@@ -47,6 +47,85 @@ final class Imap
         }
     }
 
+    /** UIDs matching an IMAP SEARCH criteria string (newest last). */
+    public function search(string $criteria, ?string $folder = null): array
+    {
+        $this->connect();
+        try {
+            $this->cmd('EXAMINE ' . self::quote($folder ?? $this->folder)); // read-only: never changes flags
+            $resp = $this->cmd("UID SEARCH CHARSET UTF-8 $criteria");
+            preg_match('/^\* SEARCH([\d ]*)/m', $resp, $m);
+            return array_values(array_filter(array_map('intval', explode(' ', trim($m[1] ?? '')))));
+        } finally {
+            $this->close();
+        }
+    }
+
+    /**
+     * Messages by UID without marking them read. $maxBytes limits how much of each message is downloaded.
+     * @return array<int,array{raw:string,flags:string}>
+     */
+    public function fetch(array $uids, int $maxBytes = 65536, ?string $folder = null): array
+    {
+        if (!$uids) return [];
+        $this->connect();
+        try {
+            $this->cmd('EXAMINE ' . self::quote($folder ?? $this->folder));
+            $out = [];
+            foreach ($uids as $uid) {
+                $resp = $this->cmd('UID FETCH ' . (int)$uid . " (FLAGS BODY.PEEK[]<0.$maxBytes>)");
+                preg_match('/FLAGS \(([^)]*)\)/', $resp, $fm);
+                if (preg_match('/\{(\d+)\}\r\n/', $resp, $lm, PREG_OFFSET_CAPTURE)) {
+                    $out[(int)$uid] = ['raw' => substr($resp, $lm[0][1] + strlen($lm[0][0]), (int)$lm[1][0]), 'flags' => $fm[1] ?? ''];
+                }
+            }
+            return $out;
+        } finally {
+            $this->close();
+        }
+    }
+
+    /** Folders with their special-use flags (\Drafts, \Sent...). @return array<string,string> name => flags */
+    public function folders(): array
+    {
+        $this->connect();
+        try {
+            $resp = $this->cmd('LIST "" "*"');
+            $out = [];
+            foreach (explode("\r\n", $resp) as $line) {
+                if (preg_match('/^\* LIST \(([^)]*)\) (?:"[^"]*"|NIL) (?:"((?:[^"\\\\]|\\\\.)*)"|(\S+))$/', $line, $m)) {
+                    $out[stripcslashes($m[2] !== '' ? $m[2] : ($m[3] ?? ''))] = $m[1];
+                }
+            }
+            return $out;
+        } finally {
+            $this->close();
+        }
+    }
+
+    /** Store a message in a folder (drafts, sent copies). */
+    public function append(string $folder, string $raw, string $flags = ''): void
+    {
+        $raw = str_replace(["\r\n", "\n"], ["\n", "\r\n"], $raw);
+        $this->connect();
+        try {
+            $tag = 'A' . (++$this->tag);
+            fwrite($this->s, "$tag APPEND " . self::quote($folder) . ($flags !== '' ? " ($flags)" : '') . ' {' . strlen($raw) . "}\r\n");
+            $line = (string)fgets($this->s, 4096);
+            if (!str_starts_with($line, '+')) throw new \RuntimeException('IMAP APPEND refused: ' . trim($line));
+            fwrite($this->s, $raw . "\r\n");
+            while (($line = fgets($this->s, 65536)) !== false) {
+                if (str_starts_with($line, "$tag ")) {
+                    if (!str_starts_with($line, "$tag OK")) throw new \RuntimeException('IMAP APPEND failed: ' . trim(substr($line, strlen($tag) + 1)));
+                    return;
+                }
+            }
+            throw new \RuntimeException('IMAP connection closed');
+        } finally {
+            $this->close();
+        }
+    }
+
     private static function quote(string $s): string { return '"' . addcslashes($s, '"\\') . '"'; }
 
     private function connect(): void

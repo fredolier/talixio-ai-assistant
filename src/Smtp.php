@@ -14,14 +14,14 @@ final class Smtp
      * @param array<string,string> $headers extra headers (In-Reply-To, References...)
      * @return string the Message-ID used
      */
-    public function send(string $from, string $to, string $subject, string $markdown, array $headers = []): string
+    public function send(string $from, string $to, string $subject, string $markdown, array $headers = [], array $cc = []): string
     {
         $domain = substr(strrchr(self::address($from), '@') ?: '@localhost', 1);
         $msgId = '<' . bin2hex(random_bytes(12)) . '@' . $domain . '>';
         $this->connect();
         try {
             $this->cmd('MAIL FROM:<' . self::address($from) . '>', 250);
-            $this->cmd('RCPT TO:<' . self::address($to) . '>', [250, 251]);
+            foreach (array_merge([$to], $cc) as $rcpt) $this->cmd('RCPT TO:<' . self::address($rcpt) . '>', [250, 251]);
             $this->cmd('DATA', 354);
             $data = self::build($from, $to, $subject, $markdown, $msgId, $headers);
             $data = preg_replace('/^\./m', '..', $data); // dot-stuffing
@@ -57,6 +57,7 @@ final class Smtp
             'Date' => date('r'), 'Message-ID' => $msgId, 'MIME-Version' => '1.0',
             'Content-Type' => "multipart/alternative; boundary=\"$b\"", 'Auto-Submitted' => 'auto-generated',
         ], $headers);
+        $h = array_filter($h, fn($v) => $v !== null && $v !== ''); // pass 'Auto-Submitted' => null for mail sent as the user
         $out = '';
         foreach ($h as $k => $v) $out .= "$k: $v\r\n";
         $part = fn(string $type, string $body) => "--$b\r\nContent-Type: $type; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"

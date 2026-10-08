@@ -44,6 +44,9 @@ final class App
     public function notifier(): Notifier { return new Notifier($this); }
     public function email(): Email { return new Email($this); }
     public function files(): Files { return new Files($this); }
+    public function approvals(): Approvals { return new Approvals($this); }
+    public function calendar(): Calendar { return new Calendar($this); }
+    public function mailbox(): Mailbox { return new Mailbox($this); }
     public function transcriber(): Transcriber { return new Transcriber($this); }
     public function webPush(): WebPush { return new WebPush($this); }
     public function signal(): Signal { return new Signal($this); }

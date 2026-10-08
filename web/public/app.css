@@ -98,6 +98,11 @@ main{min-width:0;height:100%;overflow:hidden}
 .fchip{display:inline-flex;align-items:center;gap:6px;max-width:100%;font-size:.8rem;padding:4px 8px;border-radius:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
 .fchip button{border:0;background:none;color:var(--muted);cursor:pointer;font:inherit;padding:0 2px}
 .fchip.uploading{opacity:.6}
+.approvals{display:flex;flex-direction:column;gap:8px;padding:10px max(16px,calc((100% - 760px)/2));border-top:1px solid var(--line);background:var(--surface);max-height:45vh;overflow-y:auto}
+.approval{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:start;border:1px solid var(--warn);border-radius:12px;padding:10px 12px;background:var(--bg)}
+.approval .label{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--warn)}
+.approval .what{grid-column:1/-1;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.9rem;max-height:160px;overflow-y:auto}
+.approval .actions{display:flex;gap:6px}
 .recorder{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px max(16px,calc((100% - 760px)/2));border-top:1px solid var(--line);background:var(--accent-soft)}
 .recorder b{font-variant-numeric:tabular-nums}
 .recorder .spacer{flex:1}

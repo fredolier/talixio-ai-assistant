@@ -136,6 +136,7 @@ function notifyBrowser(m) {
 }
 
 async function poll() {
+  if (!state.sending && state.status?.pending_approvals !== undefined) loadApprovals();
   if (state.sending || document.hidden && !('Notification' in window && Notification.permission === 'granted')) return;
   try { appendMessages((await api('/api/messages?after=' + state.lastId)).messages, true); } catch {}
 }
@@ -149,6 +150,8 @@ const TOOL_LABEL = (name, input = {}) => {
     schedule_task: 'Scheduling', list_tasks: 'Checking scheduled tasks', cancel_task: 'Cancelling a task',
     delegate: `Starting a background job${input.title ? ': ' + input.title : ''}`, list_jobs: 'Checking jobs', cancel_job: 'Cancelling a job',
     usage_report: 'Checking spending', file_read: 'Reading the attachment',
+    calendar_events: 'Checking your calendar', calendar_add: 'Preparing a calendar event', mail_list: 'Looking through your email',
+    mail_read: 'Reading an email', mail_draft: 'Writing a draft', mail_send: 'Preparing an email',
   })[name] || `Using ${name.replace(/_/g, ' ')}`;
 };
 const SPIN = '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
@@ -200,11 +203,32 @@ async function send(opts = {}) {
     if (!done) throw new Error('The connection was interrupted. The answer will appear when ready.');
     pending.remove(); live.remove();
     appendMessages(done.messages);
+    loadApprovals();
   } catch (e) {
     live.remove(); toast(e.message);
     if (!textSoFar) { pending.remove(); input.value = text; }
   } finally {
     state.sending = false; $('#send').disabled = false; input.focus();
+  }
+}
+
+// ---- approvals ----
+async function loadApprovals() {
+  let list = [];
+  try { list = (await api('/api/approvals')).approvals; } catch { return; }
+  const box = $('#approvals'); box.hidden = !list.length; box.innerHTML = '';
+  for (const a of list) {
+    const el = document.createElement('div'); el.className = 'approval';
+    el.innerHTML = `<span class="label">Needs your approval · #${a.id}</span>
+      <div class="actions"><button class="btn small" data-d="reject" type="button">Reject</button><button class="btn small primary" data-d="approve" type="button">Approve</button></div>
+      <div class="what">${esc(a.summary)}</div>`;
+    el.querySelectorAll('button').forEach(b => b.onclick = async () => {
+      el.querySelectorAll('button').forEach(x => x.disabled = true);
+      try { const r = await post(`/api/approvals/${a.id}/${b.dataset.d}`); appendMessages(r.messages); toast(b.dataset.d === 'approve' ? 'Approved' : 'Rejected'); }
+      catch (e) { toast(e.message); }
+      loadApprovals();
+    });
+    box.append(el);
   }
 }
 
@@ -352,7 +376,7 @@ async function loadChannels() {
   const mySub = await pushSubscription().catch(() => null);
   const box = $('#channels'); box.innerHTML = '';
   for (const c of channels) {
-    const on = c.state === 'on', partial = c.state === 'notifications only';
+    const on = c.state === 'on', partial = ['notifications only', 'read only'].includes(c.state);
     const el = document.createElement('div'); el.className = 'channel';
     const uses = [c.chat ? 'chat' : null, notify_on.includes(c.id) ? 'notifications' : null].filter(Boolean).join(' + ');
     el.innerHTML = `<h3>${esc(c.name)} <span class="pill ${on ? 'on' : partial ? 'partial' : 'off'}">${esc(c.state)}</span>${uses && (on || partial) ? `<span class="chip">${uses}</span>` : ''}</h3>
@@ -463,6 +487,7 @@ async function start() {
   await refreshStatus();
   state.lastId = 0; $('#thread').innerHTML = '';
   appendMessages((await api('/api/messages')).messages);
+  loadApprovals();
   route();
   clearInterval(state.pollTimer);
   state.pollTimer = setInterval(() => { poll(); }, 4000);

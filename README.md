@@ -114,7 +114,7 @@ Create a bot with @BotFather, set `TALIXIO_TELEGRAM_TOKEN`, restart, and message
 with your chat id; put it in `TALIXIO_TELEGRAM_ALLOWED_IDS`. Telegram and the web app share the same
 conversation.
 
-## What it can do (v0.5)
+## What it can do (v0.6)
 - **Live answers**: replies appear as they are written, with what it's doing ("Searching the web…",
   "Reading example.com…").
 - **Photos, PDFs, documents**: attach (or paste, or drag) files in the web app, or send them on
@@ -129,6 +129,15 @@ conversation.
   action items. Transcripts and summaries are searchable later. Transcription uses Gemini
   (`GEMINI_API_KEY`, also works when Claude is the brain) or OpenAI. Telegram bots can only
   receive files up to 20 MB, so upload long recordings in the web app.
+- **Approvals**: anything with outside effects (sending email as you, adding calendar events)
+  waits for you: Approve/Reject buttons in the app, or reply "yes 12" / "no 12" on Signal,
+  Telegram or email. Requests expire after 7 days. `TALIXIO_AUTO_APPROVE` skips the question for
+  tools you trust.
+- **Your calendar**: reads any iCal subscription link (Google, Outlook, iCloud...) and/or a CalDAV
+  calendar; adds events through CalDAV after approval. Recurring events are expanded. Google
+  Calendar is read-only for now (adding needs Google sign-in, not supported yet).
+- **Your mailbox**: lists and reads your email without marking it read, writes drafts into your
+  Drafts folder, and sends as you only after approval (with a copy in Sent).
 - **One conversation everywhere**: web app, email, Signal, Telegram and terminal (`sudo talixio chat`)
   share one thread. Messages it starts go to push notifications, email, Signal, Telegram or ntfy
   (`TALIXIO_NOTIFY`); see and test them on the **Channels** page.

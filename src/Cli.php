@@ -67,6 +67,14 @@ final class Cli
             catch (\Throwable $e) { $line(false, "IMAP: {$e->getMessage()}"); }
             $line($c->emailAllowed !== [], 'email senders allowlisted: ' . (implode(', ', $c->emailAllowed) ?: 'none (set TALIXIO_EMAIL_ALLOWED)'));
         }
+        if ($app->calendar()->enabled()) {
+            try { $n = count($app->calendar()->events(strtotime('today'), strtotime('today') + 7 * 86400)); $line(true, "calendar: $n event(s) in the next 7 days" . ($app->calendar()->canWrite() ? ' (CalDAV: can add events)' : ' (read-only)')); }
+            catch (\Throwable $e) { $line(false, "calendar: {$e->getMessage()}"); }
+        }
+        if ($app->mailbox()->enabled()) {
+            try { $folders = (new Imap($c->mailboxImapHost, $c->mailboxImapPort, $c->mailboxUser, $c->mailboxPassword, 'INBOX', $c->mailboxImapSecurity))->folders(); $line(true, 'mailbox login (' . count($folders) . ' folders)'); }
+            catch (\Throwable $e) { $line(false, "mailbox: {$e->getMessage()}"); }
+        }
         if ($c->signalNumber !== '') {
             $found = is_executable($c->signalCli) || trim((string)shell_exec('command -v ' . escapeshellarg($c->signalCli) . ' 2>/dev/null')) !== '';
             $line($found, "signal-cli found ({$c->signalCli})");

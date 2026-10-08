@@ -38,6 +38,8 @@ final class Store
             CREATE TRIGGER IF NOT EXISTS docs_ad AFTER DELETE ON docs BEGIN INSERT INTO docs_fts(docs_fts, rowid, text) VALUES('delete', old.id, old.text); END;
             CREATE TABLE IF NOT EXISTS files(id INTEGER PRIMARY KEY, name TEXT NOT NULL, mime TEXT NOT NULL, kind TEXT NOT NULL, size INTEGER NOT NULL,
                 path TEXT NOT NULL, duration REAL, text TEXT, created INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, tool TEXT NOT NULL, args TEXT NOT NULL, summary TEXT NOT NULL,
+                status TEXT NOT NULL, result TEXT, created INTEGER NOT NULL, decided INTEGER);
             CREATE TABLE IF NOT EXISTS push_subs(endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, ua TEXT NOT NULL, created INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS embeddings(doc_id INTEGER PRIMARY KEY, model TEXT NOT NULL, vec BLOB NOT NULL);
             SQL);
