@@ -11,6 +11,7 @@ final class Search
             'brave' => self::brave($cfg, $q),
             'tavily' => self::tavily($cfg, $q),
             'searxng' => self::searxng($cfg, $q),
+            'gemini' => self::gemini($cfg, $q),
             default => throw new \RuntimeException('search is not configured'),
         };
         if (!$items) return 'no results';
@@ -35,6 +36,24 @@ final class Search
     {
         $d = Http::json('https://api.tavily.com/search', ['query' => $q, 'max_results' => 8], ['Authorization: Bearer ' . $cfg->tavilyKey], 30);
         return array_map(fn($r) => [$r['title'] ?? '', $r['url'] ?? '', $r['content'] ?? ''], $d['results'] ?? []);
+    }
+
+    /** Gemini's native "Grounding with Google Search" (same API key), on the fast tier's model. */
+    private static function gemini(Config $cfg, string $q): array
+    {
+        $base = preg_replace('#/openai$#', '', $cfg->openaiBaseUrl);
+        $model = preg_replace('#^models/#', '', $cfg->tier('fast')->model ?: GeminiModels::FALLBACK['fast']);
+        $d = Http::json("$base/models/$model:generateContent", [
+            'contents' => [['parts' => [['text' => "Search the web and give a factual summary with key details (dates, numbers, names) for: $q"]]]],
+            'tools' => [['google_search' => new \stdClass()]],
+        ], ['x-goog-api-key: ' . $cfg->openaiKey], 60);
+        $cand = $d['candidates'][0] ?? [];
+        $text = implode('', array_column($cand['content']['parts'] ?? [], 'text'));
+        $items = [['Search summary (Google, via Gemini)', '', $text]];
+        foreach ($cand['groundingMetadata']['groundingChunks'] ?? [] as $c) {
+            if (isset($c['web']['uri'])) $items[] = [$c['web']['title'] ?? '', $c['web']['uri'], ''];
+        }
+        return $text === '' && count($items) === 1 ? [] : $items;
     }
 
     private static function searxng(Config $cfg, string $q): array

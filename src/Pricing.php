@@ -11,6 +11,9 @@ final class Pricing
 {
     public const DEFAULTS = [
         'haiku' => [1.0, 5.0], 'sonnet' => [3.0, 15.0], 'opus' => [5.0, 25.0],
+        // Gemini 2.5 from Google's pricing page; newer Gemini models from third-party listings (Oct 2026), check them
+        'gemini-2.5-flash-lite' => [0.1, 0.4], 'gemini-2.5-flash' => [0.3, 2.5], 'gemini-2.5-pro' => [1.25, 10.0],
+        'flash-lite' => [0.25, 1.5], 'gemini-flash' => [0.75, 3.75], 'flash' => [0.75, 3.75], 'gemini' => [2.0, 12.0],
         'gpt-4.1-nano' => [0.1, 0.4], 'gpt-4.1-mini' => [0.4, 1.6], 'gpt-4.1' => [2.0, 8.0],
         'gpt-4o-mini' => [0.15, 0.6], 'gpt-4o' => [2.5, 10.0],
     ];

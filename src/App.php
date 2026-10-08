@@ -15,6 +15,7 @@ final class App
     public function __construct(public Config $cfg)
     {
         $this->store = new Store($cfg->dbPath());
+        if ($cfg->provider === 'gemini') GeminiModels::apply($cfg, $this->store);
         $this->ws = new Workspace($cfg->workspaceDir());
         $this->embeddings = new Embeddings($cfg);
         $this->tools = new Tools($this);
@@ -28,7 +29,7 @@ final class App
         $c = $this->cfg;
         return match ($c->provider) {
             'anthropic' => new AnthropicProvider($c->anthropicKey, $tier, $c->search === 'builtin', $c->anthropicBaseUrl),
-            'openai' => new OpenAIProvider($c->openaiKey, $tier, $c->openaiBaseUrl),
+            'openai', 'gemini' => new OpenAIProvider($c->openaiKey, $tier, $c->openaiBaseUrl),
             'claude-code' => new ClaudeCodeProvider($c->claudeBin, $tier, $c->search === 'builtin', dirname(__DIR__) . '/bin/talixio'),
             'echo' => new EchoProvider(),
             default => throw new \InvalidArgumentException("unknown TALIXIO_PROVIDER {$c->provider}"),

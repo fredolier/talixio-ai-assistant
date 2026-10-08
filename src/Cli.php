@@ -51,6 +51,7 @@ final class Cli
         $line($c->webPassword !== '', 'web password set');
         $line(match ($c->provider) {
             'anthropic' => $c->anthropicKey !== '', 'openai' => $c->openaiKey !== '' || !str_contains($c->openaiBaseUrl, 'openai.com'),
+            'gemini' => $c->openaiKey !== '',
             'claude-code', 'echo' => true, default => false,
         }, "provider {$c->provider} credentials");
         if ($c->embeddings !== 'off') {

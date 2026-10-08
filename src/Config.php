@@ -67,19 +67,23 @@ final class Config
             'anthropic' => ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
             'openai' => ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1'],
             'claude-code' => ['haiku', 'sonnet', 'opus'],
-            default => ['', '', ''],
+            default => ['', '', ''], // gemini: chosen from the models your key can use (GeminiModels)
         };
         $std = $e('TALIXIO_MODEL', $std);
         $c->tiers = [
             'fast' => new Tier('fast', $e('TALIXIO_MODEL_FAST', $e('TALIXIO_CHEAP_MODEL', $fast)), 6),
             'standard' => new Tier('standard', $std, 12),
             'deep' => new Tier('deep', $e('TALIXIO_MODEL_DEEP', $deep), 25,
-                (int)$e('TALIXIO_DEEP_THINKING_TOKENS', '8000'), $e('TALIXIO_DEEP_REASONING_EFFORT')),
+                (int)$e('TALIXIO_DEEP_THINKING_TOKENS', '8000'), $e('TALIXIO_DEEP_REASONING_EFFORT', $c->provider === 'gemini' ? 'high' : '')),
         ];
         $c->anthropicKey = $e('ANTHROPIC_API_KEY');
         $c->anthropicBaseUrl = rtrim($e('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'), '/');
         $c->openaiKey = $e('OPENAI_API_KEY');
         $c->openaiBaseUrl = rtrim($e('OPENAI_BASE_URL', 'https://api.openai.com/v1'), '/');
+        if ($c->provider === 'gemini') { // Gemini through its OpenAI-compatible endpoint
+            $c->openaiKey = $e('GEMINI_API_KEY');
+            $c->openaiBaseUrl = rtrim($e('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta/openai'), '/');
+        }
         $c->claudeBin = $e('TALIXIO_CLAUDE_BIN', 'claude');
         $c->dataDir = rtrim($e('TALIXIO_DATA_DIR', 'data'), '/');
         if (!str_starts_with($c->dataDir, '/')) $c->dataDir = getcwd() . '/' . $c->dataDir; // child processes run elsewhere
@@ -102,6 +106,7 @@ final class Config
                 $c->tavilyKey !== '' => 'tavily',
                 $c->searxngUrl !== '' => 'searxng',
                 in_array($c->provider, ['anthropic', 'claude-code'], true) => 'builtin',
+                $c->provider === 'gemini' => 'gemini',
                 default => 'off',
             };
         }
@@ -116,12 +121,13 @@ final class Config
         if ($c->embeddings === 'auto') {
             $c->embeddings = match (true) {
                 $c->voyageKey !== '' => 'voyage',
+                $c->provider === 'gemini' && $c->openaiKey !== '' => 'gemini',
                 $c->openaiKey !== '' && str_contains($c->openaiBaseUrl, 'api.openai.com') => 'openai',
                 default => 'off',
             };
         }
         $c->embeddingsModel = $e('TALIXIO_EMBEDDINGS_MODEL', match ($c->embeddings) {
-            'ollama' => 'nomic-embed-text', 'openai' => 'text-embedding-3-small', 'voyage' => 'voyage-3.5-lite', default => '',
+            'ollama' => 'nomic-embed-text', 'openai' => 'text-embedding-3-small', 'voyage' => 'voyage-3.5-lite', 'gemini' => 'gemini-embedding-001', default => '',
         });
         $c->recallMinSim = (float)$e('TALIXIO_RECALL_MIN_SIMILARITY', '0.5');
         $list = fn(string $v) => array_values(array_filter(array_map(fn($x) => strtolower(trim($x)), explode(',', $v)), 'strlen'));
@@ -155,4 +161,6 @@ final class Config
     public function workspaceDir(): string { return $this->dataDir . '/workspace'; }
     /** Models served by a local OpenAI-compatible server cost nothing. */
     public function localModels(): bool { return $this->provider === 'openai' && !str_contains($this->openaiBaseUrl, 'openai.com'); }
+    /** Providers that speak the OpenAI chat completions API. */
+    public function openaiCompatible(): bool { return in_array($this->provider, ['openai', 'gemini'], true); }
 }

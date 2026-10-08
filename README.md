@@ -48,12 +48,19 @@ Edit `/etc/talixio/talixio.env`, then `sudo systemctl restart talixio-worker tal
 
 | Option | Settings |
 |---|---|
+| Gemini API | `TALIXIO_PROVIDER=gemini`, `GEMINI_API_KEY=...` (create one at https://aistudio.google.com/apikey) |
 | Claude API | `TALIXIO_PROVIDER=anthropic`, `ANTHROPIC_API_KEY=...` |
 | Claude Pro/Max subscription | `./install.sh --with-claude-code`, then `sudo -u talixio HOME=/var/lib/talixio /var/lib/talixio/.local/bin/claude setup-token`, put the token in `CLAUDE_CODE_OAUTH_TOKEN=` and set `TALIXIO_PROVIDER=claude-code` |
 | OpenAI | `TALIXIO_PROVIDER=openai`, `OPENAI_API_KEY=...` |
 | Local model (Ollama...) | `TALIXIO_PROVIDER=openai`, `OPENAI_BASE_URL=http://localhost:11434/v1`, `TALIXIO_MODEL=llama3.1` |
 
-With the subscription option, usage counts against your plan's limits. Anthropic's policy on this
+With Gemini, the tier models are picked automatically from the models your key can use (newest
+Flash-Lite / Flash / Pro, checked daily); `sudo talixio doctor` shows which. Web search uses Google
+Search grounding and memory search uses Gemini embeddings, with the same key. A Google AI Pro/Ultra
+subscription does not include API access; the API key is separate. On the free tier, Google may use
+your prompts to improve its products and rate limits are low; enable billing on the key to avoid both.
+
+With the Claude subscription option, usage counts against your plan's limits. Anthropic's policy on this
 has changed several times in 2026; see
 [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).
 

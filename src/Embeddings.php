@@ -23,7 +23,8 @@ final class Embeddings
         $texts = array_map(fn($t) => mb_substr($t, 0, 6000), $texts);
         $vecs = $this->fake ? ($this->fake)($texts, $type) : match ($this->cfg->embeddings) {
             'ollama' => $this->ollama($texts, $type),
-            'openai' => $this->openai($texts),
+            'openai' => $this->openai($texts, 'https://api.openai.com/v1'),
+            'gemini' => $this->openai($texts, $this->cfg->openaiBaseUrl), // OpenAI-compatible endpoint
             'voyage' => $this->voyage($texts, $type),
             default => throw new \RuntimeException('embeddings are off'),
         };
@@ -51,9 +52,9 @@ final class Embeddings
         return $r['embeddings'] ?? throw new \RuntimeException('ollama: no embeddings in response');
     }
 
-    private function openai(array $texts): array
+    private function openai(array $texts, string $base): array
     {
-        $r = Http::json('https://api.openai.com/v1/embeddings', ['model' => $this->cfg->embeddingsModel, 'input' => $texts],
+        $r = Http::json("$base/embeddings", ['model' => $this->cfg->embeddingsModel, 'input' => $texts],
             ['Authorization: Bearer ' . $this->cfg->openaiKey], 60);
         return array_column($r['data'] ?? [], 'embedding');
     }

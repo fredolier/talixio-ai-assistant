@@ -2,7 +2,7 @@
 declare(strict_types=1);
 // Run: php tests/run.php   (no network, no API key needed)
 require __DIR__ . '/../src/autoload.php';
-use Talixio\{App, Config, Cron, Email, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker};
+use Talixio\{App, Config, Cron, Email, GeminiModels, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker};
 
 $fails = 0;
 function check(string $name, bool $ok, string $detail = ''): void {
@@ -278,6 +278,35 @@ $port = random_int(20000, 40000); $c->smtpPort = $port; $sp = $spawn('smtp.php',
 $res = $app->notifier()->notify('Reminder', 'Call the bank');
 proc_close($sp);
 check('notifier: email and signal sent, push skipped without devices', $res['email'] === 'sent' && $res['signal'] === 'sent' && $res['webpush'] === 'no device subscribed' && $res['ntfy'] === 'off (TALIXIO_NOTIFY)', json_encode($res));
+
+// ---- Gemini ----
+$picked = GeminiModels::choose(['models/gemini-2.5-flash', 'models/gemini-2.5-flash-lite', 'models/gemini-2.5-pro', 'models/gemini-3.1-pro-preview',
+    'models/gemini-3.5-flash-lite', 'models/gemini-3.5-flash-lite-preview-09-2026', 'models/gemini-embedding-001', 'models/gemini-2.5-flash-preview-tts', 'models/gemini-2.0-flash-001']);
+check('gemini: newest models per tier, stable over preview', $picked === ['fast' => 'gemini-3.5-flash-lite', 'standard' => 'gemini-2.5-flash', 'deep' => 'gemini-3.1-pro-preview'], json_encode($picked));
+check('gemini: -latest aliases win', GeminiModels::choose(['models/gemini-flash-latest', 'models/gemini-2.5-flash', 'models/gemini-pro-latest'])['standard'] === 'gemini-flash-latest');
+check('gemini: empty list falls back', GeminiModels::choose([]) === GeminiModels::FALLBACK);
+$pr = new Pricing();
+check('pricing: gemini flash-lite before flash', $pr->priceFor('gemini-2.5-flash-lite') === [0.1, 0.4] && $pr->priceFor('gemini-3.5-flash-lite') === [0.25, 1.5] && $pr->priceFor('gemini-3.1-pro-preview') === [2.0, 12.0]);
+// provider wiring against a fake Gemini server: model list + chat with a tool call that carries extra fields
+$gport = random_int(20000, 40000);
+file_put_contents("$dir/gemini.php", '<?php
+$path = parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH); header("Content-Type: application/json");
+if (str_ends_with($path, "/models")) { echo json_encode(["data" => [["id" => "models/gemini-9.0-flash"], ["id" => "models/gemini-9.0-flash-lite"], ["id" => "models/gemini-9.0-pro"]]]); return; }
+$req = json_decode(file_get_contents("php://input"), true); file_put_contents(__DIR__ . "/gemini-last.json", json_encode($req));
+$last = end($req["messages"]);
+if ($last["role"] === "tool") { echo json_encode(["choices" => [["message" => ["role" => "assistant", "content" => "Done: " . $last["content"]]]], "usage" => ["prompt_tokens" => 20, "completion_tokens" => 5]]); return; }
+echo json_encode(["choices" => [["message" => ["role" => "assistant", "content" => null, "tool_calls" => [["id" => "c1", "type" => "function", "function" => ["name" => "list_tasks", "arguments" => "{}"], "extra_content" => ["google" => ["thought_signature" => "SIG"]]]]]]], "usage" => ["prompt_tokens" => 10, "completion_tokens" => 3]]);');
+$gp = proc_open([PHP_BINARY, '-S', "127.0.0.1:$gport", "$dir/gemini.php"], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp);
+usleep(400000);
+putenv('TALIXIO_PROVIDER=gemini'); putenv('GEMINI_API_KEY=k'); putenv("GEMINI_BASE_URL=http://127.0.0.1:$gport/v1beta/openai"); putenv("TALIXIO_DATA_DIR=$dir/g");
+$g = App::fromEnv();
+check('gemini: tiers picked from the live model list', $g->cfg->tier('fast')->model === 'gemini-9.0-flash-lite' && $g->cfg->tier('deep')->model === 'gemini-9.0-pro');
+check('gemini: deep tier reasons hard, embeddings and search on', $g->cfg->tier('deep')->reasoningEffort === 'high' && $g->cfg->embeddings === 'gemini' && $g->cfg->search === 'gemini');
+[$text, $meta] = $g->agent()->run('web', 'standard', 'chat', [['role' => 'user', 'content' => 'what is scheduled?']]);
+$sent = json_decode((string)file_get_contents("$dir/gemini-last.json"), true);
+check('gemini: tool loop works through the OpenAI-compatible API', $text === 'Done: no tasks' && $meta['model'] === 'gemini-9.0-flash' && $meta['cost'] > 0, "$text " . json_encode($meta));
+check('gemini: thought signature sent back with the tool call', ($sent['messages'][2]['tool_calls'][0]['extra_content']['google']['thought_signature'] ?? '') === 'SIG');
+proc_terminate($gp); proc_close($gp);
 
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
