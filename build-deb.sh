@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build talixio_<version>_all.deb  (usage: ./build-deb.sh [version])
+# Build talixio-ai-assistant_<version>_all.deb  (usage: ./build-deb.sh [version])
 set -eu
 VERSION="${1:-0.1.0}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -15,7 +15,7 @@ install -m 644 "$ROOT/README.md" "$STAGE/usr/share/doc/talixio/README.md"
 install -m 755 "$ROOT/packaging/postinst" "$ROOT/packaging/prerm" "$STAGE/DEBIAN/"
 echo /etc/talixio/talixio.env > "$STAGE/DEBIAN/conffiles"
 cat > "$STAGE/DEBIAN/control" <<CTL
-Package: talixio
+Package: talixio-ai-assistant
 Version: $VERSION
 Section: net
 Priority: optional
@@ -27,4 +27,4 @@ Description: Self-hosted always-on AI assistant (Claude / OpenAI)
  proactive messages. Runs as a systemd service.
 CTL
 find "$STAGE" -type d -exec chmod 755 {} +
-dpkg-deb --root-owner-group --build "$STAGE" "$ROOT/talixio_${VERSION}_all.deb"
+dpkg-deb --root-owner-group --build "$STAGE" "$ROOT/talixio-ai-assistant_${VERSION}_all.deb"

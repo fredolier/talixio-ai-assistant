@@ -7,14 +7,16 @@ Telegram chat and proactive scheduled messages. Installs as a `.deb` and runs as
 
 ## Install (Debian/Ubuntu)
 ```bash
-./build-deb.sh                          # -> talixio_0.1.0_all.deb
-sudo apt install ./talixio_0.1.0_all.deb   # pulls php-cli, php-curl, php-sqlite3, php-mbstring
+./build-deb.sh                          # -> talixio-ai-assistant_0.1.0_all.deb
+sudo apt install ./talixio-ai-assistant_0.1.0_all.deb   # pulls php-cli, php-curl, php-sqlite3, php-mbstring
 sudoedit /etc/talixio/talixio.env       # API key, Telegram token (@BotFather), allowed chat ids
 sudo systemctl restart talixio
 journalctl -u talixio -f                # logs
 ```
 **Set `TALIXIO_TELEGRAM_ALLOWED_IDS`**, otherwise anyone who finds the bot can spend your API credits.
 Requires PHP >= 8.2.
+
+See `docs/features.html` for scenarios and a comparison with other bots.
 
 ## Dev
 ```bash

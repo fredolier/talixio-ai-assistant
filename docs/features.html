@@ -1,0 +1,116 @@
+<title>Talixio AI Assistant</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: single reading column, scenario cards as chat transcripts, one comparison table */
+:root{
+  --bg:#f4f7f8; --surface:#ffffff; --fg:#13222d; --muted:#51636f; --line:#d6e0e5;
+  --accent:#0a7a72; --accent-soft:#dff2ef; --warn:#8a5a00; --warn-soft:#fbefd2; --off:#5b6670; --off-soft:#e6ebee;
+  --user:#e8eef2; --bot:#dff2ef;
+  --display:"Fraunces",Georgia,serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1a21; --surface:#16252e; --fg:#e6eef2; --muted:#9db0bb; --line:#283b46; --accent:#4fd1c5; --accent-soft:#12403d; --warn:#f0c36a; --warn-soft:#3b2f12; --off:#a3b2bb; --off-soft:#233540;
+  --user:#223541; --bot:#12403d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1a21; --surface:#16252e; --fg:#e6eef2; --muted:#9db0bb; --line:#283b46;
+  --accent:#4fd1c5; --accent-soft:#12403d; --warn:#f0c36a; --warn-soft:#3b2f12; --off:#a3b2bb; --off-soft:#233540;
+  --user:#223541; --bot:#12403d; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.6}
+.wrap{max-width:860px;margin:0 auto;padding-inline:16px;padding-block:40px 64px;display:flex;flex-direction:column;gap:48px}
+h1,h2{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:clamp(2rem,6vw,3rem)} h2{font-size:1.6rem}
+h3{font-size:1.05rem;margin:0}
+p{margin:0}
+.lead{font-size:1.15rem;color:var(--muted);max-width:62ch;margin-top:12px}
+.eyebrow{font-family:var(--mono);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+section{display:flex;flex-direction:column;gap:20px;min-width:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.pill{align-self:flex-start;font-family:var(--mono);font-size:.72rem;padding:2px 9px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}
+.pill.cfg{background:var(--warn-soft);color:var(--warn)} .pill.no{background:var(--off-soft);color:var(--off)}
+.chat{display:flex;flex-direction:column;gap:6px;font-size:.92rem}
+.m{padding:7px 11px;border-radius:10px;max-width:92%;overflow-wrap:anywhere}
+.u{background:var(--user);align-self:flex-end} .b{background:var(--bot);align-self:flex-start}
+.m small{display:block;font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.92rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-size:.76rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0} td:first-child{font-weight:600}
+.note{color:var(--muted);font-size:.92rem;max-width:68ch}
+code{font-family:var(--mono);font-size:.88em;background:var(--off-soft);padding:1px 5px;border-radius:4px}
+pre{margin:0;overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;font-family:var(--mono);font-size:.85rem}
+a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">talixio-ai-assistant · v0.1</div>
+  <h1>A personal AI that lives on your server and answers on Telegram.</h1>
+  <p class="lead">Install one Debian package. It runs as a service around the clock, remembers what you tell it, uses Claude or OpenAI as its brain, and can message you first on a schedule.</p>
+</header>
+
+<section>
+  <h2>What it does today</h2>
+  <div class="grid">
+    <div class="card"><span class="pill">Works now</span><h3>Chat from your phone</h3><p>Message your own Telegram bot. Only the chat ids you list can talk to it.</p></div>
+    <div class="card"><span class="pill">Works now</span><h3>Remembers you</h3><p>Conversation history and long-term facts are stored in SQLite on your machine. The model saves a fact itself when you say something worth keeping.</p></div>
+    <div class="card"><span class="pill">Works now</span><h3>Messages you first</h3><p>Daily jobs such as a morning briefing run at a time you set (UTC) and arrive in your chat.</p></div>
+    <div class="card"><span class="pill">Works now</span><h3>Your choice of model</h3><p>Claude, OpenAI, or any OpenAI-compatible server such as Ollama running on your own hardware.</p></div>
+    <div class="card"><span class="pill">Works now</span><h3>Reads web pages</h3><p>The <code>fetch_url</code> tool lets it open a link you send and summarize it.</p></div>
+    <div class="card"><span class="pill">Works now</span><h3>Stays up</h3><p>systemd restarts it after a crash or reboot. Logs go to <code>journalctl -u talixio</code>.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Scenarios</h2>
+  <div class="grid">
+    <div class="card"><span class="pill">Works now</span><h3>Personal memory</h3>
+      <div class="chat">
+        <div class="m u">I'm vegetarian and I train on Tuesdays and Thursdays.</div>
+        <div class="m b"><small>tool: remember</small>Noted. I'll keep that in mind.</div>
+        <div class="m u">Plan dinner for Thursday.</div>
+        <div class="m b">Since you train that evening: a vegetarian high-protein option such as lentil dal with rice and yogurt.</div>
+      </div></div>
+    <div class="card"><span class="pill cfg">Needs a daily job</span><h3>Morning briefing</h3>
+      <div class="chat">
+        <div class="m b"><small>07:30 · scheduled</small>Good morning. It's Tuesday, a training day. Reminder you asked me to chase the invoice from Monday.</div>
+      </div>
+      <pre>TALIXIO_DAILY_JOBS=07:30|123456|Give me a short morning briefing</pre></div>
+    <div class="card"><span class="pill">Works now</span><h3>Read this link for me</h3>
+      <div class="chat">
+        <div class="m u">Summarize https://example.com/long-article in 5 bullets.</div>
+        <div class="m b"><small>tool: fetch_url</small>Here are the five main points…</div>
+      </div></div>
+    <div class="card"><span class="pill cfg">Needs Ollama or similar</span><h3>Fully private mode</h3>
+      <p>Point <code>OPENAI_BASE_URL</code> at a local model server. Chats and memory then never leave your machine, apart from Telegram itself.</p>
+      <pre>OPENAI_BASE_URL=http://localhost:11434/v1
+TALIXIO_PROVIDER=openai
+TALIXIO_MODEL=llama3.1</pre></div>
+    <div class="card"><span class="pill no">Not built yet</span><h3>Run commands, edit files, code</h3><p>No shell or file tools exist yet. A Claude Code backend for agentic work is the planned next step, with confirmation before anything destructive.</p></div>
+    <div class="card"><span class="pill no">Not built yet</span><h3>Email, calendar, voice, other chat apps</h3><p>Only Telegram is connected. Discord, WhatsApp, email and voice are not implemented.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>How it compares</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Option</th><th>Where it runs</th><th>Strength</th><th>Trade-off</th></tr></thead>
+    <tbody>
+      <tr><td>Talixio</td><td>Your server</td><td>Tiny, readable PHP. Installs with apt. You own the data and choose the model.</td><td>v0.1: one channel, four tools, no agentic coding or integrations yet.</td></tr>
+      <tr><td>Hosted assistants (ChatGPT, Claude apps, custom GPTs)</td><td>Vendor cloud</td><td>Polished, many features, no setup.</td><td>Not on your server, no scheduled messages from you, data lives with the vendor.</td></tr>
+      <tr><td>Self-hosted agent frameworks (Hermes Agent and similar)</td><td>Your server</td><td>Broader: more channels, skills, tool ecosystems, sandboxed execution.</td><td>Larger and more to configure and secure. Check each project for current features.</td></tr>
+      <tr><td>Companion / persona bots (Muse and similar)</td><td>Usually vendor cloud</td><td>Personality and roleplay tuned for conversation.</td><td>Mostly closed, little control over data or model. Talixio can approximate a persona with <code>TALIXIO_PERSONA</code> but is not tuned for it.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">The rows for other products are general categories, not a feature-by-feature audit. I have not tested them against Talixio. The honest summary: choose Talixio if you want a small assistant you fully control and can extend in PHP. Choose a larger framework if you need many integrations or autonomous coding today.</p>
+</section>
+
+<section>
+  <h2>Install</h2>
+<pre>./build-deb.sh
+sudo apt install ./talixio-ai-assistant_0.1.0_all.deb
+sudoedit /etc/talixio/talixio.env
+sudo systemctl restart talixio</pre>
+</section>
+</div>
