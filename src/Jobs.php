@@ -19,6 +19,17 @@ final class Jobs
         return $this->app->store->addJob($title, $instructions, $tier, $this->app->cfg->jobMaxUsd);
     }
 
+    /** Meeting recording: transcribe, then summarise. Not subject to the parallel-job limit check (the user asked for it). */
+    public function createMeeting(int $fileId, string $note = ''): int
+    {
+        $f = $this->app->files()->get($fileId);
+        $title = 'Meeting summary: ' . ($f ? preg_replace('/\.[a-z0-9]+$/i', '', $f['name']) : "recording #$fileId");
+        $instructions = "Summarise this meeting for the user." . ($note !== '' ? " The user said: \"$note\"." : '')
+            . "\n\nWrite, in the meeting's language:\n1. **Summary** (5-10 lines)\n2. **Decisions**\n3. **Action items**: who, what, by when (\"not stated\" if unknown)\n"
+            . "4. **Open questions / follow-ups**\n5. **Participants** (as named in the transcript)\nBe factual: only what the transcript supports.";
+        return $this->app->store->addJob($title, $instructions, $this->app->cfg->meetingTier, max($this->app->cfg->jobMaxUsd, 1.0), 'meeting', $fileId);
+    }
+
     public function cancel(int $id): bool
     {
         $j = $this->app->store->job($id);
@@ -75,7 +86,16 @@ final class Jobs
             if ($max > 0 && $cost >= $max) throw new Abort(sprintf('cost cap of $%.2f reached', $max));
         };
         try {
-            [$text, $meta] = $this->app->agent()->run('job', $j['tier'], 'job', [['role' => 'user', 'content' => $j['instructions']]], '', 'job', $id, $guard);
+            $task = $j['instructions'];
+            if ($j['kind'] === 'meeting') {
+                $store->updateJob($id, ['result' => 'Transcribing…']);
+                $f = $this->app->files()->get((int)$j['file_id']) ?? throw new \RuntimeException('recording not found');
+                $transcript = $this->app->files()->text((int)$f['id']);
+                $store->updateJob($id, ['result' => 'Summarising…']);
+                $task .= "\n\nRecording: {$f['name']}, " . date('Y-m-d H:i', (int)$f['created']) . ". The full transcript is saved as file #{$f['id']} (searchable later).\n\n# Transcript\n" . mb_substr($transcript, 0, 300000);
+            }
+            [$text, $meta] = $this->app->agent()->run('job', $j['tier'], 'job', [['role' => 'user', 'content' => $task]], '', 'job', $id, $guard);
+            if ($j['kind'] === 'meeting') $store->addDoc('summary', $id, 'meeting summary: ' . $j['title'], $text);
             $store->updateJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);
         } catch (Abort $e) {
             if ($e->getMessage() === 'cancelled') return; // the user or assistant cancelled it: nothing to report
@@ -91,8 +111,10 @@ final class Jobs
     {
         $j = $this->app->store->job($id);
         $head = $j['status'] === 'done' ? 'finished' : 'failed';
-        $reply = $this->app->agent()->chat('job',
-            "[Background job #{$j['id']} \"{$j['title']}\" $head. Its report follows. Relay what matters to the user concisely, with sources; don't mention job numbers unless useful.]\n\n{$j['result']}");
+        $how = $j['kind'] === 'meeting'
+            ? "Give the user the meeting summary as written (keep the structure), then offer to schedule reminders for the user's own action items."
+            : "Relay what matters to the user concisely, with sources; don't mention job numbers unless useful.";
+        $reply = $this->app->agent()->chat('job', "[Background job #{$j['id']} \"{$j['title']}\" $head. Its report follows. $how]\n\n{$j['result']}");
         $this->app->notifier()->notify($j['title'], $reply);
     }
 }

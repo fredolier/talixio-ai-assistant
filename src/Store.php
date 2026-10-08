@@ -36,10 +36,15 @@ final class Store
             CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(text, content='docs', content_rowid='id', tokenize='unicode61 remove_diacritics 2');
             CREATE TRIGGER IF NOT EXISTS docs_ai AFTER INSERT ON docs BEGIN INSERT INTO docs_fts(rowid, text) VALUES (new.id, new.text); END;
             CREATE TRIGGER IF NOT EXISTS docs_ad AFTER DELETE ON docs BEGIN INSERT INTO docs_fts(docs_fts, rowid, text) VALUES('delete', old.id, old.text); END;
+            CREATE TABLE IF NOT EXISTS files(id INTEGER PRIMARY KEY, name TEXT NOT NULL, mime TEXT NOT NULL, kind TEXT NOT NULL, size INTEGER NOT NULL,
+                path TEXT NOT NULL, duration REAL, text TEXT, created INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS push_subs(endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, ua TEXT NOT NULL, created INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS embeddings(doc_id INTEGER PRIMARY KEY, model TEXT NOT NULL, vec BLOB NOT NULL);
             SQL);
         $this->addColumn('messages', 'meta', 'TEXT');
+        $this->addColumn('messages', 'files', 'TEXT');
+        $this->addColumn('jobs', 'kind', "TEXT NOT NULL DEFAULT 'agent'");
+        $this->addColumn('jobs', 'file_id', 'INTEGER');
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");
         $this->addColumn('usage', 'job_id', 'INTEGER');
         $this->addColumn('usage', 'cache_read', 'INTEGER NOT NULL DEFAULT 0');
@@ -66,10 +71,10 @@ final class Store
     }
 
     // --- messages (one conversation thread shared by every channel) ---
-    public function addMessage(string $role, string $channel, string $content, ?array $meta = null): int
+    public function addMessage(string $role, string $channel, string $content, ?array $meta = null, array $files = []): int
     {
-        $this->q('INSERT INTO messages(role,channel,content,ts,meta) VALUES(?,?,?,?,?)',
-            [$role, $channel, $content, time(), $meta ? json_encode($meta) : null]);
+        $this->q('INSERT INTO messages(role,channel,content,ts,meta,files) VALUES(?,?,?,?,?,?)',
+            [$role, $channel, $content, time(), $meta ? json_encode($meta) : null, $files ? json_encode(array_values(array_map('intval', $files))) : null]);
         $id = (int)$this->db->lastInsertId();
         [$label, $text] = match (true) { // index what was said, without our internal instructions
             $channel === 'job' && $role === 'user' => ['job report', preg_replace('/^\[[^\]]*\]\s*/', '', $content)],
@@ -87,7 +92,15 @@ final class Store
         $rows = $after <= 0
             ? array_reverse($this->q('SELECT * FROM messages ORDER BY id DESC LIMIT ?', [$limit])->fetchAll())
             : $this->q('SELECT * FROM messages WHERE id > ? ORDER BY id LIMIT ?', [$after, $limit])->fetchAll();
-        return array_map(fn($r) => ['meta' => $r['meta'] ? json_decode($r['meta'], true) : null] + $r, $rows);
+        $files = [];
+        foreach ($rows as $r) foreach (json_decode((string)$r['files'], true) ?: [] as $fid) $files[$fid] = true;
+        $info = [];
+        if ($files) {
+            $in = implode(',', array_map('intval', array_keys($files)));
+            foreach ($this->db->query("SELECT id, name, mime, kind, size, duration FROM files WHERE id IN ($in)") as $f) $info[$f['id']] = $f;
+        }
+        return array_map(fn($r) => ['meta' => $r['meta'] ? json_decode($r['meta'], true) : null,
+            'files' => array_values(array_filter(array_map(fn($i) => $info[$i] ?? null, json_decode((string)$r['files'], true) ?: [])))] + $r, $rows);
     }
 
     /** Recent history shaped for LLM APIs: alternating roles, starting with the user. Also returns the oldest id included. */
@@ -128,9 +141,9 @@ final class Store
     }
 
     // --- background jobs (sub-agents) ---
-    public function addJob(string $title, string $instructions, string $tier, float $maxCost): int
+    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null): int
     {
-        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created) VALUES(?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time()]);
+        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id) VALUES(?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId]);
         return (int)$this->db->lastInsertId();
     }
 

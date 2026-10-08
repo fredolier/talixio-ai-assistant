@@ -8,8 +8,8 @@ final class Tools
     /** Which tools each kind of run gets. Sub-agents can read and research but not change memory, schedules or spawn more jobs. */
     public const SETS = [
         'chat' => null, // everything
-        'heartbeat' => ['memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report'],
-        'job' => ['memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks'],
+        'heartbeat' => ['file_read', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report'],
+        'job' => ['memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read'],
         'none' => [],
     ];
 
@@ -41,6 +41,15 @@ final class Tools
             function (array $a) {
                 $hits = $this->app->recall()->search($a['query'], min(20, max(1, (int)($a['limit'] ?? 8))));
                 return $hits ? Recall::format($hits) : 'nothing found';
+            });
+
+        $this->register('file_read', 'Read the text of an attached document, PDF or audio transcript by its id (#n in the conversation). Use offset to continue a long one.',
+            ['id' => ['type' => 'integer'], 'offset' => ['type' => 'integer']], ['id'],
+            function (array $a) {
+                $text = $this->app->files()->text((int)$a['id']);
+                $off = max(0, (int)($a['offset'] ?? 0));
+                $chunk = mb_substr($text, $off, 30000);
+                return $chunk . ($off + 30000 < mb_strlen($text) ? "\n[... more: call again with offset " . ($off + 30000) . ' of ' . mb_strlen($text) . ']' : '');
             });
 
         $this->register('schedule_task',

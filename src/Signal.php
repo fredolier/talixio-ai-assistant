@@ -54,10 +54,24 @@ final class Signal
         foreach (array_filter(explode("\n", $out)) as $line) {
             $env = json_decode($line, true)['envelope'] ?? null;
             $text = trim((string)($env['dataMessage']['message'] ?? ''));
+            $atts = $env['dataMessage']['attachments'] ?? [];
             $from = (string)($env['sourceNumber'] ?? $env['source'] ?? '');
-            if ($text === '' || $from === '') continue;
+            if (($text === '' && !$atts) || $from === '') continue;
             if (!in_array($from, $this->app->cfg->signalAllowed, true)) { Log::warn("signal: ignored message from $from (not in TALIXIO_SIGNAL_ALLOWED)"); continue; }
-            $this->send($from, $this->app->agent()->chat('signal', $text));
+            try {
+                $files = [];
+                foreach ($atts as $a) {
+                    $src = $this->app->cfg->dataDir . '/signal/attachments/' . basename((string)($a['id'] ?? ''));
+                    if (!is_file($src)) continue;
+                    $tmp = tempnam(sys_get_temp_dir(), 'sig'); copy($src, $tmp);
+                    $ext = explode('/', (string)($a['contentType'] ?? ''))[1] ?? 'bin';
+                    $files[] = $this->app->files()->save($tmp, (string)($a['filename'] ?? '') ?: "signal-attachment.$ext", (string)($a['contentType'] ?? ''));
+                }
+                $this->send($from, $this->app->agent()->incoming('signal', $text, $files));
+            } catch (\Throwable $e) {
+                Log::error("signal: {$e->getMessage()}");
+                $this->send($from, "I couldn't process that: {$e->getMessage()}");
+            }
             $n++;
         }
         return $n;

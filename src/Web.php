@@ -23,6 +23,9 @@ final class Web
             if ($path === '/api/login' && $method === 'POST') { $this->login((string)($body['password'] ?? '')); return; }
             if (empty($_SESSION['ok'])) $this->fail(401, 'Please sign in.');
             session_write_close(); // don't hold the session lock during long model calls
+            if ($path === '/api/chat' && $method === 'POST' && !empty($body['stream'])) { $this->chatStream($body); return; }
+            if ($path === '/api/files' && $method === 'POST') { $this->json($this->upload()); return; }
+            if (preg_match('#^/api/files/(\d+)$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1]); return; }
             $this->json($this->route($method, $path, $body));
         } catch (\Throwable $e) {
             Log::error("web: {$e->getMessage()}");
@@ -37,7 +40,7 @@ final class Web
             $path === '/api/logout' => $this->logout(),
             $path === '/api/status' => $this->status(),
             $path === '/api/messages' => ['messages' => $s->messagesAfter((int)($_GET['after'] ?? 0))],
-            $path === '/api/chat' && $m === 'POST' => $this->chat((string)($b['text'] ?? '')),
+            $path === '/api/chat' && $m === 'POST' => $this->chat((string)($b['text'] ?? ''), array_map('intval', (array)($b['files'] ?? [])), !empty($b['meeting'])),
             $path === '/api/tasks' => ['tasks' => array_map(fn($t) => $t + ['next_text' => $t['next_run'] ? date('D j M, H:i', (int)$t['next_run']) : null], $s->tasks())],
             (bool)preg_match('#^/api/tasks/(\d+)/(toggle|delete)$#', $path, $mm) && $m === 'POST' => $this->taskAction((int)$mm[1], $mm[2]),
             $path === '/api/memory' && $m === 'GET' => ['files' => $this->app->ws->all()],
@@ -107,14 +110,72 @@ final class Web
             ]];
     }
 
-    private function chat(string $text): array
+    private function chat(string $text, array $files = [], bool $meeting = false, ?callable $onEvent = null): array
     {
         $text = trim($text);
-        if ($text === '') $this->fail(400, 'empty message');
+        if ($text === '' && !$files) $this->fail(400, 'empty message');
         set_time_limit(0);
+        ignore_user_abort(true); // finish the turn even if the page is closed
         $before = $this->app->store->maxMessageId();
-        $this->app->agent()->chat('web', $text);
+        $audio = null;
+        foreach ($files as $id) { $f = $this->app->files()->get($id); if ($f && $f['kind'] === 'audio') { $audio = $id; break; } }
+        if ($audio !== null) {
+            if ($meeting) $text = trim("meeting $text");
+            $this->app->agent()->audio('web', $audio, $text, $onEvent);
+        } else {
+            $this->app->agent()->chat('web', $text, 'standard', $files, $onEvent);
+        }
         return ['messages' => $this->app->store->messagesAfter($before)];
+    }
+
+    /** Server-sent events: text as it is written, tool activity, then the stored messages. */
+    private function chatStream(array $b): void
+    {
+        while (ob_get_level() > 0) ob_end_clean();
+        header('Content-Type: text/event-stream');
+        header('Cache-Control: no-store');
+        header('X-Accel-Buffering: no');
+        $send = function (string $event, array $data): void {
+            echo "event: $event\ndata: " . json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
+            @flush();
+        };
+        echo ": stream\n\n"; @flush();
+        try {
+            $result = $this->chat((string)($b['text'] ?? ''), array_map('intval', (array)($b['files'] ?? [])), !empty($b['meeting']),
+                fn(array $e) => $send($e['type'], $e));
+            $send('done', $result);
+        } catch (\Throwable $e) {
+            Log::error("web stream: {$e->getMessage()}");
+            $send('fail', ['error' => $e->getMessage()]);
+        }
+    }
+
+    private function upload(): array
+    {
+        $f = $_FILES['file'] ?? null;
+        if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK) {
+            $err = $f['error'] ?? -1;
+            $this->fail(400, $err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE ? 'File too large.' : 'Upload failed.');
+        }
+        $id = $this->app->files()->save($f['tmp_name'], (string)$f['name'], (string)($f['type'] ?? ''));
+        $info = $this->app->files()->get($id);
+        return ['file' => array_intersect_key($info, array_flip(['id', 'name', 'mime', 'kind', 'size', 'duration']))];
+    }
+
+    /** Images, PDFs and audio are shown inline; anything else is downloaded, never rendered on this origin. */
+    private function serveFile(int $id): void
+    {
+        $f = $this->app->files()->get($id);
+        if (!$f || !is_file($f['path'])) $this->fail(404, 'not found');
+        while (ob_get_level() > 0) ob_end_clean();
+        $inline = in_array($f['kind'], ['image', 'pdf', 'audio'], true) && !str_contains($f['mime'], 'svg') && !str_contains($f['mime'], 'html');
+        header('Content-Type: ' . ($inline ? $f['mime'] : 'application/octet-stream'));
+        header('Content-Disposition: ' . ($inline ? 'inline' : 'attachment') . "; filename*=UTF-8''" . rawurlencode($f['name']));
+        header('X-Content-Type-Options: nosniff');
+        header("Content-Security-Policy: default-src 'none'; sandbox");
+        header('Cache-Control: private, max-age=86400');
+        header('Content-Length: ' . filesize($f['path']));
+        readfile($f['path']);
     }
 
     private function taskAction(int $id, string $action): array

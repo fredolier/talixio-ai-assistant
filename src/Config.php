@@ -10,6 +10,12 @@ final class Config
     public string $anthropicKey = '';
     public string $anthropicBaseUrl = 'https://api.anthropic.com';
     public string $openaiKey = '';
+    public string $geminiKey = '';               // usable for transcription, embeddings and search whatever the provider
+    public string $geminiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta';
+    public string $transcribe = 'auto';          // resolved to gemini | openai | off
+    public string $transcribeModel = '';
+    public string $meetingTier = 'standard';
+    public int $voiceNoteMaxSeconds = 180;       // longer audio is treated as a meeting recording
     public string $openaiBaseUrl = 'https://api.openai.com/v1';
     public string $claudeBin = 'claude';
     public string $dataDir = 'data';
@@ -80,10 +86,23 @@ final class Config
         $c->anthropicBaseUrl = rtrim($e('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'), '/');
         $c->openaiKey = $e('OPENAI_API_KEY');
         $c->openaiBaseUrl = rtrim($e('OPENAI_BASE_URL', 'https://api.openai.com/v1'), '/');
+        $c->geminiKey = $e('GEMINI_API_KEY');
+        $c->geminiBaseUrl = preg_replace('#/openai$#', '', rtrim($e('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'), '/'));
         if ($c->provider === 'gemini') { // Gemini through its OpenAI-compatible endpoint
-            $c->openaiKey = $e('GEMINI_API_KEY');
-            $c->openaiBaseUrl = rtrim($e('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta/openai'), '/');
+            $c->openaiKey = $c->geminiKey;
+            $c->openaiBaseUrl = $c->geminiBaseUrl . '/openai';
         }
+        $c->transcribe = strtolower($e('TALIXIO_TRANSCRIBE', 'auto'));
+        if ($c->transcribe === 'auto') {
+            $c->transcribe = match (true) {
+                $c->geminiKey !== '' => 'gemini',
+                $c->provider === 'openai' && $c->openaiKey !== '' && str_contains($c->openaiBaseUrl, 'api.openai.com') => 'openai',
+                default => 'off',
+            };
+        }
+        $c->transcribeModel = $e('TALIXIO_TRANSCRIBE_MODEL', match ($c->transcribe) { 'openai' => 'gpt-4o-transcribe', default => '' });
+        $c->meetingTier = $e('TALIXIO_MEETING_TIER', 'standard');
+        $c->voiceNoteMaxSeconds = (int)$e('TALIXIO_VOICE_NOTE_MAX_SECONDS', '180');
         $c->claudeBin = $e('TALIXIO_CLAUDE_BIN', 'claude');
         $c->dataDir = rtrim($e('TALIXIO_DATA_DIR', 'data'), '/');
         if (!str_starts_with($c->dataDir, '/')) $c->dataDir = getcwd() . '/' . $c->dataDir; // child processes run elsewhere
@@ -121,7 +140,7 @@ final class Config
         if ($c->embeddings === 'auto') {
             $c->embeddings = match (true) {
                 $c->voyageKey !== '' => 'voyage',
-                $c->provider === 'gemini' && $c->openaiKey !== '' => 'gemini',
+                $c->geminiKey !== '' => 'gemini',
                 $c->openaiKey !== '' && str_contains($c->openaiBaseUrl, 'api.openai.com') => 'openai',
                 default => 'off',
             };
@@ -157,6 +176,7 @@ final class Config
 
     public function tier(string $name): Tier { return $this->tiers[$name] ?? $this->tiers['standard']; }
     public function embeddingsBackend(): string { return $this->embeddings; }
+    public function filesDir(): string { return $this->dataDir . '/files'; }
     public function dbPath(): string { return $this->dataDir . '/talixio.db'; }
     public function workspaceDir(): string { return $this->dataDir . '/workspace'; }
     /** Models served by a local OpenAI-compatible server cost nothing. */

@@ -114,7 +114,21 @@ Create a bot with @BotFather, set `TALIXIO_TELEGRAM_TOKEN`, restart, and message
 with your chat id; put it in `TALIXIO_TELEGRAM_ALLOWED_IDS`. Telegram and the web app share the same
 conversation.
 
-## What it can do (v0.4)
+## What it can do (v0.5)
+- **Live answers**: replies appear as they are written, with what it's doing ("Searching the web…",
+  "Reading example.com…").
+- **Photos, PDFs, documents**: attach (or paste, or drag) files in the web app, or send them on
+  Telegram/Signal. Images are shown to the model; PDF and text files are read (scanned PDFs aren't
+  OCR'd yet) and become searchable.
+- **Voice notes**: tap the microphone in the web app, or send a voice message on Telegram/Signal:
+  it's transcribed and answered.
+- **Meeting summaries**: record a meeting in the web app (microphone → "Summarise meeting"; keep
+  the page open and the phone awake) or upload a recording (any audio over 3 minutes counts as a
+  meeting). It's transcribed with speaker labels in the background, then you get a summary,
+  decisions, action items (who/what/when) and open questions, and it offers reminders for your
+  action items. Transcripts and summaries are searchable later. Transcription uses Gemini
+  (`GEMINI_API_KEY`, also works when Claude is the brain) or OpenAI. Telegram bots can only
+  receive files up to 20 MB, so upload long recordings in the web app.
 - **One conversation everywhere**: web app, email, Signal, Telegram and terminal (`sudo talixio chat`)
   share one thread. Messages it starts go to push notifications, email, Signal, Telegram or ntfy
   (`TALIXIO_NOTIFY`); see and test them on the **Channels** page.

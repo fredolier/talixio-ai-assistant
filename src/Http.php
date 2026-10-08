@@ -36,6 +36,46 @@ final class Http
     }
 
     /**
+     * POST JSON and read a server-sent-events stream. Calls $onEvent(string $event, array $data) per event.
+     * Throws with the response body on HTTP errors.
+     */
+    public static function sse(string $url, array $payload, array $headers, callable $onEvent, int $timeout = 600): void
+    {
+        $status = 0; $buf = ''; $errBody = '';
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_USERAGENT => 'Talixio/0.5',
+            CURLOPT_HTTPHEADER => array_merge(['Content-Type: application/json', 'Accept: text/event-stream'], $headers),
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+            CURLOPT_HEADERFUNCTION => function ($ch, string $line) use (&$status) {
+                if (preg_match('#^HTTP/\S+ (\d{3})#', $line, $m)) $status = (int)$m[1];
+                return strlen($line);
+            },
+            CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$buf, &$status, &$errBody, $onEvent) {
+                if ($status >= 400) { $errBody .= $chunk; return strlen($chunk); }
+                $buf .= str_replace("\r\n", "\n", $chunk);
+                while (($pos = strpos($buf, "\n\n")) !== false) {
+                    $block = substr($buf, 0, $pos); $buf = substr($buf, $pos + 2);
+                    $event = 'message'; $data = '';
+                    foreach (explode("\n", $block) as $line) {
+                        if (str_starts_with($line, 'event:')) $event = trim(substr($line, 6));
+                        elseif (str_starts_with($line, 'data:')) $data .= ltrim(substr($line, 5));
+                    }
+                    if ($data === '' || $data === '[DONE]') continue;
+                    $json = json_decode($data, true);
+                    if (is_array($json)) $onEvent($event, $json);
+                }
+                return strlen($chunk);
+            },
+        ]);
+        $ok = curl_exec($ch);
+        $err = curl_error($ch);
+        curl_close($ch);
+        if ($status >= 400) throw new \RuntimeException("API error $status: " . mb_substr($errBody, 0, 400));
+        if ($ok === false) throw new \RuntimeException("HTTP error: $err");
+    }
+
+    /**
      * Fetch a public URL for the model. Blocks private/loopback/link-local addresses (so a web page
      * cannot trick the assistant into reading your router or cloud metadata), pins the resolved IP
      * against DNS rebinding, and re-checks every redirect.

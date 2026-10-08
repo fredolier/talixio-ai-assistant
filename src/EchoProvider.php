@@ -5,11 +5,13 @@ namespace Talixio;
 /** TALIXIO_PROVIDER=echo: no model, repeats your message. For checking an install before adding an API key. */
 final class EchoProvider implements Provider
 {
-    public function complete(string $system, string $context, array $messages, Tools $tools, callable $onUsage): string
+    public function complete(string $system, string $context, array $messages, Tools $tools, callable $onUsage, ?callable $onEvent = null): string
     {
-        $last = (string)(end($messages)['content'] ?? '');
+        $last = Content::text(end($messages)['content'] ?? '');
         if (str_contains($last, 'Reply with exactly: pong') || $last === 'ping') return 'pong';
         if (str_contains($last, 'HEARTBEAT_OK')) return 'HEARTBEAT_OK';
-        return "Echo mode (no AI model configured yet): \"$last\"\n\nSet TALIXIO_PROVIDER and an API key in /etc/talixio/talixio.env, then restart.";
+        $reply = "Echo mode (no AI model configured yet): \"$last\"\n\nSet TALIXIO_PROVIDER and an API key in /etc/talixio/talixio.env, then restart.";
+        if ($onEvent) foreach (preg_split('/(?<= )/', $reply) as $w) $onEvent(['type' => 'text', 'text' => $w]);
+        return $reply;
     }
 }

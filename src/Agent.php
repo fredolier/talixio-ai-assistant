@@ -53,7 +53,7 @@ final class Agent
      * @return array{0:string,1:array} text, meta {tier, model, in, out, cost}
      */
     public function run(string $source, string $tierName, string $toolset, array $history, string $extra = '',
-                        string $role = 'main', ?int $jobId = null, ?callable $guard = null): array
+                        string $role = 'main', ?int $jobId = null, ?callable $guard = null, ?callable $onEvent = null): array
     {
         $budget = $this->app->budget();
         $status = $budget->status();
@@ -72,12 +72,16 @@ final class Agent
             if ($budget->status()['state'] === 'blocked') throw new Abort('budget exhausted during the run');
         };
         $text = $this->app->provider($tier)->complete($this->systemPrompt($role), $role === 'summary' ? '' : $this->context($tier, $extra),
-            $history, $this->app->tools->only($toolset), $onUsage);
+            $history, $this->app->tools->only($toolset), $onUsage, $onEvent);
         return [trim($text), $meta];
     }
 
-    /** A message from the user on some channel. "/fast" or "/deep" at the start picks the tier. Returns the reply. */
-    public function chat(string $channel, string $text, string $tier = 'standard'): string
+    /**
+     * A message from the user on some channel. "/fast" or "/deep" at the start picks the tier.
+     * $files: ids of attached files (images are shown to the model, documents and audio as text).
+     * $onEvent receives live progress (text deltas, tool use) for streaming UIs. Returns the reply.
+     */
+    public function chat(string $channel, string $text, string $tier = 'standard', array $files = [], ?callable $onEvent = null): string
     {
         $store = $this->app->store;
         $prompt = $text;
@@ -85,18 +89,26 @@ final class Agent
         $lock = fopen($this->app->cfg->dataDir . '/agent.lock', 'c');
         flock($lock, LOCK_EX); // one main-thread turn at a time across the web app, worker and jobs
         try {
-            $store->addMessage('user', $channel, $text);
+            $ref = $files ? $this->app->files()->reference($files) : '';
+            $store->addMessage('user', $channel, trim($text . ($ref !== '' ? "\n$ref" : '')), null, $files);
             $history = $store->history($this->app->cfg->historyMessages, $oldest);
-            if ($prompt !== $text && $history) $history[count($history) - 1]['content'] = $prompt;
+            if ($history) {
+                $content = $prompt;
+                if ($files) {
+                    if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Reading the attachments…']);
+                    $content = $this->app->files()->parts($prompt, $files);
+                }
+                $history[count($history) - 1]['content'] = $content; // the new message, with attachments
+            }
             $recalled = '';
-            if (!in_array($channel, ['schedule', 'job'], true)) {
+            if (!in_array($channel, ['schedule', 'job'], true) && $prompt !== '') {
                 try { $recalled = $this->app->recall()->autoRecall($prompt, $oldest, $this->app->cfg->recallMinSim); }
                 catch (\Throwable $e) { Log::warn("recall: {$e->getMessage()}"); }
             }
             $meta = null;
             try {
                 [$reply, $meta] = $this->run($channel, $tier, 'chat', $history,
-                    $recalled !== '' ? "## Possibly relevant from past conversations\n$recalled" : '');
+                    $recalled !== '' ? "## Possibly relevant from past conversations\n$recalled" : '', 'main', null, null, $onEvent);
                 $reply = $reply ?: '(no response)';
             } catch (Abort $e) {
                 $reply = "I've reached my spending limit, so I'm not calling the model right now. " . $this->app->budget()->describe()
@@ -111,6 +123,36 @@ final class Agent
             flock($lock, LOCK_UN);
             fclose($lock);
         }
+    }
+
+    /**
+     * Audio received on any channel: a short voice note is transcribed and answered like a typed message;
+     * a longer recording becomes a background meeting-summary job. Returns the reply (or an acknowledgement).
+     */
+    public function audio(string $channel, int $fileId, string $caption = '', ?callable $onEvent = null): string
+    {
+        $f = $this->app->files()->get($fileId) ?? throw new \RuntimeException("no file $fileId");
+        $long = ($f['duration'] ?? 0) > $this->app->cfg->voiceNoteMaxSeconds || preg_match('/\b(meeting|réunion|reunion|call|interview)\b/i', $caption);
+        if ($long) {
+            $id = $this->app->jobs()->createMeeting($fileId, $caption);
+            $mins = $f['duration'] ? ' (' . max(1, (int)round($f['duration'] / 60)) . ' min)' : '';
+            $msg = "Got the recording{$mins}. I'm transcribing and summarising it in the background (job #$id): you'll get the summary, decisions and action items here.";
+            $this->app->store->addMessage('user', $channel, trim("$caption\n" . $this->app->files()->reference([$fileId])), null, [$fileId]);
+            $this->app->store->addMessage('assistant', $channel, $msg);
+            return $msg;
+        }
+        if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Transcribing your voice note…']);
+        $transcript = $this->app->files()->text($fileId);
+        return $this->chat($channel, trim(($caption !== '' ? "$caption\n" : '') . "🎤 $transcript"), 'standard', [], $onEvent);
+    }
+
+    /** A message with attachments from a chat app: audio goes through audio(), other files are attached. */
+    public function incoming(string $channel, string $text, array $fileIds): string
+    {
+        foreach ($fileIds as $id) {
+            if (($this->app->files()->get($id)['kind'] ?? '') === 'audio') return $this->audio($channel, $id, $text);
+        }
+        return $this->chat($channel, $text, 'standard', $fileIds);
     }
 
     /** A scheduled task fires: the prompt is recorded in the thread so the conversation stays coherent. */

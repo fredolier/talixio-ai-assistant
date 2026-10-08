@@ -28,7 +28,7 @@ say() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 say "Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq php-cli php-curl php-sqlite3 php-mbstring rsync curl ca-certificates >/dev/null
+apt-get install -y -qq php-cli php-curl php-sqlite3 php-mbstring php-gd rsync curl ca-certificates ffmpeg poppler-utils >/dev/null
 php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || { echo "PHP 8.2+ required (found $(php -r 'echo PHP_VERSION;')). Use Debian 12+ or Ubuntu 24.04+." >&2; exit 1; }
 
 say "Creating user and directories"

@@ -69,9 +69,9 @@ check('mcp tools/call', str_contains($call['result']['content'][0]['text'], 'Bri
 final class FakeModel implements Provider {
     public array $calls = [];
     /** @var callable */ public $script;
-    public function complete(string $system, string $context, array $messages, Tools $tools, callable $onUsage): string {
+    public function complete(string $system, string $context, array $messages, Tools $tools, callable $onUsage, ?callable $onEvent = null): string {
         $this->calls[] = compact('system', 'context', 'messages') + ['tools' => $tools->names()];
-        return ($this->script)(end($messages)['content'], $tools, $onUsage, $context);
+        return ($this->script)(\Talixio\Content::text(end($messages)["content"]), $tools, $onUsage, $context, $messages, $onEvent);
     }
 }
 $fake = new FakeModel();
@@ -307,6 +307,100 @@ $sent = json_decode((string)file_get_contents("$dir/gemini-last.json"), true);
 check('gemini: tool loop works through the OpenAI-compatible API', $text === 'Done: no tasks' && $meta['model'] === 'gemini-9.0-flash' && $meta['cost'] > 0, "$text " . json_encode($meta));
 check('gemini: thought signature sent back with the tool call', ($sent['messages'][2]['tool_calls'][0]['extra_content']['google']['thought_signature'] ?? '') === 'SIG');
 proc_terminate($gp); proc_close($gp);
+
+// ---- streaming, attachments, audio ----
+putenv("TALIXIO_FAKE_LOG=$dir/fake-llm.log");
+$llmPort = random_int(20000, 40000);
+$llm = proc_open([PHP_BINARY, '-S', "127.0.0.1:$llmPort", __DIR__ . '/fakes/llm-stream.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp);
+$waitPort($llmPort);
+$events = [];
+$collect = function (array $e) use (&$events) { $events[] = $e; };
+$tier = new \Talixio\Tier('standard', 'claude-sonnet-x', 5, 2048);
+$usageLog = [];
+$text = (new \Talixio\AnthropicProvider('k', $tier, false, "http://127.0.0.1:$llmPort"))->complete('sys', '', [['role' => 'user', 'content' => 'tasks?']], $app->tools->only('chat'),
+    function ($u) use (&$usageLog) { $usageLog[] = $u; }, $collect);
+check('anthropic stream: text assembled across deltas and a tool call', str_starts_with($text, 'Here are your tasks: ') && str_contains($text, '#2 Brief'), $text);
+check('anthropic stream: deltas and tool events emitted', count(array_filter($events, fn($e) => $e['type'] === 'text')) === 4 && in_array('list_tasks', array_column(array_filter($events, fn($e) => $e['type'] === 'tool'), 'name'), true));
+check('anthropic stream: usage from start and delta', $usageLog[0]['in'] === 100 && $usageLog[0]['out'] === 20 && $usageLog[1]['out'] === 12);
+$rawLines = array_values(array_filter(explode("\n", (string)@file_get_contents("$dir/fake-llm.log"))));
+$second = json_decode(end($rawLines), true);
+check('anthropic stream: thinking block with signature and {} tool input sent back', ($second['messages'][1]['content'][0]['signature'] ?? '') === 'SIG123'
+    && str_contains(end($rawLines), '"name":"list_tasks","input":{}') && ($second['thinking']['budget_tokens'] ?? 0) === 2048);
+$events = [];
+$text = (new \Talixio\OpenAIProvider('k', new \Talixio\Tier('standard', 'gemini-x', 5), "http://127.0.0.1:$llmPort"))->complete('sys', '', [['role' => 'user', 'content' => 'tasks?']], $app->tools->only('chat'),
+    fn($u) => null, $collect);
+$sent = array_map(fn($l) => json_decode($l, true), array_filter(explode("\n", (string)@file_get_contents("$dir/fake-llm.log"))));
+check('openai stream: tool call fragments merged, extra fields kept', str_starts_with($text, 'Done: ') && (end($sent)['messages'][2]['tool_calls'][0]['extra_content']['google']['thought_signature'] ?? '') === 'S1', $text);
+check('openai stream: deltas emitted', implode('', array_column(array_filter($events, fn($e) => $e['type'] === 'text'), 'text')) === $text);
+@unlink("$dir/fake-llm.log");
+
+// content conversion
+$parts = [['type' => 'text', 'text' => 'look'], ['type' => 'image', 'mime' => 'image/png', 'data' => 'QUJD']];
+check('content: anthropic image block', \Talixio\Content::anthropic($parts)[1]['source']['media_type'] === 'image/png');
+check('content: openai data url', \Talixio\Content::openai($parts)[1]['image_url']['url'] === 'data:image/png;base64,QUJD');
+
+// files: PDF text, image downscale, audio
+$pdfText = 'Invoice 42 total 1250 EUR';
+$objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    "<< /Length " . strlen("BT /F1 12 Tf 20 100 Td ($pdfText) Tj ET") . " >>\nstream\nBT /F1 12 Tf 20 100 Td ($pdfText) Tj ET\nendstream", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+$pdf = "%PDF-1.4\n"; $off = [];
+foreach ($objs as $i => $o) { $off[] = strlen($pdf); $pdf .= ($i + 1) . " 0 obj\n$o\nendobj\n"; }
+$x = strlen($pdf); $pdf .= "xref\n0 6\n0000000000 65535 f \n" . implode('', array_map(fn($o) => sprintf("%010d 00000 n \n", $o), $off)) . "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n$x\n%%EOF\n";
+file_put_contents("$dir/in.pdf", $pdf);
+$pdfId = $app->files()->save("$dir/in.pdf", 'invoice.pdf');
+check('files: pdf detected and text extracted', $app->files()->get($pdfId)['kind'] === 'pdf' && str_contains($app->files()->text($pdfId), $pdfText));
+check('files: pdf text is searchable', str_contains($app->tools->run('search_memory', ['query' => 'invoice total']), '1250'));
+$img = imagecreatetruecolor(3000, 1500); ob_start(); imagepng($img); file_put_contents("$dir/big.png", ob_get_clean());
+$imgId = $app->files()->save("$dir/big.png", 'big.png');
+$part = $app->files()->imagePart($imgId);
+$dims = getimagesizefromstring(base64_decode($part['data']));
+check('files: large image downscaled to 1600px jpeg', $part['mime'] === 'image/jpeg' && $dims[0] === 1600 && $dims[1] === 800);
+check('files: unsafe names cleaned', !str_contains($app->files()->get($app->files()->save((function () use ($dir) { file_put_contents("$dir/t.txt", 'x'); return "$dir/t.txt"; })(), '../../etc/<x>.txt'))['path'], '..'));
+
+// chat with attachments: image goes to the model as an image part, the stored message keeps a reference
+$fake->script = function ($last, $tools, $on, $ctx, $messages) { return json_encode(array_column(is_array(end($messages)['content']) ? end($messages)['content'] : [], 'type')); };
+$reply = $app->agent()->chat('web', 'What is in these?', 'standard', [$imgId, $pdfId]);
+check('chat: image part and document text sent to the model', $reply === '["text","text","image","text"]', $reply);
+$um = $s->messagesAfter(0); $um = $um[count($um) - 2];
+check('chat: stored message references the files', str_contains($um['content'], '[attached image #') && count($um['files']) === 2 && $um['files'][0]['kind'] === 'image');
+
+// audio: voice note transcribed and answered; long recording becomes a meeting job
+putenv("GEMINI_API_KEY=k"); $app->cfg->geminiKey = 'k'; $app->cfg->transcribe = 'gemini'; $app->cfg->geminiBaseUrl = "http://127.0.0.1:$llmPort/v1beta";
+exec('ffmpeg -nostdin -loglevel error -f lavfi -i sine=frequency=440:duration=4 -y ' . escapeshellarg("$dir/note.wav"));
+exec('ffmpeg -nostdin -loglevel error -f lavfi -i sine=frequency=440:duration=200 -ac 1 -y ' . escapeshellarg("$dir/meeting.ogg"));
+$noteId = $app->files()->save("$dir/note.wav", 'note.wav');
+check('audio: duration measured', abs((float)$app->files()->get($noteId)['duration'] - 4.0) < 0.2);
+$fake->script = function ($last) { return "You said: $last"; };
+$reply = $app->agent()->incoming('signal', '', [$noteId]);
+check('voice note: transcribed then answered', str_contains($reply, '🎤 [00:00] Speaker 1: We decide to launch on Monday'), $reply);
+check('voice note: transcription cost recorded', (int)$s->q("SELECT COUNT(*) FROM usage WHERE source='transcription'")->fetchColumn() === 1);
+$meetId = $app->files()->save("$dir/meeting.ogg", 'Weekly sync.ogg');
+$ack = $app->agent()->audio('web', $meetId);
+$job = $s->jobs()[0];
+check('meeting: long recording becomes a background job', $job['kind'] === 'meeting' && (int)$job['file_id'] === $meetId && str_contains($ack, 'transcribing and summarising'));
+$fake->script = function ($last) { return str_contains($last, '# Transcript') ? (str_contains($last, 'Fred will send the invoice') ? "**Summary** Launch Monday.\n**Action items**: Fred: invoice by Friday" : 'no transcript') : "Relayed: $last"; };
+$app->jobs()->runJob((int)$job['id']);
+$job = $s->job((int)$job['id']);
+check('meeting: transcript summarised with action items', $job['status'] === 'done' && str_contains($job['result'], 'Fred: invoice by Friday'), (string)$job['result']);
+check('meeting: transcript and summary searchable', str_contains($app->tools->run('search_memory', ['query' => 'launch Monday']), 'transcript: Weekly sync') || str_contains($app->tools->run('search_memory', ['query' => 'launch Monday']), 'meeting summary'));
+$last = $s->messagesAfter(0); $last = end($last);
+check('meeting: summary relayed in the chat', str_starts_with($last['content'], 'Relayed: [Background job') && str_contains($last['content'], 'offer to schedule reminders'));
+proc_terminate($llm); proc_close($llm);
+
+// claude-code: stream-json events, images written next to it, Read allowed only then
+putenv("TALIXIO_FAKE_CLAUDE_ARGS=$dir/claude-args.txt");
+$events = [];
+$cc = new \Talixio\ClaudeCodeProvider(__DIR__ . '/fakes/claude', new \Talixio\Tier('standard', 'sonnet', 5), true, dirname(__DIR__) . '/bin/talixio');
+$out = $cc->complete('sys', 'ctx', [['role' => 'user', 'content' => [['type' => 'text', 'text' => 'what is this?'], ['type' => 'image', 'mime' => 'image/png', 'data' => base64_encode('PNG')]]]],
+    $app->tools->only('chat'), fn($u) => null, $collect);
+$args = (string)file_get_contents("$dir/claude-args.txt");
+check('claude-code: result and live events', $out === 'Nothing scheduled.' && in_array('list_tasks', array_column($events, 'name'), true) && in_array('Nothing scheduled.', array_column($events, 'text'), true));
+check('claude-code: image placed in its folder and Read allowed', str_contains($args, 'image-1.png') && preg_match('/^mcp__talixio__\S*,WebSearch,WebFetch,Read$/m', $args) === 1, $args);
+check('claude-code: shell and editing tools disabled', str_contains($args, 'Bash,Edit,Write,MultiEdit,NotebookEdit,Task,Agent,Glob,Grep'));
+$cc->complete('sys', '', [['role' => 'user', 'content' => 'hi']], $app->tools->only('none'), fn($u) => null);
+$args = (string)file_get_contents("$dir/claude-args.txt");
+check('claude-code: no Read and no MCP without attachments or tools', !str_contains($args, 'Read') && !str_contains($args, '--mcp-config'), $args);
 
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";

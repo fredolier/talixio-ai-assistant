@@ -41,12 +41,12 @@ final class Search
     /** Gemini's native "Grounding with Google Search" (same API key), on the fast tier's model. */
     private static function gemini(Config $cfg, string $q): array
     {
-        $base = preg_replace('#/openai$#', '', $cfg->openaiBaseUrl);
-        $model = preg_replace('#^models/#', '', $cfg->tier('fast')->model ?: GeminiModels::FALLBACK['fast']);
+        $base = $cfg->geminiBaseUrl;
+        $model = $cfg->provider === 'gemini' ? preg_replace('#^models/#', '', $cfg->tier('fast')->model ?: GeminiModels::FALLBACK['fast']) : GeminiModels::FALLBACK['standard'];
         $d = Http::json("$base/models/$model:generateContent", [
             'contents' => [['parts' => [['text' => "Search the web and give a factual summary with key details (dates, numbers, names) for: $q"]]]],
             'tools' => [['google_search' => new \stdClass()]],
-        ], ['x-goog-api-key: ' . $cfg->openaiKey], 60);
+        ], ['x-goog-api-key: ' . $cfg->geminiKey], 60);
         $cand = $d['candidates'][0] ?? [];
         $text = implode('', array_column($cand['content']['parts'] ?? [], 'text'));
         $items = [['Search summary (Google, via Gemini)', '', $text]];

@@ -64,8 +64,8 @@ function md(src) {
   return out.join('').replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[+i]);
 }
 
-const CHANNEL = { web: null, cli: 'Terminal', telegram: 'Telegram', email: 'Email', signal: 'Signal', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
-const money = v => v == null ? '' : v < 0.01 ? '<$0.01' : '$' + v.toFixed(v < 1 ? 3 : 2);
+const CHANNEL = { web: null, approval: 'Approval', cli: 'Terminal', telegram: 'Telegram', email: 'Email', signal: 'Signal', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
+const money = v => v == null ? '' : v === 0 ? '$0' : v < 0.01 ? '<$0.01' : '$' + v.toFixed(v < 1 ? 3 : 2);
 const ktok = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
 const fmtTime = ts => new Date(ts * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -86,9 +86,14 @@ function renderMessage(m) {
   }
   el.className = `msg ${m.role}`;
   const chip = CHANNEL[m.channel] ? `<span class="chip ${m.channel}">${CHANNEL[m.channel]}</span>` : '';
+  const atts = (m.files || []).map(f => f.kind === 'image'
+      ? `<a href="/api/files/${f.id}" target="_blank" rel="noopener"><img src="/api/files/${f.id}" alt="${esc(f.name)}" loading="lazy"></a>`
+      : f.kind === 'audio' ? `<audio controls preload="none" src="/api/files/${f.id}"></audio>`
+      : `<a class="fchip" href="/api/files/${f.id}" target="_blank" rel="noopener">${f.kind === 'pdf' ? 'PDF' : 'File'} · ${esc(f.name)}</a>`).join('');
+  const body = m.content.replace(/^\[attached [^\]]*\]$/gm, '').trim();
   const mt = m.meta;
-  const usage = mt ? `<span class="tier" title="${esc(mt.model)} · ${nf.format(mt.in)} in / ${nf.format(mt.out)} out tokens">${esc(shortModel(mt.model))} · ${ktok(mt.in + mt.out)} tok${mt.cost_known ? ' · ' + money(mt.cost) : ''}</span>` : '';
-  el.innerHTML = `<div class="bubble">${m.role === 'user' ? esc(m.content) : md(m.content)}</div><div class="meta">${chip}<span>${fmtTime(m.ts)}</span>${usage}</div>`;
+  const usage = mt && (mt.in + mt.out) > 0 ? `<span class="tier" title="${esc(mt.model)} · ${nf.format(mt.in)} in / ${nf.format(mt.out)} out tokens">${esc(shortModel(mt.model))} · ${ktok(mt.in + mt.out)} tok${mt.cost_known ? ' · ' + money(mt.cost) : ''}</span>` : '';
+  el.innerHTML = `${atts ? `<div class="attachments">${atts}</div>` : ''}${body ? `<div class="bubble">${m.role === 'user' ? esc(body) : md(body)}</div>` : ''}<div class="meta">${chip}<span>${fmtTime(m.ts)}</span>${usage}</div>`;
   return el;
 }
 
@@ -135,25 +140,141 @@ async function poll() {
   try { appendMessages((await api('/api/messages?after=' + state.lastId)).messages, true); } catch {}
 }
 
-async function send() {
+const TOOL_LABEL = (name, input = {}) => {
+  const host = u => { try { return new URL(u).host; } catch { return 'a page'; } };
+  return ({
+    web_search: `Searching the web${input.query ? ': ' + input.query : ''}`, WebSearch: `Searching the web${input.query ? ': ' + input.query : ''}`,
+    fetch_url: `Reading ${host(input.url)}`, WebFetch: `Reading ${host(input.url)}`, Read: 'Looking at the image',
+    search_memory: 'Searching past conversations', memory_read: 'Reading memory', memory_append: 'Saving to memory', memory_replace: 'Updating memory',
+    schedule_task: 'Scheduling', list_tasks: 'Checking scheduled tasks', cancel_task: 'Cancelling a task',
+    delegate: `Starting a background job${input.title ? ': ' + input.title : ''}`, list_jobs: 'Checking jobs', cancel_job: 'Cancelling a job',
+    usage_report: 'Checking spending', file_read: 'Reading the attachment',
+  })[name] || `Using ${name.replace(/_/g, ' ')}`;
+};
+const SPIN = '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
+
+async function send(opts = {}) {
   const input = $('#input'); const text = input.value.trim();
-  if (!text || state.sending) return;
+  const files = opts.files || state.pending.filter(f => f.id).map(f => f.id);
+  if ((!text && !files.length) || state.sending) return;
+  if (state.pending.some(f => !f.id)) { toast('Wait for the upload to finish.'); return; }
   state.sending = true; $('#send').disabled = true;
   input.value = ''; autosize();
+  const shownFiles = opts.shownFiles || state.pending.map(f => f.info);
+  state.pending = []; renderPending();
   $('#empty')?.remove();
   const thread = $('#thread');
-  const pending = renderMessage({ id: 0, role: 'user', channel: 'web', content: text, ts: Date.now() / 1000 });
-  const typing = document.createElement('div'); typing.className = 'msg assistant typing'; typing.innerHTML = '<div class="bubble"><i></i><i></i><i></i></div>';
-  thread.append(pending, typing); thread.scrollTop = thread.scrollHeight;
+  const pending = renderMessage({ id: 0, role: 'user', channel: 'web', content: text, files: shownFiles, ts: Date.now() / 1000 });
+  const live = document.createElement('div'); live.className = 'msg assistant typing';
+  live.innerHTML = '<div class="bubble"><i></i><i></i><i></i></div><div class="activity" hidden></div>';
+  thread.append(pending, live); thread.scrollTop = thread.scrollHeight;
+  let textSoFar = '';
+  const activity = t => { const a = live.querySelector('.activity'); a.hidden = !t; a.innerHTML = t ? SPIN + esc(t) : ''; thread.scrollTop = thread.scrollHeight; };
   try {
-    const { messages } = await post('/api/chat', { text });
-    pending.remove(); typing.remove();
-    appendMessages(messages);
+    const res = await fetch('/api/chat', { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Talixio': '1', Accept: 'text/event-stream' },
+      body: JSON.stringify({ text, files, meeting: !!opts.meeting, stream: true }) });
+    if (res.status === 401) { showLogin(); throw new Error('Please sign in.'); }
+    if (!res.ok || !res.body) throw new Error(`Server error (HTTP ${res.status})`);
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = ''; let done = null;
+    while (true) {
+      const { value, done: end } = await reader.read();
+      if (end) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, i); buf = buf.slice(i + 2);
+        const ev = (block.match(/^event: (.*)$/m) || [])[1]; const data = (block.match(/^data: (.*)$/m) || [])[1];
+        if (!ev || !data) continue;
+        const d = JSON.parse(data);
+        if (ev === 'text') {
+          textSoFar += d.text; live.classList.remove('typing');
+          live.querySelector('.bubble').innerHTML = md(textSoFar); live.querySelector('.bubble').classList.add('cursor'); activity('');
+          thread.scrollTop = thread.scrollHeight;
+        } else if (ev === 'tool') { activity(TOOL_LABEL(d.name, d.input)); if (textSoFar) { textSoFar += '\n\n'; } }
+        else if (ev === 'status') activity(d.text);
+        else if (ev === 'done') done = d;
+        else if (ev === 'fail') throw new Error(d.error);
+      }
+    }
+    if (!done) throw new Error('The connection was interrupted. The answer will appear when ready.');
+    pending.remove(); live.remove();
+    appendMessages(done.messages);
   } catch (e) {
-    typing.remove(); toast(e.message); input.value = text;
+    live.remove(); toast(e.message);
+    if (!textSoFar) { pending.remove(); input.value = text; }
   } finally {
     state.sending = false; $('#send').disabled = false; input.focus();
   }
+}
+
+// ---- attachments ----
+state.pending = [];
+function renderPending() {
+  const box = $('#pending-files'); box.hidden = !state.pending.length;
+  box.innerHTML = '';
+  state.pending.forEach((f, i) => {
+    const c = document.createElement('span'); c.className = 'fchip' + (f.id ? '' : ' uploading');
+    c.innerHTML = `${esc(f.info.name)}${f.id ? '' : ' · uploading…'} <button type="button" aria-label="Remove">×</button>`;
+    c.querySelector('button').onclick = () => { state.pending.splice(i, 1); renderPending(); };
+    box.append(c);
+  });
+}
+function uploadFile(file, name) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData(); fd.append('file', file, name || file.name);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/files'); xhr.setRequestHeader('X-Talixio', '1');
+    xhr.onload = () => { try { const d = JSON.parse(xhr.responseText); xhr.status < 300 ? resolve(d.file) : reject(new Error(d.error || 'Upload failed')); } catch { reject(new Error(`Upload failed (HTTP ${xhr.status})`)); } };
+    xhr.onerror = () => reject(new Error('Upload failed: network error'));
+    xhr.send(fd);
+  });
+}
+async function addFiles(list) {
+  for (const file of list) {
+    const entry = { id: null, info: { name: file.name, kind: file.type.startsWith('image/') ? 'image' : 'file' } };
+    state.pending.push(entry); renderPending();
+    try { const info = await uploadFile(file); entry.id = info.id; entry.info = info; }
+    catch (e) { state.pending.splice(state.pending.indexOf(entry), 1); toast(e.message); }
+    renderPending();
+  }
+}
+
+// ---- voice notes and meeting recordings ----
+const rec = { media: null, chunks: [], start: 0, timer: null, wake: null };
+async function startRecording() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { toast('Recording needs a recent browser over HTTPS.'); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+  catch { toast('Microphone access was refused.'); return; }
+  const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  rec.media = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
+  rec.chunks = []; rec.media.ondataavailable = e => e.data.size && rec.chunks.push(e.data);
+  rec.media.start(10000); rec.start = Date.now();
+  try { rec.wake = await navigator.wakeLock?.request('screen'); } catch {}
+  $('#recorder').hidden = false; $('#composer').hidden = true;
+  const tick = () => { const s = Math.floor((Date.now() - rec.start) / 1000); $('#rec-time').textContent = `${Math.floor(s / 3600) ? Math.floor(s / 3600) + ':' : ''}${String(Math.floor(s / 60) % 60).padStart(Math.floor(s / 3600) ? 2 : 1, '0')}:${String(s % 60).padStart(2, '0')}`; };
+  tick(); rec.timer = setInterval(tick, 1000);
+}
+function stopRecording() {
+  return new Promise(resolve => {
+    clearInterval(rec.timer); try { rec.wake?.release(); } catch {}
+    $('#recorder').hidden = true; $('#composer').hidden = false;
+    if (!rec.media) return resolve(null);
+    rec.media.onstop = () => { rec.media.stream.getTracks().forEach(t => t.stop()); const b = new Blob(rec.chunks, { type: rec.media.mimeType || 'audio/webm' }); rec.media = null; resolve(b); };
+    rec.media.stop();
+  });
+}
+async function finishRecording(meeting) {
+  const blob = await stopRecording();
+  if (!blob || blob.size < 1000) { toast('Nothing was recorded.'); return; }
+  const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+  const name = `${meeting ? 'meeting' : 'voice-note'}-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.${ext}`;
+  toast(meeting ? 'Uploading the recording…' : 'Sending your voice note…');
+  try {
+    const info = await uploadFile(blob, name);
+    await send({ files: [info.id], shownFiles: [info], meeting });
+  } catch (e) { toast(e.message); }
 }
 
 function autosize() { const i = $('#input'); i.style.height = 'auto'; i.style.height = Math.min(i.scrollHeight, 200) + 'px'; }
@@ -356,6 +477,16 @@ $('#login-form').onsubmit = async e => {
 };
 $('#logout').onclick = async () => { try { await post('/api/logout'); } catch {} showLogin(); };
 $('#composer').onsubmit = e => { e.preventDefault(); send(); };
+$('#attach').onclick = () => $('#file-input').click();
+$('#file-input').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
+$('#mic').onclick = startRecording;
+$('#rec-cancel').onclick = () => stopRecording();
+$('#rec-voice').onclick = () => finishRecording(false);
+$('#rec-meeting').onclick = () => finishRecording(true);
+$('#input').addEventListener('paste', e => { const f = [...(e.clipboardData?.files || [])]; if (f.length) { e.preventDefault(); addFiles(f); } });
+['dragover', 'dragenter'].forEach(t => $('#composer').addEventListener(t, e => { e.preventDefault(); $('#composer').classList.add('drag'); }));
+['dragleave', 'drop'].forEach(t => $('#composer').addEventListener(t, () => $('#composer').classList.remove('drag')));
+$('#composer').addEventListener('drop', e => { e.preventDefault(); addFiles([...(e.dataTransfer?.files || [])]); });
 $('#input').addEventListener('input', autosize);
 $('#input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
 $('#test-notify').onclick = async () => {
