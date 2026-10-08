@@ -1,0 +1,21 @@
+[Unit]
+Description=Talixio assistant web app
+After=network-online.target
+
+[Service]
+User=talixio
+Group=talixio
+EnvironmentFile=/etc/talixio/talixio.env
+Environment=HOME=/var/lib/talixio
+Environment=PATH=/var/lib/talixio/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PHP_CLI_SERVER_WORKERS=4
+WorkingDirectory=/var/lib/talixio
+ExecStart=/usr/bin/php -d variables_order=EGPCS -S ${TALIXIO_WEB_BIND} -t /opt/talixio/web/public /opt/talixio/web/router.php
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

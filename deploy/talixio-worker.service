@@ -1,0 +1,21 @@
+[Unit]
+Description=Talixio assistant worker (chat apps, schedules, heartbeat)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=talixio
+Group=talixio
+EnvironmentFile=/etc/talixio/talixio.env
+Environment=HOME=/var/lib/talixio
+Environment=PATH=/var/lib/talixio/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=/var/lib/talixio
+ExecStart=/usr/bin/php /opt/talixio/bin/talixio worker
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

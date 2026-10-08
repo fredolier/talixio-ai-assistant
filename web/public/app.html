@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#0e7c6b">
+<title>Talixio</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="login" class="login" hidden>
+  <form id="login-form" class="login-card">
+    <div class="mark" aria-hidden="true"></div>
+    <h1>Talixio</h1>
+    <p class="muted">Your assistant, on your server.</p>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required autofocus>
+    <button class="btn primary" type="submit">Sign in</button>
+    <p id="login-error" class="error" role="alert"></p>
+  </form>
+</div>
+
+<div id="shell" class="shell" hidden>
+  <nav class="rail" aria-label="Sections">
+    <div class="brand"><div class="mark" aria-hidden="true"></div><span id="brand-name">Talixio</span></div>
+    <a href="#chat" data-view="chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></svg><span>Chat</span></a>
+    <a href="#tasks" data-view="tasks"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Tasks</span></a>
+    <a href="#memory" data-view="memory"><svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg><span>Memory</span></a>
+    <a href="#activity" data-view="activity"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Activity</span></a>
+    <div class="rail-foot">
+      <div id="status" class="status" title="Background worker"><i></i><span>…</span></div>
+      <button id="logout" class="link" type="button">Sign out</button>
+    </div>
+  </nav>
+
+  <main>
+    <section id="view-chat" class="view chat-view">
+      <header class="topbar">
+        <div><h2 id="chat-title">Chat</h2><p class="muted small" id="chat-sub"></p></div>
+        <button id="notify-btn" class="btn ghost small" type="button" hidden>Enable notifications</button>
+      </header>
+      <div id="thread" class="thread" aria-live="polite"></div>
+      <form id="composer" class="composer">
+        <textarea id="input" rows="1" placeholder="Message Talixio…" aria-label="Message"></textarea>
+        <button id="send" class="btn primary icon" type="submit" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2-6z"/></svg></button>
+      </form>
+    </section>
+
+    <section id="view-tasks" class="view page" hidden>
+      <header class="page-head"><h2>Scheduled tasks</h2>
+        <p class="muted">Ask in chat to create them: <q>remind me tomorrow at 9 to call the bank</q>, <q>every weekday at 8:00 send me a briefing</q>.</p></header>
+      <div id="tasks" class="list"></div>
+    </section>
+
+    <section id="view-memory" class="view page" hidden>
+      <header class="page-head"><h2>Memory</h2>
+        <p class="muted">Plain files the assistant reads before every answer and updates as it learns. You can edit them too.</p></header>
+      <div class="tabs" id="mem-tabs" role="tablist"></div>
+      <p class="muted small" id="mem-help"></p>
+      <textarea id="mem-editor" class="editor" spellcheck="false" aria-label="File content"></textarea>
+      <div class="row"><button id="mem-save" class="btn primary" type="button">Save</button><span id="mem-state" class="muted small"></span></div>
+    </section>
+
+    <section id="view-activity" class="view page" hidden>
+      <header class="page-head"><h2>Activity</h2><p class="muted">Model usage over the last 30 days and every tool the assistant used.</p></header>
+      <div id="usage" class="usage"></div>
+      <h3>Tool calls</h3>
+      <div class="table-wrap"><table id="tools"><thead><tr><th>When</th><th>Tool</th><th>Input</th><th>Result</th></tr></thead><tbody></tbody></table></div>
+    </section>
+  </main>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

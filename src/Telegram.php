@@ -2,66 +2,41 @@
 declare(strict_types=1);
 namespace Talixio;
 
-/** Long-polling bot (no public URL needed) plus a UTC daily scheduler, in one loop. */
+/** Telegram bot via long polling: no public URL needed. Only allowlisted chat ids are answered. */
 final class Telegram
 {
     private string $api;
-    private array $lastFired = [];
 
-    public function __construct(private Config $cfg, private Agent $agent)
+    public function __construct(private Config $cfg, private ?App $app)
     {
         $this->api = "https://api.telegram.org/bot{$cfg->telegramToken}";
     }
 
     public function send(int $chat, string $text): void
     {
-        foreach (mb_str_split($text, 4000) as $part) { // Telegram limit is 4096
+        foreach (mb_str_split($text, 4000) as $part) {
             Http::json("{$this->api}/sendMessage", ['chat_id' => $chat, 'text' => $part], [], 30);
         }
     }
 
-    private function answer(int $chat, string $text): void
+    /** One long-poll round (up to $timeout seconds). */
+    public function poll(int $timeout): void
     {
-        try { $this->send($chat, $this->agent->reply((string)$chat, $text)); }
-        catch (\Throwable $e) {
-            Log::error('handler failed: ' . $e->getMessage());
-            try { $this->send($chat, 'Sorry, something went wrong.'); } catch (\Throwable) {}
-        }
-    }
-
-    private function tickScheduler(): void
-    {
-        $hhmm = gmdate('H:i'); $day = gmdate('Y-m-d');
-        foreach ($this->cfg->dailyJobs as $i => [$when, $chat, $prompt]) {
-            if ($when === $hhmm && ($this->lastFired[$i] ?? '') !== $day) {
-                $this->lastFired[$i] = $day;
-                $this->answer($chat, $prompt);
+        $store = $this->app->store;
+        $offset = (int)$store->get('telegram_offset', '0');
+        [, $body] = Http::request('GET', "{$this->api}/getUpdates?timeout=$timeout&offset=$offset", [], null, $timeout + 15);
+        foreach ((json_decode($body, true)['result'] ?? []) as $u) {
+            $store->set('telegram_offset', (string)($u['update_id'] + 1));
+            $chat = $u['message']['chat']['id'] ?? null;
+            $text = $u['message']['text'] ?? null;
+            if ($chat === null || $text === null) continue;
+            if (!in_array($chat, $this->cfg->telegramAllowed, true)) {
+                Log::warn("telegram: ignored chat $chat (add it to TALIXIO_TELEGRAM_ALLOWED_IDS)");
+                $this->send($chat, "This assistant is private. Your chat id is $chat.");
+                continue;
             }
-        }
-    }
-
-    public function run(): never
-    {
-        $offset = 0;
-        while (true) {
-            try {
-                [, $body] = Http::request('GET', "{$this->api}/getUpdates?timeout=25&offset=$offset", [], null, 40);
-                foreach ((json_decode($body, true)['result'] ?? []) as $u) {
-                    $offset = $u['update_id'] + 1;
-                    $chat = $u['message']['chat']['id'] ?? null;
-                    $text = $u['message']['text'] ?? null;
-                    if ($chat === null || $text === null) continue;
-                    if ($this->cfg->telegramAllowed && !in_array($chat, $this->cfg->telegramAllowed, true)) {
-                        Log::warn("ignored unauthorized chat $chat");
-                        continue;
-                    }
-                    $this->answer($chat, $text);
-                }
-            } catch (\Throwable $e) {
-                Log::error('poll failed: ' . $e->getMessage());
-                sleep(5);
-            }
-            $this->tickScheduler();
+            if ($text === '/start') { $this->send($chat, "Hi, I'm {$this->cfg->name}. Ask me anything."); continue; }
+            $this->send($chat, $this->app->agent()->chat('telegram', $text));
         }
     }
 }

@@ -5,9 +5,10 @@ namespace Talixio;
 interface Provider
 {
     /**
-     * Run the full tool-use loop and return the final text.
-     * @param array $messages [{role, content}]
+     * Run the whole tool-use loop and return the final text.
+     * @param array $messages [{role: user|assistant, content: string}]
      * @param callable $runTool fn(string $name, array $args): string
+     * @param callable $onUsage fn(string $model, int $in, int $out, ?float $costUsd): void
      */
-    public function complete(string $system, array $messages, array $tools, callable $runTool): string;
+    public function complete(string $system, array $messages, Tools $tools, callable $onUsage): string;
 }

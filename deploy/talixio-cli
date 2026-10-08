@@ -1,0 +1,8 @@
+#!/bin/sh
+# `talixio doctor|chat` with the system config, run as the talixio user.
+set -e
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+set -a; . /etc/talixio/talixio.env; set +a
+export HOME=/var/lib/talixio PATH="/var/lib/talixio/.local/bin:$PATH"
+cd /var/lib/talixio
+exec runuser -u talixio -- /usr/bin/php /opt/talixio/bin/talixio "$@"
