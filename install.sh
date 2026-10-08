@@ -4,6 +4,7 @@
 #   sudo ./install.sh --domain bot.example.com   also set up HTTPS with Caddy (DNS must point here)
 #   sudo ./install.sh --with-claude-code      also install the Claude Code CLI (use a Claude Pro/Max plan)
 set -euo pipefail
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 
 DOMAIN="" ; WITH_CLAUDE=0
 while [ $# -gt 0 ]; do
@@ -14,7 +15,6 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
-[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
 APP=/opt/talixio DATA=/var/lib/talixio ETC=/etc/talixio ENV=/etc/talixio/talixio.env
