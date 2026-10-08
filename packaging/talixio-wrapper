@@ -1,0 +1,4 @@
+#!/bin/sh
+# Loads the system config (if readable) so `talixio chat` behaves like the service.
+if [ -r /etc/talixio/talixio.env ]; then set -a; . /etc/talixio/talixio.env; set +a; fi
+exec /usr/bin/php /usr/share/talixio/bin/talixio "$@"
