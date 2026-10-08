@@ -133,6 +133,12 @@ main{min-width:0;height:100%;overflow:hidden}
 .split{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
 .split>div{display:flex;flex-direction:column;gap:8px;min-width:0}
 .split table{min-width:0}
+.channel{display:grid;grid-template-columns:1fr auto;gap:6px 16px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.channel h3{margin:0;font-size:1rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.channel p{margin:0;font-size:.86rem;color:var(--muted);overflow-wrap:anywhere;grid-column:1/-1}
+.channel .err{color:var(--danger)}
+.pill.on{background:var(--accent);color:var(--accent-ink)} .pill.partial{background:var(--accent-soft);color:var(--ink)} .pill.off{background:var(--sunk);color:var(--muted)}
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tab{font:inherit;font-size:.88rem;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:6px 12px;border-radius:99px;cursor:pointer}
 .tab[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}

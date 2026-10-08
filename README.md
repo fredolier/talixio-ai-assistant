@@ -57,18 +57,60 @@ With the subscription option, usage counts against your plan's limits. Anthropic
 has changed several times in 2026; see
 [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).
 
-### Notifications on your phone
-Install the **ntfy** app, subscribe to a long random topic, and set
-`TALIXIO_NTFY_URL=https://ntfy.sh/<your-random-topic>`. Scheduled tasks and heartbeat messages
-arrive as push notifications. The web app can also show browser notifications while it's open.
+### Security
+The web app is password protected (`TALIXIO_WEB_PASSWORD`, generated at install; sessions last 30
+days; wrong passwords are slowed down). Chat channels only answer allowlisted senders.
+If your reverse proxy is on another machine, the hop between it and the VM is plain HTTP: bind to
+the VM's private IP (or `0.0.0.0:8080`) and firewall port 8080 to the proxy only.
+
+### Push notifications from the web app
+Open the app over HTTPS, go to **Channels** and press **Turn on for this device** (on iPhone/iPad:
+first Share → Add to Home Screen, then open it from there). Reminders, briefings and job results
+then arrive as notifications, like a native app. Works per device; no extra service needed.
+**ntfy** is an alternative: set `TALIXIO_NTFY_URL=https://ntfy.sh/<long-random-topic>`.
+
+### Email
+Give the assistant its own mailbox (e.g. `assistant@yourdomain`), then set in the config:
+```
+TALIXIO_SMTP_HOST=smtp.yourprovider.com    # Gmail: smtp.gmail.com with an app password
+TALIXIO_SMTP_PORT=587
+TALIXIO_SMTP_USER=assistant@yourdomain
+TALIXIO_SMTP_PASSWORD=...
+TALIXIO_EMAIL_FROM=Talixio <assistant@yourdomain>
+TALIXIO_EMAIL_TO=you@yourdomain            # notifications go here
+TALIXIO_IMAP_HOST=imap.yourprovider.com    # optional: to chat by email
+```
+- **Notifications** need only SMTP and `TALIXIO_EMAIL_TO`.
+- **Chat by email**: with IMAP set, it checks the mailbox every minute and answers emails from
+  `TALIXIO_EMAIL_ALLOWED` (default: your address) in the same thread as the web app. It only trusts
+  mail your provider verified (SPF/DKIM/DMARC in `Authentication-Results`), so forged senders are
+  ignored; set `TALIXIO_EMAIL_REQUIRE_AUTH=0` only if your provider doesn't add that header.
+- Microsoft 365 mostly disables password login for SMTP/IMAP; it would need OAuth (not supported yet).
+- `sudo talixio doctor` tests the SMTP and IMAP logins.
+
+### Signal
+Needs a phone number dedicated to the assistant (a cheap prepaid SIM or eSIM that can receive one SMS).
+```bash
+sudo ./install.sh --with-signal                  # installs signal-cli (native build, x86_64)
+sudo nano /etc/talixio/talixio.env               # TALIXIO_SIGNAL_NUMBER=+33..., TALIXIO_SIGNAL_ALLOWED=<your number>
+sudo talixio signal register                     # if asked for a captcha: open https://signalcaptchas.org/registration/generate.html,
+                                                 # solve it, copy the signalcaptcha:// link, then:
+sudo talixio signal register --captcha 'signalcaptcha://...'
+sudo talixio signal verify 123456                # the code received by SMS
+sudo talixio signal updateProfile --given-name Talixio
+sudo systemctl restart talixio-worker
+```
+Then message the assistant's number from your Signal app.
 
 ### Telegram (optional)
 Create a bot with @BotFather, set `TALIXIO_TELEGRAM_TOKEN`, restart, and message the bot. It replies
 with your chat id; put it in `TALIXIO_TELEGRAM_ALLOWED_IDS`. Telegram and the web app share the same
 conversation.
 
-## What it can do (v0.3)
-- **One conversation everywhere**: web app, Telegram and terminal (`sudo talixio chat`) share one thread.
+## What it can do (v0.4)
+- **One conversation everywhere**: web app, email, Signal, Telegram and terminal (`sudo talixio chat`)
+  share one thread. Messages it starts go to push notifications, email, Signal, Telegram or ntfy
+  (`TALIXIO_NOTIFY`); see and test them on the **Channels** page.
 - **Memory you can edit**: `USER.md` (about you), `MEMORY.md` (notes), `SOUL.md` (personality),
   `HEARTBEAT.md` (checklist), editable on the Memory page.
 - **Reminders and recurring tasks by chat**: "remind me tomorrow at 9", "every weekday at 8:00 send
@@ -99,8 +141,8 @@ Costs are estimates from list prices built into `src/Pricing.php` (Claude: Haiku
 $3/$15, Opus $5/$25 per million tokens). Check your provider's pricing and override with
 `TALIXIO_PRICES` if they differ.
 
-Not yet: headless browser, skills (learning procedures), shell/code tools, email, WhatsApp, Signal,
-Slack, Teams, voice. See the roadmap.
+Not yet: headless browser, skills (learning procedures), shell/code tools, managing your own
+mailbox, WhatsApp, Slack, Teams, voice. See the roadmap.
 
 ## Files
 ```

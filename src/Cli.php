@@ -46,7 +46,7 @@ final class Cli
         $line = function (bool $good, string $msg) use (&$ok) { echo ($good ? ' ok  ' : ' !!  ') . $msg . "\n"; $ok = $ok && $good; };
         echo "Talixio doctor\n";
         $line(PHP_VERSION_ID >= 80200, 'PHP ' . PHP_VERSION . ' (need 8.2+)');
-        foreach (['curl', 'pdo_sqlite', 'mbstring'] as $ext) $line(extension_loaded($ext), "php extension $ext");
+        foreach (['curl', 'pdo_sqlite', 'mbstring', 'openssl'] as $ext) $line(extension_loaded($ext), "php extension $ext");
         $line(is_writable($c->dataDir), "data dir {$c->dataDir} writable");
         $line($c->webPassword !== '', 'web password set');
         $line(match ($c->provider) {
@@ -57,6 +57,21 @@ final class Cli
             try { $app->embeddings->embed(['test'], 'query'); $line(true, "embeddings {$c->embeddings}:{$c->embeddingsModel}"); }
             catch (\Throwable $e) { $line(false, "embeddings {$c->embeddings}: {$e->getMessage()}"); }
         }
+        if ($app->email()->canSend()) {
+            try { (new Smtp($c->smtpHost, $c->smtpPort, $c->smtpSecurity, $c->smtpUser, $c->smtpPassword))->check(); $line(true, "SMTP {$c->smtpHost}:{$c->smtpPort} login"); }
+            catch (\Throwable $e) { $line(false, "SMTP: {$e->getMessage()}"); }
+        }
+        if ($c->imapHost !== '') {
+            try { (new Imap($c->imapHost, $c->imapPort, $c->imapUser, $c->imapPassword, $c->imapFolder, $c->imapSecurity))->fetchUnseen(0); $line(true, "IMAP {$c->imapHost}:{$c->imapPort} login"); }
+            catch (\Throwable $e) { $line(false, "IMAP: {$e->getMessage()}"); }
+            $line($c->emailAllowed !== [], 'email senders allowlisted: ' . (implode(', ', $c->emailAllowed) ?: 'none (set TALIXIO_EMAIL_ALLOWED)'));
+        }
+        if ($c->signalNumber !== '') {
+            $found = is_executable($c->signalCli) || trim((string)shell_exec('command -v ' . escapeshellarg($c->signalCli) . ' 2>/dev/null')) !== '';
+            $line($found, "signal-cli found ({$c->signalCli})");
+            $line($c->signalAllowed !== [], 'Signal senders allowlisted');
+        }
+        echo '     notifications: ' . json_encode($app->notifier()->channels()) . "\n";
         echo '     budget: ' . $app->budget()->describe() . "\n";
         echo "     embeddings: {$c->embeddings} | search: {$c->search} | telegram: " . ($c->telegramToken ? 'on' : 'off') . ' | ntfy: ' . ($c->ntfyUrl ? 'on' : 'off')
             . " | heartbeat: " . ($c->heartbeatMinutes ?: 'off') . " | timezone: {$c->timezone}\n";

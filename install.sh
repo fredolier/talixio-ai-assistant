@@ -4,6 +4,7 @@
 #   sudo ./install.sh --domain bot.example.com   also set up HTTPS with Caddy (DNS must point here)
 #   sudo ./install.sh --bind 10.0.0.5:8080      listen on this address (when another machine runs your reverse proxy)
 #   sudo ./install.sh --with-claude-code      also install the Claude Code CLI (use a Claude Pro/Max plan)
+#   sudo ./install.sh --with-signal           also install signal-cli (Signal channel)
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 
@@ -13,7 +14,8 @@ while [ $# -gt 0 ]; do
     --domain) DOMAIN="${2:?--domain needs a value}"; shift 2 ;;
     --bind) BIND_ARG="${2:?--bind needs host:port}"; shift 2 ;;
     --with-claude-code) WITH_CLAUDE=1; shift ;;
-    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
+    --with-signal) WITH_SIGNAL=1; shift ;;
+    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -58,6 +60,27 @@ chown root:talixio "$ENV"; chmod 640 "$ENV"
 if [ "$WITH_CLAUDE" = 1 ]; then
   say "Installing Claude Code CLI for the talixio user"
   runuser -u talixio -- env HOME="$DATA" bash -c 'curl -fsSL https://claude.ai/install.sh | bash' || echo "Claude Code install failed; see https://docs.claude.com/en/docs/claude-code/setup" >&2
+fi
+
+if [ "$WITH_SIGNAL" = 1 ]; then
+  say "Installing signal-cli (native build, no Java needed)"
+  if [ "$(uname -m)" != "x86_64" ]; then
+    echo "signal-cli's native build is x86_64 only. On $(uname -m), install signal-cli with Java 21+ manually: https://github.com/AsamK/signal-cli" >&2
+  else
+    URL="$(curl -fsSL https://api.github.com/repos/AsamK/signal-cli/releases/latest | grep -oE '"browser_download_url": *"[^"]*Linux-native\.tar\.gz"' | head -1 | cut -d'"' -f4)"
+    if [ -z "$URL" ]; then
+      echo "Could not find the latest signal-cli native release; see https://github.com/AsamK/signal-cli/releases" >&2
+    else
+      TMP="$(mktemp -d)"; curl -fsSL "$URL" -o "$TMP/signal-cli.tgz"
+      install -d /opt/signal-cli && tar -xzf "$TMP/signal-cli.tgz" -C /opt/signal-cli && rm -rf "$TMP"
+      BIN="$(find /opt/signal-cli -type f -name signal-cli -perm -u+x | head -1)"
+      ln -sf "$BIN" /usr/local/bin/signal-cli
+      install -d -o talixio -g talixio -m 700 "$DATA/signal"
+      sed -i "s|^TALIXIO_SIGNAL_CLI=.*|TALIXIO_SIGNAL_CLI=/usr/local/bin/signal-cli|" "$ENV"
+      echo "    $(/usr/local/bin/signal-cli --version 2>/dev/null || echo 'signal-cli installed')"
+      echo "    Next: register the assistant's number, see README (Signal)."
+    fi
+  fi
 fi
 
 say "Installing services"

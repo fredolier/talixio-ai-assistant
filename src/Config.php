@@ -36,6 +36,27 @@ final class Config
     public string $ollamaUrl = 'http://127.0.0.1:11434';
     public string $voyageKey = '';
     public float $recallMinSim = 0.5;
+    /** @var string[] channels for messages the assistant starts (ntfy, webpush, telegram, email, signal) */
+    public array $notify = [];
+    public string $smtpHost = '';
+    public int $smtpPort = 587;
+    public string $smtpSecurity = 'auto';       // auto | starttls | tls | none
+    public string $smtpUser = '';
+    public string $smtpPassword = '';
+    public string $emailFrom = '';
+    public string $emailTo = '';
+    /** @var string[] */ public array $emailAllowed = [];
+    public bool $emailRequireAuth = true;
+    public string $imapHost = '';
+    public int $imapPort = 993;
+    public string $imapUser = '';
+    public string $imapPassword = '';
+    public string $imapFolder = 'INBOX';
+    public string $imapSecurity = 'auto';
+    public string $vapidSubject = '';
+    public string $signalCli = 'signal-cli';
+    public string $signalNumber = '';
+    /** @var string[] */ public array $signalAllowed = [];
 
     public static function fromEnv(): self
     {
@@ -103,6 +124,27 @@ final class Config
             'ollama' => 'nomic-embed-text', 'openai' => 'text-embedding-3-small', 'voyage' => 'voyage-3.5-lite', default => '',
         });
         $c->recallMinSim = (float)$e('TALIXIO_RECALL_MIN_SIMILARITY', '0.5');
+        $list = fn(string $v) => array_values(array_filter(array_map(fn($x) => strtolower(trim($x)), explode(',', $v)), 'strlen'));
+        $c->smtpHost = $e('TALIXIO_SMTP_HOST');
+        $c->smtpPort = (int)$e('TALIXIO_SMTP_PORT', '587');
+        $c->smtpSecurity = strtolower($e('TALIXIO_SMTP_SECURITY', 'auto'));
+        $c->smtpUser = $e('TALIXIO_SMTP_USER');
+        $c->smtpPassword = $e('TALIXIO_SMTP_PASSWORD');
+        $c->emailFrom = $e('TALIXIO_EMAIL_FROM', $c->smtpUser);
+        $c->emailTo = $e('TALIXIO_EMAIL_TO');
+        $c->emailAllowed = $list($e('TALIXIO_EMAIL_ALLOWED', $c->emailTo));
+        $c->emailRequireAuth = $e('TALIXIO_EMAIL_REQUIRE_AUTH', '1') !== '0';
+        $c->imapHost = $e('TALIXIO_IMAP_HOST');
+        $c->imapPort = (int)$e('TALIXIO_IMAP_PORT', '993');
+        $c->imapUser = $e('TALIXIO_IMAP_USER', $c->smtpUser);
+        $c->imapPassword = $e('TALIXIO_IMAP_PASSWORD', $c->smtpPassword);
+        $c->imapFolder = $e('TALIXIO_IMAP_FOLDER', 'INBOX');
+        $c->imapSecurity = strtolower($e('TALIXIO_IMAP_SECURITY', 'auto'));
+        $c->vapidSubject = $e('TALIXIO_VAPID_SUBJECT', 'mailto:' . ($c->emailTo ?: 'admin@localhost'));
+        $c->signalCli = $e('TALIXIO_SIGNAL_CLI', 'signal-cli');
+        $c->signalNumber = $e('TALIXIO_SIGNAL_NUMBER');
+        $c->signalAllowed = array_values(array_filter(array_map('trim', explode(',', $e('TALIXIO_SIGNAL_ALLOWED'))), 'strlen'));
+        $c->notify = $list($e('TALIXIO_NOTIFY', 'ntfy,webpush,telegram,email,signal'));
         date_default_timezone_set($c->timezone);
         return $c;
     }

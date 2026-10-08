@@ -36,6 +36,7 @@ final class Store
             CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(text, content='docs', content_rowid='id', tokenize='unicode61 remove_diacritics 2');
             CREATE TRIGGER IF NOT EXISTS docs_ai AFTER INSERT ON docs BEGIN INSERT INTO docs_fts(rowid, text) VALUES (new.id, new.text); END;
             CREATE TRIGGER IF NOT EXISTS docs_ad AFTER DELETE ON docs BEGIN INSERT INTO docs_fts(docs_fts, rowid, text) VALUES('delete', old.id, old.text); END;
+            CREATE TABLE IF NOT EXISTS push_subs(endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, ua TEXT NOT NULL, created INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS embeddings(doc_id INTEGER PRIMARY KEY, model TEXT NOT NULL, vec BLOB NOT NULL);
             SQL);
         $this->addColumn('messages', 'meta', 'TEXT');

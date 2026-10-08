@@ -1,8 +1,15 @@
 #!/bin/sh
 # `talixio doctor|chat` with the system config, run as the talixio user.
+# `talixio signal <args>` runs signal-cli for the assistant's number (register, verify, link...).
 set -e
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 set -a; . /etc/talixio/talixio.env; set +a
-export HOME=/var/lib/talixio PATH="/var/lib/talixio/.local/bin:$PATH"
+export HOME=/var/lib/talixio PATH="/var/lib/talixio/.local/bin:/usr/local/bin:$PATH"
 cd /var/lib/talixio
+if [ "$1" = signal ]; then
+  shift
+  [ -n "$TALIXIO_SIGNAL_NUMBER" ] || { echo "Set TALIXIO_SIGNAL_NUMBER (e.g. +33612345678) in /etc/talixio/talixio.env first." >&2; exit 1; }
+  install -d -o talixio -g talixio -m 700 /var/lib/talixio/signal
+  exec runuser -u talixio -- "${TALIXIO_SIGNAL_CLI:-signal-cli}" --config /var/lib/talixio/signal -a "$TALIXIO_SIGNAL_NUMBER" "$@"
+fi
 exec runuser -u talixio -- /usr/bin/php /opt/talixio/bin/talixio "$@"

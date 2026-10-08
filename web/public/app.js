@@ -61,7 +61,7 @@ function md(src) {
   return out.join('').replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[+i]);
 }
 
-const CHANNEL = { web: null, cli: 'Terminal', telegram: 'Telegram', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
+const CHANNEL = { web: null, cli: 'Terminal', telegram: 'Telegram', email: 'Email', signal: 'Signal', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
 const money = v => v == null ? '' : v < 0.01 ? '<$0.01' : '$' + v.toFixed(v < 1 ? 3 : 2);
 const ktok = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
 const fmtTime = ts => new Date(ts * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
@@ -201,6 +201,53 @@ async function loadJobs() {
   if (jobs.some(j => ['queued', 'running'].includes(j.status)) && location.hash === '#jobs') loadJobs.t = setTimeout(() => loadJobs().catch(() => {}), 4000);
 }
 
+// ---- channels ----
+const b64ToBytes = s => { const b = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function pushSubscription() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+async function enablePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    throw new Error(/iPhone|iPad/.test(navigator.userAgent) ? 'On iPhone and iPad: Share → Add to Home Screen, open Talixio from there, then turn this on.' : 'This browser does not support push notifications. It needs HTTPS.');
+  }
+  if (await Notification.requestPermission() !== 'granted') throw new Error('Notifications are blocked for this site in your browser settings.');
+  const reg = await navigator.serviceWorker.register('/sw.js');
+  await navigator.serviceWorker.ready;
+  const { key } = await api('/api/push/key');
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+  await post('/api/push/subscribe', sub.toJSON());
+}
+async function disablePush() {
+  const sub = await pushSubscription();
+  if (sub) { await post('/api/push/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe(); }
+}
+async function loadChannels() {
+  const { channels, notify_on } = await api('/api/channels');
+  const mySub = await pushSubscription().catch(() => null);
+  const box = $('#channels'); box.innerHTML = '';
+  for (const c of channels) {
+    const on = c.state === 'on', partial = c.state === 'notifications only';
+    const el = document.createElement('div'); el.className = 'channel';
+    const uses = [c.chat ? 'chat' : null, notify_on.includes(c.id) ? 'notifications' : null].filter(Boolean).join(' + ');
+    el.innerHTML = `<h3>${esc(c.name)} <span class="pill ${on ? 'on' : partial ? 'partial' : 'off'}">${esc(c.state)}</span>${uses && (on || partial) ? `<span class="chip">${uses}</span>` : ''}</h3>
+      <div class="actions"></div>
+      <p>${esc(c.detail)}</p>${c.error ? `<p class="err">Last error: ${esc(c.error)}</p>` : ''}`;
+    if (c.id === 'webpush') {
+      const b = document.createElement('button'); b.className = 'btn small' + (mySub ? '' : ' primary'); b.type = 'button';
+      b.textContent = mySub ? 'Turn off on this device' : 'Turn on for this device';
+      b.onclick = async () => {
+        b.disabled = true;
+        try { if (mySub) { await disablePush(); toast('Push notifications off on this device'); } else { await enablePush(); toast('Push notifications on for this device'); $('#notify-btn').hidden = true; } loadChannels(); }
+        catch (e) { toast(e.message); b.disabled = false; }
+      };
+      el.querySelector('.actions').append(b);
+    }
+    box.append(el);
+  }
+}
+
 // ---- memory ----
 const MEM_HELP = {
   'USER.md': 'What the assistant knows about you.',
@@ -262,7 +309,7 @@ async function loadActivity() {
 }
 
 // ---- shell ----
-const VIEWS = { chat: null, tasks: loadTasks, jobs: loadJobs, memory: loadMemory, activity: loadActivity };
+const VIEWS = { chat: null, tasks: loadTasks, jobs: loadJobs, memory: loadMemory, channels: loadChannels, activity: loadActivity };
 function route() {
   const v = (location.hash.slice(1) in VIEWS) ? location.hash.slice(1) : 'chat';
   for (const k of Object.keys(VIEWS)) $('#view-' + k).hidden = k !== v;
@@ -296,7 +343,7 @@ async function start() {
   clearInterval(state.pollTimer);
   state.pollTimer = setInterval(() => { poll(); }, 4000);
   setInterval(refreshStatus, 60000);
-  if ('Notification' in window && Notification.permission === 'default') $('#notify-btn').hidden = false;
+  pushSubscription().then(sub => { $('#notify-btn').hidden = !!sub || !('PushManager' in window) && !/iPhone|iPad/.test(navigator.userAgent); }).catch(() => {});
 }
 
 $('#login-form').onsubmit = async e => {
@@ -308,10 +355,13 @@ $('#logout').onclick = async () => { try { await post('/api/logout'); } catch {}
 $('#composer').onsubmit = e => { e.preventDefault(); send(); };
 $('#input').addEventListener('input', autosize);
 $('#input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
-$('#notify-btn').onclick = async () => {
-  const p = await Notification.requestPermission();
-  $('#notify-btn').hidden = true;
-  toast(p === 'granted' ? 'Notifications on while this tab is open. For phone push, set up ntfy.' : 'Notifications blocked.');
+$('#test-notify').onclick = async () => {
+  $('#test-result').textContent = 'Sending…';
+  try {
+    const { results } = await post('/api/notify/test');
+    $('#test-result').textContent = Object.entries(results).filter(([, r]) => r === 'sent' || r.startsWith('error')).map(([k, r]) => `${k}: ${r}`).join(' · ') || 'No notification channel is set up yet.';
+    loadChannels();
+  } catch (e) { $('#test-result').textContent = e.message; }
 };
 $('#search-form').onsubmit = async e => {
   e.preventDefault();

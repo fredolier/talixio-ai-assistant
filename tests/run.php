@@ -2,7 +2,7 @@
 declare(strict_types=1);
 // Run: php tests/run.php   (no network, no API key needed)
 require __DIR__ . '/../src/autoload.php';
-use Talixio\{App, Config, Cron, Http, McpServer, Pricing, Provider, Recall, Store, Summarizer, Tools, Worker};
+use Talixio\{App, Config, Cron, Email, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker};
 
 $fails = 0;
 function check(string $name, bool $ok, string $detail = ''): void {
@@ -188,6 +188,96 @@ check('usage_report works', str_contains($app->tools->run('usage_report', []), '
 // toolsets
 check('chat toolset has delegate', in_array('delegate', $app->tools->only('chat')->names(), true));
 check('job toolset cannot write memory', !in_array('memory_append', $app->tools->only('job')->names(), true));
+
+// ---- channels ----
+$app->cfg->budgetDaily = 0; $app->cfg->budgetMonthly = 0;
+$fake->script = function ($last, $tools, $on) { return "Reply to: " . mb_substr($last, 0, 60); };
+$spawn = function (string $script, array $args) { return proc_open([PHP_BINARY, __DIR__ . "/fakes/$script", ...$args], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $p); };
+$waitPort = function (int $port) { for ($i = 0; $i < 50; $i++) { $c = @fsockopen('127.0.0.1', $port); if ($c) { fclose($c); return; } usleep(50000); } };
+
+// markdown + MIME building
+check('markdown to html escapes and formats', Markdown::toHtml("Hi <b>\n\n- **A**\n- see https://x.io") === "<p>Hi &lt;b&gt;</p>\n<ul><li><strong>A</strong></li><li>see <a href=\"https://x.io\">https://x.io</a></li></ul>");
+$mime = Smtp::build('Talixio <bot@example.com>', 'fred@example.com', 'Réunion demain', "**Bonjour**", '<id@example.com>');
+check('email: encoded subject, both parts', str_contains($mime, 'Subject: =?UTF-8?Q?') && str_contains($mime, 'text/plain') && str_contains($mime, 'text/html') && str_contains($mime, 'From: "Talixio" <bot@example.com>'));
+
+// SMTP against a fake server (plain, for testing only)
+$port = random_int(20000, 40000); $log = "$dir/smtp.log";
+$proc = $spawn('smtp.php', [(string)$port, $log]); $waitPort($port);
+$id = (new Smtp('127.0.0.1', $port, 'none', 'bot@example.com', 'secret'))->send('Talixio <bot@example.com>', 'fred@example.com', 'Hello', "Line\n.dot line");
+proc_close($proc);
+$t = (string)@file_get_contents($log);
+check('smtp: auth, envelope, data, dot-stuffing', str_contains($t, 'AUTH PLAIN ' . base64_encode("\0bot@example.com\0secret")) && str_contains($t, 'MAIL FROM:<bot@example.com>')
+    && str_contains($t, 'RCPT TO:<fred@example.com>') && str_contains($t, "Message-ID: $id") && str_contains($t, 'QUIT'), $t);
+
+// MIME parsing and reply stripping
+$eml = "From: Fred <Fred@Example.com>\r\nTo: bot@example.com\r\nSubject: =?UTF-8?Q?Caf=C3=A9_tomorrow?=\r\nMessage-ID: <m1@example.com>\r\n"
+    . "Authentication-Results: mx.example.net; spf=pass smtp.mailfrom=fred@example.com; dkim=pass header.d=example.com\r\n"
+    . "Content-Type: multipart/alternative; boundary=\"XX\"\r\n\r\n--XX\r\nContent-Type: text/plain; charset=ISO-8859-1\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n"
+    . "Can we meet at 10 at the caf=E9?\r\n\r\nOn Tue, 7 Oct 2026, Bot <bot@example.com> wrote:\r\n> earlier text\r\n--XX\r\nContent-Type: text/html\r\n\r\n<p>html</p>\r\n--XX--\r\n";
+$m = Mime::parse($eml);
+check('mime: plain part decoded from latin-1 QP', str_contains($m['text'], 'at the café?'));
+check('mime: quoted reply stripped', Mime::stripReply($m['text']) === 'Can we meet at 10 at the café?');
+check('mime: encoded subject', Mime::decodeHeader($m['headers']['subject']) === 'Café tomorrow');
+check('email auth: dkim pass for the sender domain', Email::authenticated($m['headers']['authentication-results'], 'fred@example.com'));
+check('email auth: pass for another domain is rejected', !Email::authenticated('mx; dkim=pass header.d=evil.com; spf=pass smtp.mailfrom=x@evil.com', 'fred@example.com'));
+check('email auth: fail is rejected', !Email::authenticated('mx; dkim=fail header.d=example.com; spf=softfail smtp.mailfrom=fred@example.com', 'fred@example.com'));
+
+// IMAP poll -> agent -> SMTP reply
+$c = $app->cfg;
+$c->smtpHost = '127.0.0.1'; $c->smtpSecurity = 'none'; $c->smtpUser = 'bot@example.com'; $c->smtpPassword = 'x'; $c->emailFrom = 'Talixio <bot@example.com>';
+$c->emailTo = 'fred@example.com'; $c->emailAllowed = ['fred@example.com']; $c->imapHost = '127.0.0.1';
+$mail = "$dir/mail"; @mkdir($mail);
+file_put_contents("$mail/1.eml", $eml);
+file_put_contents("$mail/2.eml", str_replace(['Fred <Fred@Example.com>', 'm1@'], ['Eve <eve@evil.com>', 'm2@'], $eml));
+file_put_contents("$mail/3.eml", str_replace(['dkim=pass', 'spf=pass', 'm1@'], ['dkim=none', 'spf=none', 'm3@'], $eml));
+$iport = random_int(40001, 60000); $c->imapPort = $iport;
+$c->smtpPort = $port = random_int(20000, 40000);
+$ip = $spawn('imap.php', [(string)$iport, $mail]); $sp = $spawn('smtp.php', [(string)$port, $log]); $waitPort($iport); $waitPort($port);
+$n = $app->email()->poll(new Imap('127.0.0.1', $iport, 'bot', 'x', 'INBOX', 'none'));
+proc_terminate($ip); proc_close($ip); proc_close($sp);
+check('email: only the verified allowlisted sender is answered', $n === 1, "answered $n");
+check('email: all fetched mail marked seen', substr_count((string)@file_get_contents("$mail/stored.log"), '\Seen') === 3);
+$t = (string)@file_get_contents($log);
+check('email: reply threaded to the original', str_contains($t, 'In-Reply-To: <m1@example.com>') && str_contains($t, 'RCPT TO:<fred@example.com>') && str_contains($t, 'Subject: Re: =?UTF-8?Q?Caf'), $t);
+$last = $s->messagesAfter(0);
+check('email: message in the shared thread', $last[count($last) - 2]['channel'] === 'email' && str_contains($last[count($last) - 2]['content'], 'Subject: Café tomorrow'));
+
+// Signal through a fake signal-cli
+$c->signalCli = __DIR__ . '/fakes/signal-cli'; $c->signalNumber = '+33600000000'; $c->signalAllowed = ['+33611111111'];
+putenv("TALIXIO_FAKE_SIGNAL_INBOX=$dir/inbox.jsonl"); putenv("TALIXIO_FAKE_SIGNAL_SENT=$dir/sent.log");
+file_put_contents("$dir/inbox.jsonl", json_encode(['envelope' => ['sourceNumber' => '+33611111111', 'dataMessage' => ['message' => 'Bonjour from Signal']]]) . "\n"
+    . json_encode(['envelope' => ['sourceNumber' => '+33699999999', 'dataMessage' => ['message' => 'spam']]]) . "\n"
+    . json_encode(['envelope' => ['sourceNumber' => '+33611111111', 'receiptMessage' => ['isDelivery' => true]]]) . "\n");
+check('signal: answers only allowlisted senders', $app->signal()->poll() === 1);
+$sent = (string)@file_get_contents("$dir/sent.log");
+check('signal: reply sent to the sender with account flags', str_contains($sent, '-a +33600000000') && str_contains($sent, 'Reply to: Bonjour from Signal +33611111111'), $sent);
+
+// Web push: encrypt for a "browser" key pair and decrypt it back like a browser would
+$ua = WebPush::newKey(); $uaPub = WebPush::rawPublic($ua); $authSecret = random_bytes(16);
+$body = WebPush::encrypt('{"title":"Hi"}', $uaPub, $authSecret);
+$salt = substr($body, 0, 16); $asPub = substr($body, 21, 65); $ct = substr($body, 86);
+$ecdh = openssl_pkey_derive(WebPush::publicFromRaw($asPub), $ua, 32);
+$ikm = hash_hkdf('sha256', $ecdh, 32, "WebPush: info\0" . $uaPub . $asPub, $authSecret);
+$plain = openssl_decrypt(substr($ct, 0, -16), 'aes-128-gcm', hash_hkdf('sha256', $ikm, 16, "Content-Encoding: aes128gcm\0", $salt), OPENSSL_RAW_DATA,
+    hash_hkdf('sha256', $ikm, 12, "Content-Encoding: nonce\0", $salt), substr($ct, -16));
+check('web push: payload decrypts on the receiving side', $plain === "{\"title\":\"Hi\"}\x02");
+$wp = $app->webPush();
+$jwt = explode('.', $wp->vapidJwt('https://fcm.googleapis.com/fcm/send/abc', time()));
+$rs = WebPush::unb64u($jwt[2]);
+$int = fn(string $x) => (ord(ltrim($x, "\0")[0] ?? "\0") > 127 ? "\0" : '') . ltrim($x, "\0");
+$r = $int(substr($rs, 0, 32)); $s2 = $int(substr($rs, 32));
+$der = "\x30" . chr(4 + strlen($r) + strlen($s2)) . "\x02" . chr(strlen($r)) . $r . "\x02" . chr(strlen($s2)) . $s2;
+check('web push: VAPID JWT signature verifies', openssl_verify("$jwt[0].$jwt[1]", $der, WebPush::publicFromRaw(WebPush::unb64u($wp->publicKey())), OPENSSL_ALGO_SHA256) === 1);
+check('web push: audience is the push service origin', json_decode(WebPush::unb64u($jwt[1]), true)['aud'] === 'https://fcm.googleapis.com');
+try { $wp->subscribe('https://127.0.0.1/x', WebPush::b64u($uaPub), WebPush::b64u($authSecret), 'test'); check('web push: refuses internal endpoints', false); }
+catch (\Throwable) { check('web push: refuses internal endpoints', true); }
+
+// notifier fans out to configured channels
+$c->notify = ['email', 'signal', 'webpush'];
+$port = random_int(20000, 40000); $c->smtpPort = $port; $sp = $spawn('smtp.php', [(string)$port, $log]); $waitPort($port);
+$res = $app->notifier()->notify('Reminder', 'Call the bank');
+proc_close($sp);
+check('notifier: email and signal sent, push skipped without devices', $res['email'] === 'sent' && $res['signal'] === 'sent' && $res['webpush'] === 'no device subscribed' && $res['ntfy'] === 'off (TALIXIO_NOTIFY)', json_encode($res));
 
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";

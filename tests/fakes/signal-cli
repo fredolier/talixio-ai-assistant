@@ -1,0 +1,13 @@
+#!/bin/sh
+# Fake signal-cli: "receive" prints canned envelopes once; "send" appends to sent.log.
+dir="$(dirname "$0")"
+for a in "$@"; do case "$a" in receive) mode=receive ;; send) mode=send ;; esac; done
+if [ "$mode" = receive ]; then
+  [ -f "$TALIXIO_FAKE_SIGNAL_INBOX" ] && cat "$TALIXIO_FAKE_SIGNAL_INBOX" && rm -f "$TALIXIO_FAKE_SIGNAL_INBOX"
+  exit 0
+fi
+if [ "$mode" = send ]; then
+  printf '%s\n' "$*" >> "$TALIXIO_FAKE_SIGNAL_SENT"
+  exit 0
+fi
+exit 1

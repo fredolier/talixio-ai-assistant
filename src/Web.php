@@ -43,6 +43,14 @@ final class Web
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
             $path === '/api/activity' => $this->activity(),
             $path === '/api/jobs' => ['jobs' => $s->jobs(50)],
+            $path === '/api/channels' => $this->channels(),
+            $path === '/api/push/key' => ['key' => $this->app->webPush()->publicKey()],
+            $path === '/api/push/subscribe' && $m === 'POST' => (function () use ($b) {
+                $this->app->webPush()->subscribe((string)($b['endpoint'] ?? ''), (string)($b['keys']['p256dh'] ?? ''), (string)($b['keys']['auth'] ?? ''), (string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
+                return ['ok' => true];
+            })(),
+            $path === '/api/push/unsubscribe' && $m === 'POST' => (function () use ($b) { $this->app->webPush()->unsubscribe((string)($b['endpoint'] ?? '')); return ['ok' => true]; })(),
+            $path === '/api/notify/test' && $m === 'POST' => ['results' => $this->app->notifier()->notify($this->app->cfg->name, 'Test notification: this channel works.')],
             (bool)preg_match('#^/api/jobs/(\d+)/cancel$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->jobs()->cancel((int)$mm[1])],
             $path === '/api/search' => ['results' => array_map(fn($h) => array_intersect_key($h, array_flip(['kind', 'ref', 'ts', 'label', 'text', 'keyword', 'sim'])),
                 $this->app->recall()->search((string)($_GET['q'] ?? ''), 20))],
@@ -58,8 +66,30 @@ final class Web
             'tiers' => array_map(fn(Tier $t) => $t->label(), $c->tiers), 'budget' => $this->app->budget()->status(),
             'embeddings' => $c->embeddings, 'max_parallel_jobs' => $c->maxParallelJobs, 'job_max_usd' => $c->jobMaxUsd,
             'worker_online' => time() - $seen < 90, 'search' => $c->search,
-            'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'ntfy' => $c->ntfyUrl !== ''],
+            'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
+                'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes];
+    }
+
+    private function channels(): array
+    {
+        $c = $this->app->cfg; $st = $this->app->store;
+        $err = fn(string $ch) => $st->get("channel_error_$ch") ?: null;
+        $notify = $this->app->notifier()->channels();
+        $mask = fn(string $v) => strlen($v) > 6 ? substr($v, 0, 3) . str_repeat('•', strlen($v) - 5) . substr($v, -2) : $v; // phone numbers
+        return ['notify_on' => $c->notify, 'channels' => [
+            ['id' => 'webpush', 'name' => 'Push notifications (this app)', 'state' => $notify['webpush'], 'error' => $err('webpush'),
+             'detail' => $this->app->webPush()->count() . ' device(s) subscribed', 'chat' => false],
+            ['id' => 'email', 'name' => 'Email', 'state' => $this->app->email()->canSend() ? ($this->app->email()->canReceive() ? 'on' : 'notifications only') : 'not configured',
+             'error' => $err('email'), 'chat' => $this->app->email()->canReceive(),
+             'detail' => $c->smtpHost ? "From {$c->emailFrom}" . ($c->emailTo ? " · notifications to {$c->emailTo}" : '') . ($c->imapHost ? ' · answers ' . implode(', ', $c->emailAllowed) : '') : 'Set TALIXIO_SMTP_* and TALIXIO_IMAP_* in the config'],
+            ['id' => 'signal', 'name' => 'Signal', 'state' => $notify['signal'], 'error' => $err('signal'), 'chat' => $this->app->signal()->enabled(),
+             'detail' => $c->signalNumber ? "Number {$c->signalNumber} · answers " . implode(', ', array_map($mask, $c->signalAllowed)) : 'Run install.sh --with-signal, then register a number'],
+            ['id' => 'telegram', 'name' => 'Telegram', 'state' => $notify['telegram'], 'error' => $err('telegram'), 'chat' => $c->telegramToken !== '',
+             'detail' => $c->telegramToken ? count($c->telegramAllowed) . ' allowed chat(s)' : 'Set TALIXIO_TELEGRAM_TOKEN'],
+            ['id' => 'ntfy', 'name' => 'ntfy', 'state' => $notify['ntfy'], 'error' => $err('ntfy'), 'chat' => false,
+             'detail' => $c->ntfyUrl ? 'Topic configured' : 'Set TALIXIO_NTFY_URL'],
+        ]];
     }
 
     private function activity(): array

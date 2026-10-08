@@ -6,6 +6,8 @@ namespace Talixio;
 final class Worker
 {
     private int $lastSummary = 0;
+    private int $lastEmail = 0;
+    private int $lastSignal = 0;
 
     public function __construct(private App $app) {}
 
@@ -14,7 +16,8 @@ final class Worker
         $cfg = $this->app->cfg;
         Log::info("worker started: provider={$cfg->provider} tiers=" . implode(',', array_map(fn(Tier $t) => "{$t->name}:{$t->label()}", $cfg->tiers))
             . " search={$cfg->search} embeddings={$cfg->embeddings} telegram=" . ($cfg->telegramToken ? 'on' : 'off')
-            . ' ntfy=' . ($cfg->ntfyUrl ? 'on' : 'off') . " heartbeat={$cfg->heartbeatMinutes}m budget=\${$cfg->budgetDaily}/day,\${$cfg->budgetMonthly}/month tz={$cfg->timezone}");
+            . ' email=' . ($this->app->email()->canReceive() ? 'in+out' : ($this->app->email()->canSend() ? 'out' : 'off'))
+            . ' signal=' . ($this->app->signal()->enabled() ? 'on' : 'off') . ' ntfy=' . ($cfg->ntfyUrl ? 'on' : 'off') . " heartbeat={$cfg->heartbeatMinutes}m budget=\${$cfg->budgetDaily}/day,\${$cfg->budgetMonthly}/month tz={$cfg->timezone}");
         $this->app->jobs()->recoverInterrupted();
         $tg = $cfg->telegramToken !== '' ? new Telegram($cfg, $this->app) : null;
         while (true) {
@@ -53,12 +56,27 @@ final class Worker
             $this->lastSummary = $now;
             $this->guard('summary', fn() => (new Summarizer($app))->maybeRun($now));
         }
+        if ($now - $this->lastSignal >= 5 && $app->signal()->enabled()) {
+            $this->lastSignal = $now;
+            $this->guard('signal', fn() => $app->signal()->poll());
+        }
+        if ($now - $this->lastEmail >= 60 && $app->email()->canReceive()) {
+            $this->lastEmail = $now;
+            $this->guard('email', fn() => $app->email()->poll());
+        }
         $this->guard('embeddings', fn() => $app->recall()->embedPending());
     }
 
     private function guard(string $what, callable $fn): void
     {
-        try { $fn(); } catch (Abort $e) { Log::warn("$what: {$e->getMessage()}"); }
-        catch (\Throwable $e) { Log::error("$what: {$e->getMessage()}"); }
+        try {
+            $fn();
+            if (in_array($what, ['email', 'signal'], true)) $this->app->store->set("channel_error_$what", '');
+        } catch (Abort $e) {
+            Log::warn("$what: {$e->getMessage()}");
+        } catch (\Throwable $e) {
+            Log::error("$what: {$e->getMessage()}");
+            if (in_array($what, ['email', 'signal'], true)) $this->app->store->set("channel_error_$what", date('Y-m-d H:i') . ' ' . $e->getMessage());
+        }
     }
 }

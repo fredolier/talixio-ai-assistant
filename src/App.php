@@ -40,5 +40,8 @@ final class App
     public function recall(): Recall { return new Recall($this->store, $this->embeddings); }
     public function budget(): Budget { return new Budget($this->store, $this->cfg->budgetDaily, $this->cfg->budgetMonthly); }
     public function pricing(): Pricing { return new Pricing($this->cfg->prices, $this->cfg->localModels() || $this->cfg->provider === 'echo'); }
-    public function notifier(): Notifier { return new Notifier($this->cfg); }
+    public function notifier(): Notifier { return new Notifier($this); }
+    public function email(): Email { return new Email($this); }
+    public function webPush(): WebPush { return new WebPush($this); }
+    public function signal(): Signal { return new Signal($this); }
 }

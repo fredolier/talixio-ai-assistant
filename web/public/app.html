@@ -30,6 +30,7 @@
     <a href="#tasks" data-view="tasks"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Tasks</span></a>
     <a href="#jobs" data-view="jobs"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Jobs</span></a>
     <a href="#memory" data-view="memory"><svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg><span>Memory</span></a>
+    <a href="#channels" data-view="channels"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg><span>Channels</span></a>
     <a href="#activity" data-view="activity"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Activity</span></a>
     <div class="rail-foot">
       <div id="status" class="status" title="Background worker"><i></i><span>…</span></div>
@@ -41,7 +42,7 @@
     <section id="view-chat" class="view chat-view">
       <header class="topbar">
         <div><h2 id="chat-title">Chat</h2><p class="muted small" id="chat-sub"></p></div>
-        <button id="notify-btn" class="btn ghost small" type="button" hidden>Enable notifications</button>
+        <a id="notify-btn" class="btn ghost small" href="#channels" hidden>Turn on notifications</a>
       </header>
       <div id="thread" class="thread" aria-live="polite"></div>
       <form id="composer" class="composer">
@@ -75,6 +76,13 @@
       <p class="muted small" id="mem-help"></p>
       <textarea id="mem-editor" class="editor" spellcheck="false" aria-label="File content"></textarea>
       <div class="row"><button id="mem-save" class="btn primary" type="button">Save</button><span id="mem-state" class="muted small"></span></div>
+    </section>
+
+    <section id="view-channels" class="view page" hidden>
+      <header class="page-head"><h2>Channels</h2>
+        <p class="muted">Where you can talk to the assistant, and where it reaches you when it has something to say (reminders, briefings, job results). Settings live in <code>/etc/talixio/talixio.env</code>.</p></header>
+      <div id="channels" class="list"></div>
+      <div class="row"><button id="test-notify" class="btn" type="button">Send a test notification</button><span id="test-result" class="muted small"></span></div>
     </section>
 
     <section id="view-activity" class="view page" hidden>
