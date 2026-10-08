@@ -41,7 +41,11 @@ final class Web
             (bool)preg_match('#^/api/tasks/(\d+)/(toggle|delete)$#', $path, $mm) && $m === 'POST' => $this->taskAction((int)$mm[1], $mm[2]),
             $path === '/api/memory' && $m === 'GET' => ['files' => $this->app->ws->all()],
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
-            $path === '/api/activity' => ['usage' => $s->usageByDay(30), 'tools' => $s->toolLog(100)],
+            $path === '/api/activity' => $this->activity(),
+            $path === '/api/jobs' => ['jobs' => $s->jobs(50)],
+            (bool)preg_match('#^/api/jobs/(\d+)/cancel$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->jobs()->cancel((int)$mm[1])],
+            $path === '/api/search' => ['results' => array_map(fn($h) => array_intersect_key($h, array_flip(['kind', 'ref', 'ts', 'label', 'text', 'keyword', 'sim'])),
+                $this->app->recall()->search((string)($_GET['q'] ?? ''), 20))],
             default => $this->fail(404, 'not found'),
         };
     }
@@ -50,10 +54,26 @@ final class Web
     {
         $c = $this->app->cfg;
         $seen = (int)$this->app->store->get('worker_seen', '0');
-        return ['name' => $c->name, 'provider' => $c->provider, 'model' => $c->model ?: 'default', 'timezone' => $c->timezone,
+        return ['name' => $c->name, 'provider' => $c->provider, 'model' => $c->tier('standard')->label(), 'timezone' => $c->timezone,
+            'tiers' => array_map(fn(Tier $t) => $t->label(), $c->tiers), 'budget' => $this->app->budget()->status(),
+            'embeddings' => $c->embeddings, 'max_parallel_jobs' => $c->maxParallelJobs, 'job_max_usd' => $c->jobMaxUsd,
             'worker_online' => time() - $seen < 90, 'search' => $c->search,
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes];
+    }
+
+    private function activity(): array
+    {
+        $s = $this->app->store;
+        $month = strtotime('first day of this month 00:00');
+        return ['usage' => $s->usageByDay(30), 'by_tier' => $s->usageBy('tier', $month), 'by_source' => $s->usageBy('source', $month),
+            'by_model' => $s->usageBy('model', $month), 'budget' => $this->app->budget()->status(), 'tools' => $s->toolLog(100),
+            'memory' => [
+                'messages' => (int)$s->q('SELECT COUNT(*) FROM messages')->fetchColumn(),
+                'summaries' => (int)$s->q('SELECT COUNT(*) FROM summaries')->fetchColumn(),
+                'docs' => (int)$s->q('SELECT COUNT(*) FROM docs')->fetchColumn(),
+                'embedded' => (int)$s->q('SELECT COUNT(*) FROM embeddings')->fetchColumn(),
+            ]];
     }
 
     private function chat(string $text): array
@@ -61,7 +81,7 @@ final class Web
         $text = trim($text);
         if ($text === '') $this->fail(400, 'empty message');
         set_time_limit(0);
-        $before = (int)($this->app->store->db->query('SELECT COALESCE(MAX(id),0) FROM messages')->fetchColumn());
+        $before = $this->app->store->maxMessageId();
         $this->app->agent()->chat('web', $text);
         return ['messages' => $this->app->store->messagesAfter($before)];
     }

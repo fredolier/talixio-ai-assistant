@@ -12,6 +12,9 @@ final class Cli
             switch ($cmd) {
                 case 'worker':
                     (new Worker($app))->run();
+                case 'job':
+                    $app->jobs()->runJob((int)($argv[2] ?? 0));
+                    return 0;
                 case 'mcp':
                     (new McpServer($app->tools))->serve();
                     return 0;
@@ -26,7 +29,7 @@ final class Cli
                 case 'doctor':
                     return self::doctor($app);
                 default:
-                    fwrite(STDERR, "usage: talixio worker|chat|doctor|mcp\n");
+                    fwrite(STDERR, "usage: talixio worker|chat|doctor|mcp|job ID\n");
                     return 2;
             }
         } catch (\Throwable $e) {
@@ -50,12 +53,19 @@ final class Cli
             'anthropic' => $c->anthropicKey !== '', 'openai' => $c->openaiKey !== '' || !str_contains($c->openaiBaseUrl, 'openai.com'),
             'claude-code', 'echo' => true, default => false,
         }, "provider {$c->provider} credentials");
-        echo "     search: {$c->search} | telegram: " . ($c->telegramToken ? 'on' : 'off') . ' | ntfy: ' . ($c->ntfyUrl ? 'on' : 'off')
+        if ($c->embeddings !== 'off') {
+            try { $app->embeddings->embed(['test'], 'query'); $line(true, "embeddings {$c->embeddings}:{$c->embeddingsModel}"); }
+            catch (\Throwable $e) { $line(false, "embeddings {$c->embeddings}: {$e->getMessage()}"); }
+        }
+        echo '     budget: ' . $app->budget()->describe() . "\n";
+        echo "     embeddings: {$c->embeddings} | search: {$c->search} | telegram: " . ($c->telegramToken ? 'on' : 'off') . ' | ntfy: ' . ($c->ntfyUrl ? 'on' : 'off')
             . " | heartbeat: " . ($c->heartbeatMinutes ?: 'off') . " | timezone: {$c->timezone}\n";
         try {
-            $t = microtime(true);
-            $r = $app->provider()->complete('Reply with exactly: pong', [['role' => 'user', 'content' => 'ping']], new Tools($c, $app->store, $app->ws), fn() => null);
-            $line(stripos($r, 'pong') !== false, sprintf('model call answered "%s" in %.1fs', mb_substr(trim($r), 0, 40), microtime(true) - $t));
+            foreach ($c->tiers as $tier) {
+                $t = microtime(true);
+                $r = $app->provider($tier)->complete('Reply with exactly: pong', '', [['role' => 'user', 'content' => 'ping']], $app->tools->only('none'), fn() => null);
+                $line(stripos($r, 'pong') !== false, sprintf('%s tier (%s) answered "%s" in %.1fs', $tier->name, $tier->label(), mb_substr(trim($r), 0, 30), microtime(true) - $t));
+            }
         } catch (\Throwable $e) {
             $line(false, 'model call failed: ' . $e->getMessage());
         }

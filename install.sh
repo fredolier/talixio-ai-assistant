@@ -2,22 +2,25 @@
 # Install or update Talixio on Debian/Ubuntu.
 #   sudo ./install.sh                         first install, or update after `git pull`
 #   sudo ./install.sh --domain bot.example.com   also set up HTTPS with Caddy (DNS must point here)
+#   sudo ./install.sh --bind 10.0.0.5:8080      listen on this address (when another machine runs your reverse proxy)
 #   sudo ./install.sh --with-claude-code      also install the Claude Code CLI (use a Claude Pro/Max plan)
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 
-DOMAIN="" ; WITH_CLAUDE=0
+DOMAIN="" ; WITH_CLAUDE=0 ; BIND_ARG=
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="${2:?--domain needs a value}"; shift 2 ;;
+    --bind) BIND_ARG="${2:?--bind needs host:port}"; shift 2 ;;
     --with-claude-code) WITH_CLAUDE=1; shift ;;
-    -h|--help) sed -n '2,6p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
 APP=/opt/talixio DATA=/var/lib/talixio ETC=/etc/talixio ENV=/etc/talixio/talixio.env
+[ -n "$DOMAIN" ] && [ -n "$BIND_ARG" ] && { echo "use either --domain (Caddy on this VM) or --bind (proxy elsewhere), not both" >&2; exit 2; }
 say() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 
 say "Installing system packages"
@@ -44,6 +47,12 @@ if [ ! -f "$ENV" ]; then
   TZ_GUESS="$(timedatectl show -p Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || echo UTC)"
   sed -i "s|^TALIXIO_TIMEZONE=.*|TALIXIO_TIMEZONE=${TZ_GUESS:-UTC}|" "$ENV"
 fi
+# add settings introduced by newer versions (keeps existing values)
+while IFS= read -r line; do
+  key="${line%%=*}"
+  case "$line" in [A-Z]*=*) grep -q "^$key=" "$ENV" || { echo "$line" >> "$ENV"; echo "    added new setting $key"; } ;; esac
+done < "$SRC/config/talixio.env.example"
+[ -n "$BIND_ARG" ] && sed -i "s|^TALIXIO_WEB_BIND=.*|TALIXIO_WEB_BIND=$BIND_ARG|" "$ENV"
 chown root:talixio "$ENV"; chmod 640 "$ENV"
 
 if [ "$WITH_CLAUDE" = 1 ]; then
@@ -82,7 +91,11 @@ systemctl --no-pager --lines=0 status talixio-worker talixio-web | grep -E '●|
 echo
 echo "  Web app:   $URL"
 [ -n "$NEW_PASSWORD" ] && echo "  Password:  $NEW_PASSWORD   (stored in $ENV)"
-case "$BIND" in 127.0.0.1:*|localhost:*) [ -z "$DOMAIN" ] && echo "  From your computer: ssh -L $PORT:127.0.0.1:$PORT <user>@<this-vm>  then open http://localhost:$PORT" ;; esac
+case "$BIND" in
+  127.0.0.1:*|localhost:*) [ -z "$DOMAIN" ] && echo "  From your computer: ssh -L $PORT:127.0.0.1:$PORT <user>@<this-vm>  then open http://localhost:$PORT" ;;
+  *) echo "  Reverse proxy (Caddy on another machine):  your.domain { reverse_proxy $BIND }"
+     echo "  Firewall tip: allow port $PORT only from the proxy, e.g. ufw allow from <proxy-ip> to any port $PORT" ;;
+esac
 echo "  Config:    sudo nano $ENV   then  sudo systemctl restart talixio-worker talixio-web"
 echo "  Check:     sudo talixio doctor"
 echo "  Logs:      journalctl -u talixio-worker -u talixio-web -f"

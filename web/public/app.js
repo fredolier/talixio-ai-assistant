@@ -1,4 +1,5 @@
 'use strict';
+const nf = new Intl.NumberFormat();
 const $ = s => document.querySelector(s);
 const state = { lastId: 0, status: null, memFile: 'USER.md', memFiles: {}, sending: false, pollTimer: null };
 
@@ -33,18 +34,36 @@ function md(src) {
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   const out = [];
+  const LI = /^\s*[-*•]\s+/, OL = /^\s*\d+[.)]\s+/;
   for (const para of s.split(/\n{2,}/)) {
-    const lines = para.split('\n');
     if (/^\u0000\d+\u0000$/.test(para.trim())) { out.push(para.trim()); continue; }
-    if (lines.every(l => /^\s*[-*•]\s+/.test(l))) { out.push('<ul>' + lines.map(l => `<li>${inline(l.replace(/^\s*[-*•]\s+/, ''))}</li>`).join('') + '</ul>'); continue; }
-    if (lines.every(l => /^\s*\d+[.)]\s+/.test(l))) { out.push('<ol>' + lines.map(l => `<li>${inline(l.replace(/^\s*\d+[.)]\s+/, ''))}</li>`).join('') + '</ol>'); continue; }
-    if (/^#{1,6}\s/.test(lines[0])) { out.push(`<h4>${inline(lines[0].replace(/^#+\s/, ''))}</h4>` + (lines.length > 1 ? `<p>${inline(lines.slice(1).join('<br>'))}</p>` : '')); continue; }
-    out.push(`<p>${inline(lines.join('<br>'))}</p>`);
+    // group consecutive lines: bullet list, numbered list, heading, or text
+    let text = [], list = null, kind = null;
+    const flushText = () => { if (text.length) out.push(`<p>${inline(text.join('<br>'))}</p>`); text = []; };
+    const flushList = () => { if (list) out.push(`<${kind}>` + list.map(l => `<li>${inline(l)}</li>`).join('') + `</${kind}>`); list = null; kind = null; };
+    for (const line of para.split('\n')) {
+      const k = LI.test(line) ? 'ul' : OL.test(line) ? 'ol' : null;
+      if (/^\u0000\d+\u0000$/.test(line.trim())) { flushText(); flushList(); out.push(line.trim()); continue; }
+      if (k) {
+        flushText();
+        if (kind && kind !== k) flushList();
+        kind = k; (list ||= []).push(line.replace(k === 'ul' ? LI : OL, ''));
+      } else if (/^#{1,6}\s/.test(line)) {
+        flushText(); flushList(); out.push(`<h4>${inline(line.replace(/^#+\s/, ''))}</h4>`);
+      } else if (list && /^\s{2,}\S/.test(line)) {
+        list[list.length - 1] += ' ' + line.trim(); // wrapped list item
+      } else {
+        flushList(); text.push(line);
+      }
+    }
+    flushText(); flushList();
   }
   return out.join('').replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[+i]);
 }
 
-const CHANNEL = { web: null, cli: 'Terminal', telegram: 'Telegram', schedule: 'Scheduled', heartbeat: 'Heartbeat' };
+const CHANNEL = { web: null, cli: 'Terminal', telegram: 'Telegram', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
+const money = v => v == null ? '' : v < 0.01 ? '<$0.01' : '$' + v.toFixed(v < 1 ? 3 : 2);
+const ktok = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
 const fmtTime = ts => new Date(ts * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
 function renderMessage(m) {
@@ -55,15 +74,30 @@ function renderMessage(m) {
     el.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>${esc(title)} · ${fmtTime(m.ts)}</span>`;
     return el;
   }
+  if (m.role === 'user' && m.channel === 'job') {
+    const [, num, title, status] = m.content.match(/^\[Background job #(\d+) "(.*?)" (\w+)/) || [];
+    const report = m.content.replace(/^\[[^\]]*\]\s*/, '');
+    el.className = 'jobcard';
+    el.innerHTML = `<details><summary><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Job ${status || 'finished'}: <b>${esc(title || 'background job')}</b> · ${fmtTime(m.ts)} · show the full report</span></summary><div class="report">${esc(report)}</div></details>`;
+    return el;
+  }
   el.className = `msg ${m.role}`;
   const chip = CHANNEL[m.channel] ? `<span class="chip ${m.channel}">${CHANNEL[m.channel]}</span>` : '';
-  el.innerHTML = `<div class="bubble">${m.role === 'user' ? esc(m.content) : md(m.content)}</div><div class="meta">${chip}<span>${fmtTime(m.ts)}</span></div>`;
+  const mt = m.meta;
+  const usage = mt ? `<span class="tier" title="${esc(mt.model)} · ${nf.format(mt.in)} in / ${nf.format(mt.out)} out tokens">${esc(shortModel(mt.model))} · ${ktok(mt.in + mt.out)} tok${mt.cost_known ? ' · ' + money(mt.cost) : ''}</span>` : '';
+  el.innerHTML = `<div class="bubble">${m.role === 'user' ? esc(m.content) : md(m.content)}</div><div class="meta">${chip}<span>${fmtTime(m.ts)}</span>${usage}</div>`;
   return el;
+}
+
+function shortModel(m) {
+  const x = String(m).replace(/^claude-code:/, '');
+  const fam = x.match(/(haiku|sonnet|opus)/i);
+  return fam ? fam[1][0].toUpperCase() + fam[1].slice(1) : x;
 }
 
 function emptyState() {
   const n = state.status?.name || 'Talixio';
-  const ideas = ['What can you do?', 'Remind me tomorrow at 9:00 to call the bank', 'Every weekday at 8:00, send me a short briefing', 'Remember that I prefer short answers'];
+  const ideas = ['What can you do?', 'Remind me tomorrow at 9:00 to call the bank', 'Every weekday at 8:00, send me a short briefing', 'Research the 3 best-rated bakeries near me and compare them'];
   const el = document.createElement('div');
   el.className = 'empty'; el.id = 'empty';
   el.innerHTML = `<div class="mark" aria-hidden="true"></div><h3>Hi, I'm ${esc(n)}.</h3><p class="muted">I run on your server around the clock, remember what matters to you, and can message you first. Try one of these:</p><div class="suggest"></div>`;
@@ -142,6 +176,31 @@ async function loadTasks() {
   }
 }
 
+// ---- jobs ----
+async function loadJobs() {
+  const { jobs } = await api('/api/jobs');
+  const s = state.status;
+  if (s) $('#jobs-help').textContent = `Sub-agents the assistant starts for research and multi-step work: up to ${s.max_parallel_jobs} at once, each capped at $${s.job_max_usd.toFixed(2)}. Results come back in the chat.`;
+  const box = $('#jobs'); box.innerHTML = '';
+  if (!jobs.length) { box.innerHTML = '<div class="placeholder">No jobs yet. Ask for research, e.g. <q>compare the three best e-bikes under €2000</q>.</div>'; return; }
+  for (const j of jobs) {
+    const el = document.createElement('div');
+    el.className = 'task';
+    const dur = j.started ? Math.max(1, Math.round(((j.finished || Date.now() / 1000) - j.started))) : null;
+    const durText = dur == null ? 'waiting' : dur < 90 ? dur + ' s' : Math.round(dur / 60) + ' min';
+    el.innerHTML = `<div><h3>${esc(j.title)}</h3><div class="when"><span class="pill ${j.status}">${j.status === 'running' ? '<span class="dot"></span>' : ''}${j.status}</span>
+        <span class="chip">${esc(j.tier)}</span><span>${money(+j.cost_usd) || '$0'} of $${(+j.max_cost_usd).toFixed(2)}</span><span>${durText}</span><span>${fmtTime(j.created)}</span></div></div>
+      <div class="actions">${['queued', 'running'].includes(j.status) ? '<button class="btn small" data-a="cancel">Cancel</button>' : ''}</div>
+      <details><summary>Instructions${j.result ? ' and report' : ''}</summary><p class="report"><b>Instructions:</b> ${esc(j.instructions)}</p>${j.result ? `<p class="report"><b>Report:</b> ${esc(j.result)}</p>` : ''}</details>`;
+    el.querySelector('[data-a=cancel]')?.addEventListener('click', async () => {
+      try { await post(`/api/jobs/${j.id}/cancel`); toast('Job cancelled'); loadJobs(); } catch (e) { toast(e.message); }
+    });
+    box.append(el);
+  }
+  clearTimeout(loadJobs.t);
+  if (jobs.some(j => ['queued', 'running'].includes(j.status)) && location.hash === '#jobs') loadJobs.t = setTimeout(() => loadJobs().catch(() => {}), 4000);
+}
+
 // ---- memory ----
 const MEM_HELP = {
   'USER.md': 'What the assistant knows about you.',
@@ -169,29 +228,41 @@ function loadMemoryTab() {
 }
 
 // ---- activity ----
-const nf = new Intl.NumberFormat();
 async function loadActivity() {
-  const { usage, tools } = await api('/api/activity');
+  const { usage, tools, budget, by_tier, by_source, memory } = await api('/api/activity');
+  const meter = (label, spent, limit) => {
+    const pct = limit > 0 ? Math.min(100, spent / limit * 100) : 0;
+    const cls = !limit ? '' : pct >= 100 ? 'blocked' : pct >= 80 ? 'low' : '';
+    return `<div class="meter"><div class="row"><span class="muted small">${label}</span><span class="muted small">${limit > 0 ? 'limit $' + limit.toFixed(2) : 'no limit set'}</span></div>
+      <b>$${spent.toFixed(2)}</b><div class="track ${cls}"><i style="width:${pct.toFixed(1)}%"></i></div></div>`;
+  };
+  $('#budget').innerHTML = meter('Spent today', budget.today, budget.daily_limit) + meter('Spent this month', budget.month, budget.monthly_limit);
+  const rows = list => list.length ? list.map(r => `<tr><td>${esc(r.name || '-')}</td><td>${nf.format(r.calls)}</td><td>${ktok(+r.input + +r.output)}</td><td>${r.cost == null ? '?' : money(+r.cost) || '$0'}</td></tr>`).join('')
+    : '<tr><td colspan="4" class="muted">Nothing yet.</td></tr>';
+  $('#by-tier tbody').innerHTML = rows(by_tier);
+  $('#by-source tbody').innerHTML = rows(by_source);
+  $('#memstats').textContent = `Memory index: ${nf.format(memory.messages)} messages, ${nf.format(memory.summaries)} summaries, ${nf.format(memory.docs)} searchable items, ${nf.format(memory.embedded)} with embeddings${state.status?.embeddings === 'off' ? ' (embeddings off: keyword search only)' : ''}.`;
   const sum = k => usage.reduce((a, d) => a + (+d[k] || 0), 0);
   const cost = usage.reduce((a, d) => a + (d.cost == null ? 0 : +d.cost), 0);
   const max = Math.max(1, ...usage.map(d => +d.input + +d.output));
   const days = [];
   for (let i = 29; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5); days.push(d.toLocaleDateString('sv-SE')); }
   const byDay = Object.fromEntries(usage.map(d => [d.day, +d.input + +d.output]));
+  const costDay = Object.fromEntries(usage.map(d => [d.day, d.cost == null ? null : +d.cost]));
   $('#usage').innerHTML = `
     <div class="stat"><b>${nf.format(sum('calls'))}</b><span>model calls</span></div>
     <div class="stat"><b>${nf.format(sum('input'))}</b><span>input tokens</span></div>
     <div class="stat"><b>${nf.format(sum('output'))}</b><span>output tokens</span></div>
     <div class="stat"><b>${cost ? '$' + cost.toFixed(2) : '–'}</b><span>${state.status?.provider === 'claude-code' ? 'API-equivalent cost (covered by your plan)' : 'reported cost'}</span></div>
     <div class="bars"><div class="small muted">Tokens per day</div>
-      <div class="bars-plot" role="img" aria-label="Tokens per day, last 30 days">${days.map(d => `<div style="height:${((byDay[d] || 0) / max * 100).toFixed(1)}%" title="${d}: ${nf.format(byDay[d] || 0)} tokens"></div>`).join('')}</div>
+      <div class="bars-plot" role="img" aria-label="Tokens per day, last 30 days">${days.map(d => `<div style="height:${((byDay[d] || 0) / max * 100).toFixed(1)}%" title="${d}: ${nf.format(byDay[d] || 0)} tokens${costDay[d] != null ? ', ' + money(costDay[d]) : ''}"></div>`).join('')}</div>
       <div class="bars-axis"><span>${days[0]}</span><span>max ${nf.format(max)}</span><span>today</span></div></div>`;
   $('#tools tbody').innerHTML = tools.length ? tools.map(t => `<tr><td>${fmtTime(t.ts)}</td><td>${esc(t.tool)}</td><td><code>${esc(t.args.slice(0, 200))}</code></td><td>${esc(t.result.slice(0, 220))}</td></tr>`).join('')
     : '<tr><td colspan="4" class="muted">No tool calls yet.</td></tr>';
 }
 
 // ---- shell ----
-const VIEWS = { chat: null, tasks: loadTasks, memory: loadMemory, activity: loadActivity };
+const VIEWS = { chat: null, tasks: loadTasks, jobs: loadJobs, memory: loadMemory, activity: loadActivity };
 function route() {
   const v = (location.hash.slice(1) in VIEWS) ? location.hash.slice(1) : 'chat';
   for (const k of Object.keys(VIEWS)) $('#view-' + k).hidden = k !== v;
@@ -206,7 +277,8 @@ async function refreshStatus() {
     $('#brand-name').textContent = s.name; document.title = s.name;
     $('#chat-title').textContent = s.name;
     const ch = Object.entries(s.channels).filter(([, on]) => on).map(([k]) => k[0].toUpperCase() + k.slice(1)).join(', ');
-    $('#chat-sub').textContent = `${s.provider}${s.model !== 'default' ? ' · ' + s.model : ''} · ${ch}`;
+    const b = s.budget, lim = b.daily_limit > 0 ? ` · $${b.today.toFixed(2)} of $${b.daily_limit.toFixed(2)} today` : '';
+    $('#chat-sub').textContent = `${shortModel(s.model)} · ${ch}${lim}${b.state === 'low' ? ' · budget low' : b.state === 'blocked' ? ' · budget reached' : ''}`;
     const st = $('#status'); st.className = 'status ' + (s.worker_online ? 'on' : 'off');
     st.querySelector('span').textContent = s.worker_online ? 'Running' : 'Worker offline';
     st.title = s.worker_online ? 'Background worker is running: schedules and chat apps work.' : 'Background worker is not running: schedules and Telegram are paused. Check: systemctl status talixio-worker';
@@ -240,6 +312,17 @@ $('#notify-btn').onclick = async () => {
   const p = await Notification.requestPermission();
   $('#notify-btn').hidden = true;
   toast(p === 'granted' ? 'Notifications on while this tab is open. For phone push, set up ntfy.' : 'Notifications blocked.');
+};
+$('#search-form').onsubmit = async e => {
+  e.preventDefault();
+  const q = $('#search-q').value.trim(); const box = $('#search-results');
+  if (!q) { box.hidden = true; return; }
+  try {
+    const { results } = await api('/api/search?q=' + encodeURIComponent(q));
+    box.hidden = false;
+    box.innerHTML = results.length ? results.map(r => `<div class="hit"><div class="meta"><span class="chip">${esc(r.label)}</span><span>${new Date(r.ts * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>${r.sim != null ? `<span>${Math.round(r.sim * 100)}% similar</span>` : ''}</div>${esc(r.text.slice(0, 600))}</div>`).join('')
+      : '<div class="placeholder">Nothing found.</div>';
+  } catch (err) { toast(err.message); }
 };
 $('#mem-editor').addEventListener('input', () => { $('#mem-state').textContent = 'Unsaved changes'; });
 $('#mem-save').onclick = async () => {

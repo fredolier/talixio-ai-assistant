@@ -22,14 +22,23 @@ It installs PHP, creates a `talixio` system user, copies the app to `/opt/talixi
 `127.0.0.1:8080`). It starts in **echo mode** (no model) so you can check the install first.
 
 Options:
-- `sudo ./install.sh --domain bot.example.com` adds HTTPS with Caddy. Point the DNS at the VM and
-  open ports 80 and 443 first. HTTPS is needed to install the web app on your phone's home screen.
+- `sudo ./install.sh --domain assistant.example.com` installs Caddy **on this VM** for HTTPS. Point the
+  DNS at the VM and open ports 80 and 443 first.
+- `sudo ./install.sh --bind 10.0.0.5:8080` when your reverse proxy runs **on another machine**: the
+  app listens on the VM's private address, and you add to your Caddyfile:
+  ```
+  assistant.example.com {
+      reverse_proxy 10.0.0.5:8080
+  }
+  ```
+  Allow port 8080 only from the proxy (`ufw allow from <proxy-ip> to any port 8080`).
+- HTTPS (either way) is needed to add the web app to your phone's home screen.
 - `sudo ./install.sh --with-claude-code` installs the Claude Code CLI for the `talixio` user.
 
 **Update:** `git pull && sudo ./install.sh` (your config and data are kept).
 
 ### Open the web app
-- With `--domain`: `https://bot.example.com`
+- With `--domain` or your own proxy: `https://assistant.example.com`
 - Without: tunnel from your computer, `ssh -L 8080:127.0.0.1:8080 you@your-vm`, then open
   http://localhost:8080
 
@@ -58,7 +67,7 @@ Create a bot with @BotFather, set `TALIXIO_TELEGRAM_TOKEN`, restart, and message
 with your chat id; put it in `TALIXIO_TELEGRAM_ALLOWED_IDS`. Telegram and the web app share the same
 conversation.
 
-## What it can do (v0.2)
+## What it can do (v0.3)
 - **One conversation everywhere**: web app, Telegram and terminal (`sudo talixio chat`) share one thread.
 - **Memory you can edit**: `USER.md` (about you), `MEMORY.md` (notes), `SOUL.md` (personality),
   `HEARTBEAT.md` (checklist), editable on the Memory page.
@@ -68,7 +77,27 @@ conversation.
   something needs attention. Each check is a model call, so it costs tokens.
 - **Web search** (Claude's built-in search, or Brave / Tavily / SearXNG) and **page reading** that
   blocks internal network addresses.
-- **Activity page**: token usage per day and an audit log of every tool call.
+- **Searchable history (RAG in SQLite)**: every message is indexed with FTS5 keyword search; with an
+  embeddings backend (Ollama, OpenAI or Voyage) meaning-based search is added. Finished stretches of
+  conversation are summarised. Relevant past snippets are added to the prompt automatically, and the
+  assistant can call `search_memory`. You can search too, on the Memory page.
+- **Model tiers**: fast (heartbeat, summaries, simple lookups), standard (chat), deep (hard reasoning,
+  with extended thinking on Claude). Start a message with `/deep` or `/fast` to choose. Each reply
+  shows the model, tokens and estimated cost.
+- **Budget**: daily and monthly limits in USD. Over 80% it switches to the fast tier and stops
+  starting sub-agents; at 100% it stops calling models. The assistant sees its spending and has a
+  `usage_report` tool.
+- **Sub-agents**: for research and multi-step work the assistant starts background jobs (`delegate`),
+  up to 3 in parallel, each with its own tier and a cost cap ($0.50 by default). It replies right
+  away; the report arrives in the chat and as a push notification. Sub-agents can search and read
+  but cannot change memory, schedules or start more jobs. See and cancel them on the Jobs page.
+- **Prompt caching** on Claude: the stable part of the instructions is cached (re-reads cost 10%).
+- **Activity page**: spending against your budget, cost by tier and by source, tokens per day, and
+  an audit log of every tool call.
+
+Costs are estimates from list prices built into `src/Pricing.php` (Claude: Haiku $1/$5, Sonnet
+$3/$15, Opus $5/$25 per million tokens). Check your provider's pricing and override with
+`TALIXIO_PRICES` if they differ.
 
 Not yet: headless browser, skills (learning procedures), shell/code tools, email, WhatsApp, Signal,
 Slack, Teams, voice. See the roadmap.

@@ -5,9 +5,8 @@ namespace Talixio;
 /** All settings come from environment variables (see config/talixio.env.example). */
 final class Config
 {
-    public string $provider = 'anthropic';      // anthropic | openai | claude-code
-    public string $model = '';
-    public string $cheapModel = '';             // used for heartbeat checks; defaults to $model
+    public string $provider = 'anthropic';      // anthropic | openai | claude-code | echo
+    /** @var array<string,Tier> */ public array $tiers = [];
     public string $anthropicKey = '';
     public string $anthropicBaseUrl = 'https://api.anthropic.com';
     public string $openaiKey = '';
@@ -23,20 +22,39 @@ final class Config
     public string $ntfyUrl = '';
     public string $ntfyToken = '';
     public int $heartbeatMinutes = 0;
-    public string $search = 'auto';             // auto | anthropic | brave | tavily | searxng | off
+    public string $search = 'auto';             // resolved to builtin | brave | tavily | searxng | off
     public string $braveKey = '';
     public string $tavilyKey = '';
     public string $searxngUrl = '';
+    public float $budgetDaily = 0.0;
+    public float $budgetMonthly = 0.0;
+    public string $prices = '';
+    public int $maxParallelJobs = 3;
+    public float $jobMaxUsd = 0.5;
+    public string $embeddings = 'off';           // resolved to ollama | openai | voyage | off
+    public string $embeddingsModel = '';
+    public string $ollamaUrl = 'http://127.0.0.1:11434';
+    public string $voyageKey = '';
+    public float $recallMinSim = 0.5;
 
     public static function fromEnv(): self
     {
-        $e = static fn(string $k, string $d = ''): string => ($v = getenv($k)) !== false && $v !== '' ? $v : $d;
+        $e = static fn(string $k, string $d = ''): string => ($v = getenv($k)) !== false && $v !== '' ? trim($v) : $d;
         $c = new self();
         $c->provider = strtolower($e('TALIXIO_PROVIDER', 'anthropic'));
-        $c->model = $e('TALIXIO_MODEL', match ($c->provider) {
-            'openai' => 'gpt-4.1', 'claude-code', 'echo' => '', default => 'claude-sonnet-5-5',
-        });
-        $c->cheapModel = $e('TALIXIO_CHEAP_MODEL', $c->model);
+        [$fast, $std, $deep] = match ($c->provider) {
+            'anthropic' => ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
+            'openai' => ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1'],
+            'claude-code' => ['haiku', 'sonnet', 'opus'],
+            default => ['', '', ''],
+        };
+        $std = $e('TALIXIO_MODEL', $std);
+        $c->tiers = [
+            'fast' => new Tier('fast', $e('TALIXIO_MODEL_FAST', $e('TALIXIO_CHEAP_MODEL', $fast)), 6),
+            'standard' => new Tier('standard', $std, 12),
+            'deep' => new Tier('deep', $e('TALIXIO_MODEL_DEEP', $deep), 25,
+                (int)$e('TALIXIO_DEEP_THINKING_TOKENS', '8000'), $e('TALIXIO_DEEP_REASONING_EFFORT')),
+        ];
         $c->anthropicKey = $e('ANTHROPIC_API_KEY');
         $c->anthropicBaseUrl = rtrim($e('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'), '/');
         $c->openaiKey = $e('OPENAI_API_KEY');
@@ -53,10 +71,10 @@ final class Config
         $c->ntfyUrl = $e('TALIXIO_NTFY_URL');
         $c->ntfyToken = $e('TALIXIO_NTFY_TOKEN');
         $c->heartbeatMinutes = (int)$e('TALIXIO_HEARTBEAT_MINUTES', '0');
-        $c->search = strtolower($e('TALIXIO_SEARCH', 'auto'));
         $c->braveKey = $e('BRAVE_API_KEY');
         $c->tavilyKey = $e('TAVILY_API_KEY');
         $c->searxngUrl = rtrim($e('SEARXNG_URL'), '/');
+        $c->search = strtolower($e('TALIXIO_SEARCH', 'auto'));
         if ($c->search === 'auto') {
             $c->search = match (true) {
                 $c->braveKey !== '' => 'brave',
@@ -66,10 +84,33 @@ final class Config
                 default => 'off',
             };
         }
+        $c->budgetDaily = (float)$e('TALIXIO_BUDGET_DAILY_USD', '0');
+        $c->budgetMonthly = (float)$e('TALIXIO_BUDGET_MONTHLY_USD', '0');
+        $c->prices = $e('TALIXIO_PRICES');
+        $c->maxParallelJobs = max(1, (int)$e('TALIXIO_MAX_PARALLEL_JOBS', '3'));
+        $c->jobMaxUsd = (float)$e('TALIXIO_JOB_MAX_USD', '0.50');
+        $c->ollamaUrl = rtrim($e('TALIXIO_OLLAMA_URL', 'http://127.0.0.1:11434'), '/');
+        $c->voyageKey = $e('VOYAGE_API_KEY');
+        $c->embeddings = strtolower($e('TALIXIO_EMBEDDINGS', 'auto'));
+        if ($c->embeddings === 'auto') {
+            $c->embeddings = match (true) {
+                $c->voyageKey !== '' => 'voyage',
+                $c->openaiKey !== '' && str_contains($c->openaiBaseUrl, 'api.openai.com') => 'openai',
+                default => 'off',
+            };
+        }
+        $c->embeddingsModel = $e('TALIXIO_EMBEDDINGS_MODEL', match ($c->embeddings) {
+            'ollama' => 'nomic-embed-text', 'openai' => 'text-embedding-3-small', 'voyage' => 'voyage-3.5-lite', default => '',
+        });
+        $c->recallMinSim = (float)$e('TALIXIO_RECALL_MIN_SIMILARITY', '0.5');
         date_default_timezone_set($c->timezone);
         return $c;
     }
 
+    public function tier(string $name): Tier { return $this->tiers[$name] ?? $this->tiers['standard']; }
+    public function embeddingsBackend(): string { return $this->embeddings; }
     public function dbPath(): string { return $this->dataDir . '/talixio.db'; }
     public function workspaceDir(): string { return $this->dataDir . '/workspace'; }
+    /** Models served by a local OpenAI-compatible server cost nothing. */
+    public function localModels(): bool { return $this->provider === 'openai' && !str_contains($this->openaiBaseUrl, 'openai.com'); }
 }

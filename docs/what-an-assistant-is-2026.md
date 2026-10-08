@@ -78,20 +78,20 @@ A chatbot answers. An assistant acts, remembers, and checks in on its own.
 - Logs, costs, scheduled jobs, memory and skills visible in one place (a small web admin page).
 - Easy to pause, stop, or roll back.
 
-## Where Talixio is today (v0.1)
+## Where Talixio is today (v0.3)
 
 | # | Capability | Status |
 |---|---|---|
-| 1 | Always on, channels | Daemon via systemd. Telegram only. |
-| 2 | Models | Anthropic, OpenAI, OpenAI-compatible. No routing, no cost tracking. |
-| 3 | Memory | Flat facts list + last 20 turns. No files, no search, no summaries. |
-| 4 | Skills | None. |
-| 5 | Tools | `fetch_url` only (raw HTML, no internal-address protection). No search, browser, shell, MCP. |
-| 6 | Proactive | Fixed daily jobs from config. No chat-created reminders, no heartbeat. |
-| 7 | Planning | Up to 8 chained tool calls. Nothing persistent. |
-| 8 | Safety | Telegram allowlist. No approvals, no audit log, no sandbox. |
+| 1 | Always on, channels | systemd services. Web app, Telegram, terminal; push via ntfy. One shared thread. |
+| 2 | Models | Claude API, Claude Code (Pro/Max plan), OpenAI, local. Three tiers (fast/standard/deep), budgets, cost tracking, prompt caching. |
+| 3 | Memory | Editable Markdown files + whole history in SQLite with FTS5 and optional embeddings, automatic recall, summaries. |
+| 4 | Skills | None yet. |
+| 5 | Tools | Web search, safe page reading, memory, scheduling, delegation. No browser, shell or MCP connectors yet. |
+| 6 | Proactive | Reminders and cron tasks created by chat, heartbeat. |
+| 7 | Planning | Background sub-agents in parallel with cost caps. No persistent plans yet. |
+| 8 | Safety | Allowlists, password, internal-address blocking, audit log, budgets, sub-agents can't write. No approvals yet (no risky tools yet). |
 | 9 | Multimodal | Text only. |
-| 10 | Observability | journald logs only. |
+| 10 | Observability | Web pages for jobs, memory, activity and costs. |
 
 ## Build plan (PHP, shipped as the `talixio-ai-assistant` .deb)
 

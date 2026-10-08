@@ -28,6 +28,7 @@
     <div class="brand"><div class="mark" aria-hidden="true"></div><span id="brand-name">Talixio</span></div>
     <a href="#chat" data-view="chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></svg><span>Chat</span></a>
     <a href="#tasks" data-view="tasks"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Tasks</span></a>
+    <a href="#jobs" data-view="jobs"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Jobs</span></a>
     <a href="#memory" data-view="memory"><svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg><span>Memory</span></a>
     <a href="#activity" data-view="activity"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Activity</span></a>
     <div class="rail-foot">
@@ -55,9 +56,21 @@
       <div id="tasks" class="list"></div>
     </section>
 
+    <section id="view-jobs" class="view page" hidden>
+      <header class="page-head"><h2>Background jobs</h2>
+        <p class="muted" id="jobs-help">Sub-agents the assistant starts for research and multi-step work. Each one has its own model tier and a cost cap; results come back in the chat.</p></header>
+      <div id="jobs" class="list"></div>
+    </section>
+
     <section id="view-memory" class="view page" hidden>
       <header class="page-head"><h2>Memory</h2>
-        <p class="muted">Plain files the assistant reads before every answer and updates as it learns. You can edit them too.</p></header>
+        <p class="muted">Search everything you've discussed. Below, the files the assistant reads before every answer and updates as it learns; you can edit them too.</p></header>
+      <form id="search-form" class="search" role="search">
+        <input id="search-q" type="search" placeholder="Search everything you've discussed…" aria-label="Search history">
+        <button class="btn" type="submit">Search</button>
+      </form>
+      <div id="search-results" class="results" hidden></div>
+      <h3>Memory files</h3>
       <div class="tabs" id="mem-tabs" role="tablist"></div>
       <p class="muted small" id="mem-help"></p>
       <textarea id="mem-editor" class="editor" spellcheck="false" aria-label="File content"></textarea>
@@ -65,8 +78,12 @@
     </section>
 
     <section id="view-activity" class="view page" hidden>
-      <header class="page-head"><h2>Activity</h2><p class="muted">Model usage over the last 30 days and every tool the assistant used.</p></header>
+      <header class="page-head"><h2>Activity</h2><p class="muted">Spending, model usage and every tool the assistant used. Costs are estimates from list prices.</p></header>
+      <div id="budget" class="budget"></div>
       <div id="usage" class="usage"></div>
+      <div class="split"><div><h3>This month by tier</h3><div class="table-wrap"><table id="by-tier"><thead><tr><th>Tier</th><th>Calls</th><th>Tokens</th><th>Cost</th></tr></thead><tbody></tbody></table></div></div>
+        <div><h3>This month by source</h3><div class="table-wrap"><table id="by-source"><thead><tr><th>Source</th><th>Calls</th><th>Tokens</th><th>Cost</th></tr></thead><tbody></tbody></table></div></div></div>
+      <p class="muted small" id="memstats"></p>
       <h3>Tool calls</h3>
       <div class="table-wrap"><table id="tools"><thead><tr><th>When</th><th>Tool</th><th>Input</th><th>Result</th></tr></thead><tbody></tbody></table></div>
     </section>
