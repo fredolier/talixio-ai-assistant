@@ -10,7 +10,10 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
     credentials: 'same-origin',
   });
-  const data = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
+  const raw = await res.text();
+  let data;
+  try { data = JSON.parse(raw); }
+  catch { data = { error: `Server error (HTTP ${res.status})` + (raw ? ': ' + raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) : '') }; }
   if (res.status === 401) { showLogin(); throw new Error(data.error || 'Please sign in.'); }
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;

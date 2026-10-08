@@ -15,6 +15,7 @@ final class Web
             readfile(dirname(__DIR__) . '/web/public/app.html');
             return;
         }
+        ob_start(); // anything printed by accident is dropped, not mixed into the JSON
         $this->startSession();
         try {
             if ($method === 'POST' && ($_SERVER['HTTP_X_TALIXIO'] ?? '') !== '1') $this->fail(403, 'missing request header');
@@ -168,6 +169,10 @@ final class Web
 
     private function json(array $data, int $code = 200): void
     {
+        while (ob_get_level() > 0) {
+            $stray = ob_get_clean();
+            if ($stray !== '' && $stray !== false) Log::warn('web: dropped unexpected output: ' . mb_substr(trim($stray), 0, 300));
+        }
         http_response_code($code);
         header('Content-Type: application/json');
         header('Cache-Control: no-store');
