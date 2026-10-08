@@ -18,6 +18,7 @@ final class Worker
             . " search={$cfg->search} embeddings={$cfg->embeddings} telegram=" . ($cfg->telegramToken ? 'on' : 'off')
             . ' email=' . ($this->app->email()->canReceive() ? 'in+out' : ($this->app->email()->canSend() ? 'out' : 'off'))
             . ' signal=' . ($this->app->signal()->enabled() ? 'on' : 'off') . ' ntfy=' . ($cfg->ntfyUrl ? 'on' : 'off') . " heartbeat={$cfg->heartbeatMinutes}m budget=\${$cfg->budgetDaily}/day,\${$cfg->budgetMonthly}/month tz={$cfg->timezone}");
+        App::$inWorker = true;
         $this->app->jobs()->recoverInterrupted();
         $tg = $cfg->telegramToken !== '' ? new Telegram($cfg, $this->app) : null;
         while (true) {

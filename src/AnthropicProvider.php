@@ -45,7 +45,8 @@ final class AnthropicProvider implements Provider
             foreach ($blocks as $b) {
                 if ($b['type'] === 'tool_use') {
                     if ($onEvent) $onEvent(['type' => 'tool', 'name' => $b['name'], 'input' => (array)$b['input']]);
-                    $results[] = ['type' => 'tool_result', 'tool_use_id' => $b['id'], 'content' => $tools->run($b['name'], (array)$b['input'])];
+                    [$out, $imgs] = Content::toolImages($tools->run($b['name'], (array)$b['input']));
+                    $results[] = ['type' => 'tool_result', 'tool_use_id' => $b['id'], 'content' => $imgs ? Content::anthropic(array_merge([['type' => 'text', 'text' => $out]], $imgs)) : $out];
                 }
             }
             $messages[] = ['role' => 'user', 'content' => $results];

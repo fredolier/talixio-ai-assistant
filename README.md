@@ -114,7 +114,7 @@ Create a bot with @BotFather, set `TALIXIO_TELEGRAM_TOKEN`, restart, and message
 with your chat id; put it in `TALIXIO_TELEGRAM_ALLOWED_IDS`. Telegram and the web app share the same
 conversation.
 
-## What it can do (v0.6)
+## What it can do (v0.7)
 - **Live answers**: replies appear as they are written, with what it's doing ("Searching the web…",
   "Reading example.com…").
 - **Photos, PDFs, documents**: attach (or paste, or drag) files in the web app, or send them on
@@ -129,6 +129,11 @@ conversation.
   action items. Transcripts and summaries are searchable later. Transcription uses Gemini
   (`GEMINI_API_KEY`, also works when Claude is the brain) or OpenAI. Telegram bots can only
   receive files up to 20 MB, so upload long recordings in the web app.
+- **Headless browser** (`install.sh --with-browser`): opens pages with JavaScript, clicks, types,
+  chooses options and takes screenshots it can look at. Every request the browser makes is checked:
+  local/private network addresses are refused. Submitting a form that sends data (login, order,
+  contact...) pauses until you approve (passwords are masked in the request). Cookies are kept
+  between runs in `/var/lib/talixio/browser-profile`.
 - **Approvals**: anything with outside effects (sending email as you, adding calendar events)
   waits for you: Approve/Reject buttons in the app, or reply "yes 12" / "no 12" on Signal,
   Telegram or email. Requests expire after 7 days. `TALIXIO_AUTO_APPROVE` skips the question for

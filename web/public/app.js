@@ -152,6 +152,8 @@ const TOOL_LABEL = (name, input = {}) => {
     usage_report: 'Checking spending', file_read: 'Reading the attachment',
     calendar_events: 'Checking your calendar', calendar_add: 'Preparing a calendar event', mail_list: 'Looking through your email',
     mail_read: 'Reading an email', mail_draft: 'Writing a draft', mail_send: 'Preparing an email',
+    browser_open: `Opening ${host(input.url)}`, browser_read: 'Reading the page', browser_click: 'Clicking', browser_type: 'Typing',
+    browser_select: 'Choosing an option', browser_back: 'Going back', browser_screenshot: 'Looking at the page',
   })[name] || `Using ${name.replace(/_/g, ' ')}`;
 };
 const SPIN = '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
@@ -172,6 +174,7 @@ async function send(opts = {}) {
   live.innerHTML = '<div class="bubble"><i></i><i></i><i></i></div><div class="activity" hidden></div>';
   thread.append(pending, live); thread.scrollTop = thread.scrollHeight;
   let textSoFar = '';
+  const approvalsTimer = setInterval(loadApprovals, 4000);
   const activity = t => { const a = live.querySelector('.activity'); a.hidden = !t; a.innerHTML = t ? SPIN + esc(t) : ''; thread.scrollTop = thread.scrollHeight; };
   try {
     const res = await fetch('/api/chat', { method: 'POST', credentials: 'same-origin',
@@ -208,6 +211,7 @@ async function send(opts = {}) {
     live.remove(); toast(e.message);
     if (!textSoFar) { pending.remove(); input.value = text; }
   } finally {
+    clearInterval(approvalsTimer);
     state.sending = false; $('#send').disabled = false; input.focus();
   }
 }

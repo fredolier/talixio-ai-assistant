@@ -24,7 +24,7 @@ try { Cron::next('61 * * * *', $t); check('cron rejects bad value', false); } ca
 
 // isolated app in a temp dir
 $dir = sys_get_temp_dir() . '/talixio-test-' . getmypid();
-putenv("TALIXIO_DATA_DIR=$dir"); putenv('TALIXIO_PROVIDER=echo'); putenv('TALIXIO_TIMEZONE=Europe/Paris');
+putenv("TALIXIO_DATA_DIR=$dir"); putenv('TALIXIO_PROVIDER=echo'); putenv('TALIXIO_NOTIFY=none'); putenv('TALIXIO_TIMEZONE=Europe/Paris');
 $app = App::fromEnv();
 $s = $app->store;
 
@@ -472,6 +472,54 @@ check('mailbox: approved email sent as the user and copied to Sent', str_starts_
     && str_contains((string)file_get_contents("$mb/appended.log"), 'folder=Envoyés'), $res);
 proc_terminate($ip); proc_close($ip);
 check('toolsets: sub-agents can read mail but not send', in_array('mail_read', $app->tools->only('job')->names(), true) && !in_array('mail_send', $app->tools->only('job')->names(), true));
+
+// ---- headless browser (real Chromium, local test site) ----
+if (\Talixio\Browser::findBinary('') !== null) {
+    $wport = random_int(20000, 40000);
+    @unlink(sys_get_temp_dir() . '/talixio-site-login.txt');
+    $wp = proc_open([PHP_BINARY, '-S', "127.0.0.1:$wport", __DIR__ . '/fakes/site.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp);
+    $waitPort($wport);
+    $c->browser = 'auto'; $c->browserAllowPrivate = false; $c->approvalWaitSeconds = 6; $c->autoApprove = [];
+    $app->tools = new Tools($app);
+    check('browser: local addresses refused by default', str_starts_with($app->tools->run('browser_open', ['url' => "http://127.0.0.1:$wport/"]), 'error: that address is not allowed'));
+    \Talixio\Browser::shutdown();
+    $c->browserAllowPrivate = true; // the test site is local
+    $page = $app->tools->run('browser_open', ['url' => "http://127.0.0.1:$wport/"]);
+    check('browser: page text after JavaScript, numbered elements', str_contains($page, 'Rendered by JavaScript: 3 products') && preg_match('/\[1\] link "See products"/', $page) === 1 && str_contains($page, 'password field'), $page);
+    preg_match('/\[(\d+)\] text field "Search"/', $page, $m1); preg_match('/\[(\d+)\] text field "Email"/', $page, $m2); preg_match('/\[(\d+)\] button "Sign in"/', $page, $m3); preg_match('/\[(\d+)\] select/', $page, $m4);
+    check('browser: GET search form submits without asking', str_contains($app->tools->run('browser_type', ['ref' => (int)$m1[1], 'text' => 'lamp', 'enter' => true]), 'Results for lamp'));
+    $app->tools->run('browser_back', []);
+    $page = $app->tools->run('browser_read', []);
+    preg_match('/\[(\d+)\] text field "Email"/', $page, $m2); preg_match('/\[(\d+)\] button "Sign in"/', $page, $m3); preg_match('/\[(\d+)\] select/', $page, $m4);
+    check('browser: select an option', str_contains($app->tools->run('browser_select', ['ref' => (int)$m4[1], 'value' => 'Blue']), 'select'));
+    $app->tools->run('browser_type', ['ref' => (int)$m2[1], 'text' => 'fred@talixio.com']);
+    // a POST form with a password waits for approval: approve it from "another process" while waiting
+    putenv("TALIXIO_DATA_DIR=$dir"); putenv('TALIXIO_PROVIDER=echo');
+    $approver = proc_open([PHP_BINARY, '-r', 'require "' . dirname(__DIR__) . '/src/autoload.php"; sleep(2); $a = Talixio\App::fromEnv(); $a->cfg->notify = []; foreach ($a->approvals()->pending() as $p) echo $a->approvals()->decide((int)$p["id"], true);'],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['file', "$dir/approver.err", 'w']], $ap);
+    $t0 = microtime(true);
+    $after = $app->tools->run('browser_click', ['ref' => (int)$m3[1]]);
+    $said = stream_get_contents($ap[1]); proc_close($approver); $said .= (string)@file_get_contents("$dir/approver.err");
+    check('browser: POST login paused until approved, then submitted', str_contains($after, 'Hello fred@talixio.com') && microtime(true) - $t0 > 1.5 && str_contains($said, 'Approved: Submit a form on the web: "Sign in"'), $said . ' | ' . mb_substr($after, 0, 120));
+    check('browser: password masked in the approval summary', str_contains($app->store->q("SELECT summary FROM approvals WHERE tool='browser_submit'")->fetchColumn(), 'pw=••••'));
+    $app->tools->run('browser_back', []);
+    $page = $app->tools->run('browser_read', []); preg_match('/\[(\d+)\] button "Sign in"/', $page, $m3);
+    @unlink(sys_get_temp_dir() . '/talixio-site-login.txt');
+    $r = $app->tools->run('browser_click', ['ref' => (int)$m3[1]]); // nobody answers: times out
+    check('browser: unanswered approval means nothing is submitted', str_contains($r, 'did not approve') && !file_exists(sys_get_temp_dir() . '/talixio-site-login.txt'));
+    App::$inWorker = true;
+    check('browser: inside the worker it asks to delegate instead of blocking', str_contains($app->tools->run('browser_click', ['ref' => (int)$m3[1]]), 'Use delegate'));
+    App::$inWorker = false;
+    \Talixio\Content::$imageLoader = fn(int $id) => $app->files()->imagePart($id); // other App instances were created above
+    $shot = $app->tools->run('browser_screenshot', []);
+    [$txt, $imgs] = \Talixio\Content::toolImages($shot);
+    check('browser: screenshot becomes an image for the model', count($imgs) === 1 && $imgs[0]['mime'] === 'image/jpeg' && str_starts_with($txt, '[screenshot #'));
+    \Talixio\Browser::shutdown();
+    check('browser: closed after use', !\Talixio\Browser::running());
+    proc_terminate($wp); proc_close($wp);
+} else {
+    echo "skip browser tests: no Chromium\n";
+}
 
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";

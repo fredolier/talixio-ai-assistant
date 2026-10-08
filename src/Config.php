@@ -77,6 +77,12 @@ final class Config
     public string $mailboxSent = 'Sent';
     /** @var string[] tools that run without asking (default: none) */ public array $autoApprove = [];
     public string $signalCli = 'signal-cli';
+    public string $browser = 'auto';             // auto (on if Chromium/Chrome is installed) | off
+    public string $chromeBin = '';
+    public bool $browserNoSandbox = false;
+    public bool $browserAllowPrivate = false;    // let the browser open local/LAN addresses (off: safer)
+    public string $browserLang = 'en-US';
+    public int $approvalWaitSeconds = 600;       // how long a paused browser action waits for your approval
     public string $signalNumber = '';
     /** @var string[] */ public array $signalAllowed = [];
 
@@ -199,6 +205,12 @@ final class Config
         $c->mailboxSent = $e('TALIXIO_MAILBOX_SENT', 'Sent');
         $c->autoApprove = $list($e('TALIXIO_AUTO_APPROVE'));
         $c->signalCli = $e('TALIXIO_SIGNAL_CLI', 'signal-cli');
+        $c->browser = strtolower($e('TALIXIO_BROWSER', 'auto'));
+        $c->chromeBin = $e('TALIXIO_CHROME_BIN');
+        $c->browserNoSandbox = $e('TALIXIO_BROWSER_NO_SANDBOX', '0') === '1';
+        $c->browserAllowPrivate = $e('TALIXIO_BROWSER_ALLOW_PRIVATE', '0') === '1';
+        $c->browserLang = $e('TALIXIO_BROWSER_LANG', 'en-US');
+        $c->approvalWaitSeconds = (int)$e('TALIXIO_APPROVAL_WAIT_SECONDS', '600');
         $c->signalNumber = $e('TALIXIO_SIGNAL_NUMBER');
         $c->signalAllowed = array_values(array_filter(array_map('trim', explode(',', $e('TALIXIO_SIGNAL_ALLOWED'))), 'strlen'));
         $c->notify = $list($e('TALIXIO_NOTIFY', 'ntfy,webpush,telegram,email,signal'));

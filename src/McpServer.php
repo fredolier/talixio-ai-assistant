@@ -9,6 +9,7 @@ final class McpServer
 
     public function serve($in = STDIN, $out = STDOUT): void
     {
+        register_shutdown_function(fn() => Browser::shutdown());
         while (($line = fgets($in)) !== false) {
             $req = json_decode(trim($line), true);
             if (!is_array($req) || !isset($req['method'])) continue;
@@ -33,8 +34,11 @@ final class McpServer
                 'name' => $t['name'], 'description' => $t['description'], 'inputSchema' => $t['parameters'],
             ], $this->tools->schemas())],
             'tools/call' => (function () use ($p) {
-                $text = $this->tools->run((string)($p['name'] ?? ''), (array)($p['arguments'] ?? []));
-                return ['content' => [['type' => 'text', 'text' => $text]], 'isError' => str_starts_with($text, 'error:')];
+                $raw = $this->tools->run((string)($p['name'] ?? ''), (array)($p['arguments'] ?? []));
+                [$text, $imgs] = Content::toolImages($raw);
+                $content = [['type' => 'text', 'text' => $text]];
+                foreach ($imgs as $i) $content[] = ['type' => 'image', 'data' => $i['data'], 'mimeType' => $i['mime']];
+                return ['content' => $content, 'isError' => str_starts_with($text, 'error:')];
             })(),
             default => null,
         };

@@ -75,6 +75,10 @@ final class Cli
             try { $folders = (new Imap($c->mailboxImapHost, $c->mailboxImapPort, $c->mailboxUser, $c->mailboxPassword, 'INBOX', $c->mailboxImapSecurity))->folders(); $line(true, 'mailbox login (' . count($folders) . ' folders)'); }
             catch (\Throwable $e) { $line(false, "mailbox: {$e->getMessage()}"); }
         }
+        if ($c->browser !== 'off') {
+            $bin = Browser::findBinary($c->chromeBin);
+            $line($bin !== null || $c->browser === 'auto', $bin ? "browser: $bin" : 'browser: none installed (optional: install.sh --with-browser)');
+        }
         if ($c->signalNumber !== '') {
             $found = is_executable($c->signalCli) || trim((string)shell_exec('command -v ' . escapeshellarg($c->signalCli) . ' 2>/dev/null')) !== '';
             $line($found, "signal-cli found ({$c->signalCli})");

@@ -13,16 +13,39 @@ final class Approvals
     /** Called instead of running a sensitive tool. Returns what the model is told. */
     public function request(string $tool, array $args, string $summary): string
     {
+        $id = $this->create($tool, $args, $summary, 'deferred');
+        return "Waiting for the user's approval (request #$id): $summary. Nothing has been done yet; it will run only if they approve. Tell the user briefly what you're asking to do.";
+    }
+
+    /**
+     * For actions that must happen now in a live session (a browser form): ask, then wait for the answer.
+     * Returns true if approved within the time limit.
+     */
+    public function ask(string $tool, array $args, string $summary): bool
+    {
+        $id = $this->create($tool, $args, $summary, 'inline');
+        $deadline = time() + $this->app->cfg->approvalWaitSeconds;
+        while (time() < $deadline) {
+            $a = $this->get($id);
+            if ($a['status'] !== 'pending') return $a['status'] === 'approved';
+            sleep(2);
+        }
+        $this->app->store->q("UPDATE approvals SET status='expired', decided=? WHERE id=? AND status='pending'", [time(), $id]);
+        return false;
+    }
+
+    private function create(string $tool, array $args, string $summary, string $mode): int
+    {
         $st = $this->app->store;
-        $st->q('INSERT INTO approvals(tool, args, summary, status, created) VALUES(?,?,?,?,?)',
-            [$tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $summary, 'pending', time()]);
+        $st->q('INSERT INTO approvals(tool, args, summary, status, created, mode) VALUES(?,?,?,?,?,?)',
+            [$tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $summary, 'pending', time(), $mode]);
         $id = (int)$st->db->lastInsertId();
         try {
             $this->app->notifier()->notify('Approval needed', "$summary\n\nApprove in the app, or reply \"yes $id\" (or \"no $id\").");
         } catch (\Throwable $e) {
             Log::warn("approval notify: {$e->getMessage()}");
         }
-        return "Waiting for the user's approval (request #$id): $summary. Nothing has been done yet; it will run only if they approve. Tell the user briefly what you're asking to do.";
+        return $id;
     }
 
     public function pending(): array
@@ -49,6 +72,7 @@ final class Approvals
             $st->addMessage('assistant', 'approval', $msg);
             return $msg;
         }
+        if ($a['mode'] === 'inline') return "Approved: {$a['summary']}. Continuing."; // the waiting session carries on
         $result = $this->app->tools->execute($a['tool'], json_decode($a['args'], true) ?: []);
         $ok = !str_starts_with($result, 'error');
         $st->q('UPDATE approvals SET result=?, status=? WHERE id=?', [mb_substr($result, 0, 4000), $ok ? 'done' : 'failed', $id]);

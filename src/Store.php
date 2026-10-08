@@ -45,6 +45,7 @@ final class Store
             SQL);
         $this->addColumn('messages', 'meta', 'TEXT');
         $this->addColumn('messages', 'files', 'TEXT');
+        $this->addColumn('approvals', 'mode', "TEXT NOT NULL DEFAULT 'deferred'");
         $this->addColumn('jobs', 'kind', "TEXT NOT NULL DEFAULT 'agent'");
         $this->addColumn('jobs', 'file_id', 'INTEGER');
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");

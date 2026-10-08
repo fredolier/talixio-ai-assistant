@@ -26,11 +26,16 @@ final class OpenAIProvider implements Provider
                 'out' => (int)($usage['completion_tokens'] ?? 0), 'cache_read' => $cached, 'cache_write' => 0, 'cost' => null]);
             if (empty($m['tool_calls'])) return (string)($m['content'] ?? '');
             $msgs[] = $m;
+            $images = [];
             foreach ($m['tool_calls'] as $c) {
                 $args = json_decode($c['function']['arguments'] ?: '{}', true) ?: [];
                 if ($onEvent) $onEvent(['type' => 'tool', 'name' => $c['function']['name'], 'input' => $args]);
-                $msgs[] = ['role' => 'tool', 'tool_call_id' => $c['id'], 'content' => $tools->run($c['function']['name'], $args)];
+                [$out, $imgs] = Content::toolImages($tools->run($c['function']['name'], $args));
+                array_push($images, ...$imgs);
+                $msgs[] = ['role' => 'tool', 'tool_call_id' => $c['id'], 'content' => $out];
             }
+            // tool messages are text-only: images (screenshots) follow as a user message
+            if ($images) $msgs[] = ['role' => 'user', 'content' => Content::openai(array_merge([['type' => 'text', 'text' => 'Screenshot(s) from the tool call above:']], $images))];
         }
         return '(stopped after too many tool steps)';
     }

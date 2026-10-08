@@ -9,6 +9,8 @@ final class App
     public Workspace $ws;
     public Tools $tools;
     public Embeddings $embeddings;
+    /** True inside the long-running worker (it must not block waiting for approvals). */
+    public static bool $inWorker = false;
     /** Set in tests to replace the configured model. */
     public ?Provider $providerOverride = null;
 
@@ -19,6 +21,7 @@ final class App
         $this->ws = new Workspace($cfg->workspaceDir());
         $this->embeddings = new Embeddings($cfg);
         $this->tools = new Tools($this);
+        Content::$imageLoader = fn(int $id) => $this->files()->imagePart($id);
     }
 
     public static function fromEnv(): self { return new self(Config::fromEnv()); }
@@ -47,6 +50,7 @@ final class App
     public function approvals(): Approvals { return new Approvals($this); }
     public function calendar(): Calendar { return new Calendar($this); }
     public function mailbox(): Mailbox { return new Mailbox($this); }
+    public function browserAvailable(): bool { return $this->cfg->browser !== 'off' && Browser::findBinary($this->cfg->chromeBin) !== null; }
     public function transcriber(): Transcriber { return new Transcriber($this); }
     public function webPush(): WebPush { return new WebPush($this); }
     public function signal(): Signal { return new Signal($this); }

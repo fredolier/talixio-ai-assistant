@@ -5,17 +5,19 @@
 #   sudo ./install.sh --bind 10.0.0.5:8080      listen on this address (when another machine runs your reverse proxy)
 #   sudo ./install.sh --with-claude-code      also install the Claude Code CLI (use a Claude Pro/Max plan)
 #   sudo ./install.sh --with-signal           also install signal-cli (Signal channel)
+#   sudo ./install.sh --with-browser          also install Chromium/Chrome (headless browser tools)
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 
-DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; BIND_ARG=""
+DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; WITH_BROWSER=0 ; BIND_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="${2:?--domain needs a value}"; shift 2 ;;
     --bind) BIND_ARG="${2:?--bind needs host:port}"; shift 2 ;;
     --with-claude-code) WITH_CLAUDE=1; shift ;;
     --with-signal) WITH_SIGNAL=1; shift ;;
-    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
+    --with-browser) WITH_BROWSER=1; shift ;;
+    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -80,6 +82,22 @@ if [ "$WITH_SIGNAL" = 1 ]; then
       echo "    $(/usr/local/bin/signal-cli --version 2>/dev/null || echo 'signal-cli installed')"
       echo "    Next: register the assistant's number, see README (Signal)."
     fi
+  fi
+fi
+
+if [ "$WITH_BROWSER" = 1 ]; then
+  say "Installing a headless browser"
+  . /etc/os-release
+  if [ "${ID:-}" = debian ]; then
+    apt-get install -y -qq chromium fonts-liberation fonts-noto-color-emoji >/dev/null && echo "    Chromium installed"
+  elif [ "$(uname -m)" = x86_64 ]; then
+    # Ubuntu's chromium package is a snap, which doesn't work well for system services: use Google Chrome's .deb
+    TMP="$(mktemp -d)"
+    curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o "$TMP/chrome.deb" \
+      && apt-get install -y -qq "$TMP/chrome.deb" fonts-liberation fonts-noto-color-emoji >/dev/null && echo "    Google Chrome installed"
+    rm -rf "$TMP"
+  else
+    echo "    No packaged browser for $(uname -m) on ${ID:-this system}: install Chromium yourself and set TALIXIO_CHROME_BIN" >&2
   fi
 fi
 

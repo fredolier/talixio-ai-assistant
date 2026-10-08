@@ -9,6 +9,20 @@ namespace Talixio;
  */
 final class Content
 {
+    /** @var callable|null fn(int $fileId): image part — set by App */
+    public static $imageLoader = null;
+
+    /** Tool results may carry images as "[[image:ID]]" markers: returns [text without markers, image parts]. */
+    public static function toolImages(string $result): array
+    {
+        $images = [];
+        $text = preg_replace_callback('/\[\[image:(\d+)\]\]/', function ($m) use (&$images) {
+            if (self::$imageLoader) { try { $images[] = (self::$imageLoader)((int)$m[1]); } catch (\Throwable) {} }
+            return "[screenshot #{$m[1]}]";
+        }, $result);
+        return [$text, $images];
+    }
+
     public static function text(string|array $c): string
     {
         if (is_string($c)) return $c;
