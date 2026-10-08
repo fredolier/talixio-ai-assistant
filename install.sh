@@ -8,7 +8,7 @@
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 
-DOMAIN="" ; WITH_CLAUDE=0 ; BIND_ARG=
+DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; BIND_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="${2:?--domain needs a value}"; shift 2 ;;
@@ -116,7 +116,8 @@ echo "  Web app:   $URL"
 [ -n "$NEW_PASSWORD" ] && echo "  Password:  $NEW_PASSWORD   (stored in $ENV)"
 case "$BIND" in
   127.0.0.1:*|localhost:*) [ -z "$DOMAIN" ] && echo "  From your computer: ssh -L $PORT:127.0.0.1:$PORT <user>@<this-vm>  then open http://localhost:$PORT" ;;
-  *) echo "  Reverse proxy (Caddy on another machine):  your.domain { reverse_proxy $BIND }"
+  *) TARGET="$BIND"; case "$BIND" in 0.0.0.0:*) TARGET="$(hostname -I 2>/dev/null | awk '{print $1}'):$PORT" ;; esac
+     echo "  Reverse proxy (Caddy on another machine):  your.domain { reverse_proxy $TARGET }"
      echo "  Firewall tip: allow port $PORT only from the proxy, e.g. ufw allow from <proxy-ip> to any port $PORT" ;;
 esac
 echo "  Config:    sudo nano $ENV   then  sudo systemctl restart talixio-worker talixio-web"
