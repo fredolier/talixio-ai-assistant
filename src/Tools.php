@@ -8,8 +8,9 @@ final class Tools
     /** Which tools each kind of run gets. Sub-agents can read and research but not change memory, schedules or spawn more jobs. */
     public const SETS = [
         'chat' => null, // everything
-        'heartbeat' => ['calendar_events', 'mail_list', 'file_read', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report'],
-        'job' => ['memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'calendar_events', 'mail_list', 'mail_read',
+        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'file_read', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report'],
+        'reflect' => ['skill_read', 'skill_save'],
+        'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'calendar_events', 'mail_list', 'mail_read',
             'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot'],
         'none' => [],
     ];
@@ -54,6 +55,15 @@ final class Tools
                 $chunk = mb_substr($text, $off, 30000);
                 return $chunk . ($off + 30000 < mb_strlen($text) ? "\n[... more: call again with offset " . ($off + 30000) . ' of ' . mb_strlen($text) . ']' : '');
             });
+
+        $this->register('skill_read', 'Read one of your skills (learned procedures, listed in your instructions) before doing a task it covers.',
+            ['name' => ['type' => 'string']], ['name'], fn(array $a) => $this->app->skills()->read($a['name']));
+        $this->register('skill_save',
+            'Save or update a skill: a reusable procedure for a recurring task (steps, which tools and sources, the user\'s preferences, pitfalls). description says WHEN to use it. Keep it short and concrete. Saving under an existing name replaces it.',
+            ['name' => ['type' => 'string'], 'description' => ['type' => 'string'], 'content' => ['type' => 'string']], ['name', 'description', 'content'],
+            fn(array $a) => $this->app->skills()->save($a['name'], $a['description'], $a['content']));
+        $this->register('skill_delete', 'Delete a skill that is wrong or no longer useful.', ['name' => ['type' => 'string']], ['name'],
+            fn(array $a) => $this->app->skills()->delete($a['name']) ? 'deleted' : 'error: no such skill');
 
         $this->register('schedule_task',
             "Schedule a prompt that you will run later and send the result to the user (reminders, recurring reports, follow-ups). Give either `at` (local time 'YYYY-MM-DD HH:MM', timezone {$cfg->timezone}) for a one-off, or `cron` (5 fields, local time, e.g. '0 8 * * 1-5') for recurring. The prompt is an instruction to your future self, e.g. 'Remind the user to call the dentist.'",

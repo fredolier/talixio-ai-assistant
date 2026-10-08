@@ -26,10 +26,13 @@ final class Cli
                         echo '> ';
                     }
                     return 0;
+                case 'backup':
+                    echo $app->backup()->run(), "\n";
+                    return 0;
                 case 'doctor':
                     return self::doctor($app);
                 default:
-                    fwrite(STDERR, "usage: talixio worker|chat|doctor|mcp|job ID\n");
+                    fwrite(STDERR, "usage: talixio worker|chat|doctor|backup|mcp|job ID\n");
                     return 2;
             }
         } catch (\Throwable $e) {

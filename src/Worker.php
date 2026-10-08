@@ -66,6 +66,7 @@ final class Worker
             $this->guard('email', fn() => $app->email()->poll());
         }
         $this->guard('embeddings', fn() => $app->recall()->embedPending());
+        if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));
     }
 
     private function guard(string $what, callable $fn): void

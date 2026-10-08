@@ -86,6 +86,13 @@
         <button class="btn" type="submit">Search</button>
       </form>
       <div id="search-results" class="results" hidden></div>
+      <h3>Skills</h3>
+      <p class="muted small">Procedures it has learned for you. It reads the matching one before doing a task, and updates them as it learns. You can edit or delete them.</p>
+      <div id="skills" class="list"></div>
+      <div id="skill-edit" class="skill-edit" hidden>
+        <textarea id="skill-editor" class="editor" spellcheck="false" aria-label="Skill"></textarea>
+        <div class="row"><button id="skill-save" class="btn primary" type="button">Save skill</button><button id="skill-cancel" class="btn" type="button">Close</button><span id="skill-state" class="muted small"></span></div>
+      </div>
       <h3>Memory files</h3>
       <div class="tabs" id="mem-tabs" role="tablist"></div>
       <p class="muted small" id="mem-help"></p>

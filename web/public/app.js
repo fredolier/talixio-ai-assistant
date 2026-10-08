@@ -64,7 +64,7 @@ function md(src) {
   return out.join('').replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[+i]);
 }
 
-const CHANNEL = { web: null, approval: 'Approval', cli: 'Terminal', telegram: 'Telegram', email: 'Email', signal: 'Signal', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
+const CHANNEL = { web: null, approval: 'Approval', learn: 'Learning', cli: 'Terminal', telegram: 'Telegram', email: 'Email', signal: 'Signal', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
 const money = v => v == null ? '' : v === 0 ? '$0' : v < 0.01 ? '<$0.01' : '$' + v.toFixed(v < 1 ? 3 : 2);
 const ktok = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
 const fmtTime = ts => new Date(ts * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
@@ -150,6 +150,7 @@ const TOOL_LABEL = (name, input = {}) => {
     schedule_task: 'Scheduling', list_tasks: 'Checking scheduled tasks', cancel_task: 'Cancelling a task',
     delegate: `Starting a background job${input.title ? ': ' + input.title : ''}`, list_jobs: 'Checking jobs', cancel_job: 'Cancelling a job',
     usage_report: 'Checking spending', file_read: 'Reading the attachment',
+    skill_read: `Following a skill${input.name ? ': ' + input.name : ''}`, skill_save: 'Saving a skill', skill_delete: 'Removing a skill',
     calendar_events: 'Checking your calendar', calendar_add: 'Preparing a calendar event', mail_list: 'Looking through your email',
     mail_read: 'Reading an email', mail_draft: 'Writing a draft', mail_send: 'Preparing an email',
     browser_open: `Opening ${host(input.url)}`, browser_read: 'Reading the page', browser_click: 'Clicking', browser_type: 'Typing',
@@ -407,7 +408,30 @@ const MEM_HELP = {
   'SOUL.md': 'Personality and tone. Change this to change how it talks.',
   'HEARTBEAT.md': 'Checklist for periodic checks (needs TALIXIO_HEARTBEAT_MINUTES). It only messages you when something needs attention.',
 };
+async function loadSkills() {
+  const { skills } = await api('/api/skills');
+  const box = $('#skills'); box.innerHTML = '';
+  if (!skills.length) { box.innerHTML = '<div class="placeholder">No skills yet. After multi-step tasks it writes down how it did them, so next time is faster and closer to what you want.</div>'; return; }
+  for (const k of skills) {
+    const el = document.createElement('div'); el.className = 'skill';
+    el.innerHTML = `<h4>${esc(k.name)}</h4><div class="actions"><button class="btn small" data-a="edit" type="button">Open</button><button class="btn small ghost" data-a="del" type="button">Delete</button></div>
+      <p>${esc(k.description)}${k.used ? ` · used ${k.used}×` : ''}</p>`;
+    el.querySelector('[data-a=edit]').onclick = async () => {
+      const { content } = await api('/api/skills/' + encodeURIComponent(k.name));
+      state.skill = k.name; $('#skill-editor').value = content; $('#skill-edit').hidden = false; $('#skill-state').textContent = '';
+      $('#skill-editor').focus();
+    };
+    el.querySelector('[data-a=del]').onclick = async () => {
+      const b = el.querySelector('[data-a=del]');
+      if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Confirm delete'; return; }
+      try { await post(`/api/skills/${encodeURIComponent(k.name)}/delete`); toast('Skill deleted'); loadSkills(); } catch (e) { toast(e.message); }
+    };
+    box.append(el);
+  }
+}
+
 async function loadMemory() {
+  loadSkills().catch(e => toast(e.message));
   state.memFiles = (await api('/api/memory')).files;
   const tabs = $('#mem-tabs'); tabs.innerHTML = '';
   for (const f of Object.keys(state.memFiles)) {
@@ -428,7 +452,7 @@ function loadMemoryTab() {
 
 // ---- activity ----
 async function loadActivity() {
-  const { usage, tools, budget, by_tier, by_source, memory } = await api('/api/activity');
+  const { usage, tools, budget, by_tier, by_source, memory, backup } = await api('/api/activity');
   const meter = (label, spent, limit) => {
     const pct = limit > 0 ? Math.min(100, spent / limit * 100) : 0;
     const cls = !limit ? '' : pct >= 100 ? 'blocked' : pct >= 80 ? 'low' : '';
@@ -440,7 +464,8 @@ async function loadActivity() {
     : '<tr><td colspan="4" class="muted">Nothing yet.</td></tr>';
   $('#by-tier tbody').innerHTML = rows(by_tier);
   $('#by-source tbody').innerHTML = rows(by_source);
-  $('#memstats').textContent = `Memory index: ${nf.format(memory.messages)} messages, ${nf.format(memory.summaries)} summaries, ${nf.format(memory.docs)} searchable items, ${nf.format(memory.embedded)} with embeddings${state.status?.embeddings === 'off' ? ' (embeddings off: keyword search only)' : ''}.`;
+  const bk = backup || {};
+  $('#memstats').textContent = (bk.last ? `Last backup ${fmtTime(bk.last)} (${bk.file}, keeping ${bk.keep}). ` : 'No backup yet (the worker makes one every night). ') + `Skills: ${memory.skills}. Memory index: ${nf.format(memory.messages)} messages, ${nf.format(memory.summaries)} summaries, ${nf.format(memory.docs)} searchable items, ${nf.format(memory.embedded)} with embeddings${state.status?.embeddings === 'off' ? ' (embeddings off: keyword search only)' : ''}.`;
   const sum = k => usage.reduce((a, d) => a + (+d[k] || 0), 0);
   const cost = usage.reduce((a, d) => a + (d.cost == null ? 0 : +d.cost), 0);
   const max = Math.max(1, ...usage.map(d => +d.input + +d.output));
@@ -537,6 +562,11 @@ $('#search-form').onsubmit = async e => {
       : '<div class="placeholder">Nothing found.</div>';
   } catch (err) { toast(err.message); }
 };
+$('#skill-save').onclick = async () => {
+  try { await post('/api/skills/' + encodeURIComponent(state.skill), { content: $('#skill-editor').value }); $('#skill-state').textContent = 'Saved'; loadSkills(); }
+  catch (e) { toast(e.message); }
+};
+$('#skill-cancel').onclick = () => { $('#skill-edit').hidden = true; };
 $('#mem-editor').addEventListener('input', () => { $('#mem-state').textContent = 'Unsaved changes'; });
 $('#mem-save').onclick = async () => {
   try {

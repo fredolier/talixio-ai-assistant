@@ -114,7 +114,7 @@ Create a bot with @BotFather, set `TALIXIO_TELEGRAM_TOKEN`, restart, and message
 with your chat id; put it in `TALIXIO_TELEGRAM_ALLOWED_IDS`. Telegram and the web app share the same
 conversation.
 
-## What it can do (v0.7)
+## What it can do (v0.8)
 - **Live answers**: replies appear as they are written, with what it's doing ("Searching the web…",
   "Reading example.com…").
 - **Photos, PDFs, documents**: attach (or paste, or drag) files in the web app, or send them on
@@ -129,6 +129,13 @@ conversation.
   action items. Transcripts and summaries are searchable later. Transcription uses Gemini
   (`GEMINI_API_KEY`, also works when Claude is the brain) or OpenAI. Telegram bots can only
   receive files up to 20 MB, so upload long recordings in the web app.
+- **Learning (skills)**: procedures it has learned for you, as Markdown files (`workspace/skills/`),
+  listed in its instructions and read when a task matches. After a multi-step task, a small
+  background job decides whether it's worth keeping and tells you when it learns or updates one.
+  See, edit or delete them on the Memory page.
+- **Nightly backups** of the database, memory, skills, files and keys (last 7 kept). Run one now
+  with `sudo talixio backup`. Restore: stop the services, extract the archive into
+  `/var/lib/talixio`, rename `backup-snapshot.db` to `talixio.db`, `chown -R talixio:talixio`, start.
 - **Headless browser** (`install.sh --with-browser`): opens pages with JavaScript, clicks, types,
   chooses options and takes screenshots it can look at. Every request the browser makes is checked:
   local/private network addresses are refused. Submitting a form that sends data (login, order,
@@ -176,8 +183,8 @@ Costs are estimates from list prices built into `src/Pricing.php` (Claude: Haiku
 $3/$15, Opus $5/$25 per million tokens). Check your provider's pricing and override with
 `TALIXIO_PRICES` if they differ.
 
-Not yet: headless browser, skills (learning procedures), shell/code tools, managing your own
-mailbox, WhatsApp, Slack, Teams, voice. See the roadmap.
+Not yet: shell/code tools, MCP connectors, Google Calendar writing (needs Google sign-in),
+Microsoft 365 mail (needs OAuth), OCR of scanned PDFs, WhatsApp, Slack, Teams, spoken replies.
 
 ## Files
 ```

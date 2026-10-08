@@ -94,6 +94,7 @@ final class Jobs
                 $store->updateJob($id, ['result' => 'Summarising…']);
                 $task .= "\n\nRecording: {$f['name']}, " . date('Y-m-d H:i', (int)$f['created']) . ". The full transcript is saved as file #{$f['id']} (searchable later).\n\n# Transcript\n" . mb_substr($transcript, 0, 300000);
             }
+            if ($j['kind'] === 'reflect') { $this->reflect($j, $guard); return; }
             [$text, $meta] = $this->app->agent()->run('job', $j['tier'], 'job', [['role' => 'user', 'content' => $task]], '', 'job', $id, $guard);
             if ($j['kind'] === 'meeting') $store->addDoc('summary', $id, 'meeting summary: ' . $j['title'], $text);
             $store->updateJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);
@@ -103,7 +104,22 @@ final class Jobs
         } catch (\Throwable $e) {
             $store->updateJob($id, ['status' => 'failed', 'result' => 'Error: ' . $e->getMessage(), 'finished' => time()]);
         }
-        $this->report($id);
+        if ($j['kind'] !== 'reflect') $this->report($id); // learning is quiet unless it learned something
+    }
+
+    /** Learning job: may save or update a skill; tells the user only when it did. */
+    private function reflect(array $j, callable $guard): void
+    {
+        $id = (int)$j['id']; $store = $this->app->store;
+        $before = (int)$store->q('SELECT COALESCE(MAX(id),0) FROM tool_log')->fetchColumn();
+        [$text, $meta] = $this->app->agent()->run('learn', 'fast', 'reflect', [['role' => 'user', 'content' => $j['instructions']]], '', 'reflect', $id, $guard);
+        $saved = $store->q("SELECT args, result FROM tool_log WHERE id > ? AND tool = 'skill_save' AND result NOT LIKE 'error%'", [$before])->fetchAll();
+        $store->updateJob($id, ['status' => 'done', 'result' => $saved ? implode("\n", array_column($saved, 'result')) : 'Nothing worth keeping.', 'cost_usd' => $meta['cost'], 'finished' => time()]);
+        foreach ($saved as $s) {
+            $a = json_decode($s['args'], true) ?: [];
+            $store->addMessage('assistant', 'learn', '📘 ' . (str_starts_with($s['result'], 'updated') ? 'Updated' : 'Learned') . " a skill: **" . Skills::slug($a['name'] ?? '?') . "**: "
+                . ($a['description'] ?? '') . "\nYou can see or edit it on the Memory page.");
+        }
     }
 
     /** Post the outcome in the main thread; the main assistant relays it to the user. */

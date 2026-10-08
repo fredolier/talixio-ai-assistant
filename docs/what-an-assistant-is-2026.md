@@ -78,20 +78,20 @@ A chatbot answers. An assistant acts, remembers, and checks in on its own.
 - Logs, costs, scheduled jobs, memory and skills visible in one place (a small web admin page).
 - Easy to pause, stop, or roll back.
 
-## Where Talixio is today (v0.3)
+## Where Talixio is today (v0.8)
 
 | # | Capability | Status |
 |---|---|---|
-| 1 | Always on, channels | systemd services. Web app, Telegram, terminal; push via ntfy. One shared thread. |
-| 2 | Models | Claude API, Claude Code (Pro/Max plan), OpenAI, local. Three tiers (fast/standard/deep), budgets, cost tracking, prompt caching. |
-| 3 | Memory | Editable Markdown files + whole history in SQLite with FTS5 and optional embeddings, automatic recall, summaries. |
-| 4 | Skills | None yet. |
-| 5 | Tools | Web search, safe page reading, memory, scheduling, delegation. No browser, shell or MCP connectors yet. |
-| 6 | Proactive | Reminders and cron tasks created by chat, heartbeat. |
-| 7 | Planning | Background sub-agents in parallel with cost caps. No persistent plans yet. |
-| 8 | Safety | Allowlists, password, internal-address blocking, audit log, budgets, sub-agents can't write. No approvals yet (no risky tools yet). |
-| 9 | Multimodal | Text only. |
-| 10 | Observability | Web pages for jobs, memory, activity and costs. |
+| 1 | Always on, channels | systemd services. Web app (installable, push notifications), email, Signal, Telegram, terminal, ntfy. One shared thread. |
+| 2 | Models | Claude API, Claude Code (Pro/Max plan), Gemini, OpenAI, local. Three tiers, budgets, cost tracking, prompt caching, live streaming. |
+| 3 | Memory | Editable Markdown files + whole history in SQLite (FTS5 + embeddings), automatic recall, summaries, searchable files and transcripts. |
+| 4 | Skills | Learned procedures as Markdown, written automatically after multi-step tasks, editable. |
+| 5 | Tools | Web search, safe page reading, headless browser, calendar (iCal/CalDAV), your mailbox, files and images. No shell or MCP connectors yet. |
+| 6 | Proactive | Reminders and cron tasks by chat, heartbeat, push to phone. |
+| 7 | Planning | Background sub-agents in parallel with cost caps; meeting summaries as background jobs. |
+| 8 | Safety | Approvals for anything with outside effects, allowlists, internal-address blocking (fetch and browser), audit log, budgets, nightly backups. |
+| 9 | Multimodal | Images, PDFs, voice notes, meeting recordings with speaker labels. No spoken replies yet. |
+| 10 | Observability | Pages for jobs, approvals, memory, skills, channels, activity and costs. |
 
 ## Build plan (PHP, shipped as the `talixio-ai-assistant` .deb)
 

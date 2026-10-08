@@ -2,7 +2,7 @@
 declare(strict_types=1);
 // Run: php tests/run.php   (no network, no API key needed)
 require __DIR__ . '/../src/autoload.php';
-use Talixio\{App, Config, Cron, Email, GeminiModels, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker};
+use Talixio\{App, Config, Cron, Email, GeminiModels, Skills, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker};
 
 $fails = 0;
 function check(string $name, bool $ok, string $detail = ''): void {
@@ -520,6 +520,70 @@ if (\Talixio\Browser::findBinary('') !== null) {
 } else {
     echo "skip browser tests: no Chromium\n";
 }
+
+// ---- skills and learning ----
+putenv("TALIXIO_DATA_DIR=$dir"); putenv('TALIXIO_PROVIDER=echo');
+$app->tools = new Tools($app);
+$sk = $app->skills();
+check('skills: save with a header, slug from the name', $app->tools->run('skill_save', ['name' => 'Rapport hebdo!', 'description' => 'When Fred asks for his weekly report', 'content' => "1. Read calendar\n2. Summarise"]) === "saved skill 'rapport-hebdo'");
+check('skills: index line in the system prompt', str_contains($app->agent()->systemPrompt(), "## Your skills\n- rapport-hebdo: When Fred asks for his weekly report"));
+check('skills: read counts usage', str_contains($app->tools->run('skill_read', ['name' => 'rapport-hebdo']), '2. Summarise') && $sk->all()[0]['used'] === 1);
+check('skills: unknown skill lists existing ones', str_contains($app->tools->run('skill_read', ['name' => 'nope']), 'Existing: rapport-hebdo'));
+$sk->writeRaw('rapport-hebdo', "---\nname: weekly-report\ndescription: Weekly report, Fridays\n---\nSteps v2");
+check('skills: editor rename keeps one file', array_column($sk->all(), 'name') === ['weekly-report'] && str_contains((string)$sk->raw('weekly-report'), 'Steps v2'));
+check('skills: path tricks neutralised', Skills::slug('../../etc/passwd') === 'etc-passwd');
+// a multi-step chat turn queues a learning job; the job saves a skill and tells the user
+$app->providerOverride = $fake;
+$fake->script = function ($last, $tools) {
+    if (str_contains($last, '## Steps taken')) { $tools->run('skill_save', ['name' => 'invoice-check', 'description' => 'When asked to check unpaid invoices', 'content' => '1. mail_list query=invoice']); return 'saved'; }
+    foreach (['list_tasks', 'list_jobs', 'usage_report', 'search_memory'] as $t) $tools->run($t, $t === 'search_memory' ? ['query' => 'invoice'] : []);
+    return 'Two invoices are unpaid.';
+};
+$app->agent()->chat('web', 'Which invoices are unpaid?');
+$learn = $s->q("SELECT * FROM jobs WHERE kind='reflect' ORDER BY id DESC")->fetch();
+check('learning: multi-step turn queues a fast, capped learning job', $learn && $learn['tier'] === 'fast' && (float)$learn['max_cost_usd'] <= 0.05 && str_contains($learn['instructions'], '- search_memory'));
+$app->jobs()->runJob((int)$learn['id']);
+$last = $s->messagesAfter(0); $last = end($last);
+check('learning: skill saved and the user told', $sk->raw('invoice-check') !== null && $last['channel'] === 'learn' && str_contains($last['content'], 'Learned a skill: **invoice-check**'));
+$fake->script = fn($last) => 'NO_SKILL';
+$n = count($s->messagesAfter(0));
+$id = $s->addJob('Learning from: x', "## Steps taken\n- a", 'fast', 0.05, 'reflect');
+$app->jobs()->runJob($id);
+check('learning: nothing worth keeping stays quiet', count($s->messagesAfter(0)) === $n && $s->job($id)['result'] === 'Nothing worth keeping.');
+$fake->script = fn($last) => 'Short answer.';
+$before = (int)$s->q("SELECT COUNT(*) FROM jobs WHERE kind='reflect'")->fetchColumn();
+$app->agent()->chat('web', 'hi');
+check('learning: simple turns are not reviewed', (int)$s->q("SELECT COUNT(*) FROM jobs WHERE kind='reflect'")->fetchColumn() === $before);
+
+// ---- backups ----
+$file = $app->backup()->run();
+exec('tar -tzf ' . escapeshellarg($file), $listing);
+check('backup: archive with database snapshot, workspace and files', in_array('backup-snapshot.db', $listing, true) && in_array('workspace/USER.md', $listing, true) && (bool)preg_grep('#^files/#', $listing) && !file_exists("$dir/backup-snapshot.db"));
+exec('tar -xzf ' . escapeshellarg($file) . ' -C ' . escapeshellarg("$dir/backups") . ' backup-snapshot.db');
+check('backup: snapshot is a readable database', (int)(new \PDO("sqlite:$dir/backups/backup-snapshot.db"))->query('SELECT COUNT(*) FROM messages')->fetchColumn() > 10);
+$c->backupKeep = 2; for ($i = 0; $i < 3; $i++) { sleep(1); $app->backup()->run(); }
+check('backup: old archives pruned', count(glob("$dir/backups/talixio-*.tar.gz")) === 2);
+check('backup: due once a day at night', !$app->backup()->due(time()) && $app->backup()->due(time() + 86400 * 2));
+
+// ---- web server: logging must not break requests (the STDERR constant doesn't exist there) ----
+$webPort = random_int(20000, 40000);
+$env = ['TALIXIO_DATA_DIR' => "$dir/web", 'TALIXIO_PROVIDER' => 'gemini', 'GEMINI_API_KEY' => 'k', 'GEMINI_BASE_URL' => 'http://127.0.0.1:1/v1beta',
+    'TALIXIO_WEB_PASSWORD' => 'pw', 'PATH' => getenv('PATH'), 'TALIXIO_NOTIFY' => 'none'];
+$ws = proc_open([PHP_BINARY, '-S', "127.0.0.1:$webPort", '-t', dirname(__DIR__) . '/web/public', dirname(__DIR__) . '/web/router.php'],
+    [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$dir/web.log", 'w'], 2 => ['file', "$dir/web.log", 'a']], $pp, null, $env);
+$waitPort($webPort);
+$ck = "$dir/cookies";
+$req = function (string $path, ?array $body = null) use ($webPort, $ck) {
+    $ch = curl_init("http://127.0.0.1:$webPort$path");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIEJAR => $ck, CURLOPT_COOKIEFILE => $ck, CURLOPT_TIMEOUT => 20,
+        CURLOPT_HTTPHEADER => ['X-Talixio: 1', 'Content-Type: application/json']] + ($body !== null ? [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($body)] : []));
+    $out = (string)curl_exec($ch); curl_close($ch); return $out;
+};
+$login = $req('/api/login', ['password' => 'pw']);
+$status = json_decode($req('/api/status'), true);
+check('web: requests that log warnings still answer JSON', $login === '{"ok":true}' && ($status['provider'] ?? '') === 'gemini', $login . ' ' . substr((string)file_get_contents("$dir/web.log"), 0, 300));
+check('web: the warning went to the log', str_contains((string)file_get_contents("$dir/web.log"), 'WARN gemini: could not list models'));
+proc_terminate($ws); proc_close($ws);
 
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";

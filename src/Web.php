@@ -48,6 +48,10 @@ final class Web
             $path === '/api/activity' => $this->activity(),
             $path === '/api/jobs' => ['jobs' => $s->jobs(50)],
             $path === '/api/channels' => $this->channels(),
+            $path === '/api/skills' => ['skills' => $this->app->skills()->all()],
+            (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'GET' => ['content' => $this->app->skills()->raw($mm[1]) ?? $this->fail(404, 'no such skill')],
+            (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) { $this->app->skills()->writeRaw($mm[1], (string)($b['content'] ?? '')); return ['ok' => true]; })(),
+            (bool)preg_match('#^/api/skills/([\w-]+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->skills()->delete($mm[1])],
             $path === '/api/approvals' => ['approvals' => array_map(fn($a) => $a + ['args_decoded' => json_decode($a['args'], true)], $this->app->approvals()->pending())],
             (bool)preg_match('#^/api/approvals/(\d+)/(approve|reject)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) {
                 $before = $this->app->store->maxMessageId();
@@ -117,7 +121,8 @@ final class Web
                 'summaries' => (int)$s->q('SELECT COUNT(*) FROM summaries')->fetchColumn(),
                 'docs' => (int)$s->q('SELECT COUNT(*) FROM docs')->fetchColumn(),
                 'embedded' => (int)$s->q('SELECT COUNT(*) FROM embeddings')->fetchColumn(),
-            ]];
+                'skills' => count($this->app->skills()->all()),
+            ], 'backup' => ['last' => (int)$s->get('backup_last', '0') ?: null, 'file' => basename($s->get('backup_last_file')) ?: null, 'keep' => $this->app->cfg->backupKeep]];
     }
 
     private function chat(string $text, array $files = [], bool $meeting = false, ?callable $onEvent = null): array

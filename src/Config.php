@@ -82,7 +82,12 @@ final class Config
     public bool $browserNoSandbox = false;
     public bool $browserAllowPrivate = false;    // let the browser open local/LAN addresses (off: safer)
     public string $browserLang = 'en-US';
-    public int $approvalWaitSeconds = 600;       // how long a paused browser action waits for your approval
+    public int $approvalWaitSeconds = 600;
+    public bool $learn = true;                   // write skills from multi-step tasks (background, fast tier)
+    public int $learnMinSteps = 4;
+    public string $backupDir = '';
+    public int $backupKeep = 7;
+    public bool $backupFiles = true;       // how long a paused browser action waits for your approval
     public string $signalNumber = '';
     /** @var string[] */ public array $signalAllowed = [];
 
@@ -211,6 +216,11 @@ final class Config
         $c->browserAllowPrivate = $e('TALIXIO_BROWSER_ALLOW_PRIVATE', '0') === '1';
         $c->browserLang = $e('TALIXIO_BROWSER_LANG', 'en-US');
         $c->approvalWaitSeconds = (int)$e('TALIXIO_APPROVAL_WAIT_SECONDS', '600');
+        $c->learn = $e('TALIXIO_LEARN', '1') !== '0';
+        $c->learnMinSteps = (int)$e('TALIXIO_LEARN_MIN_STEPS', '4');
+        $c->backupDir = rtrim($e('TALIXIO_BACKUP_DIR'), '/');
+        $c->backupKeep = (int)$e('TALIXIO_BACKUP_KEEP', '7');
+        $c->backupFiles = $e('TALIXIO_BACKUP_FILES', '1') !== '0';
         $c->signalNumber = $e('TALIXIO_SIGNAL_NUMBER');
         $c->signalAllowed = array_values(array_filter(array_map('trim', explode(',', $e('TALIXIO_SIGNAL_ALLOWED'))), 'strlen'));
         $c->notify = $list($e('TALIXIO_NOTIFY', 'ntfy,webpush,telegram,email,signal'));
