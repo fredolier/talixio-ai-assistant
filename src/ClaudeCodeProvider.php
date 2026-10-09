@@ -34,7 +34,7 @@ final class ClaudeCodeProvider implements Provider
                 '--disallowedTools', 'Bash,Edit,Write,MultiEdit,NotebookEdit,Task,Agent,Glob,Grep',
                 '--append-system-prompt', $sys];
             if ($tools->names()) {
-                file_put_contents("$work/.mcp.json", json_encode(['mcpServers' => ['talixio' => ['command' => PHP_BINARY, 'args' => [$this->talixioBin, 'mcp']]]], JSON_UNESCAPED_SLASHES));
+                file_put_contents("$work/.mcp.json", json_encode(['mcpServers' => ['talixio' => ['command' => PHP_BINARY, 'args' => [$this->talixioBin, 'mcp'], 'env' => $tools->env()]]], JSON_UNESCAPED_SLASHES));
                 array_push($cmd, '--mcp-config', "$work/.mcp.json", '--strict-mcp-config');
             }
             if ($allowed) array_push($cmd, '--allowedTools', implode(',', $allowed));

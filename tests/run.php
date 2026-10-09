@@ -459,12 +459,15 @@ proc_terminate($llm); proc_close($llm);
 // claude-code: stream-json events, images written next to it, Read allowed only then
 putenv("TALIXIO_FAKE_CLAUDE_ARGS=$dir/claude-args.txt");
 $events = [];
+$app->space = 4;
 $cc = new \Talixio\ClaudeCodeProvider(__DIR__ . '/fakes/claude', new \Talixio\Tier('standard', 'sonnet', 5), true, dirname(__DIR__) . '/bin/talixio');
 $out = $cc->complete('sys', 'ctx', [['role' => 'user', 'content' => [['type' => 'text', 'text' => 'what is this?'], ['type' => 'image', 'mime' => 'image/png', 'data' => base64_encode('PNG')]]]],
     $app->tools->only('chat'), fn($u) => null, $collect);
 $args = (string)file_get_contents("$dir/claude-args.txt");
 check('claude-code: result and live events', $out === 'Nothing scheduled.' && in_array('list_tasks', array_column($events, 'name'), true) && in_array('Nothing scheduled.', array_column($events, 'text'), true));
 check('claude-code: image placed in its folder and Read allowed', str_contains($args, 'image-1.png') && preg_match('/^mcp__talixio__\S*,WebSearch,WebFetch,Read$/m', $args) === 1, $args);
+check('claude-code: the tools process gets the turn\'s space', str_contains($args, '"TALIXIO_SPACE":"4"'), $args);
+$app->space = 0;
 check('claude-code: shell and editing tools disabled', str_contains($args, 'Bash,Edit,Write,MultiEdit,NotebookEdit,Task,Agent,Glob,Grep'));
 $cc->complete('sys', '', [['role' => 'user', 'content' => 'hi']], $app->tools->only('none'), fn($u) => null);
 $args = (string)file_get_contents("$dir/claude-args.txt");
@@ -1394,6 +1397,16 @@ check('board api: tasks of a month for the calendar', in_array('MAI-1', array_co
 $bd->create(['title' => 'Due tomorrow', 'due_date' => date('Y-m-d', strtotime('tomorrow'))], (int)$bsp['id']);
 $ba->cfg->taskReminder = '00:00'; $ba->cfg->notify = [];
 check('board: reminder the day before, once a day', $bd->remind(time()) === 1 && $bd->remind(time()) === 0);
+$mp = proc_open([PHP_BINARY, dirname(__DIR__) . '/bin/talixio', 'mcp'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $mpipes, null,
+    ['TALIXIO_DATA_DIR' => $ad, 'TALIXIO_SPACE' => (string)$bsp['id'], 'PATH' => getenv('PATH')]);
+fwrite($mpipes[0], json_encode(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => ['name' => 'board_add', 'arguments' => ['title' => 'Via Claude Code']]]) . "\n"); fclose($mpipes[0]);
+$mout = stream_get_contents($mpipes[1]); proc_close($mp);
+check('board: tasks added through Claude Code land in the space of the conversation', str_contains($mout, 'MAI-') && ($bd->list(['q' => 'Via Claude Code'])[0]['space'] ?? -1) === (int)$bsp['id'], $mout);
+$gm = $bd->create(['title' => 'Mis dans Général par erreur'], 0);
+$gm2 = $bd->update($gm['id'], ['space' => (int)$bsp['id']]);
+check('board: moved to another space, it gets that space\'s code and the old one still works', str_starts_with($gm2['code'], 'MAI-') && $bd->find($gm['code'])['id'] === $gm['id'], $gm2['code']);
+$gm3 = $bd->undo($bd->history($gm['id'])[0]['id']);
+check('board: undoing the move gives the old code back', $gm3['code'] === $gm['code'] && $gm3['space'] === 0);
 check('board: trash emptied after 30 days', $bd->purge(-1) === 1 && $bd->find('MAI-2') === null);
 // morning briefing from the Tasks page
 $bt = $aj('/api/tasks/briefing', ['time' => '07:30', 'days' => '1-5'], 'd');

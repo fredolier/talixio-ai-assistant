@@ -2,6 +2,7 @@
 # Fake Claude Code CLI (stream-json): records args and the working directory listing, emits a tool use and a result.
 printf '%s\n' "$@" > "$TALIXIO_FAKE_CLAUDE_ARGS"
 ls -A >> "$TALIXIO_FAKE_CLAUDE_ARGS"
+cat .mcp.json >> "$TALIXIO_FAKE_CLAUDE_ARGS" 2>/dev/null
 cat > /dev/null
 echo '{"type":"system","subtype":"init"}'
 echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__talixio__list_tasks","input":{}}]}}'

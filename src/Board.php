@@ -33,6 +33,7 @@ final class Board
             CREATE INDEX IF NOT EXISTS card_time_card ON card_time(card);");
         $app->store->addColumn('cards', 'gcal_id', 'TEXT');       // its Google Calendar event, when shown in the calendar
         $app->store->addColumn('cards', 'gcal_synced', 'INTEGER'); // version last sent to Google
+        $app->store->addColumn('cards', 'old_codes', "TEXT NOT NULL DEFAULT ''"); // ',GEN-3,': codes it had in other spaces, still recognised
     }
 
     // ---------- reading ----------
@@ -48,7 +49,8 @@ final class Board
     {
         $ref = trim($ref);
         if (preg_match('/^#?(\d+)$/', $ref, $m)) return $this->get((int)$m[1]);
-        $id = $this->app->store->q('SELECT id FROM cards WHERE code = ? COLLATE NOCASE', [$ref])->fetchColumn();
+        $id = $this->app->store->q('SELECT id FROM cards WHERE code = ? COLLATE NOCASE', [$ref])->fetchColumn()
+            ?: $this->app->store->q("SELECT id FROM cards WHERE old_codes LIKE ? ESCAPE '\\'", ['%,' . addcslashes($ref, '%_\\') . ',%'])->fetchColumn(); // moved from another space
         return $id ? $this->get((int)$id) : null;
     }
 
@@ -239,6 +241,11 @@ final class Board
             if ($ids !== $old) { $this->setDeps($id, $ids); $depsChanged = true; $changes[] = 'dependencies: ' . ($ids ? implode(', ', array_map(fn($i) => $this->get($i)['code'] ?? "#$i", $ids)) : 'none'); }
         }
         if (!$v && !$depsChanged) return $c;
+        if (isset($v['space']) && $v['space'] !== $c['space']) { // a code of its new space; the old one keeps working
+            $v['code'] = $this->nextCode($v['space']);
+            $v['old_codes'] = rtrim($before['row']['old_codes'] ?: ',', ',') . ",{$c['code']},";
+            $changes[] = "code {$c['code']} → {$v['code']}";
+        }
         if ($v) {
             $v['updated'] = time();
             $this->app->store->q('UPDATE cards SET ' . implode(',', array_map(fn($k) => "$k = ?", array_keys($v))) . ', version = version + 1 WHERE id = ?', [...array_values($v), $id]);
@@ -477,7 +484,7 @@ final class Board
         $b = json_decode($l['before'], true);
         $id = (int)$l['card'];
         $now = $this->snapshot($id);
-        $row = array_diff_key($b['row'], array_flip(['id', 'code', 'created', 'version']));
+        $row = array_diff_key($b['row'], array_flip(['id', 'created', 'version', 'gcal_id', 'gcal_synced']));
         $row['updated'] = time();
         $st->db->beginTransaction();
         $st->q('UPDATE cards SET ' . implode(',', array_map(fn($k) => "$k = ?", array_keys($row))) . ', version = version + 1 WHERE id = ?', [...array_values($row), $id]);

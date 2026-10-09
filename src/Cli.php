@@ -19,7 +19,9 @@ final class Cli
                     $n = $app->files()->processPending(600);
                     if ($n) Log::info("library: indexed $n file(s)");
                     return 0;
-                case 'mcp':
+                case 'mcp': // Claude Code runs this for each turn: tools act in the turn's space
+                    $app->space = max(0, (int)getenv('TALIXIO_SPACE'));
+                    App::$inWorker = getenv('TALIXIO_IN_WORKER') === '1';
                     (new McpServer($app->tools))->serve();
                     return 0;
                 case 'chat':
