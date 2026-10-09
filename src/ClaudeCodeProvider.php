@@ -46,17 +46,22 @@ final class ClaudeCodeProvider implements Provider
             fwrite($pipes[0], $prompt);
             fclose($pipes[0]);
             $result = null; $raw = '';
-            while (($line = fgets($pipes[1])) !== false) {
-                $raw .= $line;
-                $ev = json_decode($line, true);
-                if (!is_array($ev)) continue;
-                if (($ev['type'] ?? '') === 'assistant' && $onEvent) {
-                    foreach ($ev['message']['content'] ?? [] as $b) {
-                        if (($b['type'] ?? '') === 'tool_use') $onEvent(['type' => 'tool', 'name' => preg_replace('/^mcp__talixio__/', '', $b['name']), 'input' => (array)($b['input'] ?? [])]);
-                        elseif (($b['type'] ?? '') === 'text' && $b['text'] !== '') $onEvent(['type' => 'text', 'text' => $b['text']]);
+            try {
+                while (($line = fgets($pipes[1])) !== false) {
+                    $raw .= $line;
+                    $ev = json_decode($line, true);
+                    if (!is_array($ev)) continue;
+                    if (($ev['type'] ?? '') === 'assistant' && $onEvent) {
+                        foreach ($ev['message']['content'] ?? [] as $b) {
+                            if (($b['type'] ?? '') === 'tool_use') $onEvent(['type' => 'tool', 'name' => preg_replace('/^mcp__talixio__/', '', $b['name']), 'input' => (array)($b['input'] ?? [])]);
+                            elseif (($b['type'] ?? '') === 'text' && $b['text'] !== '') $onEvent(['type' => 'text', 'text' => $b['text']]);
+                        }
                     }
+                    if (($ev['type'] ?? '') === 'result') $result = $ev;
                 }
-                if (($ev['type'] ?? '') === 'result') $result = $ev;
+            } catch (\Throwable $e) { // stopped by the user: end the claude process too
+                proc_terminate($proc); proc_close($proc);
+                throw $e;
             }
             $code = proc_close($proc);
             if (!$result) $result = json_decode(trim($raw), true); // plain json output (older CLIs or fakes)

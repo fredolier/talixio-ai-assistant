@@ -151,7 +151,10 @@ conversation.
 
 ## What it can do (v0.9)
 - **Live answers**: replies appear as they are written, with what it's doing ("Searching the web…",
-  "Reading example.com…").
+  "Reading example.com…"). The send button becomes **Stop** while it writes (what was written is kept).
+  Copy any message; **edit** your last message or ask for a **new answer**. **Find in the
+  conversation** (magnifier at the top) jumps to old messages. The message you are writing survives
+  closing the app, and a message sent while offline goes out as soon as the connection is back.
 - **Library (your knowledge base)**: every file is kept in folders you organise (`/Clients/Alice`,
   `/Admin/Taxes`...), browsable in the **Library** page (folder tree, breadcrumb, preview, drag and
   drop to upload or move, rename, delete, Markdown notes you can view and edit). Every file can

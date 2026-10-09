@@ -99,13 +99,32 @@ final class Store
         return $id;
     }
 
+    /** Remove messages (the last turn, to retry or edit it) and their search entries. */
+    public function deleteMessages(array $ids): void
+    {
+        foreach ($ids as $id) {
+            $this->deleteDocs(['message'], (int)$id);
+            $this->q('DELETE FROM messages WHERE id = ?', [(int)$id]);
+        }
+    }
+
     public function maxMessageId(): int { return (int)$this->db->query('SELECT COALESCE(MAX(id),0) FROM messages')->fetchColumn(); }
 
     public function messagesAfter(int $after, int $limit = 200): array
     {
-        $rows = $after <= 0
+        return $this->withFiles($after <= 0
             ? array_reverse($this->q('SELECT * FROM messages ORDER BY id DESC LIMIT ?', [$limit])->fetchAll())
-            : $this->q('SELECT * FROM messages WHERE id > ? ORDER BY id LIMIT ?', [$after, $limit])->fetchAll();
+            : $this->q('SELECT * FROM messages WHERE id > ? ORDER BY id LIMIT ?', [$after, $limit])->fetchAll());
+    }
+
+    /** Earlier messages, for scrolling back (oldest first). */
+    public function messagesBefore(int $before, int $limit = 100): array
+    {
+        return $this->withFiles(array_reverse($this->q('SELECT * FROM messages WHERE id < ? ORDER BY id DESC LIMIT ?', [$before, $limit])->fetchAll()));
+    }
+
+    private function withFiles(array $rows): array
+    {
         $files = [];
         foreach ($rows as $r) foreach (json_decode((string)$r['files'], true) ?: [] as $fid) $files[$fid] = true;
         $info = [];

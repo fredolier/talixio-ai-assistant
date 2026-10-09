@@ -41,7 +41,7 @@ final class Http
      */
     public static function sse(string $url, array $payload, array $headers, callable $onEvent, int $timeout = 600): void
     {
-        $status = 0; $buf = ''; $errBody = '';
+        $status = 0; $buf = ''; $errBody = ''; $thrown = null;
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_POST => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_USERAGENT => 'Talixio/0.5',
@@ -51,7 +51,7 @@ final class Http
                 if (preg_match('#^HTTP/\S+ (\d{3})#', $line, $m)) $status = (int)$m[1];
                 return strlen($line);
             },
-            CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$buf, &$status, &$errBody, $onEvent) {
+            CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$buf, &$status, &$errBody, &$thrown, $onEvent) {
                 if ($status >= 400) { $errBody .= $chunk; return strlen($chunk); }
                 $buf .= str_replace("\r\n", "\n", $chunk);
                 while (($pos = strpos($buf, "\n\n")) !== false) {
@@ -63,7 +63,9 @@ final class Http
                     }
                     if ($data === '' || $data === '[DONE]') continue;
                     $json = json_decode($data, true);
-                    if (is_array($json)) $onEvent($event, $json);
+                    // an exception (the user pressed Stop, an API error event) ends the transfer right away
+                    try { if (is_array($json)) $onEvent($event, $json); }
+                    catch (\Throwable $e) { $thrown = $e; return 0; }
                 }
                 return strlen($chunk);
             },
@@ -71,6 +73,7 @@ final class Http
         $ok = curl_exec($ch);
         $err = curl_error($ch);
         curl_close($ch);
+        if ($thrown) throw $thrown;
         if ($status >= 400) throw new \RuntimeException("API error $status: " . mb_substr($errBody, 0, 400));
         if ($ok === false) throw new \RuntimeException("HTTP error: $err");
     }

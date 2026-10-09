@@ -50,7 +50,11 @@ final class Web
         return match (true) {
             $path === '/api/logout' => $this->logout(),
             $path === '/api/status' => $this->status(),
-            $path === '/api/messages' => ['messages' => $s->messagesAfter((int)($_GET['after'] ?? 0))],
+            $path === '/api/messages' => ['messages' => isset($_GET['before']) ? $s->messagesBefore((int)$_GET['before']) : $s->messagesAfter((int)($_GET['after'] ?? 0)),
+                'first_id' => (int)$s->q('SELECT COALESCE(MIN(id),0) FROM messages')->fetchColumn()],
+            $path === '/api/messages/search' => ['results' => $this->searchMessages((string)($_GET['q'] ?? ''))],
+            (bool)preg_match('#^/api/messages/(\d+)/undo$#', $path, $mm) && $m === 'POST' => $this->undoTurn((int)$mm[1]),
+            $path === '/api/chat/stop' && $m === 'POST' => (function () use ($s) { $s->set('chat_stop', (string)microtime(true)); return ['ok' => true]; })(),
             $path === '/api/chat' && $m === 'POST' => $this->chat((string)($b['text'] ?? ''), array_map('intval', (array)($b['files'] ?? [])), !empty($b['meeting'])),
             $path === '/api/tasks' => ['tasks' => array_map(fn($t) => $t + ['next_text' => $t['next_run'] ? date('D j M, H:i', (int)$t['next_run']) : null], $s->tasks())],
             (bool)preg_match('#^/api/tasks/(\d+)/(toggle|delete)$#', $path, $mm) && $m === 'POST' => $this->taskAction((int)$mm[1], $mm[2]),
@@ -279,6 +283,57 @@ final class Web
     private ?Auth $auth = null;
 
     private static function minutes(int $s): string { $m = (int)ceil($s / 60); return $m <= 1 ? 'a minute' : ($m < 120 ? "$m minutes" : (int)ceil($m / 60) . ' hours'); }
+
+    /** Find in the conversation: exact words first (newest first), then matches by meaning. */
+    private function searchMessages(string $q): array
+    {
+        $q = trim($q);
+        if (mb_strlen($q) < 2) return [];
+        $s = $this->app->store; $out = [];
+        $like = '%' . addcslashes($q, '%_\\') . '%';
+        foreach ($s->q("SELECT id, role, channel, content, ts FROM messages WHERE content LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT 40", [$like])->fetchAll() as $r) {
+            $out[(int)$r['id']] = ['id' => (int)$r['id'], 'role' => $r['role'], 'channel' => $r['channel'], 'ts' => (int)$r['ts'], 'snippet' => self::snippet($r['content'], $q), 'exact' => true];
+        }
+        if (count($out) < 40) {
+            try {
+                foreach ($this->app->recall()->search($q, 20, PHP_INT_MAX, ['message']) as $h) {
+                    $id = (int)$h['ref'];
+                    if (isset($out[$id]) || !($r = $s->q('SELECT id, role, channel, content, ts FROM messages WHERE id = ?', [$id])->fetch())) continue;
+                    $out[$id] = ['id' => $id, 'role' => $r['role'], 'channel' => $r['channel'], 'ts' => (int)$r['ts'], 'snippet' => self::snippet($r['content'], $q), 'exact' => false];
+                }
+            } catch (\Throwable $e) { Log::warn("message search: {$e->getMessage()}"); }
+        }
+        return array_values($out);
+    }
+
+    private static function snippet(string $text, string $q): string
+    {
+        $text = preg_replace('/\s+/', ' ', preg_replace('/^\[[^\]]*\]\s*/', '', $text));
+        $pos = mb_stripos($text, $q);
+        $start = $pos === false ? 0 : max(0, $pos - 80);
+        return ($start > 0 ? '…' : '') . mb_substr($text, $start, 240) . (mb_strlen($text) > $start + 240 ? '…' : '');
+    }
+
+    /**
+     * Take back the last turn (to edit the message or get a new answer): removes the user's message and the
+     * answer after it, and returns the message for the composer. Only for the latest turn, when nothing else
+     * (a job report, a scheduled task) came after it and no answer is being written.
+     */
+    private function undoTurn(int $id): array
+    {
+        $s = $this->app->store;
+        $msg = $s->q('SELECT * FROM messages WHERE id = ?', [$id])->fetch();
+        if (!$msg || $msg['role'] !== 'user') $this->fail(404, 'No such message.');
+        $after = $s->q('SELECT id, role, channel FROM messages WHERE id > ? ORDER BY id', [$id])->fetchAll();
+        foreach ($after as $a) if ($a['role'] !== 'assistant' || $a['channel'] !== $msg['channel']) $this->fail(409, 'Only the latest message can be changed.');
+        $lock = fopen($this->app->cfg->dataDir . '/agent.lock', 'c');
+        if (!flock($lock, LOCK_EX | LOCK_NB)) $this->fail(409, 'Wait for the answer to finish (or stop it) first.');
+        try { $s->deleteMessages([$id, ...array_column($after, 'id')]); }
+        finally { flock($lock, LOCK_UN); fclose($lock); }
+        $ids = json_decode((string)$msg['files'], true) ?: [];
+        $files = array_values(array_filter(array_map(fn($f) => ($i = $this->app->files()->get((int)$f)) ? $this->fileInfo($i) : null, $ids)));
+        return ['text' => trim(preg_replace('/^\[attached [^\]]*\]$/m', '', (string)$msg['content'])), 'files' => $files, 'removed' => [$id, ...array_map('intval', array_column($after, 'id'))]];
+    }
 
     private function digest(): array
     {

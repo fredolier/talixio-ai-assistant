@@ -116,6 +116,19 @@ final class Agent
         }
         $prompt = $text;
         if (preg_match('#^/(fast|standard|deep)\b\s*#i', $text, $m)) { $tier = strtolower($m[1]); $prompt = substr($text, strlen($m[0])); }
+        $started = microtime(true); $partial = '';
+        if ($onEvent) { // the user can stop the answer (Stop button): checked on each streamed event, at most twice a second
+            $inner = $onEvent; $checked = 0.0;
+            $onEvent = function (array $e) use ($inner, $store, $started, &$partial, &$checked) {
+                if (microtime(true) - $checked > 0.5) {
+                    $checked = microtime(true);
+                    if ((float)$store->get('chat_stop', '0') >= $started) throw new Abort('stopped by the user');
+                }
+                if ($e['type'] === 'text') $partial .= $e['text'];
+                elseif ($e['type'] === 'tool' && $partial !== '') $partial .= "\n\n";
+                $inner($e);
+            };
+        }
         $lock = fopen($this->app->cfg->dataDir . '/agent.lock', 'c');
         if (!flock($lock, LOCK_EX | LOCK_NB)) { // one main-thread turn at a time across the web app, worker and jobs
             if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Finishing another task first (a scheduled task or a job report)… your message is queued.']);
@@ -145,7 +158,8 @@ final class Agent
                     $recalled !== '' ? "## Possibly relevant from past conversations\n$recalled" : '', 'main', null, null, $onEvent);
                 $reply = $reply ?: '(no response)';
             } catch (Abort $e) {
-                $reply = "I've reached my spending limit, so I'm not calling the model right now. " . $this->app->budget()->describe()
+                if ($e->getMessage() === 'stopped by the user') $reply = trim($partial) !== '' ? trim($partial) . "\n\n*(stopped)*" : '*(stopped)*';
+                else $reply = "I've reached my spending limit, so I'm not calling the model right now. " . $this->app->budget()->describe()
                     . "\nRaise TALIXIO_BUDGET_DAILY_USD / TALIXIO_BUDGET_MONTHLY_USD if needed.";
             } catch (\Throwable $e) {
                 Log::error("agent: {$e->getMessage()}");

@@ -324,3 +324,23 @@ tr:last-child td{border-bottom:0}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto!important}}
 .qr svg{width:180px;height:180px;background:#fff;border-radius:8px;display:block;margin:.4rem 0}
+
+/* message actions, stop, find in the conversation */
+.meta .acts{display:inline-flex;gap:2px;margin-left:2px;opacity:0;transition:opacity .15s}
+.msg:hover .acts,.msg:focus-within .acts{opacity:1}
+@media (hover:none){.meta .acts{opacity:.75}}
+.act{border:0;background:transparent;color:var(--muted);padding:3px;border-radius:6px;cursor:pointer;display:grid;place-items:center}
+.act:hover{background:var(--sunk);color:var(--ink)}
+.act svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.msg:not(.last-turn) .act[data-act=retry],.msg:not(.last-turn) .act[data-act=edit]{display:none}
+.msg.flash .bubble{animation:flash 1.6s ease-out}
+@keyframes flash{0%,30%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
+#send.stop{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.earlier{align-self:center}
+.topbar-actions{display:flex;gap:6px;align-items:center}
+.chat-search{padding:10px max(16px,calc((100% - 760px)/2));border-bottom:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;gap:8px;max-height:45vh}
+.chat-search input{flex:1;min-width:0}
+.sresults{overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.sres{display:flex;flex-direction:column;gap:2px;text-align:left;border:0;background:transparent;color:inherit;padding:8px 10px;border-radius:8px;cursor:pointer;font:inherit}
+.sres:hover{background:var(--sunk)}
+.sres mark{background:var(--accent-soft);color:inherit;border-radius:3px}

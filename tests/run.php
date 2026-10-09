@@ -142,6 +142,17 @@ check('summary runs once idle', (new Summarizer($app))->maybeRun(time() + 3600))
 check('summary used the fast tier with no tools', str_contains(json_encode($s->usageBy('tier', 0)), '"fast"') && end($fake->calls)['tools'] === []);
 check('summary is searchable', str_contains($app->tools->run('search_memory', ['query' => 'TGV']), 'summary of'));
 
+// ---- stop button: the answer so far is kept, marked as stopped ----
+$fake->script = function ($last, $tools, $on, $ctx, $msgs, $ev) use ($usage, $s) {
+    $usage($on); $ev(['type' => 'text', 'text' => 'The first part. ']);
+    $s->set('chat_stop', (string)microtime(true)); usleep(600000);
+    $ev(['type' => 'text', 'text' => 'never shown']); return 'The first part. never shown';
+};
+$reply = $app->agent()->chat('web', 'write a long essay', 'standard', [], fn($e) => null);
+check('stop: the partial answer is saved, marked stopped', $reply === "The first part.\n\n*(stopped)*", $reply);
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return 'ok'; };
+check('stop: an older stop does not affect the next answer', $app->agent()->chat('web', 'hello again', 'standard', [], fn($e) => null) === 'ok');
+
 // ---- compaction with progressive forgetting ----
 $cd = "$dir/compact"; putenv("TALIXIO_DATA_DIR=$cd");
 $ca = App::fromEnv(); $ca->providerOverride = $fake; $cs = $ca->store;
@@ -373,6 +384,11 @@ $rawLines = array_values(array_filter(explode("\n", (string)@file_get_contents("
 $second = json_decode(end($rawLines), true);
 check('anthropic stream: thinking block with signature and {} tool input sent back', ($second['messages'][1]['content'][0]['signature'] ?? '') === 'SIG123'
     && str_contains(end($rawLines), '"name":"list_tasks","input":{}') && ($second['thinking']['budget_tokens'] ?? 0) === 2048);
+try {
+    (new \Talixio\AnthropicProvider('k', $tier, false, "http://127.0.0.1:$llmPort"))->complete('sys', '', [['role' => 'user', 'content' => 'tasks?']], $app->tools->only('chat'),
+        fn($u) => null, function (array $e) { if ($e['type'] === 'text') throw new \Talixio\Abort('stopped by the user'); });
+    check('stop: an answer being streamed can be interrupted', false);
+} catch (\Talixio\Abort $e) { check('stop: an answer being streamed can be interrupted', $e->getMessage() === 'stopped by the user'); }
 $events = [];
 $text = (new \Talixio\OpenAIProvider('k', new \Talixio\Tier('standard', 'gemini-x', 5), "http://127.0.0.1:$llmPort"))->complete('sys', '', [['role' => 'user', 'content' => 'tasks?']], $app->tools->only('chat'),
     fn($u) => null, $collect);
@@ -958,6 +974,24 @@ check('totp: password and code sign in', $r['_code'] === 200 && $aj('/api/status
 check('totp: turning off needs the password', $aj('/api/security/totp/disable', ['password' => 'nope', 'code' => $code], 'd', '203.0.113.12')['_code'] === 403);
 exec('TALIXIO_DATA_DIR=' . escapeshellarg($ad) . ' TALIXIO_PROVIDER=echo ' . PHP_BINARY . ' ' . escapeshellarg(dirname(__DIR__) . '/bin/talixio') . ' totp off 2>&1', $o, $rc);
 check('totp: "talixio totp off" for a lost phone', $rc === 0 && $aj('/api/security', null, 'd')['totp'] === false, implode("\n", $o));
+// chat comfort: take back the last turn, find in the conversation, scroll back
+$aj('/api/chat', ['text' => 'first question about the Dupont plumber'], 'd');
+$aj('/api/chat', ['text' => 'another question'], 'd');
+$r2 = $aj('/api/chat', ['text' => 'second question'], 'd');
+$ids = array_column($r2['messages'] ?? [], 'id');
+$undo = $aj('/api/messages/' . min($ids) . '/undo', [], 'd');
+check('chat: the latest turn can be taken back (edit / new answer)', ($undo['text'] ?? '') === 'second question' && count($undo['removed'] ?? []) === 2
+    && !str_contains(json_encode($aj('/api/messages', null, 'd')['messages']), 'second question'), json_encode($undo));
+$all = $aj('/api/messages', null, 'd')['messages'];
+$firstQ = array_values(array_filter($all, fn($m) => str_contains($m['content'], 'Dupont')))[0]['id'];
+check('chat: an older message cannot be taken back', $aj("/api/messages/$firstQ/undo", [], 'd')['_code'] === 409);
+$found = $aj('/api/messages/search?q=' . urlencode('dupont plumber'), null, 'd')['results'] ?? [];
+$hit = array_values(array_filter($found, fn($h) => $h['id'] === $firstQ))[0] ?? [];
+check('chat: find in the conversation (exact words, case-insensitive)', ($hit['exact'] ?? false) && str_contains($hit['snippet'], 'Dupont'), json_encode($found));
+$before = $aj("/api/messages?before=" . ($firstQ + 1), null, 'd');
+check('chat: earlier messages page', end($before['messages'])['id'] === $firstQ && $before['first_id'] >= 1, json_encode($before));
+check('chat: stop request accepted', $aj('/api/chat/stop', [], 'd')['ok'] ?? false);
+
 $share = function () use ($webPort) {
     $ch = curl_init("http://127.0.0.1:$webPort/share");
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => ['text' => 'hello'], CURLOPT_HTTPHEADER => ['X-Forwarded-For: 203.0.113.50']]);

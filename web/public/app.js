@@ -86,6 +86,7 @@ function renderMessage(m) {
     return el;
   }
   el.className = `msg ${m.role}`;
+  if (m.id) { el.dataset.id = m.id; el.dataset.channel = m.channel; }
   const chip = CHANNEL[m.channel] ? `<span class="chip ${m.channel}">${CHANNEL[m.channel]}</span>` : '';
   const atts = (m.files || []).map(f => f.kind === 'image'
       ? `<a href="/api/files/${f.id}" target="_blank" rel="noopener"><img src="/api/files/${f.id}" alt="${esc(f.name)}" loading="lazy"></a>`
@@ -94,8 +95,56 @@ function renderMessage(m) {
   const body = m.content.replace(/^\[attached [^\]]*\]$/gm, '').trim();
   const mt = m.meta;
   const usage = mt && (mt.in + mt.out) > 0 ? `<span class="tier" title="${esc(mt.model)} · ${nf.format(mt.in)} in / ${nf.format(mt.out)} out tokens">${esc(shortModel(mt.model))} · ${ktok(mt.in + mt.out)} tok${mt.cost_known ? ' · ' + money(mt.cost) : ''}</span>` : '';
-  el.innerHTML = `${atts ? `<div class="attachments">${atts}</div>` : ''}${body ? `<div class="bubble">${m.role === 'user' ? esc(body) : md(body)}</div>` : ''}<div class="meta">${chip}<span>${fmtTime(m.ts)}</span>${usage}</div>`;
+  const acts = m.id && body ? `<span class="acts"><button type="button" class="act" data-act="copy" title="Copy" aria-label="Copy">${ICON.copy}</button>`
+    + (m.role === 'assistant' ? `<button type="button" class="act" data-act="retry" title="New answer" aria-label="New answer">${ICON.retry}</button>`
+      : `<button type="button" class="act" data-act="edit" title="Edit the message" aria-label="Edit the message">${ICON.edit}</button>`) + '</span>' : '';
+  el.innerHTML = `${atts ? `<div class="attachments">${atts}</div>` : ''}${body ? `<div class="bubble">${m.role === 'user' ? esc(body) : md(body)}</div>` : ''}<div class="meta">${chip}<span>${fmtTime(m.ts)}</span>${usage}${acts}</div>`;
+  el.querySelectorAll('.act').forEach(b => b.onclick = () => messageAction(b.dataset.act, m, el));
   return el;
+}
+
+const ICON = {
+  copy: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
+  retry: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/></svg>',
+  edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>',
+  send: '<svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2-6z"/></svg>',
+  stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5" style="fill:currentColor"/></svg>',
+};
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { const t = document.createElement('textarea'); t.value = text; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
+  toast('Copied.');
+}
+
+/** Copy any message; get a new answer to, or edit, the latest exchange. */
+async function messageAction(act, m, el) {
+  const body = m.content.replace(/^\[attached [^\]]*\]$/gm, '').trim();
+  if (act === 'copy') return copyText(body);
+  if (state.sending) return toast('Wait for the answer to finish (or stop it) first.');
+  const userEl = act === 'edit' ? el : [...$('#thread').querySelectorAll('.msg.user[data-id]')].filter(u => +u.dataset.id < m.id).pop();
+  if (!userEl) return toast('Nothing to answer again.');
+  if ($('#input').value.trim() && act === 'edit' && !confirm('Replace the message you are writing?')) return;
+  try {
+    const d = await post(`/api/messages/${userEl.dataset.id}/undo`);
+    for (const id of d.removed) $(`#thread [data-id="${id}"]`)?.remove();
+    state.lastId = Math.max(0, ...[...$('#thread').querySelectorAll('[data-id]')].map(x => +x.dataset.id));
+    state.pending = d.files.map(f => ({ id: f.id, info: f })); renderPending();
+    $('#input').value = d.text; autosize(); markLast();
+    if (act === 'retry') send(); else { $('#input').focus(); saveDraft(); }
+  } catch (e) { toast(e.message); }
+}
+
+/** Retry and edit only make sense on the latest exchange. */
+function markLast() {
+  const msgs = [...$('#thread').querySelectorAll('.msg[data-id]')];
+  msgs.forEach(x => x.classList.remove('last-turn'));
+  const lastUser = msgs.filter(x => x.classList.contains('user')).pop();
+  if (!lastUser) return;
+  const after = msgs.slice(msgs.indexOf(lastUser) + 1);
+  if (after.every(x => x.classList.contains('assistant') && x.dataset.channel === lastUser.dataset.channel)) {
+    lastUser.classList.add('last-turn'); after.forEach(x => x.classList.add('last-turn'));
+  }
 }
 
 function shortModel(m) {
@@ -122,13 +171,54 @@ function appendMessages(list, notify = false) {
   const thread = $('#thread');
   if (!list.length) { if (!thread.children.length) thread.append(emptyState()); return; }
   $('#empty')?.remove();
+  const initial = !state.lastId;
   for (const m of list) {
     if (m.id <= state.lastId) continue;
     state.lastId = m.id;
     thread.append(renderMessage(m));
+    if (!state.firstLoaded || m.id < state.firstLoaded) state.firstLoaded = m.id;
     if (notify && m.role === 'assistant' && (document.hidden || m.channel !== 'web')) notifyBrowser(m);
   }
+  markLast(); earlierButton();
+  if (initial) thread.style.scrollBehavior = 'auto'; // opening the app: straight to the latest message
   thread.scrollTop = thread.scrollHeight;
+  thread.style.scrollBehavior = '';
+}
+
+/** Older messages, added above the ones shown (keeps the scroll position). */
+async function loadEarlier() {
+  if (!state.firstLoaded || state.firstLoaded <= state.firstId) return false;
+  const thread = $('#thread');
+  const { messages } = await api('/api/messages?before=' + state.firstLoaded);
+  if (!messages.length) { state.firstId = state.firstLoaded; earlierButton(); return false; }
+  const h = thread.scrollHeight, top = thread.scrollTop;
+  const anchor = thread.querySelector('.msg[data-id], .trigger, .jobcard');
+  const frag = document.createDocumentFragment();
+  for (const m of messages) frag.append(renderMessage(m));
+  thread.insertBefore(frag, $('#earlier')?.nextSibling || anchor);
+  state.firstLoaded = messages[0].id;
+  earlierButton(); markLast();
+  thread.style.scrollBehavior = 'auto'; thread.scrollTop = top + thread.scrollHeight - h; thread.style.scrollBehavior = '';
+  return true;
+}
+function earlierButton() {
+  const more = state.firstLoaded && state.firstId && state.firstLoaded > state.firstId;
+  let b = $('#earlier');
+  if (!more) { b?.remove(); return; }
+  if (!b) {
+    b = document.createElement('button'); b.id = 'earlier'; b.type = 'button'; b.className = 'btn small ghost earlier'; b.textContent = 'Show earlier messages';
+    b.onclick = () => loadEarlier().catch(e => toast(e.message));
+  }
+  $('#thread').prepend(b);
+}
+
+/** Scroll to a message, loading older ones if needed, and highlight it. */
+async function jumpTo(id) {
+  for (let i = 0; i < 100 && !$(`#thread [data-id="${id}"]`); i++) if (!(await loadEarlier())) break;
+  const el = $(`#thread [data-id="${id}"]`);
+  if (!el) return toast('That message is no longer in the conversation.');
+  el.scrollIntoView({ block: 'center' });
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
 }
 
 function notifyBrowser(m) {
@@ -158,15 +248,40 @@ const TOOL_LABEL = (name, input = {}) => {
     browser_select: 'Choosing an option', browser_back: 'Going back', browser_screenshot: 'Looking at the page',
   })[name] || `Using ${name.replace(/_/g, ' ')}`;
 };
+// ---- find in the conversation ----
+$('#chat-search-btn').onclick = () => {
+  const p = $('#chat-search'); p.hidden = !p.hidden;
+  if (!p.hidden) { $('#chat-search-q').focus(); $('#chat-search-q').select(); }
+};
+$('#chat-search-close').onclick = () => { $('#chat-search').hidden = true; };
+$('#chat-search-q').addEventListener('keydown', e => { if (e.key === 'Escape') $('#chat-search').hidden = true; });
+$('#chat-search-q').addEventListener('input', () => { clearTimeout(chatSearch.t); chatSearch.t = setTimeout(chatSearch, 300); });
+async function chatSearch() {
+  const q = $('#chat-search-q').value.trim(); const box = $('#chat-search-results');
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  try {
+    const { results } = await api('/api/messages/search?q=' + encodeURIComponent(q));
+    if (q !== $('#chat-search-q').value.trim()) return;
+    const mark = t => esc(t).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi'), x => `<mark>${x}</mark>`);
+    box.innerHTML = results.length ? '' : '<p class="muted small">Nothing found.</p>';
+    for (const r of results) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'sres';
+      b.innerHTML = `<span class="muted small">${r.role === 'user' ? 'You' : esc(state.status?.name || 'Assistant')} · ${new Date(r.ts * 1000).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${r.exact ? '' : ' · similar'}</span><span>${mark(r.snippet)}</span>`;
+      b.onclick = () => { jumpTo(r.id); if (matchMedia('(max-width: 760px)').matches) $('#chat-search').hidden = true; };
+      box.append(b);
+    }
+  } catch (e) { box.innerHTML = `<p class="error small">${esc(e.message)}</p>`; }
+}
+
 const SPIN = '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
 
 async function send(opts = {}) {
   const input = $('#input'); const text = input.value.trim();
   const files = opts.files || state.pending.filter(f => f.id).map(f => f.id);
   if ((!text && !files.length) || state.sending) return;
-  if (!navigator.onLine) { toast('You are offline. Your message stays here: send it when you are back online.'); return; }
   if (state.pending.some(f => !f.id)) { toast('Wait for the upload to finish.'); return; }
-  state.sending = true; $('#send').disabled = true;
+  if (!navigator.onLine) { queueOffline(); return; }
+  state.sending = true; sendMode(true);
   input.value = ''; autosize();
   const shownFiles = opts.shownFiles || state.pending.map(f => f.info);
   state.pending = []; renderPending();
@@ -210,13 +325,60 @@ async function send(opts = {}) {
     pending.remove(); live.remove();
     appendMessages(done.messages);
     loadApprovals();
+    clearDraft();
   } catch (e) {
-    live.remove(); toast(e.message);
-    if (!textSoFar) { pending.remove(); input.value = text; }
+    live.remove();
+    if (!textSoFar) {
+      pending.remove(); input.value = text; autosize();
+      state.pending = shownFiles.map((info, i) => ({ id: files[i], info })).filter(f => f.id); renderPending();
+      if (!navigator.onLine || e instanceof TypeError) { state.sending = false; queueOffline(); return; }
+    }
+    toast(e.message);
   } finally {
     clearInterval(approvalsTimer);
-    state.sending = false; $('#send').disabled = false; input.focus();
+    state.sending = false; sendMode(false); if (!state.queued) input.focus();
   }
+}
+
+/** While an answer is being written, the send button stops it. */
+function sendMode(busy) {
+  const b = $('#send'); b.disabled = false; b.classList.toggle('stop', busy);
+  b.innerHTML = busy ? ICON.stop : ICON.send;
+  b.setAttribute('aria-label', busy ? 'Stop the answer' : 'Send'); b.title = busy ? 'Stop the answer' : '';
+}
+async function stopAnswer() {
+  const b = $('#send'); b.disabled = true;
+  try { await post('/api/chat/stop'); } catch (e) { toast(e.message); }
+}
+
+/** Offline: the message waits in the box and is sent as soon as the connection is back. */
+function queueOffline() {
+  state.queued = true; saveDraft();
+  banner('Offline: your message will be sent as soon as you are back online.', 'Cancel', () => { state.queued = false; banner(''); }, 'offline');
+}
+window.addEventListener('online', () => {
+  if (!state.queued) return;
+  state.queued = false; banner('');
+  setTimeout(() => send(), 800); // give the connection a moment
+});
+
+/** The message being written (and its attachments) survives closing the app. */
+const DRAFT = 'talixio.draft';
+function saveDraft() {
+  try {
+    const text = $('#input').value; const files = state.pending.filter(f => f.id).map(f => ({ id: f.id, info: f.info }));
+    if (text.trim() || files.length) localStorage.setItem(DRAFT, JSON.stringify({ text, files, queued: !!state.queued }));
+    else localStorage.removeItem(DRAFT);
+  } catch {}
+}
+function clearDraft() { try { localStorage.removeItem(DRAFT); } catch {} }
+function restoreDraft() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(DRAFT) || 'null'); } catch {}
+  if (!d || $('#input').value.trim() || state.pending.length) return;
+  $('#input').value = d.text || ''; autosize();
+  state.pending = (d.files || []).filter(f => f.id); renderPending();
+  if (d.queued) { if (navigator.onLine) send(); else queueOffline(); }
 }
 
 // ---- approvals ----
@@ -251,6 +413,7 @@ function renderPending() {
     c.querySelector('button').onclick = () => { state.pending.splice(i, 1); renderPending(); };
     box.append(c);
   });
+  saveDraft();
 }
 function uploadFile(file, name, folder) {
   return new Promise((resolve, reject) => {
@@ -905,8 +1068,11 @@ let start = startApp;
 async function startApp() {
   $('#login').hidden = true; $('#shell').hidden = false;
   await refreshStatus();
-  state.lastId = 0; $('#thread').innerHTML = '';
-  appendMessages((await api('/api/messages')).messages);
+  state.lastId = 0; state.firstLoaded = 0; $('#thread').innerHTML = '';
+  const first = await api('/api/messages');
+  state.firstId = first.first_id;
+  appendMessages(first.messages);
+  restoreDraft();
   loadApprovals();
   route();
   clearInterval(state.pollTimer);
@@ -927,7 +1093,7 @@ $('#login-form').onsubmit = async e => {
   }
 };
 $('#logout').onclick = async () => { try { await post('/api/logout'); } catch {} showLogin(); };
-$('#composer').onsubmit = e => { e.preventDefault(); send(); };
+$('#composer').onsubmit = e => { e.preventDefault(); if (state.sending) stopAnswer(); else send(); };
 $('#attach').onclick = () => $('#file-input').click();
 $('#file-input').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
 $('#mic').onclick = startRecording;
@@ -938,7 +1104,7 @@ $('#input').addEventListener('paste', e => { const f = [...(e.clipboardData?.fil
 ['dragover', 'dragenter'].forEach(t => $('#composer').addEventListener(t, e => { e.preventDefault(); $('#composer').classList.add('drag'); }));
 ['dragleave', 'drop'].forEach(t => $('#composer').addEventListener(t, () => $('#composer').classList.remove('drag')));
 $('#composer').addEventListener('drop', e => { e.preventDefault(); addFiles([...(e.dataTransfer?.files || [])]); });
-$('#input').addEventListener('input', autosize);
+$('#input').addEventListener('input', () => { autosize(); clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); });
 $('#input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
 $('#test-notify').onclick = async () => {
   $('#test-result').textContent = 'Sending…';
@@ -1084,7 +1250,7 @@ async function registerServiceWorker() {
   } catch {}
 }
 function onlineState() {
-  if (navigator.onLine) { if ($('#banner').classList.contains('offline')) banner(''); $('#send').disabled = state.sending; }
+  if (navigator.onLine) { if ($('#banner').classList.contains('offline') && !state.queued) banner(''); }
   else { banner('You are offline: you can read the conversation; sending works again once you are back online.', '', null, 'offline'); }
 }
 window.addEventListener('online', () => { onlineState(); poll(); refreshStatus(); });

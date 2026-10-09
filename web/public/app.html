@@ -57,8 +57,15 @@
     <section id="view-chat" class="view chat-view">
       <header class="topbar">
         <div><h2 id="chat-title">Chat</h2><p class="muted small" id="chat-sub"></p></div>
-        <a id="notify-btn" class="btn ghost small" href="#settings" hidden>Turn on notifications</a>
+        <div class="topbar-actions">
+          <a id="notify-btn" class="btn ghost small" href="#settings" hidden>Turn on notifications</a>
+          <button id="chat-search-btn" class="btn ghost icon" type="button" aria-label="Find in the conversation" title="Find in the conversation"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></button>
+        </div>
       </header>
+      <div id="chat-search" class="chat-search" hidden>
+        <div class="row"><input id="chat-search-q" type="search" placeholder="Find in the conversation…" aria-label="Find in the conversation"><button id="chat-search-close" class="btn ghost small" type="button">Close</button></div>
+        <div id="chat-search-results" class="sresults"></div>
+      </div>
       <div id="thread" class="thread" aria-live="polite"></div>
       <div id="approvals" class="approvals" hidden></div>
       <div id="recorder" class="recorder" hidden>
