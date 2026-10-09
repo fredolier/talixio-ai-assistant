@@ -23,6 +23,7 @@ final class Web
         }
         if ($path === '/api/google/callback' && $method === 'GET') { $this->googleCallback(); return; } // Google's redirect carries no session cookie (SameSite)
         if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
+        if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
         $this->startSession();
         try {
@@ -109,6 +110,12 @@ final class Web
             $path === '/api/spotify/disconnect' && $m === 'POST' => (function () { $this->app->spotify()->disconnect(); return $this->spotifyState(); })(),
             $path === '/api/mcp' && $m === 'GET' => $this->connectors(),
             $path === '/api/mcp' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcp()->saveRaw((string)($b['raw'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
+            $path === '/api/mcp/oauth/start' && $m === 'POST' => (function () use ($b) {
+                $name = (string)($b['server'] ?? '');
+                $cfg = $this->app->mcp()->servers()[$name] ?? $this->fail(404, 'no such connector');
+                return ['url' => $this->app->mcpOAuth()->start($name, $cfg, $this->app->mcp()->cache()[$name]['auth_meta'] ?? null)];
+            })(),
+            $path === '/api/mcp/oauth/forget' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcpOAuth()->forget((string)($b['server'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/mcp/refresh' && $m === 'POST' => (function () { set_time_limit(0); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/shell/check' && $m === 'POST' => (function () { try { return ['ok' => true, 'text' => $this->app->shell()->check()]; } catch (\Throwable $e) { return ['ok' => false, 'text' => $e->getMessage()]; } })(),
             $path === '/api/heartbeat/run' && $m === 'POST' => (function () {
@@ -192,7 +199,9 @@ final class Web
         $mcp = $this->app->mcp(); $cache = $mcp->cache(); $out = [];
         foreach ($mcp->servers() as $name => $srv) {
             $c = $cache[$name] ?? null;
+            $signed = isset($srv['url']) && $this->app->mcpOAuth()->signedIn($name);
             $out[] = ['name' => $name, 'kind' => isset($srv['url']) ? 'remote' : 'local', 'trust' => ($srv['trust'] ?? '') === 'all' ? 'all' : 'read',
+                'auth' => $signed ? 'signed_in' : (!empty($c['auth']) || !empty($srv['oauth']) ? 'needed' : null), 'signed_in_at' => $signed ? $this->app->mcpOAuth()->account($name) : null,
                 'error' => $c['error'] ?? ($c ? null : 'not checked yet'), 'at' => $c['at'] ?? null,
                 'tools' => array_map(fn($t) => ['name' => Mcp::toolName($name, (string)$t['name']), 'title' => (string)($t['title'] ?? $t['name']),
                     'read_only' => !empty($t['annotations']['readOnlyHint'])], $c['tools'] ?? [])];
@@ -314,6 +323,23 @@ final class Web
         header('Content-Type: text/calendar; charset=utf-8');
         header('Cache-Control: private, max-age=300');
         echo $bd->ics();
+    }
+
+    /** Back from a connector's sign-in page (no session cookie here: the one-time state proves it was started from the app). */
+    private function mcpOAuthCallback(): void
+    {
+        $msg = '';
+        try {
+            if (isset($_GET['error'])) throw new \RuntimeException('sign-in cancelled: ' . $_GET['error'] . (isset($_GET['error_description']) ? ' (' . $_GET['error_description'] . ')' : ''));
+            $name = $this->app->mcpOAuth()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+            set_time_limit(0);
+            $cache = $this->app->mcp()->refresh();
+            $msg = !empty($cache[$name]['error']) ? "$name: signed in, but " . $cache[$name]['error'] : "connected:$name";
+        } catch (\Throwable $e) {
+            Log::warn("mcp oauth: {$e->getMessage()}");
+            $msg = $e->getMessage();
+        }
+        header('Location: ' . Config::basePath() . '/?mcp=' . rawurlencode($msg) . '#settings', true, 303);
     }
 
     private function spotifyState(): array

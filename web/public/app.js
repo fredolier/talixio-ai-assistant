@@ -1520,11 +1520,18 @@ function showConnectors(d) {
   if (document.activeElement !== $('#mcp-raw')) $('#mcp-raw').value = d.raw;
   const ok = d.servers.filter(x => !x.error).length;
   $('#mcp-badge').textContent = d.servers.length ? `· ${ok}/${d.servers.length} connected` : '· none';
-  $('#mcp-servers').innerHTML = d.servers.map(x => `<div class="mcp-server ${x.error ? 'bad' : ''}">
+  $('#mcp-servers').innerHTML = d.servers.map(x => `<div class="mcp-server ${x.error && x.auth !== 'needed' ? 'bad' : ''}">
       <div class="row"><b>${esc(x.name)}</b><span class="chip">${x.kind}</span>${x.trust === 'all' ? '<span class="chip">trusted: no approval</span>' : ''}
-        <span class="muted small">${x.error ? '' : x.tools.length + ' tool(s)'}${x.at ? ' · checked ' + fmtTime(x.at) : ''}</span></div>
-      ${x.error ? `<p class="error small">${esc(x.error)}</p>` : `<div class="tools">${x.tools.map(t => `<span class="chip" title="${esc(t.name)}">${esc(t.title)}${t.read_only ? '' : ' ✋'}</span>`).join('')}</div>`}
+        <span class="muted small">${x.error ? '' : x.tools.length + ' tool(s)'}${x.at ? ' · checked ' + fmtTime(x.at) : ''}</span>
+        ${x.auth === 'signed_in' ? `<span class="spacer"></span><span class="muted small">signed in ${esc(x.signed_in_at || '')}</span><button type="button" class="btn small ghost" data-signout="${esc(x.name)}">Sign out</button>`
+          : x.auth === 'needed' ? `<span class="spacer"></span><button type="button" class="btn small primary" data-signin="${esc(x.name)}">Sign in</button>` : ''}</div>
+      ${x.auth === 'needed' ? `<p class="small">This service asks you to sign in with your account: press <b>Sign in</b>, accept, and you come back here.</p>` : x.error ? `<p class="error small">${esc(x.error)}</p>` : `<div class="tools">${x.tools.map(t => `<span class="chip" title="${esc(t.name)}">${esc(t.title)}${t.read_only ? '' : ' ✋'}</span>`).join('')}</div>`}
     </div>`).join('') + (d.servers.some(x => x.tools.some(t => !t.read_only)) ? '<p class="muted small">✋ asks for your approval before running.</p>' : '');
+  $('#mcp-servers').querySelectorAll('[data-signin]').forEach(b => b.onclick = async () => {
+    b.disabled = true; $('#mcp-state').textContent = 'Opening the sign-in page…';
+    try { location.href = (await post('api/mcp/oauth/start', { server: b.dataset.signin })).url; } catch (e) { $('#mcp-state').textContent = e.message; b.disabled = false; }
+  });
+  $('#mcp-servers').querySelectorAll('[data-signout]').forEach(b => b.onclick = () => mcpAction('api/mcp/oauth/forget', { server: b.dataset.signout }));
   $('#shell-state').textContent = !d.shell.installed ? 'not installed (install.sh --with-shell).' : d.shell.mode === 'off' ? 'installed, off (Settings → Sandboxed shell).' : d.shell.mode === 'ask' ? 'on, asks before each command.' : 'on, runs without asking.';
 }
 async function loadConnectors() { try { showConnectors(await api('api/mcp')); } catch {} }
@@ -2339,6 +2346,12 @@ async function handleLaunch() {
     history.replaceState(null, '', './#settings');
     toast(g === 'connected' ? 'Google Calendar connected.' : g);
     if (g === 'connected') setTimeout(() => { $('#google-card').open = true; $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
+  }
+  if (params.has('mcp')) {
+    const g = params.get('mcp');
+    history.replaceState(null, '', './#settings');
+    toast(g.startsWith('connected:') ? `Connected to ${g.slice(10)}: its tools are available from the next message.` : g);
+    setTimeout(() => { $('#mcp-card').open = true; $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600);
   }
   if (params.has('spotify')) {
     const g = params.get('spotify');

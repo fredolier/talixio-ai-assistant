@@ -1408,6 +1408,37 @@ check('board: moved to another space, it gets that space\'s code and the old one
 $gm3 = $bd->undo($bd->history($gm['id'])[0]['id']);
 check('board: undoing the move gives the old code back', $gm3['code'] === $gm['code'] && $gm3['space'] === 0);
 check('board: trash emptied after 30 days', $bd->purge(-1) === 1 && $bd->find('MAI-2') === null);
+// connectors that need you to sign in (OAuth, MCP authorization spec)
+$oport = $freePort();
+$os = proc_open([PHP_BINARY, '-S', "127.0.0.1:$oport", __DIR__ . '/fakes/mcp-oauth.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp);
+$waitPort($oport); @unlink(sys_get_temp_dir() . "/fake-mcp-oauth-$oport.json");
+$mc = $aj('/api/mcp', ['raw' => json_encode(['mcpServers' => ['notes' => ['url' => "http://127.0.0.1:$oport/mcp"]]])], 'd');
+$notes = array_values(array_filter($mc['servers'] ?? [], fn($x) => $x['name'] === 'notes'))[0] ?? [];
+check('mcp oauth: a server asking for sign-in is shown as such', ($notes['auth'] ?? '') === 'needed' && str_contains((string)$notes['error'], 'sign in'), json_encode($notes));
+$st0 = $aj('/api/mcp/oauth/start', ['server' => 'notes'], 'd');
+parse_str((string)parse_url((string)($st0['url'] ?? ''), PHP_URL_QUERY), $oq);
+check('mcp oauth: registered, sign-in page with PKCE, the resource and the scopes', str_starts_with((string)$st0['url'], "http://127.0.0.1:$oport/auth/authorize") && $oq['client_id'] === 'client-1'
+    && $oq['code_challenge_method'] === 'S256' && $oq['resource'] === "http://127.0.0.1:$oport/mcp" && $oq['scope'] === 'notes:read notes:write' && str_ends_with($oq['redirect_uri'], '/api/mcp/oauth/callback'), json_encode($oq));
+$hop = function (string $url): array { $ch = curl_init($url); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]); $r = (string)curl_exec($ch); curl_close($ch); preg_match('/^Location: (.+)$/mi', $r, $m); return [$r, trim($m[1] ?? '')]; };
+[, $back] = $hop($st0['url']);                       // the person approves on the service's page
+[$r2, $land] = $hop($back);                           // back in Talixio, without a session cookie
+check('mcp oauth: back from the sign-in page, connected', str_contains($land, '?mcp=connected%3Anotes') && str_contains($land, '#settings'), $land . ' ' . substr($r2, 0, 200));
+$mc = $aj('/api/mcp', null, 'd');
+$notes = array_values(array_filter($mc['servers'], fn($x) => $x['name'] === 'notes'))[0];
+check('mcp oauth: signed in, tools listed', $notes['auth'] === 'signed_in' && count($notes['tools']) === 1 && !$notes['error'], json_encode($notes));
+check('mcp oauth: tokens kept privately', (fileperms("$ad/mcp-oauth.json") & 0777) === 0600);
+putenv("TALIXIO_DATA_DIR=$ad"); $oa = App::fromEnv(); putenv("TALIXIO_DATA_DIR=$dir");
+check('mcp oauth: tools called with the token', str_contains($oa->tools->run('mcp_notes_search_notes', ['q' => 'budget']), 'notes about budget (token at-1)'));
+$hop("http://127.0.0.1:$oport/revoke-all");
+check('mcp oauth: a refused token is renewed once, then the call goes through', str_contains($oa->tools->run('mcp_notes_search_notes', ['q' => 'x']), '(token at-2)')
+    && in_array('refreshed', json_decode((string)file_get_contents(sys_get_temp_dir() . "/fake-mcp-oauth-$oport.json"), true)['log'], true));
+[, $land] = $hop($back);
+check('mcp oauth: a sign-in answer is used once', !str_contains($land, 'connected'), $land);
+$mc = $aj('/api/mcp/oauth/forget', ['server' => 'notes'], 'd');
+check('mcp oauth: sign out', (array_values(array_filter($mc['servers'], fn($x) => $x['name'] === 'notes'))[0]['auth'] ?? '') === 'needed' && !str_contains((string)@file_get_contents("$ad/mcp-oauth.json"), 'at-2'));
+$aj('/api/mcp', ['raw' => json_encode(['mcpServers' => new stdClass()])], 'd');
+proc_terminate($os); proc_close($os);
+
 // morning briefing from the Tasks page
 $bt = $aj('/api/tasks/briefing', ['time' => '07:30', 'days' => '1-5'], 'd');
 check('briefing: created as a weekday task with calendar, email and weather', ($bt['task']['cron'] ?? '') === '30 7 * * 1-5' && str_contains($bt['task']['prompt'], 'mail_triage') && str_contains($bt['task']['prompt'], 'weather'), json_encode($bt));

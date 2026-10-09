@@ -6,7 +6,8 @@ namespace Talixio;
  * Connectors: tools from MCP servers (GitHub, Notion, home automation, your own scripts...).
  * data/mcp.json uses the usual format:
  *   {"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_TOKEN": "..."}},
- *                   "notes":  {"url": "https://example.com/mcp", "headers": {"Authorization": "Bearer ..."}, "trust": "all"}}}
+ *                   "notes":  {"url": "https://example.com/mcp", "headers": {"Authorization": "Bearer ..."}, "trust": "all"},
+ *                   "notion": {"url": "https://mcp.notion.com/mcp"}}}          (OAuth: "Sign in" in Settings, see McpOAuth)
  * Local servers (command) are started for each call; remote ones (url) use Streamable HTTP. Their tool lists
  * are cached (refreshed by the worker, or from Settings). Tools not marked read-only wait for your approval,
  * unless the server has "trust": "all". Tools are named mcp_<server>_<tool>.
@@ -27,7 +28,7 @@ final class Mcp
         $out = [];
         foreach ((array)($d['mcpServers'] ?? []) as $name => $s) {
             $name = preg_replace('/[^a-z0-9]+/', '_', strtolower((string)$name));
-            if ($name !== '' && is_array($s) && (isset($s['command']) || isset($s['url'])) && empty($s['disabled'])) $out[$name] = $s;
+            if ($name !== '' && is_array($s) && (isset($s['command']) || isset($s['url'])) && empty($s['disabled'])) $out[$name] = $s + ['_name' => $name];
         }
         return $out;
     }
@@ -68,6 +69,8 @@ final class Mcp
                     if (!($cursor = $r['nextCursor'] ?? null)) break;
                 }
                 $cache[$name] = ['tools' => array_values(array_filter($tools, fn($t) => is_array($t) && isset($t['name']))), 'error' => null, 'at' => time()];
+            } catch (McpAuthRequired $e) {
+                $cache[$name] = ['tools' => [], 'error' => $e->getMessage(), 'at' => time(), 'auth' => true, 'auth_meta' => $e->metadata];
             } catch (\Throwable $e) {
                 $cache[$name] = ['tools' => [], 'error' => $e->getMessage(), 'at' => time()];
                 Log::warn("mcp $name: {$e->getMessage()}");
@@ -179,12 +182,29 @@ final class Mcp
         }
     }
 
+    /** Remote server: with the headers of mcp.json, or the OAuth sign-in (renewed once if refused). */
     private function http(array $s, string $method, array|object $params, int $timeout): array
     {
+        $name = (string)($s['_name'] ?? '');
+        $explicit = (bool)array_filter(array_keys((array)($s['headers'] ?? [])), fn($k) => strcasecmp((string)$k, 'Authorization') === 0);
+        $oauth = $this->app->mcpOAuth();
+        $token = !$explicit && $name !== '' ? $oauth->accessToken($name) : null;
+        try {
+            return $this->httpOnce($s, $method, $params, $timeout, $token);
+        } catch (McpAuthRequired $e) {
+            if ($explicit) throw new \RuntimeException('the server refused the credentials (HTTP 401): check the headers in mcp.json');
+            if ($token !== null && ($fresh = $oauth->accessToken($name, true)) !== null) return $this->httpOnce($s, $method, $params, $timeout, $fresh);
+            throw new McpAuthRequired("$name needs you to sign in: Settings → Connectors → Sign in", $e->metadata);
+        }
+    }
+
+    private function httpOnce(array $s, string $method, array|object $params, int $timeout, ?string $token): array
+    {
         $session = null;
-        $post = function (array $msg) use ($s, &$session, $timeout): array {
+        $post = function (array $msg) use ($s, &$session, $timeout, $token): array {
             $headers = ['Content-Type: application/json', 'Accept: application/json, text/event-stream', 'MCP-Protocol-Version: ' . self::PROTOCOL];
             foreach ((array)($s['headers'] ?? []) as $k => $v) $headers[] = "$k: $v";
+            if ($token !== null) $headers[] = "Authorization: Bearer $token";
             if ($session) $headers[] = "Mcp-Session-Id: $session";
             $respHeaders = [];
             $ch = curl_init((string)$s['url']);
@@ -195,7 +215,11 @@ final class Mcp
             $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $err = curl_error($ch);
             curl_close($ch);
             if ($code === 0) throw new \RuntimeException("cannot reach {$s['url']}: $err");
-            if ($code === 401 || $code === 403) throw new \RuntimeException("the server refused the credentials (HTTP $code): check the headers in mcp.json");
+            if ($code === 401) { // sign-in needed (or the token was refused): where to sign in is in WWW-Authenticate
+                preg_match('/resource_metadata="?([^",\s]+)/i', $respHeaders['www-authenticate'] ?? '', $mm);
+                throw new McpAuthRequired('sign-in needed', $mm[1] ?? null);
+            }
+            if ($code === 403) throw new \RuntimeException('access refused (HTTP 403)' . ($token !== null ? ': the account you signed in with lacks the rights for this' : ': check the headers in mcp.json'));
             if ($code >= 400) throw new \RuntimeException("HTTP $code: " . mb_substr(trim($body), 0, 300));
             if (isset($respHeaders['mcp-session-id'])) $session = $respHeaders['mcp-session-id'];
             if (!isset($msg['id'])) return [];

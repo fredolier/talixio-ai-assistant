@@ -65,6 +65,7 @@ final class App
     public function spotify(): Spotify { return new Spotify($this); }
     public function shell(): Shell { return new Shell($this); }
     public function mcp(): Mcp { return new Mcp($this); }
+    public function mcpOAuth(): McpOAuth { return new McpOAuth($this); }
     public function browserAvailable(): bool { return $this->cfg->browser !== 'off' && Browser::findBinary($this->cfg->chromeBin) !== null; }
     public function transcriber(): Transcriber { return new Transcriber($this); }
     public function webPush(): WebPush { return new WebPush($this); }

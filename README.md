@@ -253,7 +253,11 @@ sudo deploy/docker/install-stack.sh --domain assistant.example.com --email you@e
   and waits for your approval.
 - **Connectors (MCP)**: Settings → *Connectors* takes the usual `mcpServers` JSON: local servers
   started by command (`install.sh --with-node` for `npx` servers) or remote ones by URL (token in
-  `headers`). Their tools join the assistant's; tools not marked read-only wait for your approval
+  `headers`, or **Sign in** for services that use OAuth: Notion `https://mcp.notion.com/mcp`,
+  Linear, Atlassian...; Talixio registers itself, you accept on their page and come back; tokens
+  are kept in `data/mcp-oauth.json` and renewed. A service without automatic registration needs
+  `"oauth": {"client_id": "…", "client_secret": "…"}` and the redirect URI
+  `<your address>/api/mcp/oauth/callback`). Their tools join the assistant's; tools not marked read-only wait for your approval
   unless the server has `"trust": "all"`. Background jobs only get the read-only ones.
 - **Approvals**: anything with outside effects (sending email as you, adding calendar events)
   waits for you: Approve/Reject buttons in the app, or reply "yes 12" / "no 12" on Signal,
