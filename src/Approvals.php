@@ -37,8 +37,8 @@ final class Approvals
     private function create(string $tool, array $args, string $summary, string $mode): int
     {
         $st = $this->app->store;
-        $st->q('INSERT INTO approvals(tool, args, summary, status, created, mode) VALUES(?,?,?,?,?,?)',
-            [$tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $summary, 'pending', time(), $mode]);
+        $st->q('INSERT INTO approvals(tool, args, summary, status, created, mode, space) VALUES(?,?,?,?,?,?,?)',
+            [$tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $summary, 'pending', time(), $mode, $this->app->space]);
         $id = (int)$st->db->lastInsertId();
         try {
             $this->app->notifier()->notify('Approval needed', "$summary\n\nApprove in the app, or reply \"yes $id\" (or \"no $id\").");
@@ -69,7 +69,7 @@ final class Approvals
         }
         if (!$approve) {
             $msg = "Cancelled: {$a['summary']}";
-            $st->addMessage('assistant', 'approval', $msg);
+            $st->addMessage('assistant', 'approval', $msg, null, [], (int)$a['space']);
             return $msg;
         }
         if ($a['mode'] === 'inline') return "Approved: {$a['summary']}. Continuing."; // the waiting session carries on
@@ -77,7 +77,7 @@ final class Approvals
         $ok = !str_starts_with($result, 'error');
         $st->q('UPDATE approvals SET result=?, status=? WHERE id=?', [mb_substr($result, 0, 4000), $ok ? 'done' : 'failed', $id]);
         $msg = ($ok ? "Done: {$a['summary']}" : "Failed: {$a['summary']}") . "\n\n" . mb_substr($result, 0, 600);
-        $st->addMessage('assistant', 'approval', $msg);
+        $st->addMessage('assistant', 'approval', $msg, null, [], (int)$a['space']);
         return $msg;
     }
 

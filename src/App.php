@@ -11,6 +11,8 @@ final class App
     public Embeddings $embeddings;
     /** True inside the long-running worker (it must not block waiting for approvals). */
     public static bool $inWorker = false;
+    /** The space the current conversation turn belongs to (0 = General). */
+    public int $space = 0;
     /** Set in tests to replace the configured model. */
     public ?Provider $providerOverride = null;
 
@@ -54,6 +56,7 @@ final class App
     public function updater(): Updater { return new Updater($this); }
     public function calendar(): Calendar { return new Calendar($this); }
     public function mailbox(): Mailbox { return new Mailbox($this); }
+    public function spaces(): Spaces { return new Spaces($this); }
     public function google(): Google { return new Google($this); }
     public function shell(): Shell { return new Shell($this); }
     public function mcp(): Mcp { return new Mcp($this); }

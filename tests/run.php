@@ -931,6 +931,51 @@ $app->agent()->chat('web', 'are you there?', 'standard', [], function (array $e)
 check('agent: a message waiting for another turn tells the user it is queued', str_contains(json_encode($events), 'queued'), json_encode($events));
 proc_close($holder);
 
+// ---- spaces: separate conversations with their own folder, instructions and notes ----
+$spd = "$dir/spaces"; @mkdir($spd); putenv("TALIXIO_DATA_DIR=$spd");
+$sa = App::fromEnv(); $sa->providerOverride = $fake; $sp = $sa->spaces();
+$house = $sp->save(['name' => 'Maison', 'folder' => '/Maison', 'instructions' => 'Réponds en français.', 'tier' => 'fast']);
+$alice = $sp->save(['name' => 'Client Alice', 'folder' => 'Clients/Alice', 'color' => '#2563EB']);
+try { $sp->save(['name' => 'maison']); check('spaces: duplicate names refused', false); } catch (\InvalidArgumentException) { check('spaces: duplicate names refused', true); }
+check('spaces: created with slug, folder and colour', $alice['slug'] === 'client-alice' && $alice['folder'] === '/Clients/Alice' && $alice['color'] === '#2563eb' && $sa->library()->exists('/Clients/Alice'));
+$seen = [];
+$fake->script = function ($last, $tools, $on, $ctx, $msgs) use ($usage, &$seen, $fake) {
+    $usage($on); $seen[] = ['system' => end($fake->calls)['system'], 'msgs' => $msgs];
+    if (str_contains($last, 'note this')) { $tools->run('space_notes', ['action' => 'append', 'text' => '- Roof quote: 4800 EUR']); return 'noted'; }
+    if (str_contains($last, 'remind')) return $tools->run('schedule_task', ['title' => 'Plumber', 'prompt' => 'Call the plumber', 'at' => date('Y-m-d H:i', time() + 7200)]);
+    if (str_contains($last, 'what did we say')) return $tools->run('search_memory', ['query' => 'gutter']) . ' || ' . $tools->run('search_memory', ['query' => 'gutter', 'all_spaces' => true]);
+    return 'ok';
+};
+$sa->agent()->chat('web', 'the gutter is leaking', 'standard', [], null, (int)$house['id']);
+$sa->agent()->chat('web', 'hello from general');
+$h = $seen[0];
+check('spaces: the space instructions, folder and isolation rules reach the model', str_contains($h['system'], 'Current space: Maison') && str_contains($h['system'], 'Réponds en français') && str_contains($h['system'], '/Maison'));
+check('spaces: the space default tier is used', str_contains(json_encode($sa->store->q("SELECT tier FROM usage ORDER BY id DESC LIMIT 2")->fetchAll()), 'fast'));
+check('spaces: each space has its own thread', count($sa->store->messagesAfter(0, 200, (int)$house['id'])) === 2 && !str_contains(json_encode($seen[1]['msgs']), 'gutter'));
+check('spaces: General knows the other spaces exist', str_contains($seen[1]['system'], 'Maison') && str_contains($seen[1]['system'], 'General conversation'));
+$sa->agent()->chat('web', 'note this', 'standard', [], null, (int)$house['id']);
+check('spaces: notes kept per space', str_contains($sp->get((int)$house['id'])['notes'], 'Roof quote') && str_contains($sa->tools->run('space_notes', ['action' => 'read']), 'General'));
+$sa->agent()->chat('web', 'remind me', 'standard', [], null, (int)$house['id']);
+check('spaces: tasks created in a space answer there', (int)$sa->store->q("SELECT space FROM tasks WHERE title = 'Plumber'")->fetchColumn() === (int)$house['id']);
+$r = $sa->agent()->chat('web', 'what did we say', 'standard', [], null, (int)$alice['id']);
+[$own, $all] = explode(' || ', $r);
+check('spaces: other spaces are private unless asked (all_spaces)', !str_contains($own, 'gutter') && str_contains($all, 'gutter'), $r);
+$fid = $sa->files()->save(tap_tmp('quote'), 'devis.txt', 'text/plain');
+$sa->agent()->chat('web', 'here is the quote', 'standard', [$fid], null, (int)$alice['id']);
+check('spaces: attachments sent in a space are filed in its folder', $sa->files()->get($fid)['folder'] === '/Clients/Alice');
+$sa->agent()->chat('web', 'sur la liste ?', 'standard', [], null, null);
+check('spaces: "/space" lists and switches chat apps', str_contains($sa->agent()->chat('telegram', '/space'), 'Maison') && str_contains($sa->agent()->chat('telegram', '/espace maison'), 'Now in the space "Maison"')
+    && $sp->forChannel('telegram') === (int)$house['id']);
+$sa->agent()->chat('telegram', 'from my phone');
+check('spaces: chat apps then write in that space', str_contains(json_encode($sa->store->messagesAfter(0, 200, (int)$house['id'])), 'from my phone'));
+$all = $sp->all();
+check('spaces: unread answers counted', array_column($all, 'unread', 'name')['Maison'] >= 1);
+$sp->markRead((int)$house['id']);
+check('spaces: marked read', array_column($sp->all(), 'unread', 'name')['Maison'] === 0);
+$sp->delete((int)$alice['id']);
+check('spaces: deleting a space removes its conversation, not its documents', $sa->store->messagesAfter(0, 200, (int)$alice['id']) === [] && $sa->files()->get($fid) !== null);
+putenv("TALIXIO_DATA_DIR=$dir");
+
 // ---- LibreOffice: faithful pages for Office files, older formats read ----
 if (\Talixio\Files::officeBinary()) {
     $od = "$dir/office"; @mkdir($od); putenv("TALIXIO_DATA_DIR=$od"); $oa = App::fromEnv();

@@ -52,13 +52,24 @@ final class Web
         return match (true) {
             $path === '/api/logout' => $this->logout(),
             $path === '/api/status' => $this->status(),
-            $path === '/api/messages' => ['messages' => isset($_GET['before']) ? $s->messagesBefore((int)$_GET['before']) : $s->messagesAfter((int)($_GET['after'] ?? 0)),
-                'first_id' => (int)$s->q('SELECT COALESCE(MIN(id),0) FROM messages')->fetchColumn()],
-            $path === '/api/messages/search' => ['results' => $this->searchMessages((string)($_GET['q'] ?? ''))],
+            $path === '/api/messages' => (function () use ($s) {
+                $space = (int)($_GET['space'] ?? 0);
+                $list = isset($_GET['before']) ? $s->messagesBefore((int)$_GET['before'], 100, $space) : $s->messagesAfter((int)($_GET['after'] ?? 0), 200, $space);
+                if (!empty($_GET['read'])) $this->app->spaces()->markRead($space); // the user is looking at this conversation
+                return ['messages' => $list, 'first_id' => (int)$s->q('SELECT COALESCE(MIN(id),0) FROM messages WHERE space = ?', [$space])->fetchColumn(),
+                    'unread' => array_sum(array_map(fn($x) => $x['id'] !== $space ? $x['unread'] : 0, $this->app->spaces()->all()))];
+            })(),
+            $path === '/api/messages/search' => ['results' => $this->searchMessages((string)($_GET['q'] ?? ''), (int)($_GET['space'] ?? 0))],
+            $path === '/api/spaces' && $m === 'GET' => ['spaces' => $this->app->spaces()->all(true), 'colors' => Spaces::COLORS],
+            $path === '/api/spaces' && $m === 'POST' => ['space' => $this->app->spaces()->save($b)],
+            (bool)preg_match('#^/api/spaces/(\d+)$#', $path, $mm) && $m === 'POST' => ['space' => $this->app->spaces()->save($b, (int)$mm[1])],
+            (bool)preg_match('#^/api/spaces/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->spaces()->delete((int)$mm[1]); return ['ok' => true]; })(),
+            (bool)preg_match('#^/api/spaces/(\d+)/read$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->spaces()->markRead((int)$mm[1]); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/messages/(\d+)/undo$#', $path, $mm) && $m === 'POST' => $this->undoTurn((int)$mm[1]),
             $path === '/api/chat/stop' && $m === 'POST' => (function () use ($s) { $s->set('chat_stop', (string)microtime(true)); return ['ok' => true]; })(),
-            $path === '/api/chat' && $m === 'POST' => $this->chat((string)($b['text'] ?? ''), array_map('intval', (array)($b['files'] ?? [])), !empty($b['meeting'])),
-            $path === '/api/tasks' => ['tasks' => array_map(fn($t) => $t + ['next_text' => $t['next_run'] ? date('D j M, H:i', (int)$t['next_run']) : null], $s->tasks())],
+            $path === '/api/chat' && $m === 'POST' => $this->chat((string)($b['text'] ?? ''), array_map('intval', (array)($b['files'] ?? [])), !empty($b['meeting']), null, (int)($b['space'] ?? 0)),
+            $path === '/api/tasks' => ['tasks' => array_map(fn($t) => $t + ['next_text' => $t['next_run'] ? date('D j M, H:i', (int)$t['next_run']) : null,
+                'space_name' => (int)$t['space'] ? ($this->app->spaces()->get((int)$t['space'])['name'] ?? null) : null], $s->tasks())],
             (bool)preg_match('#^/api/tasks/(\d+)/(toggle|delete)$#', $path, $mm) && $m === 'POST' => $this->taskAction((int)$mm[1], $mm[2]),
             (bool)preg_match('#^/api/tasks/(\d+)/tier$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b, $s) {
                 $s->task((int)$mm[1]) ?? $this->fail(404, 'no such task');
@@ -350,18 +361,18 @@ final class Web
     private static function minutes(int $s): string { $m = (int)ceil($s / 60); return $m <= 1 ? 'a minute' : ($m < 120 ? "$m minutes" : (int)ceil($m / 60) . ' hours'); }
 
     /** Find in the conversation: exact words first (newest first), then matches by meaning. */
-    private function searchMessages(string $q): array
+    private function searchMessages(string $q, int $space = 0): array
     {
         $q = trim($q);
         if (mb_strlen($q) < 2) return [];
         $s = $this->app->store; $out = [];
         $like = '%' . addcslashes($q, '%_\\') . '%';
-        foreach ($s->q("SELECT id, role, channel, content, ts FROM messages WHERE content LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT 40", [$like])->fetchAll() as $r) {
+        foreach ($s->q("SELECT id, role, channel, content, ts FROM messages WHERE space = ? AND content LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT 40", [$space, $like])->fetchAll() as $r) {
             $out[(int)$r['id']] = ['id' => (int)$r['id'], 'role' => $r['role'], 'channel' => $r['channel'], 'ts' => (int)$r['ts'], 'snippet' => self::snippet($r['content'], $q), 'exact' => true];
         }
         if (count($out) < 40) {
             try {
-                foreach ($this->app->recall()->search($q, 20, PHP_INT_MAX, ['message']) as $h) {
+                foreach ($this->app->recall()->search($q, 20, PHP_INT_MAX, ['message'], null, $space) as $h) {
                     $id = (int)$h['ref'];
                     if (isset($out[$id]) || !($r = $s->q('SELECT id, role, channel, content, ts FROM messages WHERE id = ?', [$id])->fetch())) continue;
                     $out[$id] = ['id' => $id, 'role' => $r['role'], 'channel' => $r['channel'], 'ts' => (int)$r['ts'], 'snippet' => self::snippet($r['content'], $q), 'exact' => false];
@@ -389,7 +400,7 @@ final class Web
         $s = $this->app->store;
         $msg = $s->q('SELECT * FROM messages WHERE id = ?', [$id])->fetch();
         if (!$msg || $msg['role'] !== 'user') $this->fail(404, 'No such message.');
-        $after = $s->q('SELECT id, role, channel FROM messages WHERE id > ? ORDER BY id', [$id])->fetchAll();
+        $after = $s->q('SELECT id, role, channel FROM messages WHERE id > ? AND space = ? ORDER BY id', [$id, (int)$msg['space']])->fetchAll();
         foreach ($after as $a) if ($a['role'] !== 'assistant' || $a['channel'] !== $msg['channel']) $this->fail(409, 'Only the latest message can be changed.');
         $lock = fopen($this->app->cfg->dataDir . '/agent.lock', 'c');
         if (!flock($lock, LOCK_EX | LOCK_NB)) $this->fail(409, 'Wait for the answer to finish (or stop it) first.');
@@ -424,8 +435,9 @@ final class Web
             ], 'backup' => ['last' => (int)$s->get('backup_last', '0') ?: null, 'file' => basename($s->get('backup_last_file')) ?: null, 'keep' => $this->app->cfg->backupKeep]];
     }
 
-    private function chat(string $text, array $files = [], bool $meeting = false, ?callable $onEvent = null): array
+    private function chat(string $text, array $files = [], bool $meeting = false, ?callable $onEvent = null, int $space = 0): array
     {
+        if (!$this->app->spaces()->get($space)) $this->fail(404, 'This space no longer exists.');
         $text = trim($text);
         if ($text === '' && !$files) $this->fail(400, 'empty message');
         set_time_limit(0);
@@ -435,11 +447,12 @@ final class Web
         foreach ($files as $id) { $f = $this->app->files()->get($id); if ($f && $f['kind'] === 'audio') { $audio = $id; break; } }
         if ($audio !== null) {
             if ($meeting) $text = trim("meeting $text");
-            $this->app->agent()->audio('web', $audio, $text, $onEvent);
+            $this->app->agent()->audio('web', $audio, $text, $onEvent, $space);
         } else {
-            $this->app->agent()->chat('web', $text, 'standard', $files, $onEvent);
+            $this->app->agent()->chat('web', $text, 'standard', $files, $onEvent, $space);
         }
-        return ['messages' => $this->app->store->messagesAfter($before)];
+        $this->app->spaces()->markRead($space);
+        return ['messages' => $this->app->store->messagesAfter($before, 200, $space)];
     }
 
     /** Server-sent events: text as it is written, tool activity, then the stored messages. */
@@ -456,7 +469,7 @@ final class Web
         echo ": stream\n\n"; @flush();
         try {
             $result = $this->chat((string)($b['text'] ?? ''), array_map('intval', (array)($b['files'] ?? [])), !empty($b['meeting']),
-                fn(array $e) => $send($e['type'], $e));
+                fn(array $e) => $send($e['type'], $e), (int)($b['space'] ?? 0));
             $send('done', $result);
         } catch (\Throwable $e) {
             Log::error("web stream: {$e->getMessage()}");

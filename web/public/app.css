@@ -8,9 +8,16 @@
   --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
   --r:12px; color-scheme:light;
 }
-@media (prefers-color-scheme:dark){:root{
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
   --bg:#0d1412; --surface:#141e1b; --sunk:#0f1916; --ink:#e4ebe8; --muted:#94a49f; --line:#24322e;
   --accent:#3dc9a7; --accent-ink:#06231c; --accent-soft:#163a31; --warn:#f0b54a; --danger:#ff8a7a; color-scheme:dark}}
+:root[data-theme=dark]{
+  --bg:#0d1412; --surface:#141e1b; --sunk:#0f1916; --ink:#e4ebe8; --muted:#94a49f; --line:#24322e;
+  --accent:#3dc9a7; --accent-ink:#06231c; --accent-soft:#163a31; --warn:#f0b54a; --danger:#ff8a7a; color-scheme:dark}
+/* a colour per space (or chosen in Settings): the accent follows it, lightened in dark mode */
+:root.tinted{--accent:var(--tint);--accent-ink:#fff;--accent-soft:color-mix(in srgb,var(--tint) 14%,var(--surface))}
+@media (prefers-color-scheme:dark){:root.tinted:not([data-theme=light]){--accent:color-mix(in srgb,var(--tint) 62%,#fff);--accent-ink:#0b1210;--accent-soft:color-mix(in srgb,var(--tint) 28%,var(--surface))}}
+:root.tinted[data-theme=dark]{--accent:color-mix(in srgb,var(--tint) 62%,#fff);--accent-ink:#0b1210;--accent-soft:color-mix(in srgb,var(--tint) 28%,var(--surface))}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
@@ -398,3 +405,32 @@ tr:last-child td{border-bottom:0}
 
 .steps{margin:.2rem 0 .6rem;padding-left:1.3em;display:flex;flex-direction:column;gap:6px}
 .steps code{word-break:break-all}
+
+/* spaces */
+.space-head{position:relative;min-width:0}
+.space-btn{display:flex;align-items:center;gap:10px;border:0;background:transparent;color:inherit;font:inherit;padding:4px 8px 4px 4px;margin-left:-4px;border-radius:10px;cursor:pointer;text-align:left;min-width:0;max-width:100%}
+.space-btn:hover{background:var(--sunk)}
+.space-text{display:flex;flex-direction:column;min-width:0}
+.space-text h2,.space-text span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.space-dot{width:12px;height:12px;border-radius:50%;background:var(--accent);flex:none}
+.space-btn .chev{width:18px;height:18px;color:var(--muted);flex:none}
+.badge{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger);color:#fff;font-size:.7rem;font-weight:700;display:inline-grid;place-items:center}
+.space-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:20;width:min(320px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:6px;display:flex;flex-direction:column;gap:2px;max-height:70vh;overflow-y:auto}
+.space-item{display:flex;align-items:center;gap:10px;border:0;background:transparent;color:inherit;font:inherit;padding:8px 10px;border-radius:8px;cursor:pointer;text-align:left;width:100%}
+.space-item:hover,.space-item.current{background:var(--sunk)}
+.space-item i{width:10px;height:10px;border-radius:50%;flex:none}
+.space-item .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.space-item .folder{color:var(--muted);font-size:.75rem}
+.space-menu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.dialog{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);padding:20px;width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 40px)}
+.dialog::backdrop{background:rgba(0,0,0,.35)}
+.dialog h3{margin:0 0 4px;font-size:1.15rem}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.swatch{width:28px;height:28px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.swatch[aria-checked=true]{box-shadow:0 0 0 2px var(--ink)}
+.row.wrap{flex-wrap:wrap}
+.row .spacer,.spacer{flex:1}
+.topbar .space-head{flex:1 1 auto}
+.topbar .topbar-actions{flex:none}
+.dialog select{font:inherit;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--sunk);color:var(--ink)}
+@media (max-width:760px){#notify-btn{display:none}}

@@ -42,10 +42,10 @@ final class Tools
                 return 'replaced';
             });
         $this->register('search_memory',
-            'Search all past conversations and their summaries (keywords and meaning). Use when the user refers to something from before that is not in the recent messages.',
-            ['query' => ['type' => 'string'], 'limit' => ['type' => 'integer']], ['query'],
+            'Search past conversations and their summaries (keywords and meaning) in the current space. Use when the user refers to something from before that is not in the recent messages. all_spaces: also search the other spaces (only when the user asks).',
+            ['query' => ['type' => 'string'], 'limit' => ['type' => 'integer'], 'all_spaces' => ['type' => 'boolean']], ['query'],
             function (array $a) {
-                $hits = $this->app->recall()->search($a['query'], min(20, max(1, (int)($a['limit'] ?? 8))));
+                $hits = $this->app->recall()->search($a['query'], min(20, max(1, (int)($a['limit'] ?? 8))), PHP_INT_MAX, null, null, !empty($a['all_spaces']) ? null : $this->app->space);
                 return $hits ? Recall::format($hits) : 'nothing found';
             });
 
@@ -53,8 +53,10 @@ final class Tools
             "Search the user's library (knowledge base: their documents, notes, PDFs, Office files, emails, transcripts, image descriptions) by keywords and meaning. folder limits the search to a folder and its subfolders, e.g. '/Clients/Alice'. Then read a whole file with file_read. Cite files by path.",
             ['query' => ['type' => 'string'], 'folder' => ['type' => 'string'], 'limit' => ['type' => 'integer']], ['query'],
             function (array $a) {
-                $hits = $this->app->library()->search($a['query'], (string)($a['folder'] ?? '/'), min(20, max(1, (int)($a['limit'] ?? 8))));
-                if (!$hits) return 'nothing found' . (!empty($a['folder']) ? " in {$a['folder']}" : '');
+                $scope = $this->spaceFolder();
+                $folder = isset($a['folder']) && $a['folder'] !== '' ? (string)$a['folder'] : ($scope !== '' ? $scope : '/'); // in a space: its folder first
+                $hits = $this->app->library()->search($a['query'], $folder, min(20, max(1, (int)($a['limit'] ?? 8))));
+                if (!$hits) return 'nothing found in ' . $folder . ($folder !== '/' ? " (search folder '/' to look in the whole library)" : '');
                 return implode("\n", array_map(fn($h) => '- ' . Library::join($h['folder'], $h['name']) . " (file #{$h['id']}): {$h['snippet']}", $hits));
             });
         $this->register('kb_list', "List a folder of the user's library: its subfolders and files (id, size, date). folder '/' is the top; omit it to see the whole folder tree.",
@@ -63,7 +65,7 @@ final class Tools
             "Save a Markdown note in the user's library (it becomes searchable), e.g. meeting notes, a summary of research, a checklist. Give id to update an existing note.",
             ['folder' => ['type' => 'string'], 'name' => ['type' => 'string'], 'content' => ['type' => 'string'], 'id' => ['type' => 'integer']], ['content'],
             function (array $a) {
-                $f = $this->app->library()->saveNote((string)($a['folder'] ?? Library::NOTES), (string)($a['name'] ?? ''), $a['content'], isset($a['id']) ? (int)$a['id'] : null);
+                $f = $this->app->library()->saveNote((string)($a['folder'] ?? ($this->spaceFolder() !== '' ? $this->spaceFolder() . '/Notes' : Library::NOTES)), (string)($a['name'] ?? ''), $a['content'], isset($a['id']) ? (int)$a['id'] : null);
                 return 'saved ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']})";
             });
         $this->register('kb_move', "File a document in the user's library: move it to a folder (created if needed), optionally renaming it. Use to tidy attachments out of /Inbox when the user asks.",
@@ -83,6 +85,10 @@ final class Tools
                 $chunk = mb_substr($text, $off, 30000);
                 return $chunk . ($off + 30000 < mb_strlen($text) ? "\n[... more: call again with offset " . ($off + 30000) . ' of ' . mb_strlen($text) . ']' : '');
             });
+
+        $this->register('space_notes', "Notes of the current space (facts, decisions, people, open points about this subject): read them, append a line, or replace text (empty new_text deletes). Not available in General: use the memory files there.",
+            ['action' => ['type' => 'string', 'enum' => ['read', 'append', 'replace']], 'text' => ['type' => 'string'], 'old_text' => ['type' => 'string'], 'new_text' => ['type' => 'string']], ['action'],
+            fn(array $a) => $this->spaceNotes($a));
 
         $this->register('skill_read', 'Read one of your skills (learned procedures, listed in your instructions) before doing a task it covers.',
             ['name' => ['type' => 'string']], ['name'], fn(array $a) => $this->app->skills()->read($a['name']));
@@ -274,6 +280,29 @@ final class Tools
             : 'error: the user did not approve submitting this form (rejected or no answer in time). Nothing was submitted.';
     }
 
+    private function spaceFolder(): string
+    {
+        return $this->app->space ? (string)($this->app->spaces()->get($this->app->space)['folder'] ?? '') : '';
+    }
+
+    private function spaceNotes(array $a): string
+    {
+        $sp = $this->app->space ? $this->app->spaces()->get($this->app->space) : null;
+        if (!$sp) return 'error: this is the General conversation; use memory_append / memory_replace instead';
+        $notes = (string)$sp['notes'];
+        switch ($a['action']) {
+            case 'read': return $notes !== '' ? $notes : '(no notes yet)';
+            case 'append': $notes = rtrim($notes) . "\n" . trim((string)($a['text'] ?? '')) . "\n"; break;
+            case 'replace':
+                $old = (string)($a['old_text'] ?? '');
+                if ($old === '' || !str_contains($notes, $old)) return 'error: old_text not found';
+                $notes = str_replace($old, (string)($a['new_text'] ?? ''), $notes); break;
+            default: return 'error: action is read, append or replace';
+        }
+        $this->app->store->q('UPDATE spaces SET notes = ? WHERE id = ?', [mb_substr(ltrim($notes), 0, 20000), $sp['id']]);
+        return 'saved';
+    }
+
     /** In "ask" mode every command waits for the user's approval first. */
     private function shellRun(array $a): string
     {
@@ -301,8 +330,8 @@ final class Tools
             if ($next < time() - 60) return 'error: that time is in the past';
         }
         $tier = in_array($a['tier'] ?? '', Tier::NAMES, true) ? $a['tier'] : 'standard';
-        $id = $this->app->store->addTask($a['title'], $a['prompt'], $cron ?: null, $next, $tier);
-        return "scheduled task #$id ($tier tier), next run " . date('D Y-m-d H:i', $next) . " ({$this->app->cfg->timezone})";
+        $id = $this->app->store->addTask($a['title'], $a['prompt'], $cron ?: null, $next, $tier, $this->app->space);
+        return "scheduled task #$id ($tier tier" . ($this->app->space ? ', answers in this space' : '') . "), next run " . date('D Y-m-d H:i', $next) . " ({$this->app->cfg->timezone})";
     }
 
     private function listTasks(): string

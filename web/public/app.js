@@ -189,7 +189,7 @@ function appendMessages(list, notify = false) {
 async function loadEarlier() {
   if (!state.firstLoaded || state.firstLoaded <= state.firstId) return false;
   const thread = $('#thread');
-  const { messages } = await api('/api/messages?before=' + state.firstLoaded);
+  const { messages } = await api(`/api/messages?space=${state.space}&before=${state.firstLoaded}`);
   if (!messages.length) { state.firstId = state.firstLoaded; earlierButton(); return false; }
   const h = thread.scrollHeight, top = thread.scrollTop;
   const anchor = thread.querySelector('.msg[data-id], .trigger, .jobcard');
@@ -229,7 +229,11 @@ function notifyBrowser(m) {
 async function poll() {
   if (!state.sending && state.status?.pending_approvals !== undefined) loadApprovals();
   if (state.sending || document.hidden && !('Notification' in window && Notification.permission === 'granted')) return;
-  try { appendMessages((await api('/api/messages?after=' + state.lastId)).messages, true); } catch {}
+  try {
+    const looking = !document.hidden && location.hash.split('/')[0] !== '#' && $('#view-chat').hidden === false;
+    const d = await api(`/api/messages?space=${state.space}&after=${state.lastId}${looking ? '&read=1' : ''}`);
+    appendMessages(d.messages, true); showOtherUnread(d.unread);
+  } catch {}
 }
 
 const TOOL_LABEL = (name, input = {}) => {
@@ -248,6 +252,129 @@ const TOOL_LABEL = (name, input = {}) => {
     browser_select: 'Choosing an option', browser_back: 'Going back', browser_screenshot: 'Looking at the page',
   })[name] || `Using ${name.replace(/_/g, ' ')}`;
 };
+// ---- spaces: separate conversations ----
+state.space = 0; state.spaces = [];
+const spaceOf = id => state.spaces.find(x => x.id === id) || state.spaces[0] || { id: 0, name: 'General', slug: 'general', folder: '', color: '' };
+async function loadSpaces() {
+  try { const d = await api('/api/spaces'); state.spaces = d.spaces; state.spaceColors = d.colors; } catch { state.spaces = state.spaces.length ? state.spaces : [{ id: 0, name: 'General', slug: 'general', folder: '', color: '', unread: 0 }]; }
+  renderSpaceHead();
+}
+function renderSpaceHead() {
+  const sp = spaceOf(state.space), general = !sp.id;
+  $('#chat-title').textContent = general ? (state.status?.name || 'Talixio') : sp.name;
+  $('#input').placeholder = general ? `Message ${state.status?.name || 'Talixio'}…` : `Message in ${sp.name}…`;
+  document.title = general ? (state.status?.name || 'Talixio') : `${sp.name} · ${state.status?.name || 'Talixio'}`;
+  applyTint();
+  showOtherUnread(state.spaces.filter(x => x.id !== state.space).reduce((a, x) => a + (x.unread || 0), 0));
+}
+function showOtherUnread(n) { const b = $('#space-unread'); b.hidden = !n; b.textContent = n > 99 ? '99+' : n; b.title = n ? `${n} new answer(s) in other spaces` : ''; }
+async function switchSpace(id, opts = {}) {
+  state.space = id;
+  try { localStorage.setItem('talixio.space', String(id)); } catch {}
+  const sp = spaceOf(id);
+  if (!opts.keepHash && location.hash.split('/')[0] === '#chat') history.replaceState(null, '', id ? `#chat/${sp.slug}` : '#chat');
+  renderSpaceHead();
+  state.lastId = 0; state.firstLoaded = 0; $('#thread').innerHTML = '';
+  $('#input').value = ''; state.pending = []; renderPending(); autosize();
+  const first = await api(`/api/messages?space=${id}&read=1`);
+  state.firstId = first.first_id;
+  appendMessages(first.messages);
+  restoreDraft();
+  const s = state.spaces.find(x => x.id === id); if (s) s.unread = 0;
+  showOtherUnread(first.unread);
+}
+$('#space-btn').onclick = async e => {
+  e.stopPropagation();
+  const menu = $('#space-menu');
+  if (!menu.hidden) { menu.hidden = true; $('#space-btn').setAttribute('aria-expanded', 'false'); return; }
+  await loadSpaces();
+  const active = state.spaces.filter(x => !x.archived), archived = state.spaces.filter(x => x.archived);
+  const item = x => `<button class="space-item${x.id === state.space ? ' current' : ''}" role="menuitem" type="button" data-id="${x.id}">
+      <i style="background:${x.color || 'var(--muted)'}"></i><span class="name">${esc(x.id ? x.name : 'General')}${x.folder ? ` <span class="folder">${esc(x.folder)}</span>` : ''}</span>${x.unread ? `<span class="badge">${x.unread}</span>` : ''}</button>`;
+  menu.innerHTML = active.map(item).join('')
+    + '<hr>' + (state.space ? '<button class="space-item" type="button" data-act="edit">Edit this space…</button>' : '')
+    + '<button class="space-item" type="button" data-act="new">+ New space</button>'
+    + (archived.length ? `<details><summary class="muted small" style="padding:6px 10px">Archived (${archived.length})</summary>${archived.map(item).join('')}</details>` : '');
+  menu.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { menu.hidden = true; switchSpace(+b.dataset.id); });
+  menu.querySelector('[data-act=new]').onclick = () => { menu.hidden = true; openSpaceEditor(null); };
+  menu.querySelector('[data-act=edit]')?.addEventListener('click', () => { menu.hidden = true; openSpaceEditor(spaceOf(state.space)); });
+  menu.hidden = false; $('#space-btn').setAttribute('aria-expanded', 'true');
+};
+document.addEventListener('click', e => { if (!e.target.closest('.space-head')) { $('#space-menu').hidden = true; $('#space-btn').setAttribute('aria-expanded', 'false'); } });
+
+/** Create or edit a space. prefill: {folder} when started from a library folder. */
+async function openSpaceEditor(sp, prefill = {}) {
+  const d = $('#space-dialog'), editing = !!(sp && sp.id);
+  if (!state.spaceColors) await loadSpaces();
+  $('#space-dialog-title').textContent = editing ? `Edit “${sp.name}”` : 'New space';
+  $('#sp-name').value = editing ? sp.name : (prefill.name || '');
+  $('#sp-folder').value = editing ? sp.folder : (prefill.folder || '');
+  $('#sp-tier').value = editing ? sp.tier : 'standard';
+  $('#sp-instructions').value = editing ? sp.instructions : '';
+  $('#sp-notes').value = editing ? sp.notes : ''; $('#sp-notes').closest('form').querySelector('label[for=sp-notes]').hidden = $('#sp-notes').hidden = !editing;
+  let color = editing && sp.color ? sp.color : state.spaceColors[state.spaces.length % state.spaceColors.length];
+  const paint = () => { $('#sp-colors').innerHTML = state.spaceColors.map(c => `<button type="button" class="swatch" role="radio" aria-checked="${c === color}" aria-label="${c}" style="background:${c}" data-c="${c}"></button>`).join('');
+    $('#sp-colors').querySelectorAll('.swatch').forEach(b => b.onclick = () => { color = b.dataset.c; paint(); }); };
+  paint();
+  $('#sp-archive').hidden = $('#sp-delete').hidden = !editing;
+  $('#sp-archive').textContent = editing && sp.archived ? 'Restore' : 'Archive';
+  $('#sp-delete').dataset.confirm = ''; $('#sp-delete').textContent = 'Delete';
+  $('#sp-cancel').onclick = () => d.close();
+  $('#space-form').onsubmit = async e => {
+    e.preventDefault();
+    const body = { name: $('#sp-name').value, folder: $('#sp-folder').value, tier: $('#sp-tier').value, color, instructions: $('#sp-instructions').value };
+    if (editing) body.notes = $('#sp-notes').value;
+    try {
+      const { space } = await post(editing ? `/api/spaces/${sp.id}` : '/api/spaces', body);
+      d.close(); await loadSpaces(); toast(editing ? 'Space saved.' : `Space “${space.name}” created.`);
+      if (!editing || location.hash.startsWith('#chat')) { if (location.hash.split('/')[0] !== '#chat') location.hash = '#chat'; await switchSpace(space.id); }
+    } catch (err) { toast(err.message); }
+  };
+  $('#sp-archive').onclick = async () => {
+    try { await post(`/api/spaces/${sp.id}`, { ...sp, archived: !sp.archived }); d.close(); await loadSpaces(); if (!sp.archived) await switchSpace(0); toast(sp.archived ? 'Space restored.' : 'Space archived: its conversation is kept.'); }
+    catch (err) { toast(err.message); }
+  };
+  $('#sp-delete').onclick = async e => {
+    const b = e.currentTarget;
+    if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Delete its conversation?'; return; }
+    try { await post(`/api/spaces/${sp.id}/delete`); d.close(); await loadSpaces(); await switchSpace(0); toast('Space deleted. Its documents are still in the library.'); }
+    catch (err) { toast(err.message); }
+  };
+  loadFolderList();
+  d.showModal(); $('#sp-name').focus();
+}
+
+async function loadFolderList() {
+  try { const { tree } = await api('/api/library/tree'); $('#folder-list').innerHTML = tree.map(t => `<option value="${esc(t.path)}">`).join(''); } catch {}
+}
+
+// ---- appearance: light / dark / automatic, accent colour (per device) ----
+function themePref() { try { return JSON.parse(localStorage.getItem('talixio.theme') || '{}'); } catch { return {}; } }
+function applyTheme() {
+  const t = themePref();
+  if (t.mode === 'light' || t.mode === 'dark') document.documentElement.dataset.theme = t.mode; else delete document.documentElement.dataset.theme;
+  applyTint();
+}
+function applyTint() {
+  const sp = state.spaces?.length ? spaceOf(state.space) : null;
+  const tint = (sp && sp.id && sp.color) || themePref().accent || '';
+  document.documentElement.classList.toggle('tinted', !!tint);
+  if (tint) document.documentElement.style.setProperty('--tint', tint); else document.documentElement.style.removeProperty('--tint');
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  document.querySelectorAll('meta[name=theme-color]').forEach(m => m.content = bg);
+}
+function renderAppearance() {
+  const t = themePref();
+  $('#theme-mode').value = t.mode || '';
+  const colors = ['', ...(state.spaceColors || [])];
+  $('#theme-colors').innerHTML = colors.map(c => `<button type="button" class="swatch" role="radio" aria-checked="${(t.accent || '') === c}" aria-label="${c || 'default'}" title="${c || 'Default green'}" style="background:${c || '#0e7c6b'}" data-c="${c}"></button>`).join('');
+  $('#theme-colors').querySelectorAll('.swatch').forEach(b => b.onclick = () => saveTheme({ ...themePref(), accent: b.dataset.c }));
+}
+function saveTheme(t) { try { localStorage.setItem('talixio.theme', JSON.stringify(t)); } catch {} applyTheme(); renderAppearance(); }
+$('#theme-mode').onchange = e => saveTheme({ ...themePref(), mode: e.target.value });
+applyTheme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTint);
+
 // ---- find in the conversation ----
 $('#chat-search-btn').onclick = () => {
   const p = $('#chat-search'); p.hidden = !p.hidden;
@@ -260,7 +387,7 @@ async function chatSearch() {
   const q = $('#chat-search-q').value.trim(); const box = $('#chat-search-results');
   if (q.length < 2) { box.innerHTML = ''; return; }
   try {
-    const { results } = await api('/api/messages/search?q=' + encodeURIComponent(q));
+    const { results } = await api(`/api/messages/search?space=${state.space}&q=` + encodeURIComponent(q));
     if (q !== $('#chat-search-q').value.trim()) return;
     const mark = t => esc(t).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi'), x => `<mark>${x}</mark>`);
     box.innerHTML = results.length ? '' : '<p class="muted small">Nothing found.</p>';
@@ -297,7 +424,7 @@ async function send(opts = {}) {
   try {
     const res = await fetch('/api/chat', { method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-Talixio': '1', Accept: 'text/event-stream' },
-      body: JSON.stringify({ text, files, meeting: !!opts.meeting, stream: true }) });
+      body: JSON.stringify({ text, files, meeting: !!opts.meeting, stream: true, space: state.space }) });
     if (res.status === 401) { showLogin(); throw new Error('Please sign in.'); }
     if (!res.ok || !res.body) throw new Error(`Server error (HTTP ${res.status})`);
     const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = ''; let done = null;
@@ -363,18 +490,18 @@ window.addEventListener('online', () => {
 });
 
 /** The message being written (and its attachments) survives closing the app. */
-const DRAFT = 'talixio.draft';
+const draftKey = () => 'talixio.draft' + (state.space ? '.' + state.space : ''); // one draft per space
 function saveDraft() {
   try {
     const text = $('#input').value; const files = state.pending.filter(f => f.id).map(f => ({ id: f.id, info: f.info }));
-    if (text.trim() || files.length) localStorage.setItem(DRAFT, JSON.stringify({ text, files, queued: !!state.queued }));
-    else localStorage.removeItem(DRAFT);
+    if (text.trim() || files.length) localStorage.setItem(draftKey(), JSON.stringify({ text, files, queued: !!state.queued }));
+    else localStorage.removeItem(draftKey());
   } catch {}
 }
-function clearDraft() { try { localStorage.removeItem(DRAFT); } catch {} }
+function clearDraft() { try { localStorage.removeItem(draftKey()); } catch {} }
 function restoreDraft() {
   let d = null;
-  try { d = JSON.parse(localStorage.getItem(DRAFT) || 'null'); } catch {}
+  try { d = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch {}
   if (!d || $('#input').value.trim() || state.pending.length) return;
   $('#input').value = d.text || ''; autosize();
   state.pending = (d.files || []).filter(f => f.id); renderPending();
@@ -430,7 +557,7 @@ async function addFiles(list) {
   for (const file of list) {
     const entry = { id: null, info: { name: file.name, kind: file.type.startsWith('image/') ? 'image' : 'file' } };
     state.pending.push(entry); renderPending();
-    try { const info = await uploadFile(file); entry.id = info.id; entry.info = info; }
+    try { const info = await uploadFile(file, file.name, spaceOf(state.space).folder || ''); entry.id = info.id; entry.info = info; }
     catch (e) { state.pending.splice(state.pending.indexOf(entry), 1); toast(e.message); }
     renderPending();
   }
@@ -468,7 +595,7 @@ async function finishRecording(meeting) {
   const name = `${meeting ? 'meeting' : 'voice-note'}-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.${ext}`;
   toast(meeting ? 'Uploading the recording…' : 'Sending your voice note…');
   try {
-    const info = await uploadFile(blob, name);
+    const info = await uploadFile(blob, name, spaceOf(state.space).folder || '');
     await send({ files: [info.id], shownFiles: [info], meeting });
   } catch (e) { toast(e.message); }
 }
@@ -485,7 +612,7 @@ async function loadTasks() {
     el.className = 'task' + (t.enabled ? '' : ' paused');
     const when = t.cron ? `Repeats · <code>${esc(t.cron)}</code>` : 'Once';
     const next = t.enabled && t.next_text ? `Next: ${esc(t.next_text)}` : (t.last_run ? `Last ran ${fmtTime(t.last_run)}` : 'Paused');
-    el.innerHTML = `<div><h3>${esc(t.title)}</h3><div class="when"><span class="chip">${when}</span><span>${next}</span></div></div>
+    el.innerHTML = `<div><h3>${esc(t.title)}</h3><div class="when"><span class="chip">${when}</span>${t.space_name ? `<span class="chip" title="Answers in this space">${esc(t.space_name)}</span>` : ''}<span>${next}</span></div></div>
       <div class="actions">${tierSelect(t.tier, 'Model that runs this task')}<button class="btn small" data-a="toggle">${t.enabled ? 'Pause' : 'Resume'}</button><button class="btn small ghost" data-a="delete">Delete</button></div>
       <p class="prompt">${esc(t.prompt)}</p>`;
     el.querySelector('select').onchange = async e => {
@@ -693,6 +820,7 @@ async function loadSettings() {
   loadChannels().catch(e => toast(e.message));
   loadUpdate().catch(() => {});
   loadSecurity();
+  renderAppearance();
   loadConnectors();
   loadGoogle();
   renderGroups((await api('/api/settings')).groups);
@@ -908,7 +1036,11 @@ function renderCrumbs() {
   const zipName = (lib.folder === '/' ? 'Library' : lib.folder.split('/').pop()) + '-' + new Date().toLocaleDateString('sv-SE') + '.zip';
   const zip = `<a class="btn small" href="/api/library/zip?folder=${encodeURIComponent(lib.folder)}" download="${esc(zipName)}" title="Download this folder and its subfolders as a ZIP">Download zip</a>`;
   const ask = `<button class="btn small primary" data-a="ask" type="button" title="Ask the assistant about the documents in this folder">Ask about ${lib.folder === '/' ? 'my library' : 'this folder'}</button>`;
-  fa.innerHTML = ask + zip + (lib.folder === '/' ? '' : '<button class="btn small" data-a="rename" type="button" title="Rename or move this folder">Rename</button><button class="btn small ghost danger" data-a="delete" type="button" title="Delete this folder">Delete</button>');
+  const owner = lib.folder !== '/' && state.spaces.find(x => x.id && x.folder === lib.folder);
+  const spaceBtn = lib.folder === '/' ? '' : owner ? `<a class="btn small" href="#chat/${esc(owner.slug)}" title="Open the conversation of this folder's space"><i class="space-dot" style="background:${esc(owner.color)};width:9px;height:9px;display:inline-block;margin-right:6px"></i>Open space</a>`
+    : '<button class="btn small" data-a="space" type="button" title="A separate conversation about this folder">New space here</button>';
+  fa.innerHTML = ask + spaceBtn + zip + (lib.folder === '/' ? '' : '<button class="btn small" data-a="rename" type="button" title="Rename or move this folder">Rename</button><button class="btn small ghost danger" data-a="delete" type="button" title="Delete this folder">Delete</button>');
+  fa.querySelector('[data-a=space]')?.addEventListener('click', () => openSpaceEditor(null, { folder: lib.folder, name: lib.folder.split('/').pop() }));
   fa.querySelector('[data-a=ask]').addEventListener('click', () => {
     location.hash = '#chat';
     const i = $('#input'); i.value = lib.folder === '/' ? 'From my library: ' : `From my documents in ${lib.folder}: `; autosize(); i.focus(); saveDraft();
@@ -1169,14 +1301,18 @@ function route() {
   $('#more-sheet').hidden = true;
   if (v !== 'library') closeViewer();
   VIEWS[v]?.().catch(e => toast(e.message));
-  if (v === 'chat') setTimeout(() => { $('#thread').scrollTop = $('#thread').scrollHeight; }, 0);
+  if (v === 'chat') {
+    const slug = (location.hash.match(/^#chat\/([\w-]+)/) || [])[1];
+    const sp = slug && state.spaces.find(x => x.slug === slug);
+    if (sp && sp.id !== state.space) switchSpace(sp.id, { keepHash: true });
+    setTimeout(() => { $('#thread').scrollTop = $('#thread').scrollHeight; }, 0);
+  }
 }
 
 async function refreshStatus() {
   try {
     const s = state.status = await api('/api/status');
     $('#brand-name').textContent = s.name; document.title = s.name;
-    $('#chat-title').textContent = s.name;
     const ch = Object.entries(s.channels).filter(([, on]) => on).map(([k]) => k[0].toUpperCase() + k.slice(1)).join(', ');
     const b = s.budget, lim = b.daily_limit > 0 ? ` · $${b.today.toFixed(2)} of $${b.daily_limit.toFixed(2)} today` : '';
     $('#chat-sub').textContent = `${shortModel(s.model)} · ${ch}${lim}${b.state === 'low' ? ' · budget low' : b.state === 'blocked' ? ' · budget reached' : ''}`;
@@ -1211,11 +1347,11 @@ let start = startApp;
 async function startApp() {
   $('#login').hidden = true; $('#shell').hidden = false;
   await refreshStatus();
-  state.lastId = 0; state.firstLoaded = 0; $('#thread').innerHTML = '';
-  const first = await api('/api/messages');
-  state.firstId = first.first_id;
-  appendMessages(first.messages);
-  restoreDraft();
+  await loadSpaces();
+  const fromHash = location.hash.match(/^#chat\/([\w-]+)/);
+  let sp = fromHash ? state.spaces.find(x => x.slug === fromHash[1]) : null;
+  if (!sp) { let saved = 0; try { saved = +(localStorage.getItem('talixio.space') || 0); } catch {} sp = state.spaces.find(x => x.id === saved && !x.archived); }
+  await switchSpace(sp ? sp.id : 0, { keepHash: !fromHash });
   loadApprovals();
   route();
   clearInterval(state.pollTimer);

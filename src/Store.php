@@ -53,6 +53,12 @@ final class Store
         $this->addColumn('files', 'note', 'INTEGER NOT NULL DEFAULT 0');           // 1 = Markdown note editable in the app
         $this->db->exec("CREATE TABLE IF NOT EXISTS folders(path TEXT PRIMARY KEY, created INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS files_folder ON files(folder);");
+        // spaces: separate threads (0 = General), each with a library folder, instructions and notes
+        $this->db->exec("CREATE TABLE IF NOT EXISTS spaces(id INTEGER PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, folder TEXT NOT NULL DEFAULT '',
+            instructions TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', tier TEXT NOT NULL DEFAULT 'standard', color TEXT NOT NULL DEFAULT '',
+            archived INTEGER NOT NULL DEFAULT 0, last_read INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)");
+        foreach (['messages', 'tasks', 'summaries', 'jobs', 'approvals', 'docs'] as $t) $this->addColumn($t, 'space', 'INTEGER NOT NULL DEFAULT 0');
+        $this->db->exec('CREATE INDEX IF NOT EXISTS messages_space ON messages(space, id)');
         $this->addColumn('summaries', 'level', 'INTEGER NOT NULL DEFAULT 1'); // 1 stretch, 2 week, 3 month
         $this->addColumn('summaries', 'merged_into', 'INTEGER');               // set once folded into a higher level
         $this->addColumn('tasks', 'tier', "TEXT NOT NULL DEFAULT 'standard'");
@@ -88,17 +94,17 @@ final class Store
     }
 
     // --- messages (one conversation thread shared by every channel) ---
-    public function addMessage(string $role, string $channel, string $content, ?array $meta = null, array $files = []): int
+    public function addMessage(string $role, string $channel, string $content, ?array $meta = null, array $files = [], int $space = 0): int
     {
-        $this->q('INSERT INTO messages(role,channel,content,ts,meta,files) VALUES(?,?,?,?,?,?)',
-            [$role, $channel, $content, time(), $meta ? json_encode($meta) : null, $files ? json_encode(array_values(array_map('intval', $files))) : null]);
+        $this->q('INSERT INTO messages(role,channel,content,ts,meta,files,space) VALUES(?,?,?,?,?,?,?)',
+            [$role, $channel, $content, time(), $meta ? json_encode($meta) : null, $files ? json_encode(array_values(array_map('intval', $files))) : null, $space]);
         $id = (int)$this->db->lastInsertId();
         [$label, $text] = match (true) { // index what was said, without our internal instructions
             $channel === 'job' && $role === 'user' => ['job report', preg_replace('/^\[[^\]]*\]\s*/', '', $content)],
             $channel === 'schedule' && $role === 'user' => ['scheduled task', preg_replace('/^\[[^\]]*\]\s*/', '', $content)],
             default => ["$role via $channel", $content],
         };
-        $this->addDoc('message', $id, $label, (string)$text);
+        $this->addDoc('message', $id, $label, (string)$text, null, $space);
         return $id;
     }
 
@@ -113,17 +119,19 @@ final class Store
 
     public function maxMessageId(): int { return (int)$this->db->query('SELECT COALESCE(MAX(id),0) FROM messages')->fetchColumn(); }
 
-    public function messagesAfter(int $after, int $limit = 200): array
+    /** Messages of one space after an id ($space null: every space). */
+    public function messagesAfter(int $after, int $limit = 200, ?int $space = 0): array
     {
+        [$w, $a] = $space === null ? ['1=1', []] : ['space = ?', [$space]];
         return $this->withFiles($after <= 0
-            ? array_reverse($this->q('SELECT * FROM messages ORDER BY id DESC LIMIT ?', [$limit])->fetchAll())
-            : $this->q('SELECT * FROM messages WHERE id > ? ORDER BY id LIMIT ?', [$after, $limit])->fetchAll());
+            ? array_reverse($this->q("SELECT * FROM messages WHERE $w ORDER BY id DESC LIMIT ?", [...$a, $limit])->fetchAll())
+            : $this->q("SELECT * FROM messages WHERE $w AND id > ? ORDER BY id LIMIT ?", [...$a, $after, $limit])->fetchAll());
     }
 
     /** Earlier messages, for scrolling back (oldest first). */
-    public function messagesBefore(int $before, int $limit = 100): array
+    public function messagesBefore(int $before, int $limit = 100, int $space = 0): array
     {
-        return $this->withFiles(array_reverse($this->q('SELECT * FROM messages WHERE id < ? ORDER BY id DESC LIMIT ?', [$before, $limit])->fetchAll()));
+        return $this->withFiles(array_reverse($this->q('SELECT * FROM messages WHERE space = ? AND id < ? ORDER BY id DESC LIMIT ?', [$space, $before, $limit])->fetchAll()));
     }
 
     private function withFiles(array $rows): array
@@ -145,12 +153,12 @@ final class Store
      * covers them), long older messages are shortened, and the oldest are dropped to stay within the size.
      * The latest few messages are always kept.
      */
-    public function history(int $limit, ?int &$oldestId = null, int $maxChars = 0): array
+    public function history(int $limit, ?int &$oldestId = null, int $maxChars = 0, int $space = 0): array
     {
-        $rows = array_reverse($this->q('SELECT id, role, content FROM messages ORDER BY id DESC LIMIT ?', [$limit])->fetchAll());
+        $rows = array_reverse($this->q('SELECT id, role, content FROM messages WHERE space = ? ORDER BY id DESC LIMIT ?', [$space, $limit])->fetchAll());
         if ($maxChars > 0 && $rows) {
             $keep = 6; $n = count($rows);
-            $upto = (int)$this->get('summarized_upto', '0');
+            $upto = (int)$this->get(self::summarizedKey($space), '0');
             $rows = array_values(array_filter($rows, fn($r, $i) => $i >= $n - $keep || (int)$r['id'] > $upto, ARRAY_FILTER_USE_BOTH));
             $n = count($rows);
             foreach ($rows as $i => $r) {
@@ -174,9 +182,9 @@ final class Store
     }
 
     // --- tasks ---
-    public function addTask(string $title, string $prompt, ?string $cron, int $nextRun, string $tier = 'standard'): int
+    public function addTask(string $title, string $prompt, ?string $cron, int $nextRun, string $tier = 'standard', int $space = 0): int
     {
-        $this->q('INSERT INTO tasks(title,prompt,cron,next_run,enabled,created,tier) VALUES(?,?,?,?,1,?,?)', [$title, $prompt, $cron, $nextRun, time(), $tier]);
+        $this->q('INSERT INTO tasks(title,prompt,cron,next_run,enabled,created,tier,space) VALUES(?,?,?,?,1,?,?,?)', [$title, $prompt, $cron, $nextRun, time(), $tier, $space]);
         return (int)$this->db->lastInsertId();
     }
 
@@ -206,9 +214,9 @@ final class Store
     }
 
     // --- background jobs (sub-agents) ---
-    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null): int
+    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null, int $space = 0): int
     {
-        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id) VALUES(?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId]);
+        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id,space) VALUES(?,?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId, $space]);
         return (int)$this->db->lastInsertId();
     }
 
@@ -266,13 +274,13 @@ final class Store
     }
 
     /** Index text for search. Long texts (documents, transcripts) are split into overlapping chunks. */
-    public function addDoc(string $kind, int $ref, string $label, string $text, ?int $ts = null): void
+    public function addDoc(string $kind, int $ref, string $label, string $text, ?int $ts = null, int $space = 0): void
     {
         if (mb_strlen(trim($text)) < 3) return;
         $chunks = self::chunks($text);
         $n = count($chunks);
         foreach ($chunks as $i => $chunk) {
-            $this->q('INSERT INTO docs(kind,ref,ts,label,text) VALUES(?,?,?,?,?)', [$kind, $ref, $ts ?? time(), $n > 1 ? "$label (part " . ($i + 1) . "/$n)" : $label, $chunk]);
+            $this->q('INSERT INTO docs(kind,ref,ts,label,text,space) VALUES(?,?,?,?,?,?)', [$kind, $ref, $ts ?? time(), $n > 1 ? "$label (part " . ($i + 1) . "/$n)" : $label, $chunk, $space]);
         }
     }
 
@@ -299,12 +307,15 @@ final class Store
         return $out;
     }
 
-    public function addSummary(int $fromId, int $toId, int $tsFrom, int $tsTo, string $text, int $level = 1): int
+    /** kv key of the last message compacted in a space (General keeps the original key). */
+    public static function summarizedKey(int $space): string { return $space ? "summarized_upto_$space" : 'summarized_upto'; }
+
+    public function addSummary(int $fromId, int $toId, int $tsFrom, int $tsTo, string $text, int $level = 1, int $space = 0): int
     {
-        $this->q('INSERT INTO summaries(from_id,to_id,ts_from,ts_to,text,level) VALUES(?,?,?,?,?,?)', [$fromId, $toId, $tsFrom, $tsTo, $text, $level]);
+        $this->q('INSERT INTO summaries(from_id,to_id,ts_from,ts_to,text,level,space) VALUES(?,?,?,?,?,?,?)', [$fromId, $toId, $tsFrom, $tsTo, $text, $level, $space]);
         $id = (int)$this->db->lastInsertId();
         $what = [2 => 'week summary', 3 => 'month summary'][$level] ?? 'summary';
-        $this->addDoc('summary', $id, "$what of " . date('Y-m-d', $tsFrom) . ($tsTo - $tsFrom > 86400 ? ' to ' . date('Y-m-d', $tsTo) : ''), $text, $tsTo);
+        $this->addDoc('summary', $id, "$what of " . date('Y-m-d', $tsFrom) . ($tsTo - $tsFrom > 86400 ? ' to ' . date('Y-m-d', $tsTo) : ''), $text, $tsTo, $space);
         return $id;
     }
 

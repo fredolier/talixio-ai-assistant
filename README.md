@@ -155,6 +155,11 @@ conversation.
   Copy any message; **edit** your last message or ask for a **new answer**. **Find in the
   conversation** (magnifier at the top) jumps to old messages. The message you are writing survives
   closing the app, and a message sent while offline goes out as soon as the connection is back.
+- **Spaces**: separate conversations for separate subjects (a client, the house, health…), switched
+  from the top of the chat. Each has its library folder (searched first; attachments are filed
+  there), its instructions, its notes kept by the assistant, a default model and a colour. A space
+  doesn't see the others' conversations unless you ask. Telegram/Signal/email write to General;
+  `/space Maison` switches them. Settings → *Appearance*: light, dark or automatic, and an accent colour.
 - **Library (your knowledge base)**: every file is kept in folders you organise (`/Clients/Alice`,
   `/Admin/Taxes`...), browsable in the **Library** page (folder tree, breadcrumb, preview, drag and
   drop to upload or move, rename, delete, Markdown notes you can view and edit). Every file can

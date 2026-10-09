@@ -50,9 +50,27 @@ final class Agent
             . "- Skills are procedures you've learned for this user. When a task matches one, read it with skill_read first and follow it. When the user corrects how you do a recurring task, update the skill.\n\n"
             . "## USER.md\n" . $cap('USER.md') . "\n\n## MEMORY.md\n" . $cap('MEMORY.md')
             . "\n\n## Your skills\n" . ($this->app->skills()->index() ?: '(none yet)')
-            . (($digest = (new Summarizer($this->app))->digest()) !== ''
+            . $this->spaceSection()
+            . (($digest = (new Summarizer($this->app))->digest($this->app->space)) !== ''
                 ? "\n\n## Earlier in your conversation with the user\nCompacted summaries, oldest first: older periods are condensed more. The latest messages follow word for word. "
                     . "For details that are not here, use search_memory.\n\n$digest" : '');
+    }
+
+    /** The current space: its purpose, instructions and notes (empty in General). */
+    private function spaceSection(): string
+    {
+        $sp = $this->app->space ? $this->app->spaces()->get($this->app->space) : null;
+        $others = array_values(array_filter(array_column($this->app->spaces()->all(), 'name'), fn($n) => $n !== ($sp['name'] ?? 'General')));
+        if (!$sp) {
+            return $others ? "\n\n## Spaces\nThis is the General conversation. The user also has separate spaces with their own conversations: " . implode(', ', $others)
+                . ". Their conversations are not shown here; search them with search_memory (all_spaces) only if the user asks." : '';
+        }
+        return "\n\n## Current space: {$sp['name']}\nThis conversation is the user's space \"{$sp['name']}\", kept separate from the others"
+            . ($others ? ' (' . implode(', ', $others) . ')' : '') . ". Other spaces' conversations are private to them: search them (search_memory with all_spaces) only if the user asks. "
+            . ($sp['folder'] !== '' ? "Its documents are in the library folder {$sp['folder']}: kb_search looks there first, and files received here are filed there. " : '')
+            . 'Keep facts and decisions about this subject in the space notes (space_notes); facts about the user in general still go to USER.md.'
+            . (trim($sp['instructions']) !== '' ? "\n\n### The user's instructions for this space\n" . trim($sp['instructions']) : '')
+            . "\n\n### Space notes\n" . (trim($sp['notes']) !== '' ? mb_substr(trim($sp['notes']), 0, 12000) : '(empty)');
     }
 
     /** Per-turn context: time, runtime, budget, recalled memories. */
@@ -104,19 +122,31 @@ final class Agent
      * $files: ids of attached files (images are shown to the model, documents and audio as text).
      * $onEvent receives live progress (text deltas, tool use) for streaming UIs. Returns the reply.
      */
-    public function chat(string $channel, string $text, string $tier = 'standard', array $files = [], ?callable $onEvent = null): string
+    public function chat(string $channel, string $text, string $tier = 'standard', array $files = [], ?callable $onEvent = null, ?int $space = null): string
     {
         $store = $this->app->store;
+        $spaces = $this->app->spaces();
+        $space ??= $spaces->forChannel($channel); // chat apps write to the space chosen with "/space name"
+        if (!$spaces->get($space)) $space = 0;
+        // "/space Maison" (or "/espace") switches a chat app to another space; "/space" alone lists them
+        if (!$files && preg_match('#^/(?:space|espace)\b\s*(.*)$#isu', trim($text), $m)) {
+            if (trim($m[1]) === '') return 'Spaces: ' . implode(', ', array_map(fn($x) => $x['name'] . ($x['id'] === $space ? ' (current)' : ''), $spaces->all())) . '. Switch with "/space name".';
+            $to = $spaces->find($m[1]);
+            if (!$to || $to['archived']) return "No space called \"{$m[1]}\". Spaces: " . implode(', ', array_column($spaces->all(), 'name')) . '.';
+            $spaces->setForChannel($channel, (int)$to['id']);
+            return "Now in the space \"{$to['name']}\". \"/space general\" to come back.";
+        }
         // "yes 12" / "non" answers a pending approval request directly, without a model call
         if (!$files && ($ans = Approvals::parseReply($text)) !== null) {
             $pending = $this->app->approvals()->pending();
             $id = $ans[1] ?? (count($pending) === 1 ? (int)$pending[0]['id'] : null);
             if ($pending && $id !== null) {
-                $store->addMessage('user', $channel, $text);
+                $store->addMessage('user', $channel, $text, null, [], $space);
                 return $this->app->approvals()->decide($id, $ans[0], $channel);
             }
         }
         $prompt = $text;
+        if ($tier === 'standard' && $space) $tier = $spaces->get($space)['tier'] ?: 'standard';
         if (preg_match('#^/(fast|standard|deep)\b\s*#i', $text, $m)) { $tier = strtolower($m[1]); $prompt = substr($text, strlen($m[0])); }
         $started = microtime(true); $partial = '';
         if ($onEvent) { // the user can stop the answer (Stop button): checked on each streamed event, at most twice a second
@@ -136,10 +166,16 @@ final class Agent
             if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Finishing another task first (a scheduled task or a job report)… your message is queued.']);
             flock($lock, LOCK_EX);
         }
+        $sf = $space ? (string)($spaces->get($space)['folder'] ?? '') : '';
+        if ($sf !== '') foreach ($files as $fid) { // attachments sent in a space are filed in its folder
+            if (($this->app->files()->get((int)$fid)['folder'] ?? '') === Library::INBOX) $this->app->library()->moveFile((int)$fid, $sf);
+        }
+        $previousSpace = $this->app->space;
+        $this->app->space = $space; // tools (library search, schedules, notes...) work within this space
         try {
             $ref = $files ? $this->app->files()->reference($files) : '';
-            $store->addMessage('user', $channel, trim($text . ($ref !== '' ? "\n$ref" : '')), null, $files);
-            $history = $store->history($this->app->cfg->historyMessages, $oldest, $this->app->cfg->historyTokens * 4);
+            $store->addMessage('user', $channel, trim($text . ($ref !== '' ? "\n$ref" : '')), null, $files, $space);
+            $history = $store->history($this->app->cfg->historyMessages, $oldest, $this->app->cfg->historyTokens * 4, $space);
             if ($history) {
                 $content = $prompt;
                 if ($files) {
@@ -150,7 +186,7 @@ final class Agent
             }
             $recalled = '';
             if (!in_array($channel, ['schedule', 'job'], true) && $prompt !== '') {
-                try { $recalled = $this->app->recall()->autoRecall($prompt, $oldest, $this->app->cfg->recallMinSim); }
+                try { $recalled = $this->app->recall()->autoRecall($prompt, $oldest, $this->app->cfg->recallMinSim, $space); }
                 catch (\Throwable $e) { Log::warn("recall: {$e->getMessage()}"); }
             }
             $meta = null;
@@ -167,10 +203,11 @@ final class Agent
                 Log::error("agent: {$e->getMessage()}");
                 $reply = "I couldn't answer: {$e->getMessage()}";
             }
-            $store->addMessage('assistant', $channel, $reply, $meta);
+            $store->addMessage('assistant', $channel, $reply, $meta, [], $space);
             if ($meta !== null) $this->maybeLearn($prompt, $reply, $toolsBefore);
             return $reply;
         } finally {
+            $this->app->space = $previousSpace;
             flock($lock, LOCK_UN);
             fclose($lock);
         }
@@ -180,21 +217,22 @@ final class Agent
      * Audio received on any channel: a short voice note is transcribed and answered like a typed message;
      * a longer recording becomes a background meeting-summary job. Returns the reply (or an acknowledgement).
      */
-    public function audio(string $channel, int $fileId, string $caption = '', ?callable $onEvent = null): string
+    public function audio(string $channel, int $fileId, string $caption = '', ?callable $onEvent = null, ?int $space = null): string
     {
+        $space ??= $this->app->spaces()->forChannel($channel);
         $f = $this->app->files()->get($fileId) ?? throw new \RuntimeException("no file $fileId");
         $long = ($f['duration'] ?? 0) > $this->app->cfg->voiceNoteMaxSeconds || preg_match('/\b(meeting|réunion|reunion|call|interview)\b/i', $caption);
         if ($long) {
-            $id = $this->app->jobs()->createMeeting($fileId, $caption);
+            $id = $this->app->jobs()->createMeeting($fileId, $caption, $space);
             $mins = $f['duration'] ? ' (' . max(1, (int)round($f['duration'] / 60)) . ' min)' : '';
             $msg = "Got the recording{$mins}. I'm transcribing and summarising it in the background (job #$id): you'll get the summary, decisions and action items here.";
-            $this->app->store->addMessage('user', $channel, trim("$caption\n" . $this->app->files()->reference([$fileId])), null, [$fileId]);
-            $this->app->store->addMessage('assistant', $channel, $msg);
+            $this->app->store->addMessage('user', $channel, trim("$caption\n" . $this->app->files()->reference([$fileId])), null, [$fileId], $space);
+            $this->app->store->addMessage('assistant', $channel, $msg, null, [], $space);
             return $msg;
         }
         if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Transcribing your voice note…']);
         $transcript = $this->app->files()->text($fileId);
-        return $this->chat($channel, trim(($caption !== '' ? "$caption\n" : '') . "🎤 $transcript"), 'standard', [], $onEvent);
+        return $this->chat($channel, trim(($caption !== '' ? "$caption\n" : '') . "🎤 $transcript"), 'standard', [], $onEvent, $space);
     }
 
     /** After a multi-step task, a background job (fast tier) checks whether it's a procedure worth keeping as a skill. */
@@ -222,9 +260,9 @@ final class Agent
     }
 
     /** A scheduled task fires: the prompt is recorded in the thread so the conversation stays coherent. */
-    public function runTask(string $title, string $prompt, string $tier = 'standard'): string
+    public function runTask(string $title, string $prompt, string $tier = 'standard', int $space = 0): string
     {
-        return $this->chat('schedule', "[Scheduled task \"$title\" is due now. Do it and write the message for the user.]\n$prompt", in_array($tier, Tier::NAMES, true) ? $tier : 'standard');
+        return $this->chat('schedule', "[Scheduled task \"$title\" is due now. Do it and write the message for the user.]\n$prompt", in_array($tier, Tier::NAMES, true) ? $tier : 'standard', [], null, $space);
     }
 
     /**

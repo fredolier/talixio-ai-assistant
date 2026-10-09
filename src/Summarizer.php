@@ -21,19 +21,22 @@ final class Summarizer
     /** One step of compaction per call (the worker calls it every few minutes). Returns true if it did something. */
     public function maybeRun(int $now, int $minMessages = 16, int $idleSeconds = 1800): bool
     {
-        return $this->compact($now, $minMessages, $idleSeconds) || $this->merge($now);
+        foreach (array_column($this->app->store->q('SELECT DISTINCT space FROM messages')->fetchAll(), 'space') as $space) { // each space has its own digest
+            if ($this->compact($now, $minMessages, $idleSeconds, false, (int)$space)) return true;
+        }
+        return $this->merge($now);
     }
 
     /** Level 1: summarise messages older than the latest KEEP_RECENT, once enough have piled up or the conversation went quiet. */
-    public function compact(int $now, int $minMessages = 16, int $idleSeconds = 1800, bool $force = false): bool
+    public function compact(int $now, int $minMessages = 16, int $idleSeconds = 1800, bool $force = false, int $space = 0): bool
     {
         $store = $this->app->store;
-        $from = (int)$store->get('summarized_upto', '0');
-        $last = $store->q('SELECT id, ts FROM messages ORDER BY id DESC LIMIT 1')->fetch();
+        $from = (int)$store->get(Store::summarizedKey($space), '0');
+        $last = $store->q('SELECT id, ts FROM messages WHERE space = ? ORDER BY id DESC LIMIT 1', [$space])->fetch();
         if (!$last) return false;
-        $cut = (int)($store->q('SELECT id FROM messages ORDER BY id DESC LIMIT 1 OFFSET ?', [self::KEEP_RECENT])->fetchColumn() ?: 0);
+        $cut = (int)($store->q('SELECT id FROM messages WHERE space = ? ORDER BY id DESC LIMIT 1 OFFSET ?', [$space, self::KEEP_RECENT])->fetchColumn() ?: 0);
         $idle = (int)$last['ts'] <= $now - $idleSeconds;
-        $rows = $store->q('SELECT * FROM messages WHERE id > ? AND id <= ? ORDER BY id LIMIT 120', [$from, $cut])->fetchAll();
+        $rows = $store->q('SELECT * FROM messages WHERE space = ? AND id > ? AND id <= ? ORDER BY id LIMIT 120', [$space, $from, $cut])->fetchAll();
         if (!$rows || (!$force && count($rows) < $minMessages && !($idle && count($rows) >= 4))) return false;
         $transcript = '';
         foreach ($rows as $r) {
@@ -42,8 +45,8 @@ final class Summarizer
         $text = $this->ask("Summarise this stretch of conversation for the assistant's memory. Keep facts about the user, decisions, commitments and promises (with dates), "
             . "things to follow up, and useful results (with links). Skip small talk. Max 200 words, bullet points.\n\n$transcript");
         if ($text === null) return false;
-        $store->addSummary((int)$rows[0]['id'], (int)end($rows)['id'], (int)$rows[0]['ts'], (int)end($rows)['ts'], $text);
-        $store->set('summarized_upto', (string)end($rows)['id']);
+        $store->addSummary((int)$rows[0]['id'], (int)end($rows)['id'], (int)$rows[0]['ts'], (int)end($rows)['ts'], $text, 1, $space);
+        $store->set(Store::summarizedKey($space), (string)end($rows)['id']);
         return true;
     }
 
@@ -56,9 +59,10 @@ final class Summarizer
             foreach ($store->q('SELECT * FROM summaries WHERE level = ? AND merged_into IS NULL ORDER BY ts_from', [$level])->fetchAll() as $s) {
                 [$start, $end] = self::period($period, (int)$s['ts_from']);
                 if ($end > $now - ($period === 'week' ? 3 : 14) * 86400) continue; // too recent: keep the details a bit longer
-                $groups[$start][] = $s;
+                $groups[$s['space'] . ':' . $start][] = $s;
             }
-            foreach ($groups as $start => $items) {
+            foreach ($groups as $items) {
+                $start = self::period($period, (int)$items[0]['ts_from'])[0];
                 $label = $period === 'week' ? 'the week of ' . date('D j M Y', $start) : date('F Y', $start);
                 $notes = implode("\n\n", array_map(fn($s) => '(' . date('D j M', (int)$s['ts_from']) . ")\n" . $s['text'], $items));
                 $text = $this->ask("These are notes from the assistant's conversations with the user during $label. Condense them into one summary of at most "
@@ -66,7 +70,7 @@ final class Summarizer
                     . "facts about the user and their projects, open follow-ups, results worth finding again. Drop what is finished and no longer matters, and small talk."
                     . "\n\n$notes");
                 if ($text === null) return false;
-                $id = $store->addSummary((int)$items[0]['from_id'], (int)end($items)['to_id'], (int)$items[0]['ts_from'], (int)end($items)['ts_to'], $text, $level + 1);
+                $id = $store->addSummary((int)$items[0]['from_id'], (int)end($items)['to_id'], (int)$items[0]['ts_from'], (int)end($items)['ts_to'], $text, $level + 1, (int)$items[0]['space']);
                 $in = implode(',', array_map(fn($s) => (int)$s['id'], $items));
                 $store->q("UPDATE summaries SET merged_into = ? WHERE id IN ($in)", [$id]);
                 return true;
@@ -76,9 +80,9 @@ final class Summarizer
     }
 
     /** What the assistant reads before every answer: month, week and recent summaries not yet merged, oldest first, within a size limit. */
-    public function digest(): string
+    public function digest(int $space = 0): string
     {
-        $rows = $this->app->store->q('SELECT * FROM summaries WHERE merged_into IS NULL ORDER BY ts_from DESC LIMIT 60')->fetchAll();
+        $rows = $this->app->store->q('SELECT * FROM summaries WHERE merged_into IS NULL AND space = ? ORDER BY ts_from DESC LIMIT 60', [$space])->fetchAll();
         $parts = []; $size = 0;
         foreach ($rows as $s) { // newest first, so the oldest are the ones left out
             $head = match ((int)$s['level']) {

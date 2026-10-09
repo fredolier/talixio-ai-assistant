@@ -21,16 +21,18 @@ final class Recall
      * @param int $beforeMessageId ignore messages with id >= this (they are already in the prompt)
      * @return array<array{kind:string,ref:int,ts:int,label:string,text:string,score:float,sim:?float,keyword:bool}>
      */
-    public function search(string $query, int $limit = 8, int $beforeMessageId = PHP_INT_MAX, ?array $kinds = null, ?array $refs = null): array
+    /** @param int|null $space conversations of this space only (documents are shared); null = every space */
+    public function search(string $query, int $limit = 8, int $beforeMessageId = PHP_INT_MAX, ?array $kinds = null, ?array $refs = null, ?int $space = null): array
     {
         $refSet = $refs !== null ? array_flip($refs) : null;
-        $exclude = fn(array $d) => ($d['kind'] === 'message' && (int)$d['ref'] >= $beforeMessageId)
+        $exclude = fn(array $d) => ($d['kind'] === 'message' && (int)$d['ref'] >= $beforeMessageId) || ($space !== null && in_array($d['kind'], ['message', 'summary'], true) && (int)$d['space'] !== $space)
             || ($kinds !== null && !in_array($d['kind'], $kinds, true)) || ($refSet !== null && !isset($refSet[(int)$d['ref']]));
         if ($refs === []) return [];
         // when restricted to some sources, filter inside SQL so other documents do not crowd them out
         $only = ''; $onlyArgs = [];
         if ($kinds !== null) { $only .= ' AND d.kind IN (' . implode(',', array_fill(0, count($kinds), '?')) . ')'; $onlyArgs = $kinds; }
         if ($refs !== null && count($refs) <= 900) { $only .= ' AND d.ref IN (' . implode(',', array_map('intval', $refs)) . ')'; }
+        if ($space !== null) { $only .= " AND (d.kind NOT IN ('message','summary') OR d.space = ?)"; $onlyArgs[] = $space; }
         $hits = [];
         $fq = self::ftsQuery($query);
         if ($fq !== '') {
@@ -68,9 +70,9 @@ final class Recall
     }
 
     /** Snippets worth adding to the prompt automatically: keyword matches or clearly similar meaning. */
-    public function autoRecall(string $query, int $beforeMessageId, float $minSim): string
+    public function autoRecall(string $query, int $beforeMessageId, float $minSim, int $space = 0): string
     {
-        $hits = array_filter($this->search($query, 6, $beforeMessageId), fn($h) => $h['keyword'] || ($h['sim'] ?? 0) >= $minSim);
+        $hits = array_filter($this->search($query, 6, $beforeMessageId, null, null, $space), fn($h) => $h['keyword'] || ($h['sim'] ?? 0) >= $minSim);
         return self::format(array_slice($hits, 0, 4), 500);
     }
 
