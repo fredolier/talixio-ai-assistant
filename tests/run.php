@@ -853,6 +853,11 @@ check('library web: emails shown with their headers', str_contains($body, '<th>S
 check('library web: Office files rendered', str_contains($raw("/api/files/$idXlsx/view/ventes.xlsx")[2], '<td>Bob</td>'));
 [$code, $h] = $raw("/api/files/$cid/file/contrat.txt");
 check('library web: file URLs end with the file name', $code === 200 && str_contains($h, 'filename="contrat.txt"'));
+$pv = $wj("/api/files/$idHtml/preview");
+check('library web: previews as data (shown in a sandboxed frame by the app, whatever the proxy adds)', str_contains($pv['html'] ?? '', '<h1>Recette</h1>') && ($pv['file']['name'] ?? '') === 'plombier.html');
+check('library web: no page preview for photos/PDFs (shown natively)', str_contains($wj("/api/files/$pid/preview")['error'] ?? '', 'No page preview'));
+[$code, $h, $body] = $raw("/preview/$noteId/Plan.md");
+check('library web: /preview/... opens the app (full-screen document page)', $code === 200 && str_contains($body, 'id="preview-page"') && str_contains($h, "img-src 'self' data: https:") && !str_contains($h, "script-src 'unsafe-inline'"));
 check('library web: photos and PDFs open natively from "view"', str_contains($raw("/api/files/$pid/view/commande.pdf")[1], 'content-type: application/pdf'));
 $lib->deleteFile($pid);
 check('library: previews removed with the file', glob("$ld/previews/$pid-*") === []);

@@ -14,7 +14,8 @@ final class Web
         if ($path === '/' || !str_starts_with($path, '/api/')) {
             header('Cache-Control: no-cache');
             header('Content-Type: text/html; charset=utf-8');
-            header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'");
+            // previews of documents run in sandboxed srcdoc frames that inherit this policy: no inline scripts, web pictures and styles allowed
+            header("Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:");
             readfile(dirname(__DIR__) . '/web/public/app.html');
             return;
         }
@@ -92,6 +93,7 @@ final class Web
             $path === '/api/library/note' && $m === 'POST' => ['file' => $this->fileInfo($this->app->library()->saveNote((string)($b['folder'] ?? Library::NOTES),
                 (string)($b['name'] ?? ''), (string)($b['content'] ?? ''), isset($b['id']) ? (int)$b['id'] : null))],
             (bool)preg_match('#^/api/files/(\d+)/text$#', $path, $mm) => $this->fileText((int)$mm[1]),
+            (bool)preg_match('#^/api/files/(\d+)/preview$#', $path, $mm) => $this->filePreview((int)$mm[1]),
             (bool)preg_match('#^/api/files/(\d+)/(move|rename|delete|reindex)$#', $path, $mm) && $m === 'POST' => $this->fileAction((int)$mm[1], $mm[2], $b),
             $path === '/api/search' => ['results' => array_map(fn($h) => array_intersect_key($h, array_flip(['kind', 'ref', 'ts', 'label', 'text', 'keyword', 'sim'])),
                 $this->app->recall()->search((string)($_GET['q'] ?? ''), 20))],
@@ -291,6 +293,18 @@ final class Web
         if ($f['note'] || ($f['kind'] === 'text' && $f['size'] < 2_000_000)) $text = (string)file_get_contents($f['path']); // the source, for editing
         return ['file' => $this->fileInfo($f), 'text' => mb_substr($text, 0, 200000), 'truncated' => mb_strlen($text) > 200000,
             'pages' => $f['kind'] === 'pdf' ? $this->app->files()->pdfPageCount($id) : null];
+    }
+
+    /**
+     * The rendered page as data: the app shows it in a sandboxed srcdoc frame (no scripts, own origin),
+     * so headers a reverse proxy adds (X-Frame-Options, Content-Type rules...) cannot break previews.
+     */
+    private function filePreview(int $id): array
+    {
+        $f = $this->app->files()->get($id) ?? $this->fail(404, 'not found');
+        if (!is_file($f['path'])) $this->fail(404, 'The file is missing on the server.');
+        if (!Preview::renders($f)) $this->fail(400, 'No page preview for this kind of file.');
+        return ['file' => $this->fileInfo($f), 'html' => (new Preview($this->app))->render($f)];
     }
 
     private function fileAction(int $id, string $action, array $b): array

@@ -192,6 +192,14 @@
     <button id="install-close" class="btn" type="button">Close</button>
   </div>
 </div>
+<div id="preview-page" class="preview-page" hidden>
+  <header class="pp-bar">
+    <div class="pp-title"><b id="pp-name">…</b><span id="pp-path" class="muted small"></span></div>
+    <a id="pp-library" class="btn small ghost" href="/#library">Library</a>
+    <a id="pp-download" class="btn small" download>Download</a>
+  </header>
+  <iframe id="pp-frame" class="pp-frame" title="Document" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" hidden></iframe>
+</div>
 <aside id="viewer" class="viewer" hidden aria-labelledby="viewer-name">
   <header class="viewer-head">
     <div class="viewer-title"><h3 id="viewer-name"></h3><p id="viewer-path" class="muted small"></p></div>

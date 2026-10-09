@@ -697,7 +697,14 @@ function libInline(value, placeholder, onOk) {
 }
 
 const fileUrl = f => `/api/files/${f.id}/file/${encodeURIComponent(f.name)}`;
-const viewUrl = f => `/api/files/${f.id}/view/${encodeURIComponent(f.name)}`;
+const previewUrl = f => `/preview/${f.id}/${encodeURIComponent(f.name)}`;
+/** Rendered documents are fetched as data and shown in a sandboxed srcdoc frame (no scripts, own origin). */
+async function fillPreview(frame, id) {
+  frame.srcdoc = '<p style="font:14px sans-serif;color:#5b6a66;padding:16px">Loading…</p>';
+  try { frame.srcdoc = (await api(`/api/files/${id}/preview`)).html; }
+  catch (e) { frame.srcdoc = `<p style="font:14px sans-serif;color:#b42318;padding:16px">${esc(e.message)}</p>`; }
+}
+const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
 const RENDERED = ['text', 'office'];
 async function openFile(id) {
   const v = $('#viewer'), body = $('#viewer-body');
@@ -709,7 +716,7 @@ async function openFile(id) {
   $('#viewer-path').textContent = `${f.folder} · ${fmtSize(f.size)} · ${fmtDate(f.created)} · #${f.id}`;
   const rendered = RENDERED.includes(f.kind);
   const opens = rendered || ['image', 'pdf', 'audio'].includes(f.kind);
-  $('#viewer-open').href = rendered ? viewUrl(f) : fileUrl(f); $('#viewer-open').hidden = !opens;
+  $('#viewer-open').href = rendered ? previewUrl(f) : fileUrl(f); $('#viewer-open').hidden = !opens;
   $('#viewer-download').href = fileUrl(f) + '?download=1'; $('#viewer-download').setAttribute('download', f.name);
   const del = $('#viewer-delete'); del.dataset.confirm = ''; del.textContent = 'Delete';
   const editable = f.note || (f.kind === 'text' && f.size < 2_000_000 && !/\.(html?|eml)$/i.test(f.name));
@@ -724,7 +731,7 @@ async function openFile(id) {
       + (d.pages > first ? `<button id="pdf-more" class="btn small" type="button" data-next="${first + 1}">Show more pages (${d.pages - first} left)</button>` : '');
   }
   if (tabs.length > 1) html += `<div class="tabs" role="tablist">${tabs.map(([k, l], i) => `<button class="tab" data-tab="${k}" type="button" role="tab" aria-selected="${i === 0}">${l}</button>`).join('')}</div>`;
-  if (rendered) html += `<iframe id="viewer-frame" class="doc-frame" data-pane="view" title="${esc(f.name)}" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" src="${viewUrl(f)}"></iframe>`;
+  if (rendered) html += `<iframe id="viewer-frame" class="doc-frame" data-pane="view" title="${esc(f.name)}" sandbox="${FRAME_SANDBOX}" referrerpolicy="no-referrer"></iframe>`;
   if (editable) html += `<div id="viewer-edit-box" class="viewer-edit" data-pane="edit" ${rendered ? 'hidden' : ''}><textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea><div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span></div></div>`;
   if (hasText) html += `<pre class="extracted" data-pane="text" hidden>${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
   if (!rendered) {
@@ -734,6 +741,7 @@ async function openFile(id) {
   }
   body.innerHTML = html;
   body.classList.toggle('framed', rendered);
+  if (rendered) fillPreview($('#viewer-frame'), f.id);
   const more = $('#pdf-more');
   if (more) more.onclick = () => {
     const from = +more.dataset.next, to = Math.min(d.pages, from + 9);
@@ -749,7 +757,7 @@ async function openFile(id) {
     try {
       await post('/api/library/note', { id: f.id, folder: f.folder, name: f.name, content: $('#viewer-editor').value });
       $('#viewer-state').textContent = 'Saved';
-      const fr = $('#viewer-frame'); if (fr) fr.src = viewUrl(f) + '?t=' + Date.now();
+      const fr = $('#viewer-frame'); if (fr) fillPreview(fr, f.id);
       loadLibrary();
     } catch (e) { toast(e.message); }
   });
@@ -835,7 +843,8 @@ async function refreshStatus() {
 
 function showLogin() { $('#shell').hidden = true; $('#login').hidden = false; clearInterval(state.pollTimer); }
 
-async function start() {
+let start = startApp;
+async function startApp() {
   $('#login').hidden = true; $('#shell').hidden = false;
   await refreshStatus();
   state.lastId = 0; $('#thread').innerHTML = '';
@@ -850,7 +859,7 @@ async function start() {
 
 $('#login-form').onsubmit = async e => {
   e.preventDefault(); $('#login-error').textContent = '';
-  try { await post('/api/login', { password: $('#password').value }); $('#password').value = ''; await start(); handleLaunch(); }
+  try { await post('/api/login', { password: $('#password').value }); $('#password').value = ''; await start(); if (!previewId) handleLaunch(); }
   catch (err) { $('#login-error').textContent = err.message; }
 };
 $('#logout').onclick = async () => { try { await post('/api/logout'); } catch {} showLogin(); };
@@ -1042,5 +1051,21 @@ async function handleLaunch() {
   }
 }
 
+/** /preview/ID/name: one document full screen ("Open in a new tab"); the address keeps the file name. */
+const previewId = (location.pathname.match(/^\/preview\/(\d+)/) || [])[1];
+async function startPreview() {
+  $('#login').hidden = true; $('#shell').hidden = true; $('#preview-page').hidden = false;
+  try {
+    const { file: f } = await api(`/api/files/${previewId}/text`);
+    document.title = f.name;
+    $('#pp-name').textContent = f.name; $('#pp-path').textContent = f.folder;
+    $('#pp-download').href = fileUrl(f) + '?download=1'; $('#pp-download').setAttribute('download', f.name);
+    $('#pp-library').href = '/#library' + (f.folder === '/' ? '' : f.folder.split('/').map(encodeURIComponent).join('/'));
+    if (RENDERED.includes(f.kind)) { $('#pp-frame').hidden = false; await fillPreview($('#pp-frame'), f.id); }
+    else location.replace(fileUrl(f)); // photos, PDFs, audio: the browser shows them itself
+  } catch (e) { $('#pp-name').textContent = e.message; }
+}
+if (previewId) start = startPreview; // after sign-in, come back to the document
+
 registerServiceWorker();
-api('/api/status').then(async () => { await start(); handleLaunch(); }).catch(() => showLogin());
+api('/api/status').then(async () => { await start(); if (!previewId) handleLaunch(); }).catch(() => showLogin());
