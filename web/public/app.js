@@ -706,6 +706,12 @@ function tierSelect(current, label) {
     `<option value="${n}"${n === current ? ' selected' : ''}>${n}${tiers[n] ? ' · ' + esc(shortModel(tiers[n])) : ''}</option>`).join('')}</select>`;
 }
 
+const EFFORTS = { low: 'low', medium: 'medium', high: 'high', xhigh: 'very high', max: 'max' };
+function effortSelect(current) {
+  return `<select class="effort-select" aria-label="Effort" title="Effort: deeper thinking and more steps, longer and more expensive">${Object.entries(EFFORTS).map(([v, l]) =>
+    `<option value="${v}"${v === current ? ' selected' : ''}>effort ${l}</option>`).join('')}</select>`;
+}
+
 const jobsFilter = (() => { try { return JSON.parse(localStorage.getItem(LSK + 'talixio.jobs') || '{}'); } catch { return {}; } })();
 function saveJobsFilter() { try { localStorage.setItem(LSK + 'talixio.jobs', JSON.stringify(jobsFilter)); } catch {} }
 const spaceChip = id => { const sp = spaceOf(+id); return `<span class="chip space-chip" data-space="${sp.id}" title="Show only the jobs of this space"><i class="space-dot" style="background:${esc(sp.color || 'var(--muted)')}"></i>${esc(sp.name)}</span>`; };
@@ -717,7 +723,7 @@ async function loadJobs() {
   if (jobsFilter.tag) q.set('tag', jobsFilter.tag);
   const { jobs, tags } = await api('api/jobs?' + q);
   const s = state.status;
-  if (s) $('#jobs-help').textContent = `Sub-agents the assistant starts for research and multi-step work: up to ${s.max_parallel_jobs} at once, each capped at $${s.job_max_usd.toFixed(2)}. Results come back in the chat of the space that started them.`;
+  if (s) $('#jobs-help').textContent = `Sub-agents the assistant starts for research and multi-step work: up to ${s.max_parallel_jobs} at once, each capped at $${s.job_max_usd.toFixed(2)} unless you give a budget (up to $${(+s.job_max_usd_limit).toFixed(2)}, Settings → Budget). Results come back in the chat of the space that started them; a job stopped by its cap can Continue from where it stopped.`;
   // filters: space, tags
   const sel = $('#jobs-space');
   sel.innerHTML = `<option value="">All spaces</option>` + state.spaces.filter(x => !x.archived || x.id === +jobsFilter.space).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
@@ -742,10 +748,10 @@ async function loadJobs() {
     const durText = dur == null ? 'waiting' : dur < 90 ? dur + ' s' : Math.round(dur / 60) + ' min';
     const tagHtml = () => tagsOf(j).map(t => `<span class="tag small" data-tag="${esc(t)}">#${esc(t)}</span>`).join('') + '<button type="button" class="tag small add" data-a="tags" title="Edit the tags">＋ tag</button>';
     el.innerHTML = `<div><h3>${esc(j.title)}</h3><div class="when"><span class="pill ${j.status}">${j.status === 'running' ? '<span class="dot"></span>' : ''}${j.status}</span>
-        ${spaceChip(j.space)}<span class="chip">${esc(j.tier)}</span><span>${money(+j.cost_usd) || '$0'} of $${(+j.max_cost_usd).toFixed(2)}</span><span>${durText}</span><span>${fmtTime(j.created)}</span></div>
+        ${spaceChip(j.space)}<span class="chip">${esc(j.tier)}</span>${j.kind === 'agent' ? `<span class="chip" title="Effort">${esc(EFFORTS[j.effort || state.status?.job_effort] || j.effort || '')}</span>` : ''}<span>${money(+j.cost_usd) || '$0'} of ${+j.max_cost_usd > 0 ? '$' + (+j.max_cost_usd).toFixed(2) : 'no cap'}</span><span>${durText}</span><span>${fmtTime(j.created)}</span>${j.parent ? `<span class="chip" title="Carries on from job #${j.parent}">continues #${j.parent}</span>` : ''}</div>
         <div class="jtags">${tagHtml()}</div></div>
       <div class="actions">${['queued', 'running'].includes(j.status) ? '<button class="btn small" data-a="cancel">Cancel</button>'
-        : j.kind !== 'reflect' ? `${tierSelect(j.tier, 'Model for running it again')}<button class="btn small" data-a="rerun">Run again</button>` : ''}</div>
+        : j.kind !== 'reflect' ? `${tierSelect(j.tier, 'Model for running it again')}${j.kind === 'agent' ? effortSelect(j.effort || state.status?.job_effort || 'medium') : ''}<label class="cap" title="Cost cap for running it again (up to $${(+(state.status?.job_max_usd_limit ?? 10)).toFixed(2)})">$<input type="number" min="0.05" step="0.5" value="${(+j.max_cost_usd > 0 ? (j.status === 'failed' && /cost cap/.test(j.result || '') ? Math.min(+j.max_cost_usd * 2, +(state.status?.job_max_usd_limit ?? 10) || +j.max_cost_usd * 2) : +j.max_cost_usd) : (+(state.status?.job_max_usd) || 2)).toFixed(2)}" aria-label="Cost cap ($)"></label>${j.kind === 'agent' ? `<button class="btn small${j.status === 'failed' && /cost cap/.test(j.result || '') ? ' primary' : ''}" data-a="continue" title="Carry on from where it stopped, with the cap and effort chosen here">Continue</button>` : ''}<button class="btn small" data-a="rerun" title="Start over with the same instructions">Run again</button>` : ''}</div>
       <details><summary>${j.result ? 'Report and instructions' : 'Instructions'}</summary>
         ${j.result ? `<div class="doc-label">Report</div><div class="doc">${md(j.result)}</div>` : ''}
         <details class="instr"${j.result ? '' : ' open'}><summary class="doc-label">Instructions</summary><div class="doc">${md(j.instructions)}</div></details></details>`;
@@ -771,9 +777,19 @@ async function loadJobs() {
     el.querySelector('[data-a=cancel]')?.addEventListener('click', async () => {
       try { await post(`api/jobs/${j.id}/cancel`); toast('Job cancelled'); loadJobs(); } catch (e) { toast(e.message); }
     });
+    el.querySelector('[data-a=continue]')?.addEventListener('click', async () => {
+      const effort = el.querySelector('.effort-select')?.value || '', max_usd = parseFloat(el.querySelector('.cap input').value);
+      try {
+        const r = await post(`api/jobs/${j.id}/continue`, { effort, max_usd: isNaN(max_usd) ? null : max_usd });
+        toast(`Job #${r.id} carries on from where #${j.id} stopped: the report will come in the chat.`); loadJobs();
+      } catch (e) { toast(e.message); }
+    });
     el.querySelector('[data-a=rerun]')?.addEventListener('click', async () => {
-      const tier = el.querySelector('select').value;
-      try { await post(`api/jobs/${j.id}/rerun`, { tier }); toast(`Running again on the ${tier} tier: the report will come in the chat.`); loadJobs(); } catch (e) { toast(e.message); }
+      const tier = el.querySelector('.tier-select').value, effort = el.querySelector('.effort-select')?.value || '', max_usd = parseFloat(el.querySelector('.cap input').value);
+      try {
+        const r = await post(`api/jobs/${j.id}/rerun`, { tier, effort, max_usd: isNaN(max_usd) ? null : max_usd });
+        toast(`Running again (job #${r.id}, ${tier} tier${effort ? ', effort ' + (EFFORTS[effort] || effort) : ''}): the report will come in the chat.`); loadJobs();
+      } catch (e) { toast(e.message); }
     });
     box.append(el);
   }

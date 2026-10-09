@@ -64,7 +64,9 @@ final class Config
     public float $budgetMonthly = 0.0;
     public string $prices = '';
     public int $maxParallelJobs = 3;
-    public float $jobMaxUsd = 0.5;
+    public float $jobMaxUsd = 2.0;               // default cost cap of a background job
+    public float $jobMaxUsdLimit = 10.0;         // the most the assistant may give one job when asked
+    public string $jobEffort = 'medium';         // default effort of background jobs (Tier::EFFORTS)
     public string $embeddings = 'off';           // resolved to ollama | openai | voyage | off
     public string $embeddingsModel = '';
     public int $embeddingsDims = -1;             // -1 = automatic, 0 = full size
@@ -140,7 +142,7 @@ final class Config
             'fast' => new Tier('fast', $e('TALIXIO_MODEL_FAST', $e('TALIXIO_CHEAP_MODEL', $fast)), 6),
             'standard' => new Tier('standard', $std, 12),
             'deep' => new Tier('deep', $e('TALIXIO_MODEL_DEEP', $deep), 25,
-                (int)$e('TALIXIO_DEEP_THINKING_TOKENS', '8000'), $e('TALIXIO_DEEP_REASONING_EFFORT', $c->provider === 'gemini' ? 'high' : '')),
+                (int)$e('TALIXIO_DEEP_THINKING_TOKENS', '8000'), self::effort($e('TALIXIO_DEEP_REASONING_EFFORT', $c->provider === 'openai' ? '' : 'high'))),
         ];
         $c->anthropicKey = $e('ANTHROPIC_API_KEY');
         $c->anthropicBaseUrl = rtrim($e('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'), '/');
@@ -213,7 +215,9 @@ final class Config
         $c->budgetMonthly = (float)$e('TALIXIO_BUDGET_MONTHLY_USD', '0');
         $c->prices = $e('TALIXIO_PRICES');
         $c->maxParallelJobs = max(1, (int)$e('TALIXIO_MAX_PARALLEL_JOBS', '3'));
-        $c->jobMaxUsd = (float)$e('TALIXIO_JOB_MAX_USD', '0.50');
+        $c->jobMaxUsd = max(0.0, (float)$e('TALIXIO_JOB_MAX_USD', '2.00'));
+        $c->jobMaxUsdLimit = max($c->jobMaxUsd, (float)$e('TALIXIO_JOB_MAX_USD_LIMIT', '10'));
+        $c->jobEffort = self::effort($e('TALIXIO_JOB_EFFORT', 'medium')) ?: 'medium';
         $c->ollamaUrl = rtrim($e('TALIXIO_OLLAMA_URL', 'http://127.0.0.1:11434'), '/');
         $c->voyageKey = $e('VOYAGE_API_KEY');
         $c->embeddings = strtolower($e('TALIXIO_EMBEDDINGS', 'auto'));
@@ -282,6 +286,8 @@ final class Config
         date_default_timezone_set($c->timezone);
         return $c;
     }
+
+    private static function effort(string $v): string { return in_array($v = strtolower($v), Tier::EFFORTS, true) ? $v : ''; }
 
     public function tier(string $name): Tier { return $this->tiers[$name] ?? $this->tiers['standard']; }
     public function embeddingsBackend(): string { return $this->embeddings; }

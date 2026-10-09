@@ -205,7 +205,7 @@ $fake->script = function ($last, $tools, $on) use ($usage) {
 };
 $app->agent()->chat('web', 'research hotels near Part-Dieu');
 $job = $s->jobs()[0];
-check('delegate queues a job', $job['status'] === 'queued' && $job['tier'] === 'fast' && (float)$job['max_cost_usd'] === 0.5);
+check('delegate queues a job with the default cap', $job['status'] === 'queued' && $job['tier'] === 'fast' && (float)$job['max_cost_usd'] === $app->cfg->jobMaxUsd && $app->cfg->jobMaxUsd === 2.0 && $job['effort'] === '');
 $app->jobs()->runJob((int)$job['id']);
 $job = $s->job((int)$job['id']);
 check('job runs with the restricted toolset', $job['status'] === 'done' && !in_array('delegate', $fake->calls[count($fake->calls) - 2]['tools'], true)
@@ -222,6 +222,59 @@ $app->jobs()->runJob($id);
 check('job stops at its cost cap', $s->job($id)['status'] === 'failed' && str_contains($s->job($id)['result'], 'cost cap'));
 $id = $s->addJob('Cancel me', 'x', 'fast', 0.5);
 check('cancel queued job', $app->jobs()->cancel($id) && $s->job($id)['status'] === 'cancelled' && !$app->jobs()->cancel($id));
+
+// job cap and effort: chosen per job, warned at 80% so the report is written
+$out = $app->tools->run('delegate', ['title' => 'Big study', 'instructions' => 'x', 'effort' => 'xhigh', 'max_usd' => 50]);
+$big = $s->job((int)preg_replace('/\D.*/s', '', substr($out, 5)));
+check('jobs: cap asked by the assistant is kept within the highest cap', (float)$big['max_cost_usd'] === 10.0 && $big['effort'] === 'xhigh' && str_contains($out, 'effort xhigh, cap $10.00'), $out);
+$app->jobs()->cancel((int)$big['id']);
+$seen = [];
+$fake->calls = [];
+$fake->script = function ($last, $tools, $on) use ($usage, &$seen) {
+    for ($i = 0; $i < 100; $i++) {
+        $usage($on);
+        $r = $tools->run('list_jobs', []);
+        if (str_contains($r, 'Job budget')) { $seen[] = $r; return 'Partial report: what I found so far.'; }
+    }
+    return 'never warned';
+};
+$id = $s->addJob('Paced', 'Dig', 'standard', 0.05, 'agent', null, 0, [], 'high');
+$app->jobs()->runJob($id);
+$j = $s->job($id);
+check('jobs: warned at 80% of the cap, the report is kept', $j['status'] === 'done' && $j['result'] === 'Partial report: what I found so far.' && (float)$j['cost_usd'] >= 0.04 && (float)$j['cost_usd'] < 0.05, json_encode($j));
+$ctx = $fake->calls[0]['context'];
+check('jobs: the job is told its effort and cap; steps and effort follow the job', str_contains($ctx, 'Effort: high. Cost cap: $0.05') && str_contains($ctx, 'max 60 tool steps') && $app->cfg->tier('standard')->maxSteps === 12, $ctx);
+$id2 = $app->jobs()->rerun($id, 'deep', 3.0, 'max');
+$r2 = $s->job($id2);
+check('jobs: run again with another tier, cap and effort', $r2['tier'] === 'deep' && (float)$r2['max_cost_usd'] === 3.0 && $r2['effort'] === 'max');
+$id3 = $app->jobs()->rerun($id);
+check('jobs: run again keeps the cap and effort', (float)$s->job($id3)['max_cost_usd'] === 0.05 && $s->job($id3)['effort'] === 'high');
+$app->jobs()->cancel($id2); $app->jobs()->cancel($id3);
+
+// continue a job stopped at its cap: the new run starts from the earlier steps and findings
+$fake->script = function ($last, $tools, $on) use ($usage) {
+    $tools->run('fetch_url', ['url' => 'http://127.0.0.1:1/source-one']);
+    for ($i = 0; $i < 100; $i++) $usage($on, 'claude-opus-x', 100000, 10000);
+    return 'never';
+};
+$fake->calls = [];
+$id = $s->addJob('Long research', 'Compare the 5 options', 'standard', 0.3);
+$app->jobs()->runJob($id);
+check('continue: the stopped job kept its steps', $s->job($id)['status'] === 'failed' && count($s->jobSteps($id)) === 1 && $s->jobSteps($id)[0]['tool'] === 'fetch_url');
+check('continue: the report offers to continue', str_contains(end($fake->calls)['messages'][count(end($fake->calls)['messages']) - 1]['content'] ?? '', "continue job #$id"));
+$out = $app->tools->run('continue_job', ['id' => $id, 'max_usd' => 4, 'note' => 'Focus on price']);
+$cid = (int)substr($out, 5);
+$c = $s->job($cid);
+check('continue: a new job with the asked cap', $c['parent'] == $id && (float)$c['max_cost_usd'] === 4.0 && $c['title'] === 'Long research (continued)' && str_contains($c['instructions'], 'Focus on price'), $out);
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return 'Full report.'; };
+$fake->calls = [];
+$app->jobs()->runJob($cid);
+$task = \Talixio\Content::text($fake->calls[0]['messages'][0]['content']);
+check('continue: the new run sees the earlier steps and is told not to redo them', $s->job($cid)['status'] === 'done' && str_contains($task, 'Continuing earlier work')
+    && str_contains($task, 'fetch_url') && str_contains($task, 'source-one') && str_contains($task, "job #$id"), $task);
+$again = $app->jobs()->continue($cid);
+check('continue: continuing again keeps one "(continued)" and the same cap', $s->job($again)['title'] === 'Long research (continued)' && (float)$s->job($again)['max_cost_usd'] === 4.0);
+$app->jobs()->cancel($again);
 
 // budget: low => fast tier, blocked => no model call
 putenv('TALIXIO_BUDGET_DAILY_USD=1'); $app->cfg->budgetDaily = 1.0;
@@ -378,7 +431,7 @@ $llm = proc_open([PHP_BINARY, '-S', "127.0.0.1:$llmPort", __DIR__ . '/fakes/llm-
 $waitPort($llmPort);
 $events = [];
 $collect = function (array $e) use (&$events) { $events[] = $e; };
-$tier = new \Talixio\Tier('standard', 'claude-sonnet-x', 5, 2048);
+$tier = new \Talixio\Tier('standard', 'claude-sonnet-x', 5, 2048, 'high');
 $usageLog = [];
 $text = (new \Talixio\AnthropicProvider('k', $tier, false, "http://127.0.0.1:$llmPort"))->complete('sys', '', [['role' => 'user', 'content' => 'tasks?']], $app->tools->only('chat'),
     function ($u) use (&$usageLog) { $usageLog[] = $u; }, $collect);
@@ -388,7 +441,15 @@ check('anthropic stream: usage from start and delta', $usageLog[0]['in'] === 100
 $rawLines = array_values(array_filter(explode("\n", (string)@file_get_contents("$dir/fake-llm.log"))));
 $second = json_decode(end($rawLines), true);
 check('anthropic stream: thinking block with signature and {} tool input sent back', ($second['messages'][1]['content'][0]['signature'] ?? '') === 'SIG123'
-    && str_contains(end($rawLines), '"name":"list_tasks","input":{}') && ($second['thinking']['budget_tokens'] ?? 0) === 2048);
+    && str_contains(end($rawLines), '"name":"list_tasks","input":{}'));
+check('anthropic: current models think adaptively at the chosen effort', ($second['thinking'] ?? null) === ['type' => 'adaptive'] && ($second['output_config']['effort'] ?? '') === 'high' && $second['max_tokens'] === 16000, json_encode($second['thinking'] ?? null));
+(new \Talixio\AnthropicProvider('k', new \Talixio\Tier('standard', 'claude-sonnet-4-5', 5, 2048, 'high'), false, "http://127.0.0.1:$llmPort"))->complete('sys', '', [['role' => 'user', 'content' => 'tasks?']], $app->tools->only('chat'), fn($u) => null, fn($e) => null);
+$rawLines = array_values(array_filter(explode("\n", (string)@file_get_contents("$dir/fake-llm.log"))));
+$legacy = json_decode(end($rawLines), true);
+check('anthropic: Claude 4.5 and older keep a thinking budget, no effort', ($legacy['thinking']['budget_tokens'] ?? 0) === 2048 && !isset($legacy['output_config']) && $legacy['max_tokens'] === 8192 + 2048);
+check('anthropic: which models take a thinking budget', \Talixio\AnthropicProvider::legacyThinking('claude-sonnet-4-5') && \Talixio\AnthropicProvider::legacyThinking('claude-opus-4-1-20250805')
+    && \Talixio\AnthropicProvider::legacyThinking('claude-3-7-sonnet-latest') && \Talixio\AnthropicProvider::legacyThinking('claude-sonnet-4-20250514')
+    && !\Talixio\AnthropicProvider::legacyThinking('claude-opus-4-6') && !\Talixio\AnthropicProvider::legacyThinking('claude-opus-5-5') && !\Talixio\AnthropicProvider::legacyThinking('claude-haiku-5-5'));
 try {
     (new \Talixio\AnthropicProvider('k', $tier, false, "http://127.0.0.1:$llmPort"))->complete('sys', '', [['role' => 'user', 'content' => 'tasks?']], $app->tools->only('chat'),
         fn($u) => null, function (array $e) { if ($e['type'] === 'text') throw new \Talixio\Abort('stopped by the user'); });

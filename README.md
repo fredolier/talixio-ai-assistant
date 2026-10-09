@@ -309,7 +309,7 @@ sudo deploy/docker/install-stack.sh --domain assistant.example.com --email you@e
   starting sub-agents; at 100% it stops calling models. The assistant sees its spending and has a
   `usage_report` tool.
 - **Sub-agents**: for research and multi-step work the assistant starts background jobs (`delegate`),
-  up to 3 in parallel, each with its own tier and a cost cap ($0.50 by default). It replies right
+  up to 3 in parallel, each with its own tier and a cost cap ($2 by default; say "budget 5 $" for a bigger one, up to `TALIXIO_JOB_MAX_USD_LIMIT`) and an effort level (low to max: deeper thinking and more steps, `TALIXIO_JOB_EFFORT`). Near its cap a job is told to write its report; one stopped by its cap can carry on from where it stopped ("continue job 12 with 3 $", or *Continue* in Jobs). It replies right
   away; the report arrives in the chat of the space that started it, and as a notification that
   names the space and opens it. Sub-agents can search and read but cannot change memory, schedules
   or start more jobs. The Jobs page shows each job's space and tags (the assistant tags them, you

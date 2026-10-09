@@ -125,12 +125,20 @@ final class Tools
             fn(array $a) => $this->app->store->deleteTask((int)$a['id']) ? 'deleted' : 'error: no such task');
 
         $this->register('delegate',
-            "Start a background sub-agent for work that takes several searches or steps (research, comparisons, planning, summarising long pages). You get control back immediately; when it finishes, its report is posted in the chat and you will relay it. Split independent parts into separate jobs to run them in parallel (max {$cfg->maxParallelJobs} at a time). The sub-agent can search the web, read pages and read memory, but cannot message the user or change memory or schedules. Write self-contained instructions: it does not see this conversation. tier: fast (simple lookups), standard (default), deep (hard reasoning; most expensive). Each job is capped at \${$cfg->jobMaxUsd}.",
+            "Start a background sub-agent for work that takes several searches or steps (research, comparisons, planning, summarising long pages). You get control back immediately; when it finishes, its report is posted in the chat and you will relay it. Split independent parts into separate jobs to run them in parallel (max {$cfg->maxParallelJobs} at a time). The sub-agent can search the web, read pages and read memory, but cannot message the user or change memory or schedules. Write self-contained instructions: it does not see this conversation. tier: fast (simple lookups), standard (default), deep (hard reasoning; most expensive). effort: how thorough (deeper thinking, more steps: low 15, medium 30, high 60, xhigh 100, max 200; default {$cfg->jobEffort}); use high or more for long, complex work. Each job is capped at \${$cfg->jobMaxUsd} unless you set max_usd (up to \${$cfg->jobMaxUsdLimit}): raise it when the user gives a budget or the work is clearly big.",
             ['title' => ['type' => 'string'], 'instructions' => ['type' => 'string'], 'tier' => ['type' => 'string', 'enum' => Tier::NAMES],
+             'effort' => ['type' => 'string', 'enum' => Tier::EFFORTS], 'max_usd' => ['type' => 'number', 'description' => 'cost cap in dollars for this job'],
              'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => '1-3 short topic tags so the user can find it later, e.g. ["bikes", "comparison"]; reuse existing tags (list_jobs shows them)']],
             ['title', 'instructions'], fn(array $a) => $this->delegate($a));
         $this->register('list_jobs', 'List recent background jobs (space, tags, status). tag: only jobs with this tag; all_spaces: not only this space.',
             ['tag' => ['type' => 'string'], 'all_spaces' => ['type' => 'boolean']], [], fn(array $a) => $this->listJobs((string)($a['tag'] ?? ''), !empty($a['all_spaces'])));
+        $this->register('continue_job', "Carry on a background job from where it stopped (cost cap reached, or the user wants it to go further): a new job that starts from the earlier run's steps and findings. Only when the user asks. max_usd: its cost cap (default: the same as before; up to \${$cfg->jobMaxUsdLimit}); effort: optional; note: what the user wants added or changed.",
+            ['id' => ['type' => 'integer'], 'max_usd' => ['type' => 'number'], 'effort' => ['type' => 'string', 'enum' => Tier::EFFORTS], 'note' => ['type' => 'string']], ['id'],
+            function (array $a) {
+                $id = $this->app->jobs()->continue((int)$a['id'], is_numeric($a['max_usd'] ?? null) ? (float)$a['max_usd'] : null, in_array($a['effort'] ?? '', Tier::EFFORTS, true) ? $a['effort'] : '', (string)($a['note'] ?? ''));
+                $j = $this->app->store->job($id);
+                return sprintf('job #%d queued: continues #%d (cap $%.2f, effort %s). The report will be posted in the chat when done.', $id, (int)$a['id'], $j['max_cost_usd'], $j['effort'] ?: $this->app->cfg->jobEffort);
+            });
         $this->register('cancel_job', 'Cancel a queued or running background job.', ['id' => ['type' => 'integer']], ['id'],
             fn(array $a) => $this->app->jobs()->cancel((int)$a['id']) ? 'cancelled' : 'error: job not found or already finished');
         $this->register('usage_report', 'Your spending: budget status, cost and tokens by tier and by source (chat, schedules, jobs...) today and this month.',
@@ -331,7 +339,7 @@ final class Tools
     }
 
     /** What tools run in a separate process (Claude Code's MCP server) must know: the space of this turn, and whether we are in the worker. */
-    public function env(): array { return ['TALIXIO_SPACE' => (string)$this->app->space, 'TALIXIO_IN_WORKER' => App::$inWorker ? '1' : '0']; }
+    public function env(): array { return ['TALIXIO_SPACE' => (string)$this->app->space, 'TALIXIO_IN_WORKER' => App::$inWorker ? '1' : '0', 'TALIXIO_JOB' => (string)($this->app->jobId ?? '')]; }
 
     /** A copy limited to one of the SETS. */
     public function only(string $set): self
@@ -373,7 +381,7 @@ final class Tools
         if (isset($this->tools[$name]) && $this->needsApproval($name)) {
             try { $out = $this->app->approvals()->request($name, $args, ($this->approval[$name])($args)); }
             catch (\Throwable $e) { $out = 'error: ' . $e->getMessage(); }
-            $this->app->store->logTool($name, $args, $out);
+            $this->app->store->logTool($name, $args, $out, $this->app->jobId);
             return $out;
         }
         return $this->execute($name, $args);
@@ -388,7 +396,8 @@ final class Tools
             try { $out = (string)($this->tools[$name][1])($args); }
             catch (\Throwable $e) { $out = 'error: ' . $e->getMessage(); } // errors go back to the model
         }
-        $this->app->store->logTool($name, $args, $out);
+        $this->app->store->logTool($name, $args, $out, $this->app->jobId);
+        if ($this->app->notice !== '') { $out .= "\n\n" . $this->app->notice; $this->app->notice = ''; }
         return $out;
     }
 
@@ -473,14 +482,18 @@ final class Tools
     private function delegate(array $a): string
     {
         $tier = in_array($a['tier'] ?? '', Tier::NAMES, true) ? $a['tier'] : 'standard';
-        $id = $this->app->jobs()->create((string)$a['title'], (string)$a['instructions'], $tier, is_array($a['tags'] ?? null) ? $a['tags'] : (is_string($a['tags'] ?? null) ? [$a['tags']] : []));
-        return "job #$id queued ($tier tier). Tell the user it's running; the report will be posted in the chat when done.";
+        $effort = in_array($a['effort'] ?? '', Tier::EFFORTS, true) ? $a['effort'] : '';
+        $id = $this->app->jobs()->create((string)$a['title'], (string)$a['instructions'], $tier, is_array($a['tags'] ?? null) ? $a['tags'] : (is_string($a['tags'] ?? null) ? [$a['tags']] : []),
+            is_numeric($a['max_usd'] ?? null) ? (float)$a['max_usd'] : null, $effort);
+        $j = $this->app->store->job($id);
+        return sprintf("job #%d queued (%s tier, effort %s, cap %s). Tell the user it's running; the report will be posted in the chat when done.",
+            $id, $tier, $j['effort'] ?: $this->app->cfg->jobEffort, (float)$j['max_cost_usd'] > 0 ? sprintf('$%.2f', $j['max_cost_usd']) : 'none');
     }
 
     private function listJobs(string $tag = '', bool $all = false): string
     {
         $names = array_column($this->app->spaces()->all(), 'name', 'id') + [0 => 'General'];
-        $rows = array_map(fn($j) => sprintf('#%d %s | %s | %s | $%.3f', $j['id'], $j['title'], $j['tier'], $j['status'], $j['cost_usd'])
+        $rows = array_map(fn($j) => sprintf('#%d %s | %s | %s | $%.3f of $%.2f', $j['id'], $j['title'], $j['tier'], $j['status'], $j['cost_usd'], $j['max_cost_usd'])
             . ($all ? ' | space ' . ($names[$j['space']] ?? $j['space']) : '') . ($j['tags'] !== '' ? ' | tags: ' . implode(', ', Store::tagList($j['tags'])) : ''),
             $this->app->store->jobs(15, $all ? null : $this->app->space, $tag));
         $tags = array_keys($this->app->store->jobTags());

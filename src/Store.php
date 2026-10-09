@@ -69,6 +69,9 @@ final class Store
         $this->addColumn('jobs', 'kind', "TEXT NOT NULL DEFAULT 'agent'");
         $this->addColumn('jobs', 'file_id', 'INTEGER');
         $this->addColumn('jobs', 'tags', "TEXT NOT NULL DEFAULT ''"); // ',research,bikes,'
+        $this->addColumn('jobs', 'effort', "TEXT NOT NULL DEFAULT ''"); // '' = TALIXIO_JOB_EFFORT
+        $this->addColumn('jobs', 'parent', 'INTEGER'); // the job this one continues
+        if ($this->addColumn('tool_log', 'job_id', 'INTEGER')) $this->db->exec('CREATE INDEX IF NOT EXISTS tool_log_job ON tool_log(job_id) WHERE job_id IS NOT NULL');
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");
         $this->addColumn('usage', 'job_id', 'INTEGER');
         $this->addColumn('usage', 'cache_read', 'INTEGER NOT NULL DEFAULT 0');
@@ -217,9 +220,9 @@ final class Store
     }
 
     // --- background jobs (sub-agents) ---
-    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null, int $space = 0, array|string $tags = []): int
+    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null, int $space = 0, array|string $tags = [], string $effort = '', ?int $parent = null): int
     {
-        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id,space,tags) VALUES(?,?,?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId, $space, self::tagString($tags)]);
+        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id,space,tags,effort,parent) VALUES(?,?,?,?,?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId, $space, self::tagString($tags), $effort, $parent]);
         return (int)$this->db->lastInsertId();
     }
 
@@ -262,11 +265,14 @@ final class Store
     }
 
     // --- audit and usage ---
-    public function logTool(string $tool, array $args, string $result): void
+    public function logTool(string $tool, array $args, string $result, ?int $jobId = null): void
     {
-        $this->q('INSERT INTO tool_log(ts,tool,args,result) VALUES(?,?,?,?)',
-            [time(), $tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), mb_substr($result, 0, 2000)]);
+        $this->q('INSERT INTO tool_log(ts,tool,args,result,job_id) VALUES(?,?,?,?,?)',
+            [time(), $tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), mb_substr($result, 0, 2000), $jobId]);
     }
+
+    /** The tool steps a background job took, oldest first. */
+    public function jobSteps(int $jobId): array { return $this->q('SELECT tool, args, result FROM tool_log WHERE job_id = ? ORDER BY id', [$jobId])->fetchAll(); }
 
     public function toolLog(int $limit = 100): array { return $this->q('SELECT * FROM tool_log ORDER BY id DESC LIMIT ?', [$limit])->fetchAll(); }
 

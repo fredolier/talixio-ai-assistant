@@ -13,6 +13,10 @@ final class App
     public static bool $inWorker = false;
     /** The space the current conversation turn belongs to (0 = General). */
     public int $space = 0;
+    /** Told to the model with the next tool result (e.g. a background job nearing its cost cap). */
+    public string $notice = '';
+    /** The background job this process is running (its tool steps are kept so it can be continued). */
+    public ?int $jobId = null;
     private ?Board $board = null;
     /** Set in tests to replace the configured model. */
     public ?Provider $providerOverride = null;

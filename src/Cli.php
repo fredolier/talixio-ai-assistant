@@ -22,6 +22,7 @@ final class Cli
                 case 'mcp': // Claude Code runs this for each turn: tools act in the turn's space
                     $app->space = max(0, (int)getenv('TALIXIO_SPACE'));
                     App::$inWorker = getenv('TALIXIO_IN_WORKER') === '1';
+                    $app->jobId = (int)getenv('TALIXIO_JOB') ?: null;
                     (new McpServer($app->tools))->serve();
                     return 0;
                 case 'chat':

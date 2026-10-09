@@ -11,9 +11,11 @@ final class AnthropicProvider implements Provider
         $messages = Content::messages($messages, [Content::class, 'anthropic']);
         $specs = array_map(fn($t) => ['name' => $t['name'], 'description' => $t['description'], 'input_schema' => $t['parameters']], $tools->schemas());
         if ($this->webSearch && $tools->allowsWeb()) $specs[] = ['type' => 'web_search_20250305', 'name' => 'web_search', 'max_uses' => 5];
+        $legacy = self::legacyThinking($this->tier->model);
+        $think = $this->tier->thinkingTokens >= 1024 || (!$legacy && $this->tier->reasoningEffort !== '');
         $payload = [
             'model' => $this->tier->model,
-            'max_tokens' => 8192 + $this->tier->thinkingTokens,
+            'max_tokens' => $legacy ? 8192 + $this->tier->thinkingTokens : ($think ? 16000 : 8192),
             // the stable part is cached (10% price on re-reads); the per-turn part follows it
             'system' => array_values(array_filter([
                 ['type' => 'text', 'text' => $system, 'cache_control' => ['type' => 'ephemeral']],
@@ -21,10 +23,11 @@ final class AnthropicProvider implements Provider
             ])),
         ];
         if ($specs) $payload['tools'] = $specs;
-        if ($this->tier->thinkingTokens >= 1024) $payload['thinking'] = ['type' => 'enabled', 'budget_tokens' => $this->tier->thinkingTokens];
+        if ($think) $payload['thinking'] = $legacy ? ['type' => 'enabled', 'budget_tokens' => $this->tier->thinkingTokens] : ['type' => 'adaptive'];
+        if (!$legacy && $this->tier->reasoningEffort !== '') $payload['output_config'] = ['effort' => $this->tier->reasoningEffort];
         for ($i = 0; $i < $this->tier->maxSteps; $i++) {
             $r = $onEvent ? $this->stream($payload + ['messages' => $messages], $onEvent)
-                : Http::json("{$this->baseUrl}/v1/messages", $payload + ['messages' => $messages], $this->headers(), 300);
+                : Http::json("{$this->baseUrl}/v1/messages", $payload + ['messages' => $messages], $this->headers(), 600);
             $u = $r['usage'] ?? [];
             $onUsage(['model' => $this->tier->model, 'in' => (int)($u['input_tokens'] ?? 0), 'out' => (int)($u['output_tokens'] ?? 0),
                 'cache_read' => (int)($u['cache_read_input_tokens'] ?? 0), 'cache_write' => (int)($u['cache_creation_input_tokens'] ?? 0), 'cost' => null]);
@@ -52,6 +55,12 @@ final class AnthropicProvider implements Provider
             $messages[] = ['role' => 'user', 'content' => $results];
         }
         return '(stopped after too many tool steps)';
+    }
+
+    /** Claude 3.x and 4.0-4.5 take a thinking budget in tokens; later models think adaptively, steered by the effort level. */
+    public static function legacyThinking(string $model): bool
+    {
+        return (bool)preg_match('/^claude-(?:3|(?:opus|sonnet|haiku)-4(?:-[0-5])?(?:-\d{8})?$)/', $model);
     }
 
     private function headers(): array { return ['x-api-key: ' . $this->key, 'anthropic-version: 2023-06-01']; }

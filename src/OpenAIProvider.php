@@ -12,7 +12,7 @@ final class OpenAIProvider implements Provider
         $msgs = array_merge([['role' => 'system', 'content' => trim("$system\n\n$context")]], Content::messages($messages, [Content::class, 'openai']));
         $payload = ['model' => $this->tier->model];
         if ($specs = array_map(fn($t) => ['type' => 'function', 'function' => $t], $tools->schemas())) $payload['tools'] = $specs;
-        if ($this->tier->reasoningEffort !== '') $payload['reasoning_effort'] = $this->tier->reasoningEffort;
+        if ($this->tier->reasoningEffort !== '') $payload['reasoning_effort'] = in_array($this->tier->reasoningEffort, ['xhigh', 'max'], true) ? 'high' : $this->tier->reasoningEffort;
         for ($i = 0; $i < $this->tier->maxSteps; $i++) {
             $r = $onEvent ? $this->stream($payload + ['messages' => $msgs], $onEvent)
                 : Http::json("{$this->baseUrl}/chat/completions", $payload + ['messages' => $msgs], ['Authorization: Bearer ' . ($this->key ?: 'none')], 300);

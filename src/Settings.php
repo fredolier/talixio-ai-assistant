@@ -30,13 +30,15 @@ final class Settings
                 ['TALIXIO_MODEL', 'Standard model', 'text', 'Empty = chosen automatically. Conversation.'],
                 ['TALIXIO_MODEL_DEEP', 'Deep model', 'text', 'Empty = chosen automatically. Messages starting with /deep and hard reasoning.'],
                 ['TALIXIO_DEEP_THINKING_TOKENS', 'Claude extended thinking (tokens)', 'number', 'Deep tier only. 0 = off.'],
-                ['TALIXIO_DEEP_REASONING_EFFORT', 'Reasoning effort (Gemini/OpenAI)', 'select', 'Deep tier.', ['' => 'default', 'low' => 'low', 'medium' => 'medium', 'high' => 'high']],
+                ['TALIXIO_DEEP_REASONING_EFFORT', 'Reasoning effort (deep tier)', 'select', 'How hard the deep model thinks. Claude: adaptive thinking at this level (the thinking tokens above apply to Claude 4.5 and older only). OpenAI/Gemini get low/medium/high.', self::EFFORT_CHOICES],
             ]],
             'budget' => ['Budget', 'Estimated from list prices. 0 = no limit. At 80%: fast model and no sub-agents; at 100%: no more model calls.', [
                 ['TALIXIO_BUDGET_DAILY_USD', 'Daily budget ($)', 'number', 'Set 0 with the Claude Code plan (already paid for).'],
                 ['TALIXIO_BUDGET_MONTHLY_USD', 'Monthly budget ($)', 'number', ''],
                 ['TALIXIO_MAX_PARALLEL_JOBS', 'Sub-agents in parallel', 'number', ''],
-                ['TALIXIO_JOB_MAX_USD', 'Cap per sub-agent ($)', 'number', ''],
+                ['TALIXIO_JOB_MAX_USD', 'Cap per background job ($)', 'number', 'Default for each job. A job that reaches it is stopped (it is warned at 80% to write its report). 0 = no cap.'],
+                ['TALIXIO_JOB_MAX_USD_LIMIT', 'Highest cap for one job ($)', 'number', 'When you ask for a bigger job ("budget 5 $"), the assistant may raise its cap up to this.'],
+                ['TALIXIO_JOB_EFFORT', 'Effort of background jobs', 'select', 'Default; can be chosen per job. Higher: deeper thinking and more steps (low 15, medium 30, high 60, xhigh 100, max 200), so longer and more expensive.', ['low' => 'low', 'medium' => 'medium', 'high' => 'high', 'xhigh' => 'very high', 'max' => 'max']],
                 ['TALIXIO_PRICES', 'Custom prices', 'text', 'pattern=input/output per million tokens, e.g. sonnet=3/15,gemini-3.8-flash=0.75/3.75'],
             ]],
             'notify' => ['Notifications', 'Where the assistant reaches you (reminders, briefings, job results, approvals).', [
@@ -145,11 +147,13 @@ final class Settings
         ];
     }
 
+    private const EFFORT_CHOICES = ['' => 'default', 'low' => 'low', 'medium' => 'medium', 'high' => 'high', 'xhigh' => 'very high', 'max' => 'max'];
+
     /** Defaults used by Config when nothing is set (shown in the app as placeholders). */
     public const DEFAULTS = [
         'TALIXIO_NAME' => 'Talixio', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_HISTORY_TOKENS' => '12000', 'TALIXIO_PROVIDER' => 'anthropic',
         'TALIXIO_DEEP_THINKING_TOKENS' => '8000', 'TALIXIO_BUDGET_DAILY_USD' => '0', 'TALIXIO_BUDGET_MONTHLY_USD' => '0', 'TALIXIO_MAX_PARALLEL_JOBS' => '3',
-        'TALIXIO_JOB_MAX_USD' => '0.50', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0', 'TALIXIO_TASK_REMINDER' => '18:00', 'TALIXIO_TASKS_GOOGLE' => '1',
+        'TALIXIO_JOB_MAX_USD' => '2.00', 'TALIXIO_JOB_MAX_USD_LIMIT' => '10', 'TALIXIO_JOB_EFFORT' => 'medium', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0', 'TALIXIO_TASK_REMINDER' => '18:00', 'TALIXIO_TASKS_GOOGLE' => '1',
         'TALIXIO_SMTP_PORT' => '587', 'TALIXIO_SMTP_SECURITY' => 'auto', 'TALIXIO_IMAP_PORT' => '993', 'TALIXIO_EMAIL_REQUIRE_AUTH' => '1',
         'TALIXIO_MAILBOX_IMAP_PORT' => '993', 'TALIXIO_MAILBOX_SMTP_PORT' => '465', 'TALIXIO_SEARCH' => 'auto', 'TALIXIO_EMBEDDINGS' => 'auto',
         'TALIXIO_OLLAMA_URL' => 'http://127.0.0.1:11434', 'TALIXIO_EMBEDDINGS_DIMS' => '', 'TALIXIO_TRANSCRIBE' => 'auto', 'TALIXIO_MEETING_TIER' => 'standard', 'TALIXIO_VOICE_NOTE_MAX_SECONDS' => '180', 'TALIXIO_VISION_INDEX' => '1',

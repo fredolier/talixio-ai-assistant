@@ -38,6 +38,7 @@ final class ClaudeCodeProvider implements Provider
                 array_push($cmd, '--mcp-config', "$work/.mcp.json", '--strict-mcp-config');
             }
             if ($allowed) array_push($cmd, '--allowedTools', implode(',', $allowed));
+            if ($this->tier->reasoningEffort !== '') array_push($cmd, '--effort', $this->tier->reasoningEffort);
             if ($this->tier->model !== '') array_push($cmd, '--model', $this->tier->model);
 
             $errFile = "$work/.stderr";
