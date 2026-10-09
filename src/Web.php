@@ -32,6 +32,7 @@ final class Web
             // the file name at the end of the URL keeps its extension in the address bar, tabs and "save as"
             if (preg_match('#^/api/files/(\d+)(?:/file/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1], !empty($_GET['download'])); return; }
             if (preg_match('#^/api/files/(\d+)/view(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveView((int)$fm[1]); return; }
+            if (preg_match('#^/api/files/(\d+)/pdf(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveOfficePdf((int)$fm[1]); return; }
             if (preg_match('#^/api/files/(\d+)/(thumb|page/(\d+))$#', $path, $fm) && $method === 'GET') { $this->servePreview((int)$fm[1], (int)($fm[3] ?? 0)); return; }
             if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/')); return; }
             if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
@@ -460,7 +461,7 @@ final class Web
         $text = $f['status'] === 'ready' || $f['status'] === 'failed' ? (string)$f['text'] : '';
         if ($f['note'] || ($f['kind'] === 'text' && $f['size'] < 2_000_000)) $text = (string)file_get_contents($f['path']); // the source, for editing
         return ['file' => $this->fileInfo($f), 'text' => mb_substr($text, 0, 200000), 'truncated' => mb_strlen($text) > 200000,
-            'pages' => $f['kind'] === 'pdf' ? $this->app->files()->pdfPageCount($id) : null];
+            'pages' => in_array($f['kind'], ['pdf', 'office'], true) ? ($this->app->files()->pdfPageCount($id) ?: null) : null];
     }
 
     /**
@@ -521,6 +522,15 @@ final class Web
         header("Content-Security-Policy: default-src 'none'; img-src data: https:; style-src 'unsafe-inline' https:; font-src data: https:; sandbox allow-popups allow-popups-to-escape-sandbox");
         header('Referrer-Policy: no-referrer');
         echo $html;
+    }
+
+    /** An Office file as PDF (LibreOffice), shown by the browser's own viewer. */
+    private function serveOfficePdf(int $id): void
+    {
+        $f = $this->app->files()->get($id);
+        if (!$f || $f['kind'] !== 'office' || !Files::officeBinary()) $this->fail(404, 'not found');
+        try { $pdf = $this->app->files()->officePdf($f); } catch (\Throwable $e) { $this->fail(500, $e->getMessage()); }
+        $this->sendPath($pdf, 'application/pdf', self::disposition('inline', preg_replace('/\.[^.]+$/', '', $f['name']) . '.pdf'), "default-src 'none'; object-src 'self'");
     }
 
     private function servePreview(int $id, int $page): void

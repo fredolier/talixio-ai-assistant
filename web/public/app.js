@@ -890,7 +890,12 @@ function renderCrumbs() {
   const fa = $('#lib-folder-actions');
   const zipName = (lib.folder === '/' ? 'Library' : lib.folder.split('/').pop()) + '-' + new Date().toLocaleDateString('sv-SE') + '.zip';
   const zip = `<a class="btn small" href="/api/library/zip?folder=${encodeURIComponent(lib.folder)}" download="${esc(zipName)}" title="Download this folder and its subfolders as a ZIP">Download zip</a>`;
-  fa.innerHTML = zip + (lib.folder === '/' ? '' : '<button class="btn small" data-a="rename" type="button" title="Rename or move this folder">Rename</button><button class="btn small ghost danger" data-a="delete" type="button" title="Delete this folder">Delete</button>');
+  const ask = `<button class="btn small primary" data-a="ask" type="button" title="Ask the assistant about the documents in this folder">Ask about ${lib.folder === '/' ? 'my library' : 'this folder'}</button>`;
+  fa.innerHTML = ask + zip + (lib.folder === '/' ? '' : '<button class="btn small" data-a="rename" type="button" title="Rename or move this folder">Rename</button><button class="btn small ghost danger" data-a="delete" type="button" title="Delete this folder">Delete</button>');
+  fa.querySelector('[data-a=ask]').addEventListener('click', () => {
+    location.hash = '#chat';
+    const i = $('#input'); i.value = lib.folder === '/' ? 'From my library: ' : `From my documents in ${lib.folder}: `; autosize(); i.focus(); saveDraft();
+  });
   fa.querySelector('[data-a=rename]')?.addEventListener('click', () => libInline(lib.folder, 'Folder path', async v => { const { folder } = await post('/api/library/folder/move', { from: lib.folder, to: v }); toast('Folder renamed'); libGo(folder); }));
   fa.querySelector('[data-a=delete]')?.addEventListener('click', async e => {
     const b = e.currentTarget, node = lib.tree.find(t => t.path === lib.folder), n = node ? node.total : 0;
@@ -978,29 +983,33 @@ async function openFile(id) {
   v.hidden = false; $('#viewer-form').hidden = true;
   $('#viewer-name').textContent = f.name;
   $('#viewer-path').textContent = `${f.folder} · ${fmtSize(f.size)} · ${fmtDate(f.created)} · #${f.id}`;
-  const rendered = RENDERED.includes(f.kind);
-  const opens = rendered || ['image', 'pdf', 'audio'].includes(f.kind);
-  $('#viewer-open').href = rendered ? previewUrl(f) : fileUrl(f); $('#viewer-open').hidden = !opens;
+  const officePages = f.kind === 'office' && d.pages; // LibreOffice installed: the real pages
+  const rendered = RENDERED.includes(f.kind) && !officePages;
+  const opens = rendered || officePages || ['image', 'pdf', 'audio'].includes(f.kind);
+  $('#viewer-open').href = officePages ? `/api/files/${f.id}/pdf/${encodeURIComponent(f.name.replace(/\.[^.]+$/, ''))}.pdf` : rendered ? previewUrl(f) : fileUrl(f);
+  $('#viewer-open').hidden = !opens;
   $('#viewer-download').href = fileUrl(f) + '?download=1'; $('#viewer-download').setAttribute('download', f.name);
   const del = $('#viewer-delete'); del.dataset.confirm = ''; del.textContent = 'Delete';
   const editable = f.note || (f.kind === 'text' && f.size < 2_000_000 && !/\.(html?|eml)$/i.test(f.name));
-  const hasText = !editable && (f.kind === 'office' || /\.(html?|eml)$/i.test(f.name)) && d.text;
-  const tabs = [rendered && ['view', 'View'], editable && ['edit', 'Edit'], hasText && ['text', 'Text only']].filter(Boolean);
+  const hasText = !editable && (f.kind === 'office' || f.kind === 'pdf' || /\.(html?|eml)$/i.test(f.name)) && d.text && !/^\(No text found/.test(d.text);
+  const paged = officePages || (f.kind === 'pdf' && d.pages);
+  const tabs = [rendered && ['view', 'View'], paged && ['pages', 'Pages'], editable && ['edit', 'Edit'], hasText && ['text', 'Text only']].filter(Boolean);
   let html = '';
   if (f.kind === 'image') html += `<a href="${fileUrl(f)}" target="_blank" rel="noopener" title="Open full size"><img src="${fileUrl(f)}" alt="${esc(f.name)}"></a>`;
   if (f.kind === 'audio') html += isVideo(f) ? `<video controls playsinline preload="metadata" src="${fileUrl(f)}"></video>` : `<audio controls preload="metadata" src="${fileUrl(f)}"></audio>`;
-  if (f.kind === 'pdf' && d.pages) {
+  const pagesHtml = () => {
     const first = Math.min(d.pages, 5);
-    html += `<div class="pdf-pages" id="pdf-pages">${Array.from({ length: first }, (_, i) => pdfPageHtml(f.id, i + 1, d.pages)).join('')}</div>`
+    return `<div class="pdf-pages" id="pdf-pages">${Array.from({ length: first }, (_, i) => pdfPageHtml(f.id, i + 1, d.pages)).join('')}</div>`
       + (d.pages > first ? `<button id="pdf-more" class="btn small" type="button" data-next="${first + 1}">Show more pages (${d.pages - first} left)</button>` : '');
-  }
+  };
   if (tabs.length > 1) html += `<div class="tabs" role="tablist">${tabs.map(([k, l], i) => `<button class="tab" data-tab="${k}" type="button" role="tab" aria-selected="${i === 0}">${l}</button>`).join('')}</div>`;
+  if (paged) html += `<div data-pane="pages">${pagesHtml()}</div>`;
   if (rendered) html += `<iframe id="viewer-frame" class="doc-frame" data-pane="view" title="${esc(f.name)}" sandbox="${FRAME_SANDBOX}" referrerpolicy="no-referrer"></iframe>`;
   if (editable) html += `<div id="viewer-edit-box" class="viewer-edit" data-pane="edit" ${rendered ? 'hidden' : ''}><textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea><div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span></div></div>`;
   if (hasText) html += `<pre class="extracted" data-pane="text" hidden>${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
   if (!rendered) {
     if (f.status === 'pending' || f.status === 'processing') html += '<p class="muted">Reading this file… it will be searchable in a moment.</p>';
-    else if (d.text && f.kind !== 'pdf') html += `<h4>${f.kind === 'audio' ? 'Transcript' : f.kind === 'image' ? 'What the assistant sees' : 'Text'}</h4><pre class="extracted">${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
+    else if (d.text && !hasText) html += `<h4>${f.kind === 'audio' ? 'Transcript' : f.kind === 'image' ? 'What the assistant sees' : 'Text'}</h4><pre class="extracted">${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
     else if (f.kind === 'other') html += '<p class="muted">This kind of file cannot be shown here; download it to open it.</p>';
   }
   body.innerHTML = html;

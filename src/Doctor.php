@@ -58,6 +58,7 @@ final class Doctor
             $bin = Browser::findBinary($c->chromeBin);
             $bin ? $this->line(true, "browser: $bin") : $this->info('browser: not installed (optional: install.sh --with-browser)');
         }
+        $this->info('Office pages: ' . (Files::officeBinary() ? 'LibreOffice (' . Files::officeBinary() . ')' : 'simple view only (install.sh --with-office for faithful pages)'));
         if ($c->shell !== 'off') $this->attempt("sandboxed shell ({$c->shell}" . ($c->shellNetwork ? ', internet on' : '') . ')', fn() => $app->shell()->check());
         foreach ($app->mcp()->cache() as $name => $info) {
             if (!isset($app->mcp()->servers()[$name])) continue;

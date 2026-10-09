@@ -931,6 +931,24 @@ $app->agent()->chat('web', 'are you there?', 'standard', [], function (array $e)
 check('agent: a message waiting for another turn tells the user it is queued', str_contains(json_encode($events), 'queued'), json_encode($events));
 proc_close($holder);
 
+// ---- LibreOffice: faithful pages for Office files, older formats read ----
+if (\Talixio\Files::officeBinary()) {
+    $od = "$dir/office"; @mkdir($od); putenv("TALIXIO_DATA_DIR=$od"); $oa = App::fromEnv();
+    file_put_contents("$od/src.html", '<h1>Devis toiture</h1><p>Montant total : 4 800 euros</p><table border="1"><tr><td>Tuiles</td><td>3000</td></tr></table>');
+    exec('cd ' . escapeshellarg($od) . ' && HOME=' . escapeshellarg($od) . ' timeout 120 soffice --headless --convert-to doc:"MS Word 97" src.html >/dev/null 2>&1');
+    $docId = $oa->files()->save(tap_tmp((string)@file_get_contents("$od/src.doc")), 'devis.doc', 'application/msword', '/Admin');
+    check('office: .doc files are Office files', $oa->files()->get($docId)['kind'] === 'office');
+    $t0 = microtime(true);
+    $txt = $oa->files()->text($docId);
+    check('office: older Word files read through LibreOffice', str_contains($txt, '4 800 euros') && str_contains($txt, 'Tuiles'), $txt);
+    check('office: converted PDF has pages', $oa->files()->pdfPageCount($docId) === 1);
+    check('office: page image and thumbnail', filesize($oa->files()->pdfPage($docId, 1)) > 3000 && $oa->files()->thumb($docId) !== null);
+    check('office: conversion cached', (function () use ($oa, $docId) { $t = microtime(true); $oa->files()->pdfPageCount($docId); return microtime(true) - $t < 1; })());
+    putenv("TALIXIO_DATA_DIR=$dir");
+} else {
+    echo "skip office tests: LibreOffice not installed\n";
+}
+
 // ---- connectors (MCP client) and the sandboxed shell ----
 $md = "$dir/mcp"; @mkdir($md); putenv("TALIXIO_DATA_DIR=$md");
 $mcpPort = $freePort();

@@ -10,11 +10,12 @@
 #                                             (--with-ollama=docker to run it in Docker instead; OLLAMA_EMBED_MODEL to pick the model)
 #   sudo ./install.sh --with-shell            also install the sandbox (bubblewrap, Python with numpy/pandas/matplotlib) for shell commands
 #   sudo ./install.sh --with-node             also install Node.js (for MCP connectors started with npx)
+#   sudo ./install.sh --with-office           also install LibreOffice (faithful pages for Word/Excel/PowerPoint, older .doc/.xls/.ppt)
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 ORIG_ARGS="$(printf '%q ' "$@")"   # remembered for updates from the web app
 
-DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; WITH_BROWSER=0 ; WITH_OLLAMA="" ; BIND_ARG="" ; WITH_SHELL=0 ; WITH_NODE=0
+DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; WITH_BROWSER=0 ; WITH_OLLAMA="" ; BIND_ARG="" ; WITH_SHELL=0 ; WITH_NODE=0 ; WITH_OFFICE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="${2:?--domain needs a value}"; shift 2 ;;
@@ -24,9 +25,10 @@ while [ $# -gt 0 ]; do
     --with-browser) WITH_BROWSER=1; shift ;;
     --with-shell) WITH_SHELL=1; shift ;;
     --with-node) WITH_NODE=1; shift ;;
+    --with-office) WITH_OFFICE=1; shift ;;
     --with-ollama) WITH_OLLAMA=native; shift ;;
     --with-ollama=*) WITH_OLLAMA="${1#*=}"; shift ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -148,6 +150,16 @@ AA
   else
     echo "    The sandbox cannot start on this system (user namespaces disabled?): shell commands stay off." >&2
   fi
+fi
+
+if [ "$WITH_OFFICE" = 1 ]; then
+  say "Installing LibreOffice (document previews)"
+  # without the desktop parts; Carlito/Caladea/Liberation have the same sizes as Calibri/Cambria/Arial, so pages lay out as in Office
+  apt-get install -y -qq --no-install-recommends libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui \
+      fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation fonts-dejavu-core >/dev/null 2>&1 \
+    || apt-get install -y -qq --no-install-recommends libreoffice-writer libreoffice-calc libreoffice-impress fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation >/dev/null
+  echo "    $(soffice --version 2>/dev/null | head -1)"
+  rm -f "$DATA"/previews/*-pdf-*.pdf 2>/dev/null || true
 fi
 
 if [ "$WITH_NODE" = 1 ]; then

@@ -17,7 +17,8 @@ final class Files
             str_starts_with($mime, 'image/') => 'image',
             $mime === 'application/pdf' || str_ends_with(strtolower($name), '.pdf') => 'pdf',
             str_starts_with($mime, 'audio/') || str_starts_with($mime, 'video/') || (bool)preg_match('/\.(m4a|mp3|ogg|oga|opus|wav|webm|aac|flac|amr|3gp|mp4|mov)$/i', $name) => 'audio',
-            (bool)preg_match('/\.(docx|xlsx|pptx|odt|ods|odp)$/i', $name) || str_contains($mime, 'officedocument') || str_contains($mime, 'opendocument') => 'office',
+            (bool)preg_match('/\.(docx|xlsx|pptx|odt|ods|odp|doc|xls|ppt|rtf|odg|pps|ppsx)$/i', $name) || str_contains($mime, 'officedocument') || str_contains($mime, 'opendocument')
+                || in_array($mime, ['application/msword', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint', 'application/rtf', 'text/rtf'], true) => 'office',
             str_starts_with($mime, 'text/') || in_array($mime, ['application/json', 'application/xml', 'message/rfc822'], true)
                 || (bool)preg_match('/\.(md|txt|csv|json|html?|eml|xml|log)$/i', $name) => 'text',
             default => 'other',
@@ -95,7 +96,11 @@ final class Files
                 $text = trim((string)shell_exec('pdftotext -layout -l 300 ' . escapeshellarg($path) . ' - 2>/dev/null'));
                 if (mb_strlen(preg_replace('/\s+/', '', $text)) < 20) $text = $this->ocrPdf($f) ?: '(No text found in this PDF: it seems to be a scan and image reading is off or unavailable.)';
                 return $text;
-            case 'office': return self::officeText($path, $name);
+            case 'office':
+                if (preg_match('/\.(docx|xlsx|pptx|odt|ods|odp)$/', $name)) return self::officeText($path, $name);
+                // older formats (.doc, .xls, .ppt, .rtf...): through LibreOffice's PDF
+                if (!self::officeBinary()) throw new \RuntimeException('this older Office format needs LibreOffice: run install.sh --with-office');
+                return trim((string)shell_exec('pdftotext -layout -l 300 ' . escapeshellarg($this->officePdf($f)) . ' - 2>/dev/null'));
             case 'audio': return $this->app->transcriber()->transcribe($f, ($f['duration'] ?? 0) > $this->app->cfg->voiceNoteMaxSeconds);
             case 'image': return $this->describeImage($f);
             case 'text':
@@ -204,6 +209,49 @@ final class Files
         $text = (string)$f['text'];
         if (trim($text) === '' || str_starts_with($text, '(could not read') || str_starts_with($text, '(No text found')) return;
         $this->app->store->addDoc($f['kind'] === 'audio' ? 'transcript' : 'file', $id, Library::label($f), mb_substr($text, 0, 800000), (int)$f['created']);
+        if ($f['kind'] === 'office' && self::officeBinary() && App::$inWorker === false && PHP_SAPI === 'cli') { // background indexer: prepare the page view
+            try { $this->officePdf($f); } catch (\Throwable $e) { Log::warn("office preview #$id: {$e->getMessage()}"); }
+        }
+    }
+
+    // ---- LibreOffice: faithful pages for Office files (install.sh --with-office) ----
+
+    public static function officeBinary(): ?string
+    {
+        static $bin = false;
+        if ($bin === false) {
+            $bin = null;
+            foreach (['/usr/bin/soffice', '/usr/local/bin/soffice', '/usr/lib/libreoffice/program/soffice', '/opt/libreoffice/program/soffice'] as $b) if (is_executable($b)) { $bin = $b; break; }
+        }
+        return $bin;
+    }
+
+    /** The file converted to PDF by LibreOffice (cached with the previews). */
+    public function officePdf(array $f): string
+    {
+        $out = substr($this->previewPath($f, 'pdf'), 0, -4) . '.pdf';
+        if (is_file($out)) return $out;
+        $bin = self::officeBinary() ?? throw new \RuntimeException('LibreOffice is not installed (install.sh --with-office)');
+        $tmp = sys_get_temp_dir() . '/talixio-lo-' . bin2hex(random_bytes(6));
+        mkdir("$tmp/out", 0700, true);
+        $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION)) ?: 'docx';
+        copy($f['path'], "$tmp/in.$ext"); // a plain name: LibreOffice names its output after the input
+        // its own profile each time: two conversions at once must not share one
+        $cmd = 'HOME=' . escapeshellarg($tmp) . ' timeout 180 ' . escapeshellarg($bin) . ' --headless --norestore --nolockcheck -env:UserInstallation=file://' . $tmp . '/profile'
+            . ' --convert-to pdf --outdir ' . escapeshellarg("$tmp/out") . ' ' . escapeshellarg("$tmp/in.$ext") . ' 2>&1';
+        $log = (string)shell_exec($cmd);
+        $ok = is_file("$tmp/out/in.pdf") && rename("$tmp/out/in.pdf", $out);
+        exec('rm -rf ' . escapeshellarg($tmp));
+        if (!$ok) throw new \RuntimeException('LibreOffice could not convert this file: ' . mb_substr(trim($log), -300));
+        return $out;
+    }
+
+    /** The PDF whose pages are shown: the file itself, or an Office file's PDF when LibreOffice is installed. */
+    public function pagesSource(array $f): ?string
+    {
+        if ($f['kind'] === 'pdf') return $f['path'];
+        if ($f['kind'] === 'office' && self::officeBinary()) return $this->officePdf($f);
+        return null;
     }
 
     /** @var resource|null background `talixio index` process started by the worker */
@@ -279,7 +327,9 @@ final class Files
         if (is_file($out)) return $out;
         $src = null;
         if ($f['kind'] === 'image') $src = (string)file_get_contents($f['path']);
-        elseif ($f['kind'] === 'pdf') $src = is_file($p = $this->pdfPage($id, 1)) ? (string)file_get_contents($p) : null;
+        elseif ($f['kind'] === 'pdf' || ($f['kind'] === 'office' && self::officeBinary())) {
+            try { $src = (string)file_get_contents($this->pdfPage($id, 1)); } catch (\Throwable) { $src = null; }
+        }
         if ($src === null || !function_exists('imagecreatefromstring') || !($img = @imagecreatefromstring($src))) return null;
         $w = imagesx($img); $h = imagesy($img); $scale = min(1, 160 / max($w, $h));
         $t = imagescale($img, max(1, (int)($w * $scale)), max(1, (int)($h * $scale)));
@@ -290,8 +340,10 @@ final class Files
     public function pdfPageCount(int $id): int
     {
         $f = $this->get($id);
-        if (!$f || $f['kind'] !== 'pdf') return 0;
-        preg_match('/^Pages:\s+(\d+)/m', (string)shell_exec('pdfinfo ' . escapeshellarg($f['path']) . ' 2>/dev/null'), $m);
+        if (!$f || !in_array($f['kind'], ['pdf', 'office'], true)) return 0;
+        try { $src = $this->pagesSource($f); } catch (\Throwable $e) { Log::warn("pages #$id: {$e->getMessage()}"); return 0; }
+        if ($src === null) return 0;
+        preg_match('/^Pages:\s+(\d+)/m', (string)shell_exec('pdfinfo ' . escapeshellarg($src) . ' 2>/dev/null'), $m);
         return (int)($m[1] ?? 0);
     }
 
@@ -299,12 +351,13 @@ final class Files
     public function pdfPage(int $id, int $page): string
     {
         $f = $this->get($id);
-        if (!$f || $f['kind'] !== 'pdf') throw new \InvalidArgumentException('not a PDF');
+        $src = $f ? $this->pagesSource($f) : null;
+        if ($src === null) throw new \InvalidArgumentException('no pages for this file');
         $page = max(1, $page);
         $out = $this->previewPath($f, "p$page");
         if (!is_file($out)) {
             $base = substr($out, 0, -4);
-            exec('pdftoppm -jpeg -jpegopt quality=80 -r 110 -singlefile -f ' . $page . ' -l ' . $page . ' ' . escapeshellarg($f['path']) . ' ' . escapeshellarg($base) . ' 2>/dev/null', $o, $code);
+            exec('pdftoppm -jpeg -jpegopt quality=80 -r 110 -singlefile -f ' . $page . ' -l ' . $page . ' ' . escapeshellarg($src) . ' ' . escapeshellarg($base) . ' 2>/dev/null', $o, $code);
             if ($code !== 0 || !is_file($out)) throw new \RuntimeException('could not render this page');
         }
         return $out;

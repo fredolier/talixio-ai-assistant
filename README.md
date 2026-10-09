@@ -195,6 +195,11 @@ conversation.
   local/private network addresses are refused. Submitting a form that sends data (login, order,
   contact...) pauses until you approve (passwords are masked in the request). Cookies are kept
   between runs in `/var/lib/talixio/browser-profile`.
+- **Viewer**: PDFs are shown as page images (every device) and open in the browser's PDF viewer;
+  Markdown, HTML, emails, CSV, JSON and Office files have a readable view; photos, audio and video
+  play natively. With **LibreOffice** (`install.sh --with-office`) Word, Excel and PowerPoint files are
+  shown as their real pages (and open as PDF), and older `.doc`, `.xls`, `.ppt`, `.rtf` are read and
+  searchable too. *Ask about this folder* in the library starts a question on those documents.
 - **Sandboxed shell** (`install.sh --with-shell`, then Settings → *Sandboxed shell*): the assistant gets
   a Linux sandbox of its own (bubblewrap) with Python (numpy, pandas, matplotlib) for exact
   calculations, data analysis, file conversions and charts; it saves results to your library. It sees
