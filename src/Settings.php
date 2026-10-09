@@ -167,7 +167,7 @@ final class Settings
             if (!array_key_exists($k, $over)) { putenv($orig === false ? $k : "$k=$orig"); unset(self::$original[$k]); }
         }
         foreach ($over as $k => $v) {
-            if (!isset(self::fields()[$k]) && $k !== 'TALIXIO_WEB_PASSWORD') continue;
+            if (!isset(self::fields()[$k]) && $k !== 'TALIXIO_WEB_PASSWORD') continue; // the hash and the TOTP secret stay out of the environment
             if (!array_key_exists($k, self::$original)) self::$original[$k] = getenv($k);
             putenv("$k=$v");
         }
@@ -226,10 +226,20 @@ final class Settings
         return $errors;
     }
 
+    /** Only a hash of the app password is kept (and the plain one from older versions is removed). */
     public static function setPassword(string $dataDir, string $password): void
     {
         $over = self::load($dataDir);
-        $over['TALIXIO_WEB_PASSWORD'] = $password;
+        unset($over['TALIXIO_WEB_PASSWORD']);
+        $over['TALIXIO_WEB_PASSWORD_HASH'] = password_hash($password, PASSWORD_DEFAULT);
+        self::write($dataDir, $over);
+    }
+
+    /** Two-step sign-in secret ('' turns it off). */
+    public static function setTotp(string $dataDir, string $secret): void
+    {
+        $over = self::load($dataDir);
+        if ($secret === '') unset($over['TALIXIO_TOTP_SECRET']); else $over['TALIXIO_TOTP_SECRET'] = $secret;
         self::write($dataDir, $over);
     }
 

@@ -114,7 +114,10 @@ final class Agent
         $prompt = $text;
         if (preg_match('#^/(fast|standard|deep)\b\s*#i', $text, $m)) { $tier = strtolower($m[1]); $prompt = substr($text, strlen($m[0])); }
         $lock = fopen($this->app->cfg->dataDir . '/agent.lock', 'c');
-        flock($lock, LOCK_EX); // one main-thread turn at a time across the web app, worker and jobs
+        if (!flock($lock, LOCK_EX | LOCK_NB)) { // one main-thread turn at a time across the web app, worker and jobs
+            if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Finishing another task first (a scheduled task or a job report)… your message is queued.']);
+            flock($lock, LOCK_EX);
+        }
         try {
             $ref = $files ? $this->app->files()->reference($files) : '';
             $store->addMessage('user', $channel, trim($text . ($ref !== '' ? "\n$ref" : '')), null, $files);

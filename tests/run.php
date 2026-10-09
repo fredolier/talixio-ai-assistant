@@ -865,6 +865,68 @@ check('library: previews removed with the file', glob("$ld/previews/$pid-*") ===
 proc_terminate($ws); proc_close($ws);
 putenv('TALIXIO_EMBEDDINGS'); putenv("TALIXIO_DATA_DIR=$dir");
 
+// ---- one main-thread turn at a time: a queued chat says so instead of hanging silently ----
+$holder = proc_open([PHP_BINARY, '-r', '$f = fopen($argv[1], "c"); flock($f, LOCK_EX); touch($argv[2]); sleep(2);', $app->cfg->dataDir . '/agent.lock', "$dir/locked"], [], $hp);
+for ($i = 0; $i < 50 && !is_file("$dir/locked"); $i++) usleep(50000);
+$events = [];
+$app->agent()->chat('web', 'are you there?', 'standard', [], function (array $e) use (&$events) { $events[] = $e; });
+check('agent: a message waiting for another turn tells the user it is queued', str_contains(json_encode($events), 'queued'), json_encode($events));
+proc_close($holder);
+
+// ---- signing in: hashed password, lockout per address, two-step codes, share limits ----
+use Talixio\Auth;
+check('totp: RFC 6238 test vectors', Auth::totp('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', 1) === '287082' && Auth::totp('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', 37037036) === '081804');
+check('totp: base32 round trip', Auth::base32Decode(Auth::base32('hello world!')) === 'hello world!' && strlen(Auth::newSecret()) === 32);
+$ad = "$dir/auth"; @mkdir($ad);
+$webPort = $freePort();
+$ws = proc_open([PHP_BINARY, '-S', "127.0.0.1:$webPort", '-t', dirname(__DIR__) . '/web/public', dirname(__DIR__) . '/web/router.php'],
+    [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$ad/web.log", 'w'], 2 => ['file', "$ad/web.log", 'a']], $pp, null,
+    ['TALIXIO_DATA_DIR' => $ad, 'TALIXIO_PROVIDER' => 'echo', 'TALIXIO_EMBEDDINGS' => 'off', 'TALIXIO_WEB_PASSWORD' => 'initial-password', 'PATH' => getenv('PATH'), 'TALIXIO_NOTIFY' => 'none']);
+$waitPort($webPort);
+$aj = function (string $path, ?array $body = null, string $jar = 'a', string $ip = '203.0.113.7') use ($webPort, $ad) {
+    $ch = curl_init("http://127.0.0.1:$webPort$path");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIEJAR => "$ad/ck-$jar", CURLOPT_COOKIEFILE => "$ad/ck-$jar", CURLOPT_TIMEOUT => 20,
+        CURLOPT_HTTPHEADER => ['X-Talixio: 1', 'Content-Type: application/json', "X-Forwarded-For: 198.51.100.1, $ip"]] + ($body !== null ? [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($body)] : []));
+    $out = json_decode((string)curl_exec($ch), true) ?? []; $out['_code'] = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch); return $out;
+};
+$t0 = microtime(true);
+for ($i = 0; $i < 5; $i++) $r = $aj('/api/login', ['password' => 'guess' . $i]);
+check('auth: wrong passwords answer at once (no sleeping server worker)', $r['_code'] === 401 && microtime(true) - $t0 < 3);
+$r = $aj('/api/login', ['password' => 'initial-password']);
+check('auth: after 5 failures the address is locked, even with the right password', $r['_code'] === 429 && str_contains($r['error'], 'Try again in'), json_encode($r));
+$r = $aj('/api/login', ['password' => 'initial-password'], 'a', '203.0.113.8');
+check('auth: other addresses are not locked (client address from the proxy)', $r['_code'] === 200, json_encode($r));
+$saved = json_decode((string)file_get_contents("$ad/settings.json"), true);
+check('auth: password from the config file replaced by a hash at the first sign-in', str_starts_with($saved['TALIXIO_WEB_PASSWORD_HASH'] ?? '', '$2y$') && !str_contains(json_encode($saved), 'initial-password'));
+$aj('/api/login', ['password' => 'initial-password'], 'b', '203.0.113.9');
+check('auth: second device signed in', $aj('/api/status', null, 'b')['_code'] === 200);
+$r = $aj('/api/settings/password', ['current' => 'initial-password', 'new' => 'a-much-longer-password'], 'a', '203.0.113.8');
+check('auth: password changed; this device stays signed in, others are signed out', $r['_code'] === 200 && $aj('/api/status', null, 'a')['_code'] === 200 && $aj('/api/status', null, 'b')['_code'] === 401, json_encode($r));
+check('auth: the old password no longer works', $aj('/api/login', ['password' => 'initial-password'], 'c', '203.0.113.10')['_code'] === 401);
+$setup = $aj('/api/security/totp/setup', [], 'a');
+check('totp: setup gives a key and an otpauth link, not active yet', strlen($setup['secret'] ?? '') === 32 && str_starts_with($setup['uri'], 'otpauth://totp/') && $aj('/api/security', null, 'a')['totp'] === false);
+check('totp: a wrong first code does not turn it on', $aj('/api/security/totp/enable', ['code' => '000000'], 'a')['_code'] === 400);
+$code = Auth::totp($setup['secret'], intdiv(time(), 30));
+check('totp: turned on with a right code', ($aj('/api/security/totp/enable', ['code' => $code], 'a')['totp'] ?? null) === true);
+$r = $aj('/api/login', ['password' => 'a-much-longer-password'], 'd', '203.0.113.11');
+check('totp: password alone asks for the code', $r['_code'] === 401 && !empty($r['need_code']));
+check('totp: a code already used is refused (replay)', $aj('/api/login', ['password' => 'a-much-longer-password', 'code' => $code], 'd', '203.0.113.11')['_code'] === 401);
+$st2 = new \Talixio\Store("$ad/talixio.db"); $st2->set('totp_last_step', '0');
+$r = $aj('/api/login', ['password' => 'a-much-longer-password', 'code' => $code], 'd', '203.0.113.11');
+check('totp: password and code sign in', $r['_code'] === 200 && $aj('/api/status', null, 'd')['_code'] === 200, json_encode($r));
+check('totp: turning off needs the password', $aj('/api/security/totp/disable', ['password' => 'nope', 'code' => $code], 'd', '203.0.113.12')['_code'] === 403);
+exec('TALIXIO_DATA_DIR=' . escapeshellarg($ad) . ' TALIXIO_PROVIDER=echo ' . PHP_BINARY . ' ' . escapeshellarg(dirname(__DIR__) . '/bin/talixio') . ' totp off 2>&1', $o, $rc);
+check('totp: "talixio totp off" for a lost phone', $rc === 0 && $aj('/api/security', null, 'd')['totp'] === false, implode("\n", $o));
+$share = function () use ($webPort) {
+    $ch = curl_init("http://127.0.0.1:$webPort/share");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => ['text' => 'hello'], CURLOPT_HTTPHEADER => ['X-Forwarded-For: 203.0.113.50']]);
+    curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch); return $c;
+};
+$codes = []; for ($i = 0; $i < Auth::MAX_SHARES_HOUR + 1; $i++) $codes[] = $share();
+check('share: shares without a session are rate-limited', $codes[0] === 303 && end($codes) === 429, implode(',', $codes));
+check('share: at most 5 waiting in the inbox', count(glob("$ad/share-inbox/*", GLOB_ONLYDIR)) <= 5);
+proc_terminate($ws); proc_close($ws);
+
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
 exit($fails ? 1 : 0);

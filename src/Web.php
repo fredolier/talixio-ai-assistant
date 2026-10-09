@@ -24,8 +24,8 @@ final class Web
         try {
             if ($method === 'POST' && ($_SERVER['HTTP_X_TALIXIO'] ?? '') !== '1') $this->fail(403, 'missing request header');
             $body = json_decode((string)file_get_contents('php://input'), true) ?: [];
-            if ($path === '/api/login' && $method === 'POST') { $this->login((string)($body['password'] ?? '')); return; }
-            if (empty($_SESSION['ok'])) $this->fail(401, 'Please sign in.');
+            if ($path === '/api/login' && $method === 'POST') { $this->login((string)($body['password'] ?? ''), (string)($body['code'] ?? '')); return; }
+            if (empty($_SESSION['ok']) || ($_SESSION['gen'] ?? '') !== $this->auth()->generation()) $this->fail(401, 'Please sign in.');
             session_write_close(); // don't hold the session lock during long model calls
             if ($path === '/api/chat' && $method === 'POST' && !empty($body['stream'])) { $this->chatStream($body); return; }
             if ($path === '/api/files' && $method === 'POST') { $this->json($this->upload()); return; }
@@ -62,6 +62,8 @@ final class Web
             $path === '/api/settings' && $m === 'GET' => ['groups' => Settings::describe($this->app->cfg->dataDir)],
             $path === '/api/settings' && $m === 'POST' => $this->saveSettings($b),
             $path === '/api/settings/password' && $m === 'POST' => $this->changePassword($b),
+            $path === '/api/security' => ['totp' => $this->auth()->totpEnabled()],
+            (bool)preg_match('#^/api/security/totp/(setup|enable|disable)$#', $path, $mm) && $m === 'POST' => $this->totp($mm[1], $b),
             $path === '/api/update' => ['installed' => $this->app->updater()->installed(), 'version' => $this->app->updater()->version(),
                 'status' => $this->app->updater()->status(), 'auto' => $this->app->cfg->autoUpdate],
             (bool)preg_match('#^/api/update/(check|update|rollback)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->updater()->request($mm[1]); return ['ok' => true]; })(),
@@ -159,6 +161,21 @@ final class Web
      */
     private function shareInbox(): void
     {
+        // the session cookie is not always sent with a share (it comes from another app): without it,
+        // shares are small and rate-limited, so nobody can fill the disk by posting here
+        $signedIn = false;
+        if (isset($_COOKIE['talixio'])) { $this->startSession(); $signedIn = !empty($_SESSION['ok']) && ($_SESSION['gen'] ?? '') === $this->auth()->generation(); session_write_close(); }
+        $ip = Auth::clientIp();
+        if (!$signedIn) {
+            if ($this->auth()->count("share:$ip", 3600) >= Auth::MAX_SHARES_HOUR) {
+                http_response_code(429);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'Too many shares in a short time. Open the app and attach the file there.';
+                return;
+            }
+            $this->auth()->hit("share:$ip");
+        }
+        $maxBytes = $signedIn ? 200_000_000 : 25_000_000;
         $inbox = $this->app->cfg->dataDir . '/share-inbox';
         if (!is_dir($inbox)) mkdir($inbox, 0700, true);
         foreach (glob("$inbox/*", GLOB_ONLYDIR) ?: [] as $d) if (filemtime($d) < time() - 3600) exec('rm -rf ' . escapeshellarg($d));
@@ -167,17 +184,19 @@ final class Web
         $token = bin2hex(random_bytes(16));
         $dir = "$inbox/$token"; mkdir($dir, 0700);
         $text = trim(implode("\n", array_filter([trim((string)($_POST['title'] ?? '')), trim((string)($_POST['text'] ?? '')), trim((string)($_POST['url'] ?? ''))], 'strlen')));
-        $files = []; $total = 0;
+        $files = []; $total = 0; $skipped = 0;
         $up = $_FILES['files'] ?? null;
         if ($up) {
             $names = (array)$up['name']; $tmps = (array)$up['tmp_name']; $errs = (array)$up['error']; $types = (array)$up['type']; $sizes = (array)$up['size'];
             foreach ($names as $i => $name) {
-                if (($errs[$i] ?? 1) !== UPLOAD_ERR_OK || count($files) >= 10 || ($total += (int)$sizes[$i]) > 100_000_000) continue;
+                if (($errs[$i] ?? 1) !== UPLOAD_ERR_OK) { if (($errs[$i] ?? 1) !== UPLOAD_ERR_NO_FILE) $skipped++; continue; }
+                if (count($files) >= 10 || $total + (int)$sizes[$i] > $maxBytes) { $skipped++; continue; }
+                $total += (int)$sizes[$i];
                 $n = count($files);
                 if (move_uploaded_file($tmps[$i], "$dir/$n")) $files[] = ['name' => (string)$name, 'type' => (string)($types[$i] ?? '')];
             }
         }
-        file_put_contents("$dir/meta.json", json_encode(['text' => mb_substr($text, 0, 20000), 'files' => $files]));
+        file_put_contents("$dir/meta.json", json_encode(['text' => mb_substr($text, 0, 20000), 'files' => $files, 'skipped' => $skipped, 'max_mb' => intdiv($maxBytes, 1_000_000)]));
         header('Location: /?share=' . $token . '#chat', true, 303);
     }
 
@@ -195,7 +214,7 @@ final class Web
             $out[] = array_intersect_key($this->app->files()->get($id), array_flip(['id', 'name', 'mime', 'kind', 'size', 'duration']));
         }
         exec('rm -rf ' . escapeshellarg($dir));
-        return ['text' => (string)$meta['text'], 'files' => $out];
+        return ['text' => (string)$meta['text'], 'files' => $out, 'skipped' => (int)($meta['skipped'] ?? 0), 'max_mb' => (int)($meta['max_mb'] ?? 0)];
     }
 
     private function saveSettings(array $b): array
@@ -209,11 +228,49 @@ final class Web
     private function changePassword(array $b): array
     {
         $current = (string)($b['current'] ?? ''); $new = (string)($b['new'] ?? '');
-        if (!hash_equals($this->app->cfg->webPassword, $current)) { sleep(2); $this->fail(403, 'The current password is wrong.'); }
+        $this->checkSecret($current);
         if (mb_strlen($new) < 12) $this->fail(400, 'The new password must be at least 12 characters.');
         Settings::setPassword($this->app->cfg->dataDir, $new);
+        $this->renewSession(); // other devices have to sign in again
         return ['ok' => true];
     }
+
+    /** The current password, for sensitive changes; failures count like failed sign-ins. */
+    private function checkSecret(string $password): void
+    {
+        $ip = Auth::clientIp();
+        if (($wait = $this->auth()->lockedFor($ip)) > 0) $this->fail(429, 'Too many wrong passwords. Try again in ' . self::minutes($wait) . '.');
+        if (!$this->auth()->checkPassword($password)) { $this->auth()->failed($ip); $this->fail(403, 'The current password is wrong.'); }
+    }
+
+    /** Two-step sign-in: setup (new secret, not active yet), enable (with a first code), disable (password and code). */
+    private function totp(string $action, array $b): array
+    {
+        $auth = $this->auth(); $st = $this->app->store; $dir = $this->app->cfg->dataDir;
+        if ($action === 'setup') {
+            if ($auth->totpEnabled()) $this->fail(400, 'Two-step sign-in is already on.');
+            $secret = Auth::newSecret();
+            $st->set('totp_pending', $secret);
+            return ['secret' => $secret, 'uri' => $auth->otpauthUri($secret)];
+        }
+        if ($action === 'enable') {
+            $secret = $st->get('totp_pending');
+            if ($secret === '') $this->fail(400, 'Start the setup again.');
+            if (!$auth->checkCode($secret, (string)($b['code'] ?? ''))) $this->fail(400, 'Wrong code. Check the time on your phone and try the next code.');
+            Settings::setTotp($dir, $secret);
+            $st->set('totp_pending', '');
+            return ['ok' => true, 'totp' => true];
+        }
+        $this->checkSecret((string)($b['password'] ?? ''));
+        if (!$auth->checkCode($auth->totpSecret(), (string)($b['code'] ?? ''))) $this->fail(403, 'Wrong code.');
+        Settings::setTotp($dir, '');
+        return ['ok' => true, 'totp' => false];
+    }
+
+    private function auth(): Auth { return $this->auth ??= new Auth($this->app); }
+    private ?Auth $auth = null;
+
+    private static function minutes(int $s): string { $m = (int)ceil($s / 60); return $m <= 1 ? 'a minute' : ($m < 120 ? "$m minutes" : (int)ceil($m / 60) . ' hours'); }
 
     private function activity(): array
     {
@@ -449,16 +506,34 @@ final class Web
         session_start();
     }
 
-    private function login(string $password): void
+    /** Password, then the authenticator code when two-step sign-in is on. Failed attempts lock the address for a while. */
+    private function login(string $password, string $code): void
     {
-        $expected = $this->app->cfg->webPassword;
-        if ($expected === '' || !hash_equals($expected, $password)) {
-            sleep(2); // slow down guessing
-            $this->fail(401, 'Wrong password.');
+        $auth = $this->auth(); $ip = Auth::clientIp();
+        if (($wait = $auth->lockedFor($ip)) > 0) {
+            header('Retry-After: ' . $wait);
+            $this->fail(429, 'Too many failed attempts. Try again in ' . self::minutes($wait) . '.');
         }
+        if (!$auth->hasPassword() || !$auth->checkPassword($password)) { $auth->failed($ip); $this->fail(401, 'Wrong password.'); }
+        if ($auth->totpEnabled()) {
+            if (trim($code) === '') { $this->json(['error' => 'Enter the 6-digit code from your authenticator app.', 'need_code' => true], 401); return; }
+            if (!$auth->checkCode($auth->totpSecret(), $code)) { $auth->failed($ip); $this->json(['error' => 'Wrong code.', 'need_code' => true], 401); return; }
+        }
+        $auth->clear("login:$ip");
         session_regenerate_id(true);
         $_SESSION['ok'] = true;
+        $_SESSION['gen'] = $auth->generation();
         $this->json(['ok' => true]);
+    }
+
+    /** After a password change: a fresh session id for this device, marked with the new password generation. */
+    private function renewSession(): void
+    {
+        session_start();
+        session_regenerate_id(true);
+        $_SESSION['ok'] = true;
+        $_SESSION['gen'] = $this->auth()->generation();
+        session_write_close();
     }
 
     private function logout(): array

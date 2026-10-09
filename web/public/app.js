@@ -14,8 +14,9 @@ async function api(path, opts = {}) {
   let data;
   try { data = JSON.parse(raw); }
   catch { data = { error: `Server error (HTTP ${res.status})` + (raw ? ': ' + raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) : '') }; }
-  if (res.status === 401) { showLogin(); throw new Error(data.error || 'Please sign in.'); }
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  const fail = msg => Object.assign(new Error(msg), { data, status: res.status });
+  if (res.status === 401) { showLogin(); throw fail(data.error || 'Please sign in.'); }
+  if (!res.ok) throw fail(data.error || `Request failed (${res.status})`);
   return data;
 }
 const post = (path, body = {}) => api(path, { method: 'POST', body });
@@ -512,6 +513,7 @@ async function saveSettings(el, g, reset) {
 async function loadSettings() {
   loadChannels().catch(e => toast(e.message));
   loadUpdate().catch(() => {});
+  loadSecurity();
   renderGroups((await api('/api/settings')).groups);
 }
 $('#doctor-run').onclick = async () => {
@@ -523,8 +525,47 @@ $('#doctor-run').onclick = async () => {
 };
 $('#pw-form').onsubmit = async e => {
   e.preventDefault();
-  try { await post('/api/settings/password', { current: $('#pw-current').value, new: $('#pw-new').value }); $('#pw-state').textContent = 'Password changed.'; $('#pw-current').value = $('#pw-new').value = ''; }
+  try { await post('/api/settings/password', { current: $('#pw-current').value, new: $('#pw-new').value }); $('#pw-state').textContent = 'Password changed. Your other devices will ask for it again.'; $('#pw-current').value = $('#pw-new').value = ''; }
   catch (err) { $('#pw-state').textContent = err.message; }
+};
+
+// ---- two-step sign-in ----
+async function loadSecurity() {
+  try { showTotp((await api('/api/security')).totp); } catch { /* shown elsewhere */ }
+}
+function showTotp(on) {
+  $('#totp-badge').textContent = on ? '· on' : '· off';
+  $('#totp-off').hidden = on; $('#totp-disable').hidden = !on; $('#totp-enable').hidden = true;
+}
+function loadScript(src) {
+  return new Promise((ok, ko) => {
+    if (document.querySelector(`script[src="${src}"]`)) return ok();
+    const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.append(s);
+  });
+}
+$('#totp-setup').onclick = async () => {
+  try {
+    const d = await post('/api/security/totp/setup');
+    $('#totp-secret').textContent = d.secret.replace(/(.{4})/g, '$1 ').trim();
+    $('#totp-link').href = d.uri;
+    $('#totp-off').hidden = true; $('#totp-enable').hidden = false; $('#totp-state').textContent = '';
+    try {
+      await loadScript('/vendor/qrcode.js');
+      const qr = qrcode(0, 'M'); qr.addData(d.uri); qr.make();
+      $('#totp-qr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+    } catch { $('#totp-qr').textContent = ''; }
+    $('#totp-code').focus();
+  } catch (e) { toast(e.message); }
+};
+$('#totp-enable').onsubmit = async e => {
+  e.preventDefault();
+  try { await post('/api/security/totp/enable', { code: $('#totp-code').value }); $('#totp-code').value = ''; showTotp(true); toast('Two-step sign-in is on.'); }
+  catch (err) { $('#totp-state').textContent = err.message; }
+};
+$('#totp-disable').onsubmit = async e => {
+  e.preventDefault();
+  try { await post('/api/security/totp/disable', { password: $('#totp-dis-pw').value, code: $('#totp-dis-code').value }); $('#totp-dis-pw').value = $('#totp-dis-code').value = ''; showTotp(false); toast('Two-step sign-in is off.'); }
+  catch (err) { $('#totp-dis-state').textContent = err.message; }
 };
 
 // ---- memory ----
@@ -861,8 +902,14 @@ async function startApp() {
 
 $('#login-form').onsubmit = async e => {
   e.preventDefault(); $('#login-error').textContent = '';
-  try { await post('/api/login', { password: $('#password').value }); $('#password').value = ''; await start(); if (!previewId) handleLaunch(); }
-  catch (err) { $('#login-error').textContent = err.message; }
+  try {
+    await post('/api/login', { password: $('#password').value, code: $('#login-code').value });
+    $('#password').value = $('#login-code').value = ''; $('#code-row').hidden = true;
+    await start(); if (!previewId) handleLaunch();
+  } catch (err) {
+    $('#login-error').textContent = err.message;
+    if (err.data?.need_code) { $('#code-row').hidden = false; $('#login-code').value = ''; $('#login-code').focus(); }
+  }
 };
 $('#logout').onclick = async () => { try { await post('/api/logout'); } catch {} showLogin(); };
 $('#composer').onsubmit = e => { e.preventDefault(); send(); };
@@ -1047,7 +1094,7 @@ async function handleLaunch() {
       for (const f of d.files) { state.pending.push({ id: f.id, info: f }); }
       renderPending();
       location.hash = '#chat';
-      toast('Shared content ready: add a message if you like, then send.');
+      toast(d.skipped ? `${d.skipped} file(s) were too large to share this way (max ${d.max_mb} MB): attach them with the paperclip.` : 'Shared content ready: add a message if you like, then send.');
       $('#input').focus();
     } catch (e) { toast(e.message); }
   }

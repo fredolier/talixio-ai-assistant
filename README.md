@@ -83,7 +83,14 @@ has changed several times in 2026; see
 
 ### Security
 The web app is password protected (`TALIXIO_WEB_PASSWORD`, generated at install; sessions last 30
-days; wrong passwords are slowed down). Chat channels only answer allowlisted senders.
+days). At the first sign-in the password is replaced by a hash in `data/settings.json` (the one in
+`talixio.env` is then ignored and can be removed). After 5 wrong passwords in 15 minutes (or 20 in a
+day) an address is blocked for a while and you get a notification; behind a reverse proxy on a private
+address, the client address comes from `X-Forwarded-For`. **Two-step sign-in** (Settings → *Two-step
+sign-in*) adds a 6-digit code from an authenticator app. Changing the password signs out other devices.
+Forgot the password: `sudo talixio password`. Lost the phone: `sudo talixio totp off`.
+Shares from other apps (Android share sheet) arriving without a session are limited to 25 MB and
+10 per hour. Chat channels only answer allowlisted senders.
 If your reverse proxy is on another machine, the hop between it and the VM is plain HTTP: bind to
 the VM's private IP (or `0.0.0.0:8080`) and firewall port 8080 to the proxy only.
 

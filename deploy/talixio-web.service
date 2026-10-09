@@ -8,7 +8,7 @@ Group=talixio
 EnvironmentFile=/etc/talixio/talixio.env
 Environment=HOME=/var/lib/talixio
 Environment=PATH=/var/lib/talixio/.local/bin:/usr/local/bin:/usr/bin:/bin
-Environment=PHP_CLI_SERVER_WORKERS=4
+Environment=PHP_CLI_SERVER_WORKERS=10
 WorkingDirectory=/var/lib/talixio
 ExecStart=/usr/bin/php -d variables_order=EGPCS -d upload_max_filesize=500M -d post_max_size=510M -d memory_limit=512M -d max_execution_time=0 -S ${TALIXIO_WEB_BIND} -t /opt/talixio/web/public /opt/talixio/web/router.php
 Restart=always
