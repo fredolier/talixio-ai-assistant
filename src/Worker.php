@@ -77,6 +77,7 @@ final class Worker
         if ($now - $this->lastSummary >= 600) {
             $this->lastSummary = $now;
             $this->guard('summary', fn() => (new Summarizer($app))->maybeRun($now));
+            $this->guard('mind', fn() => $app->mind()->tick($now));
         }
         if ($now - $this->lastSignal >= 5 && $app->signal()->enabled()) {
             $this->lastSignal = $now;

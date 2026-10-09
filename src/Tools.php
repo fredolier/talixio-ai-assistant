@@ -33,6 +33,14 @@ final class Tools
             'Append text to a memory file. USER.md = facts about the user; MEMORY.md = notes, decisions; HEARTBEAT.md = your periodic checklist; SOUL.md = your persona.',
             ['file' => $file, 'text' => ['type' => 'string']], ['file', 'text'],
             function (array $a) { $ws = $this->app->ws; $ws->write($a['file'], rtrim($ws->read($a['file'])) . "\n" . trim($a['text']) . "\n"); return 'appended'; });
+        $this->register('mind_observe', 'Note something that says a lot about the user or about how you should be, for your own learning (it becomes part of your character once confirmed over time). '
+            . 'kind: value (what matters to them), pattern (how they decide or work), self (about your behaviour: what they liked or corrected). One general sentence. strength: 1 hint, 2 clear, 3 explicit.',
+            ['kind' => ['type' => 'string', 'enum' => Mind::KINDS], 'text' => ['type' => 'string'], 'strength' => ['type' => 'integer']], ['kind', 'text'],
+            function (array $a) {
+                if (!$this->app->cfg->mind) return 'learning is off';
+                $this->app->mind()->addObservation((string)$a['kind'], (string)$a['text'], (int)($a['strength'] ?? 2), $this->app->space, 'noted');
+                return 'noted';
+            });
         $this->register('memory_replace', 'Replace exact text in a memory file (empty new_text deletes it). Use to correct or remove outdated facts.',
             ['file' => $file, 'old_text' => ['type' => 'string'], 'new_text' => ['type' => 'string']], ['file', 'old_text', 'new_text'],
             function (array $a) {

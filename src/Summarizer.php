@@ -47,6 +47,8 @@ final class Summarizer
         if ($text === null) return false;
         $store->addSummary((int)$rows[0]['id'], (int)end($rows)['id'], (int)$rows[0]['ts'], (int)end($rows)['ts'], $text, 1, $space);
         $store->set(Store::summarizedKey($space), (string)end($rows)['id']);
+        $mind = $this->app->mind(); // the same stretch, read again for what it says about the user and the assistant
+        if ($mind->enabled()) { try { $mind->observe($rows, $space); } catch (\Throwable $e) { Log::warn("mind: {$e->getMessage()}"); } }
         return true;
     }
 

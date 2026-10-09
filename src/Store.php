@@ -71,6 +71,15 @@ final class Store
         $this->addColumn('jobs', 'tags', "TEXT NOT NULL DEFAULT ''"); // ',research,bikes,'
         $this->addColumn('jobs', 'effort', "TEXT NOT NULL DEFAULT ''"); // '' = TALIXIO_JOB_EFFORT
         $this->addColumn('jobs', 'parent', 'INTEGER'); // the job this one continues
+        // the assistant's mind (Mind): observations from the history, beliefs built from them, a journal of how it changes
+        $this->db->exec("CREATE TABLE IF NOT EXISTS mind_obs(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, strength INTEGER NOT NULL DEFAULT 1,
+                space INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'chat', messages TEXT NOT NULL DEFAULT '[]', processed INTEGER NOT NULL DEFAULT 0);
+            CREATE INDEX IF NOT EXISTS mind_obs_pending ON mind_obs(processed);
+            CREATE TABLE IF NOT EXISTS mind_beliefs(id INTEGER PRIMARY KEY, kind TEXT NOT NULL, space INTEGER NOT NULL DEFAULT 0, text TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'emerging', confidence REAL NOT NULL DEFAULT 0, support INTEGER NOT NULL DEFAULT 0, days INTEGER NOT NULL DEFAULT 0,
+                last_seen INTEGER, created INTEGER NOT NULL, merged_into INTEGER);
+            CREATE TABLE IF NOT EXISTS mind_links(belief INTEGER NOT NULL, obs INTEGER NOT NULL, polarity INTEGER NOT NULL, PRIMARY KEY(belief, obs));
+            CREATE TABLE IF NOT EXISTS mind_journal(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL);");
         if ($this->addColumn('tool_log', 'job_id', 'INTEGER')) $this->db->exec('CREATE INDEX IF NOT EXISTS tool_log_job ON tool_log(job_id) WHERE job_id IS NOT NULL');
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");
         $this->addColumn('usage', 'job_id', 'INTEGER');

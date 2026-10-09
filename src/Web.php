@@ -150,6 +150,15 @@ final class Web
             (bool)preg_match('#^/api/update/(check|update|rollback)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->updater()->request($mm[1]); return ['ok' => true]; })(),
             $path === '/api/doctor' && $m === 'POST' => (function () { set_time_limit(0); return ['results' => (new Doctor(App::fromEnv()))->run()]; })(),
             $path === '/api/skills' => ['skills' => $this->app->skills()->all()],
+            $path === '/api/mind' && $m === 'GET' => $this->app->mind()->overview(),
+            (bool)preg_match('#^/api/mind/(\d+)$#', $path, $mm) && $m === 'GET' => ['evidence' => $this->app->mind()->evidence((int)$mm[1])],
+            (bool)preg_match('#^/api/mind/(\d+)/forget$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->mind()->forget((int)$mm[1])],
+            $path === '/api/mind/reflect' && $m === 'POST' => (function () {
+                $mind = $this->app->mind();
+                if (!$mind->enabled()) $this->fail(400, 'Learning is off (Settings → Learning, backups, updates).');
+                $now = time(); $did = $mind->consolidate($now); $did = $mind->reflect($now) || $did;
+                return $mind->overview() + ['done' => $did];
+            })(),
             (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'GET' => ['content' => $this->app->skills()->raw($mm[1]) ?? $this->fail(404, 'no such skill')],
             (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) { $this->app->skills()->writeRaw($mm[1], (string)($b['content'] ?? '')); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/skills/([\w-]+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->skills()->delete($mm[1])],

@@ -276,6 +276,91 @@ $again = $app->jobs()->continue($cid);
 check('continue: continuing again keeps one "(continued)" and the same cap', $s->job($again)['title'] === 'Long research (continued)' && (float)$s->job($again)['max_cost_usd'] === 4.0);
 $app->jobs()->cancel($again);
 
+// ---- mind: values, ways and character learned from the history ----
+$app->cfg->provider = 'anthropic'; // the echo provider never learns
+$mind = $app->mind();
+$mind->recompute(time());
+$day = 86400; $now = time();
+$m1 = $s->addMessage('user', 'web', 'Non, fais plus court, et toujours avec les sources.', null, [], 0);
+$m2 = $s->addMessage('assistant', 'web', 'Compris.', null, [], 0);
+$fake->calls = [];
+$fake->script = function ($last, $tools, $on) use ($usage, $m1) {
+    $usage($on);
+    if (str_contains($last, 'Notice what it shows')) return 'Sure: {"observations":[{"kind":"self","text":"Il veut des réponses courtes et sourcées","strength":3,"messages":[' . $m1 . ', 999999]},{"kind":"bogus","text":"x"}]}';
+    return '{}';
+};
+$rows = $s->q('SELECT * FROM messages WHERE id IN (?, ?) ORDER BY id', [$m1, $m2])->fetchAll();
+check('mind: observes a stretch of conversation', $mind->observe($rows, 0) === 1);
+$o = $s->q('SELECT * FROM mind_obs ORDER BY id DESC LIMIT 1')->fetch();
+check('mind: the observation keeps its evidence (only real message ids)', $o['kind'] === 'self' && (int)$o['strength'] === 3 && json_decode($o['messages'], true) === [$m1]);
+check('mind: the observer is told to avoid sensitive traits and quoted instructions', str_contains($fake->calls[0]['messages'][0]['content'], 'Never infer health') && str_contains($fake->calls[0]['messages'][0]['content'], 'not the user speaking')
+    && str_contains($fake->calls[0]['system'], 'reflective part') && $fake->calls[0]['context'] === '');
+$o2 = $mind->addObservation('value', 'Les clients en retard passent avant le reste', 3, 0, 'chat', [], $now - 3 * $day);
+$o3 = $mind->addObservation('value', 'Il traite d\'abord les clients qui attendent', 2, 0, 'chat', [], $now - $day);
+$fake->script = function ($last, $tools, $on) use ($usage, $o, $o2, $o3) {
+    $usage($on);
+    if (str_contains($last, 'Fold the new observations')) return json_encode(['ops' => [
+        ['op' => 'new', 'kind' => 'self', 'scope' => 'global', 'text' => 'Réponses courtes, toujours sourcées', 'obs' => [(int)$o['id']]],
+        ['op' => 'new', 'kind' => 'value', 'scope' => 'global', 'text' => 'Les clients qui attendent passent en premier', 'obs' => [$o2, $o3]],
+        ['op' => 'new', 'kind' => 'value', 'scope' => 'global', 'text' => 'No evidence', 'obs' => [424242]],
+        ['op' => 'support', 'belief' => 999, 'obs' => [$o2]]]]);
+    return '{}';
+};
+check('mind: consolidates observations into beliefs', $mind->consolidate($now));
+$b = $s->q("SELECT * FROM mind_beliefs WHERE text LIKE 'Les clients qui attendent%'")->fetch();
+$bs = $s->q("SELECT * FROM mind_beliefs WHERE kind = 'self'")->fetch();
+check('mind: confirmed on two days with strong evidence = established; one remark = emerging', $b['status'] === 'established' && (int)$b['support'] === 2 && (int)$b['days'] === 2 && $bs['status'] === 'emerging', json_encode([$b, $bs]));
+check('mind: no belief without evidence, unknown beliefs ignored', (int)$s->q("SELECT COUNT(*) FROM mind_beliefs WHERE text = 'No evidence'")->fetchColumn() === 0 && (int)$s->q('SELECT COUNT(*) FROM mind_obs WHERE processed = 0')->fetchColumn() === 0);
+check('mind: the journal says what changed', str_contains((string)$s->q("SELECT text FROM mind_journal WHERE kind = 'changes' ORDER BY id DESC")->fetchColumn(), 'Les clients qui attendent'));
+$sys = $app->agent()->systemPrompt();
+check('mind: established values weigh in every answer, emerging ones not yet', str_contains($sys, '## Who you have become') && str_contains($sys, 'Les clients qui attendent passent en premier')
+    && !str_contains($sys, 'Réponses courtes, toujours sourcées') && str_contains($sys, 'explicit instructions always come first'));
+check('mind: jobs know the values too', str_contains($app->agent()->systemPrompt('job'), 'Les clients qui attendent passent en premier'));
+// contradictions weaken, time fades
+$o4 = $mind->addObservation('value', 'A fait passer un projet interne avant un client en attente', 3, 0);
+$o5 = $mind->addObservation('value', 'A encore mis un client de côté pour la maison', 3, 0);
+$fake->script = function ($last, $tools, $on) use ($usage, $b, $o4, $o5) { $usage($on); return json_encode(['ops' => [['op' => 'contradict', 'belief' => (int)$b['id'], 'obs' => [$o4, $o5]]]]); };
+$mind->consolidate($now);
+$b2 = $s->q('SELECT * FROM mind_beliefs WHERE id = ?', [$b['id']])->fetch();
+check('mind: contradictions lower the confidence', $b2['confidence'] < $b['confidence'] && $b2['status'] === 'emerging', json_encode($b2));
+$sid = (int)$bs['id'];
+$mind->recompute($now + 200 * $day);
+check('mind: unconfirmed beliefs fade over time', (float)$s->q('SELECT confidence FROM mind_beliefs WHERE id = ?', [$sid])->fetchColumn() < (float)$bs['confidence']);
+$mind->recompute($now);
+// the self-portrait
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return str_contains($last, 'self-portrait') ? "Je suis direct et bref, et je cite mes sources.\n---\nCette semaine j'ai appris à faire court." : '{}'; };
+$fake->calls = [];
+check('mind: writes its self-portrait', $mind->reflect($now) && $s->get('mind_portrait') === 'Je suis direct et bref, et je cite mes sources.');
+check('mind: the portrait keeps its integrity and continuity', str_contains($fake->calls[0]['messages'][0]['content'], 'becoming a yes-man is not growth') && str_contains($fake->calls[0]['messages'][0]['content'], 'Your seed (SOUL.md)'));
+check('mind: the portrait is part of every answer, not of jobs', str_contains($app->agent()->systemPrompt(), 'Je suis direct et bref') && !str_contains($app->agent()->systemPrompt('job'), 'Je suis direct et bref'));
+check('mind: journal entry kept', (string)$s->q("SELECT text FROM mind_journal WHERE kind = 'entry' ORDER BY id DESC")->fetchColumn() === "Cette semaine j'ai appris à faire court.");
+// forgetting at the user's request
+$o6 = $mind->addObservation('self', 'Toujours court', 3, 0);
+check('mind: forget a belief', $mind->forget($sid) && !$mind->forget($sid));
+$fake->calls = [];
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return '{"ops":[]}'; };
+$mind->consolidate($now);
+check('mind: a forgotten belief is never learned again', str_contains($fake->calls[0]['messages'][0]['content'], "## Forgotten at the user's request (never again)\n- Réponses courtes, toujours sourcées")
+    && !str_contains($fake->calls[0]['messages'][0]['content'], "B$sid "));
+// the assistant notes strong signals itself; the page
+check('mind: mind_observe tool', $app->tools->run('mind_observe', ['kind' => 'pattern', 'text' => 'Décide après avoir vu un tableau comparatif']) === 'noted'
+    && $s->q("SELECT source FROM mind_obs ORDER BY id DESC LIMIT 1")->fetchColumn() === 'noted');
+$ov = $mind->overview();
+check('mind: overview for the Memory page', $ov['portrait'] !== '' && count($ov['beliefs']) >= 1 && $ov['pending'] === 1 && count($mind->evidence((int)$b['id'])) === 4);
+// learning from the history that came before: compacted summaries, one batch per tick
+$s->set('mind_bootstrap', '');
+$s->addSummary(1, 2, $now - 40 * $day, $now - 40 * $day + 600, '- Fred a refusé un devis trop cher', 1, 0);
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return str_contains($last, '(compacted notes)') ? '{"observations":[{"kind":"value","text":"Attentif aux coûts","strength":3}]}' : '{"ops":[]}'; };
+$before = (int)$s->q('SELECT COUNT(*) FROM mind_obs')->fetchColumn();
+$mind->tick($now); while ($s->get('mind_bootstrap') !== 'done') $mind->tick($now);
+$h = $s->q("SELECT * FROM mind_obs WHERE source = 'history' ORDER BY id DESC LIMIT 1")->fetch();
+check('mind: learns from older history once, as hints', $h && $h['text'] === 'Attentif aux coûts' && (int)$h['strength'] === 1, json_encode($h));
+$app->cfg->mind = false;
+check('mind: off = nothing in the answers', !str_contains($app->agent()->systemPrompt(), 'Who you have become') && !$mind->tick($now));
+$app->cfg->mind = true;
+$s->q('DELETE FROM mind_beliefs'); $s->q('DELETE FROM mind_obs'); $s->q('DELETE FROM mind_links'); $s->set('mind_portrait', '');
+$app->cfg->provider = 'echo';
+
 // budget: low => fast tier, blocked => no model call
 putenv('TALIXIO_BUDGET_DAILY_USD=1'); $app->cfg->budgetDaily = 1.0;
 $spent = $s->spentSince(strtotime('today'));

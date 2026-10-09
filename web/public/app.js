@@ -1646,7 +1646,51 @@ $('#digest-compact').onclick = async () => {
   b.disabled = false; b.textContent = 'Compact now';
 };
 
+const MIND_KIND = { value: 'What matters to you', pattern: 'How you work and decide', self: 'What it learned about itself' };
+async function loadMind() { showMind(await api('api/mind')); }
+function showMind(d) {
+  const box = $('#mind');
+  if (!d.enabled) { box.innerHTML = '<div class="placeholder">Learning is off (Settings → Learning, backups, updates → Character and values).</div>'; return; }
+  const est = d.beliefs.filter(b => b.status === 'established'), emerging = d.beliefs.filter(b => b.status !== 'established');
+  const item = b => `<li class="belief" data-id="${b.id}"><div class="b-text">${esc(b.text)}${b.space_name ? ` <span class="chip small">${esc(b.space_name)}</span>` : ''}</div>
+      <div class="b-meta"><span class="conf" title="Confidence ${Math.round(b.confidence * 100)}%"><i style="width:${Math.round(b.confidence * 100)}%"></i></span>
+      <span>seen ${b.support}× over ${b.days} day${b.days > 1 ? 's' : ''}${b.last_seen ? ', last ' + fmtDate(b.last_seen) : ''}</span>
+      <button class="linkish" data-a="why" type="button">Why?</button><button class="linkish danger" data-a="forget" type="button">Forget</button></div><div class="b-why" hidden></div></li>`;
+  const group = (list, empty) => Object.entries(MIND_KIND).map(([k, label]) => {
+    const l = list.filter(b => b.kind === k);
+    return l.length ? `<h4>${label}</h4><ul class="beliefs">${l.map(item).join('')}</ul>` : '';
+  }).join('') || `<p class="muted small">${empty}</p>`;
+  const status = d.learning_history ? 'Learning from your past conversations…' : `${nf.format(d.observations)} observation${d.observations === 1 ? '' : 's'} so far${d.pending ? `, ${d.pending} not yet thought over` : ''}${d.consolidated ? ` · last thought over ${fmtTime(d.consolidated)}` : ''}.`;
+  box.innerHTML = `<div class="card portrait"><div class="row"><h4>Who it has become</h4><span class="muted small">${d.reflected ? 'Portrait of ' + fmtDate(d.reflected) : ''}</span></div>
+      ${d.portrait ? `<div class="doc">${md(d.portrait)}</div>` : '<p class="muted">No portrait yet: it writes one once it has learned enough, then updates it every week.</p>'}</div>
+    <div class="row"><span class="muted small">${status}</span><button id="mind-reflect" class="btn" type="button">Think it over now</button></div>
+    ${group(est, 'Nothing established yet: beliefs need to be confirmed on several days.')}
+    ${emerging.length ? `<details class="card emerging"><summary>Emerging (${emerging.length}): not sure yet, not used in its choices</summary>${group(emerging, '')}</details>` : ''}
+    ${d.journal.length ? `<details class="card"><summary>Journal</summary><ul class="journal">${d.journal.map(j => `<li><span class="muted small">${fmtTime(j.ts)}</span><div class="doc">${md(j.text)}</div></li>`).join('')}</ul></details>` : ''}`;
+  box.querySelectorAll('.belief').forEach(li => {
+    const id = li.dataset.id;
+    li.querySelector('[data-a=why]').onclick = async () => {
+      const w = li.querySelector('.b-why');
+      if (!w.hidden) { w.hidden = true; return; }
+      const { evidence } = await api('api/mind/' + id);
+      w.innerHTML = `<ul>${evidence.map(e => `<li class="${e.polarity < 0 ? 'against' : ''}"><span class="muted small">${fmtDate(e.ts)} · ${esc(e.space_name)}${e.polarity < 0 ? ' · against' : ''}${e.source === 'noted' ? ' · noted during a conversation' : e.source === 'history' ? ' · from older history' : ''}</span> ${esc(e.text)}</li>`).join('')}</ul>`;
+      w.hidden = false;
+    };
+    li.querySelector('[data-a=forget]').onclick = async e => {
+      const b = e.currentTarget;
+      if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Forget for good?'; return; }
+      try { await post(`api/mind/${id}/forget`); toast('Forgotten: it will not learn it again.'); loadMind(); } catch (err) { toast(err.message); }
+    };
+  });
+  $('#mind-reflect').onclick = async e => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = 'Thinking…';
+    try { const r = await post('api/mind/reflect'); showMind(r); toast(r.done ? 'Done: see what changed in the journal.' : 'Nothing new to think over yet.'); }
+    catch (err) { toast(err.message); b.disabled = false; b.textContent = 'Think it over now'; }
+  };
+}
+
 async function loadMemory() {
+  loadMind().catch(e => toast(e.message));
   loadSkills().catch(e => toast(e.message));
   loadDigest().catch(() => {});
   state.memFiles = (await api('api/memory')).files;

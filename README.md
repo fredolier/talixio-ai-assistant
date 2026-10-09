@@ -302,6 +302,20 @@ sudo deploy/docker/install-stack.sh --domain assistant.example.com --email you@e
   month's weeks into an even shorter month summary. The assistant reads this digest before every
   answer (Memory page → *Conversation digest*), so it keeps the thread of months of conversation for
   a fixed cost, while details fade. Nothing is deleted: every message and summary stays searchable.
+- **Character and values, learned by itself** (`TALIXIO_MIND`): each compacted stretch of
+  conversation is read again for what it shows beyond facts: what matters to you (values), how you
+  decide and work (patterns), and how it should be (lessons about itself); the assistant also notes
+  strong signals as they happen. Once a day it folds these observations into beliefs, each with its
+  evidence and a confidence that grows when confirmed on several days, drops when contradicted and
+  fades when nothing confirms it (half-life 4 months). Once a week it rewrites its self-portrait in
+  the first person, from `SOUL.md` (the seed), what it learned and the previous portrait, and keeps a
+  journal of what changed. Established beliefs and the portrait go into every answer (values also
+  into jobs) and weigh in its choices; it says when one shapes a decision, your explicit
+  instructions always win, and it keeps the right to disagree. It also learns from the history that
+  came before (compacted summaries, as hints). Memory page → *Character and values*: the portrait,
+  each belief with *Why?* (its evidence) and *Forget* (for good: it won't learn it again), the
+  emerging ones, the journal. Never about health, religion, politics, sexuality or origin. Cost: a
+  fast-model call per compacted stretch, a standard one per day and per week.
 - **Model tiers**: fast (heartbeat, summaries, simple lookups), standard (chat), deep (hard reasoning,
   with extended thinking on Claude). Start a message with `/deep` or `/fast` to choose. Each reply
   shows the model, tokens and estimated cost.
