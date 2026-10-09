@@ -32,6 +32,20 @@ final class Cli
                         echo '> ';
                     }
                     return 0;
+                case 'boot': // container start (multi-user server): first password, and resets asked from the admin page
+                    $dir = $app->cfg->dataDir; $over = Settings::load($dir);
+                    if (($h = (string)getenv('TALIXIO_INIT_PASSWORD_HASH')) !== '' && ($over['TALIXIO_WEB_PASSWORD_HASH'] ?? '') === '' && !isset($over['TALIXIO_INIT_DONE'])) {
+                        $over['TALIXIO_WEB_PASSWORD_HASH'] = $h; $over['TALIXIO_INIT_DONE'] = '1';
+                    }
+                    $r = (string)getenv('TALIXIO_RESET'); // "<nonce>:password:<hash>" or "<nonce>:totp", applied once
+                    if ($r !== '' && ($over['TALIXIO_RESET_DONE'] ?? '') !== strtok($r, ':')) {
+                        [$nonce, $what, $hash] = array_pad(explode(':', $r, 3), 3, '');
+                        if ($what === 'password' && $hash !== '') { $over['TALIXIO_WEB_PASSWORD_HASH'] = $hash; echo "password reset\n"; }
+                        if ($what === 'totp') { unset($over['TALIXIO_TOTP_SECRET']); echo "two-step sign-in turned off\n"; }
+                        $over['TALIXIO_RESET_DONE'] = $nonce;
+                    }
+                    Settings::write($dir, $over);
+                    return 0;
                 case 'backup':
                     echo $app->backup()->run(), "\n";
                     return 0;

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Talixio admin</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<main id="gate" class="gate" hidden>
+  <form id="login" class="box" hidden>
+    <h1>Talixio admin</h1>
+    <label>Password<input id="l-pw" type="password" autocomplete="current-password" required></label>
+    <label>Code from your authenticator app<input id="l-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required></label>
+    <button class="btn primary" type="submit">Sign in</button>
+    <p id="l-err" class="err"></p>
+  </form>
+  <form id="setup" class="box" hidden>
+    <h1>Set up the admin</h1>
+    <p class="muted">Use the setup code shown in the server logs: <code>docker logs talixio-admin</code>.</p>
+    <label>Setup code<input id="s-code" autocomplete="off" required></label>
+    <div id="s-step2" hidden>
+      <p>Scan this with an authenticator app (Google Authenticator, Aegis, 1Password…). Signing in will always need its code.</p>
+      <div id="s-qr" class="qr"></div>
+      <p class="muted small">Or type this key: <code id="s-secret"></code></p>
+      <label>Admin password (12 characters or more)<input id="s-pw" type="password" autocomplete="new-password" minlength="12"></label>
+      <label>The code shown by the app<input id="s-totp" inputmode="numeric" maxlength="8"></label>
+    </div>
+    <button class="btn primary" type="submit" id="s-btn">Continue</button>
+    <p id="s-err" class="err"></p>
+  </form>
+</main>
+
+<div id="app" hidden>
+  <header class="top">
+    <h1>Talixio admin</h1>
+    <div id="server" class="server muted small"></div>
+    <button id="logout" class="btn ghost small" type="button">Sign out</button>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button data-tab="people" class="on">People</button><button data-tab="update">Updates</button><button data-tab="settings">Settings</button><button data-tab="security">Security</button><button data-tab="activity">Activity</button>
+  </nav>
+
+  <section id="tab-people" class="tab">
+    <div class="row"><h2>People</h2><span class="spacer"></span><button id="new-btn" class="btn primary" type="button">+ New person</button></div>
+    <p class="muted small">Each person has their own assistant, data and API keys. You manage their container, never their content.</p>
+    <div id="people" class="people"></div>
+  </section>
+
+  <section id="tab-update" class="tab" hidden>
+    <h2>Updates</h2>
+    <p id="version" class="muted"></p>
+    <div class="row wrap"><label class="inline">Branch <input id="branch" value="main" size="28"></label>
+      <button id="update-btn" class="btn primary" type="button">Build and update everyone</button>
+      <button id="rollback-btn" class="btn" type="button">Back to the previous version</button></div>
+    <p class="muted small">The new version is built from the git repository, then each assistant is moved to it one by one. If one does not start, it goes back to the previous version and the update stops.</p>
+    <div id="job" class="job" hidden></div>
+  </section>
+
+  <section id="tab-settings" class="tab" hidden>
+    <h2>Settings</h2>
+    <form id="settings" class="form">
+      <fieldset><legend>Addresses</legend>
+        <label>Domain<input id="st-domain" placeholder="assistant.example.com"></label>
+        <label class="check"><input type="radio" name="mode" value="path"> <span><b>One address</b>: assistant.example.com/<i>person</i>/ (no DNS change)</span></label>
+        <label class="check"><input type="radio" name="mode" value="subdomain"> <span><b>Subdomains</b>: <i>person</i>.assistant.example.com (needs a DNS record <code>*.assistant.example.com</code> pointing to this server; certificates come at the first visit)</span></label>
+        <p class="muted small">Changing these restarts every assistant (a few seconds). People keep their data; their app must be opened at the new address (and installed again on phones).</p>
+      </fieldset>
+      <fieldset><legend>New assistants get</legend>
+        <div class="row wrap"><label class="inline">Memory (MB)<input id="st-mem" type="number" min="256" step="128"></label><label class="inline">CPUs<input id="st-cpus" type="number" min="0.25" step="0.25"></label></div>
+      </fieldset>
+      <fieldset><legend>Shared memory search (Ollama)</legend>
+        <label class="check"><input id="st-ollama" type="checkbox"> <span>Assistants search their memory by meaning with the server's Ollama (no API key needed). They only get embeddings from it.</span></label>
+        <div class="row wrap"><label class="inline">Model<input id="st-model" size="28"></label><button id="pull-btn" class="btn small" type="button">Download the model</button></div>
+      </fieldset>
+      <fieldset><legend>Google Calendar for everyone (optional)</legend>
+        <p class="muted small">One Google OAuth client for all the assistants: each person then just presses "Connect" in their Settings. Add each address below as an authorised redirect URI of the client.</p>
+        <label>Client ID<input id="st-gid" autocomplete="off"></label>
+        <label>Client secret<input id="st-gsecret" type="password" autocomplete="off" placeholder="unchanged"></label>
+        <pre id="st-redirects" class="small"></pre>
+      </fieldset>
+      <fieldset><legend>Sandboxes</legend>
+        <label class="check"><input id="st-apparmor" type="checkbox"> <span>Run assistants without Docker's AppArmor profile, so the shell sandbox and the browser keep their own sandboxes (needed on Ubuntu; seccomp and no privileges still apply).</span></label>
+      </fieldset>
+      <button class="btn primary" type="submit">Save</button> <span id="st-msg" class="muted small"></span>
+    </form>
+  </section>
+
+  <section id="tab-security" class="tab" hidden>
+    <h2>Security</h2>
+    <form id="ips" class="form"><fieldset><legend>Addresses allowed to open this page</legend>
+      <p class="muted small">One per line (IP or range, e.g. 203.0.113.7 or 10.8.0.0/24). Empty = from anywhere (password and code still needed). Your address now: <code id="my-ip"></code></p>
+      <textarea id="ips-list" rows="4"></textarea>
+      <button class="btn" type="submit">Save</button> <span id="ips-msg" class="muted small"></span></fieldset></form>
+    <form id="pw" class="form"><fieldset><legend>Admin password</legend>
+      <label>Current password<input id="pw-cur" type="password" autocomplete="current-password"></label>
+      <label>New password (12 characters or more)<input id="pw-new" type="password" autocomplete="new-password" minlength="12"></label>
+      <label>Authenticator code<input id="pw-code" inputmode="numeric" maxlength="8"></label>
+      <button class="btn" type="submit">Change</button> <span id="pw-msg" class="muted small"></span></fieldset></form>
+  </section>
+
+  <section id="tab-activity" class="tab" hidden>
+    <h2>Activity</h2>
+    <div id="audit" class="audit"></div>
+  </section>
+</div>
+
+<dialog id="dlg" class="dialog"><form method="dialog" id="dlg-form"><div id="dlg-body"></div>
+  <div class="row"><span class="spacer"></span><button id="dlg-cancel" class="btn" value="cancel" type="button">Cancel</button><button id="dlg-ok" class="btn primary" value="ok">OK</button></div></form></dialog>
+<div id="toast" class="toast" hidden></div>
+<script src="qrcode.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

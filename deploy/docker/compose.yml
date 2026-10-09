@@ -1,0 +1,96 @@
+# Talixio for several people on one server. Started by install-stack.sh (which writes .env and builds
+# the talixio:current image); the assistants themselves are created from the admin page.
+#   https://<domain>/admin/   the admin page
+#   https://<domain>/<person>/   (or https://<person>.<domain>/)  each person's assistant
+name: talixio
+
+services:
+  caddy:                      # the only door: HTTPS, the admin page, the assistants, embeddings for them
+    image: caddy:2-alpine
+    container_name: talixio-caddy
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - type: volume                     # Caddyfile written by the agent (not Caddy's sample)
+        source: caddy-conf
+        target: /etc/caddy
+        volume: { nocopy: true }
+      - caddy-data:/data                 # certificates
+      - caddy-config:/config
+    networks: [control, ollama]          # + each assistant's own network (joined by the agent)
+    depends_on: [agent]                  # the agent writes the Caddyfile first
+    mem_limit: 256m
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges]
+
+  ollama:                     # embeddings for everyone's memory search; reachable only through Caddy
+    image: ollama/ollama:latest
+    container_name: talixio-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_NUM_PARALLEL: "2"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: 30m
+    volumes: [ollama:/root/.ollama]
+    networks: [ollama]
+    mem_limit: 1536m
+    security_opt: [no-new-privileges]
+
+  agent:                      # the only part with Docker access; a closed list of actions (src/Fleet.php)
+    image: talixio:current
+    container_name: talixio-agent
+    restart: unless-stopped
+    entrypoint: ["/usr/bin/tini", "--", "sh", "-c", "php /opt/talixio/deploy/docker/fleetctl.php init; exec php -S 0.0.0.0:8090 /opt/talixio/deploy/docker/agent.php"]
+    group_add: ["${DOCKER_GID}"]          # access to the Docker socket
+    environment:
+      TALIXIO_AGENT_TOKEN: ${AGENT_TOKEN}
+      TALIXIO_DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+      TALIXIO_GIT_URL: ${GIT_URL}
+      TALIXIO_GIT_BRANCH: ${GIT_BRANCH:-main}
+      TALIXIO_STATE_DIR: /state
+      CADDY_CONFIG_DIR: /caddy-config
+      PHP_CLI_SERVER_WORKERS: "4"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - agent-state:/state
+      - caddy-conf:/caddy-config
+    networks: [control]
+    healthcheck: { test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8090/health"], interval: 30s }
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 256m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+
+  admin:                      # the admin page: talks to the agent only, never to Docker or people's data
+    image: talixio:current
+    container_name: talixio-admin
+    restart: unless-stopped
+    entrypoint: ["/usr/bin/tini", "--", "sh", "-c", "php /opt/talixio/deploy/docker/admin.php; exec php -S 0.0.0.0:8080 /opt/talixio/deploy/docker/admin.php"]
+    environment:
+      TALIXIO_AGENT_URL: http://talixio-agent:8090
+      TALIXIO_AGENT_TOKEN: ${AGENT_TOKEN}
+      TALIXIO_ADMIN_DIR: /admin-data
+      TALIXIO_BASE_PATH: admin
+    volumes: [admin-data:/admin-data]
+    networks: [control]
+    healthcheck: { test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/icon.svg"], interval: 30s }
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 128m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+
+networks:
+  control: { name: talixio-control }
+  ollama: { name: talixio-ollama }
+
+volumes:
+  caddy-conf: { name: talixio-caddy-conf }
+  caddy-data: { name: talixio-caddy-data }
+  caddy-config: { name: talixio-caddy-config }
+  ollama: { name: talixio-ollama-models }
+  agent-state: { name: talixio-agent-state }
+  admin-data: { name: talixio-admin-data }

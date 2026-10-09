@@ -262,7 +262,7 @@ final class Settings
         self::write($dataDir, $over);
     }
 
-    private static function write(string $dataDir, array $over): void
+    public static function write(string $dataDir, array $over): void
     {
         ksort($over);
         $tmp = self::file($dataDir) . '.tmp';

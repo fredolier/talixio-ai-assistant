@@ -1,0 +1,43 @@
+:root{--bg:#f2f5f4;--surface:#fff;--sunk:#e8eeec;--ink:#14201d;--muted:#5b6a66;--line:#d9e2df;--accent:#0e7c6b;--accent-ink:#fff;--accent-soft:#dcefe9;--warn:#995f00;--danger:#b42318;color-scheme:light}
+[hidden]{display:none!important}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1412;--surface:#141e1b;--sunk:#0f1916;--ink:#e4ebe8;--muted:#94a49f;--line:#24322e;--accent:#3dc9a7;--accent-ink:#06231c;--accent-soft:#163a31;--warn:#f0b54a;--danger:#ff8a7a;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+h1{font-size:1.25rem;margin:0} h2{font-size:1.15rem;margin:0 0 6px} h3{margin:0 0 10px}
+.muted{color:var(--muted)} .small{font-size:.84rem} .err{color:var(--danger);min-height:1.3em;margin:0}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;background:var(--sunk);padding:1px 5px;border-radius:5px}
+a{color:var(--accent)}
+.btn{font:inherit;font-size:.9rem;padding:8px 14px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600} .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+.btn.ghost{background:none} .btn.small{padding:5px 10px;font-size:.84rem} .btn:disabled{opacity:.5;cursor:default}
+input,select,textarea{font:inherit;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--sunk);color:var(--ink);width:100%}
+label{display:flex;flex-direction:column;gap:4px;font-size:.86rem;color:var(--muted);margin:8px 0}
+label.inline{display:inline-flex;width:auto} label.inline input{width:auto}
+label.check{flex-direction:row;align-items:flex-start;gap:8px;color:var(--ink)} label.check input{width:auto;margin-top:4px}
+.row{display:flex;gap:10px;align-items:center} .wrap{flex-wrap:wrap} .spacer{flex:1}
+.gate{min-height:100vh;display:grid;place-items:center;padding:16px}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;width:min(420px,100%)}
+.box .btn{margin-top:8px}
+.qr{width:200px;margin:8px auto;background:#fff;border-radius:8px}
+.top{display:flex;align-items:center;gap:16px;padding:14px max(16px,calc((100% - 1000px)/2));border-bottom:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
+.top .server{flex:1}
+.tabs{display:flex;gap:4px;padding:10px max(16px,calc((100% - 1000px)/2)) 0;overflow-x:auto}
+.tabs button{font:inherit;padding:8px 14px;border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);cursor:pointer}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.tab{padding:18px max(16px,calc((100% - 1000px)/2)) 40px}
+.people{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.person{display:grid;grid-template-columns:1fr auto 170px 200px;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.person a{overflow-wrap:anywhere}
+@media (max-width:760px){.person{grid-template-columns:1fr auto}.person .acts{grid-column:1/-1}}
+.pill{font-size:.75rem;font-weight:600;padding:2px 10px;border-radius:99px;background:var(--sunk);color:var(--muted)}
+.pill.on{background:var(--accent-soft);color:var(--accent)} .pill.warn{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)} .pill.off{color:var(--danger)}
+.form fieldset{border:1px solid var(--line);border-radius:12px;background:var(--surface);margin:0 0 14px;padding:10px 16px 14px}
+.form legend{font-weight:600;padding:0 6px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0} pre.out{background:var(--sunk);border-radius:9px;padding:10px;max-height:50vh;overflow:auto;font-size:.82rem}
+.job{margin-top:14px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface)} .job.failed{border-color:var(--danger)} .job.done{border-color:var(--accent)}
+.job p{margin:4px 0}
+.audit div{padding:6px 0;border-bottom:1px solid var(--line)}
+.dialog{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);padding:20px;width:min(520px,calc(100vw - 24px))}
+.dialog::backdrop{background:rgba(0,0,0,.4)}
+.secret code{font-size:1.1rem;user-select:all}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.9rem;z-index:10}

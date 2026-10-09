@@ -23,13 +23,13 @@ RUN set -eux; \
     if [ "$WITH_NODE" = 1 ] && [ "$WITH_CLAUDE_CODE" = 1 ]; then npm install -g --omit=dev @anthropic-ai/claude-code && npm cache clean --force; fi; \
     rm -rf /var/lib/apt/lists/* /root/.npm; \
     useradd --uid 1000 --home-dir /data/home --shell /usr/sbin/nologin talixio; \
-    install -d -o talixio -g talixio -m 750 /data
+    install -d -o talixio -g talixio -m 750 /data /state /admin-data /caddy-config
 
 COPY --chown=root:root . /opt/talixio
 ARG VERSION_SHA=unknown
 ARG VERSION_DATE=
 ARG VERSION_SUBJECT=
-RUN set -eux; chmod 755 /opt/talixio/deploy/docker/entrypoint.sh; \
+RUN set -eux; chmod 755 /opt/talixio/deploy/docker/entrypoint.sh /caddy-config; \
     php -r 'file_put_contents("/opt/talixio/VERSION.json", json_encode(["sha" => $argv[1], "short" => substr($argv[1], 0, 7), "branch" => "image", "date" => $argv[2], "subject" => $argv[3], "installed_at" => time()]));' \
       "$VERSION_SHA" "$VERSION_DATE" "$VERSION_SUBJECT"
 

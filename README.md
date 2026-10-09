@@ -149,6 +149,16 @@ Create a bot with @BotFather, set `TALIXIO_TELEGRAM_TOKEN`, restart, and message
 with your chat id; put it in `TALIXIO_TELEGRAM_ALLOWED_IDS`. Telegram and the web app share the same
 conversation.
 
+## Several people on one server (Docker)
+
+One assistant per person, each with their own data, keys (and costs) and password, managed from an
+admin page (`https://<domain>/admin/`) without SSH; a shared Ollama for memory search. An existing
+installation can be moved into it. See [deploy/docker/README.md](deploy/docker/README.md):
+
+```bash
+sudo deploy/docker/install-stack.sh --domain assistant.example.com --email you@example.com [--migrate fred]
+```
+
 ## What it can do (v0.9)
 - **Live answers**: replies appear as they are written, with what it's doing ("Searching the web…",
   "Reading example.com…"). The send button becomes **Stop** while it writes (what was written is kept).

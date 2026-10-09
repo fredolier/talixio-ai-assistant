@@ -1426,6 +1426,46 @@ check('share: shares without a session are rate-limited', $codes[0] === 303 && e
 check('share: at most 5 waiting in the inbox', count(glob("$ad/share-inbox/*", GLOB_ONLYDIR)) <= 5);
 proc_terminate($ws); proc_close($ws);
 
+// ---- multi-user server: the agent's locked template, Caddy configuration, admin checks ----
+$fl = new \Talixio\Fleet("$dir/fleet", "$dir/no-docker.sock");
+check('fleet: identifiers', \Talixio\Fleet::validId('alice') && \Talixio\Fleet::validId('jean-paul') && !\Talixio\Fleet::validId('admin') && !\Talixio\Fleet::validId('A') && !\Talixio\Fleet::validId('x') && !\Talixio\Fleet::validId('bob-') && !\Talixio\Fleet::validId('../etc'));
+$fs = $fl->state(); $fs['settings']['domain'] = 'assistant.example.com';
+$fs['instances']['alice'] = ['name' => 'Alice', 'email' => '', 'memory_mb' => 1024, 'cpus' => 1.5, 'created' => time(), 'password_hash' => '$2y$x', 'reset' => '', 'timezone' => 'Europe/Paris'];
+$spec = $fl->spec('alice', $fs);
+$hc = $spec['HostConfig'];
+check('fleet: containers are locked down (no privileges, read-only, limits, own network)', $hc['Privileged'] === false && $hc['CapDrop'] === ['ALL'] && $hc['ReadonlyRootfs'] && $hc['Memory'] === 1024 * 1048576
+    && $hc['NanoCpus'] === 1500000000 && $hc['NetworkMode'] === 'talixio-i-alice' && in_array('no-new-privileges', $hc['SecurityOpt'], true) && !isset($hc['Binds']) && $hc['Mounts'][0]['Source'] === 'talixio-alice'
+    && str_starts_with(implode("\n", $hc['SecurityOpt']), 'no-new-privileges') && json_decode(substr($hc['SecurityOpt'][1], 8), true)['defaultAction'] === 'SCMP_ACT_ERRNO');
+check('fleet: instance settings (prefix, shared Ollama through Caddy)', in_array('TALIXIO_BASE_PATH=alice', $spec['Env'], true) && in_array('TALIXIO_OLLAMA_URL=http://talixio-caddy:11434', $spec['Env'], true));
+$cf = $fl->caddyfile($fs);
+check('fleet: Caddy routes the admin page and each assistant under its path', str_contains($cf, "assistant.example.com {") && str_contains($cf, 'handle_path /admin/*') && str_contains($cf, "handle_path /alice/* {\n\t\treverse_proxy talixio-alice:8080") && !str_contains($cf, 'on_demand'));
+check('fleet: Ollama only for embeddings', str_contains($cf, '@embed path /api/embed /api/embeddings /api/tags /api/version') && str_contains($cf, 'respond 403'));
+$fs['settings']['mode'] = 'subdomain';
+$cf = $fl->caddyfile($fs);
+check('fleet: subdomain mode, certificates on demand only for existing people', str_contains($cf, '*.assistant.example.com {') && str_contains($cf, '@alice host alice.assistant.example.com') && str_contains($cf, 'ask http://talixio-agent:8090/ask')
+    && in_array('TALIXIO_BASE_PATH=', $fl->spec('alice', $fs)['Env'], true));
+file_put_contents("$dir/fleet/fleet.json", json_encode($fs));
+check('fleet: /ask says yes only for existing people', $fl->ask('alice.assistant.example.com') && !$fl->ask('bob.assistant.example.com') && !$fl->ask('alice.evil.com') && !$fl->ask('assistant.example.com'));
+try { $fl->setSettings(['domain' => 'bad domain; rm']); check('fleet: bad domain refused', false); } catch (\InvalidArgumentException) { check('fleet: bad domain refused', true); }
+try { $fl->create('admin'); check('fleet: reserved identifiers refused', false); } catch (\InvalidArgumentException) { check('fleet: reserved identifiers refused', true); }
+check('admin: allowed addresses (IPv4, IPv6, ranges)', \Talixio\AdminWeb::ipAllowed('10.8.0.5', ['10.8.0.0/24']) && !\Talixio\AdminWeb::ipAllowed('10.8.1.5', ['10.8.0.0/24'])
+    && \Talixio\AdminWeb::ipAllowed('203.0.113.7', ['203.0.113.7']) && \Talixio\AdminWeb::ipAllowed('2001:db8::1', ['2001:db8::/32']) && \Talixio\AdminWeb::ipAllowed('1.2.3.4', []) && !\Talixio\AdminWeb::ipAllowed('1.2.3.4', ['5.6.7.8']));
+// container start: first password, then a reset asked from the admin page, applied once
+$bd2 = "$dir/boot"; mkdir($bd2);
+$boot = function (array $env) use ($bd2) { $e = ['TALIXIO_DATA_DIR' => $bd2, 'PATH' => getenv('PATH')] + $env; $p = proc_open([PHP_BINARY, dirname(__DIR__) . '/bin/talixio', 'boot'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pp, null, $e); $o = stream_get_contents($pp[1]); proc_close($p); return $o; };
+$boot(['TALIXIO_INIT_PASSWORD_HASH' => password_hash('first-password-1', PASSWORD_DEFAULT)]);
+check('boot: first password written', password_verify('first-password-1', \Talixio\Settings::load($bd2)['TALIXIO_WEB_PASSWORD_HASH'] ?? ''));
+\Talixio\Settings::setPassword($bd2, 'changed-by-the-person');
+$boot(['TALIXIO_INIT_PASSWORD_HASH' => password_hash('first-password-1', PASSWORD_DEFAULT)]);
+check('boot: the person\'s own password is never overwritten by the first one', password_verify('changed-by-the-person', \Talixio\Settings::load($bd2)['TALIXIO_WEB_PASSWORD_HASH']));
+\Talixio\Settings::setTotp($bd2, 'ABCDEF');
+$o = $boot(['TALIXIO_RESET' => 'n1:password:' . password_hash('reset-password-1', PASSWORD_DEFAULT)]);
+\Talixio\Settings::setPassword($bd2, 'after-the-reset');
+$boot(['TALIXIO_RESET' => 'n1:password:' . password_hash('reset-password-1', PASSWORD_DEFAULT)]);
+check('boot: a reset is applied once', str_contains($o, 'password reset') && password_verify('after-the-reset', \Talixio\Settings::load($bd2)['TALIXIO_WEB_PASSWORD_HASH']));
+$boot(['TALIXIO_RESET' => 'n2:totp']);
+check('boot: two-step sign-in reset', !isset(\Talixio\Settings::load($bd2)['TALIXIO_TOTP_SECRET']));
+
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
 exit($fails ? 1 : 0);

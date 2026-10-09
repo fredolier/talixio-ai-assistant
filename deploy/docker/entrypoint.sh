@@ -11,7 +11,8 @@ web() {
 }
 worker() { exec php /opt/talixio/bin/talixio worker; }
 
-[ $# -gt 0 ] && exec php /opt/talixio/bin/talixio "$@"   # e.g. docker exec … talixio doctor, or a one-off command
+[ $# -gt 0 ] && exec php /opt/talixio/bin/talixio "$@"   # a one-off command, e.g. doctor
+php /opt/talixio/bin/talixio boot                         # first password / resets asked from the admin page
 
 # tini -g sends docker's stop signal to every process here, these loops included
 ( while true; do ( web ); echo "web app stopped, restarting in 3 s" >&2; sleep 3; done ) &

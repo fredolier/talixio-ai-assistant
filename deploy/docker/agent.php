@@ -1,0 +1,84 @@
+<?php
+declare(strict_types=1);
+// The Talixio agent (multi-user server): the only service with access to Docker. Reached by the
+// admin page (with a shared token) and by Caddy (/ask, for certificates in subdomain mode), on the
+// internal control network only. Every route maps to one fixed action of Talixio\Fleet.
+//   php -S 0.0.0.0:8090 /opt/talixio/deploy/docker/agent.php
+require __DIR__ . '/../../src/autoload.php';
+
+use Talixio\Fleet;
+
+ini_set('display_errors', '0');
+set_time_limit(0);
+$state = getenv('TALIXIO_STATE_DIR') ?: '/state';
+$fleet = new Fleet($state);
+$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+
+$json = function (mixed $d, int $code = 200): void {
+    http_response_code($code);
+    header('Content-Type: application/json');
+    echo json_encode($d, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+};
+
+// Caddy, before getting a certificate for a subdomain: yes only for existing instances
+if ($path === '/ask') { http_response_code($fleet->ask(strtolower((string)($_GET['domain'] ?? ''))) ? 200 : 404); return; }
+if ($path === '/health') { $json(['ok' => true]); return; }
+
+$token = (string)getenv('TALIXIO_AGENT_TOKEN');
+if (strlen($token) < 32 || !hash_equals($token, (string)($_SERVER['HTTP_X_AGENT_TOKEN'] ?? ''))) { $json(['error' => 'forbidden'], 403); return; }
+$b = json_decode((string)file_get_contents('php://input'), true) ?: [];
+
+/** Long actions (update, rollback, model download) run on their own; the admin page follows them in job.json. */
+$background = function (string $kind, string $arg = '') use ($state, $json): void {
+    $job = json_decode((string)@file_get_contents("$state/job.json"), true) ?: [];
+    if (in_array($job['state'] ?? '', ['running'], true) && time() - (int)($job['updated'] ?? 0) < 3600) { $json(['error' => 'Another long action is running: ' . ($job['kind'] ?? '')], 409); return; }
+    file_put_contents("$state/job.json", json_encode(['kind' => $kind, 'state' => 'running', 'message' => 'Starting…', 'log' => [], 'started' => time(), 'updated' => time()]));
+    $cmd = ['setsid', PHP_BINARY, __DIR__ . '/fleet-job.php', $kind, $arg];
+    proc_close(proc_open($cmd, [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$state/job.out", 'a'], 2 => ['file', "$state/job.out", 'a']], $pipes));
+    $json(['ok' => true]);
+};
+
+try {
+    $m = [];
+    match (true) {
+        $path === '/instances' && $method === 'GET' => $json(['instances' => $fleet->list(), 'settings' => $fleet->state()['settings']]),
+        $path === '/instances' && $method === 'POST' => $json($fleet->create((string)($b['id'] ?? ''), (string)($b['name'] ?? ''), (string)($b['email'] ?? ''),
+            isset($b['memory_mb']) ? (int)$b['memory_mb'] : null, isset($b['cpus']) ? (float)$b['cpus'] : null)),
+        (bool)preg_match('#^/instances/([a-z0-9-]+)/(start|stop|restart|recreate|reset-password|reset-totp|doctor|backup|limits|remove)$#', $path, $m) && $method === 'POST' => (function () use ($fleet, $m, $b, $json) {
+            [, $id, $act] = $m;
+            $r = match ($act) {
+                'start' => $fleet->start($id), 'stop' => $fleet->stop($id), 'restart' => $fleet->restart($id), 'recreate' => $fleet->recreate($id),
+                'reset-password' => ['password' => $fleet->resetPassword($id)],
+                'reset-totp' => $fleet->resetTotp($id),
+                'doctor' => ['text' => $fleet->doctor($id)],
+                'backup' => ['text' => $fleet->backup($id)],
+                'limits' => $fleet->setLimits($id, (int)($b['memory_mb'] ?? 1024), (float)($b['cpus'] ?? 1.5)),
+                'remove' => $fleet->remove($id, !empty($b['delete_data'])),
+            };
+            $json(is_array($r) ? $r : ['ok' => true]);
+        })(),
+        $path === '/settings' && $method === 'POST' => (function () use ($fleet, $b, $json) {
+            $before = $fleet->state()['settings'];
+            $after = $fleet->setSettings($b);
+            $fleet->reloadCaddy();
+            // what instances get from these settings changed: make their containers again
+            $keys = ['mode', 'ollama', 'ollama_model', 'google_client_id', 'google_client_secret', 'apparmor_unconfined', 'domain'];
+            $redo = array_filter($keys, fn($k) => ($before[$k] ?? null) !== ($after[$k] ?? null));
+            if ($redo) foreach (array_keys($fleet->state()['instances']) as $id) $fleet->recreate($id);
+            $json(['settings' => $after, 'recreated' => (bool)$redo]);
+        })(),
+        $path === '/server' => $json($fleet->server()),
+        $path === '/caddyfile' => $json(['caddyfile' => $fleet->caddyfile()]),
+        $path === '/job' => $json(json_decode((string)@file_get_contents("$state/job.json"), true) ?: ['state' => 'none']),
+        $path === '/update' && $method === 'POST' => $background('update', (string)($b['branch'] ?? (getenv('TALIXIO_GIT_BRANCH') ?: 'main'))),
+        $path === '/rollback' && $method === 'POST' => $background('rollback'),
+        $path === '/pull-model' && $method === 'POST' => $background('pull-model'),
+        default => $json(['error' => 'not found'], 404),
+    };
+} catch (\InvalidArgumentException $e) {
+    $json(['error' => $e->getMessage()], 400);
+} catch (\Throwable $e) {
+    error_log('agent: ' . $e->getMessage());
+    $json(['error' => $e->getMessage()], 500);
+}
