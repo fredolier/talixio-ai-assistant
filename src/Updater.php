@@ -20,6 +20,7 @@ final class Updater
     public function request(string $what): void
     {
         if (!in_array($what, ['check', 'update', 'rollback'], true)) throw new \InvalidArgumentException('unknown request');
+        if (getenv('TALIXIO_MANAGED')) throw new \RuntimeException('This assistant is updated by the administrator of the server (new image for everyone).');
         if (!$this->installed()) throw new \RuntimeException('Updates work on an installation made with git clone + install.sh.');
         $st = $this->status();
         if (in_array($st['state'] ?? '', ['updating', 'checking'], true) && time() - (int)($st['updated_at'] ?? 0) < 1800) throw new \RuntimeException('An update is already running.');

@@ -1,0 +1,6 @@
+.git
+data
+research
+tests/fakes/*.json
+*.deb
+.env
