@@ -23,6 +23,11 @@ final class Worker
         App::$inWorker = true;
         $this->app->jobs()->recoverInterrupted();
         $this->app->files()->recoverInterrupted();
+        if ($this->app->store->get('briefing_tasks') === '') { // once: the morning briefing also lists the tasks board
+            $this->app->store->q("UPDATE tasks SET prompt = REPLACE(prompt, ?, ?) WHERE title = 'Morning briefing'", ["3. Reminders and deadlines today and in the next 3 days (list_tasks, memory).",
+                "3. Tasks (board_list with all_spaces): overdue, due today and in the next 3 days, blocked ones; then the next routines and reminders (list_tasks)."]);
+            $this->app->store->set('briefing_tasks', '1');
+        }
         if ($this->app->store->get('pages_indexed') === '') { // once: PDFs indexed by page, so answers can cite pages
             foreach ($this->app->store->q("SELECT id FROM files WHERE status = 'ready' AND (kind = 'pdf' OR (kind = 'office' AND name LIKE '%.pptx'))")->fetchAll() as $r) {
                 try { $this->app->files()->index((int)$r['id']); } catch (\Throwable $e) { Log::warn("reindex {$r['id']}: {$e->getMessage()}"); }
@@ -94,6 +99,8 @@ final class Worker
         if ($now % 600 < 15) $this->guard('update', fn() => $app->updater()->notifyIfNew());
         if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));
         if ($now % 3600 < 15) $this->guard('tasks trash', fn() => $app->board()->purge());
+        $this->guard('tasks calendar', fn() => $app->board()->syncGoogle());
+        $this->guard('tasks reminder', fn() => $app->board()->remind($now));
     }
 
     private function guard(string $what, callable $fn): void

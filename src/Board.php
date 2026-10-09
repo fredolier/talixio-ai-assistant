@@ -31,6 +31,8 @@ final class Board
             CREATE INDEX IF NOT EXISTS card_log_card ON card_log(card, id);
             CREATE TABLE IF NOT EXISTS card_time(id INTEGER PRIMARY KEY, card INTEGER NOT NULL, day TEXT NOT NULL, hours REAL NOT NULL, note TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS card_time_card ON card_time(card);");
+        $app->store->addColumn('cards', 'gcal_id', 'TEXT');       // its Google Calendar event, when shown in the calendar
+        $app->store->addColumn('cards', 'gcal_synced', 'INTEGER'); // version last sent to Google
     }
 
     // ---------- reading ----------
@@ -485,6 +487,105 @@ final class Board
         $st->db->commit();
         $this->log($id, $who, 'undo', 'undid: ' . $l['what'], $now);
         return $this->get($id);
+    }
+
+    // ---------- calendar ----------
+
+    /** Cards with a start or due date in [$from, $to] (days, inclusive), done ones too. */
+    public function inRange(string $from, string $to, ?int $space = null): array
+    {
+        $args = [$to, $from, $from, $to];
+        $sql = "SELECT * FROM cards WHERE deleted_at IS NULL AND ((COALESCE(start_date, due_date) <= ? AND COALESCE(due_date, start_date) >= ?) OR (start_date IS NULL AND due_date BETWEEN ? AND ?))";
+        if ($space !== null) { $sql .= ' AND space = ?'; $args[] = $space; }
+        return array_map(fn($c) => $this->shape($c), $this->app->store->q("$sql ORDER BY due_date, priority LIMIT 1000", $args)->fetchAll());
+    }
+
+    private function eventTitle(array $c): string { return ($c['status'] === 'done' ? '✓ ' : '') . "{$c['code']} · {$c['title']}"; }
+
+    private function eventText(array $c): string
+    {
+        $sp = $this->app->spaces()->get($c['space'])['name'] ?? '';
+        return "Task {$c['code']} ($sp) · " . self::STATUSES[$c['status']] . " · P{$c['priority']}" . ($c['estimate_hours'] !== null ? ' · workload ' . self::fmtHours($c['estimate_hours']) : '')
+            . (trim($c['body']) !== '' ? "\n\n" . mb_substr(trim($c['body']), 0, 1500) : '');
+    }
+
+    /** Worker: tasks marked "show in my calendar" → Google Calendar (added, updated, removed). Returns how many changed. */
+    public function syncGoogle(): int
+    {
+        if (!$this->app->cfg->tasksGoogle || !$this->app->google()->connected()) return 0;
+        $st = $this->app->store; $g = $this->app->google(); $n = 0;
+        $todo = $st->q("SELECT id FROM cards WHERE (in_calendar = 1 AND deleted_at IS NULL AND COALESCE(due_date, start_date) IS NOT NULL AND (gcal_id IS NULL OR gcal_synced IS NULL OR gcal_synced < version))
+            OR (gcal_id IS NOT NULL AND (in_calendar = 0 OR deleted_at IS NOT NULL OR COALESCE(due_date, start_date) IS NULL)) LIMIT 20")->fetchAll(\PDO::FETCH_COLUMN);
+        foreach ($todo as $id) {
+            $c = $this->get((int)$id);
+            $raw = $st->q('SELECT gcal_id, version FROM cards WHERE id = ?', [$id])->fetch();
+            try {
+                if ($c['in_calendar'] && !$c['deleted_at'] && ($c['due_date'] || $c['start_date'])) {
+                    $start = $c['start_date'] ?? $c['due_date']; $end = $c['due_date'] ?? $c['start_date'];
+                    $eid = $g->putTaskEvent($raw['gcal_id'] ?: null, $c['id'], $this->eventTitle($c), $start, $end, $this->eventText($c));
+                    $st->q('UPDATE cards SET gcal_id = ?, gcal_synced = ? WHERE id = ?', [$eid, $raw['version'], $id]);
+                } else {
+                    $g->deleteTaskEvent($raw['gcal_id']);
+                    $st->q('UPDATE cards SET gcal_id = NULL, gcal_synced = NULL WHERE id = ?', [$id]);
+                }
+                $n++;
+            } catch (\Throwable $e) {
+                Log::warn("tasks → Google Calendar ({$c['code']}): {$e->getMessage()}");
+                break; // try again next time
+            }
+        }
+        return $n;
+    }
+
+    /** Private calendar link (iCal): its secret part, created on first use; $reset makes a new one. */
+    public function icsToken(bool $reset = false): string
+    {
+        $t = $this->app->store->get('tasks_ics_token');
+        if ($t === '' || $reset) { $t = bin2hex(random_bytes(20)); $this->app->store->set('tasks_ics_token', $t); }
+        return $t;
+    }
+
+    /** The tasks marked "show in my calendar", as an iCal feed (all-day, start to due date). */
+    public function ics(): string
+    {
+        $esc = fn(string $v) => str_replace(["\\", ';', ',', "\n"], ["\\\\", '\;', '\,', '\n'], $v);
+        $fold = function (string $l): string { // lines of at most 75 bytes, never cutting a character
+            $out = ''; $cur = '';
+            foreach (mb_str_split($l) as $ch) { if (strlen($cur) + strlen($ch) > 73) { $out .= "$cur\r\n "; $cur = ''; } $cur .= $ch; }
+            return $out . $cur;
+        };
+        $out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Talixio//Tasks//EN', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:' . $esc($this->app->cfg->name . ' tasks'), 'REFRESH-INTERVAL;VALUE=DURATION:PT1H'];
+        $rows = $this->app->store->q("SELECT * FROM cards WHERE in_calendar = 1 AND deleted_at IS NULL AND COALESCE(due_date, start_date) IS NOT NULL")->fetchAll();
+        foreach ($rows as $r) {
+            $c = $this->shape($r);
+            $start = $c['start_date'] ?? $c['due_date']; $end = $c['due_date'] ?? $c['start_date'];
+            array_push($out, 'BEGIN:VEVENT', "UID:task-{$c['id']}@talixio", 'DTSTAMP:' . gmdate('Ymd\THis\Z', $c['updated']), 'SEQUENCE:' . $c['version'],
+                'DTSTART;VALUE=DATE:' . str_replace('-', '', $start), 'DTEND;VALUE=DATE:' . date('Ymd', strtotime("$end +1 day")),
+                $fold('SUMMARY:' . $esc($this->eventTitle($c))), $fold('DESCRIPTION:' . $esc($this->eventText($c))), 'TRANSP:TRANSPARENT', 'END:VEVENT');
+        }
+        $out[] = 'END:VCALENDAR';
+        return implode("\r\n", $out) . "\r\n";
+    }
+
+    /** Worker, once a day at TALIXIO_TASK_REMINDER: what is due tomorrow, per space. */
+    public function remind(int $now): int
+    {
+        $at = $this->app->cfg->taskReminder;
+        if ($at === '' || date('H:i', $now) < str_pad($at, 5, '0', STR_PAD_LEFT)) return 0;
+        $key = 'tasks_reminded_' . date('Y-m-d', $now);
+        if ($this->app->store->get($key) !== '') return 0;
+        $this->app->store->set($key, '1');
+        $tomorrow = date('Y-m-d', strtotime('tomorrow', $now));
+        $rows = $this->app->store->q("SELECT * FROM cards WHERE due_date = ? AND status != 'done' AND deleted_at IS NULL ORDER BY space, priority", [$tomorrow])->fetchAll();
+        $by = [];
+        foreach ($rows as $r) $by[(int)$r['space']][] = $this->shape($r);
+        foreach ($by as $space => $cards) {
+            $text = "Due tomorrow:\n" . implode("\n", array_map(fn($c) => "- {$c['code']} {$c['title']} (P{$c['priority']}" . ($c['status'] !== 'todo' ? ', ' . mb_strtolower(self::STATUSES[$c['status']]) : '') . ')'
+                . (array_filter($this->warnings($c), fn($w) => $w['kind'] === 'waiting') ? ' ⚠ still waiting for another task' : ''), $cards));
+            try { $this->app->notifier()->notify(count($cards) === 1 ? 'Task due tomorrow' : count($cards) . ' tasks due tomorrow', $text, $space); }
+            catch (\Throwable $e) { Log::warn("task reminder: {$e->getMessage()}"); }
+        }
+        return count($rows);
     }
 
     // ---------- for the assistant ----------

@@ -103,6 +103,10 @@ final class Settings
                 ['VOYAGE_API_KEY', 'Voyage key', 'secret', ''],
                 ['TALIXIO_OLLAMA_URL', 'Ollama address', 'url', ''],
             ]],
+            'tasks' => ['Tasks', 'The tasks board of each space.', [
+                ['TALIXIO_TASK_REMINDER', 'Reminder the day before a due date', 'text', 'At this time (e.g. 18:00), a notification lists the tasks due tomorrow, per space. Empty = off.'],
+                ['TALIXIO_TASKS_GOOGLE', 'Tasks marked "show in my calendar" go to Google Calendar', 'select', 'When Google Calendar is connected: added as all-day events (start to due date) and kept up to date. Otherwise use the private calendar link (Tasks → Calendar).', ['1' => 'on', '0' => 'off']],
+            ]],
             'audio' => ['Audio, meetings and library', '', [
                 ['TALIXIO_TRANSCRIBE', 'Transcription', 'select', 'auto: Gemini when its key is set.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'off' => 'off']],
                 ['TALIXIO_TRANSCRIBE_MODEL', 'Transcription model', 'text', 'Empty = automatic.'],
@@ -145,7 +149,7 @@ final class Settings
     public const DEFAULTS = [
         'TALIXIO_NAME' => 'Talixio', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_HISTORY_TOKENS' => '12000', 'TALIXIO_PROVIDER' => 'anthropic',
         'TALIXIO_DEEP_THINKING_TOKENS' => '8000', 'TALIXIO_BUDGET_DAILY_USD' => '0', 'TALIXIO_BUDGET_MONTHLY_USD' => '0', 'TALIXIO_MAX_PARALLEL_JOBS' => '3',
-        'TALIXIO_JOB_MAX_USD' => '0.50', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0',
+        'TALIXIO_JOB_MAX_USD' => '0.50', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0', 'TALIXIO_TASK_REMINDER' => '18:00', 'TALIXIO_TASKS_GOOGLE' => '1',
         'TALIXIO_SMTP_PORT' => '587', 'TALIXIO_SMTP_SECURITY' => 'auto', 'TALIXIO_IMAP_PORT' => '993', 'TALIXIO_EMAIL_REQUIRE_AUTH' => '1',
         'TALIXIO_MAILBOX_IMAP_PORT' => '993', 'TALIXIO_MAILBOX_SMTP_PORT' => '465', 'TALIXIO_SEARCH' => 'auto', 'TALIXIO_EMBEDDINGS' => 'auto',
         'TALIXIO_OLLAMA_URL' => 'http://127.0.0.1:11434', 'TALIXIO_EMBEDDINGS_DIMS' => '', 'TALIXIO_TRANSCRIBE' => 'auto', 'TALIXIO_MEETING_TIER' => 'standard', 'TALIXIO_VOICE_NOTE_MAX_SECONDS' => '180', 'TALIXIO_VISION_INDEX' => '1',

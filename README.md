@@ -178,6 +178,12 @@ conversation.
   sees them all and keeps an **overall order** across spaces (ask it to propose one). Deleted tasks
   stay in a trash for 30 days, every change is logged with who made it and can be undone, and an
   edit made in two places at once is refused instead of overwriting.
+  A **calendar** view shows tasks on their due date (drag one to another day; on a phone, a list of
+  days), with your agenda's events if you want. Tasks marked "show in my calendar" go to Google
+  Calendar (all-day, start to due date, kept up to date) or to any calendar app through a private
+  iCal link; the others stay private. A notification the evening before lists what is due tomorrow
+  (Settings → Tasks), the morning briefing lists overdue and coming tasks, an email on the Mail
+  page becomes a task in one click, and meeting summaries offer their action items as tasks.
 - **Spaces**: separate conversations for separate subjects (a client, the house, health…), switched
   from the top of the chat. Each has its library folder (searched first; attachments are filed
   there), its instructions, its notes kept by the assistant, a default model and a colour. A space

@@ -47,6 +47,8 @@ final class Config
     public string $ntfyUrl = '';
     public string $ntfyToken = '';
     public int $heartbeatMinutes = 0;
+    public string $taskReminder = '18:00';
+    public bool $tasksGoogle = true;
     public string $search = 'auto';             // resolved to builtin | brave | tavily | searxng | off
     public string $braveKey = '';
     public string $tavilyKey = '';
@@ -173,6 +175,8 @@ final class Config
         foreach (['spotifyAuthUrl' => 'TALIXIO_SPOTIFY_AUTH_URL', 'spotifyTokenUrl' => 'TALIXIO_SPOTIFY_TOKEN_URL', 'spotifyApiBase' => 'TALIXIO_SPOTIFY_API_BASE'] as $prop => $var) {
             if ($e($var) !== '') $c->$prop = rtrim($e($var), '/');
         }
+        $c->taskReminder = preg_match('/^([01]?\d|2[0-3]):[0-5]\d$/', trim($e('TALIXIO_TASK_REMINDER', '18:00'))) ? trim($e('TALIXIO_TASK_REMINDER', '18:00')) : '';
+        $c->tasksGoogle = $e('TALIXIO_TASKS_GOOGLE', '1') !== '0';
         $c->mailTriage = $e('TALIXIO_MAIL_TRIAGE', '1') !== '0';
         $c->autoFile = in_array($e('TALIXIO_AUTO_FILE', 'suggest'), ['off', 'suggest', 'auto'], true) ? $e('TALIXIO_AUTO_FILE', 'suggest') : 'suggest';
         $c->shell = in_array($e('TALIXIO_SHELL', 'off'), ['off', 'ask', 'auto'], true) ? $e('TALIXIO_SHELL', 'off') : 'off';

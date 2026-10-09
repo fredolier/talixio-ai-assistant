@@ -128,6 +128,7 @@ final class Google
                     'singleEvents' => 'true', 'orderBy' => 'startTime', 'maxResults' => 250, 'pageToken' => $page]));
                 foreach ($d['items'] ?? [] as $e) {
                     if (($e['status'] ?? '') === 'cancelled') continue;
+                    if (isset($e['extendedProperties']['private']['talixioTask'])) continue; // our own tasks, shown from the board
                     $allDay = isset($e['start']['date']);
                     $start = $allDay ? strtotime($e['start']['date']) : strtotime((string)($e['start']['dateTime'] ?? ''));
                     $end = $allDay ? strtotime($e['end']['date']) : strtotime((string)($e['end']['dateTime'] ?? ''));
@@ -140,6 +141,24 @@ final class Google
             } while ($page);
         }
         return $out;
+    }
+
+    /** An all-day event for a task (created, or updated when $id is given). Returns its id. */
+    public function putTaskEvent(?string $id, int $cardId, string $title, string $startDay, string $endDay, string $description): string
+    {
+        $body = ['summary' => $title, 'description' => $description, 'start' => ['date' => $startDay], 'end' => ['date' => date('Y-m-d', strtotime("$endDay +1 day"))],
+            'transparency' => 'transparent', 'extendedProperties' => ['private' => ['talixioTask' => (string)$cardId]]];
+        if ($id) {
+            try { return (string)($this->api('PUT', '/calendars/primary/events/' . rawurlencode($id), $body)['id'] ?? $id); }
+            catch (\RuntimeException $e) { if (!preg_match('/not found|deleted|HTTP 404|HTTP 410/i', $e->getMessage())) throw $e; } // removed in Calendar: add it again
+        }
+        return (string)($this->api('POST', '/calendars/primary/events', $body)['id'] ?? '');
+    }
+
+    public function deleteTaskEvent(string $id): void
+    {
+        try { $this->api('DELETE', '/calendars/primary/events/' . rawurlencode($id)); }
+        catch (\RuntimeException $e) { if (!preg_match('/not found|deleted|HTTP 404|HTTP 410/i', $e->getMessage())) throw $e; }
     }
 
     public function insert(string $title, int $start, int $end, bool $allDay, string $location = '', string $description = ''): array

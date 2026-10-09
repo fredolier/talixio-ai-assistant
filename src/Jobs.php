@@ -149,7 +149,7 @@ final class Jobs
         $j = $this->app->store->job($id);
         $head = $j['status'] === 'done' ? 'finished' : 'failed';
         $how = $j['kind'] === 'meeting'
-            ? "Give the user the meeting summary as written (keep the structure), then offer to schedule reminders for the user's own action items."
+            ? "Give the user the meeting summary as written (keep the structure), then offer to add the user's own action items as tasks on the board (board_add, with due dates when stated)."
             : "Relay what matters to the user concisely, with sources; don't mention job numbers unless useful.";
         $reply = $this->app->agent()->chat('job', "[Background job #{$j['id']} \"{$j['title']}\" $head. Its report follows. $how]\n\n{$j['result']}", 'standard', [], null, (int)$j['space']);
         $this->app->notifier()->notify($j['title'], $reply, (int)$j['space']);

@@ -965,7 +965,7 @@ async function loadBoard() {
   if (![...sel.options].some(o => o.value === boardPrefs.space)) boardPrefs.space = '0';
   sel.value = boardPrefs.space;
   sel.onchange = () => { boardPrefs.space = sel.value; boardPrefs.tag = ''; saveBoardPrefs(); loadBoard(); };
-  const mode = boardPrefs.mode === 'overall' ? 'overall' : 'board';
+  const mode = ['overall', 'calendar'].includes(boardPrefs.mode) ? boardPrefs.mode : 'board';
   document.querySelectorAll('#view-board .seg button').forEach(b => { b.classList.toggle('on', b.dataset.mode === mode); b.setAttribute('aria-selected', b.dataset.mode === mode); b.onclick = () => { boardPrefs.mode = b.dataset.mode; saveBoardPrefs(); loadBoard(); }; });
   $('#board-q').value = boardPrefs.q || '';
   $('#board-q').oninput = () => { clearTimeout(loadBoard.qt); loadBoard.qt = setTimeout(() => { boardPrefs.q = $('#board-q').value.trim(); saveBoardPrefs(); loadBoard(); }, 300); };
@@ -975,6 +975,7 @@ async function loadBoard() {
   const sp = boardPrefs.space === '' ? '' : `space=${boardPrefs.space}&`;
   const q = new URLSearchParams(); if (boardPrefs.tag) q.set('tag', boardPrefs.tag); if (boardPrefs.q) q.set('q', boardPrefs.q);
   if (mode === 'overall') await renderOverall(await api('/api/board/portfolio')); // arbitration is across all spaces
+  else if (mode === 'calendar') await renderCalendar();
   else {
     const d = await api(`/api/board?${sp}${q}`);
     Object.assign(board, d);
@@ -984,8 +985,8 @@ async function loadBoard() {
     $('#board-tags').querySelectorAll('.tag').forEach(b => b.onclick = () => { boardPrefs.tag = boardPrefs.tag === b.dataset.tag ? '' : b.dataset.tag; saveBoardPrefs(); loadBoard(); });
     renderBoard();
   }
-  $('#board-tags').hidden = mode === 'overall'; sel.hidden = mode === 'overall';
-  $('#board-q').hidden = mode === 'overall';
+  $('#board-tags').hidden = mode !== 'board'; sel.hidden = mode === 'overall';
+  $('#board-q').hidden = mode !== 'board';
   clearTimeout(loadBoard.t);
   loadBoard.t = setTimeout(() => { if (location.hash.startsWith('#board') && !$('#card-dialog').open && !document.querySelector('.kcard.dragging, .kquick:focus')) loadBoard().catch(() => {}); }, 30000);
 }
@@ -1100,7 +1101,8 @@ let cardRte = null;
 async function openCard(id, prefill = {}) {
   const dlg = $('#card-dialog');
   if (!cardRte) cardRte = makeRte($('#cd-rte'));
-  let d = { card: { space: prefill.space ?? state.space, status: prefill.status || 'todo', priority: 3, title: '', body: '', tags: [], depends_on: [], blocks: [], in_calendar: 0 }, history: [], time: [], depends_on: [], blocks: [] };
+  let d = { card: { space: prefill.space ?? state.space, status: prefill.status || 'todo', priority: 3, title: prefill.title || '', body: prefill.body || '', due_date: prefill.due_date || null,
+    tags: [], links: prefill.links || [], depends_on: [], blocks: [], in_calendar: 0 }, history: [], time: [], depends_on: [], blocks: [] };
   if (id) { try { d = await api(`/api/board/${id}`); } catch (e) { toast(e.message); return; } }
   const c = d.card, isNew = !id;
   let deps = d.depends_on.slice();
@@ -1123,7 +1125,9 @@ async function openCard(id, prefill = {}) {
     $('#cd-deps').querySelectorAll('button').forEach(b => b.onclick = () => { deps = deps.filter(x => x.id !== +b.dataset.id); paintDeps(); });
   };
   paintDeps();
-  $('#cd-blocks').innerHTML = d.blocks.length ? 'Blocks: ' + d.blocks.map(x => `<b>${esc(x.code)}</b> ${esc(x.title)}`).join(', ') : '';
+  $('#cd-blocks').innerHTML = (d.blocks.length ? 'Blocks: ' + d.blocks.map(x => `<b>${esc(x.code)}</b> ${esc(x.title)}`).join(', ') : '')
+    + (c.links?.length ? `<div class="cd-links">${c.links.map(l => l.type === 'email' ? `<a href="#mail">✉ ${esc(l.label || 'email')}</a>` : l.type === 'file' ? `<a href="#" class="cite" data-file="${+l.ref}">${CITE_SVG}${esc(l.label || 'document')}</a>` : `<span>${esc(l.label || '')}</span>`).join('')}</div>` : '');
+  $('#cd-blocks').querySelector('a[href="#mail"]')?.addEventListener('click', () => dlg.close());
   // dependency search
   const q = $('#cd-dep-q'), hits = $('#cd-dep-hits'); q.value = ''; hits.hidden = true;
   q.oninput = () => { clearTimeout(q.t); q.t = setTimeout(async () => {
@@ -1167,7 +1171,7 @@ async function openCard(id, prefill = {}) {
     e.preventDefault();
     const body = { title: $('#cd-title').value, body: cardRte.value, status: $('#cd-status').value, priority: +$('#cd-priority').value, start_date: $('#cd-start').value,
       due_date: $('#cd-due').value, estimate_hours: $('#cd-estimate').value.trim(), in_calendar: $('#cd-cal').checked, tags: $('#cd-tags').value,
-      space: +$('#cd-space').value, depends_on: deps.map(x => x.id) };
+      space: +$('#cd-space').value, depends_on: deps.map(x => x.id), ...(isNew && c.links?.length ? { links: c.links } : {}) };
     try {
       if (isNew) { const r = await post('/api/board', body); toast(`${r.card.code} added`); }
       else await post(`/api/board/${c.id}`, { ...body, version: c.version });
@@ -1179,6 +1183,105 @@ async function openCard(id, prefill = {}) {
   };
   dlg.showModal();
   if (isNew) $('#cd-title').focus(); else dlg.focus(); // no keyboard popping up on phones
+}
+
+/** Month grid (a list of days on phones): tasks on their due date (and start), your calendar's events if wanted. */
+async function renderCalendar() {
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const now = new Date();
+  if (!/^\d{4}-\d{2}$/.test(boardPrefs.month || '')) boardPrefs.month = iso(now).slice(0, 7);
+  const [y, mo] = boardPrefs.month.split('-').map(Number);
+  const first = new Date(y, mo - 1, 1), last = new Date(y, mo, 0);
+  const gridStart = new Date(first); gridStart.setDate(1 - ((first.getDay() + 6) % 7));
+  const gridEnd = new Date(last); gridEnd.setDate(last.getDate() + (7 - ((last.getDay() + 6) % 7) - 1));
+  const sp = boardPrefs.space === '' ? '' : `&space=${boardPrefs.space}`;
+  const d = await api(`/api/board/calendar?from=${iso(gridStart)}&to=${iso(gridEnd)}${sp}${boardPrefs.agenda ? '&events=1' : ''}`);
+  board.refs = board.refs || {};
+  const root = $('#board'); root.className = 'calendar'; root.innerHTML = '';
+  $('#board-summary').hidden = true;
+  const bar = document.createElement('div'); bar.className = 'cal-bar';
+  bar.innerHTML = `<button type="button" class="icon-btn" data-m="-1" aria-label="Previous month">‹</button><b>${first.toLocaleDateString([], { month: 'long', year: 'numeric' })}</b>
+    <button type="button" class="icon-btn" data-m="1" aria-label="Next month">›</button><button type="button" class="btn small ghost" data-m="0">Today</button>
+    <label class="small"><input type="checkbox" id="cal-agenda"${boardPrefs.agenda ? ' checked' : ''}${d.calendar ? '' : ' disabled'}> Show my agenda</label>
+    <span class="spacer"></span><button type="button" class="btn small" id="cal-link">${BICON.cal} Calendar link</button>`;
+  bar.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+    const k = +b.dataset.m; const t = k ? new Date(y, mo - 1 + k, 1) : now; boardPrefs.month = iso(t).slice(0, 7); saveBoardPrefs(); loadBoard();
+  });
+  bar.querySelector('#cal-agenda').onchange = e => { boardPrefs.agenda = e.target.checked; saveBoardPrefs(); loadBoard(); };
+  bar.querySelector('#cal-link').onclick = () => showCalendarLink(d.google);
+  root.append(bar);
+  if (d.events_error) root.append(Object.assign(document.createElement('p'), { className: 'muted small', textContent: 'Your agenda could not be read: ' + d.events_error }));
+  // what goes on each day
+  const days = {};
+  const put = (day, item) => (days[day] ||= []).push(item);
+  for (const c of d.cards) {
+    if (c.due_date) put(c.due_date, { c, kind: 'due' });
+    if (c.start_date && c.start_date !== c.due_date) put(c.start_date, { c, kind: 'start' });
+  }
+  for (const e of d.events) {
+    const s = new Date(e.start * 1000), en = new Date((e.end || e.start) * 1000 - (e.all_day ? 1000 : 0));
+    for (const t = new Date(s.getFullYear(), s.getMonth(), s.getDate()); t <= en; t.setDate(t.getDate() + 1)) put(iso(t), { e, time: e.all_day ? '' : s.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+  }
+  const t0 = iso(now);
+  const chip = it => {
+    if (it.e) return `<div class="cal-ev" title="${esc(it.e.title)}${it.e.location ? ' · ' + esc(it.e.location) : ''}">${it.time ? `<span>${it.time}</span> ` : ''}${esc(it.e.title)}</div>`;
+    const c = it.c, s = spaceOf(c.space), late = it.kind === 'due' && c.status !== 'done' && c.due_date < t0;
+    return `<div class="cal-task p${c.priority}${c.status === 'done' ? ' done' : ''}${late ? ' late' : ''}${it.kind === 'start' ? ' start' : ''}" data-id="${c.id}" draggable="${it.kind === 'due'}" style="--sp:${esc(s.color || 'var(--muted)')}"
+      title="${esc(c.code)} ${esc(c.title)} · ${it.kind === 'start' ? 'starts' : 'due'}${c.in_calendar ? ' · in your calendar' : ''}">${it.kind === 'start' ? '▸ ' : ''}<b>${esc(c.code)}</b> ${esc(c.title)}</div>`;
+  };
+  const sortDay = list => list.sort((a, b) => (a.e ? 0 : 1) - (b.e ? 0 : 1) || (a.c && b.c ? a.c.priority - b.c.priority : 0));
+  const narrow = matchMedia('(max-width: 760px)').matches;
+  if (narrow) { // agenda: days with something, from the start of the month (or today)
+    const list = document.createElement('div'); list.className = 'cal-list';
+    const late = d.cards.filter(c => c.due_date && c.due_date < t0 && c.status !== 'done');
+    if (late.length && boardPrefs.month === t0.slice(0, 7)) list.innerHTML = `<h4 class="late">Overdue</h4>` + late.map(c => chip({ c, kind: 'due' })).join('');
+    for (const t = new Date(first); t <= last; t.setDate(t.getDate() + 1)) {
+      const k = iso(t); if (!days[k] || (k < t0 && boardPrefs.month === t0.slice(0, 7))) continue;
+      list.innerHTML += `<h4${k === t0 ? ' class="today"' : ''}>${t.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</h4>` + sortDay(days[k]).map(chip).join('');
+    }
+    if (!list.innerHTML) list.innerHTML = '<p class="muted">Nothing dated this month.</p>';
+    root.append(list);
+  } else {
+    const grid = document.createElement('div'); grid.className = 'cal-grid';
+    grid.innerHTML = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(n => `<div class="cal-dow">${n}</div>`).join('');
+    for (const t = new Date(gridStart); t <= gridEnd; t.setDate(t.getDate() + 1)) {
+      const k = iso(t), cell = document.createElement('div');
+      cell.className = 'cal-day' + (t.getMonth() !== mo - 1 ? ' other' : '') + (k === t0 ? ' today' : '') + ((t.getDay() + 6) % 7 > 4 ? ' weekend' : '');
+      cell.dataset.day = k;
+      cell.innerHTML = `<span class="cal-num">${t.getDate()}</span>` + sortDay(days[k] || []).map(chip).join('');
+      cell.ondragover = e => { e.preventDefault(); cell.classList.add('over'); };
+      cell.ondragleave = () => cell.classList.remove('over');
+      cell.ondrop = async e => {
+        e.preventDefault(); cell.classList.remove('over');
+        const id = +e.dataTransfer.getData('text/plain'); const c = d.cards.find(x => x.id === id); if (!c || c.due_date === k) return;
+        const shift = (Date.parse(k) - Date.parse(c.due_date)) / 864e5; const body = { due_date: k, version: c.version };
+        if (c.start_date) { const s = new Date(c.start_date + 'T12:00:00'); s.setDate(s.getDate() + shift); body.start_date = iso(s); }
+        try { await post(`/api/board/${id}`, body); toast(`${c.code}: due ${fmtDay(k)}`); } catch (err) { toast(err.message); }
+        loadBoard();
+      };
+      cell.onclick = e => { if (e.target === cell || e.target.classList.contains('cal-num')) openCard(null, { space: boardPrefs.space === '' ? state.space : +boardPrefs.space, due_date: k }); };
+      grid.append(cell);
+    }
+    root.append(grid);
+  }
+  root.querySelectorAll('.cal-task').forEach(el => {
+    el.onclick = () => openCard(+el.dataset.id);
+    el.ondragstart = e => e.dataTransfer.setData('text/plain', el.dataset.id);
+  });
+}
+
+async function showCalendarLink(google) {
+  const { url } = await api('/api/board/ics');
+  $('#bs-title').textContent = 'Tasks in your calendar';
+  $('#bs-list').innerHTML = `<p class="small">Tasks with <b>Show in my calendar</b> ticked appear as all-day events, from their start to their due date. The others stay here.</p>
+    ${google ? '<p class="small">Google Calendar is connected: they are added there automatically and kept up to date.</p>' : ''}
+    <p class="small">${google ? 'For another calendar app' : 'To see them in your calendar app'} (Google, Apple, Outlook…), subscribe to this private link. Anyone with it can read those tasks: keep it to yourself.</p>
+    <div class="row"><input id="ics-url" readonly value="${esc(url)}" style="flex:1;min-width:0"><button type="button" class="btn small" id="ics-copy">Copy</button></div>
+    <p class="muted small">Google Calendar: Other calendars → + → From URL. Subscribed calendars refresh every few hours. <button type="button" class="btn small ghost" id="ics-reset">Make a new link</button> (the old one stops working)</p>`;
+  $('#ics-copy').onclick = () => copyText($('#ics-url').value);
+  $('#ics-reset').onclick = async () => { if (!confirm('Make a new link? Calendars subscribed to the old one will stop updating.')) return; await post('/api/board/ics'); showCalendarLink(google); };
+  $('#bs-close').onclick = () => $('#board-side').close();
+  if (!$('#board-side').open) $('#board-side').showModal();
 }
 
 async function showBoardTrash() {
@@ -1705,8 +1808,9 @@ const RENDERED = ['text', 'office'];
 /** A citation in an answer: open the document in the library, at its page. */
 document.addEventListener('click', async e => {
   const a = e.target.closest('a.cite');
-  if (!a) return;
+  if (!a || a.closest('[contenteditable=true]')) return;
   e.preventDefault();
+  a.closest('dialog[open]')?.close();
   try {
     const { file } = await api(`/api/files/${a.dataset.file}/text`);
     lib.folder = file.folder; location.hash = '#library' + (file.folder === '/' ? '' : file.folder);
@@ -1814,9 +1918,12 @@ async function loadMail() {
           <div>${esc(m.subject)}</div>${m.summary ? `<div class="muted small">${esc(m.summary)}</div>` : `<div class="muted small snippet">${esc(m.snippet.slice(0, 160))}</div>`}</div>
         <div class="mail-acts"><select aria-label="Group">${Object.entries(MAIL_LABELS).map(([v, l]) => `<option value="${v}"${v === m.label ? ' selected' : ''}>${l}</option>`).join('')}</select>
           ${m.label === 'reply' && m.status !== 'done' ? '<button class="btn small" data-a="draft" type="button">Prepare a reply</button>' : ''}
+          ${m.status !== 'done' && m.label !== 'low' ? '<button class="btn small" data-a="task" type="button" title="Make it a task on the board">→ Task</button>' : ''}
           <button class="btn small ${m.status === 'done' ? '' : 'primary'}" data-a="${m.status === 'done' ? 'open' : 'done'}" type="button">${m.status === 'done' ? 'Reopen' : 'Done'}</button></div>`;
       el.querySelector('select').onchange = async e => { try { await post(`/api/mail/${m.uid}/label`, { label: e.target.value }); toast('Moved: it will remember.'); loadMail(); } catch (err) { toast(err.message); } };
       el.querySelector('[data-a=done], [data-a=open]').onclick = async e => { try { await post(`/api/mail/${m.uid}/${e.currentTarget.dataset.a}`); loadMail(); } catch (err) { toast(err.message); } };
+      el.querySelector('[data-a=task]')?.addEventListener('click', () => openCard(null, { space: state.space, title: m.subject, due_date: m.due || '',
+        body: `From ${m.sender} <${m.email}>, ${new Date(m.ts * 1000).toLocaleDateString()}${m.summary ? '\n\n' + m.summary : ''}`, links: [{ type: 'email', ref: m.uid, label: m.subject }] }));
       el.querySelector('[data-a=draft]')?.addEventListener('click', async () => {
         location.hash = '#chat'; if (state.space) await switchSpace(0);
         $('#input').value = `Prepare a reply to the email from ${m.sender} "${m.subject}" (uid ${m.uid}) and save it as a draft. `; autosize(); $('#input').focus();

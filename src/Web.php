@@ -11,6 +11,7 @@ final class Web
     {
         if ($path === '/sw.js') { $this->serviceWorker(); return; }
         if ($path === '/share' && $method === 'POST') { $this->shareInbox(); return; }
+        if (preg_match('#^/cal/tasks-([0-9a-f]{40})\.ics$#', $path, $cm) && $method === 'GET') { $this->tasksIcs($cm[1]); return; } // calendar apps have no session
         if ($path === '/' || !str_starts_with($path, '/api/')) {
             header('Cache-Control: no-cache');
             header('Content-Type: text/html; charset=utf-8');
@@ -207,7 +208,7 @@ final class Web
         $prompt = "Morning briefing for the user. Gather, in this order, only what is useful today:\n"
             . "1. Today's calendar (calendar_events): times, places, what to prepare or bring.\n"
             . "2. Emails waiting (mail_triage): to answer and to do first, with due dates.\n"
-            . "3. Reminders and deadlines today and in the next 3 days (list_tasks, memory).\n"
+            . "3. Tasks (board_list with all_spaces): overdue, due today and in the next 3 days, blocked ones; then the next routines and reminders (list_tasks).\n"
             . "4. The weather today in the user's town (from USER.md; skip it if unknown) with a quick web search.\n"
             . "5. One line on anything else that matters today (follow-ups promised, birthdays in USER.md...).\n"
             . "Short and easy to scan: a heading per part, bullets, under 200 words, in the user's language. Skip empty parts."
@@ -262,6 +263,20 @@ final class Web
             foreach ($cards as $c) foreach ([...$c['depends_on'], ...$c['blocks']] as $d) $codes[$d] ??= $brief($d);
             return ['cards' => $cards, 'refs' => array_filter($codes)];
         }
+        if ($path === '/api/board/calendar') {
+            $from = (string)($_GET['from'] ?? date('Y-m-01')); $to = (string)($_GET['to'] ?? date('Y-m-t'));
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) $this->fail(400, 'bad dates');
+            $cards = array_map($card, $bd->inRange($from, $to, isset($_GET['space']) && $_GET['space'] !== '' ? (int)$_GET['space'] : null));
+            $events = [];
+            if (!empty($_GET['events']) && $this->app->calendar()->enabled()) {
+                try { $events = array_map(fn($e) => array_intersect_key($e, array_flip(['title', 'start', 'end', 'all_day', 'location', 'calendar'])), $this->app->calendar()->events(strtotime($from), strtotime("$to +1 day"))); }
+                catch (\Throwable $e) { $eventsError = $e->getMessage(); }
+            }
+            return ['cards' => $cards, 'events' => $events, 'events_error' => $eventsError ?? null, 'calendar' => $this->app->calendar()->enabled(),
+                'google' => $this->app->google()->connected() && $this->app->cfg->tasksGoogle];
+        }
+        if ($path === '/api/board/ics' && $m === 'GET') return ['url' => $this->baseUrl() . '/cal/tasks-' . $bd->icsToken() . '.ics'];
+        if ($path === '/api/board/ics' && $m === 'POST') return ['url' => $this->baseUrl() . '/cal/tasks-' . $bd->icsToken(true) . '.ics'];
         if ($path === '/api/board/trash') return ['cards' => $bd->list(['trash' => true])];
         if ($path === '/api/board/recent') return ['changes' => $bd->recent(isset($_GET['space']) && $_GET['space'] !== '' ? (int)$_GET['space'] : null)];
         if ($path === '/api/board/find') return ['cards' => array_map($bd->brief(...), array_slice($bd->list(['q' => (string)($_GET['q'] ?? ''), 'done_days' => 365]), 0, 20))];
@@ -285,6 +300,19 @@ final class Web
             'unrank' => (function () use ($bd, $id) { $bd->clearGlobalRank($id); return ['ok' => true]; })(),
             default => $this->fail(404, 'not found'),
         };
+    }
+
+    private function baseUrl(): string { return preg_replace('#/api/google/callback$#', '', Google::redirectUri()); }
+
+    /** The private calendar link of the tasks shown in the calendar (the token in the address is the password). */
+    private function tasksIcs(string $token): void
+    {
+        $bd = $this->app->board();
+        $saved = $this->app->store->get('tasks_ics_token');
+        if ($saved === '' || !hash_equals($saved, $token)) { http_response_code(404); echo 'Not found'; return; }
+        header('Content-Type: text/calendar; charset=utf-8');
+        header('Cache-Control: private, max-age=300');
+        echo $bd->ics();
     }
 
     private function spotifyState(): array

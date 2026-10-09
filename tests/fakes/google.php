@@ -20,16 +20,23 @@ if ($path === '/calendar/v3/users/me/calendarList') {
     echo json_encode(['items' => [['id' => 'fred@gmail.com', 'summary' => 'fred@gmail.com', 'primary' => true, 'selected' => true],
         ['id' => 'family#group', 'summary' => 'Family', 'selected' => true], ['id' => 'hidden', 'summary' => 'Hidden']]]); return;
 }
+if (preg_match('#^/calendar/v3/calendars/primary/events/([^/]+)$#', $path, $m)) { // task events: update, delete
+    $state[$_SERVER['REQUEST_METHOD'] === 'DELETE' ? 'deleted' : 'updated'][] = ['id' => $m[1], 'body' => json_decode((string)file_get_contents('php://input'), true)];
+    file_put_contents($log, json_encode($state));
+    if ($_SERVER['REQUEST_METHOD'] === 'DELETE') { http_response_code(204); return; }
+    echo json_encode(['id' => $m[1]]); return;
+}
 if (preg_match('#^/calendar/v3/calendars/([^/]+)/events$#', $path, $m)) {
     $cal = rawurldecode($m[1]);
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $state['inserted'][] = json_decode((string)file_get_contents('php://input'), true);
-        file_put_contents($log, json_encode($state)); echo '{"id":"new1"}'; return;
+        file_put_contents($log, json_encode($state)); echo json_encode(['id' => 'new' . count($state['inserted'])]); return;
     }
     $t = strtotime('tomorrow 10:00');
     $items = $cal === 'family#group'
         ? [['id' => 'f1', 'iCalUID' => 'f1@google', 'summary' => 'School play', 'start' => ['date' => date('Y-m-d', $t)], 'end' => ['date' => date('Y-m-d', $t + 86400)]]]
-        : [['id' => 'e1', 'iCalUID' => 'e1@google', 'summary' => 'Dentist', 'location' => 'Lyon', 'start' => ['dateTime' => date('c', $t)], 'end' => ['dateTime' => date('c', $t + 3600)]],
+        : [['id' => 't1', 'summary' => 'MAI-1 · a task', 'extendedProperties' => ['private' => ['talixioTask' => '1']], 'start' => ['date' => date('Y-m-d', $t)], 'end' => ['date' => date('Y-m-d', $t + 86400)]],
+           ['id' => 'e1', 'iCalUID' => 'e1@google', 'summary' => 'Dentist', 'location' => 'Lyon', 'start' => ['dateTime' => date('c', $t)], 'end' => ['dateTime' => date('c', $t + 3600)]],
            ['id' => 'e2', 'summary' => 'Cancelled thing', 'status' => 'cancelled', 'start' => ['dateTime' => date('c', $t)], 'end' => ['dateTime' => date('c', $t + 60)]]];
     echo json_encode(['items' => $items]); return;
 }
