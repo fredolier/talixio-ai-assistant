@@ -5,6 +5,7 @@ require __DIR__ . '/../src/autoload.php';
 use Talixio\{App, Config, Cron, Email, GeminiModels, Skills, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker};
 
 $fails = 0;
+function tap_tmp(string $content): string { $t = tempnam(sys_get_temp_dir(), 'tt'); file_put_contents($t, $content); return $t; }
 function check(string $name, bool $ok, string $detail = ''): void {
     global $fails;
     echo ($ok ? "ok   " : "FAIL ") . $name . ($ok || $detail === '' ? '' : "  -> $detail") . "\n";
@@ -929,6 +930,56 @@ $events = [];
 $app->agent()->chat('web', 'are you there?', 'standard', [], function (array $e) use (&$events) { $events[] = $e; });
 check('agent: a message waiting for another turn tells the user it is queued', str_contains(json_encode($events), 'queued'), json_encode($events));
 proc_close($holder);
+
+// ---- connectors (MCP client) and the sandboxed shell ----
+$md = "$dir/mcp"; @mkdir($md); putenv("TALIXIO_DATA_DIR=$md");
+$mcpPort = $freePort();
+$mp = proc_open([PHP_BINARY, '-S', "127.0.0.1:$mcpPort", __DIR__ . '/fakes/mcp-fake.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp);
+$waitPort($mcpPort);
+$ma = App::fromEnv();
+try { $ma->mcp()->saveRaw('{"servers": []}'); check('mcp: bad configuration refused', false); } catch (\InvalidArgumentException) { check('mcp: bad configuration refused', true); }
+$ma->mcp()->saveRaw(json_encode(['mcpServers' => [
+    'Local Fake' => ['command' => PHP_BINARY, 'args' => [__DIR__ . '/fakes/mcp-fake.php'], 'env' => ['FAKE_TOKEN' => 'tok-1']],
+    'remote' => ['url' => "http://127.0.0.1:$mcpPort/mcp", 'headers' => ['Authorization' => 'Bearer xyz'], 'trust' => 'all'],
+    'broken' => ['command' => '/nonexistent/server'],
+]]));
+$cache = $ma->mcp()->refresh();
+check('mcp: tools listed from a local (stdio) and a remote (HTTP) server', count($cache['local_fake']['tools'] ?? []) === 3 && count($cache['remote']['tools'] ?? []) === 3, json_encode($cache));
+check('mcp: a broken server is reported, not fatal', !empty($cache['broken']['error']));
+$ma = App::fromEnv();
+$names = $ma->tools->names();
+check('mcp: tools registered as mcp_<server>_<tool>', in_array('mcp_local_fake_lookup', $names, true) && in_array('mcp_remote_create_note', $names, true));
+check('mcp: local call with its environment', $ma->tools->run('mcp_local_fake_lookup', ['word' => 'zebra']) === 'definition of zebra (tok-1)');
+check('mcp: remote call with session and headers (SSE answer)', $ma->tools->run('mcp_remote_lookup', ['word' => 'okapi']) === 'definition of okapi (Bearer xyz)');
+$r = $ma->tools->run('mcp_local_fake_create_note', ['text' => 'buy milk']);
+check('mcp: tools that change something wait for approval', str_contains($r, 'Waiting for the user\'s approval') && str_contains($ma->approvals()->pending()[0]['summary'] ?? '', 'create_note'), $r);
+$ma->cfg->notify = [];
+$done = $ma->approvals()->decide((int)$ma->approvals()->pending()[0]['id'], true);
+check('mcp: approved call runs', str_contains($done, 'note created: buy milk'), $done);
+check('mcp: trusted server runs without asking', $ma->tools->run('mcp_remote_create_note', ['text' => 'x']) === 'note created: x');
+check('mcp: tool errors reported as errors', str_starts_with($ma->tools->run('mcp_remote_fail', []), 'error: it broke'));
+$job = $ma->tools->only('job')->names();
+check('mcp: background jobs get read-only connector tools only', in_array('mcp_local_fake_lookup', $job, true) && !in_array('mcp_local_fake_create_note', $job, true));
+proc_terminate($mp); proc_close($mp);
+if (\Talixio\Shell::binary()) {
+    putenv('TALIXIO_SHELL=auto'); $sa = App::fromEnv();
+    check('shell: tools offered when on', in_array('shell_run', $sa->tools->names(), true) && in_array('shell_run', $sa->tools->only('job')->names(), true));
+    $out = $sa->tools->run('shell_run', ['command' => 'echo hi > note.txt; cat note.txt; python3 -c "print(6*7)"; ls / | tr "\n" " "; cat ' . escapeshellarg($sa->cfg->dataDir . '/settings.json') . ' 2>&1 | head -1']);
+    check('shell: runs commands, /work kept, server files invisible', str_contains($out, "[exit code") && str_contains($out, "hi\n42") && !str_contains($out, 'home') && str_contains($out, 'No such file'), $out);
+    check('shell: no network by default', str_contains($sa->tools->run('shell_run', ['command' => 'python3 -c "import socket; socket.create_connection((\'1.1.1.1\', 53), 3)" 2>&1 | tail -1']), 'Error'));
+    $lf = $sa->files()->save(tap_tmp("a,b\n1,2\n"), 'data.csv', 'text/csv', '/Clients');
+    $out = $sa->tools->run('shell_run', ['command' => 'wc -l in/data.csv', 'files' => [$lf]]);
+    check('shell: library files copied in', str_contains($out, '2 in/data.csv'), $out);
+    check('shell: results saved to the library', str_contains($sa->tools->run('shell_save', ['path' => '/work/note.txt', 'folder' => '/Results']), '/Results/note.txt'));
+    check('shell: cannot save outside /work', str_starts_with($sa->tools->run('shell_save', ['path' => '../../settings.json']), 'error'));
+    check('shell: time limit', str_contains($sa->shell()->run('sleep 10', [], 1), 'stopped after 1 s'));
+    putenv('TALIXIO_SHELL=ask'); $sa = App::fromEnv(); App::$inWorker = true;
+    check('shell: "ask" mode cannot wait inside the worker', str_contains($sa->tools->run('shell_run', ['command' => 'ls']), 'delegate'));
+    App::$inWorker = false; putenv('TALIXIO_SHELL');
+} else {
+    echo "skip shell tests: bubblewrap not installed\n";
+}
+putenv("TALIXIO_DATA_DIR=$dir");
 
 // ---- signing in: hashed password, lockout per address, two-step codes, share limits ----
 use Talixio\Auth;

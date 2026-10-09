@@ -693,6 +693,7 @@ async function loadSettings() {
   loadChannels().catch(e => toast(e.message));
   loadUpdate().catch(() => {});
   loadSecurity();
+  loadConnectors();
   renderGroups((await api('/api/settings')).groups);
 }
 $('#doctor-run').onclick = async () => {
@@ -706,6 +707,32 @@ $('#pw-form').onsubmit = async e => {
   e.preventDefault();
   try { await post('/api/settings/password', { current: $('#pw-current').value, new: $('#pw-new').value }); $('#pw-state').textContent = 'Password changed. Your other devices will ask for it again.'; $('#pw-current').value = $('#pw-new').value = ''; }
   catch (err) { $('#pw-state').textContent = err.message; }
+};
+
+// ---- connectors (MCP) and the sandbox ----
+function showConnectors(d) {
+  if (document.activeElement !== $('#mcp-raw')) $('#mcp-raw').value = d.raw;
+  const ok = d.servers.filter(x => !x.error).length;
+  $('#mcp-badge').textContent = d.servers.length ? `· ${ok}/${d.servers.length} connected` : '· none';
+  $('#mcp-servers').innerHTML = d.servers.map(x => `<div class="mcp-server ${x.error ? 'bad' : ''}">
+      <div class="row"><b>${esc(x.name)}</b><span class="chip">${x.kind}</span>${x.trust === 'all' ? '<span class="chip">trusted: no approval</span>' : ''}
+        <span class="muted small">${x.error ? '' : x.tools.length + ' tool(s)'}${x.at ? ' · checked ' + fmtTime(x.at) : ''}</span></div>
+      ${x.error ? `<p class="error small">${esc(x.error)}</p>` : `<div class="tools">${x.tools.map(t => `<span class="chip" title="${esc(t.name)}">${esc(t.title)}${t.read_only ? '' : ' ✋'}</span>`).join('')}</div>`}
+    </div>`).join('') + (d.servers.some(x => x.tools.some(t => !t.read_only)) ? '<p class="muted small">✋ asks for your approval before running.</p>' : '');
+  $('#shell-state').textContent = !d.shell.installed ? 'not installed (install.sh --with-shell).' : d.shell.mode === 'off' ? 'installed, off (Settings → Sandboxed shell).' : d.shell.mode === 'ask' ? 'on, asks before each command.' : 'on, runs without asking.';
+}
+async function loadConnectors() { try { showConnectors(await api('/api/mcp')); } catch {} }
+const mcpAction = async (path, body) => {
+  $('#mcp-state').textContent = 'Connecting… (local servers can take a minute the first time)';
+  try { showConnectors(await post(path, body)); $('#mcp-state').textContent = 'Done. New tools are available from the next message.'; }
+  catch (e) { $('#mcp-state').textContent = e.message; }
+};
+$('#mcp-save').onclick = () => mcpAction('/api/mcp', { raw: $('#mcp-raw').value });
+$('#mcp-refresh').onclick = () => mcpAction('/api/mcp/refresh');
+$('#shell-test').onclick = async () => {
+  const b = $('#shell-test'); b.disabled = true;
+  try { const r = await post('/api/shell/check'); toast(r.ok ? 'Sandbox works: ' + r.text.split('\n').pop() : r.text); } catch (e) { toast(e.message); }
+  b.disabled = false;
 };
 
 // ---- two-step sign-in ----
@@ -1036,6 +1063,42 @@ $('#hb-run').onclick = async () => {
   b.disabled = false; b.textContent = 'Check now';
 };
 
+/** Bars with a value axis (round steps), a few dates underneath and a tooltip per day. */
+function tokenChart(days, byDay, costDay) {
+  const max = Math.max(0, ...days.map(d => byDay[d] || 0));
+  const step = niceStep(max / 4); const top = Math.max(step, Math.ceil(max / step) * step);
+  const ticks = []; for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v);
+  const short = d => new Date(d + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'short' });
+  return `<div class="chart" role="img" aria-label="Tokens per day over the last 30 days, up to ${nf.format(max)} a day">
+    <div class="y-axis">${ticks.map(v => `<span style="bottom:${(v / top * 100).toFixed(2)}%">${ktok(v)}</span>`).join('')}</div>
+    <div class="plot">${ticks.map(v => `<i class="grid" style="bottom:${(v / top * 100).toFixed(2)}%"></i>`).join('')}
+      <div class="cols">${days.map((d, i) => `<div class="col" data-tip="<b>${short(d)}</b><br>${nf.format(byDay[d] || 0)} tokens${costDay[d] != null ? '<br>' + (money(costDay[d]) || '$0') : ''}">
+        <div class="bar${i === days.length - 1 ? ' today' : ''}" style="height:${((byDay[d] || 0) / top * 100).toFixed(2)}%"></div></div>`).join('')}</div>
+      <div class="tip" hidden></div></div>
+    <div class="x-axis">${days.map((d, i) => `<span>${(days.length - 1 - i) % 7 === 0 ? (i === days.length - 1 ? 'Today' : short(d)) : ''}</span>`).join('')}</div>
+  </div>`;
+}
+function niceStep(raw) {
+  if (raw <= 0) return 1000;
+  const p = 10 ** Math.floor(Math.log10(raw)), f = raw / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+}
+function chartHover(chart) {
+  if (!chart) return;
+  const tip = chart.querySelector('.tip'), plot = chart.querySelector('.plot');
+  const show = col => {
+    chart.querySelectorAll('.col.on').forEach(c => c.classList.remove('on'));
+    if (!col) { tip.hidden = true; return; }
+    col.classList.add('on'); tip.innerHTML = col.dataset.tip; tip.hidden = false;
+    const pr = plot.getBoundingClientRect(), cr = col.getBoundingClientRect();
+    // beside the hovered day, at the top of the plot, so it never hides the bar it describes
+    const right = cr.right - pr.left + 6, left = cr.left - pr.left - 6 - tip.offsetWidth;
+    tip.style.left = (right + tip.offsetWidth <= pr.width || left < 0 ? Math.min(right, pr.width - tip.offsetWidth) : left) + 'px';
+  };
+  plot.addEventListener('pointermove', e => show(e.target.closest('.col')));
+  plot.addEventListener('pointerleave', () => show(null));
+}
+
 async function loadActivity() {
   loadHeartbeats().catch(() => {});
   const { usage, tools, budget, by_tier, by_source, memory, backup } = await api('/api/activity');
@@ -1054,7 +1117,6 @@ async function loadActivity() {
   $('#memstats').textContent = (bk.last ? `Last backup ${fmtTime(bk.last)} (${bk.file}, keeping ${bk.keep}). ` : 'No backup yet (the worker makes one every night). ') + `Skills: ${memory.skills}. Memory index: ${nf.format(memory.messages)} messages, ${nf.format(memory.summaries)} summaries, ${nf.format(memory.docs)} searchable items, ${memory.embeddings_model ? `${nf.format(memory.embedded)} indexed by meaning with ${memory.embeddings_model}${memory.embedded < memory.docs ? ' (indexing in progress)' : ''}` : 'search by meaning off (keyword search only)'}.`;
   const sum = k => usage.reduce((a, d) => a + (+d[k] || 0), 0);
   const cost = usage.reduce((a, d) => a + (d.cost == null ? 0 : +d.cost), 0);
-  const max = Math.max(1, ...usage.map(d => +d.input + +d.output));
   const days = [];
   for (let i = 29; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5); days.push(d.toLocaleDateString('sv-SE')); }
   const byDay = Object.fromEntries(usage.map(d => [d.day, +d.input + +d.output]));
@@ -1064,9 +1126,8 @@ async function loadActivity() {
     <div class="stat"><b>${nf.format(sum('input'))}</b><span>input tokens</span></div>
     <div class="stat"><b>${nf.format(sum('output'))}</b><span>output tokens</span></div>
     <div class="stat"><b>${cost ? '$' + cost.toFixed(2) : '–'}</b><span>${state.status?.provider === 'claude-code' ? 'API-equivalent cost (covered by your plan)' : 'reported cost'}</span></div>
-    <div class="bars"><div class="small muted">Tokens per day</div>
-      <div class="bars-plot" role="img" aria-label="Tokens per day, last 30 days">${days.map(d => `<div style="height:${((byDay[d] || 0) / max * 100).toFixed(1)}%" title="${d}: ${nf.format(byDay[d] || 0)} tokens${costDay[d] != null ? ', ' + money(costDay[d]) : ''}"></div>`).join('')}</div>
-      <div class="bars-axis"><span>${days[0]}</span><span>max ${nf.format(max)}</span><span>today</span></div></div>`;
+    <div class="bars"><div class="bars-title">Tokens per day <span class="muted small">· last 30 days</span></div>${tokenChart(days, byDay, costDay)}</div>`;
+  chartHover($('#usage .chart'));
   $('#tools tbody').innerHTML = tools.length ? tools.map(t => `<tr><td>${fmtTime(t.ts)}</td><td>${esc(t.tool)}</td><td><code>${esc(t.args.slice(0, 200))}</code></td><td>${esc(t.result.slice(0, 220))}</td></tr>`).join('')
     : '<tr><td colspan="4" class="muted">No tool calls yet.</td></tr>';
 }

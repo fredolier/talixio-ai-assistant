@@ -65,6 +65,10 @@ final class Web
                 return ['ok' => true];
             })(),
             $path === '/api/heartbeats' => $this->heartbeats(),
+            $path === '/api/mcp' && $m === 'GET' => $this->connectors(),
+            $path === '/api/mcp' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcp()->saveRaw((string)($b['raw'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
+            $path === '/api/mcp/refresh' && $m === 'POST' => (function () { set_time_limit(0); $this->app->mcp()->refresh(); return $this->connectors(); })(),
+            $path === '/api/shell/check' && $m === 'POST' => (function () { try { return ['ok' => true, 'text' => $this->app->shell()->check()]; } catch (\Throwable $e) { return ['ok' => false, 'text' => $e->getMessage()]; } })(),
             $path === '/api/heartbeat/run' && $m === 'POST' => (function () {
                 set_time_limit(0);
                 if (!$this->app->ws->hasContent('HEARTBEAT.md')) $this->fail(400, 'The checklist (Memory → HEARTBEAT.md) is empty: write what to check first.');
@@ -128,6 +132,19 @@ final class Web
                 $this->app->recall()->search((string)($_GET['q'] ?? ''), 20))],
             default => $this->fail(404, 'not found'),
         };
+    }
+
+    private function connectors(): array
+    {
+        $mcp = $this->app->mcp(); $cache = $mcp->cache(); $out = [];
+        foreach ($mcp->servers() as $name => $srv) {
+            $c = $cache[$name] ?? null;
+            $out[] = ['name' => $name, 'kind' => isset($srv['url']) ? 'remote' : 'local', 'trust' => ($srv['trust'] ?? '') === 'all' ? 'all' : 'read',
+                'error' => $c['error'] ?? ($c ? null : 'not checked yet'), 'at' => $c['at'] ?? null,
+                'tools' => array_map(fn($t) => ['name' => Mcp::toolName($name, (string)$t['name']), 'title' => (string)($t['title'] ?? $t['name']),
+                    'read_only' => !empty($t['annotations']['readOnlyHint'])], $c['tools'] ?? [])];
+        }
+        return ['raw' => $mcp->raw(), 'servers' => $out, 'shell' => ['mode' => $this->app->cfg->shell, 'installed' => Shell::binary() !== null]];
     }
 
     private function heartbeats(): array

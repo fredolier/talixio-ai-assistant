@@ -58,6 +58,11 @@ final class Doctor
             $bin = Browser::findBinary($c->chromeBin);
             $bin ? $this->line(true, "browser: $bin") : $this->info('browser: not installed (optional: install.sh --with-browser)');
         }
+        if ($c->shell !== 'off') $this->attempt("sandboxed shell ({$c->shell}" . ($c->shellNetwork ? ', internet on' : '') . ')', fn() => $app->shell()->check());
+        foreach ($app->mcp()->cache() as $name => $info) {
+            if (!isset($app->mcp()->servers()[$name])) continue;
+            $info['error'] ? $this->line(false, "connector $name: {$info['error']}") : $this->line(true, "connector $name: " . count($info['tools']) . ' tool(s)');
+        }
         if ($c->signalNumber !== '') {
             $found = is_executable($c->signalCli) || trim((string)shell_exec('command -v ' . escapeshellarg($c->signalCli) . ' 2>/dev/null')) !== '';
             $this->line($found, "signal-cli ({$c->signalCli})");

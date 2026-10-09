@@ -110,6 +110,11 @@ final class Settings
                 ['TALIXIO_APPROVAL_WAIT_SECONDS', 'Wait for an approval (seconds)', 'number', 'For a web form being filled in.'],
                 ['TALIXIO_AUTO_APPROVE', 'Actions without approval', 'multi', 'Not recommended: you won\'t be asked for these any more.', ['calendar_add' => 'Add to calendar', 'mail_send' => 'Send email as you', 'browser_submit' => 'Submit a web form']],
             ]],
+            'shell' => ['Sandboxed shell', 'A Linux sandbox for the assistant (bubblewrap, installed with install.sh --with-shell): it runs commands and Python to compute, convert or analyse files. It sees only the system programs and its own work folder, not your server, data or keys.', [
+                ['TALIXIO_SHELL', 'Commands', 'select', '"Ask me" shows each command and waits for your approval (in the app, or "yes N" in a chat).', ['off' => 'off', 'ask' => 'ask me before each command', 'auto' => 'run without asking (sandboxed)']],
+                ['TALIXIO_SHELL_NETWORK', 'Internet access in the sandbox', 'bool', 'To install Python packages (pip) or download data. Off is safer.'],
+                ['TALIXIO_SHELL_TIMEOUT', 'Time limit per command (seconds)', 'number', ''],
+            ]],
             'maintenance' => ['Learning, backups, updates', '', [
                 ['TALIXIO_LEARN', 'Learn from tasks (skills)', 'bool', 'After a multi-step task, a small agent decides whether to keep it (max $0.05).'],
                 ['TALIXIO_LEARN_MIN_STEPS', 'Minimum steps to learn', 'number', ''],
@@ -138,7 +143,7 @@ final class Settings
         'TALIXIO_BROWSER' => 'auto', 'TALIXIO_BROWSER_LANG' => 'en-US', 'TALIXIO_BROWSER_ALLOW_PRIVATE' => '0', 'TALIXIO_BROWSER_NO_SANDBOX' => '0',
         'TALIXIO_APPROVAL_WAIT_SECONDS' => '600', 'TALIXIO_LEARN' => '1', 'TALIXIO_LEARN_MIN_STEPS' => '4', 'TALIXIO_BACKUP_KEEP' => '7',
         'TALIXIO_BACKUP_FILES' => '1', 'TALIXIO_AUTO_UPDATE' => '0', 'TALIXIO_CLAUDE_BIN' => 'claude', 'TALIXIO_SIGNAL_CLI' => 'signal-cli',
-        'TALIXIO_RECALL_MIN_SIMILARITY' => '0.5', 'TALIXIO_DEEP_REASONING_EFFORT' => '',
+        'TALIXIO_RECALL_MIN_SIMILARITY' => '0.5', 'TALIXIO_SHELL' => 'off', 'TALIXIO_SHELL_NETWORK' => '0', 'TALIXIO_SHELL_TIMEOUT' => '120', 'TALIXIO_DEEP_REASONING_EFFORT' => '',
     ];
 
     /** @return array<string,array> key => field */

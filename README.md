@@ -195,6 +195,16 @@ conversation.
   local/private network addresses are refused. Submitting a form that sends data (login, order,
   contact...) pauses until you approve (passwords are masked in the request). Cookies are kept
   between runs in `/var/lib/talixio/browser-profile`.
+- **Sandboxed shell** (`install.sh --with-shell`, then Settings → *Sandboxed shell*): the assistant gets
+  a Linux sandbox of its own (bubblewrap) with Python (numpy, pandas, matplotlib) for exact
+  calculations, data analysis, file conversions and charts; it saves results to your library. It sees
+  only the system programs and its work folder (`data/sandbox/work`), never your server, data or
+  keys; no internet unless you allow it; time and memory limits. Mode *ask me* shows every command
+  and waits for your approval.
+- **Connectors (MCP)**: Settings → *Connectors* takes the usual `mcpServers` JSON: local servers
+  started by command (`install.sh --with-node` for `npx` servers) or remote ones by URL (token in
+  `headers`). Their tools join the assistant's; tools not marked read-only wait for your approval
+  unless the server has `"trust": "all"`. Background jobs only get the read-only ones.
 - **Approvals**: anything with outside effects (sending email as you, adding calendar events)
   waits for you: Approve/Reject buttons in the app, or reply "yes 12" / "no 12" on Signal,
   Telegram or email. Requests expire after 7 days. `TALIXIO_AUTO_APPROVE` skips the question for

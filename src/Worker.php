@@ -8,6 +8,7 @@ final class Worker
     private int $lastSummary = 0;
     private int $lastEmail = 0;
     private int $lastSignal = 0;
+    private int $lastMcp = 0;
 
     public function __construct(private App $app) {}
 
@@ -74,6 +75,10 @@ final class Worker
             $this->guard('email', fn() => $app->email()->poll());
         }
         if (App::$inWorker) $this->guard('library', fn() => $app->files()->startIndexer());
+        if ($now - $this->lastMcp >= 6 * 3600 && $app->mcp()->servers()) { // connectors' tool lists
+            $this->lastMcp = $now;
+            $this->guard('connectors', fn() => $app->mcp()->refresh());
+        }
         $this->guard('embeddings', fn() => $app->recall()->embedPending());
         if ($now % 600 < 15) $this->guard('update', fn() => $app->updater()->notifyIfNew());
         if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));

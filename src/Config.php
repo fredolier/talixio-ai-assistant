@@ -24,6 +24,9 @@ final class Config
     public string $name = 'Talixio';
     public int $historyMessages = 40;
     public int $historyTokens = 12000;
+    public string $shell = 'off';
+    public bool $shellNetwork = false;
+    public int $shellTimeout = 120;
     public string $webPassword = '';
     public string $telegramToken = '';
     /** @var int[] */ public array $telegramAllowed = [];
@@ -145,6 +148,9 @@ final class Config
         $c->name = $e('TALIXIO_NAME', 'Talixio');
         $c->historyMessages = max(6, (int)$e('TALIXIO_HISTORY_MESSAGES', '40'));
         $c->historyTokens = max(2000, (int)$e('TALIXIO_HISTORY_TOKENS', '12000'));
+        $c->shell = in_array($e('TALIXIO_SHELL', 'off'), ['off', 'ask', 'auto'], true) ? $e('TALIXIO_SHELL', 'off') : 'off';
+        $c->shellNetwork = $e('TALIXIO_SHELL_NETWORK', '0') === '1';
+        $c->shellTimeout = max(5, min(3600, (int)$e('TALIXIO_SHELL_TIMEOUT', '120')));
         $c->webPassword = $e('TALIXIO_WEB_PASSWORD');
         $c->telegramToken = $e('TALIXIO_TELEGRAM_TOKEN');
         $c->telegramAllowed = array_map('intval', array_filter(array_map('trim', explode(',', $e('TALIXIO_TELEGRAM_ALLOWED_IDS'))), 'strlen'));

@@ -178,6 +178,18 @@
       <h3>Configuration</h3>
       <div id="settings-groups" class="groups"></div>
 
+      <details class="card group" id="mcp-card">
+        <summary><b>Connectors (MCP)</b> <span id="mcp-badge" class="muted small"></span></summary>
+        <div class="fields">
+          <p class="muted small">Give the assistant tools from MCP servers: GitHub, Notion, your home automation, your own scripts… Local servers are started by command (Node servers need <code>install.sh --with-node</code>); remote ones by URL with a token in <code>headers</code>. Tools that change something wait for your approval, unless the server has <code>"trust": "all"</code>. Saved in <code>data/mcp.json</code>.</p>
+          <div id="mcp-servers" class="mcp-servers"></div>
+          <label for="mcp-raw">Configuration</label>
+          <textarea id="mcp-raw" class="editor mono" rows="10" spellcheck="false" placeholder='{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "…"}}}}'></textarea>
+          <div class="row"><button id="mcp-save" class="btn primary" type="button">Save and connect</button><button id="mcp-refresh" class="btn" type="button">Check again</button><span id="mcp-state" class="muted small"></span></div>
+          <p class="muted small">Sandboxed shell: <span id="shell-state">…</span> <button id="shell-test" class="btn small" type="button">Test the sandbox</button></p>
+        </div>
+      </details>
+
       <details class="card group">
         <summary><b>App password</b></summary>
         <form id="pw-form" class="fields">

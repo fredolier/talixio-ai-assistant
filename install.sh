@@ -8,11 +8,13 @@
 #   sudo ./install.sh --with-browser          also install Chromium/Chrome (headless browser tools)
 #   sudo ./install.sh --with-ollama           also install Ollama + a local embedding model for memory search
 #                                             (--with-ollama=docker to run it in Docker instead; OLLAMA_EMBED_MODEL to pick the model)
+#   sudo ./install.sh --with-shell            also install the sandbox (bubblewrap, Python with numpy/pandas/matplotlib) for shell commands
+#   sudo ./install.sh --with-node             also install Node.js (for MCP connectors started with npx)
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 ORIG_ARGS="$(printf '%q ' "$@")"   # remembered for updates from the web app
 
-DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; WITH_BROWSER=0 ; WITH_OLLAMA="" ; BIND_ARG=""
+DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; WITH_BROWSER=0 ; WITH_OLLAMA="" ; BIND_ARG="" ; WITH_SHELL=0 ; WITH_NODE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="${2:?--domain needs a value}"; shift 2 ;;
@@ -20,9 +22,11 @@ while [ $# -gt 0 ]; do
     --with-claude-code) WITH_CLAUDE=1; shift ;;
     --with-signal) WITH_SIGNAL=1; shift ;;
     --with-browser) WITH_BROWSER=1; shift ;;
+    --with-shell) WITH_SHELL=1; shift ;;
+    --with-node) WITH_NODE=1; shift ;;
     --with-ollama) WITH_OLLAMA=native; shift ;;
     --with-ollama=*) WITH_OLLAMA="${1#*=}"; shift ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -122,6 +126,33 @@ if [ "$WITH_BROWSER" = 1 ]; then
   else
     echo "    No packaged browser for $(uname -m) on ${ID:-this system}: install Chromium yourself and set TALIXIO_CHROME_BIN" >&2
   fi
+fi
+
+if [ "$WITH_SHELL" = 1 ]; then
+  say "Installing the sandbox for shell commands"
+  apt-get install -y -qq bubblewrap python3 python3-numpy python3-pandas python3-matplotlib python3-openpyxl python3-pip fonts-dejavu-core >/dev/null
+  # Ubuntu 24.04+ forbids unprivileged user namespaces unless an AppArmor profile allows the program
+  if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ] && ! grep -rqs 'bwrap' /etc/apparmor.d/ 2>/dev/null; then
+    cat > /etc/apparmor.d/talixio-bwrap <<'AA'
+abi <abi/4.0>,
+include <tunables/global>
+profile talixio-bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+  include if exists <local/talixio-bwrap>
+}
+AA
+    apparmor_parser -r /etc/apparmor.d/talixio-bwrap && echo "    AppArmor: allowed bubblewrap to create its sandbox"
+  fi
+  if runuser -u talixio -- bwrap --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib --proc /proc --dev /dev --unshare-all --die-with-parent /bin/true 2>/dev/null; then
+    echo "    Sandbox works. Turn shell commands on in Settings → Sandboxed shell."
+  else
+    echo "    The sandbox cannot start on this system (user namespaces disabled?): shell commands stay off." >&2
+  fi
+fi
+
+if [ "$WITH_NODE" = 1 ]; then
+  say "Installing Node.js (MCP connectors)"
+  apt-get install -y -qq nodejs npm >/dev/null && echo "    Node.js $(node --version 2>/dev/null) installed"
 fi
 
 if [ -n "$WITH_OLLAMA" ]; then
