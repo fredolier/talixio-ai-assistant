@@ -280,8 +280,10 @@ conversation.
   `usage_report` tool.
 - **Sub-agents**: for research and multi-step work the assistant starts background jobs (`delegate`),
   up to 3 in parallel, each with its own tier and a cost cap ($0.50 by default). It replies right
-  away; the report arrives in the chat and as a push notification. Sub-agents can search and read
-  but cannot change memory, schedules or start more jobs. See and cancel them on the Jobs page.
+  away; the report arrives in the chat of the space that started it, and as a notification that
+  names the space and opens it. Sub-agents can search and read but cannot change memory, schedules
+  or start more jobs. The Jobs page shows each job's space and tags (the assistant tags them, you
+  can edit them), filters by space or tag, and shows reports with tables, lists and headings.
 - **Prompt caching** on Claude: the stable part of the instructions is cached (re-reads cost 10%).
 - **Activity page**: spending against your budget, cost by tier and by source, tokens per day, and
   an audit log of every tool call.

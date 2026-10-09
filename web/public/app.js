@@ -28,46 +28,89 @@ function toast(text) {
 const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const CITE_SVG = '<svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 12h6M9 16h6"/></svg>';
-// Small, safe Markdown subset: escapes everything first, then adds formatting.
+// Safe Markdown: escapes everything first, then adds formatting (headings, lists with nesting and
+// checkboxes, tables, quotes, rules, code, links, citations, phone buttons).
 function md(src) {
   const blocks = [];
-  let s = esc(src).replace(/```[\w-]*\n([\s\S]*?)```/g, (_, code) => { blocks.push(`<pre><code>${code}</code></pre>`); return `\u0000${blocks.length - 1}\u0000`; });
+  const keep = html => { blocks.push(html); return `\u0000${blocks.length - 1}\u0000`; };
+  let s = esc(String(src).replace(/\r\n?/g, '\n').replace(/\t/g, '    '))
+    .replace(/^ {0,3}```[\w+-]*\n([\s\S]*?)\n? {0,3}```[ ]*$/gm, (_, code) => '\n' + keep(`<pre><code>${code}</code></pre>`) + '\n');
   const inline = t => t
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+    .replace(/`([^`\n]+)`/g, (_, c) => keep(`<code>${c}</code>`))
+    .replace(/\*\*([^*\n]+?)\*\*|__([^_\n]+?)__/g, (_, a, b) => `<strong>${a ?? b}</strong>`)
+    .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>')
+    .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
     .replace(/\[([^\]]+)\]\(\/files\/(\d+)(?:#p(\d+))?\)/g, (_, t, id, pg) => `<a href="#" class="cite" data-file="${id}"${pg ? ` data-page="${pg}"` : ''} title="Open the document${pg ? ' at page ' + pg : ''}">${CITE_SVG}${t}</a>`)
     // buttons that open an app on the phone (phone_action, Spotify): custom schemes only from this list
     .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|intent|deezer|tg|sgnl|uber|homeassistant):[^\s)]+)\)/g, (_, t, h) => `<a href="${h}" class="action">${t.replace(/^▶\s*/, '')}</a>`)
     .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" class="action" target="_blank" rel="noopener">$1</a>')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
-  const out = [];
-  const LI = /^\s*[-*•]\s+/, OL = /^\s*\d+[.)]\s+/;
-  for (const para of s.split(/\n{2,}/)) {
-    if (/^\u0000\d+\u0000$/.test(para.trim())) { out.push(para.trim()); continue; }
-    // group consecutive lines: bullet list, numbered list, heading, or text
-    let text = [], list = null, kind = null;
-    const flushText = () => { if (text.length) out.push(`<p>${inline(text.join('<br>'))}</p>`); text = []; };
-    const flushList = () => { if (list) out.push(`<${kind}>` + list.map(l => `<li>${inline(l)}</li>`).join('') + `</${kind}>`); list = null; kind = null; };
-    for (const line of para.split('\n')) {
-      const k = LI.test(line) ? 'ul' : OL.test(line) ? 'ol' : null;
-      if (/^\u0000\d+\u0000$/.test(line.trim())) { flushText(); flushList(); out.push(line.trim()); continue; }
-      if (k) {
-        flushText();
-        if (kind && kind !== k) flushList();
-        kind = k; (list ||= []).push(line.replace(k === 'ul' ? LI : OL, ''));
-      } else if (/^#{1,6}\s/.test(line)) {
-        flushText(); flushList(); out.push(`<h4>${inline(line.replace(/^#+\s/, ''))}</h4>`);
-      } else if (list && /^\s{2,}\S/.test(line)) {
-        list[list.length - 1] += ' ' + line.trim(); // wrapped list item
-      } else {
-        flushList(); text.push(line);
+  const lines = s.split('\n'), n = lines.length, out = [];
+  const LIST = /^( *)([-*+•]|\d{1,3}[.)])\s+(.*)$/, HR = /^ {0,3}([-*_])( *\1){2,} *$/, HEAD = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
+  const SEP = /^ *\|? *:?-{2,}:? *(\| *:?-{2,}:? *)*\|? *$/, QUOTE = /^ {0,3}&gt; ?/;
+  const ph = l => /^\s*\u0000\d+\u0000\s*$/.test(l);
+  const isTable = i => lines[i].includes('|') && i + 1 < n && SEP.test(lines[i + 1]);
+  const startsBlock = i => HEAD.test(lines[i]) || HR.test(lines[i]) || LIST.test(lines[i]) || QUOTE.test(lines[i]) || ph(lines[i]) || isTable(i);
+  const cells = l => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+  const item = t => { const m = t.match(/^\[([ xX])\]\s+(.*)$/); return m ? `<span class="check${m[1] === ' ' ? '' : ' done'}">${m[1] === ' ' ? '☐' : '☑'}</span> ${inline(m[2])}` : inline(t); };
+  let i = 0;
+  const list = () => {
+    const first = lines[i].match(LIST), indent = first[1].length, ordered = /\d/.test(first[2]);
+    const items = [];
+    while (i < n) {
+      const l = lines[i];
+      if (!l.trim()) { // a blank line inside a list: go on if the list does
+        let j = i + 1; while (j < n && !lines[j].trim()) j++;
+        const m = j < n && lines[j].match(LIST);
+        if (m && m[1].length >= indent && (m[1].length > indent || /\d/.test(m[2]) === ordered)) { i = j; continue; }
+        if (j < n && items.length && /^ {2,}\S/.test(lines[j]) && !LIST.test(lines[j])) { items[items.length - 1] += '<br>'; i = j; continue; }
+        break;
       }
+      const m = l.match(LIST);
+      if (m) {
+        const ind = m[1].length;
+        if (ind < indent) break;
+        if (ind >= indent + 2 && items.length) { items[items.length - 1] += list(); continue; }
+        if (/\d/.test(m[2]) !== ordered) break;
+        items.push(item(m[3])); i++; continue;
+      }
+      if (items.length && (/^ {2,}\S/.test(l) || !startsBlock(i))) { items[items.length - 1] += (/^ {2,}/.test(l) ? ' ' : ' ') + inline(l.trim()); i++; continue; }
+      break;
     }
-    flushText(); flushList();
+    const start = ordered ? parseInt(first[2], 10) : 1;
+    return ordered ? `<ol${start !== 1 ? ` start="${start}"` : ''}>${items.map(x => `<li>${x}</li>`).join('')}</ol>` : `<ul>${items.map(x => `<li>${x}</li>`).join('')}</ul>`;
+  };
+  while (i < n) {
+    const l = lines[i];
+    let m;
+    if (!l.trim()) { i++; continue; }
+    if (ph(l)) { out.push(l.trim()); i++; continue; }
+    if ((m = l.match(HEAD))) { const h = Math.min(6, m[1].length + 2); out.push(`<h${h}>${inline(m[2])}</h${h}>`); i++; continue; }
+    if (HR.test(l)) { out.push('<hr>'); i++; continue; }
+    if (isTable(i)) {
+      const head = cells(l), align = cells(lines[i + 1]).map(c => c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : '');
+      const td = (tag, c, k) => `<${tag}${align[k] ? ` style="text-align:${align[k]}"` : ''}>${inline(c)}</${tag}>`;
+      i += 2;
+      const rows = [];
+      while (i < n && lines[i].trim() && lines[i].includes('|')) { rows.push(cells(lines[i])); i++; }
+      out.push(`<div class="table"><table><thead><tr>${head.map((c, k) => td('th', c, k)).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${head.map((_, k) => td('td', r[k] ?? '', k)).join('')}</tr>`).join('')}</tbody></table></div>`);
+      continue;
+    }
+    if (QUOTE.test(l)) {
+      const q = [];
+      while (i < n && QUOTE.test(lines[i])) { q.push(lines[i].replace(QUOTE, '')); i++; }
+      out.push(`<blockquote>${md(q.join('\n').replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&'))}</blockquote>`);
+      continue;
+    }
+    if (LIST.test(l)) { out.push(list()); continue; }
+    const para = [];
+    while (i < n && lines[i].trim() && (!para.length || !startsBlock(i))) { para.push(lines[i].trim()); i++; }
+    out.push(`<p>${inline(para.join('<br>'))}</p>`);
   }
-  return out.join('').replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[+i]);
+  let html = out.join('');
+  for (let k = 0; k < 3 && html.includes('\u0000'); k++) html = html.replace(/\u0000(\d+)\u0000/g, (_, j) => blocks[+j]); // inline code inside blocks
+  return html;
 }
 
 const CHANNEL = { web: null, approval: 'Approval', learn: 'Learning', cli: 'Terminal', telegram: 'Telegram', email: 'Email', signal: 'Signal', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
@@ -87,7 +130,7 @@ function renderMessage(m) {
     const [, num, title, status] = m.content.match(/^\[Background job #(\d+) "(.*?)" (\w+)/) || [];
     const report = m.content.replace(/^\[[^\]]*\]\s*/, '');
     el.className = 'jobcard';
-    el.innerHTML = `<details><summary><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Job ${status || 'finished'}: <b>${esc(title || 'background job')}</b> · ${fmtTime(m.ts)} · show the full report</span></summary><div class="report">${esc(report)}</div></details>`;
+    el.innerHTML = `<details><summary><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Job ${status || 'finished'}: <b>${esc(title || 'background job')}</b> · ${fmtTime(m.ts)} · show the full report</span></summary><div class="report doc">${md(report)}</div></details>`;
     return el;
   }
   el.className = `msg ${m.role}`;
@@ -658,22 +701,68 @@ function tierSelect(current, label) {
     `<option value="${n}"${n === current ? ' selected' : ''}>${n}${tiers[n] ? ' · ' + esc(shortModel(tiers[n])) : ''}</option>`).join('')}</select>`;
 }
 
+const jobsFilter = (() => { try { return JSON.parse(localStorage.getItem('talixio.jobs') || '{}'); } catch { return {}; } })();
+function saveJobsFilter() { try { localStorage.setItem('talixio.jobs', JSON.stringify(jobsFilter)); } catch {} }
+const spaceChip = id => { const sp = spaceOf(+id); return `<span class="chip space-chip" data-space="${sp.id}" title="Show only the jobs of this space"><i class="space-dot" style="background:${esc(sp.color || 'var(--muted)')}"></i>${esc(sp.name)}</span>`; };
+const tagsOf = j => (j.tags || '').split(',').filter(Boolean);
+
 async function loadJobs() {
-  const { jobs } = await api('/api/jobs');
+  const q = new URLSearchParams();
+  if (jobsFilter.space != null && jobsFilter.space !== '') q.set('space', jobsFilter.space);
+  if (jobsFilter.tag) q.set('tag', jobsFilter.tag);
+  const { jobs, tags } = await api('/api/jobs?' + q);
   const s = state.status;
-  if (s) $('#jobs-help').textContent = `Sub-agents the assistant starts for research and multi-step work: up to ${s.max_parallel_jobs} at once, each capped at $${s.job_max_usd.toFixed(2)}. Results come back in the chat.`;
+  if (s) $('#jobs-help').textContent = `Sub-agents the assistant starts for research and multi-step work: up to ${s.max_parallel_jobs} at once, each capped at $${s.job_max_usd.toFixed(2)}. Results come back in the chat of the space that started them.`;
+  // filters: space, tags
+  const sel = $('#jobs-space');
+  sel.innerHTML = `<option value="">All spaces</option>` + state.spaces.filter(x => !x.archived || x.id === +jobsFilter.space).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  sel.value = jobsFilter.space ?? '';
+  sel.onchange = () => { jobsFilter.space = sel.value; saveJobsFilter(); loadJobs(); };
+  const names = Object.keys(tags || {});
+  if (jobsFilter.tag && !names.includes(jobsFilter.tag)) names.unshift(jobsFilter.tag);
+  $('#jobs-tags').innerHTML = names.length ? names.map(t => `<button type="button" class="tag${t === jobsFilter.tag ? ' on' : ''}" data-tag="${esc(t)}">#${esc(t)}${tags?.[t] ? ` <small>${tags[t]}</small>` : ''}</button>`).join('') : '<span class="muted small">No tags yet: the assistant tags the jobs it starts, and you can add yours.</span>';
+  $('#jobs-tags').querySelectorAll('.tag').forEach(b => b.onclick = () => { jobsFilter.tag = jobsFilter.tag === b.dataset.tag ? '' : b.dataset.tag; saveJobsFilter(); loadJobs(); });
   const box = $('#jobs'); box.innerHTML = '';
-  if (!jobs.length) { box.innerHTML = '<div class="placeholder">No jobs yet. Ask for research, e.g. <q>compare the three best e-bikes under €2000</q>.</div>'; return; }
+  const filtered = (jobsFilter.space ?? '') !== '' || jobsFilter.tag;
+  if (!jobs.length) {
+    box.innerHTML = filtered ? '<div class="placeholder">No job matches these filters. <a href="#jobs" data-a="clear">Show them all</a></div>'
+      : '<div class="placeholder">No jobs yet. Ask for research, e.g. <q>compare the three best e-bikes under €2000</q>.</div>';
+    box.querySelector('[data-a=clear]')?.addEventListener('click', e => { e.preventDefault(); jobsFilter.space = ''; jobsFilter.tag = ''; saveJobsFilter(); loadJobs(); });
+    return;
+  }
   for (const j of jobs) {
     const el = document.createElement('div');
-    el.className = 'task';
+    el.className = 'task job';
     const dur = j.started ? Math.max(1, Math.round(((j.finished || Date.now() / 1000) - j.started))) : null;
     const durText = dur == null ? 'waiting' : dur < 90 ? dur + ' s' : Math.round(dur / 60) + ' min';
+    const tagHtml = () => tagsOf(j).map(t => `<span class="tag small" data-tag="${esc(t)}">#${esc(t)}</span>`).join('') + '<button type="button" class="tag small add" data-a="tags" title="Edit the tags">＋ tag</button>';
     el.innerHTML = `<div><h3>${esc(j.title)}</h3><div class="when"><span class="pill ${j.status}">${j.status === 'running' ? '<span class="dot"></span>' : ''}${j.status}</span>
-        <span class="chip">${esc(j.tier)}</span><span>${money(+j.cost_usd) || '$0'} of $${(+j.max_cost_usd).toFixed(2)}</span><span>${durText}</span><span>${fmtTime(j.created)}</span></div></div>
+        ${spaceChip(j.space)}<span class="chip">${esc(j.tier)}</span><span>${money(+j.cost_usd) || '$0'} of $${(+j.max_cost_usd).toFixed(2)}</span><span>${durText}</span><span>${fmtTime(j.created)}</span></div>
+        <div class="jtags">${tagHtml()}</div></div>
       <div class="actions">${['queued', 'running'].includes(j.status) ? '<button class="btn small" data-a="cancel">Cancel</button>'
         : j.kind !== 'reflect' ? `${tierSelect(j.tier, 'Model for running it again')}<button class="btn small" data-a="rerun">Run again</button>` : ''}</div>
-      <details><summary>Instructions${j.result ? ' and report' : ''}</summary><p class="report"><b>Instructions:</b> ${esc(j.instructions)}</p>${j.result ? `<p class="report"><b>Report:</b> ${esc(j.result)}</p>` : ''}</details>`;
+      <details><summary>${j.result ? 'Report and instructions' : 'Instructions'}</summary>
+        ${j.result ? `<div class="doc-label">Report</div><div class="doc">${md(j.result)}</div>` : ''}
+        <details class="instr"${j.result ? '' : ' open'}><summary class="doc-label">Instructions</summary><div class="doc">${md(j.instructions)}</div></details></details>`;
+    el.querySelector('.space-chip').addEventListener('click', () => { jobsFilter.space = String(j.space); saveJobsFilter(); loadJobs(); });
+    const wireTags = () => {
+      el.querySelectorAll('.jtags .tag[data-tag]').forEach(t => t.onclick = () => { jobsFilter.tag = t.dataset.tag; saveJobsFilter(); loadJobs(); });
+      el.querySelector('[data-a=tags]').onclick = () => {
+        const box = el.querySelector('.jtags');
+        box.innerHTML = `<input class="tag-input" type="text" value="${esc(tagsOf(j).join(', '))}" placeholder="tags, separated by commas" aria-label="Tags">`;
+        const inp = box.querySelector('input'); inp.focus(); inp.select();
+        let done = false;
+        const save = async keep => {
+          if (done) return; done = true;
+          if (keep) { try { const r = await post(`/api/jobs/${j.id}/tags`, { tags: inp.value }); j.tags = r.job.tags; } catch (e) { toast(e.message); } }
+          box.innerHTML = tagHtml(); wireTags();
+          if (keep) loadJobs();
+        };
+        inp.onkeydown = e => { if (e.key === 'Enter') save(true); if (e.key === 'Escape') save(false); };
+        inp.onblur = () => save(true);
+      };
+    };
+    wireTags();
     el.querySelector('[data-a=cancel]')?.addEventListener('click', async () => {
       try { await post(`/api/jobs/${j.id}/cancel`); toast('Job cancelled'); loadJobs(); } catch (e) { toast(e.message); }
     });
@@ -684,7 +773,7 @@ async function loadJobs() {
     box.append(el);
   }
   clearTimeout(loadJobs.t);
-  if (jobs.some(j => ['queued', 'running'].includes(j.status)) && location.hash === '#jobs') loadJobs.t = setTimeout(() => loadJobs().catch(() => {}), 4000);
+  if (jobs.some(j => ['queued', 'running'].includes(j.status)) && location.hash === '#jobs') loadJobs.t = setTimeout(() => { if (!document.querySelector('.tag-input')) loadJobs().catch(() => {}); }, 4000);
 }
 
 // ---- channels ----

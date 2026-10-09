@@ -67,6 +67,7 @@ final class Store
             tools TEXT NOT NULL DEFAULT \'[]\', cost REAL, model TEXT)');
         $this->addColumn('jobs', 'kind', "TEXT NOT NULL DEFAULT 'agent'");
         $this->addColumn('jobs', 'file_id', 'INTEGER');
+        $this->addColumn('jobs', 'tags', "TEXT NOT NULL DEFAULT ''"); // ',research,bikes,'
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");
         $this->addColumn('usage', 'job_id', 'INTEGER');
         $this->addColumn('usage', 'cache_read', 'INTEGER NOT NULL DEFAULT 0');
@@ -215,14 +216,41 @@ final class Store
     }
 
     // --- background jobs (sub-agents) ---
-    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null, int $space = 0): int
+    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null, int $space = 0, array|string $tags = []): int
     {
-        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id,space) VALUES(?,?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId, $space]);
+        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id,space,tags) VALUES(?,?,?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId, $space, self::tagString($tags)]);
         return (int)$this->db->lastInsertId();
     }
 
     public function job(int $id): ?array { return $this->q('SELECT * FROM jobs WHERE id=?', [$id])->fetch() ?: null; }
-    public function jobs(int $limit = 50): array { return $this->q('SELECT * FROM jobs ORDER BY id DESC LIMIT ?', [$limit])->fetchAll(); }
+    /** Newest first; optionally only one space and/or one tag. */
+    public function jobs(int $limit = 50, ?int $space = null, string $tag = ''): array
+    {
+        $where = []; $args = [];
+        if ($space !== null) { $where[] = 'space = ?'; $args[] = $space; }
+        if ($tag !== '') { $where[] = "tags LIKE ? ESCAPE '\\'"; $args[] = '%,' . addcslashes(mb_strtolower($tag), '%_\\') . ',%'; }
+        $args[] = $limit;
+        return $this->q('SELECT * FROM jobs' . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY id DESC LIMIT ?', $args)->fetchAll();
+    }
+
+    /** Every tag used on jobs, with how many jobs carry it. */
+    public function jobTags(): array
+    {
+        $count = [];
+        foreach ($this->q("SELECT tags FROM jobs WHERE tags != ''")->fetchAll(\PDO::FETCH_COLUMN) as $t) foreach (self::tagList($t) as $x) $count[$x] = ($count[$x] ?? 0) + 1;
+        arsort($count);
+        return $count;
+    }
+
+    /** ['a','b'] <-> ',a,b,' (lower case, no commas, at most 8 tags of 30 characters). */
+    public static function tagString(array|string $tags): string
+    {
+        if (is_string($tags)) $tags = preg_split('/[,#]+/', $tags);
+        $clean = [];
+        foreach ($tags as $t) { $t = mb_substr(trim(preg_replace('/\s+/', ' ', mb_strtolower((string)$t))), 0, 30); if ($t !== '' && !in_array($t, $clean, true)) $clean[] = $t; }
+        return $clean ? ',' . implode(',', array_slice($clean, 0, 8)) . ',' : '';
+    }
+    public static function tagList(string $s): array { return array_values(array_filter(explode(',', $s), fn($x) => $x !== '')); }
     public function jobsWithStatus(string $status): array { return $this->q('SELECT * FROM jobs WHERE status=? ORDER BY id', [$status])->fetchAll(); }
     public function updateJob(int $id, array $fields): void { $this->update('jobs', $id, $fields); }
 

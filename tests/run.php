@@ -337,6 +337,10 @@ $port = $freePort(); $c->smtpPort = $port; $sp = $spawn('smtp.php', [(string)$po
 $res = $app->notifier()->notify('Reminder', 'Call the bank');
 proc_close($sp);
 check('notifier: email and signal sent, push skipped without devices', $res['email'] === 'sent' && $res['signal'] === 'sent' && $res['webpush'] === 'no device subscribed' && $res['ntfy'] === 'off (TALIXIO_NOTIFY)', json_encode($res));
+$nsp = $app->spaces()->save(['name' => 'Maison']);
+$c->notify = ['signal'];
+$app->notifier()->notify('Job finished', 'Report ready', (int)$nsp['id']);
+check('notifier: says which space a message comes from', str_contains((string)@file_get_contents("$dir/sent.log"), '[Maison] Report ready'));
 
 // ---- Gemini ----
 $picked = GeminiModels::choose(['models/gemini-2.5-flash', 'models/gemini-2.5-flash-lite', 'models/gemini-2.5-pro', 'models/gemini-3.1-pro-preview',
@@ -1201,6 +1205,14 @@ $st3->updateJob($jid, ['status' => 'done', 'result' => 'A, B, C', 'finished' => 
 $new = $aj("/api/jobs/$jid/rerun", ['tier' => 'deep'], 'd');
 check('jobs: a finished job runs again on another tier', ($st3->job((int)($new['id'] ?? 0))['tier'] ?? '') === 'deep' && $st3->job((int)$new['id'])['instructions'] === 'Compare three e-bikes', json_encode($new));
 check('jobs: a running job is not run twice', $aj('/api/jobs/' . $new['id'] . '/rerun', [], 'd')['_code'] === 400);
+$st3->updateJob($jid, ['space' => 3]);
+$tj = $aj("/api/jobs/$jid/tags", ['tags' => 'Vélos, comparison,vélos'], 'd');
+check('jobs: tags cleaned (lower case, no duplicates)', ($tj['job']['tags'] ?? '') === ',vélos,comparison,', json_encode($tj));
+$jl = $aj('/api/jobs?tag=V%C3%A9los', null, 'd');
+check('jobs: filtered by tag, tag counts for the filter bar', count($jl['jobs']) === 1 && $jl['jobs'][0]['id'] === $jid && ($jl['tags']['comparison'] ?? 0) === 1, json_encode($jl['tags'] ?? null));
+check('jobs: filtered by space', count($aj('/api/jobs?space=3', null, 'd')['jobs']) === 1 && !in_array($jid, array_column($aj('/api/jobs?space=0', null, 'd')['jobs'], 'id'), true));
+$again = $aj("/api/jobs/$jid/rerun", [], 'd');
+check('jobs: running again keeps the space and tags', ($st3->job((int)$again['id'])['tags'] ?? '') === ',vélos,comparison,' && (int)$st3->job((int)$again['id'])['space'] === 3);
 check('heartbeat: needs a checklist to run by hand', $aj('/api/heartbeat/run', [], 'd')['_code'] === 400);
 (new \Talixio\Workspace("$ad/workspace"))->write('HEARTBEAT.md', "- Anything due today?\n");
 $hb = $aj('/api/heartbeat/run', [], 'd');

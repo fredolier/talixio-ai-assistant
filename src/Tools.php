@@ -126,9 +126,11 @@ final class Tools
 
         $this->register('delegate',
             "Start a background sub-agent for work that takes several searches or steps (research, comparisons, planning, summarising long pages). You get control back immediately; when it finishes, its report is posted in the chat and you will relay it. Split independent parts into separate jobs to run them in parallel (max {$cfg->maxParallelJobs} at a time). The sub-agent can search the web, read pages and read memory, but cannot message the user or change memory or schedules. Write self-contained instructions: it does not see this conversation. tier: fast (simple lookups), standard (default), deep (hard reasoning; most expensive). Each job is capped at \${$cfg->jobMaxUsd}.",
-            ['title' => ['type' => 'string'], 'instructions' => ['type' => 'string'], 'tier' => ['type' => 'string', 'enum' => Tier::NAMES]],
+            ['title' => ['type' => 'string'], 'instructions' => ['type' => 'string'], 'tier' => ['type' => 'string', 'enum' => Tier::NAMES],
+             'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => '1-3 short topic tags so the user can find it later, e.g. ["bikes", "comparison"]; reuse existing tags (list_jobs shows them)']],
             ['title', 'instructions'], fn(array $a) => $this->delegate($a));
-        $this->register('list_jobs', 'List recent background jobs and their status.', [], [], fn() => $this->listJobs());
+        $this->register('list_jobs', 'List recent background jobs (space, tags, status). tag: only jobs with this tag; all_spaces: not only this space.',
+            ['tag' => ['type' => 'string'], 'all_spaces' => ['type' => 'boolean']], [], fn(array $a) => $this->listJobs((string)($a['tag'] ?? ''), !empty($a['all_spaces'])));
         $this->register('cancel_job', 'Cancel a queued or running background job.', ['id' => ['type' => 'integer']], ['id'],
             fn(array $a) => $this->app->jobs()->cancel((int)$a['id']) ? 'cancelled' : 'error: job not found or already finished');
         $this->register('usage_report', 'Your spending: budget status, cost and tokens by tier and by source (chat, schedules, jobs...) today and this month.',
@@ -370,15 +372,19 @@ final class Tools
     private function delegate(array $a): string
     {
         $tier = in_array($a['tier'] ?? '', Tier::NAMES, true) ? $a['tier'] : 'standard';
-        $id = $this->app->jobs()->create((string)$a['title'], (string)$a['instructions'], $tier);
+        $id = $this->app->jobs()->create((string)$a['title'], (string)$a['instructions'], $tier, is_array($a['tags'] ?? null) ? $a['tags'] : (is_string($a['tags'] ?? null) ? [$a['tags']] : []));
         return "job #$id queued ($tier tier). Tell the user it's running; the report will be posted in the chat when done.";
     }
 
-    private function listJobs(): string
+    private function listJobs(string $tag = '', bool $all = false): string
     {
-        $rows = array_map(fn($j) => sprintf('#%d %s | %s | %s | $%.3f', $j['id'], $j['title'], $j['tier'], $j['status'], $j['cost_usd']),
-            $this->app->store->jobs(15));
-        return $rows ? implode("\n", $rows) : 'no jobs';
+        $names = array_column($this->app->spaces()->all(), 'name', 'id') + [0 => 'General'];
+        $rows = array_map(fn($j) => sprintf('#%d %s | %s | %s | $%.3f', $j['id'], $j['title'], $j['tier'], $j['status'], $j['cost_usd'])
+            . ($all ? ' | space ' . ($names[$j['space']] ?? $j['space']) : '') . ($j['tags'] !== '' ? ' | tags: ' . implode(', ', Store::tagList($j['tags'])) : ''),
+            $this->app->store->jobs(15, $all ? null : $this->app->space, $tag));
+        $tags = array_keys($this->app->store->jobTags());
+        return ($rows ? implode("\n", $rows) : 'no jobs' . ($tag !== '' ? " tagged \"$tag\"" : '') . ($all ? '' : ' in this space'))
+            . ($tags ? "\nTags in use: " . implode(', ', array_slice($tags, 0, 30)) : '');
     }
 
     private function usageReport(): string

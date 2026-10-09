@@ -252,7 +252,7 @@ final class Agent
         $trace = implode("\n", array_map(fn($s) => "- {$s['tool']} " . mb_substr($s['args'], 0, 200), $steps));
         $task = "## The user asked\n" . mb_substr($request, 0, 3000) . "\n\n## Steps taken\n$trace\n\n## Final answer\n" . mb_substr($reply, 0, 3000)
             . ($used ? "\n\n(An existing skill was used: update it if the steps above improved on it.)" : '');
-        try { $this->app->store->addJob('Learning from: ' . mb_substr(preg_replace('/\s+/', ' ', $request), 0, 60), $task, 'fast', 0.05, 'reflect'); }
+        try { $this->app->store->addJob('Learning from: ' . mb_substr(preg_replace('/\s+/', ' ', $request), 0, 60), $task, 'fast', 0.05, 'reflect', null, $this->app->space, ['learning']); }
         catch (\Throwable $e) { Log::warn("learn: {$e->getMessage()}"); }
     }
 

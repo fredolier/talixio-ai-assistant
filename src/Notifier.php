@@ -20,19 +20,24 @@ final class Notifier
         ];
     }
 
-    public function notify(string $title, string $text): array
+    /** $space: the space the message belongs to (named in the title; the app notification opens it). */
+    public function notify(string $title, string $text, int $space = 0): array
     {
         $c = $this->app->cfg;
         $results = [];
+        $sp = $this->app->spaces()->get($space) ?? $this->app->spaces()->general();
+        if ($space) $title = "{$sp['name']} · $title";
+        $url = '/#chat/' . $sp['slug'];
+        $plain = $space ? "[{$sp['name']}] $text" : $text; // chat apps: say which space it comes from
         foreach ($this->channels() as $ch => $state) {
             if (!in_array($ch, $c->notify, true) || $state !== 'on') { $results[$ch] = in_array($ch, $c->notify, true) ? $state : 'off (TALIXIO_NOTIFY)'; continue; }
             try {
                 match ($ch) {
-                    'webpush' => $this->app->webPush()->notify($title, $text),
+                    'webpush' => $this->app->webPush()->notify($title, $text, $url),
                     'ntfy' => $this->ntfy($title, $text),
-                    'telegram' => (new Telegram($c, null))->send($c->telegramAllowed[0], $text),
+                    'telegram' => (new Telegram($c, null))->send($c->telegramAllowed[0], $plain),
                     'email' => $this->app->email()->notify($title, $text),
-                    'signal' => $this->app->signal()->notify($title, $text),
+                    'signal' => $this->app->signal()->notify($title, $plain),
                 };
                 $results[$ch] = 'sent';
                 $this->app->store->set("channel_error_$ch", '');

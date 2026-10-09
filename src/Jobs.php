@@ -10,13 +10,13 @@ final class Jobs
 
     public function __construct(private App $app) {}
 
-    public function create(string $title, string $instructions, string $tier): int
+    public function create(string $title, string $instructions, string $tier, array $tags = []): int
     {
         $state = $this->app->budget()->status()['state'];
         if ($state !== 'ok') throw new \RuntimeException("budget is $state: not starting background jobs. Do it yourself briefly or tell the user.");
         $active = count($this->app->store->jobsWithStatus('queued')) + count($this->app->store->jobsWithStatus('running'));
         if ($active >= $this->app->cfg->maxParallelJobs * 3) throw new \RuntimeException("$active jobs already queued or running; wait for some to finish");
-        return $this->app->store->addJob($title, $instructions, $tier, $this->app->cfg->jobMaxUsd, 'agent', null, $this->app->space); // the report comes back in this space
+        return $this->app->store->addJob($title, $instructions, $tier, $this->app->cfg->jobMaxUsd, 'agent', null, $this->app->space, $tags); // the report comes back in this space
     }
 
     /** Meeting recording: transcribe, then summarise. Not subject to the parallel-job limit check (the user asked for it). */
@@ -29,7 +29,7 @@ final class Jobs
         $instructions = "Summarise this meeting for the user." . ($note !== '' ? " The user said: \"$note\"." : '')
             . "\n\nWrite, in the meeting's language:\n1. **Summary** (5-10 lines)\n2. **Decisions**\n3. **Action items**: who, what, by when (\"not stated\" if unknown)\n"
             . "4. **Open questions / follow-ups**\n5. **Participants** (as named in the transcript)\nBe factual: only what the transcript supports.";
-        return $this->app->store->addJob($title, $instructions, $this->app->cfg->meetingTier, max($this->app->cfg->jobMaxUsd, 1.0), 'meeting', $fileId, $space);
+        return $this->app->store->addJob($title, $instructions, $this->app->cfg->meetingTier, max($this->app->cfg->jobMaxUsd, 1.0), 'meeting', $fileId, $space, ['meeting']);
     }
 
     /** Run a finished job again (same instructions), optionally with another tier. Returns the new job id. */
@@ -40,7 +40,14 @@ final class Jobs
         if ($j['kind'] === 'reflect') throw new \InvalidArgumentException('Learning jobs are not run again.');
         if ($tier !== '' && !in_array($tier, Tier::NAMES, true)) throw new \InvalidArgumentException('unknown tier');
         if ($this->app->budget()->status()['state'] === 'blocked') throw new \InvalidArgumentException('The budget is used up.');
-        return $this->app->store->addJob($j['title'], $j['instructions'], $tier ?: $j['tier'], (float)$j['max_cost_usd'], $j['kind'], $j['file_id'] !== null ? (int)$j['file_id'] : null, (int)$j['space']);
+        return $this->app->store->addJob($j['title'], $j['instructions'], $tier ?: $j['tier'], (float)$j['max_cost_usd'], $j['kind'], $j['file_id'] !== null ? (int)$j['file_id'] : null, (int)$j['space'], Store::tagList($j['tags']));
+    }
+
+    public function setTags(int $id, array|string $tags): array
+    {
+        $this->app->store->job($id) ?? throw new \InvalidArgumentException("no job $id");
+        $this->app->store->updateJob($id, ['tags' => Store::tagString($tags)]);
+        return $this->app->store->job($id);
     }
 
     public function cancel(int $id): bool
@@ -145,6 +152,6 @@ final class Jobs
             ? "Give the user the meeting summary as written (keep the structure), then offer to schedule reminders for the user's own action items."
             : "Relay what matters to the user concisely, with sources; don't mention job numbers unless useful.";
         $reply = $this->app->agent()->chat('job', "[Background job #{$j['id']} \"{$j['title']}\" $head. Its report follows. $how]\n\n{$j['result']}", 'standard', [], null, (int)$j['space']);
-        $this->app->notifier()->notify($j['title'], $reply);
+        $this->app->notifier()->notify($j['title'], $reply, (int)$j['space']);
     }
 }

@@ -158,6 +158,10 @@
     <section id="view-jobs" class="view page" hidden>
       <header class="page-head"><h2>Background jobs</h2>
         <p class="muted" id="jobs-help">Sub-agents the assistant starts for research and multi-step work. Each one has its own model tier and a cost cap; results come back in the chat.</p></header>
+      <div class="row wrap filters" id="jobs-filters">
+        <select id="jobs-space" aria-label="Space"></select>
+        <div id="jobs-tags" class="tagbar"></div>
+      </div>
       <div id="jobs" class="list"></div>
     </section>
 
@@ -179,7 +183,7 @@
       <h3>Conversation digest</h3>
       <p class="muted small">The assistant keeps the latest messages word for word. Older ones are summarised, then each past week and month is condensed further: details fade, what matters stays. It reads this digest before every answer; everything remains searchable above.</p>
       <div class="row"><span id="digest-state" class="muted small"></span><button id="digest-compact" class="btn" type="button">Compact now</button></div>
-      <details class="card digest"><summary>Show the digest</summary><div id="digest" class="report"></div></details>
+      <details class="card digest"><summary>Show the digest</summary><div id="digest" class="doc"></div></details>
       <h3>Memory files</h3>
       <div class="tabs" id="mem-tabs" role="tablist"></div>
       <p class="muted small" id="mem-help"></p>

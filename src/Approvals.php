@@ -41,7 +41,7 @@ final class Approvals
             [$tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $summary, 'pending', time(), $mode, $this->app->space]);
         $id = (int)$st->db->lastInsertId();
         try {
-            $this->app->notifier()->notify('Approval needed', "$summary\n\nApprove in the app, or reply \"yes $id\" (or \"no $id\").");
+            $this->app->notifier()->notify('Approval needed', "$summary\n\nApprove in the app, or reply \"yes $id\" (or \"no $id\").", $this->app->space);
         } catch (\Throwable $e) {
             Log::warn("approval notify: {$e->getMessage()}");
         }
