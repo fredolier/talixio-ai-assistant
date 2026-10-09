@@ -236,9 +236,14 @@ conversation.
 - **Google Calendar** (Settings → *Google Calendar*, steps shown there): with your own OAuth client
   it reads every calendar you show in Google Calendar and adds events to your main one after your
   approval. Publish the OAuth app "In production" (testing apps lose access after 7 days).
+- **Spotify** (Settings → *Spotify*, steps shown there; Premium needed): "play Daft Punk", "my
+  running playlist", "pause", "louder", "add this to my playlist": the music plays on your phone
+  or speaker, from the app, Telegram or anywhere. With your own app from developer.spotify.com.
+  When no device is available (Spotify closed), the answer has a button that opens Spotify on it.
+- **Phone buttons**: a web app can't open other apps by itself, so the assistant puts buttons in its
+  answers that you tap: open an app, navigate (Maps, Waze), call, text, WhatsApp, email, YouTube.
 - **Your calendar**: reads any iCal subscription link (Google, Outlook, iCloud...) and/or a CalDAV
-  calendar; adds events through CalDAV after approval. Recurring events are expanded. Google
-  Calendar is read-only for now (adding needs Google sign-in, not supported yet).
+  calendar; adds events through CalDAV after approval. Recurring events are expanded.
 - **Your mailbox**: lists and reads your email without marking it read, writes drafts into your
   Drafts folder, and sends as you only after approval (with a copy in Sent).
 - **One conversation everywhere**: web app, email, Signal, Telegram and terminal (`sudo talixio chat`)
@@ -285,8 +290,8 @@ Costs are estimates from list prices built into `src/Pricing.php` (Claude: Haiku
 $3/$15, Opus $5/$25 per million tokens). Check your provider's pricing and override with
 `TALIXIO_PRICES` if they differ.
 
-Not yet: shell/code tools, MCP connectors, Google Calendar writing (needs Google sign-in),
-Microsoft 365 mail (needs OAuth), WhatsApp, Slack, Teams, spoken replies.
+Not yet: Microsoft 365 mail (needs OAuth), WhatsApp, Slack, Teams, spoken replies, starting apps
+on the phone without a tap (would need a native Android app).
 
 ## Files
 ```

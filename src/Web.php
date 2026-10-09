@@ -20,6 +20,7 @@ final class Web
             return;
         }
         if ($path === '/api/google/callback' && $method === 'GET') { $this->googleCallback(); return; } // Google's redirect carries no session cookie (SameSite)
+        if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
         $this->startSession();
         try {
@@ -99,6 +100,9 @@ final class Web
             $path === '/api/google' => $this->googleState(),
             $path === '/api/google/connect' && $m === 'POST' => ['url' => $this->app->google()->authUrl(Google::redirectUri())],
             $path === '/api/google/disconnect' && $m === 'POST' => (function () { $this->app->google()->disconnect(); return $this->googleState(); })(),
+            $path === '/api/spotify' => $this->spotifyState(),
+            $path === '/api/spotify/connect' && $m === 'POST' => ['url' => $this->app->spotify()->authUrl(Spotify::redirectUri())],
+            $path === '/api/spotify/disconnect' && $m === 'POST' => (function () { $this->app->spotify()->disconnect(); return $this->spotifyState(); })(),
             $path === '/api/mcp' && $m === 'GET' => $this->connectors(),
             $path === '/api/mcp' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcp()->saveRaw((string)($b['raw'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/mcp/refresh' && $m === 'POST' => (function () { set_time_limit(0); $this->app->mcp()->refresh(); return $this->connectors(); })(),
@@ -231,6 +235,28 @@ final class Web
             $msg = $e->getMessage();
         }
         header('Location: /?google=' . rawurlencode($msg) . '#settings', true, 303);
+    }
+
+    private function spotifyState(): array
+    {
+        $sp = $this->app->spotify(); $t = $sp->tokens(); $devices = [];
+        if ($sp->connected()) { try { $devices = array_column($sp->devices(), 'name'); } catch (\Throwable $e) { $err = $e->getMessage(); } }
+        return ['configured' => $sp->configured(), 'connected' => $sp->connected(), 'name' => $t['name'] ?? '', 'premium' => $t['premium'] ?? null,
+            'devices' => $devices, 'error' => $err ?? null, 'redirect' => Spotify::redirectUri()];
+    }
+
+    /** Spotify sends the user back here after consent (the one-time state proves it was started from the app). */
+    private function spotifyCallback(): void
+    {
+        $msg = 'connected';
+        try {
+            if (isset($_GET['error'])) throw new \RuntimeException('Spotify: ' . $_GET['error']);
+            $this->app->spotify()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+        } catch (\Throwable $e) {
+            Log::warn("spotify: {$e->getMessage()}");
+            $msg = $e->getMessage();
+        }
+        header('Location: /?spotify=' . rawurlencode($msg) . '#settings', true, 303);
     }
 
     private function heartbeats(): array

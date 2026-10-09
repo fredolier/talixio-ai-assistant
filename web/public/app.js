@@ -37,6 +37,9 @@ function md(src) {
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
     .replace(/\[([^\]]+)\]\(\/files\/(\d+)(?:#p(\d+))?\)/g, (_, t, id, pg) => `<a href="#" class="cite" data-file="${id}"${pg ? ` data-page="${pg}"` : ''} title="Open the document${pg ? ' at page ' + pg : ''}">${CITE_SVG}${t}</a>`)
+    // buttons that open an app on the phone (phone_action, Spotify): custom schemes only from this list
+    .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|intent|deezer|tg|sgnl|uber|homeassistant):[^\s)]+)\)/g, (_, t, h) => `<a href="${h}" class="action">${t.replace(/^▶\s*/, '')}</a>`)
+    .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" class="action" target="_blank" rel="noopener">$1</a>')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   const out = [];
@@ -843,6 +846,7 @@ async function loadSettings() {
   renderAppearance();
   loadConnectors();
   loadGoogle();
+  loadSpotify();
   renderGroups((await api('/api/settings')).groups);
 }
 $('#doctor-run').onclick = async () => {
@@ -857,6 +861,23 @@ $('#pw-form').onsubmit = async e => {
   try { await post('/api/settings/password', { current: $('#pw-current').value, new: $('#pw-new').value }); $('#pw-state').textContent = 'Password changed. Your other devices will ask for it again.'; $('#pw-current').value = $('#pw-new').value = ''; }
   catch (err) { $('#pw-state').textContent = err.message; }
 };
+
+// ---- Spotify ----
+function showSpotify(g) {
+  $('#spotify-badge').textContent = g.connected ? `· connected${g.name ? ' as ' + g.name : ''}` : g.configured ? '· not connected' : '· not set up';
+  $('#spotify-redirect').textContent = g.redirect;
+  $('#spotify-status').innerHTML = g.connected
+    ? `<p class="small">Connected${g.name ? ' as <b>' + esc(g.name) + '</b>' : ''}.${g.premium === false ? ' <b>This account is not Premium</b>: Spotify only lets Premium accounts be controlled; the assistant will give you buttons to open Spotify instead.' : ''}</p>`
+      + (g.error ? `<p class="small error">${esc(g.error)}</p>` : `<p class="muted small">${g.devices.length ? 'Devices available now: ' + g.devices.map(esc).join(', ') : 'No device right now: open Spotify on your phone and it will appear.'}</p>`)
+    : '';
+  $('#spotify-steps').hidden = g.connected;
+  $('#spotify-connect').hidden = g.connected; $('#spotify-disconnect').hidden = !g.connected;
+  $('#spotify-connect').disabled = !g.configured; $('#spotify-connect').title = g.configured ? '' : 'Fill in the client ID and secret first (step 3)';
+}
+async function loadSpotify() { try { showSpotify(await api('/api/spotify')); } catch {} }
+$('#spotify-copy').onclick = () => copyText($('#spotify-redirect').textContent);
+$('#spotify-connect').onclick = async () => { try { location.href = (await post('/api/spotify/connect')).url; } catch (e) { toast(e.message); } };
+$('#spotify-disconnect').onclick = async () => { try { showSpotify(await post('/api/spotify/disconnect')); toast('Spotify disconnected.'); } catch (e) { toast(e.message); } };
 
 // ---- Google Calendar ----
 function showGoogle(g) {
@@ -1693,6 +1714,12 @@ async function handleLaunch() {
     history.replaceState(null, '', '/#settings');
     toast(g === 'connected' ? 'Google Calendar connected.' : g);
     if (g === 'connected') setTimeout(() => { $('#google-card').open = true; $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
+  }
+  if (params.has('spotify')) {
+    const g = params.get('spotify');
+    history.replaceState(null, '', '/#settings');
+    toast(g === 'connected' ? 'Spotify connected.' : g);
+    setTimeout(() => { $('#spotify-card').open = true; $('#spotify-card').scrollIntoView({ block: 'center' }); }, 600);
   }
   if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', '/' + location.hash);
   if (token) {

@@ -236,6 +236,20 @@
         </div>
       </details>
 
+      <details class="card group" id="spotify-card">
+        <summary><b>Spotify</b> <span id="spotify-badge" class="muted small"></span></summary>
+        <div class="fields">
+          <p class="muted small">Ask "play Daft Punk", "pause", "next song", "add this to my running playlist": the music plays on your phone or speaker. Needs Spotify Premium, and Spotify open (or used recently) on the device.</p>
+          <div id="spotify-status"></div>
+          <ol class="steps small" id="spotify-steps">
+            <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> (sign in with your Spotify account) and press <b>Create app</b>: any name (e.g. "Talixio"), tick <i>Web API</i>, redirect URI: <code id="spotify-redirect"></code> <button id="spotify-copy" class="btn small" type="button">Copy</button></li>
+            <li>In the app's <b>Settings</b>, copy the <i>Client ID</i> and press <i>View client secret</i>.</li>
+            <li>Paste both in <b>Configuration → Spotify</b> below, save, then press Connect.</li>
+          </ol>
+          <div class="row"><button id="spotify-connect" class="btn primary" type="button">Connect Spotify</button><button id="spotify-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button></div>
+        </div>
+      </details>
+
       <details class="card group" id="mcp-card">
         <summary><b>Connectors (MCP)</b> <span id="mcp-badge" class="muted small"></span></summary>
         <div class="fields">

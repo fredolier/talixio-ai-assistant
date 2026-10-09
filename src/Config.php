@@ -33,6 +33,12 @@ final class Config
     public string $googleTokenUrl = 'https://oauth2.googleapis.com/token';
     public string $googleRevokeUrl = 'https://oauth2.googleapis.com/revoke';
     public string $googleApiBase = 'https://www.googleapis.com/calendar/v3';
+    public string $spotifyClientId = '';
+    public string $spotifyClientSecret = '';
+    public string $spotifyDevice = '';
+    public string $spotifyAuthUrl = 'https://accounts.spotify.com/authorize';
+    public string $spotifyTokenUrl = 'https://accounts.spotify.com/api/token';
+    public string $spotifyApiBase = 'https://api.spotify.com/v1';
     public bool $shellNetwork = false;
     public int $shellTimeout = 120;
     public string $webPassword = '';
@@ -160,6 +166,12 @@ final class Config
         $c->googleClientSecret = trim($e('TALIXIO_GOOGLE_CLIENT_SECRET'));
         foreach (['googleAuthUrl' => 'TALIXIO_GOOGLE_AUTH_URL', 'googleTokenUrl' => 'TALIXIO_GOOGLE_TOKEN_URL', 'googleRevokeUrl' => 'TALIXIO_GOOGLE_REVOKE_URL', 'googleApiBase' => 'TALIXIO_GOOGLE_API_BASE'] as $prop => $var) {
             if ($e($var) !== '') $c->$prop = rtrim($e($var), '/'); // tests point these at a fake server
+        }
+        $c->spotifyClientId = trim($e('TALIXIO_SPOTIFY_CLIENT_ID'));
+        $c->spotifyClientSecret = trim($e('TALIXIO_SPOTIFY_CLIENT_SECRET'));
+        $c->spotifyDevice = trim($e('TALIXIO_SPOTIFY_DEVICE'));
+        foreach (['spotifyAuthUrl' => 'TALIXIO_SPOTIFY_AUTH_URL', 'spotifyTokenUrl' => 'TALIXIO_SPOTIFY_TOKEN_URL', 'spotifyApiBase' => 'TALIXIO_SPOTIFY_API_BASE'] as $prop => $var) {
+            if ($e($var) !== '') $c->$prop = rtrim($e($var), '/');
         }
         $c->mailTriage = $e('TALIXIO_MAIL_TRIAGE', '1') !== '0';
         $c->autoFile = in_array($e('TALIXIO_AUTO_FILE', 'suggest'), ['off', 'suggest', 'auto'], true) ? $e('TALIXIO_AUTO_FILE', 'suggest') : 'suggest';

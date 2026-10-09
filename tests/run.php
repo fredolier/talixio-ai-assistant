@@ -1243,6 +1243,61 @@ foreach (['AUTH_URL', 'TOKEN_URL', 'REVOKE_URL', 'API_BASE'] as $k) putenv("TALI
 putenv("TALIXIO_DATA_DIR=$dir");
 proc_terminate($gs); proc_close($gs);
 
+// Spotify: connect, play on the phone, controls, save; and phone buttons
+$sport = $freePort();
+$ss = proc_open([PHP_BINARY, '-S', "127.0.0.1:$sport", __DIR__ . '/fakes/spotify.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp);
+$waitPort($sport);
+$slog = sys_get_temp_dir() . "/fake-spotify-$sport.json"; @unlink($slog);
+$scalls = function () use ($slog) { return json_decode((string)@file_get_contents($slog), true)['calls'] ?? []; };
+\Talixio\Settings::save($ad, ['TALIXIO_SPOTIFY_CLIENT_ID' => 'scid', 'TALIXIO_SPOTIFY_CLIENT_SECRET' => 'ssec']);
+foreach (['AUTH_URL' => '/authorize', 'TOKEN_URL' => '/api/token', 'API_BASE' => '/v1'] as $k => $v) putenv("TALIXIO_SPOTIFY_$k=http://127.0.0.1:$sport$v");
+putenv("TALIXIO_DATA_DIR=$ad"); $sa = App::fromEnv();
+check('spotify: phone tools only once connected', !isset(array_flip(array_column($sa->tools->schemas(), "name"))['spotify_play']));
+$url = $sa->spotify()->authUrl('https://assistant.example/api/spotify/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+check('spotify: consent link asks to control playback', str_contains($q['scope'], 'user-modify-playback-state') && strlen($q['state']) === 32 && $q['redirect_uri'] === 'https://assistant.example/api/spotify/callback');
+try { $sa->spotify()->finish('good-code', 'forged'); check('spotify: forged state refused', false); } catch (\InvalidArgumentException) { check('spotify: forged state refused', true); }
+$url = $sa->spotify()->authUrl('https://assistant.example/api/spotify/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+check('spotify: connected, account name kept, tokens private', $sa->spotify()->finish('good-code', $q['state']) === 'Fred' && $sa->spotify()->connected() && (fileperms("$ad/spotify.json") & 0777) === 0600);
+$sa = App::fromEnv();
+$r = $sa->tools->run('spotify_play', ['query' => 'get lucky']);
+$play = array_values(array_filter($scalls(), fn($c) => $c[1] === '/v1/me/player/play'));
+check('spotify: plays the song found, on the phone when nothing is playing', str_contains($r, 'Get Lucky') && str_contains($r, 'Galaxy S25 Ultra') && ($play[0][2]['device_id'] ?? '') === 'D2' && ($play[0][3]['uris'][0] ?? '') === 'spotify:track:T1', $r);
+$r = $sa->tools->run('spotify_play', ['query' => 'Daft Punk', 'type' => 'artist', 'device' => 'living']);
+$play = array_values(array_filter($scalls(), fn($c) => $c[1] === '/v1/me/player/play'));
+check('spotify: an artist on the device named (nulls in results skipped)', str_contains($r, 'Living room') && (end($play)[3]['context_uri'] ?? '') === 'spotify:artist:A1' && end($play)[2]['device_id'] === 'D1', $r);
+$r = $sa->tools->run('spotify_play', ['query' => 'running', 'type' => 'playlist']);
+check('spotify: your own playlist by name', str_contains($r, 'your playlist "Running"'), $r);
+$r = $sa->tools->run('spotify_control', ['action' => 'volume', 'value' => '+15']);
+$vol = array_values(array_filter($scalls(), fn($c) => $c[1] === '/v1/me/player/volume'));
+check('spotify: volume relative to the current one', str_contains($r, '75%') && ($vol[0][2]['volume_percent'] ?? '') === '75', $r);
+check('spotify: now playing', str_contains($sa->tools->run('spotify_now', []), 'Playing: "Get Lucky" by Daft Punk, Pharrell Williams'));
+$r = $sa->tools->run('spotify_save', ['playlist' => 'run']);
+check('spotify: the song playing added to a playlist (new items endpoint)', str_contains($r, 'to "Running"') && count(array_filter($scalls(), fn($c) => $c[1] === '/v1/playlists/P1/items' && $c[3]['uris'] === ['spotify:track:T1'])) === 1, $r);
+check('spotify: liked songs', str_contains($sa->tools->run('spotify_save', []), 'liked songs'));
+$st = json_decode((string)file_get_contents($slog), true); $st['devices'] = false; file_put_contents($slog, json_encode($st));
+$r = $sa->tools->run('spotify_play', ['query' => 'get lucky']);
+check('spotify: no device, a button that opens Spotify on the song', str_contains($r, '[▶ Open in Spotify](spotify:track:T1)'), $r);
+$tok = json_decode((string)file_get_contents("$ad/spotify.json"), true); $tok['expires'] = 0; file_put_contents("$ad/spotify.json", json_encode($tok));
+$sa->tools->run('spotify_now', []);
+$tok = json_decode((string)file_get_contents("$ad/spotify.json"), true);
+check('spotify: token refreshed, new refresh token kept', $tok['access_token'] === 'sat-2' && $tok['refresh_token'] === 'srt-2');
+$state = $aj('/api/spotify', null, 'd');
+check('spotify: status for the app', $state['connected'] && $state['name'] === 'Fred' && str_ends_with($state['redirect'], '/api/spotify/callback'), json_encode($state));
+$ch = curl_init("http://127.0.0.1:$webPort/api/spotify/callback?code=x&state=bad"); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]); $h = (string)curl_exec($ch); curl_close($ch);
+check('spotify: callback works without a session and reports back in the app', str_contains($h, '303') && str_contains($h, 'Location: /?spotify='));
+$sa->spotify()->disconnect();
+check('spotify: disconnect forgets the tokens', !$sa->spotify()->connected() && !is_file("$ad/spotify.json"));
+foreach (['AUTH_URL', 'TOKEN_URL', 'API_BASE'] as $k) putenv("TALIXIO_SPOTIFY_$k");
+putenv("TALIXIO_DATA_DIR=$dir");
+proc_terminate($ss); proc_close($ss);
+$pl = fn(...$a) => \Talixio\PhoneLinks::make(...$a);
+check('phone: known app opens by its own link', $pl('app', 'Spotify') === '[▶ Open Spotify](spotify:)');
+check('phone: other app by package, Play Store as fallback', str_starts_with($pl('app', 'com.sncf.connect'), '[▶ Open com.sncf.connect](intent://#Intent;package=com.sncf.connect;S.browser_fallback_url=https%3A%2F%2Fplay.google.com'));
+check('phone: navigation, call, sms, email', str_contains($pl('navigate', '12 rue de la Paix, Paris'), 'destination=12%20rue%20de%20la%20Paix%2C%20Paris)')
+    && str_contains($pl('call', '+33 6 12 34 56 78'), '(tel:+33612345678)') && str_contains($pl('sms', '06 12', 'J\'arrive (10 min)'), 'sms:0612?body=J%27arrive%20%2810%20min%29)')
+    && str_contains($pl('email', 'a@b.fr'), '(mailto:a@b.fr)'));
+try { $pl('web', 'javascript:alert(1)'); check('phone: only web addresses for web', false); } catch (\InvalidArgumentException) { check('phone: only web addresses for web', true); }
+
 // morning briefing from the Tasks page
 $bt = $aj('/api/tasks/briefing', ['time' => '07:30', 'days' => '1-5'], 'd');
 check('briefing: created as a weekday task with calendar, email and weather', ($bt['task']['cron'] ?? '') === '30 7 * * 1-5' && str_contains($bt['task']['prompt'], 'mail_triage') && str_contains($bt['task']['prompt'], 'weather'), json_encode($bt));

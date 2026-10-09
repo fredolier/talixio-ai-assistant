@@ -60,6 +60,7 @@ final class App
     public function triage(): Triage { return new Triage($this); }
     public function spaces(): Spaces { return new Spaces($this); }
     public function google(): Google { return new Google($this); }
+    public function spotify(): Spotify { return new Spotify($this); }
     public function shell(): Shell { return new Shell($this); }
     public function mcp(): Mcp { return new Mcp($this); }
     public function browserAvailable(): bool { return $this->cfg->browser !== 'off' && Browser::findBinary($this->cfg->chromeBin) !== null; }
