@@ -9,6 +9,7 @@ final class Worker
     private int $lastEmail = 0;
     private int $lastSignal = 0;
     private int $lastMcp = 0;
+    private int $lastTriage = 0;
 
     public function __construct(private App $app) {}
 
@@ -81,6 +82,10 @@ final class Worker
             $this->guard('email', fn() => $app->email()->poll());
         }
         if (App::$inWorker) $this->guard('library', fn() => $app->files()->startIndexer());
+        if ($now - $this->lastTriage >= 900 && $app->triage()->enabled()) { // sort new emails every 15 minutes
+            $this->lastTriage = $now;
+            $this->guard('mail triage', fn() => $app->triage()->run());
+        }
         if ($now - $this->lastMcp >= 6 * 3600 && $app->mcp()->servers()) { // connectors' tool lists
             $this->lastMcp = $now;
             $this->guard('connectors', fn() => $app->mcp()->refresh());

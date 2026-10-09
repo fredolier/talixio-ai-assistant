@@ -448,3 +448,27 @@ a.cite{display:inline-flex;align-items:center;gap:3px;padding:0 6px;border-radiu
 a.cite:hover{box-shadow:inset 0 0 0 1px var(--accent)}
 a.cite svg{width:13px;height:13px;color:var(--accent)}
 .pdf-page.flash img{animation:flash 1.8s ease-out}
+
+/* briefing, mail, people */
+.briefing-card{display:flex;flex-direction:row;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-bottom:14px;padding:14px 16px}
+.briefing-card p{margin:2px 0 0}
+.briefing-card input,.briefing-card select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--sunk);color:var(--ink)}
+.mail-group{margin-top:16px}
+.mail-group h3{margin:0 0 6px}
+.mail-row{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-bottom:6px}
+.mail-row.done{opacity:.6}
+.mail-main{min-width:0;flex:1 1 320px}
+.mail-main .row{gap:8px;flex-wrap:wrap}
+.mail-acts{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.mail-acts select{font:inherit;font-size:.83rem;padding:5px 6px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.people-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:16px;align-items:start;margin-top:12px}
+.person{padding:16px;position:sticky;top:12px}
+.person h3{margin:0}
+.person h4{margin:16px 0 6px}
+.person-form label{display:flex;flex-direction:column;gap:4px;font-size:.83rem;color:var(--muted)}
+.person-form input,.person-form textarea{font:inherit;color:var(--ink);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--sunk)}
+.ico.avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700}
+ul.plain{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;font-size:.9rem}
+@media (max-width:900px){.people-split{grid-template-columns:1fr}.person{position:static}}
+.briefing-card>div:first-child{flex:1 1 260px;min-width:0}
+.briefing-card label,#view-mail label{display:inline-flex;align-items:center;gap:6px;margin:0}

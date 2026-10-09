@@ -56,6 +56,8 @@ final class App
     public function updater(): Updater { return new Updater($this); }
     public function calendar(): Calendar { return new Calendar($this); }
     public function mailbox(): Mailbox { return new Mailbox($this); }
+    public function contacts(): Contacts { return new Contacts($this); }
+    public function triage(): Triage { return new Triage($this); }
     public function spaces(): Spaces { return new Spaces($this); }
     public function google(): Google { return new Google($this); }
     public function shell(): Shell { return new Shell($this); }

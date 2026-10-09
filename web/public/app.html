@@ -42,6 +42,8 @@
     <a href="#chat" data-view="chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></svg><span>Chat</span></a>
     <a href="#library" data-view="library"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Library</span></a>
     <a href="#tasks" data-view="tasks"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Tasks</span></a>
+    <a href="#mail" data-view="mail" class="secondary"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>Mail</span></a>
+    <a href="#people" data-view="people" class="secondary"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg><span>People</span></a>
     <a href="#jobs" data-view="jobs" class="secondary"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Jobs</span></a>
     <a href="#memory" data-view="memory"><svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg><span>Memory</span></a>
     <a href="#settings" data-view="settings" class="secondary"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
@@ -127,7 +129,30 @@
     <section id="view-tasks" class="view page" hidden>
       <header class="page-head"><h2>Scheduled tasks</h2>
         <p class="muted">Ask in chat to create them: <q>remind me tomorrow at 9 to call the bank</q>, <q>every weekday at 8:00 send me a briefing</q>.</p></header>
+      <div class="card briefing-card" id="briefing-card">
+        <div><b>Morning briefing</b><p class="muted small">Your day at a glance: calendar, emails to handle, reminders, weather.</p></div>
+        <div class="row wrap">
+          <label class="small">At <input id="brief-time" type="time" value="07:30"></label>
+          <select id="brief-days" aria-label="Days"><option value="1-5">weekdays</option><option value="*">every day</option><option value="1-6">Monday to Saturday</option></select>
+          <button id="brief-save" class="btn primary small" type="button">Set up</button>
+          <button id="brief-run" class="btn small" type="button" hidden>Send it now</button>
+        </div>
+      </div>
       <div id="tasks" class="list"></div>
+    </section>
+
+    <section id="view-mail" class="view page" hidden>
+      <header class="page-head"><h2>Mail to handle</h2>
+        <p class="muted" id="mail-help">Your new emails, sorted: to answer, to do, to read. Move one to another group and it learns.</p></header>
+      <div class="row wrap"><button id="mail-run" class="btn small" type="button">Check now</button><label class="small muted"><input id="mail-all" type="checkbox"> show handled</label><span id="mail-state" class="muted small"></span></div>
+      <div id="mail-list"></div>
+    </section>
+
+    <section id="view-people" class="view page wide" hidden>
+      <header class="page-head lib-head"><div><h2>People</h2><p class="muted">From your emails, and what the assistant learns about each person.</p></div>
+        <div class="lib-actions"><button id="people-new" class="btn small" type="button">New contact</button></div></header>
+      <form id="people-search" class="search" role="search"><input id="people-q" type="search" placeholder="Search people, companies, notes…" aria-label="Search people"></form>
+      <div class="people-split"><div id="people-list" class="lib-list"></div><div id="person" class="person card" hidden></div></div>
     </section>
 
     <section id="view-jobs" class="view page" hidden>
@@ -323,6 +348,8 @@
 <datalist id="folder-list"></datalist>
 <div id="more-sheet" class="sheet" hidden>
   <div class="sheet-card more-card" role="dialog" aria-label="More">
+    <a href="#mail" data-view="mail">Mail to handle</a>
+    <a href="#people" data-view="people">People</a>
     <a href="#jobs" data-view="jobs">Background jobs</a>
     <a href="#activity" data-view="activity">Activity and costs</a>
     <a href="#settings" data-view="settings">Settings</a>

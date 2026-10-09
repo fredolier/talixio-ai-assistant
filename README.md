@@ -160,6 +160,14 @@ conversation.
   all*. The folder is decided in embedding space from the documents you already filed (no model
   call, and it learns from every move you make); the fast model is only asked when that is unclear or
   the name is meaningless. Settings → *Filing new documents*: suggest, file the obvious ones, or off.
+- **Mail to handle** (needs your mailbox): every 15 minutes new emails are sorted into *to answer*,
+  *to do* (with due dates), *to read* and *low priority*: newsletters by their headers, the others
+  in embedding space from earlier decisions, the fast model only when unsure (several emails per call).
+  Move an email to another group and it learns. *Prepare a reply* asks the assistant for a draft.
+- **People**: everyone you hear from by email becomes a contact; the assistant adds what it learns
+  (`contact_save`). A person's page shows notes, recent emails, documents and conversations mentioning them.
+- **Morning briefing** (Tasks page): at the time and days you choose: today's calendar, emails to
+  handle, reminders and deadlines, the weather. *Send it now* to try it; every task has *Run now*.
 - **Spaces**: separate conversations for separate subjects (a client, the house, health…), switched
   from the top of the chat. Each has its library folder (searched first; attachments are filed
   there), its instructions, its notes kept by the assistant, a default model and a colour. A space

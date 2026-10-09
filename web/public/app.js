@@ -605,8 +605,25 @@ async function finishRecording(meeting) {
 function autosize() { const i = $('#input'); i.style.height = 'auto'; i.style.height = Math.min(i.scrollHeight, 200) + 'px'; }
 
 // ---- tasks ----
+async function runTaskNow(t, b) {
+  b.disabled = true; b.textContent = 'Running…';
+  try { const r = await post(`/api/tasks/${t.id}/run`); toast('Done: the result is in the chat.'); if (r.space === state.space) poll(); }
+  catch (e) { toast(e.message); }
+  b.disabled = false; b.textContent = t.title === 'Morning briefing' ? 'Send it now' : 'Run now';
+}
+$('#brief-save').onclick = async () => {
+  try { await post('/api/tasks/briefing', { time: $('#brief-time').value, days: $('#brief-days').value }); toast('Morning briefing set up.'); loadTasks(); }
+  catch (e) { toast(e.message); }
+};
 async function loadTasks() {
   const { tasks } = await api('/api/tasks');
+  const brief = tasks.find(t => t.title === 'Morning briefing');
+  if (brief) {
+    const [mm, hh, , , days] = brief.cron.split(' ');
+    $('#brief-time').value = `${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`; $('#brief-days').value = days;
+    $('#brief-save').textContent = 'Update';
+    $('#brief-run').hidden = false; $('#brief-run').onclick = () => runTaskNow(brief, $('#brief-run'));
+  }
   const box = $('#tasks'); box.innerHTML = '';
   if (!tasks.length) { box.innerHTML = '<div class="placeholder">No scheduled tasks yet.</div>'; return; }
   for (const t of tasks) {
@@ -615,13 +632,14 @@ async function loadTasks() {
     const when = t.cron ? `Repeats · <code>${esc(t.cron)}</code>` : 'Once';
     const next = t.enabled && t.next_text ? `Next: ${esc(t.next_text)}` : (t.last_run ? `Last ran ${fmtTime(t.last_run)}` : 'Paused');
     el.innerHTML = `<div><h3>${esc(t.title)}</h3><div class="when"><span class="chip">${when}</span>${t.space_name ? `<span class="chip" title="Answers in this space">${esc(t.space_name)}</span>` : ''}<span>${next}</span></div></div>
-      <div class="actions">${tierSelect(t.tier, 'Model that runs this task')}<button class="btn small" data-a="toggle">${t.enabled ? 'Pause' : 'Resume'}</button><button class="btn small ghost" data-a="delete">Delete</button></div>
+      <div class="actions">${tierSelect(t.tier, 'Model that runs this task')}<button class="btn small" data-a="run" title="Run it now">Run now</button><button class="btn small" data-a="toggle">${t.enabled ? 'Pause' : 'Resume'}</button><button class="btn small ghost" data-a="delete">Delete</button></div>
       <p class="prompt">${esc(t.prompt)}</p>`;
     el.querySelector('select').onchange = async e => {
       try { await post(`/api/tasks/${t.id}/tier`, { tier: e.target.value }); toast(`"${t.title}" will run on the ${e.target.value} tier.`); }
       catch (err) { toast(err.message); e.target.value = t.tier; }
     };
     el.querySelectorAll('button').forEach(b => b.onclick = async () => {
+      if (b.dataset.a === 'run') return runTaskNow(t, b);
       try { await post(`/api/tasks/${t.id}/${b.dataset.a}`); toast(b.dataset.a === 'delete' ? 'Task deleted' : (t.enabled ? 'Task paused' : 'Task resumed')); loadTasks(); }
       catch (e) { toast(e.message); }
     });
@@ -1241,6 +1259,89 @@ async function newNote() {
   catch (e) { toast(e.message); }
 }
 
+// ---- mail to handle ----
+const MAIL_LABELS = { reply: 'To answer', action: 'To do', fyi: 'To read', low: 'Low priority' };
+async function loadMail() {
+  const d = await api('/api/mail' + ($('#mail-all').checked ? '?all=1' : ''));
+  const box = $('#mail-list');
+  if (!d.mailbox) { box.innerHTML = '<div class="placeholder">Connect your mailbox first: Settings → Configuration → Your mailbox.</div>'; return; }
+  if (!d.enabled) { box.innerHTML = '<div class="placeholder">Email sorting is off: Settings → Your mailbox → Sort new emails.</div>'; return; }
+  if (!d.emails.length) { box.innerHTML = `<div class="placeholder">${d.last_run ? 'Nothing waiting. 🎉' : 'Not checked yet: press "Check now" (it then runs every 15 minutes).'}</div>`; return; }
+  box.innerHTML = '';
+  for (const [k, title] of Object.entries(MAIL_LABELS)) {
+    const list = d.emails.filter(m => m.label === k);
+    if (!list.length) continue;
+    const sec = document.createElement('section'); sec.className = 'mail-group';
+    sec.innerHTML = `<h3>${title} <span class="muted small">${list.length}</span></h3>`;
+    for (const m of list) {
+      const el = document.createElement('div'); el.className = 'mail-row' + (m.status === 'done' ? ' done' : '');
+      el.innerHTML = `<div class="mail-main"><div class="row"><b>${esc(m.sender)}</b><span class="muted small">${fmtDate(m.ts)}</span>${m.due ? `<span class="pill failed">due ${esc(m.due)}</span>` : ''}${m.by === 'you' ? '' : `<span class="muted small" title="${m.by === 'similar' ? 'Like emails you sorted before' : m.by === 'list' ? 'A mailing list' : 'Sorted by the model'}">·</span>`}</div>
+          <div>${esc(m.subject)}</div>${m.summary ? `<div class="muted small">${esc(m.summary)}</div>` : `<div class="muted small snippet">${esc(m.snippet.slice(0, 160))}</div>`}</div>
+        <div class="mail-acts"><select aria-label="Group">${Object.entries(MAIL_LABELS).map(([v, l]) => `<option value="${v}"${v === m.label ? ' selected' : ''}>${l}</option>`).join('')}</select>
+          ${m.label === 'reply' && m.status !== 'done' ? '<button class="btn small" data-a="draft" type="button">Prepare a reply</button>' : ''}
+          <button class="btn small ${m.status === 'done' ? '' : 'primary'}" data-a="${m.status === 'done' ? 'open' : 'done'}" type="button">${m.status === 'done' ? 'Reopen' : 'Done'}</button></div>`;
+      el.querySelector('select').onchange = async e => { try { await post(`/api/mail/${m.uid}/label`, { label: e.target.value }); toast('Moved: it will remember.'); loadMail(); } catch (err) { toast(err.message); } };
+      el.querySelector('[data-a=done], [data-a=open]').onclick = async e => { try { await post(`/api/mail/${m.uid}/${e.currentTarget.dataset.a}`); loadMail(); } catch (err) { toast(err.message); } };
+      el.querySelector('[data-a=draft]')?.addEventListener('click', async () => {
+        location.hash = '#chat'; if (state.space) await switchSpace(0);
+        $('#input').value = `Prepare a reply to the email from ${m.sender} "${m.subject}" (uid ${m.uid}) and save it as a draft. `; autosize(); $('#input').focus();
+      });
+      sec.append(el);
+    }
+    box.append(sec);
+  }
+}
+$('#mail-all').onchange = () => loadMail().catch(e => toast(e.message));
+$('#mail-run').onclick = async () => {
+  const b = $('#mail-run'); b.disabled = true; $('#mail-state').textContent = 'Checking…';
+  try { const r = await post('/api/mail/run'); $('#mail-state').textContent = r.sorted ? `${r.sorted} new email(s) sorted.` : 'No new email.'; loadMail(); }
+  catch (e) { $('#mail-state').textContent = e.message; }
+  b.disabled = false;
+};
+
+// ---- people ----
+async function loadPeople() {
+  const { contacts } = await api('/api/contacts?q=' + encodeURIComponent($('#people-q').value.trim()));
+  const box = $('#people-list'); box.innerHTML = '';
+  if (!contacts.length) { box.innerHTML = '<div class="placeholder">No one yet. People you get emails from appear here, and the assistant adds what it learns.</div>'; return; }
+  for (const c of contacts) {
+    const el = document.createElement('a'); el.href = '#'; el.className = 'lib-row';
+    el.innerHTML = `<span class="ico avatar">${esc((c.name || '?').trim()[0].toUpperCase())}</span><span class="name"><b>${esc(c.name)}</b><span>${esc([c.org, c.email].filter(Boolean).join(' · '))}</span></span><span class="muted small">${c.last_ts ? fmtDate(c.last_ts) : ''}</span>`;
+    el.onclick = e => { e.preventDefault(); openPerson(c.id); };
+    box.append(el);
+  }
+}
+$('#people-search').onsubmit = e => { e.preventDefault(); loadPeople(); };
+$('#people-q').addEventListener('input', () => { clearTimeout(loadPeople.t); loadPeople.t = setTimeout(() => loadPeople().catch(() => {}), 300); });
+$('#people-new').onclick = () => showPerson({ contact: { id: 0, name: '', email: '', phone: '', org: '', notes: '' }, emails: [], documents: [], conversations: [] });
+async function openPerson(id) { try { showPerson(await api(`/api/contacts/${id}`)); } catch (e) { toast(e.message); } }
+function showPerson(p) {
+  const c = p.contact, box = $('#person'); box.hidden = false;
+  box.innerHTML = `<div class="row"><h3>${esc(c.name || 'New contact')}</h3><span class="spacer"></span><button class="btn ghost icon" data-a="close" type="button" aria-label="Close">✕</button></div>
+    <form class="fields person-form">
+      <label>Name<input name="name" value="${esc(c.name)}" required></label>
+      <label>Email<input name="email" type="email" value="${esc(c.email)}"></label>
+      <label>Phone<input name="phone" value="${esc(c.phone)}"></label>
+      <label>Company<input name="org" value="${esc(c.org)}"></label>
+      <label>What you know<textarea name="notes" rows="5">${esc(c.notes)}</textarea></label>
+      <div class="row wrap"><button class="btn primary small" type="submit">Save</button>${c.id ? '<button class="btn small" data-a="ask" type="button">Ask about this person</button><span class="spacer"></span><button class="btn ghost danger small" data-a="delete" type="button">Delete</button>' : ''}</div>
+    </form>
+    ${p.emails.length ? `<h4>Recent emails</h4><ul class="plain">${p.emails.map(m => `<li><span class="muted small">${fmtDate(m.ts)}</span> ${esc(m.subject)} <span class="chip">${MAIL_LABELS[m.label] || m.label}</span></li>`).join('')}</ul>` : ''}
+    ${p.documents.length ? `<h4>In your documents</h4><ul class="plain">${p.documents.map(d => `<li>${md(`[${d.name.replace(/[\[\]]/g, '')}${d.page ? ' p. ' + d.page : ''}](/files/${d.id}${d.page ? '#p' + d.page : ''})`)}</li>`).join('')}</ul>` : ''}
+    ${p.conversations.length ? `<h4>In your conversations</h4><ul class="plain">${p.conversations.map(t => `<li><span class="muted small">${fmtDate(t.ts)}</span> ${esc(t.text)}</li>`).join('')}</ul>` : ''}`;
+  box.querySelector('[data-a=close]').onclick = () => { box.hidden = true; };
+  box.querySelector('form').onsubmit = async e => {
+    e.preventDefault();
+    const body = Object.fromEntries(new FormData(e.target));
+    try { const r = await post(c.id ? `/api/contacts/${c.id}` : '/api/contacts', body); toast('Saved.'); loadPeople(); openPerson(r.contact.id); } catch (err) { toast(err.message); }
+  };
+  box.querySelector('[data-a=ask]')?.addEventListener('click', () => { location.hash = '#chat'; $('#input').value = `About ${c.name}: `; autosize(); $('#input').focus(); });
+  box.querySelector('[data-a=delete]')?.addEventListener('click', async e => {
+    const b = e.currentTarget; if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Confirm delete'; return; }
+    try { await post(`/api/contacts/${c.id}/delete`); box.hidden = true; loadPeople(); } catch (err) { toast(err.message); }
+  });
+}
+
 // ---- activity ----
 async function loadHeartbeats(data) {
   const d = data || await api('/api/heartbeats');
@@ -1332,13 +1433,13 @@ async function loadActivity() {
 }
 
 // ---- shell ----
-const VIEWS = { chat: null, library: loadLibrary, tasks: loadTasks, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity };
+const VIEWS = { chat: null, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity };
 function route() {
   const h = location.hash.slice(1) === 'channels' ? 'settings' : location.hash.slice(1).split('/')[0];
   const v = (h in VIEWS) ? h : 'chat';
   for (const k of Object.keys(VIEWS)) $('#view-' + k).hidden = k !== v;
   document.querySelectorAll('.rail a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
-  $('#more-btn').classList.toggle('active', ['jobs', 'activity', 'settings'].includes(v));
+  $('#more-btn').classList.toggle('active', ['jobs', 'activity', 'settings', 'mail', 'people'].includes(v));
   $('#more-sheet').hidden = true;
   if (v !== 'library') closeViewer();
   VIEWS[v]?.().catch(e => toast(e.message));

@@ -534,6 +534,36 @@ $res = $app->approvals()->decide((int)$app->approvals()->pending()[0]['id'], tru
 proc_close($sp);
 check('mailbox: approved email sent as the user and copied to Sent', str_starts_with($res, 'Done: Send email') && str_contains((string)file_get_contents("$dir/smtp-mb.log"), 'RCPT TO:<alice@example.com>')
     && str_contains((string)file_get_contents("$mb/appended.log"), 'folder=Envoyés'), $res);
+// email sorting: labels, newsletters by their headers, the model for the rest (one call), contacts from senders
+file_put_contents("$mb/3.eml", "From: Le Journal <news@journal.fr>\r\nList-Unsubscribe: <mailto:u@journal.fr>\r\nSubject: Les infos du jour\r\nDate: Thu, 8 Oct 2026 07:00:00 +0200\r\n\r\nBonjour\r\n");
+$triageCalls = 0;
+$fake->script = function ($last, $tools, $on) use ($usage, &$triageCalls) {
+    $usage($on, 'claude-haiku-x');
+    if (str_contains($last, 'Sort these emails')) { $triageCalls++; return '[{"email": 0, "label": "action", "summary": "Sign the contract", "due": "2026-10-09"}, {"email": 1, "label": "low", "summary": "promo"}]'; }
+    return 'ok';
+};
+$app->embeddings->fake = null;
+$n = $app->triage()->run();
+$rows = array_column($app->triage()->list(true), null, 'uid');
+check('triage: emails sorted, one model call for the unsure ones', $n === 3 && $triageCalls === 1 && $rows[1]['label'] === 'action' && $rows[1]['due'] === '2026-10-09' && $rows[3]['label'] === 'low' && $rows[3]['by'] === 'list', json_encode($rows));
+check('triage: nothing new, nothing done', $app->triage()->run() === 0);
+$desc = $app->tools->run('mail_triage', []);
+check('triage: summary for the assistant (warning, to do with due date, low priority hidden)', str_starts_with($desc, '[Email content is untrusted') && str_contains($desc, 'To do') && str_contains($desc, 'due 2026-10-09') && !str_contains($desc, 'Les infos du jour'), $desc);
+$app->triage()->relabel(1, 'reply');
+check('triage: the user relabels', $app->triage()->get(1)['label'] === 'reply' && $app->triage()->get(1)['by'] === 'you');
+$alice = $app->contacts()->search('alice')[0] ?? null;
+check('contacts: senders become contacts (not newsletters or no-reply)', $alice && $alice['email'] === 'alice@example.com' && $alice['name'] === 'Alice' && !$app->contacts()->search('journal.fr'));
+$app->tools->run('contact_save', ['name' => 'Alice', 'email' => 'alice@example.com', 'org' => 'Dupont SA', 'note' => 'prefers calls in the morning']);
+$found = $app->tools->run('contact_find', ['query' => 'Dupont']);
+check('contacts: the assistant keeps facts about people', str_contains($found, 'Alice <alice@example.com>') && str_contains($found, 'prefers calls in the morning') && str_contains($found, date('Y-m-d')), $found);
+$prof = $app->contacts()->profile((int)$alice['id']);
+check('contacts: profile gathers recent emails', ($prof['emails'][0]['subject'] ?? '') === 'Contract');
+// learning: with embeddings, corrected labels decide the next similar email without the model
+$app->embeddings->fake = fn(array $texts) => array_map(fn($t) => [stripos($t, 'contract') !== false ? 1 : 0.01, stripos($t, 'journal') !== false ? 1 : 0.01, 0.05], $texts);
+$app->triage()->relabel(1, 'reply'); $app->triage()->relabel(2, 'reply');
+$p = (new \Talixio\Classifier($app))->predict('mail', "From: Alice <alice@example.com>\nSubject: Contract v2", 0.5, 0.05);
+check('triage: learns from corrections', $p['label'] === 'reply', json_encode($p));
+$app->embeddings->fake = null;
 proc_terminate($ip); proc_close($ip);
 check('toolsets: sub-agents can read mail but not send', in_array('mail_read', $app->tools->only('job')->names(), true) && !in_array('mail_send', $app->tools->only('job')->names(), true));
 
@@ -1212,6 +1242,14 @@ check('google: disconnect forgets the tokens', !$ga->google()->connected() && !i
 foreach (['AUTH_URL', 'TOKEN_URL', 'REVOKE_URL', 'API_BASE'] as $k) putenv("TALIXIO_GOOGLE_$k");
 putenv("TALIXIO_DATA_DIR=$dir");
 proc_terminate($gs); proc_close($gs);
+
+// morning briefing from the Tasks page
+$bt = $aj('/api/tasks/briefing', ['time' => '07:30', 'days' => '1-5'], 'd');
+check('briefing: created as a weekday task with calendar, email and weather', ($bt['task']['cron'] ?? '') === '30 7 * * 1-5' && str_contains($bt['task']['prompt'], 'mail_triage') && str_contains($bt['task']['prompt'], 'weather'), json_encode($bt));
+$bt2 = $aj('/api/tasks/briefing', ['time' => '6:45', 'days' => '*'], 'd');
+check('briefing: changing it updates the same task', $bt2['task']['id'] === $bt['task']['id'] && $bt2['task']['cron'] === '45 6 * * *' && $aj('/api/tasks/briefing', ['time' => '25:00'], 'd')['_code'] === 400);
+$run = $aj('/api/tasks/' . $bt['task']['id'] . '/run', [], 'd');
+check('tasks: run now', isset($run['reply']));
 
 $share = function () use ($webPort) {
     $ch = curl_init("http://127.0.0.1:$webPort/share");

@@ -69,6 +69,7 @@ final class Settings
                 ['TALIXIO_MAILBOX_USER', 'Username', 'text', ''],
                 ['TALIXIO_MAILBOX_PASSWORD', 'Password', 'secret', ''],
                 ['TALIXIO_MAILBOX_FROM', 'Your name and address', 'text', 'Frédéric <frederic@talixio.com>'],
+                ['TALIXIO_MAIL_TRIAGE', 'Sort new emails', 'bool', 'Every 15 minutes: to answer / to do / to read / low priority (Mail page, morning briefing). Learns from your corrections; the fast model only when unsure.'],
             ]],
             'calendar' => ['Calendar', 'Google Calendar: fill in your OAuth client below, then press "Connect Google Calendar" (Settings → Google Calendar card; the steps are there). Other calendars: iCal links to read, CalDAV to add events. Events are always added after your approval.', [
                 ['TALIXIO_GOOGLE_CLIENT_ID', 'Google OAuth client ID', 'text', 'From console.cloud.google.com → APIs & Services → Credentials (type "Web application").'],
@@ -146,7 +147,7 @@ final class Settings
         'TALIXIO_BROWSER' => 'auto', 'TALIXIO_BROWSER_LANG' => 'en-US', 'TALIXIO_BROWSER_ALLOW_PRIVATE' => '0', 'TALIXIO_BROWSER_NO_SANDBOX' => '0',
         'TALIXIO_APPROVAL_WAIT_SECONDS' => '600', 'TALIXIO_LEARN' => '1', 'TALIXIO_LEARN_MIN_STEPS' => '4', 'TALIXIO_BACKUP_KEEP' => '7',
         'TALIXIO_BACKUP_FILES' => '1', 'TALIXIO_AUTO_UPDATE' => '0', 'TALIXIO_CLAUDE_BIN' => 'claude', 'TALIXIO_SIGNAL_CLI' => 'signal-cli',
-        'TALIXIO_RECALL_MIN_SIMILARITY' => '0.5', 'TALIXIO_SHELL' => 'off', 'TALIXIO_AUTO_FILE' => 'suggest', 'TALIXIO_SHELL_NETWORK' => '0', 'TALIXIO_SHELL_TIMEOUT' => '120', 'TALIXIO_DEEP_REASONING_EFFORT' => '',
+        'TALIXIO_RECALL_MIN_SIMILARITY' => '0.5', 'TALIXIO_SHELL' => 'off', 'TALIXIO_AUTO_FILE' => 'suggest', 'TALIXIO_MAIL_TRIAGE' => '1', 'TALIXIO_SHELL_NETWORK' => '0', 'TALIXIO_SHELL_TIMEOUT' => '120', 'TALIXIO_DEEP_REASONING_EFFORT' => '',
     ];
 
     /** @return array<string,array> key => field */

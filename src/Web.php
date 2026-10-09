@@ -78,6 +78,24 @@ final class Web
                 return ['ok' => true];
             })(),
             $path === '/api/heartbeats' => $this->heartbeats(),
+            // email sorting and people
+            $path === '/api/mail' => ['enabled' => $this->app->triage()->enabled(), 'mailbox' => $this->app->mailbox()->enabled(), 'labels' => Triage::LABELS,
+                'emails' => $this->app->triage()->list(!empty($_GET['all'])), 'last_run' => (int)$s->get('triage_last_uid', '0') > 0],
+            $path === '/api/mail/run' && $m === 'POST' => (function () { set_time_limit(300); return ['sorted' => $this->app->triage()->run()]; })(),
+            (bool)preg_match('#^/api/mail/(\d+)/label$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) { $this->app->triage()->relabel((int)$mm[1], (string)($b['label'] ?? '')); return ['ok' => true]; })(),
+            (bool)preg_match('#^/api/mail/(\d+)/(done|open)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->triage()->setStatus((int)$mm[1], $mm[2]); return ['ok' => true]; })(),
+            $path === '/api/contacts' && $m === 'GET' => ['contacts' => $this->app->contacts()->search((string)($_GET['q'] ?? ''), 300)],
+            $path === '/api/contacts' && $m === 'POST' => ['contact' => $this->app->contacts()->save($b)],
+            (bool)preg_match('#^/api/contacts/(\d+)$#', $path, $mm) && $m === 'GET' => $this->app->contacts()->profile((int)$mm[1]),
+            (bool)preg_match('#^/api/contacts/(\d+)$#', $path, $mm) && $m === 'POST' => ['contact' => $this->app->contacts()->save(['id' => (int)$mm[1]] + $b)],
+            (bool)preg_match('#^/api/contacts/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->contacts()->delete((int)$mm[1]); return ['ok' => true]; })(),
+            $path === '/api/tasks/briefing' && $m === 'POST' => ['task' => $this->briefing($b)],
+            (bool)preg_match('#^/api/tasks/(\d+)/run$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $s) {
+                set_time_limit(0);
+                $t = $s->task((int)$mm[1]) ?? $this->fail(404, 'no such task');
+                $reply = $this->app->agent()->runTask($t['title'], $t['prompt'], (string)$t['tier'], (int)$t['space']);
+                return ['reply' => $reply, 'space' => (int)$t['space']];
+            })(),
             $path === '/api/google' => $this->googleState(),
             $path === '/api/google/connect' && $m === 'POST' => ['url' => $this->app->google()->authUrl(Google::redirectUri())],
             $path === '/api/google/disconnect' && $m === 'POST' => (function () { $this->app->google()->disconnect(); return $this->googleState(); })(),
@@ -170,6 +188,28 @@ final class Web
                     'read_only' => !empty($t['annotations']['readOnlyHint'])], $c['tools'] ?? [])];
         }
         return ['raw' => $mcp->raw(), 'servers' => $out, 'shell' => ['mode' => $this->app->cfg->shell, 'installed' => Shell::binary() !== null]];
+    }
+
+    /** The morning briefing: one scheduled task, created or updated from the Tasks page. */
+    private function briefing(array $b): array
+    {
+        if (!preg_match('/^([01]?\d|2[0-3]):([0-5]\d)$/', (string)($b['time'] ?? ''), $t)) $this->fail(400, 'Give a time like 07:30.');
+        $days = in_array($b['days'] ?? '', ['1-5', '*', '1-6', '0,6'], true) ? $b['days'] : '1-5';
+        $cron = (int)$t[2] . ' ' . (int)$t[1] . " * * $days";
+        $prompt = "Morning briefing for the user. Gather, in this order, only what is useful today:\n"
+            . "1. Today's calendar (calendar_events): times, places, what to prepare or bring.\n"
+            . "2. Emails waiting (mail_triage): to answer and to do first, with due dates.\n"
+            . "3. Reminders and deadlines today and in the next 3 days (list_tasks, memory).\n"
+            . "4. The weather today in the user's town (from USER.md; skip it if unknown) with a quick web search.\n"
+            . "5. One line on anything else that matters today (follow-ups promised, birthdays in USER.md...).\n"
+            . "Short and easy to scan: a heading per part, bullets, under 200 words, in the user's language. Skip empty parts."
+            . (trim((string)($b['extra'] ?? '')) !== '' ? "\nAlso: " . trim((string)$b['extra']) : '');
+        $s = $this->app->store;
+        $next = Cron::next($cron, time());
+        $id = (int)$s->q("SELECT id FROM tasks WHERE title = 'Morning briefing' ORDER BY id LIMIT 1")->fetchColumn();
+        if ($id) $s->updateTask($id, ['cron' => $cron, 'prompt' => $prompt, 'next_run' => $next, 'enabled' => 1]);
+        else $id = $s->addTask('Morning briefing', $prompt, $cron, $next, 'standard', 0);
+        return $s->task($id);
     }
 
     private function googleState(): array
