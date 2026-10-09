@@ -192,9 +192,9 @@ final class Files
                 $t = $this->vision([['type' => 'text', 'text' => 'Transcribe this page.'], ['type' => 'image', 'mime' => 'image/jpeg', 'data' => base64_encode((string)file_get_contents($pg))]],
                     'You transcribe scanned document pages exactly, keeping the reading order and line breaks. Output only the text of the page.');
                 if ($t === null) break;
-                $out[] = '--- Page ' . ($i + 1) . "\n$t";
+                $out[] = $t;
             }
-            return implode("\n\n", $out);
+            return implode("\f", $out); // form feeds separate pages, like pdftotext
         } finally {
             exec('rm -rf ' . escapeshellarg($tmp));
         }
@@ -208,10 +208,29 @@ final class Files
         $this->app->store->deleteDocs(['file', 'transcript'], $id);
         $text = (string)$f['text'];
         if (trim($text) === '' || str_starts_with($text, '(could not read') || str_starts_with($text, '(No text found')) return;
-        $this->app->store->addDoc($f['kind'] === 'audio' ? 'transcript' : 'file', $id, Library::label($f), mb_substr($text, 0, 800000), (int)$f['created']);
+        $text = mb_substr($text, 0, 800000);
+        $pages = self::pages($text);
+        if ($pages) $this->app->store->addPagedDoc('file', $id, Library::label($f), $pages, (int)$f['created']); // passages know their page (citations)
+        else $this->app->store->addDoc($f['kind'] === 'audio' ? 'transcript' : 'file', $id, Library::label($f), $text, (int)$f['created']);
         if ($f['kind'] === 'office' && self::officeBinary() && App::$inWorker === false && PHP_SAPI === 'cli') { // background indexer: prepare the page view
             try { $this->officePdf($f); } catch (\Throwable $e) { Log::warn("office preview #$id: {$e->getMessage()}"); }
         }
+    }
+
+    /** Pages of a PDF's text (form feeds) or a presentation's slides; null when the text has no pages. */
+    public static function pages(string $text): ?array
+    {
+        if (str_contains($text, "\f")) return explode("\f", rtrim($text, "\f"));
+        if (preg_match('/^--- Slide 1\n/', $text)) return array_values(array_filter(preg_split('/^--- Slide \d+\n/m', $text), fn($p) => $p !== ''));
+        return null;
+    }
+
+    /** The text with visible page marks, for reading with file_read. */
+    public static function withPageMarks(string $text): string
+    {
+        $pages = str_contains($text, "\f") ? explode("\f", rtrim($text, "\f")) : null;
+        if (!$pages) return $text;
+        return implode("\n\n", array_map(fn($p, $i) => '[page ' . ($i + 1) . "]\n" . trim($p), $pages, array_keys($pages)));
     }
 
     // ---- LibreOffice: faithful pages for Office files (install.sh --with-office) ----

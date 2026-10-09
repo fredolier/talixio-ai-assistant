@@ -205,9 +205,26 @@ final class Library
             $f = $this->app->files()->get((int)$h['ref']);
             if (!$f) continue;
             $out[] = ['id' => (int)$f['id'], 'name' => $f['name'], 'folder' => $f['folder'], 'kind' => $f['kind'], 'snippet' => preg_replace('/\s+/', ' ', mb_substr($h['text'], 0, 400)),
+                'page' => preg_match('/ p\. (\d+)(?:-(\d+))?$/', (string)$h['label'], $pm) ? self::bestPage($f, $query, (int)$pm[1], (int)($pm[2] ?? $pm[1])) : null,
                 'score' => round($h['score'], 4), 'sim' => $h['sim'] !== null ? round($h['sim'], 3) : null];
         }
         return $out;
+    }
+
+    /** In a passage spanning several pages, the page where the searched words are. */
+    private static function bestPage(array $f, string $query, int $from, int $to): int
+    {
+        if ($from === $to) return $from;
+        $pages = Files::pages((string)$f['text']) ?? [];
+        preg_match_all('/[\p{L}\p{N}]{3,}/u', mb_strtolower($query), $m);
+        $best = $from; $bestScore = -1;
+        for ($p = $from; $p <= $to; $p++) {
+            $text = mb_strtolower($pages[$p - 1] ?? '');
+            $score = 0;
+            foreach (array_unique($m[0]) as $w) if (str_contains($text, $w)) $score++;
+            if ($score > $bestScore) { $best = $p; $bestScore = $score; }
+        }
+        return $best;
     }
 
     /** @return int[] */

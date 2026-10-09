@@ -27,6 +27,7 @@ function toast(text) {
 }
 const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+const CITE_SVG = '<svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 12h6M9 16h6"/></svg>';
 // Small, safe Markdown subset: escapes everything first, then adds formatting.
 function md(src) {
   const blocks = [];
@@ -35,6 +36,7 @@ function md(src) {
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\(\/files\/(\d+)(?:#p(\d+))?\)/g, (_, t, id, pg) => `<a href="#" class="cite" data-file="${id}"${pg ? ` data-page="${pg}"` : ''} title="Open the document${pg ? ' at page ' + pg : ''}">${CITE_SVG}${t}</a>`)
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   const out = [];
@@ -1147,7 +1149,19 @@ async function fillPreview(frame, id) {
 }
 const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
 const RENDERED = ['text', 'office'];
-async function openFile(id) {
+/** A citation in an answer: open the document in the library, at its page. */
+document.addEventListener('click', async e => {
+  const a = e.target.closest('a.cite');
+  if (!a) return;
+  e.preventDefault();
+  try {
+    const { file } = await api(`/api/files/${a.dataset.file}/text`);
+    lib.folder = file.folder; location.hash = '#library' + (file.folder === '/' ? '' : file.folder);
+    setTimeout(() => openFile(+a.dataset.file, { page: +a.dataset.page || 0 }), 150);
+  } catch (err) { toast(err.message.includes('not found') ? 'That document is no longer in the library.' : err.message); }
+});
+
+async function openFile(id, opts = {}) {
   const v = $('#viewer'), body = $('#viewer-body');
   let d;
   try { d = await api(`/api/files/${id}/text`); } catch (e) { toast(e.message); return; }
@@ -1170,7 +1184,7 @@ async function openFile(id) {
   if (f.kind === 'image') html += `<a href="${fileUrl(f)}" target="_blank" rel="noopener" title="Open full size"><img src="${fileUrl(f)}" alt="${esc(f.name)}"></a>`;
   if (f.kind === 'audio') html += isVideo(f) ? `<video controls playsinline preload="metadata" src="${fileUrl(f)}"></video>` : `<audio controls preload="metadata" src="${fileUrl(f)}"></audio>`;
   const pagesHtml = () => {
-    const first = Math.min(d.pages, 5);
+    const first = Math.min(d.pages, Math.max(5, opts.page || 0)); // a citation's page is loaded too
     return `<div class="pdf-pages" id="pdf-pages">${Array.from({ length: first }, (_, i) => pdfPageHtml(f.id, i + 1, d.pages)).join('')}</div>`
       + (d.pages > first ? `<button id="pdf-more" class="btn small" type="button" data-next="${first + 1}">Show more pages (${d.pages - first} left)</button>` : '');
   };
@@ -1185,6 +1199,10 @@ async function openFile(id) {
     else if (f.kind === 'other') html += '<p class="muted">This kind of file cannot be shown here; download it to open it.</p>';
   }
   body.innerHTML = html;
+  if (opts.page && paged) { // open on the cited page
+    const pg = body.querySelectorAll('.pdf-page')[opts.page - 1];
+    if (pg) setTimeout(() => { pg.scrollIntoView({ block: 'start' }); pg.classList.add('flash'); }, 300);
+  }
   body.classList.toggle('framed', rendered);
   if (rendered) fillPreview($('#viewer-frame'), f.id);
   const more = $('#pdf-more');

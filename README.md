@@ -209,7 +209,8 @@ conversation.
   Markdown, HTML, emails, CSV, JSON and Office files have a readable view; photos, audio and video
   play natively. With **LibreOffice** (`install.sh --with-office`) Word, Excel and PowerPoint files are
   shown as their real pages (and open as PDF), and older `.doc`, `.xls`, `.ppt`, `.rtf` are read and
-  searchable too. *Ask about this folder* in the library starts a question on those documents.
+  searchable too. *Ask about this folder* in the library starts a question on those documents. Answers cite
+  documents with their page ("Bail Dupont p. 3"): a click opens the viewer at that page.
 - **Sandboxed shell** (`install.sh --with-shell`, then Settings → *Sandboxed shell*): the assistant gets
   a Linux sandbox of its own (bubblewrap) with Python (numpy, pandas, matplotlib) for exact
   calculations, data analysis, file conversions and charts; it saves results to your library. It sees

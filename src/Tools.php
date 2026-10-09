@@ -57,7 +57,8 @@ final class Tools
                 $folder = isset($a['folder']) && $a['folder'] !== '' ? (string)$a['folder'] : ($scope !== '' ? $scope : '/'); // in a space: its folder first
                 $hits = $this->app->library()->search($a['query'], $folder, min(20, max(1, (int)($a['limit'] ?? 8))));
                 if (!$hits) return 'nothing found in ' . $folder . ($folder !== '/' ? " (search folder '/' to look in the whole library)" : '');
-                return implode("\n", array_map(fn($h) => '- ' . Library::join($h['folder'], $h['name']) . " (file #{$h['id']}): {$h['snippet']}", $hits));
+                return implode("\n", array_map(fn($h) => '- ' . Library::join($h['folder'], $h['name']) . " (file #{$h['id']}" . ($h['page'] ? ", page {$h['page']}" : '') . ', cite as ['
+                    . preg_replace('/[\[\]]/', '', $h['name']) . ($h['page'] ? " p. {$h['page']}" : '') . "](/files/{$h['id']}" . ($h['page'] ? "#p{$h['page']}" : '') . ")): {$h['snippet']}", $hits));
             });
         $this->register('kb_list', "List a folder of the user's library: its subfolders and files (id, size, date). folder '/' is the top; omit it to see the whole folder tree.",
             ['folder' => ['type' => 'string']], [], fn(array $a) => $this->kbList($a['folder'] ?? null));
@@ -90,7 +91,7 @@ final class Tools
         $this->register('file_read', 'Read the text of a file by its id (#n in the conversation or from kb_search/kb_list): document, PDF, Office file, note, audio transcript or image description. Use offset to continue a long one.',
             ['id' => ['type' => 'integer'], 'offset' => ['type' => 'integer']], ['id'],
             function (array $a) {
-                $text = $this->app->files()->text((int)$a['id']);
+                $text = Files::withPageMarks($this->app->files()->text((int)$a['id']));
                 $off = max(0, (int)($a['offset'] ?? 0));
                 $chunk = mb_substr($text, $off, 30000);
                 return $chunk . ($off + 30000 < mb_strlen($text) ? "\n[... more: call again with offset " . ($off + 30000) . ' of ' . mb_strlen($text) . ']' : '');

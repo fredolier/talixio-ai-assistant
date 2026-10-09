@@ -285,6 +285,25 @@ final class Store
         }
     }
 
+    /** Index a paged document: passages of whole pages (about 2000 characters), labelled with their pages. */
+    public function addPagedDoc(string $kind, int $ref, string $label, array $pages, ?int $ts = null, int $space = 0): void
+    {
+        $flush = function (string $text, int $from, int $to) use ($kind, $ref, $label, $ts, $space) {
+            if (mb_strlen(trim($text)) < 3) return;
+            $p = $from === $to ? "p. $from" : "p. $from-$to";
+            foreach (self::chunks($text) as $chunk) {
+                $this->q('INSERT INTO docs(kind,ref,ts,label,text,space) VALUES(?,?,?,?,?,?)', [$kind, $ref, $ts ?? time(), "$label $p", $chunk, $space]);
+            }
+        };
+        $buf = ''; $from = 1;
+        foreach (array_values($pages) as $i => $page) {
+            $page = trim($page); $n = $i + 1;
+            if ($buf !== '' && mb_strlen($buf) + mb_strlen($page) > 2000) { $flush($buf, $from, $n - 1); $buf = ''; $from = $n; }
+            $buf .= ($buf !== '' ? "\n\n" : '') . $page;
+        }
+        $flush($buf, $from, max($from, count($pages)));
+    }
+
     /**
      * Split text into ~2000-character chunks with ~200 characters of overlap, cutting at paragraph or
      * sentence boundaries, so search finds the right passage of a long document (max 400 chunks).

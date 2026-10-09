@@ -22,6 +22,12 @@ final class Worker
         App::$inWorker = true;
         $this->app->jobs()->recoverInterrupted();
         $this->app->files()->recoverInterrupted();
+        if ($this->app->store->get('pages_indexed') === '') { // once: PDFs indexed by page, so answers can cite pages
+            foreach ($this->app->store->q("SELECT id FROM files WHERE status = 'ready' AND (kind = 'pdf' OR (kind = 'office' AND name LIKE '%.pptx'))")->fetchAll() as $r) {
+                try { $this->app->files()->index((int)$r['id']); } catch (\Throwable $e) { Log::warn("reindex {$r['id']}: {$e->getMessage()}"); }
+            }
+            $this->app->store->set('pages_indexed', '1');
+        }
         $tg = $cfg->telegramToken !== '' ? new Telegram($cfg, $this->app) : null;
         $settingsFile = Settings::file($cfg->dataDir);
         $settingsAt = @filemtime($settingsFile) ?: 0;
