@@ -83,6 +83,7 @@ final class Config
     public bool $browserAllowPrivate = false;    // let the browser open local/LAN addresses (off: safer)
     public string $browserLang = 'en-US';
     public int $approvalWaitSeconds = 600;
+    public bool $autoUpdate = false;
     public bool $learn = true;                   // write skills from multi-step tasks (background, fast tier)
     public int $learnMinSteps = 4;
     public string $backupDir = '';
@@ -93,6 +94,9 @@ final class Config
 
     public static function fromEnv(): self
     {
+        $dataDir = rtrim((string)(getenv('TALIXIO_DATA_DIR') ?: 'data'), '/');
+        if (!str_starts_with($dataDir, '/')) $dataDir = getcwd() . '/' . $dataDir;
+        Settings::apply($dataDir); // values saved in the web app override the config file
         $e = static fn(string $k, string $d = ''): string => ($v = getenv($k)) !== false && $v !== '' ? trim($v) : $d;
         $c = new self();
         $c->provider = strtolower($e('TALIXIO_PROVIDER', 'anthropic'));
@@ -216,6 +220,7 @@ final class Config
         $c->browserAllowPrivate = $e('TALIXIO_BROWSER_ALLOW_PRIVATE', '0') === '1';
         $c->browserLang = $e('TALIXIO_BROWSER_LANG', 'en-US');
         $c->approvalWaitSeconds = (int)$e('TALIXIO_APPROVAL_WAIT_SECONDS', '600');
+        $c->autoUpdate = $e('TALIXIO_AUTO_UPDATE', '0') === '1';
         $c->learn = $e('TALIXIO_LEARN', '1') !== '0';
         $c->learnMinSteps = (int)$e('TALIXIO_LEARN_MIN_STEPS', '4');
         $c->backupDir = rtrim($e('TALIXIO_BACKUP_DIR'), '/');

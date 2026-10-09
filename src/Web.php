@@ -48,6 +48,13 @@ final class Web
             $path === '/api/activity' => $this->activity(),
             $path === '/api/jobs' => ['jobs' => $s->jobs(50)],
             $path === '/api/channels' => $this->channels(),
+            $path === '/api/settings' && $m === 'GET' => ['groups' => Settings::describe($this->app->cfg->dataDir)],
+            $path === '/api/settings' && $m === 'POST' => $this->saveSettings($b),
+            $path === '/api/settings/password' && $m === 'POST' => $this->changePassword($b),
+            $path === '/api/update' => ['installed' => $this->app->updater()->installed(), 'version' => $this->app->updater()->version(),
+                'status' => $this->app->updater()->status(), 'auto' => $this->app->cfg->autoUpdate],
+            (bool)preg_match('#^/api/update/(check|update|rollback)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->updater()->request($mm[1]); return ['ok' => true]; })(),
+            $path === '/api/doctor' && $m === 'POST' => (function () { set_time_limit(0); return ['results' => (new Doctor(App::fromEnv()))->run()]; })(),
             $path === '/api/skills' => ['skills' => $this->app->skills()->all()],
             (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'GET' => ['content' => $this->app->skills()->raw($mm[1]) ?? $this->fail(404, 'no such skill')],
             (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) { $this->app->skills()->writeRaw($mm[1], (string)($b['content'] ?? '')); return ['ok' => true]; })(),
@@ -79,6 +86,7 @@ final class Web
         return ['name' => $c->name, 'provider' => $c->provider, 'model' => $c->tier('standard')->label(), 'timezone' => $c->timezone,
             'tiers' => array_map(fn(Tier $t) => $t->label(), $c->tiers), 'budget' => $this->app->budget()->status(),
             'embeddings' => $c->embeddings, 'max_parallel_jobs' => $c->maxParallelJobs, 'job_max_usd' => $c->jobMaxUsd,
+            'version' => $this->app->updater()->version()['short'] ?? null,
             'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()),
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
@@ -96,18 +104,35 @@ final class Web
              'detail' => $this->app->webPush()->count() . ' device(s) subscribed', 'chat' => false],
             ['id' => 'email', 'name' => 'Email', 'state' => $this->app->email()->canSend() ? ($this->app->email()->canReceive() ? 'on' : 'notifications only') : 'not configured',
              'error' => $err('email'), 'chat' => $this->app->email()->canReceive(),
-             'detail' => $c->smtpHost ? "From {$c->emailFrom}" . ($c->emailTo ? " · notifications to {$c->emailTo}" : '') . ($c->imapHost ? ' · answers ' . implode(', ', $c->emailAllowed) : '') : 'Set TALIXIO_SMTP_* and TALIXIO_IMAP_* in the config'],
+             'detail' => $c->smtpHost ? "From {$c->emailFrom}" . ($c->emailTo ? " · notifications to {$c->emailTo}" : '') . ($c->imapHost ? ' · answers ' . implode(', ', $c->emailAllowed) : '') : 'Set it up below: Configuration → Assistant\'s email'],
             ['id' => 'signal', 'name' => 'Signal', 'state' => $notify['signal'], 'error' => $err('signal'), 'chat' => $this->app->signal()->enabled(),
-             'detail' => $c->signalNumber ? "Number {$c->signalNumber} · answers " . implode(', ', array_map($mask, $c->signalAllowed)) : 'Run install.sh --with-signal, then register a number'],
+             'detail' => $c->signalNumber ? "Number {$c->signalNumber} · answers " . implode(', ', array_map($mask, $c->signalAllowed)) : 'Install with install.sh --with-signal, register a number, then fill in Configuration → Signal'],
             ['id' => 'calendar', 'name' => 'Calendar', 'state' => $this->app->calendar()->enabled() ? ($this->app->calendar()->canWrite() ? 'on' : 'read only') : 'not configured', 'error' => null, 'chat' => false,
-             'detail' => $this->app->calendar()->enabled() ? count($c->calendarIcs) . ' subscription link(s)' . ($c->caldavUrl ? ' · CalDAV (adds events after your approval)' : '') : 'Set TALIXIO_CALENDAR_ICS and/or TALIXIO_CALDAV_URL'],
+             'detail' => $this->app->calendar()->enabled() ? count($c->calendarIcs) . ' subscription link(s)' . ($c->caldavUrl ? ' · CalDAV (adds events after your approval)' : '') : 'Set it up below: Configuration → Calendar'],
             ['id' => 'mailbox', 'name' => 'Your mailbox', 'state' => $this->app->mailbox()->enabled() ? 'on' : 'not configured', 'error' => null, 'chat' => false,
-             'detail' => $this->app->mailbox()->enabled() ? "{$c->mailboxUser}: reads, sorts and drafts; sends only after your approval" : 'Set TALIXIO_MAILBOX_* to let it read and draft your email'],
+             'detail' => $this->app->mailbox()->enabled() ? "{$c->mailboxUser}: reads, sorts and drafts; sends only after your approval" : 'Set it up below: Configuration → Your mailbox'],
             ['id' => 'telegram', 'name' => 'Telegram', 'state' => $notify['telegram'], 'error' => $err('telegram'), 'chat' => $c->telegramToken !== '',
-             'detail' => $c->telegramToken ? count($c->telegramAllowed) . ' allowed chat(s)' : 'Set TALIXIO_TELEGRAM_TOKEN'],
+             'detail' => $c->telegramToken ? count($c->telegramAllowed) . ' allowed chat(s)' : 'Set it up below: Configuration → Telegram'],
             ['id' => 'ntfy', 'name' => 'ntfy', 'state' => $notify['ntfy'], 'error' => $err('ntfy'), 'chat' => false,
-             'detail' => $c->ntfyUrl ? 'Topic configured' : 'Set TALIXIO_NTFY_URL'],
+             'detail' => $c->ntfyUrl ? 'Topic configured' : 'Set it up below: Configuration → Notifications'],
         ]];
+    }
+
+    private function saveSettings(array $b): array
+    {
+        $errors = Settings::save($this->app->cfg->dataDir, (array)($b['changes'] ?? []), array_map('strval', (array)($b['reset'] ?? [])));
+        if ($errors) { http_response_code(422); return ['errors' => $errors, 'error' => 'Some values are not valid.']; }
+        Settings::apply($this->app->cfg->dataDir);
+        return ['ok' => true, 'groups' => Settings::describe($this->app->cfg->dataDir)];
+    }
+
+    private function changePassword(array $b): array
+    {
+        $current = (string)($b['current'] ?? ''); $new = (string)($b['new'] ?? '');
+        if (!hash_equals($this->app->cfg->webPassword, $current)) { sleep(2); $this->fail(403, 'The current password is wrong.'); }
+        if (mb_strlen($new) < 12) $this->fail(400, 'The new password must be at least 12 characters.');
+        Settings::setPassword($this->app->cfg->dataDir, $new);
+        return ['ok' => true];
     }
 
     private function activity(): array

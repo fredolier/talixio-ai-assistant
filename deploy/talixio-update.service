@@ -1,0 +1,9 @@
+[Unit]
+Description=Talixio update (check, install or roll back)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/talixio/deploy/talixio-update.sh auto
+TimeoutStartSec=30min

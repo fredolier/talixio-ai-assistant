@@ -35,16 +35,28 @@ Options:
 - HTTPS (either way) is needed to add the web app to your phone's home screen.
 - `sudo ./install.sh --with-claude-code` installs the Claude Code CLI for the `talixio` user.
 
-**Update:** `git pull && sudo ./install.sh` (your config and data are kept).
+**Updates:** in the app, **Settings → Updates** shows new versions from the repository (checked
+every 6 hours), with **Update now** (backup, `git pull`, reinstall, restart) and **Restore previous
+version**. You get a notification when a new version is available; turn on automatic night-time
+updates in Settings if you prefer. By hand it's still `git pull && sudo ./install.sh` (your config
+and data are kept). The update runs as root through a small systemd service
+(`talixio-update.path/.service/.timer`); the web app only drops a request file. It runs git as the
+clone's owner, so a private repository works with your own git credentials. If your clone has local
+changes, the update stops and tells you.
 
 ### Open the web app
 - With `--domain` or your own proxy: `https://assistant.example.com`
 - Without: tunnel from your computer, `ssh -L 8080:127.0.0.1:8080 you@your-vm`, then open
   http://localhost:8080
 
+### Settings
+Everything is configurable in the app: **Settings** (AI model, keys, budget, notifications, email,
+your mailbox, calendar, Signal, Telegram, search, audio, browser, approvals, backups, password).
+Values saved there are kept in `/var/lib/talixio/settings.json` and override
+`/etc/talixio/talixio.env`; "reset" returns to the file's value. Secrets are never shown back.
+**Run checks** tests the logins and makes one call per model tier (same as `sudo talixio doctor`).
+
 ### Choose the brain
-Edit `/etc/talixio/talixio.env`, then `sudo systemctl restart talixio-worker talixio-web` and run
-`sudo talixio doctor` (it checks the config and makes one test call).
 
 | Option | Settings |
 |---|---|

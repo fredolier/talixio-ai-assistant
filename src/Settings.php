@@ -1,0 +1,242 @@
+<?php
+declare(strict_types=1);
+namespace Talixio;
+
+/**
+ * Settings editable in the web app. Values saved there go to data/settings.json and override
+ * /etc/talixio/talixio.env (which keeps the defaults). They are applied to the process environment,
+ * so child processes (jobs, Claude Code, signal-cli...) see them too.
+ */
+final class Settings
+{
+    /** group => [title, intro, fields: [key, label, type, help, options]] ; types: text number secret bool select multi list url */
+    public static function schema(): array
+    {
+        return [
+            'assistant' => ['Assistant', '', [
+                ['TALIXIO_NAME', 'Name', 'text', 'Your assistant\'s name.'],
+                ['TALIXIO_TIMEZONE', 'Time zone', 'text', 'e.g. Europe/Paris. Used for reminders and the calendar.'],
+                ['TALIXIO_HISTORY_MESSAGES', 'Recent messages sent to the model', 'number', 'Older ones stay reachable through memory search.'],
+            ]],
+            'brain' => ['AI model', 'The assistant\'s brain. "Check configuration" makes one test call per tier.', [
+                ['TALIXIO_PROVIDER', 'Provider', 'select', 'claude-code uses your Claude Pro/Max plan (installed with --with-claude-code).', ['anthropic' => 'Claude (API)', 'claude-code' => 'Claude Code (Pro/Max plan)', 'gemini' => 'Gemini (API)', 'openai' => 'OpenAI or compatible server (Ollama…)', 'echo' => 'Echo (test, no model)']],
+                ['ANTHROPIC_API_KEY', 'Claude API key', 'secret', 'console.anthropic.com'],
+                ['CLAUDE_CODE_OAUTH_TOKEN', 'Claude Code token', 'secret', 'From "claude setup-token" (see the README).'],
+                ['GEMINI_API_KEY', 'Gemini API key', 'secret', 'aistudio.google.com/apikey. Also used for transcription, memory search and web search.'],
+                ['OPENAI_API_KEY', 'OpenAI API key', 'secret', ''],
+                ['OPENAI_BASE_URL', 'OpenAI-compatible server address', 'url', 'For Ollama, vLLM, OpenRouter… Empty = OpenAI.'],
+                ['TALIXIO_MODEL_FAST', 'Fast model', 'text', 'Empty = chosen automatically. Background work, summaries, simple lookups.'],
+                ['TALIXIO_MODEL', 'Standard model', 'text', 'Empty = chosen automatically. Conversation.'],
+                ['TALIXIO_MODEL_DEEP', 'Deep model', 'text', 'Empty = chosen automatically. Messages starting with /deep and hard reasoning.'],
+                ['TALIXIO_DEEP_THINKING_TOKENS', 'Claude extended thinking (tokens)', 'number', 'Deep tier only. 0 = off.'],
+                ['TALIXIO_DEEP_REASONING_EFFORT', 'Reasoning effort (Gemini/OpenAI)', 'select', 'Deep tier.', ['' => 'default', 'low' => 'low', 'medium' => 'medium', 'high' => 'high']],
+            ]],
+            'budget' => ['Budget', 'Estimated from list prices. 0 = no limit. At 80%: fast model and no sub-agents; at 100%: no more model calls.', [
+                ['TALIXIO_BUDGET_DAILY_USD', 'Daily budget ($)', 'number', 'Set 0 with the Claude Code plan (already paid for).'],
+                ['TALIXIO_BUDGET_MONTHLY_USD', 'Monthly budget ($)', 'number', ''],
+                ['TALIXIO_MAX_PARALLEL_JOBS', 'Sub-agents in parallel', 'number', ''],
+                ['TALIXIO_JOB_MAX_USD', 'Cap per sub-agent ($)', 'number', ''],
+                ['TALIXIO_PRICES', 'Custom prices', 'text', 'pattern=input/output per million tokens, e.g. sonnet=3/15,gemini-3.8-flash=0.75/3.75'],
+            ]],
+            'notify' => ['Notifications', 'Where the assistant reaches you (reminders, briefings, job results, approvals).', [
+                ['TALIXIO_NOTIFY', 'Channels used', 'multi', 'Only configured channels are used.', ['webpush' => 'App notifications', 'email' => 'Email', 'signal' => 'Signal', 'telegram' => 'Telegram', 'ntfy' => 'ntfy']],
+                ['TALIXIO_HEARTBEAT_MINUTES', 'Periodic check (minutes)', 'number', 'Reads the HEARTBEAT.md checklist and tells you if something needs attention. 0 = off. Each check is a model call.'],
+                ['TALIXIO_NTFY_URL', 'ntfy address', 'secret', 'https://ntfy.sh/<long-random-topic>'],
+                ['TALIXIO_NTFY_TOKEN', 'ntfy token', 'secret', 'Only for a protected ntfy server.'],
+                ['TALIXIO_VAPID_SUBJECT', 'Contact for app notifications', 'text', 'mailto:you@example.com'],
+            ]],
+            'email' => ['Assistant\'s email', 'The assistant\'s own mailbox (e.g. assistant@talixio.com): notifications by email, and chat by email when IMAP is filled in. OVH MX Plan: ssl0.ovh.net, SMTP 465, IMAP 993.', [
+                ['TALIXIO_SMTP_HOST', 'SMTP server', 'text', ''],
+                ['TALIXIO_SMTP_PORT', 'SMTP port', 'number', '465 (TLS) or 587 (STARTTLS)'],
+                ['TALIXIO_SMTP_SECURITY', 'SMTP security', 'select', '', ['auto' => 'auto', 'tls' => 'TLS', 'starttls' => 'STARTTLS', 'none' => 'none (local relay)']],
+                ['TALIXIO_SMTP_USER', 'Username', 'text', ''],
+                ['TALIXIO_SMTP_PASSWORD', 'Password', 'secret', ''],
+                ['TALIXIO_EMAIL_FROM', 'Sender', 'text', 'Talixio <assistant@talixio.com>'],
+                ['TALIXIO_EMAIL_TO', 'Your address (notifications)', 'text', ''],
+                ['TALIXIO_IMAP_HOST', 'IMAP server (chat by email)', 'text', 'Empty = notifications only.'],
+                ['TALIXIO_IMAP_PORT', 'IMAP port', 'number', ''],
+                ['TALIXIO_IMAP_USER', 'IMAP username', 'text', 'Empty = SMTP username.'],
+                ['TALIXIO_IMAP_PASSWORD', 'IMAP password', 'secret', 'Empty = SMTP password.'],
+                ['TALIXIO_EMAIL_ALLOWED', 'Allowed senders', 'list', 'The only addresses it answers. Empty = your address.'],
+                ['TALIXIO_EMAIL_REQUIRE_AUTH', 'Require a verified sender (SPF/DKIM)', 'bool', 'Ignores email with a forged sender. Untick only if your emails get no answer.'],
+            ]],
+            'mailbox' => ['Your mailbox', 'Your own mailbox (e.g. frederic@talixio.com): reads without marking as read, writes drafts, sends only after your approval.', [
+                ['TALIXIO_MAILBOX_IMAP_HOST', 'IMAP server', 'text', 'OVH: ssl0.ovh.net. Empty = off.'],
+                ['TALIXIO_MAILBOX_IMAP_PORT', 'IMAP port', 'number', ''],
+                ['TALIXIO_MAILBOX_SMTP_HOST', 'SMTP server', 'text', 'Empty = same server as IMAP.'],
+                ['TALIXIO_MAILBOX_SMTP_PORT', 'SMTP port', 'number', ''],
+                ['TALIXIO_MAILBOX_USER', 'Username', 'text', ''],
+                ['TALIXIO_MAILBOX_PASSWORD', 'Password', 'secret', ''],
+                ['TALIXIO_MAILBOX_FROM', 'Your name and address', 'text', 'Frédéric <frederic@talixio.com>'],
+            ]],
+            'calendar' => ['Calendar', 'Reading: iCal subscription links (Google: Settings → your calendar → "Secret address in iCal format"). Adding events: CalDAV, after your approval.', [
+                ['TALIXIO_CALENDAR_ICS', 'iCal links', 'secret', 'Several links separated by commas. These links give access to your calendar: keep them secret.'],
+                ['TALIXIO_CALDAV_URL', 'CalDAV calendar address', 'url', 'Nextcloud, Fastmail, iCloud…'],
+                ['TALIXIO_CALDAV_USER', 'CalDAV username', 'text', ''],
+                ['TALIXIO_CALDAV_PASSWORD', 'CalDAV password', 'secret', ''],
+            ]],
+            'signal' => ['Signal', 'A number dedicated to the assistant, registered with "sudo talixio signal register" (see the README).', [
+                ['TALIXIO_SIGNAL_NUMBER', 'Assistant\'s number', 'text', '+33…'],
+                ['TALIXIO_SIGNAL_ALLOWED', 'Your numbers', 'list', 'The only numbers it answers.'],
+            ]],
+            'telegram' => ['Telegram', '', [
+                ['TALIXIO_TELEGRAM_TOKEN', 'Bot token', 'secret', 'From @BotFather.'],
+                ['TALIXIO_TELEGRAM_ALLOWED_IDS', 'Allowed chat ids', 'list', 'Message the bot: it replies with your id.'],
+            ]],
+            'search' => ['Web search and memory', '', [
+                ['TALIXIO_SEARCH', 'Web search', 'select', 'auto: Claude\'s or Gemini\'s built-in search, otherwise the service set below.', ['auto' => 'auto', 'builtin' => 'built-in (Claude)', 'gemini' => 'Google via Gemini', 'brave' => 'Brave', 'tavily' => 'Tavily', 'searxng' => 'SearXNG', 'off' => 'off']],
+                ['BRAVE_API_KEY', 'Brave Search key', 'secret', ''],
+                ['TAVILY_API_KEY', 'Tavily key', 'secret', ''],
+                ['SEARXNG_URL', 'SearXNG address', 'url', ''],
+                ['TALIXIO_EMBEDDINGS', 'Search by meaning (embeddings)', 'select', 'Keyword search always works. Changing the model makes older memories unsearchable by meaning.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'voyage' => 'Voyage', 'ollama' => 'Ollama (local)', 'off' => 'off']],
+                ['TALIXIO_EMBEDDINGS_MODEL', 'Embeddings model', 'text', 'Empty = the service\'s default.'],
+                ['VOYAGE_API_KEY', 'Voyage key', 'secret', ''],
+                ['TALIXIO_OLLAMA_URL', 'Ollama address', 'url', ''],
+            ]],
+            'audio' => ['Audio and meetings', '', [
+                ['TALIXIO_TRANSCRIBE', 'Transcription', 'select', 'auto: Gemini when its key is set.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'off' => 'off']],
+                ['TALIXIO_TRANSCRIBE_MODEL', 'Transcription model', 'text', 'Empty = automatic.'],
+                ['TALIXIO_MEETING_TIER', 'Tier for meeting summaries', 'select', '', ['standard' => 'standard', 'deep' => 'deep', 'fast' => 'fast']],
+                ['TALIXIO_VOICE_NOTE_MAX_SECONDS', 'Longer than this (seconds) = a meeting', 'number', ''],
+            ]],
+            'browser' => ['Browser and approvals', '', [
+                ['TALIXIO_BROWSER', 'Browser', 'select', 'Installed with install.sh --with-browser.', ['auto' => 'on when installed', 'off' => 'off']],
+                ['TALIXIO_BROWSER_LANG', 'Browser language', 'text', 'fr-FR'],
+                ['TALIXIO_BROWSER_ALLOW_PRIVATE', 'Allow local network addresses', 'bool', 'Not recommended: a web page could reach your devices.'],
+                ['TALIXIO_BROWSER_NO_SANDBOX', 'Disable Chromium\'s sandbox', 'bool', 'Only if Chromium won\'t start otherwise.'],
+                ['TALIXIO_APPROVAL_WAIT_SECONDS', 'Wait for an approval (seconds)', 'number', 'For a web form being filled in.'],
+                ['TALIXIO_AUTO_APPROVE', 'Actions without approval', 'multi', 'Not recommended: you won\'t be asked for these any more.', ['calendar_add' => 'Add to calendar', 'mail_send' => 'Send email as you', 'browser_submit' => 'Submit a web form']],
+            ]],
+            'maintenance' => ['Learning, backups, updates', '', [
+                ['TALIXIO_LEARN', 'Learn from tasks (skills)', 'bool', 'After a multi-step task, a small agent decides whether to keep it (max $0.05).'],
+                ['TALIXIO_LEARN_MIN_STEPS', 'Minimum steps to learn', 'number', ''],
+                ['TALIXIO_BACKUP_KEEP', 'Backups kept', 'number', 'One per night. 0 = no backups.'],
+                ['TALIXIO_BACKUP_FILES', 'Include received files', 'bool', 'Recordings, PDFs…'],
+                ['TALIXIO_BACKUP_DIR', 'Backup folder', 'text', 'Empty = /var/lib/talixio/backups. Use another disk to survive losing the VM.'],
+                ['TALIXIO_AUTO_UPDATE', 'Install updates automatically at night', 'bool', 'Otherwise you get a notification and press "Update".'],
+            ]],
+            'advanced' => ['Advanced', '', [
+                ['TALIXIO_CLAUDE_BIN', 'Claude Code program', 'text', ''],
+                ['TALIXIO_SIGNAL_CLI', 'signal-cli program', 'text', ''],
+                ['TALIXIO_CHROME_BIN', 'Chromium/Chrome program', 'text', ''],
+                ['TALIXIO_RECALL_MIN_SIMILARITY', 'Automatic recall threshold', 'number', 'Between 0 and 1.'],
+            ]],
+        ];
+    }
+
+    /** Defaults used by Config when nothing is set (shown in the app as placeholders). */
+    public const DEFAULTS = [
+        'TALIXIO_NAME' => 'Talixio', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_PROVIDER' => 'anthropic',
+        'TALIXIO_DEEP_THINKING_TOKENS' => '8000', 'TALIXIO_BUDGET_DAILY_USD' => '0', 'TALIXIO_BUDGET_MONTHLY_USD' => '0', 'TALIXIO_MAX_PARALLEL_JOBS' => '3',
+        'TALIXIO_JOB_MAX_USD' => '0.50', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0',
+        'TALIXIO_SMTP_PORT' => '587', 'TALIXIO_SMTP_SECURITY' => 'auto', 'TALIXIO_IMAP_PORT' => '993', 'TALIXIO_EMAIL_REQUIRE_AUTH' => '1',
+        'TALIXIO_MAILBOX_IMAP_PORT' => '993', 'TALIXIO_MAILBOX_SMTP_PORT' => '465', 'TALIXIO_SEARCH' => 'auto', 'TALIXIO_EMBEDDINGS' => 'auto',
+        'TALIXIO_OLLAMA_URL' => 'http://127.0.0.1:11434', 'TALIXIO_TRANSCRIBE' => 'auto', 'TALIXIO_MEETING_TIER' => 'standard', 'TALIXIO_VOICE_NOTE_MAX_SECONDS' => '180',
+        'TALIXIO_BROWSER' => 'auto', 'TALIXIO_BROWSER_LANG' => 'en-US', 'TALIXIO_BROWSER_ALLOW_PRIVATE' => '0', 'TALIXIO_BROWSER_NO_SANDBOX' => '0',
+        'TALIXIO_APPROVAL_WAIT_SECONDS' => '600', 'TALIXIO_LEARN' => '1', 'TALIXIO_LEARN_MIN_STEPS' => '4', 'TALIXIO_BACKUP_KEEP' => '7',
+        'TALIXIO_BACKUP_FILES' => '1', 'TALIXIO_AUTO_UPDATE' => '0', 'TALIXIO_CLAUDE_BIN' => 'claude', 'TALIXIO_SIGNAL_CLI' => 'signal-cli',
+        'TALIXIO_RECALL_MIN_SIMILARITY' => '0.5', 'TALIXIO_DEEP_REASONING_EFFORT' => '',
+    ];
+
+    /** @return array<string,array> key => field */
+    public static function fields(): array
+    {
+        $out = [];
+        foreach (self::schema() as $g => [, , $fields]) foreach ($fields as $f) $out[$f[0]] = ['key' => $f[0], 'label' => $f[1], 'type' => $f[2], 'help' => $f[3] ?? '', 'options' => $f[4] ?? null, 'group' => $g];
+        return $out;
+    }
+
+    public static function file(string $dataDir): string { return $dataDir . '/settings.json'; }
+
+    public static function load(string $dataDir): array
+    {
+        $d = json_decode((string)@file_get_contents(self::file($dataDir)), true);
+        return is_array($d) ? array_filter($d, 'is_string') : [];
+    }
+
+    /** @var array<string,string|false> environment values before overrides, to restore when an override is removed */
+    private static array $original = [];
+
+    /** Put the saved overrides into the process environment (called by Config). */
+    public static function apply(string $dataDir): void
+    {
+        $over = self::load($dataDir);
+        foreach (self::$original as $k => $orig) {
+            if (!array_key_exists($k, $over)) { putenv($orig === false ? $k : "$k=$orig"); unset(self::$original[$k]); }
+        }
+        foreach ($over as $k => $v) {
+            if (!isset(self::fields()[$k]) && $k !== 'TALIXIO_WEB_PASSWORD') continue;
+            if (!array_key_exists($k, self::$original)) self::$original[$k] = getenv($k);
+            putenv("$k=$v");
+        }
+    }
+
+    /** What the web app shows: values (secrets masked) and where they come from. */
+    public static function describe(string $dataDir): array
+    {
+        $over = self::load($dataDir);
+        $groups = [];
+        foreach (self::schema() as $g => [$title, $intro, $fields]) {
+            $items = [];
+            foreach ($fields as $f) {
+                [$key, $label, $type] = $f;
+                $value = (string)(getenv($key) !== false ? getenv($key) : '');
+                $source = array_key_exists($key, $over) ? 'app' : ((self::$original[$key] ?? getenv($key)) ? 'file' : 'default');
+                $items[] = ['key' => $key, 'label' => $label, 'type' => $type, 'help' => $f[3] ?? '', 'options' => $f[4] ?? null, 'default' => self::DEFAULTS[$key] ?? '',
+                    'value' => $type === 'secret' ? '' : $value, 'set' => $value !== '', 'source' => $source,
+                    'hint' => $type === 'secret' && $value !== '' ? '•••• ' . (mb_strlen($value) > 12 ? mb_substr($value, -4) : '') : ''];
+            }
+            $groups[] = ['id' => $g, 'title' => $title, 'intro' => $intro, 'fields' => $items];
+        }
+        return $groups;
+    }
+
+    /**
+     * Save changes from the web app. $changes: key => value; for secrets an empty value means "unchanged";
+     * $reset: keys to remove from the app's overrides (back to the config file's value).
+     */
+    public static function save(string $dataDir, array $changes, array $reset = []): array
+    {
+        $fields = self::fields();
+        $over = self::load($dataDir);
+        $errors = [];
+        foreach ($changes as $k => $v) {
+            if (!isset($fields[$k])) { $errors[$k] = 'unknown setting'; continue; }
+            $f = $fields[$k];
+            $v = is_array($v) ? implode(',', array_map('strval', $v)) : trim((string)$v);
+            if ($f['type'] === 'secret' && $v === '') continue;
+            if ($f['type'] === 'number' && $v !== '' && !is_numeric($v)) { $errors[$k] = 'a number is expected'; continue; }
+            if ($f['type'] === 'bool') $v = in_array(strtolower($v), ['1', 'true', 'on', 'yes'], true) ? '1' : '0';
+            if ($f['type'] === 'select' && !array_key_exists($v, $f['options'])) { $errors[$k] = 'not one of the choices'; continue; }
+            if ($f['type'] === 'multi') {
+                $vals = array_values(array_filter(array_map('trim', explode(',', $v)), 'strlen'));
+                if (array_diff($vals, array_keys($f['options']))) { $errors[$k] = 'not one of the choices'; continue; }
+                $v = $vals ? implode(',', $vals) : 'none';
+            }
+            if ($f['type'] === 'list') $v = implode(',', array_filter(array_map('trim', preg_split('/[,\n]+/', $v)), 'strlen'));
+            if ($f['type'] === 'url' && $v !== '' && !preg_match('#^https?://#i', $v)) { $errors[$k] = 'an http(s) address is expected'; continue; }
+            if ($k === 'TALIXIO_TIMEZONE' && $v !== '' && !in_array($v, \DateTimeZone::listIdentifiers(), true)) { $errors[$k] = 'unknown time zone, e.g. Europe/Paris'; continue; }
+            if (preg_match('/[\r\n]/', $v)) { $errors[$k] = 'a single line'; continue; }
+            $over[$k] = $v;
+        }
+        foreach ($reset as $k) unset($over[$k]);
+        if (!$errors) self::write($dataDir, $over);
+        return $errors;
+    }
+
+    public static function setPassword(string $dataDir, string $password): void
+    {
+        $over = self::load($dataDir);
+        $over['TALIXIO_WEB_PASSWORD'] = $password;
+        self::write($dataDir, $over);
+    }
+
+    private static function write(string $dataDir, array $over): void
+    {
+        ksort($over);
+        $tmp = self::file($dataDir) . '.tmp';
+        file_put_contents($tmp, json_encode($over, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+        chmod($tmp, 0600);
+        rename($tmp, self::file($dataDir));
+    }
+}

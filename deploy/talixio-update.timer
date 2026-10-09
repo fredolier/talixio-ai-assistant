@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for Talixio updates every 6 hours
+
+[Timer]
+OnCalendar=*-*-* 03,09,15,21:20:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -30,7 +30,7 @@
     <a href="#tasks" data-view="tasks"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Tasks</span></a>
     <a href="#jobs" data-view="jobs"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Jobs</span></a>
     <a href="#memory" data-view="memory"><svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg><span>Memory</span></a>
-    <a href="#channels" data-view="channels"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg><span>Channels</span></a>
+    <a href="#settings" data-view="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
     <a href="#activity" data-view="activity"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Activity</span></a>
     <div class="rail-foot">
       <div id="status" class="status" title="Background worker"><i></i><span>…</span></div>
@@ -42,7 +42,7 @@
     <section id="view-chat" class="view chat-view">
       <header class="topbar">
         <div><h2 id="chat-title">Chat</h2><p class="muted small" id="chat-sub"></p></div>
-        <a id="notify-btn" class="btn ghost small" href="#channels" hidden>Turn on notifications</a>
+        <a id="notify-btn" class="btn ghost small" href="#settings" hidden>Turn on notifications</a>
       </header>
       <div id="thread" class="thread" aria-live="polite"></div>
       <div id="approvals" class="approvals" hidden></div>
@@ -100,11 +100,33 @@
       <div class="row"><button id="mem-save" class="btn primary" type="button">Save</button><span id="mem-state" class="muted small"></span></div>
     </section>
 
-    <section id="view-channels" class="view page" hidden>
-      <header class="page-head"><h2>Channels</h2>
-        <p class="muted">Where you can talk to the assistant, and where it reaches you when it has something to say (reminders, briefings, job results). Settings live in <code>/etc/talixio/talixio.env</code>.</p></header>
+    <section id="view-settings" class="view page" hidden>
+      <header class="page-head"><h2>Settings</h2>
+        <p class="muted">Everything is set here. Values saved in the app override <code>/etc/talixio/talixio.env</code>; "Reset" goes back to the file's value. Changes apply right away.</p></header>
+
+      <div id="update" class="card update" hidden></div>
+
+      <div class="card">
+        <div class="row between"><h3>Check configuration</h3><button id="doctor-run" class="btn" type="button">Run checks</button></div>
+        <p class="muted small">Tests logins (email, calendar…) and makes one short call per model tier.</p>
+        <ul id="doctor" class="doctor" hidden></ul>
+      </div>
+
+      <h3>Channels</h3>
       <div id="channels" class="list"></div>
       <div class="row"><button id="test-notify" class="btn" type="button">Send a test notification</button><span id="test-result" class="muted small"></span></div>
+
+      <h3>Configuration</h3>
+      <div id="settings-groups" class="groups"></div>
+
+      <details class="card group">
+        <summary><b>App password</b></summary>
+        <form id="pw-form" class="fields">
+          <label for="pw-current">Current password</label><input id="pw-current" type="password" autocomplete="current-password" required>
+          <label for="pw-new">New password (12+ characters)</label><input id="pw-new" type="password" autocomplete="new-password" minlength="12" required>
+          <div class="row"><button class="btn primary" type="submit">Change password</button><span id="pw-state" class="muted small"></span></div>
+        </form>
+      </details>
     </section>
 
     <section id="view-activity" class="view page" hidden>

@@ -8,6 +8,7 @@
 #   sudo ./install.sh --with-browser          also install Chromium/Chrome (headless browser tools)
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+ORIG_ARGS="$(printf '%q ' "$@")"   # remembered for updates from the web app
 
 DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; WITH_BROWSER=0 ; BIND_ARG=""
 while [ $# -gt 0 ]; do
@@ -30,7 +31,7 @@ say() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 say "Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq php-cli php-curl php-sqlite3 php-mbstring php-gd rsync curl ca-certificates ffmpeg poppler-utils >/dev/null
+apt-get install -y -qq php-cli php-curl php-sqlite3 php-mbstring php-gd rsync curl ca-certificates git ffmpeg poppler-utils >/dev/null
 php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || { echo "PHP 8.2+ required (found $(php -r 'echo PHP_VERSION;')). Use Debian 12+ or Ubuntu 24.04+." >&2; exit 1; }
 
 say "Creating user and directories"
@@ -39,9 +40,23 @@ install -d -o talixio -g talixio -m 750 "$DATA"
 install -d -m 755 "$ETC"
 
 say "Copying the app to $APP"
+if [ -d "$APP" ]; then rm -rf "$APP.prev"; cp -a "$APP" "$APP.prev"; fi   # for "Restore previous version"
 rsync -a --delete --exclude .git --exclude data --exclude '*.deb' "$SRC/" "$APP/"
 chown -R root:root "$APP"
+chmod 755 "$APP/deploy/talixio-update.sh"
 ln -sf "$APP/deploy/talixio-cli" /usr/local/bin/talixio
+# version and source repository, for updates from the web app
+OWNER="$(stat -c %U "$SRC")"
+gitsrc() { runuser -u "$OWNER" -- git -C "$SRC" "$@"; }   # as the clone's owner: git refuses root on someone else's repository
+if command -v git >/dev/null && gitsrc rev-parse HEAD >/dev/null 2>&1; then
+  php -r 'file_put_contents($argv[1], json_encode(["sha" => $argv[2], "short" => substr($argv[2], 0, 7), "branch" => $argv[3], "date" => $argv[4], "subject" => $argv[5], "installed_at" => time()], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));' \
+    "$APP/VERSION.json" "$(gitsrc rev-parse HEAD)" "$(gitsrc rev-parse --abbrev-ref HEAD)" "$(gitsrc log -1 --format=%cI)" "$(gitsrc log -1 --format=%s)"
+  install -d -m 755 "$ETC"
+  printf 'SRC=%q\nOWNER=%q\nBRANCH=%q\nARGS=%q\n' "$SRC" "$OWNER" "$(gitsrc rev-parse --abbrev-ref HEAD)" "$ORIG_ARGS" > "$ETC/install.conf"
+  chmod 644 "$ETC/install.conf"
+else
+  echo "    (not a git clone: updates from the web app are off; use git clone + install.sh to get them)"
+fi
 
 NEW_PASSWORD=""
 if [ ! -f "$ENV" ]; then
@@ -103,8 +118,10 @@ fi
 
 say "Installing services"
 install -m 644 "$APP/deploy/talixio-worker.service" "$APP/deploy/talixio-web.service" /etc/systemd/system/
+install -m 644 "$APP/deploy/talixio-update.service" "$APP/deploy/talixio-update.path" "$APP/deploy/talixio-update.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable -q talixio-worker talixio-web
+[ -f "$ETC/install.conf" ] && systemctl enable -q --now talixio-update.path talixio-update.timer
 systemctl restart talixio-worker talixio-web
 
 BIND="$(grep -E '^TALIXIO_WEB_BIND=' "$ENV" | cut -d= -f2-)"; BIND="${BIND:-127.0.0.1:8080}"

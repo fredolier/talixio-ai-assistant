@@ -21,7 +21,14 @@ final class Worker
         App::$inWorker = true;
         $this->app->jobs()->recoverInterrupted();
         $tg = $cfg->telegramToken !== '' ? new Telegram($cfg, $this->app) : null;
+        $settingsFile = Settings::file($cfg->dataDir);
+        $settingsAt = @filemtime($settingsFile) ?: 0;
         while (true) {
+            clearstatcache(true, $settingsFile);
+            if ((@filemtime($settingsFile) ?: 0) !== $settingsAt && Jobs::runningCount() === 0) {
+                Log::info('settings changed in the web app: restarting the worker to apply them');
+                exit(0); // systemd restarts it with the new settings
+            }
             $this->app->store->set('worker_seen', (string)time());
             try {
                 if ($tg) $tg->poll(Jobs::runningCount() > 0 ? 3 : 10); else sleep(3);
@@ -66,6 +73,7 @@ final class Worker
             $this->guard('email', fn() => $app->email()->poll());
         }
         $this->guard('embeddings', fn() => $app->recall()->embedPending());
+        if ($now % 600 < 15) $this->guard('update', fn() => $app->updater()->notifyIfNew());
         if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));
     }
 

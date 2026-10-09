@@ -50,6 +50,7 @@ final class App
     public function approvals(): Approvals { return new Approvals($this); }
     public function skills(): Skills { return new Skills($this); }
     public function backup(): Backup { return new Backup($this); }
+    public function updater(): Updater { return new Updater($this); }
     public function calendar(): Calendar { return new Calendar($this); }
     public function mailbox(): Mailbox { return new Mailbox($this); }
     public function browserAvailable(): bool { return $this->cfg->browser !== 'off' && Browser::findBinary($this->cfg->chromeBin) !== null; }

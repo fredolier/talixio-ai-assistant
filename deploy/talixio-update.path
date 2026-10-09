@@ -1,0 +1,11 @@
+[Unit]
+Description=Talixio update requests from the web app
+
+[Path]
+PathExists=/var/lib/talixio/update.request
+PathExists=/var/lib/talixio/check.request
+PathExists=/var/lib/talixio/rollback.request
+Unit=talixio-update.service
+
+[Install]
+WantedBy=multi-user.target

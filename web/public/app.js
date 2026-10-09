@@ -401,6 +401,129 @@ async function loadChannels() {
   }
 }
 
+// ---- updates ----
+async function loadUpdate() {
+  let d;
+  try { d = await api('/api/update'); }
+  catch { if (state.updating) setTimeout(loadUpdate, 3000); return; } // the app restarts during an update
+  const box = $('#update'); box.hidden = false;
+  if (!d.installed) { box.innerHTML = '<h3>Updates</h3><p class="muted small">Updates from the app work on an installation made with <code>git clone</code> + <code>install.sh</code>.</p>'; return; }
+  const v = d.version || {}, st = d.status || {};
+  const busy = ['updating', 'checking'].includes(st.state);
+  if (state.updating && !busy && state.updateFrom && v.sha !== state.updateFrom) { toast('Updated. Reloading…'); setTimeout(() => location.reload(), 1200); return; }
+  if (state.updating && !busy && ['failed', 'done', 'rolled_back'].includes(st.state)) { state.updating = false; if (st.state !== 'failed') { setTimeout(() => location.reload(), 1200); } }
+  const when = t => t ? new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'never';
+  box.innerHTML = `<div class="row between"><h3>Updates</h3><span class="version">${esc(v.short || '?')} · ${esc((v.date || '').slice(0, 10))}</span></div>
+    <p class="small ${st.state === 'failed' ? 'error' : 'muted'}">${esc(st.message || 'Not checked yet.')} ${st.checked_at ? '· checked ' + when(st.checked_at) : ''}${d.auto ? ' · installs automatically at night' : ''}</p>
+    ${st.state === 'available' && st.commits?.length ? `<ul>${st.commits.map(c => `<li>${esc(c.subject)} <span class="muted small">${esc(c.date)}</span></li>`).join('')}</ul>` : ''}
+    ${busy || st.state === 'failed' ? `<div class="log">${esc((st.log || '').split('\n').slice(-14).join('\n'))}</div>` : ''}
+    <div class="row" style="flex-wrap:wrap">
+      ${st.state === 'available' ? '<button class="btn primary" data-u="update" type="button">Update now</button>' : ''}
+      <button class="btn" data-u="check" type="button" ${busy ? 'disabled' : ''}>${busy ? (st.state === 'checking' ? 'Checking…' : 'Updating…') : 'Check now'}</button>
+      ${st.can_rollback && !busy ? '<button class="btn ghost" data-u="rollback" type="button">Restore previous version</button>' : ''}
+    </div>`;
+  box.querySelectorAll('[data-u]').forEach(b => b.onclick = async () => {
+    if (b.dataset.u !== 'check' && b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = b.dataset.u === 'update' ? 'Confirm: back up and update' : 'Confirm restore'; return; }
+    try {
+      await post('/api/update/' + b.dataset.u);
+      if (b.dataset.u === 'check') state.checkPolls = 10; else { state.updating = true; state.updateFrom = v.sha; }
+      toast(b.dataset.u === 'check' ? 'Checking…' : b.dataset.u === 'update' ? 'Updating: a backup is made first. The app restarts at the end.' : 'Restoring…');
+    } catch (e) { toast(e.message); }
+    setTimeout(loadUpdate, 1500);
+  });
+  if (busy || state.updating) setTimeout(loadUpdate, 3000);
+  else if (state.checkPolls > 0) { state.checkPolls--; setTimeout(loadUpdate, 2000); }
+}
+
+// ---- settings ----
+function fieldInput(f) {
+  const id = 'set-' + f.key;
+  const eff = f.value !== '' ? f.value : f.default;
+  if (f.type === 'bool') return `<input id="${id}" type="checkbox" ${eff === '1' ? 'checked' : ''}>`;
+  if (f.type === 'select') return `<select id="${id}">${Object.entries(f.options).map(([v, l]) => `<option value="${esc(v)}" ${v === eff ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  if (f.type === 'multi') {
+    const on = (eff || '').split(',');
+    return `<div class="checks" id="${id}">${Object.entries(f.options).map(([v, l]) => `<label><input type="checkbox" value="${esc(v)}" ${on.includes(v) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>`;
+  }
+  if (f.type === 'secret') return `<input id="${id}" type="password" autocomplete="new-password" placeholder="${f.set ? 'Set (' + esc(f.hint.trim()) + '). Type to replace.' : 'Not set'}">`;
+  return `<input id="${id}" type="${f.type === 'number' ? 'text' : f.type === 'url' ? 'url' : 'text'}" ${f.type === 'number' ? 'inputmode="decimal"' : ''} value="${esc(f.value)}" placeholder="${esc(f.default || '')}">`;
+}
+function fieldValue(f) {
+  const el = document.getElementById('set-' + f.key);
+  if (f.type === 'bool') return el.checked ? '1' : '0';
+  if (f.type === 'multi') return [...el.querySelectorAll('input:checked')].map(i => i.value).join(',');
+  return el.value.trim();
+}
+function initialValue(f) {
+  const eff = f.value !== '' ? f.value : f.default;
+  if (f.type === 'bool') return eff === '1' ? '1' : '0';
+  if (f.type === 'multi') return (eff || '').split(',').filter(Boolean).join(',');
+  if (f.type === 'secret') return '';
+  if (f.type === 'select') return eff;
+  return f.value;
+}
+function renderGroups(groups) {
+  const box = $('#settings-groups'); const open = new Set([...box.querySelectorAll('details[open]')].map(d => d.dataset.id)); box.innerHTML = '';
+  for (const g of groups) {
+    const el = document.createElement('details'); el.className = 'card group'; el.dataset.id = g.id; if (open.has(g.id)) el.open = true;
+    const setCount = g.fields.filter(f => f.set).length;
+    el.innerHTML = `<summary><b>${esc(g.title)}</b><span class="count">${setCount ? setCount + ' set' : ''}</span></summary>
+      ${g.intro ? `<p class="muted small">${esc(g.intro)}</p>` : ''}
+      <div class="fields">${g.fields.map(f => `<div class="field ${f.type === 'bool' ? 'bool' : ''}" data-key="${f.key}">
+          ${f.type === 'bool' ? fieldInput(f) : ''}
+          <div style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1">
+            <div class="top"><label for="set-${f.key}">${esc(f.label)}</label>
+              ${f.source === 'app' ? `<span class="src">set in the app · <button type="button" data-reset="${f.key}">reset</button></span>` : f.source === 'file' ? '<span class="src">from the config file</span>' : ''}
+              ${f.type === 'secret' && f.set && f.source === 'app' ? '' : ''}</div>
+            ${f.type !== 'bool' ? fieldInput(f) : ''}
+            ${f.help ? `<p class="help">${esc(f.help)}</p>` : ''}<p class="err" hidden></p>
+          </div></div>`).join('')}
+        <div class="row"><button class="btn primary" type="button" data-save>Save</button><span class="muted small" data-state></span></div></div>`;
+    el.querySelectorAll('.field').forEach(fe => {
+      const f = g.fields.find(x => x.key === fe.dataset.key);
+      const mark = () => fe.classList.toggle('changed', fieldValue(f) !== initialValue(f));
+      fe.addEventListener('input', mark); fe.addEventListener('change', mark);
+    });
+    el.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => saveSettings(el, g, [b.dataset.reset]));
+    el.querySelector('[data-save]').onclick = () => saveSettings(el, g, []);
+    box.append(el);
+  }
+}
+async function saveSettings(el, g, reset) {
+  const changes = {};
+  if (!reset.length) for (const f of g.fields) { const v = fieldValue(f); if (v !== initialValue(f)) changes[f.key] = v; }
+  const state = el.querySelector('[data-state]');
+  if (!reset.length && !Object.keys(changes).length) { state.textContent = 'Nothing changed.'; return; }
+  el.querySelectorAll('.err').forEach(e => { e.hidden = true; });
+  try {
+    const res = await fetch('/api/settings', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Talixio': '1' }, body: JSON.stringify({ changes, reset }) });
+    const d = await res.json();
+    if (!res.ok) {
+      for (const [k, msg] of Object.entries(d.errors || {})) { const e = el.querySelector(`[data-key="${k}"] .err`); if (e) { e.textContent = msg; e.hidden = false; } }
+      state.textContent = d.error || 'Not saved.'; return;
+    }
+    renderGroups(d.groups); toast(reset.length ? 'Back to the config file value' : 'Saved. The background worker restarts to apply it.');
+    refreshStatus();
+  } catch (e) { toast(e.message); }
+}
+async function loadSettings() {
+  loadChannels().catch(e => toast(e.message));
+  loadUpdate().catch(() => {});
+  renderGroups((await api('/api/settings')).groups);
+}
+$('#doctor-run').onclick = async () => {
+  const b = $('#doctor-run'); b.disabled = true; b.textContent = 'Checking…';
+  const ul = $('#doctor'); ul.hidden = false; ul.innerHTML = '<li class="info">Running checks (this can take a few seconds)…</li>';
+  try { const { results } = await post('/api/doctor'); ul.innerHTML = results.map(r => `<li class="${r.status}">${esc(r.text)}</li>`).join(''); }
+  catch (e) { ul.innerHTML = `<li class="fail">${esc(e.message)}</li>`; }
+  b.disabled = false; b.textContent = 'Run checks';
+};
+$('#pw-form').onsubmit = async e => {
+  e.preventDefault();
+  try { await post('/api/settings/password', { current: $('#pw-current').value, new: $('#pw-new').value }); $('#pw-state').textContent = 'Password changed.'; $('#pw-current').value = $('#pw-new').value = ''; }
+  catch (err) { $('#pw-state').textContent = err.message; }
+};
+
 // ---- memory ----
 const MEM_HELP = {
   'USER.md': 'What the assistant knows about you.',
@@ -486,9 +609,10 @@ async function loadActivity() {
 }
 
 // ---- shell ----
-const VIEWS = { chat: null, tasks: loadTasks, jobs: loadJobs, memory: loadMemory, channels: loadChannels, activity: loadActivity };
+const VIEWS = { chat: null, tasks: loadTasks, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity };
 function route() {
-  const v = (location.hash.slice(1) in VIEWS) ? location.hash.slice(1) : 'chat';
+  const h = location.hash.slice(1) === 'channels' ? 'settings' : location.hash.slice(1);
+  const v = (h in VIEWS) ? h : 'chat';
   for (const k of Object.keys(VIEWS)) $('#view-' + k).hidden = k !== v;
   document.querySelectorAll('.rail a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
   VIEWS[v]?.().catch(e => toast(e.message));

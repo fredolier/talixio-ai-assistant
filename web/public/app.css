@@ -167,6 +167,38 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .skill{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px}
 .skill h4{margin:0;font-size:.95rem;font-family:var(--mono)} .skill p{margin:0;font-size:.86rem;color:var(--muted);grid-column:1/-1;overflow-wrap:anywhere}
 .skill-edit{display:flex;flex-direction:column;gap:8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.card h3{margin:0}
+.row.between{justify-content:space-between;flex-wrap:wrap}
+.doctor{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:.88rem}
+.doctor li{display:flex;gap:8px;overflow-wrap:anywhere}
+.doctor li::before{content:'•';color:var(--muted);width:1em;flex:none;text-align:center}
+.doctor li.ok::before{content:'✓';color:var(--accent)} .doctor li.fail::before{content:'!';color:var(--danger);font-weight:700}
+.doctor li.fail{color:var(--danger)}
+.groups{display:flex;flex-direction:column;gap:10px}
+.group summary{cursor:pointer;display:flex;justify-content:space-between;gap:12px;align-items:center;list-style:none}
+.group summary::-webkit-details-marker{display:none}
+.group summary::after{content:'+';color:var(--muted);font-size:1.2rem;line-height:1}
+.group[open] summary::after{content:'–'}
+.group summary .count{font-size:.78rem;color:var(--muted);margin-left:auto}
+.fields{display:flex;flex-direction:column;gap:12px;margin-top:10px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field .top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.field label{font-size:.88rem;color:var(--ink);font-weight:600}
+.field .src{font-size:.72rem;color:var(--muted)}
+.field .src button{border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;padding:0;text-decoration:underline}
+.field .help{font-size:.8rem;color:var(--muted);margin:0}
+.field input[type=checkbox]{width:auto}
+.field .checks{display:flex;flex-wrap:wrap;gap:6px 16px}
+.field .checks label{font-weight:400;display:flex;gap:6px;align-items:center}
+.field select{font:inherit;color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+.field.bool{flex-direction:row;align-items:flex-start;gap:10px}
+.field.bool input{margin-top:3px}
+.field.changed input,.field.changed select{border-color:var(--accent)}
+.field .err{color:var(--danger);font-size:.8rem;margin:0}
+.update .version{font-family:var(--mono);font-size:.85rem}
+.update ul{margin:0;padding-left:1.2em;font-size:.88rem;max-height:200px;overflow-y:auto}
+.update .log{font-family:var(--mono);font-size:.78rem;white-space:pre-wrap;max-height:200px;overflow:auto;background:var(--sunk);border-radius:8px;padding:8px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tab{font:inherit;font-size:.88rem;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:6px 12px;border-radius:99px;cursor:pointer}
 .tab[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
