@@ -19,6 +19,7 @@ final class Web
             readfile(dirname(__DIR__) . '/web/public/app.html');
             return;
         }
+        if ($path === '/api/google/callback' && $method === 'GET') { $this->googleCallback(); return; } // Google's redirect carries no session cookie (SameSite)
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
         $this->startSession();
         try {
@@ -66,6 +67,9 @@ final class Web
                 return ['ok' => true];
             })(),
             $path === '/api/heartbeats' => $this->heartbeats(),
+            $path === '/api/google' => $this->googleState(),
+            $path === '/api/google/connect' && $m === 'POST' => ['url' => $this->app->google()->authUrl(Google::redirectUri())],
+            $path === '/api/google/disconnect' && $m === 'POST' => (function () { $this->app->google()->disconnect(); return $this->googleState(); })(),
             $path === '/api/mcp' && $m === 'GET' => $this->connectors(),
             $path === '/api/mcp' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcp()->saveRaw((string)($b['raw'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/mcp/refresh' && $m === 'POST' => (function () { set_time_limit(0); $this->app->mcp()->refresh(); return $this->connectors(); })(),
@@ -146,6 +150,27 @@ final class Web
                     'read_only' => !empty($t['annotations']['readOnlyHint'])], $c['tools'] ?? [])];
         }
         return ['raw' => $mcp->raw(), 'servers' => $out, 'shell' => ['mode' => $this->app->cfg->shell, 'installed' => Shell::binary() !== null]];
+    }
+
+    private function googleState(): array
+    {
+        $g = $this->app->google(); $t = $g->tokens(); $cals = [];
+        if ($g->connected()) { try { $cals = array_column($g->calendars(), 'name'); } catch (\Throwable $e) { $err = $e->getMessage(); } }
+        return ['configured' => $g->configured(), 'connected' => $g->connected(), 'email' => $t['email'] ?? '', 'calendars' => $cals, 'error' => $err ?? null, 'redirect' => Google::redirectUri()];
+    }
+
+    /** Google sends the user back here after consent (the one-time state proves it was started from the app). */
+    private function googleCallback(): void
+    {
+        $msg = 'connected';
+        try {
+            if (isset($_GET['error'])) throw new \RuntimeException('Google: ' . $_GET['error']);
+            $this->app->google()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+        } catch (\Throwable $e) {
+            Log::warn("google: {$e->getMessage()}");
+            $msg = $e->getMessage();
+        }
+        header('Location: /?google=' . rawurlencode($msg) . '#settings', true, 303);
     }
 
     private function heartbeats(): array

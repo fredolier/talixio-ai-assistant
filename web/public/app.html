@@ -178,6 +178,21 @@
       <h3>Configuration</h3>
       <div id="settings-groups" class="groups"></div>
 
+      <details class="card group" id="google-card">
+        <summary><b>Google Calendar</b> <span id="google-badge" class="muted small"></span></summary>
+        <div class="fields">
+          <div id="google-status"></div>
+          <ol class="steps small" id="google-steps">
+            <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">console.cloud.google.com</a>, create a project (e.g. "Talixio").</li>
+            <li><a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener">Enable the Google Calendar API</a>.</li>
+            <li><a href="https://console.cloud.google.com/auth/branding" target="_blank" rel="noopener">OAuth consent screen</a>: type <i>External</i>, your email as contact. Under <i>Audience</i>, press <b>Publish app</b> ("In production"): in "Testing" Google cuts the access after 7 days. Google will show "unverified app" when you connect: that's your own app, continue.</li>
+            <li><a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener">Create an OAuth client</a>: type <i>Web application</i>, authorised redirect URI: <code id="google-redirect"></code> <button id="google-copy" class="btn small" type="button">Copy</button></li>
+            <li>Paste its client ID and secret in <b>Configuration → Calendar</b> below, save, then press Connect.</li>
+          </ol>
+          <div class="row"><button id="google-connect" class="btn primary" type="button">Connect Google Calendar</button><button id="google-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button></div>
+        </div>
+      </details>
+
       <details class="card group" id="mcp-card">
         <summary><b>Connectors (MCP)</b> <span id="mcp-badge" class="muted small"></span></summary>
         <div class="fields">

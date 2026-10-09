@@ -70,7 +70,9 @@ final class Settings
                 ['TALIXIO_MAILBOX_PASSWORD', 'Password', 'secret', ''],
                 ['TALIXIO_MAILBOX_FROM', 'Your name and address', 'text', 'Frédéric <frederic@talixio.com>'],
             ]],
-            'calendar' => ['Calendar', 'Reading: iCal subscription links (Google: Settings → your calendar → "Secret address in iCal format"). Adding events: CalDAV, after your approval.', [
+            'calendar' => ['Calendar', 'Google Calendar: fill in your OAuth client below, then press "Connect Google Calendar" (Settings → Google Calendar card; the steps are there). Other calendars: iCal links to read, CalDAV to add events. Events are always added after your approval.', [
+                ['TALIXIO_GOOGLE_CLIENT_ID', 'Google OAuth client ID', 'text', 'From console.cloud.google.com → APIs & Services → Credentials (type "Web application").'],
+                ['TALIXIO_GOOGLE_CLIENT_SECRET', 'Google OAuth client secret', 'secret', ''],
                 ['TALIXIO_CALENDAR_ICS', 'iCal links', 'secret', 'Several links separated by commas. These links give access to your calendar: keep them secret.'],
                 ['TALIXIO_CALDAV_URL', 'CalDAV calendar address', 'url', 'Nextcloud, Fastmail, iCloud…'],
                 ['TALIXIO_CALDAV_USER', 'CalDAV username', 'text', ''],

@@ -12,7 +12,8 @@ final class Calendar
     public function __construct(private App $app) {}
 
     public function enabled(): bool { return $this->app->cfg->calendarIcs !== [] || $this->canWrite(); }
-    public function canWrite(): bool { return $this->app->cfg->caldavUrl !== ''; }
+    public function canWrite(): bool { return $this->app->cfg->caldavUrl !== '' || $this->app->google()->connected(); }
+    private function caldav(): bool { return $this->app->cfg->caldavUrl !== ''; }
 
     /** Events overlapping [$from, $to). */
     public function events(int $from, int $to): array
@@ -22,7 +23,8 @@ final class Calendar
         foreach ($c->calendarIcs as $i => $url) {
             $all = array_merge($all, ICal::events($this->ics($url), $from, $to, count($c->calendarIcs) > 1 || $this->canWrite() ? 'calendar ' . ($i + 1) : ''));
         }
-        if ($this->canWrite()) {
+        if ($this->app->google()->connected()) $all = array_merge($this->app->google()->events($from, $to), $all); // first: its names win in duplicates
+        if ($this->caldav()) {
             foreach ($this->caldavQuery($from, $to) as $ics) $all = array_merge($all, ICal::events($ics, $from, $to, $c->calendarIcs ? 'CalDAV' : ''));
         }
         $seen = []; // same event in two sources
@@ -77,7 +79,11 @@ final class Calendar
     /** Create an event (called after approval). */
     public function add(string $title, int $start, int $end, bool $allDay, string $location = '', string $description = ''): string
     {
-        if (!$this->canWrite()) throw new \RuntimeException('no writable calendar: set TALIXIO_CALDAV_URL');
+        if (!$this->canWrite()) throw new \RuntimeException('no writable calendar: connect Google Calendar or set a CalDAV calendar');
+        if ($this->app->google()->connected()) {
+            $this->app->google()->insert($title, $start, $end, $allDay, $location, $description);
+            return "added to Google Calendar: $title, " . ($allDay ? date('D j M', $start) . ' (all day)' : date('D j M H:i', $start) . '–' . date('H:i', $end));
+        }
         $uid = bin2hex(random_bytes(12)) . '@talixio';
         $esc = fn(string $v) => str_replace(["\\", ';', ',', "\n"], ["\\\\", '\;', '\,', '\n'], $v);
         $dt = fn(int $t) => $allDay ? ';VALUE=DATE:' . date('Ymd', $t) : ':' . gmdate('Ymd\THis\Z', $t);

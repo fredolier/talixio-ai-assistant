@@ -1077,6 +1077,43 @@ check('heartbeat: needs a checklist to run by hand', $aj('/api/heartbeat/run', [
 $hb = $aj('/api/heartbeat/run', [], 'd');
 check('heartbeat: a quiet check is logged with what it checked', array_key_exists('message', $hb) && $hb['message'] === null && ($hb['checks'][0]['outcome'] ?? '') === 'quiet' && $hb['checklist'] === true, json_encode($hb));
 
+// Google Calendar through OAuth (fake Google)
+$gport = $freePort();
+$gs = proc_open([PHP_BINARY, '-S', "127.0.0.1:$gport", __DIR__ . '/fakes/google.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp);
+$waitPort($gport);
+@unlink(sys_get_temp_dir() . "/fake-google-$gport.json");
+\Talixio\Settings::save($ad, ['TALIXIO_GOOGLE_CLIENT_ID' => 'cid', 'TALIXIO_GOOGLE_CLIENT_SECRET' => 'sec']);
+foreach (['AUTH_URL' => '/auth', 'TOKEN_URL' => '/token', 'REVOKE_URL' => '/revoke', 'API_BASE' => '/calendar/v3'] as $k => $v) putenv("TALIXIO_GOOGLE_$k=http://127.0.0.1:$gport$v");
+putenv("TALIXIO_DATA_DIR=$ad"); $ga = App::fromEnv();
+$url = $ga->google()->authUrl('https://assistant.example/api/google/callback');
+parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+check('google: consent link asks for offline calendar access', str_contains($q['scope'], 'calendar.events') && $q['access_type'] === 'offline' && strlen($q['state']) === 32);
+try { $ga->google()->finish('good-code', 'forged'); check('google: forged state refused', false); } catch (\InvalidArgumentException) { check('google: forged state refused', true); }
+$url = $ga->google()->authUrl('https://assistant.example/api/google/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+check('google: connected, account read from the id token', $ga->google()->finish('good-code', $q['state']) === 'fred@gmail.com' && $ga->google()->connected()
+    && (fileperms("$ad/google.json") & 0777) === 0600);
+$ga = App::fromEnv();
+$ev = $ga->tools->run('calendar_events', []);
+check('google: events from the shown calendars, cancelled ones left out', str_contains($ev, 'Dentist @ Lyon') && str_contains($ev, 'School play') && str_contains($ev, '[Family]') && !str_contains($ev, 'Cancelled'), $ev);
+$r = $ga->tools->run('calendar_add', ['title' => 'Call the bank', 'start' => date('Y-m-d', strtotime('+2 days')) . ' 09:00']);
+check('google: adding an event waits for approval', str_contains($r, 'approval'));
+$ga->cfg->notify = [];
+$done = $ga->approvals()->decide((int)$ga->approvals()->pending()[0]['id'], true);
+$ins = json_decode((string)file_get_contents(sys_get_temp_dir() . "/fake-google-$gport.json"), true)['inserted'][0] ?? [];
+check('google: approved event added to the main calendar with the time zone', str_contains($done, 'Google Calendar') && ($ins['summary'] ?? '') === 'Call the bank' && ($ins['start']['timeZone'] ?? '') === 'Europe/Paris', $done . json_encode($ins));
+$tok = json_decode((string)file_get_contents("$ad/google.json"), true); $tok['expires'] = 0; file_put_contents("$ad/google.json", json_encode($tok));
+$ga->store->set('google_calendars', '');
+check('google: access token refreshed when expired', str_contains($ga->tools->run('calendar_events', []), 'Dentist') && json_decode((string)file_get_contents("$ad/google.json"), true)['access_token'] === 'at-2');
+$state = $aj('/api/google', null, 'd');
+check('google: status for the app (account, calendars, redirect address)', $state['connected'] && $state['email'] === 'fred@gmail.com' && in_array('Family', $state['calendars'], true) && str_ends_with($state['redirect'], '/api/google/callback'), json_encode($state));
+$ch = curl_init("http://127.0.0.1:$webPort/api/google/callback?code=x&state=bad"); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]); $h = (string)curl_exec($ch); curl_close($ch);
+check('google: callback works without a session and reports errors back in the app', str_contains($h, '303') && str_contains($h, 'Location: /?google=') && str_contains($h, '#settings'));
+$ga->google()->disconnect();
+check('google: disconnect forgets the tokens', !$ga->google()->connected() && !is_file("$ad/google.json"));
+foreach (['AUTH_URL', 'TOKEN_URL', 'REVOKE_URL', 'API_BASE'] as $k) putenv("TALIXIO_GOOGLE_$k");
+putenv("TALIXIO_DATA_DIR=$dir");
+proc_terminate($gs); proc_close($gs);
+
 $share = function () use ($webPort) {
     $ch = curl_init("http://127.0.0.1:$webPort/share");
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => ['text' => 'hello'], CURLOPT_HTTPHEADER => ['X-Forwarded-For: 203.0.113.50']]);

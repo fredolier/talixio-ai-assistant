@@ -214,6 +214,9 @@ conversation.
   waits for you: Approve/Reject buttons in the app, or reply "yes 12" / "no 12" on Signal,
   Telegram or email. Requests expire after 7 days. `TALIXIO_AUTO_APPROVE` skips the question for
   tools you trust.
+- **Google Calendar** (Settings → *Google Calendar*, steps shown there): with your own OAuth client
+  it reads every calendar you show in Google Calendar and adds events to your main one after your
+  approval. Publish the OAuth app "In production" (testing apps lose access after 7 days).
 - **Your calendar**: reads any iCal subscription link (Google, Outlook, iCloud...) and/or a CalDAV
   calendar; adds events through CalDAV after approval. Recurring events are expanded. Google
   Calendar is read-only for now (adding needs Google sign-in, not supported yet).

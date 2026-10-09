@@ -694,6 +694,7 @@ async function loadSettings() {
   loadUpdate().catch(() => {});
   loadSecurity();
   loadConnectors();
+  loadGoogle();
   renderGroups((await api('/api/settings')).groups);
 }
 $('#doctor-run').onclick = async () => {
@@ -708,6 +709,22 @@ $('#pw-form').onsubmit = async e => {
   try { await post('/api/settings/password', { current: $('#pw-current').value, new: $('#pw-new').value }); $('#pw-state').textContent = 'Password changed. Your other devices will ask for it again.'; $('#pw-current').value = $('#pw-new').value = ''; }
   catch (err) { $('#pw-state').textContent = err.message; }
 };
+
+// ---- Google Calendar ----
+function showGoogle(g) {
+  $('#google-badge').textContent = g.connected ? `· connected${g.email ? ' as ' + g.email : ''}` : g.configured ? '· not connected' : '· not set up';
+  $('#google-redirect').textContent = g.redirect;
+  $('#google-status').innerHTML = g.connected
+    ? `<p class="small">Reads ${g.calendars.length ? esc(g.calendars.join(', ')) : 'your calendars'}; adds events to your main calendar after your approval.</p>${g.error ? `<p class="error small">${esc(g.error)}</p>` : ''}`
+    : '';
+  $('#google-steps').hidden = g.connected;
+  $('#google-connect').hidden = g.connected; $('#google-disconnect').hidden = !g.connected;
+  $('#google-connect').disabled = !g.configured; $('#google-connect').title = g.configured ? '' : 'Fill in the client ID and secret first (step 5)';
+}
+async function loadGoogle() { try { showGoogle(await api('/api/google')); } catch {} }
+$('#google-copy').onclick = () => copyText($('#google-redirect').textContent);
+$('#google-connect').onclick = async () => { try { location.href = (await post('/api/google/connect')).url; } catch (e) { toast(e.message); } };
+$('#google-disconnect').onclick = async () => { try { showGoogle(await post('/api/google/disconnect')); toast('Google Calendar disconnected.'); } catch (e) { toast(e.message); } };
 
 // ---- connectors (MCP) and the sandbox ----
 function showConnectors(d) {
@@ -1393,6 +1410,12 @@ function setBadge(n) {
 async function handleLaunch() {
   const params = new URLSearchParams(location.search);
   const token = params.get('share');
+  if (params.has('google')) {
+    const g = params.get('google');
+    history.replaceState(null, '', '/#settings');
+    toast(g === 'connected' ? 'Google Calendar connected.' : g);
+    if (g === 'connected') setTimeout(() => { $('#google-card').open = true; $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
+  }
   if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', '/' + location.hash);
   if (token) {
     try {

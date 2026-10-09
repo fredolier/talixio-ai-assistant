@@ -54,6 +54,7 @@ final class App
     public function updater(): Updater { return new Updater($this); }
     public function calendar(): Calendar { return new Calendar($this); }
     public function mailbox(): Mailbox { return new Mailbox($this); }
+    public function google(): Google { return new Google($this); }
     public function shell(): Shell { return new Shell($this); }
     public function mcp(): Mcp { return new Mcp($this); }
     public function browserAvailable(): bool { return $this->cfg->browser !== 'off' && Browser::findBinary($this->cfg->chromeBin) !== null; }
