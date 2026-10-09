@@ -307,7 +307,29 @@ tr:last-child td{border-bottom:0}
 .rail .more{display:none}
 .more-card a{padding:12px 4px;border-bottom:1px solid var(--line);color:var(--ink);text-decoration:none;font-weight:500}
 
+/* desktop: the menu folds down to its icons (remembered; folded by default on narrow screens) */
+.shell{transition:grid-template-columns .18s ease}
+.brand{position:relative}
+.rail-toggle{margin-left:auto;border:0;background:transparent;color:var(--muted);padding:5px;border-radius:8px;cursor:pointer;display:grid;place-items:center}
+.rail-toggle:hover{background:var(--sunk);color:var(--ink)}
+.rail-toggle svg{width:18px;height:18px}
+#logout{display:flex;align-items:center;gap:8px}
+#logout svg{width:16px;height:16px}
+.rail a span,.brand span,#logout span{white-space:nowrap;overflow:hidden}
+.shell.collapsed{grid-template-columns:64px 1fr}
+.shell.collapsed .rail{padding:18px 8px;align-items:center}
+.shell.collapsed .brand{flex-direction:column;padding:0 0 14px;gap:12px}
+.shell.collapsed .brand span,.shell.collapsed .rail a span,.shell.collapsed #logout span,.shell.collapsed .status span,.shell.collapsed #install-btn{display:none}
+.shell.collapsed .rail-toggle{margin:0}
+.shell.collapsed .rail-toggle svg{transform:scaleX(-1)}
+.shell.collapsed .rail a{justify-content:center;width:44px;height:40px;padding:0}
+.shell.collapsed .rail-foot{align-items:center;padding:8px 0}
 @media (max-width:760px){
+  .rail-toggle{display:none}
+  .shell.collapsed{grid-template-columns:1fr}
+  .shell.collapsed .rail{padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));align-items:stretch}
+  .shell.collapsed .rail a{width:auto;height:auto;padding:6px 10px}
+  .shell.collapsed .rail a span{display:inline}
   .rail a.secondary{display:none}
   .rail .more{display:flex;flex-direction:column;align-items:center;gap:2px;font:inherit;font-size:.7rem;padding:6px 10px;background:none;border:0;color:var(--muted);cursor:pointer}
   .rail .more.active{color:var(--ink);font-weight:600}

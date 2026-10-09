@@ -1101,6 +1101,25 @@ async function refreshStatus() {
 
 function showLogin() { $('#shell').hidden = true; $('#login').hidden = false; clearInterval(state.pollTimer); }
 
+// ---- the menu on the left folds down to its icons ----
+function railCollapsed() {
+  let v = null; try { v = localStorage.getItem('talixio.rail'); } catch {}
+  return v ? v === 'icons' : innerWidth < 1100; // narrow desktop windows start folded
+}
+function applyRail(collapsed) {
+  $('#shell').classList.toggle('collapsed', collapsed);
+  const t = $('#rail-toggle'); const label = collapsed ? 'Expand the menu' : 'Collapse the menu';
+  t.title = label; t.setAttribute('aria-label', label); t.setAttribute('aria-expanded', String(!collapsed));
+  // names stay reachable as tooltips and for screen readers
+  document.querySelectorAll('.rail a, #logout').forEach(a => { const n = a.querySelector('span')?.textContent || ''; if (collapsed) a.title = n; else a.removeAttribute('title'); a.setAttribute('aria-label', n); });
+}
+$('#rail-toggle').onclick = () => {
+  const c = !$('#shell').classList.contains('collapsed');
+  try { localStorage.setItem('talixio.rail', c ? 'icons' : 'full'); } catch {}
+  applyRail(c);
+};
+applyRail(railCollapsed());
+
 let start = startApp;
 async function startApp() {
   $('#login').hidden = true; $('#shell').hidden = false;
