@@ -163,6 +163,7 @@ async function send(opts = {}) {
   const input = $('#input'); const text = input.value.trim();
   const files = opts.files || state.pending.filter(f => f.id).map(f => f.id);
   if ((!text && !files.length) || state.sending) return;
+  if (!navigator.onLine) { toast('You are offline. Your message stays here: send it when you are back online.'); return; }
   if (state.pending.some(f => !f.id)) { toast('Wait for the upload to finish.'); return; }
   state.sending = true; $('#send').disabled = true;
   input.value = ''; autosize();
@@ -222,6 +223,7 @@ async function loadApprovals() {
   let list = [];
   try { list = (await api('/api/approvals')).approvals; } catch { return; }
   const box = $('#approvals'); box.hidden = !list.length; box.innerHTML = '';
+  setBadge(list.length);
   for (const a of list) {
     const el = document.createElement('div'); el.className = 'approval';
     el.innerHTML = `<span class="label">Needs your approval · #${a.id}</span>
@@ -650,7 +652,7 @@ async function start() {
 
 $('#login-form').onsubmit = async e => {
   e.preventDefault(); $('#login-error').textContent = '';
-  try { await post('/api/login', { password: $('#password').value }); $('#password').value = ''; start(); }
+  try { await post('/api/login', { password: $('#password').value }); $('#password').value = ''; await start(); handleLaunch(); }
   catch (err) { $('#login-error').textContent = err.message; }
 };
 $('#logout').onclick = async () => { try { await post('/api/logout'); } catch {} showLogin(); };
@@ -700,6 +702,99 @@ $('#mem-save').onclick = async () => {
 };
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 window.addEventListener('hashchange', route);
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
-api('/api/status').then(start).catch(() => showLogin());
+// ---- installable app (PWA) ----
+const pwa = { prompt: null, standalone: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true };
+function banner(text, action, onAction, kind = '') {
+  const b = $('#banner'); b.className = 'banner ' + kind; b.hidden = !text; $('#banner-text').textContent = text || '';
+  const a = $('#banner-action'); a.hidden = !action; a.textContent = action || ''; a.onclick = onAction || null;
+}
+function platform() {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  if (/Safari/.test(ua) && !/Chrome|Chromium|Edg/.test(ua)) return 'mac-safari';
+  if (/Firefox/.test(ua)) return 'firefox';
+  return 'desktop';
+}
+function installHelp() {
+  const steps = {
+    ios: '<ol><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button (square with an arrow).</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>Open Talixio from your home screen, then turn on notifications in Settings.</li></ol>',
+    'mac-safari': '<ol><li>In Safari\'s menu bar choose <b>File → Add to Dock…</b></li><li>Click <b>Add</b>: Talixio opens in its own window from the Dock.</li></ol>',
+    firefox: '<p>Firefox on computers can\'t install web apps. Use Chrome, Edge or Safari, or on Android use Firefox\'s menu → <b>Install</b>.</p>',
+    android: '<ol><li>Open the browser menu (⋮).</li><li>Choose <b>Install app</b> or <b>Add to Home screen</b>.</li></ol>',
+    desktop: '<ol><li>Click the install icon at the right of the address bar (a screen with an arrow), or open the menu (⋮).</li><li>Choose <b>Install Talixio</b>.</li></ol>',
+  };
+  $('#install-steps').innerHTML = steps[platform()] || steps.desktop;
+  $('#install-help').hidden = false;
+}
+async function install() {
+  if (pwa.prompt) { pwa.prompt.prompt(); const { outcome } = await pwa.prompt.userChoice; pwa.prompt = null; if (outcome === 'accepted') toast('Installing Talixio…'); updateInstallUi(); }
+  else installHelp();
+}
+function updateInstallUi() {
+  const can = !pwa.standalone;
+  $('#install-btn').hidden = !(can && pwa.prompt);
+  $('#install-card').hidden = !can;
+}
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); pwa.prompt = e; updateInstallUi(); });
+window.addEventListener('appinstalled', () => { pwa.prompt = null; toast('Talixio is installed.'); updateInstallUi(); });
+$('#install-btn').onclick = install;
+$('#install-card-btn').onclick = install;
+$('#install-close').onclick = () => { $('#install-help').hidden = true; };
+updateInstallUi();
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname))) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+    const offerUpdate = w => banner('A new version of Talixio is ready.', 'Reload', () => { state.updateAccepted = true; w.postMessage('update'); });
+    if (reg.waiting && navigator.serviceWorker.controller) offerUpdate(reg.waiting);
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offerUpdate(w); });
+    });
+    let reloading = false;
+    // reload only when the user accepted an update (the first install also changes the controller)
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloading && state.updateAccepted) { reloading = true; location.reload(); } });
+    setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000); // installed apps stay open for days
+  } catch {}
+}
+function onlineState() {
+  if (navigator.onLine) { if ($('#banner').classList.contains('offline')) banner(''); $('#send').disabled = state.sending; }
+  else { banner('You are offline: you can read the conversation; sending works again once you are back online.', '', null, 'offline'); }
+}
+window.addEventListener('online', () => { onlineState(); poll(); refreshStatus(); });
+window.addEventListener('offline', onlineState);
+if (!navigator.onLine) onlineState();
+
+/** Badge on the app icon: pending approvals. */
+function setBadge(n) {
+  if (!('setAppBadge' in navigator)) return;
+  (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+}
+
+/** Shared from another app, or launched from a shortcut. */
+async function handleLaunch() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('share');
+  if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', '/' + location.hash);
+  if (token) {
+    try {
+      const d = await post('/api/share/claim', { token });
+      if (d.text) { $('#input').value = d.text; autosize(); }
+      for (const f of d.files) { state.pending.push({ id: f.id, info: f }); }
+      renderPending();
+      location.hash = '#chat';
+      toast('Shared content ready: add a message if you like, then send.');
+      $('#input').focus();
+    } catch (e) { toast(e.message); }
+  }
+  if (params.get('action') === 'record') {
+    location.hash = '#chat';
+    banner('Ready to record a meeting.', 'Start recording', () => { banner(''); startRecording(); });
+  }
+}
+
+registerServiceWorker();
+api('/api/status').then(async () => { await start(); handleLaunch(); }).catch(() => showLogin());

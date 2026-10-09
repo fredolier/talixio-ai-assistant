@@ -1,2 +1,43 @@
-{"name":"Talixio","short_name":"Talixio","start_url":"/#chat","display":"standalone","background_color":"#0e7c6b","theme_color":"#0e7c6b",
- "icons":[{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "id": "/",
+  "name": "Talixio",
+  "short_name": "Talixio",
+  "description": "Your personal AI assistant, on your own server.",
+  "lang": "en",
+  "start_url": "/?source=app#chat",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#f2f5f4",
+  "theme_color": "#0e7c6b",
+  "categories": ["productivity", "utilities"],
+  "launch_handler": { "client_mode": ["focus-existing", "auto"] },
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "New message", "short_name": "Chat", "url": "/?source=shortcut#chat", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Record a meeting", "short_name": "Record", "url": "/?action=record#chat", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Scheduled tasks", "short_name": "Tasks", "url": "/?source=shortcut#tasks", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [{ "name": "files[]", "accept": ["image/*", "application/pdf", "audio/*", "video/mp4", "text/plain", ".pdf", ".m4a", ".mp3", ".ogg", ".opus", ".wav", ".txt"] }]
+    }
+  },
+  "screenshots": [
+    { "src": "/screenshots/wide.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Chat with your assistant" },
+    { "src": "/screenshots/narrow.png", "sizes": "390x844", "type": "image/png", "form_factor": "narrow", "label": "On your phone" }
+  ]
+}

@@ -3,11 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<meta name="theme-color" content="#0e7c6b">
+<meta name="theme-color" content="#f2f5f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1412" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Your personal AI assistant, on your own server.">
+<meta name="application-name" content="Talixio">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Talixio">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Talixio</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="icon" href="/icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
@@ -33,6 +41,7 @@
     <a href="#settings" data-view="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
     <a href="#activity" data-view="activity"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Activity</span></a>
     <div class="rail-foot">
+      <button id="install-btn" class="btn small primary" type="button" hidden>Install app</button>
       <div id="status" class="status" title="Background worker"><i></i><span>…</span></div>
       <button id="logout" class="link" type="button">Sign out</button>
     </div>
@@ -106,6 +115,11 @@
 
       <div id="update" class="card update" hidden></div>
 
+      <div class="card" id="install-card">
+        <div class="row between"><h3>App on your devices</h3><button id="install-card-btn" class="btn primary" type="button">Install the app</button></div>
+        <p class="muted small" id="install-card-text">Install Talixio like a native app on your computer and phone: its own window and icon, notifications, and "Share to Talixio" from other apps on Android.</p>
+      </div>
+
       <div class="card">
         <div class="row between"><h3>Check configuration</h3><button id="doctor-run" class="btn" type="button">Run checks</button></div>
         <p class="muted small">Tests logins (email, calendar…) and makes one short call per model tier.</p>
@@ -140,6 +154,14 @@
       <div class="table-wrap"><table id="tools"><thead><tr><th>When</th><th>Tool</th><th>Input</th><th>Result</th></tr></thead><tbody></tbody></table></div>
     </section>
   </main>
+</div>
+<div id="banner" class="banner" role="status" hidden><span id="banner-text"></span><button id="banner-action" class="btn small" type="button" hidden></button></div>
+<div id="install-help" class="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-labelledby="install-title">
+    <h3 id="install-title">Install Talixio</h3>
+    <div id="install-steps"></div>
+    <button id="install-close" class="btn" type="button">Close</button>
+  </div>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="/app.js"></script>

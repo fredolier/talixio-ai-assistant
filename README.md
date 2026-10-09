@@ -87,6 +87,17 @@ days; wrong passwords are slowed down). Chat channels only answer allowlisted se
 If your reverse proxy is on another machine, the hop between it and the VM is plain HTTP: bind to
 the VM's private IP (or `0.0.0.0:8080`) and firewall port 8080 to the proxy only.
 
+### Install the app (computer and phone)
+Talixio is an installable web app (PWA): its own window and icon, opens instantly (also offline),
+notifications, a badge for pending approvals, and shortcuts (New message, Record a meeting, Tasks).
+- **Chrome / Edge (Windows, Mac, Linux)**: the install icon in the address bar, or Settings → *Install the app*.
+- **Android (Chrome)**: menu ⋮ → *Install app*. Then **Share → Talixio** from any app sends photos,
+  PDFs, voice notes, links or text to the assistant (they wait in the message box until you press Send).
+- **iPhone / iPad (Safari)**: Share → *Add to Home Screen* (iOS has no "share to" for web apps).
+- **Mac (Safari)**: File → *Add to Dock*.
+HTTPS is required (your domain behind Caddy). When a new version is installed on the server, open
+apps show "A new version is ready – Reload".
+
 ### Push notifications from the web app
 Open the app over HTTPS, go to **Channels** and press **Turn on for this device** (on iPhone/iPad:
 first Share → Add to Home Screen, then open it from there). Reminders, briefings and job results

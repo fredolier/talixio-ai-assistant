@@ -9,7 +9,10 @@ final class Web
 
     public function handle(string $method, string $path): void
     {
+        if ($path === '/sw.js') { $this->serviceWorker(); return; }
+        if ($path === '/share' && $method === 'POST') { $this->shareInbox(); return; }
         if ($path === '/' || !str_starts_with($path, '/api/')) {
+            header('Cache-Control: no-cache');
             header('Content-Type: text/html; charset=utf-8');
             header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'");
             readfile(dirname(__DIR__) . '/web/public/app.html');
@@ -26,6 +29,7 @@ final class Web
             if ($path === '/api/chat' && $method === 'POST' && !empty($body['stream'])) { $this->chatStream($body); return; }
             if ($path === '/api/files' && $method === 'POST') { $this->json($this->upload()); return; }
             if (preg_match('#^/api/files/(\d+)$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1]); return; }
+            if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
             $this->json($this->route($method, $path, $body));
         } catch (\Throwable $e) {
             Log::error("web: {$e->getMessage()}");
@@ -116,6 +120,64 @@ final class Web
             ['id' => 'ntfy', 'name' => 'ntfy', 'state' => $notify['ntfy'], 'error' => $err('ntfy'), 'chat' => false,
              'detail' => $c->ntfyUrl ? 'Topic configured' : 'Set it up below: Configuration → Notifications'],
         ]];
+    }
+
+    /** The service worker, versioned by the app's files so every update refreshes installed apps. */
+    private function serviceWorker(): void
+    {
+        $root = dirname(__DIR__);
+        $sig = '';
+        foreach (array_merge(glob("$root/web/public/*") ?: [], ["$root/web/sw.template.js", "$root/VERSION.json"]) as $f) $sig .= $f . @filemtime($f) . @filesize($f);
+        header('Content-Type: text/javascript; charset=utf-8');
+        header('Cache-Control: no-cache');
+        header('Service-Worker-Allowed: /');
+        echo str_replace('__VERSION__', substr(sha1($sig), 0, 12), (string)file_get_contents("$root/web/sw.template.js"));
+    }
+
+    /**
+     * Share target: content shared from another app (photo, PDF, voice note, link, text) arrives here.
+     * It is kept in a quarantined inbox (limited size, deleted after an hour) and only becomes a
+     * message once the signed-in user claims it in the app and presses Send.
+     */
+    private function shareInbox(): void
+    {
+        $inbox = $this->app->cfg->dataDir . '/share-inbox';
+        if (!is_dir($inbox)) mkdir($inbox, 0700, true);
+        foreach (glob("$inbox/*", GLOB_ONLYDIR) ?: [] as $d) if (filemtime($d) < time() - 3600) exec('rm -rf ' . escapeshellarg($d));
+        $pending = glob("$inbox/*", GLOB_ONLYDIR) ?: [];
+        if (count($pending) >= 5) { usort($pending, fn($a, $b) => filemtime($a) <=> filemtime($b)); exec('rm -rf ' . escapeshellarg($pending[0])); }
+        $token = bin2hex(random_bytes(16));
+        $dir = "$inbox/$token"; mkdir($dir, 0700);
+        $text = trim(implode("\n", array_filter([trim((string)($_POST['title'] ?? '')), trim((string)($_POST['text'] ?? '')), trim((string)($_POST['url'] ?? ''))], 'strlen')));
+        $files = []; $total = 0;
+        $up = $_FILES['files'] ?? null;
+        if ($up) {
+            $names = (array)$up['name']; $tmps = (array)$up['tmp_name']; $errs = (array)$up['error']; $types = (array)$up['type']; $sizes = (array)$up['size'];
+            foreach ($names as $i => $name) {
+                if (($errs[$i] ?? 1) !== UPLOAD_ERR_OK || count($files) >= 10 || ($total += (int)$sizes[$i]) > 100_000_000) continue;
+                $n = count($files);
+                if (move_uploaded_file($tmps[$i], "$dir/$n")) $files[] = ['name' => (string)$name, 'type' => (string)($types[$i] ?? '')];
+            }
+        }
+        file_put_contents("$dir/meta.json", json_encode(['text' => mb_substr($text, 0, 20000), 'files' => $files]));
+        header('Location: /?share=' . $token . '#chat', true, 303);
+    }
+
+    /** Signed-in user takes a shared item: files are stored like uploads and prefilled in the composer. */
+    private function shareClaim(string $token): array
+    {
+        if (!preg_match('/^[a-f0-9]{32}$/', $token)) $this->fail(400, 'bad share');
+        $dir = $this->app->cfg->dataDir . "/share-inbox/$token";
+        $meta = json_decode((string)@file_get_contents("$dir/meta.json"), true);
+        if (!is_array($meta)) $this->fail(404, 'This share has expired. Share it again.');
+        $out = [];
+        foreach ($meta['files'] as $i => $f) {
+            if (!is_file("$dir/$i")) continue;
+            $id = $this->app->files()->save("$dir/$i", $f['name'] ?: 'shared-file', $f['type']);
+            $out[] = array_intersect_key($this->app->files()->get($id), array_flip(['id', 'name', 'mime', 'kind', 'size', 'duration']));
+        }
+        exec('rm -rf ' . escapeshellarg($dir));
+        return ['text' => (string)$meta['text'], 'files' => $out];
     }
 
     private function saveSettings(array $b): array
