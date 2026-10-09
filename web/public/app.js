@@ -639,11 +639,12 @@ const DL_SVG = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"
 const isVideo = f => (f.mime || '').startsWith('video/');
 function fileRow(f, sub) {
   const el = document.createElement('div'); el.className = 'lib-row'; el.draggable = true; el.tabIndex = 0; el.setAttribute('role', 'button');
-  const label = f.note ? 'NOTE' : isVideo(f) ? 'VID' : KIND_LABEL[f.kind] || 'FILE';
+  const ext = (f.name.match(/\.([a-z0-9]{1,4})$/i) || [])[1];
+  const label = f.note ? 'NOTE' : isVideo(f) ? 'VID' : ['text', 'office'].includes(f.kind) && ext ? ext.toUpperCase() : KIND_LABEL[f.kind] || 'FILE';
   const ico = f.kind === 'image' || f.kind === 'pdf' ? `<img src="/api/files/${f.id}/thumb" alt="" loading="lazy">` : label;
   const status = f.status === 'pending' || f.status === 'processing' ? '<span class="pill pending">reading…</span>' : f.status === 'failed' ? '<span class="pill failed">unreadable</span>' : '';
   el.innerHTML = `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>`
-    + `<span class="row-end">${status}<a class="btn ghost icon dl" href="/api/files/${f.id}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a></span>`;
+    + `<span class="row-end">${status}<a class="btn ghost icon dl" href="/api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a></span>`;
   el.querySelector('.dl').onclick = e => e.stopPropagation();
   const th = el.querySelector('.ico img'); if (th) th.onerror = () => th.replaceWith(label);
   el.onclick = () => openFile(f.id);
@@ -695,6 +696,9 @@ function libInline(value, placeholder, onOk) {
   form.onsubmit = async e => { e.preventDefault(); try { await onOk(input.value.trim()); form.hidden = true; } catch (err) { toast(err.message); } };
 }
 
+const fileUrl = f => `/api/files/${f.id}/file/${encodeURIComponent(f.name)}`;
+const viewUrl = f => `/api/files/${f.id}/view/${encodeURIComponent(f.name)}`;
+const RENDERED = ['text', 'office'];
 async function openFile(id) {
   const v = $('#viewer'), body = $('#viewer-body');
   let d;
@@ -703,38 +707,51 @@ async function openFile(id) {
   v.hidden = false; $('#viewer-form').hidden = true;
   $('#viewer-name').textContent = f.name;
   $('#viewer-path').textContent = `${f.folder} · ${fmtSize(f.size)} · ${fmtDate(f.created)} · #${f.id}`;
-  const viewable = ['image', 'pdf', 'audio'].includes(f.kind) || (f.kind === 'text' && /^text\/(plain|markdown|csv)/.test(f.mime));
-  $('#viewer-open').href = `/api/files/${f.id}`; $('#viewer-open').hidden = !viewable;
-  $('#viewer-download').href = `/api/files/${f.id}?download=1`; $('#viewer-download').setAttribute('download', f.name);
+  const rendered = RENDERED.includes(f.kind);
+  const opens = rendered || ['image', 'pdf', 'audio'].includes(f.kind);
+  $('#viewer-open').href = rendered ? viewUrl(f) : fileUrl(f); $('#viewer-open').hidden = !opens;
+  $('#viewer-download').href = fileUrl(f) + '?download=1'; $('#viewer-download').setAttribute('download', f.name);
   const del = $('#viewer-delete'); del.dataset.confirm = ''; del.textContent = 'Delete';
   const editable = f.note || (f.kind === 'text' && f.size < 2_000_000 && !/\.(html?|eml)$/i.test(f.name));
-  const markdown = editable && (f.note || /\.(md|markdown)$/i.test(f.name));
+  const hasText = !editable && (f.kind === 'office' || /\.(html?|eml)$/i.test(f.name)) && d.text;
+  const tabs = [rendered && ['view', 'View'], editable && ['edit', 'Edit'], hasText && ['text', 'Text only']].filter(Boolean);
   let html = '';
-  if (f.kind === 'image') html += `<a href="/api/files/${f.id}" target="_blank" rel="noopener" title="Open full size"><img src="/api/files/${f.id}" alt="${esc(f.name)}"></a>`;
-  if (f.kind === 'audio') html += isVideo(f) ? `<video controls playsinline preload="metadata" src="/api/files/${f.id}"></video>` : `<audio controls preload="metadata" src="/api/files/${f.id}"></audio>`;
+  if (f.kind === 'image') html += `<a href="${fileUrl(f)}" target="_blank" rel="noopener" title="Open full size"><img src="${fileUrl(f)}" alt="${esc(f.name)}"></a>`;
+  if (f.kind === 'audio') html += isVideo(f) ? `<video controls playsinline preload="metadata" src="${fileUrl(f)}"></video>` : `<audio controls preload="metadata" src="${fileUrl(f)}"></audio>`;
   if (f.kind === 'pdf' && d.pages) {
     const first = Math.min(d.pages, 5);
     html += `<div class="pdf-pages" id="pdf-pages">${Array.from({ length: first }, (_, i) => pdfPageHtml(f.id, i + 1, d.pages)).join('')}</div>`
       + (d.pages > first ? `<button id="pdf-more" class="btn small" type="button" data-next="${first + 1}">Show more pages (${d.pages - first} left)</button>` : '');
   }
-  if (markdown) html += `<div class="row"><div class="tabs" role="tablist"><button class="tab" id="tab-view" type="button" aria-selected="true">View</button><button class="tab" id="tab-edit" type="button" aria-selected="false">Edit</button></div></div>`
-    + `<div id="viewer-md" class="viewer-md bubble">${md(d.text)}</div>`;
-  if (editable) html += `<div id="viewer-edit-box" class="viewer-edit" ${markdown ? 'hidden' : ''}><textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea><div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span></div></div>`;
-  else if (f.status === 'pending' || f.status === 'processing') html += '<p class="muted">Reading this file… it will be searchable in a moment.</p>';
-  else if (d.text) html += `<h4>${f.kind === 'audio' ? 'Transcript' : f.kind === 'image' ? 'What the assistant sees' : 'Text'}</h4><pre class="extracted">${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
-  else if (f.kind === 'other') html += '<p class="muted">This kind of file cannot be read; it is stored and can be downloaded.</p>';
+  if (tabs.length > 1) html += `<div class="tabs" role="tablist">${tabs.map(([k, l], i) => `<button class="tab" data-tab="${k}" type="button" role="tab" aria-selected="${i === 0}">${l}</button>`).join('')}</div>`;
+  if (rendered) html += `<iframe id="viewer-frame" class="doc-frame" data-pane="view" title="${esc(f.name)}" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" src="${viewUrl(f)}"></iframe>`;
+  if (editable) html += `<div id="viewer-edit-box" class="viewer-edit" data-pane="edit" ${rendered ? 'hidden' : ''}><textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea><div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span></div></div>`;
+  if (hasText) html += `<pre class="extracted" data-pane="text" hidden>${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
+  if (!rendered) {
+    if (f.status === 'pending' || f.status === 'processing') html += '<p class="muted">Reading this file… it will be searchable in a moment.</p>';
+    else if (d.text && f.kind !== 'pdf') html += `<h4>${f.kind === 'audio' ? 'Transcript' : f.kind === 'image' ? 'What the assistant sees' : 'Text'}</h4><pre class="extracted">${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
+    else if (f.kind === 'other') html += '<p class="muted">This kind of file cannot be shown here; download it to open it.</p>';
+  }
   body.innerHTML = html;
+  body.classList.toggle('framed', rendered);
   const more = $('#pdf-more');
   if (more) more.onclick = () => {
     const from = +more.dataset.next, to = Math.min(d.pages, from + 9);
     for (let n = from; n <= to; n++) $('#pdf-pages').insertAdjacentHTML('beforeend', pdfPageHtml(f.id, n, d.pages));
     more.dataset.next = to + 1; more.textContent = `Show more pages (${d.pages - to} left)`; more.hidden = to >= d.pages;
   };
-  const showTab = edit => { $('#tab-view').setAttribute('aria-selected', String(!edit)); $('#tab-edit').setAttribute('aria-selected', String(edit)); $('#viewer-md').hidden = edit; $('#viewer-edit-box').hidden = !edit; if (edit) $('#viewer-editor').focus(); else $('#viewer-md').innerHTML = md($('#viewer-editor').value); };
-  if (markdown) { $('#tab-view').onclick = () => showTab(false); $('#tab-edit').onclick = () => showTab(true); }
+  body.querySelectorAll('[data-tab]').forEach(t => t.onclick = () => {
+    body.querySelectorAll('[data-tab]').forEach(o => o.setAttribute('aria-selected', String(o === t)));
+    body.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== t.dataset.tab; });
+    if (t.dataset.tab === 'edit') $('#viewer-editor').focus();
+  });
   $('#viewer-save')?.addEventListener('click', async () => {
-    try { await post('/api/library/note', { id: f.id, folder: f.folder, name: f.name, content: $('#viewer-editor').value }); $('#viewer-state').textContent = 'Saved'; loadLibrary(); }
-    catch (e) { toast(e.message); }
+    try {
+      await post('/api/library/note', { id: f.id, folder: f.folder, name: f.name, content: $('#viewer-editor').value });
+      $('#viewer-state').textContent = 'Saved';
+      const fr = $('#viewer-frame'); if (fr) fr.src = viewUrl(f) + '?t=' + Date.now();
+      loadLibrary();
+    } catch (e) { toast(e.message); }
   });
   $('#viewer-editor')?.addEventListener('input', () => { $('#viewer-state').textContent = 'Unsaved changes'; });
 }
@@ -749,7 +766,7 @@ function pdfPageHtml(id, n, total) {
 }
 async function newNote() {
   const folder = lib.folder === '/' ? '/Notes' : lib.folder;
-  try { const { file } = await post('/api/library/note', { folder, name: '', content: '# ' }); await loadLibrary(); await openFile(file.id); $('#tab-edit')?.click(); }
+  try { const { file } = await post('/api/library/note', { folder, name: '', content: '# ' }); await loadLibrary(); await openFile(file.id); $('#viewer-body [data-tab=edit]')?.click(); }
   catch (e) { toast(e.message); }
 }
 

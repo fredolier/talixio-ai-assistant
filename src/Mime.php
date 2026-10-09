@@ -13,6 +13,28 @@ final class Mime
         return ['headers' => $headers, 'text' => self::text($headers, $body)];
     }
 
+    /** The HTML body of an email (first text/html part), or '' when it only has text. */
+    public static function htmlBody(string $raw): string
+    {
+        [$head, $body] = self::split($raw);
+        return self::findHtml(self::headers($head), $body);
+    }
+
+    private static function findHtml(array $headers, string $body): string
+    {
+        $type = strtolower($headers['content-type'] ?? 'text/plain');
+        if (str_starts_with($type, 'text/html')) return self::decode($headers, $body);
+        if (!str_starts_with($type, 'multipart/') || ($b = self::param($headers['content-type'], 'boundary')) === '') return '';
+        foreach (array_slice(explode("--$b", $body), 1) as $part) {
+            if (str_starts_with($part, '--')) break;
+            [$ph, $pb] = self::split(ltrim($part, "\n"));
+            $phs = self::headers($ph);
+            if (str_contains(strtolower($phs['content-disposition'] ?? ''), 'attachment')) continue;
+            if (($h = self::findHtml($phs, $pb)) !== '') return $h;
+        }
+        return '';
+    }
+
     private static function split(string $raw): array
     {
         $raw = str_replace("\r\n", "\n", $raw);

@@ -28,7 +28,9 @@ final class Web
             session_write_close(); // don't hold the session lock during long model calls
             if ($path === '/api/chat' && $method === 'POST' && !empty($body['stream'])) { $this->chatStream($body); return; }
             if ($path === '/api/files' && $method === 'POST') { $this->json($this->upload()); return; }
-            if (preg_match('#^/api/files/(\d+)$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1], !empty($_GET['download'])); return; }
+            // the file name at the end of the URL keeps its extension in the address bar, tabs and "save as"
+            if (preg_match('#^/api/files/(\d+)(?:/file/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1], !empty($_GET['download'])); return; }
+            if (preg_match('#^/api/files/(\d+)/view(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveView((int)$fm[1]); return; }
             if (preg_match('#^/api/files/(\d+)/(thumb|page/(\d+))$#', $path, $fm) && $method === 'GET') { $this->servePreview((int)$fm[1], (int)($fm[3] ?? 0)); return; }
             if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/')); return; }
             if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
@@ -320,6 +322,23 @@ final class Web
         // PDFs need the browser's own viewer, which a sandboxed response blocks; they still get no scripts or network access
         $this->sendPath($f['path'], $type, self::disposition($inline ? 'inline' : 'attachment', $f['name']),
             $f['kind'] === 'pdf' && $inline ? "default-src 'none'; object-src 'self'" : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox");
+    }
+
+    /** A readable page for documents (Markdown, HTML, Office, CSV, email...); media open natively. */
+    private function serveView(int $id): void
+    {
+        $f = $this->app->files()->get($id);
+        if (!$f || !is_file($f['path'])) $this->fail(404, 'not found');
+        if (!Preview::renders($f)) { $this->serveFile($id); return; }
+        $html = (new Preview($this->app))->render($f);
+        while (ob_get_level() > 0) ob_end_clean();
+        header('Content-Type: text/html; charset=utf-8');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, no-cache');
+        // own opaque origin, no scripts, no forms; pictures and fonts of saved pages may load
+        header("Content-Security-Policy: default-src 'none'; img-src data: https:; style-src 'unsafe-inline' https:; font-src data: https:; sandbox allow-popups allow-popups-to-escape-sandbox");
+        header('Referrer-Policy: no-referrer');
+        echo $html;
     }
 
     private function servePreview(int $id, int $page): void

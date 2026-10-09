@@ -667,8 +667,8 @@ $mk = function (string $name, string $content) use ($ld) { $p = "$ld/up-" . bin2
 $zip = function (array $entries) use ($ld) { $p = "$ld/z-" . bin2hex(random_bytes(3)) . '.zip'; $z = new ZipArchive(); $z->open($p, ZipArchive::CREATE); foreach ($entries as $n => $c) $z->addFromString($n, $c); $z->close(); return $p; };
 $docx = $zip(['word/document.xml' => '<w:document><w:body><w:p><w:r><w:t>Facture n°42 pour Alice</w:t></w:r></w:p><w:p><w:r><w:t>Montant : 1 200 &amp; TVA</w:t></w:r></w:p></w:body></w:document>']);
 $idDocx = $lf->save($docx, 'facture-alice.docx', 'application/octet-stream', '/Clients/Alice');
-$xlsx = $zip(['xl/sharedStrings.xml' => '<sst><si><t>Client</t></si><si><t>Montant</t></si><si><t>Bob</t></si></sst>',
-    'xl/worksheets/sheet1.xml' => '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>870</v></c></row></sheetData></worksheet>']);
+$xlsx = $zip(['xl/sharedStrings.xml' => '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Client</t></si><si><t>Montant</t></si><si><t>Bob</t></si></sst>',
+    'xl/worksheets/sheet1.xml' => '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>870</v></c></row></sheetData></worksheet>']);
 $idXlsx = $lf->save($xlsx, 'ventes.xlsx', '', '/Clients/Bob');
 $pptx = $zip(['ppt/slides/slide1.xml' => '<p:sld><a:p><a:r><a:t>Roadmap 2027</a:t></a:r></a:p></p:sld>', 'ppt/slides/slide2.xml' => '<p:sld><a:p><a:r><a:t>Lancement en mars</a:t></a:r></a:p></p:sld>']);
 $idPptx = $lf->save($pptx, 'plan.pptx', '', '/Projets');
@@ -819,6 +819,41 @@ if ($z->open("$ld/dl.zip") === true) { for ($i = 0; $i < $z->numFiles; $i++) $na
 sort($names);
 check('library web: download a folder as a ZIP with its tree', $code === 200 && str_contains($h, "perso-") && in_array('Admin/contrat.txt', $names) && in_array('Admin/commande.pdf', $names)
     && in_array('Admin/Logement/devis.eml', $names) && ($cont ?? '') === 'Contrat de maintenance chaudière', json_encode($names));
+// rendered previews ("View" and "Open in a new tab")
+$png1 = (function () { $im = imagecreatetruecolor(4, 4); ob_start(); imagepng($im); return (string)ob_get_clean(); })();
+$dx = $zip(['word/document.xml' => '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><w:body>'
+    . '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Contrat cadre</w:t></w:r></w:p>'
+    . '<w:p><w:r><w:t xml:space="preserve">Prix </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>ferme</w:t></w:r><w:r><w:t>&lt;script&gt;</w:t></w:r></w:p>'
+    . '<w:p><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Point un</w:t></w:r></w:p>'
+    . '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Lot</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Montant</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+    . '<w:p><w:r><w:drawing><a:blip r:embed="rId5"/></w:drawing></w:r></w:p></w:body></w:document>',
+    'word/_rels/document.xml.rels' => '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId5" Target="media/image1.png"/></Relationships>',
+    'word/media/image1.png' => $png1]);
+$dh = \Talixio\Preview::docx($dx);
+check('preview: Word headings, bold, lists, tables and images', str_contains($dh, '<h1>Contrat cadre</h1>') && str_contains($dh, 'Prix <strong>ferme</strong>&lt;script&gt;')
+    && str_contains($dh, '<ul><li>Point un</li></ul>') && str_contains($dh, '<td><p>Lot</p></td>') && str_contains($dh, '<img src="data:image/png;base64,'), $dh);
+$xh = \Talixio\Preview::xlsx($lf->get($idXlsx)['path']);
+check('preview: Excel as a table', str_contains($xh, '<td>Bob</td><td class="num">870</td>'), $xh);
+check('preview: PowerPoint slides', substr_count(\Talixio\Preview::pptx($lf->get($idPptx)['path']), 'class="slide"') === 2);
+check('preview: OpenDocument headings and paragraphs', str_contains($oh = \Talixio\Preview::odf($zip(['content.xml' => '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><text:h text:outline-level="1">Bail</text:h><text:p>Loyer révisé chaque janvier</text:p></office:text></office:body></office:document-content>'])), '<h1>Bail</h1>') && str_contains($oh, '<p>Loyer révisé chaque janvier</p>'), $oh);
+check('preview: CSV as a table (separator detected)', str_contains(\Talixio\Preview::csv("a;b\n1;x\n"), '<th>a</th><th>b</th></tr><tr><td class="num">1</td><td>x</td>'));
+$md = \Talixio\Markdown::document("# T\n\n| a | b |\n|---|---|\n| 1 | **2** |\n\n- [x] done\n- [ ] todo\n\n> q\n\n[x](javascript:alert(1)) <b>raw</b>");
+check('preview: Markdown tables, task lists, quotes; HTML and javascript: links neutralised', str_contains($md, '<h1>T</h1>') && str_contains($md, '<td><strong>2</strong></td>') && str_contains($md, 'checked')
+    && str_contains($md, '<blockquote>') && !str_contains($md, 'javascript') && str_contains($md, '&lt;b&gt;raw&lt;/b&gt;'), $md);
+$mail = "From: a@b.c\r\nSubject: Hi\r\nContent-Type: multipart/alternative; boundary=XX\r\n\r\n--XX\r\nContent-Type: text/plain\r\n\r\nplain\r\n--XX\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n<p>Bonjour <b>=C3=A0 tous</b></p>\r\n--XX--\r\n";
+check('preview: email HTML body found', \Talixio\Mime::htmlBody($mail) === '<p>Bonjour <b>à tous</b></p>');
+[$code, $h, $body] = $raw("/api/files/$idHtml/view/plombier.html");
+check('library web: HTML files shown as a page, scripts off, own origin', $code === 200 && str_contains($h, 'content-type: text/html') && str_contains($h, 'sandbox allow-popups') && !str_contains($h, 'allow-scripts')
+    && !str_contains($h, 'allow-same-origin') && str_contains($body, '<h1>Recette</h1>') && str_contains($body, '<base target="_blank">'));
+$noteId = $lib->saveNote('/Notes', 'Plan', "# Plan\n\n| Etape | Date |\n|---|---|\n| Devis | lundi |\n")['id'];
+[$code, $h, $body] = $raw("/api/files/$noteId/view/Plan.md");
+check('library web: notes and .md files rendered, not raw', $code === 200 && str_contains($body, '<h1>Plan</h1>') && str_contains($body, '<td>Devis</td>'));
+[$code, $h, $body] = $raw("/api/files/$idEml/view/devis.eml");
+check('library web: emails shown with their headers', str_contains($body, '<th>Subject</th><td>Devis toiture</td>') && str_contains($body, '4 800 euros'));
+check('library web: Office files rendered', str_contains($raw("/api/files/$idXlsx/view/ventes.xlsx")[2], '<td>Bob</td>'));
+[$code, $h] = $raw("/api/files/$cid/file/contrat.txt");
+check('library web: file URLs end with the file name', $code === 200 && str_contains($h, 'filename="contrat.txt"'));
+check('library web: photos and PDFs open natively from "view"', str_contains($raw("/api/files/$pid/view/commande.pdf")[1], 'content-type: application/pdf'));
 $lib->deleteFile($pid);
 check('library: previews removed with the file', glob("$ld/previews/$pid-*") === []);
 

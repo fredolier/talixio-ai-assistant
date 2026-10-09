@@ -149,7 +149,10 @@ conversation.
   `/Admin/Taxes`...), browsable in the **Library** page (folder tree, breadcrumb, preview, drag and
   drop to upload or move, rename, delete, Markdown notes you can view and edit). Every file can
   be downloaded, or viewed in the app: photos, PDFs page by page (works on phones too), audio and
-  video with seeking, text and notes; a whole folder downloads as a ZIP keeping its subfolders. Chat and Signal/Telegram
+  video with seeking; Markdown notes and .md files rendered (tables, task lists...), saved web pages
+  shown as they look (scripts off), Word/Excel/PowerPoint/OpenDocument converted to a readable page
+  with their images, CSV as a table, emails with their headers. "Open in a new tab" shows the same
+  rendered page. A whole folder downloads as a ZIP keeping its subfolders. Chat and Signal/Telegram
   attachments land in `/Inbox`, recordings in `/Meetings`. In the background each file is read and
   indexed for search: PDF (scanned pages are transcribed by the fast model), Word/Excel/PowerPoint
   and OpenDocument, HTML, emails (.eml), Markdown/CSV/text, audio (transcribed) and photos
