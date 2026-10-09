@@ -55,6 +55,14 @@ final class Web
             $path === '/api/tasks' => ['tasks' => array_map(fn($t) => $t + ['next_text' => $t['next_run'] ? date('D j M, H:i', (int)$t['next_run']) : null], $s->tasks())],
             (bool)preg_match('#^/api/tasks/(\d+)/(toggle|delete)$#', $path, $mm) && $m === 'POST' => $this->taskAction((int)$mm[1], $mm[2]),
             $path === '/api/memory' && $m === 'GET' => ['files' => $this->app->ws->all()],
+            $path === '/api/memory/digest' && $m === 'GET' => $this->digest(),
+            $path === '/api/memory/compact' && $m === 'POST' => (function () {
+                set_time_limit(0);
+                $sum = new Summarizer($this->app);
+                $did = $sum->compact(time(), 1, 0, true);
+                while ($sum->merge(time())) $did = true;
+                return ['done' => $did] + $this->digest();
+            })(),
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
             $path === '/api/activity' => $this->activity(),
             $path === '/api/jobs' => ['jobs' => $s->jobs(50)],
@@ -271,6 +279,15 @@ final class Web
     private ?Auth $auth = null;
 
     private static function minutes(int $s): string { $m = (int)ceil($s / 60); return $m <= 1 ? 'a minute' : ($m < 120 ? "$m minutes" : (int)ceil($m / 60) . ' hours'); }
+
+    private function digest(): array
+    {
+        $s = $this->app->store;
+        $levels = [];
+        foreach ($s->q('SELECT level, COUNT(*) n FROM summaries WHERE merged_into IS NULL GROUP BY level')->fetchAll() as $r) $levels[(int)$r['level']] = (int)$r['n'];
+        return ['digest' => (new Summarizer($this->app))->digest(), 'levels' => (object)$levels,
+            'waiting' => (int)$s->q('SELECT COUNT(*) FROM messages WHERE id > ?', [(int)$s->get('summarized_upto', '0')])->fetchColumn()];
+    }
 
     private function activity(): array
     {

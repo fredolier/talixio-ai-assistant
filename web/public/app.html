@@ -135,6 +135,10 @@
         <textarea id="skill-editor" class="editor" spellcheck="false" aria-label="Skill"></textarea>
         <div class="row"><button id="skill-save" class="btn primary" type="button">Save skill</button><button id="skill-cancel" class="btn" type="button">Close</button><span id="skill-state" class="muted small"></span></div>
       </div>
+      <h3>Conversation digest</h3>
+      <p class="muted small">The assistant keeps the latest messages word for word. Older ones are summarised, then each past week and month is condensed further: details fade, what matters stays. It reads this digest before every answer; everything remains searchable above.</p>
+      <div class="row"><span id="digest-state" class="muted small"></span><button id="digest-compact" class="btn" type="button">Compact now</button></div>
+      <details class="card digest"><summary>Show the digest</summary><div id="digest" class="report"></div></details>
       <h3>Memory files</h3>
       <div class="tabs" id="mem-tabs" role="tablist"></div>
       <p class="muted small" id="mem-help"></p>

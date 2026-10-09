@@ -137,10 +137,51 @@ $app->embeddings->fake = null;
 // summaries
 $fake->script = function ($last, $tools, $on) use ($usage) { $usage($on, 'claude-haiku-x'); return str_contains($last, 'Summarise') ? '- Chose 14:04 TGV for Lyon' : 'ok'; };
 $fake->calls = [];
-check('summary waits while the conversation is active', (new Summarizer($app))->maybeRun(time()) === false);
+check('summary waits while the conversation is active', (new Summarizer($app))->maybeRun(time(), 1000) === false);
 check('summary runs once idle', (new Summarizer($app))->maybeRun(time() + 3600));
 check('summary used the fast tier with no tools', str_contains(json_encode($s->usageBy('tier', 0)), '"fast"') && end($fake->calls)['tools'] === []);
 check('summary is searchable', str_contains($app->tools->run('search_memory', ['query' => 'TGV']), 'summary of'));
+
+// ---- compaction with progressive forgetting ----
+$cd = "$dir/compact"; putenv("TALIXIO_DATA_DIR=$cd");
+$ca = App::fromEnv(); $ca->providerOverride = $fake; $cs = $ca->store;
+$fake->script = function ($last, $tools, $on) use ($usage) {
+    $usage($on, 'claude-haiku-x');
+    if (str_contains($last, 'during the week of')) return '- WEEKLY: kept the dentist appointment';
+    if (preg_match('/during (January|February|March|April|May|June|July|August|September|October|November|December)/', $last)) return '- MONTHLY: dentist sorted';
+    return '- STRETCH: talked about message ' . substr_count($last, '] user');
+};
+for ($i = 1; $i <= 8; $i++) $cs->addMessage($i % 2 ? 'user' : 'assistant', 'web', "message $i" . ($i === 3 ? ' about the plumber Dupont' : ''));
+$sum = new Summarizer($ca);
+check('compaction: nothing while the conversation is short', $sum->compact(time()) === false);
+for ($i = 9; $i <= 30; $i++) $cs->addMessage($i % 2 ? 'user' : 'assistant', 'web', "message $i");
+check('compaction: older messages summarised once enough piled up, even mid-conversation', $sum->compact(time()) && (int)$cs->get('summarized_upto') === 20);
+$h = $cs->history(40, $old, 100000);
+check('compaction: only the latest messages stay word for word', count($h) === 10 && $h[0]['content'] === 'message 21', json_encode(array_column($h, 'content')));
+check('compaction: the stretch summary is in the instructions', str_contains($ca->agent()->systemPrompt(), "Earlier in your conversation with the user") && str_contains($ca->agent()->systemPrompt(), 'STRETCH'));
+check('compaction: details stay searchable', str_contains($ca->tools->run('search_memory', ['query' => 'plumber Dupont']), 'plumber'));
+$cs->addMessage('user', 'web', str_repeat('Long pasted document. ', 2000));
+for ($i = 0; $i < 5; $i++) $cs->addMessage($i % 2 ? 'user' : 'assistant', 'web', "after $i");
+$h = $cs->history(40, $old, 6000);
+$all = implode('|', array_column($h, 'content'));
+check('history: long older messages shortened, oldest dropped to fit the size', mb_strlen($all) < 12000 && str_contains($all, 'after 4') && (str_contains($all, 'shortened') || !str_contains($all, 'Long pasted')), (string)mb_strlen($all));
+check('history: the latest messages are always kept', count($cs->history(40, $old, 10)) >= 4);
+// older summaries: a past week is merged into one shorter summary, past weeks of a month into a month summary
+$weekAgo = strtotime('monday this week 10:00') - 21 * 86400;
+$cs->addSummary(1, 2, $weekAgo, $weekAgo + 3600, '- dentist on Tuesday');
+$cs->addSummary(3, 4, $weekAgo + 86400, $weekAgo + 90000, '- moved the dentist to Thursday');
+$monthAgo = strtotime(date('Y-m-05 10:00')) - 100 * 86400;
+$cs->addSummary(5, 6, $monthAgo, $monthAgo + 3600, '- WEEK A', 2);
+$cs->addSummary(7, 8, $monthAgo + 7 * 86400, $monthAgo + 7 * 86400 + 3600, '- WEEK B', 2);
+$merged = 0; while ($sum->merge(time())) $merged++;
+$levels = array_column($cs->q('SELECT level, COUNT(*) n FROM summaries WHERE merged_into IS NULL GROUP BY level')->fetchAll(), 'n', 'level');
+check('forgetting: past week and month condensed', $merged >= 2 && ($levels[2] ?? 0) >= 1 && ($levels[3] ?? 0) >= 1, json_encode($levels));
+$dg = $sum->digest();
+check('forgetting: the digest shows condensed periods, oldest first, not the merged details', str_contains($dg, 'MONTHLY') && str_contains($dg, 'WEEKLY') && !str_contains($dg, 'moved the dentist')
+    && strpos($dg, 'MONTHLY') < strpos($dg, 'WEEKLY') && strpos($dg, 'WEEKLY') < strpos($dg, 'STRETCH'), $dg);
+check('forgetting: merged details still searchable', str_contains($ca->tools->run('search_memory', ['query' => 'Thursday dentist']), 'Thursday'));
+check('forgetting: a recent week is not merged yet', $cs->q("SELECT COUNT(*) FROM summaries WHERE level = 1 AND merged_into IS NULL AND text LIKE '%STRETCH%'")->fetchColumn() == 1);
+putenv("TALIXIO_DATA_DIR=$dir");
 
 // sub-agents
 $fake->script = function ($last, $tools, $on) use ($usage) {

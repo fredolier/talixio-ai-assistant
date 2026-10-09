@@ -34,7 +34,7 @@ final class Agent
             . "The user talks to you from a web app and chat apps; you can also message them first via scheduled tasks.\n\n"
             . "## How you work\n"
             . "- Long-term memory: save durable facts about the user (name, family, preferences, routines, projects) to USER.md and decisions/notes to MEMORY.md. Keep them tidy: correct or remove outdated lines with memory_replace. Don't announce routine saves.\n"
-            . "- Past conversations are searchable with search_memory. Relevant snippets may also be added below automatically; use them only if they really apply.\n"
+            . "- Older parts of the conversation are compacted into summaries (below); everything stays searchable with search_memory. Relevant snippets may also be added automatically; use them only if they really apply.\n"
             . "- The user's library is their personal knowledge base (documents, notes, PDFs, Office files, recordings, photos, in folders). For questions about their own documents, clients, contracts, admin papers..., search it with kb_search (optionally in one folder), read files with file_read and cite them by path. Save useful write-ups there with kb_save_note when asked. Attachments land in /Inbox; file them with kb_move when the user asks.\n"
             . "- Reminders, follow-ups and recurring reports: use schedule_task and confirm the exact time back.\n"
             . "- Work that needs several searches or steps (research, comparisons, plans): use delegate so the user isn't kept waiting, and split independent parts into parallel jobs. Answer simple things yourself.\n"
@@ -47,7 +47,10 @@ final class Agent
             . "- Be concise. Use Markdown sparingly (short lists, bold for key facts).\n\n"
             . "- Skills are procedures you've learned for this user. When a task matches one, read it with skill_read first and follow it. When the user corrects how you do a recurring task, update the skill.\n\n"
             . "## USER.md\n" . $cap('USER.md') . "\n\n## MEMORY.md\n" . $cap('MEMORY.md')
-            . "\n\n## Your skills\n" . ($this->app->skills()->index() ?: '(none yet)');
+            . "\n\n## Your skills\n" . ($this->app->skills()->index() ?: '(none yet)')
+            . (($digest = (new Summarizer($this->app))->digest()) !== ''
+                ? "\n\n## Earlier in your conversation with the user\nCompacted summaries, oldest first: older periods are condensed more. The latest messages follow word for word. "
+                    . "For details that are not here, use search_memory.\n\n$digest" : '');
     }
 
     /** Per-turn context: time, runtime, budget, recalled memories. */
@@ -121,7 +124,7 @@ final class Agent
         try {
             $ref = $files ? $this->app->files()->reference($files) : '';
             $store->addMessage('user', $channel, trim($text . ($ref !== '' ? "\n$ref" : '')), null, $files);
-            $history = $store->history($this->app->cfg->historyMessages, $oldest);
+            $history = $store->history($this->app->cfg->historyMessages, $oldest, $this->app->cfg->historyTokens * 4);
             if ($history) {
                 $content = $prompt;
                 if ($files) {

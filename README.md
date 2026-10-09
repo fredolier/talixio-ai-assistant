@@ -217,9 +217,15 @@ conversation.
   Long documents are split into overlapping chunks so the right passage is found. Recommended
   local model: `qwen3-embedding:0.6b` through Ollama (best multilingual score among small models,
   Apache 2.0, 32k context), vectors kept at 512 dimensions for speed. Changing the model re-indexes
-  memory in the background. Gemini, OpenAI and Voyage embeddings work too. Finished stretches of
-  conversation are summarised. Relevant past snippets are added to the prompt automatically, and the
-  assistant can call `search_memory`. You can search too, on the Memory page.
+  memory in the background. Gemini, OpenAI and Voyage embeddings work too. Relevant past snippets are
+  added to the prompt automatically, and the assistant can call `search_memory`. You can search too,
+  on the Memory page.
+- **Compaction with progressive forgetting**: the latest messages are sent word for word, within a
+  size limit (`TALIXIO_HISTORY_TOKENS`, long pasted texts shortened). Older ones are summarised in
+  stretches; once a week is over its summaries are merged into one shorter week summary, and a past
+  month's weeks into an even shorter month summary. The assistant reads this digest before every
+  answer (Memory page → *Conversation digest*), so it keeps the thread of months of conversation for
+  a fixed cost, while details fade. Nothing is deleted: every message and summary stays searchable.
 - **Model tiers**: fast (heartbeat, summaries, simple lookups), standard (chat), deep (hard reasoning,
   with extended thinking on Claude). Start a message with `/deep` or `/fast` to choose. Each reply
   shows the model, tokens and estimated cost.

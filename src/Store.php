@@ -53,6 +53,8 @@ final class Store
         $this->addColumn('files', 'note', 'INTEGER NOT NULL DEFAULT 0');           // 1 = Markdown note editable in the app
         $this->db->exec("CREATE TABLE IF NOT EXISTS folders(path TEXT PRIMARY KEY, created INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS files_folder ON files(folder);");
+        $this->addColumn('summaries', 'level', 'INTEGER NOT NULL DEFAULT 1'); // 1 stretch, 2 week, 3 month
+        $this->addColumn('summaries', 'merged_into', 'INTEGER');               // set once folded into a higher level
         $this->addColumn('jobs', 'kind', "TEXT NOT NULL DEFAULT 'agent'");
         $this->addColumn('jobs', 'file_id', 'INTEGER');
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");
@@ -115,10 +117,27 @@ final class Store
             'files' => array_values(array_filter(array_map(fn($i) => $info[$i] ?? null, json_decode((string)$r['files'], true) ?: [])))] + $r, $rows);
     }
 
-    /** Recent history shaped for LLM APIs: alternating roles, starting with the user. Also returns the oldest id included. */
-    public function history(int $limit, ?int &$oldestId = null): array
+    /**
+     * Recent history shaped for LLM APIs: alternating roles, starting with the user. Also returns the oldest id included.
+     * With $maxChars (the main conversation): messages already compacted into summaries are left out (the digest
+     * covers them), long older messages are shortened, and the oldest are dropped to stay within the size.
+     * The latest few messages are always kept.
+     */
+    public function history(int $limit, ?int &$oldestId = null, int $maxChars = 0): array
     {
         $rows = array_reverse($this->q('SELECT id, role, content FROM messages ORDER BY id DESC LIMIT ?', [$limit])->fetchAll());
+        if ($maxChars > 0 && $rows) {
+            $keep = 6; $n = count($rows);
+            $upto = (int)$this->get('summarized_upto', '0');
+            $rows = array_values(array_filter($rows, fn($r, $i) => $i >= $n - $keep || (int)$r['id'] > $upto, ARRAY_FILTER_USE_BOTH));
+            $n = count($rows);
+            foreach ($rows as $i => $r) {
+                if ($i < $n - 4 && mb_strlen($r['content']) > 4000) $rows[$i]['content'] = mb_substr($r['content'], 0, 4000) . "
+[… shortened; the full message can be found with search_memory]";
+            }
+            $total = array_sum(array_map(fn($r) => mb_strlen($r['content']), $rows));
+            while (count($rows) > 4 && $total > $maxChars) $total -= mb_strlen(array_shift($rows)['content']);
+        }
         $oldestId = $rows ? (int)$rows[0]['id'] : PHP_INT_MAX;
         $out = [];
         foreach ($rows as $r) {
@@ -246,11 +265,12 @@ final class Store
         return $out;
     }
 
-    public function addSummary(int $fromId, int $toId, int $tsFrom, int $tsTo, string $text): int
+    public function addSummary(int $fromId, int $toId, int $tsFrom, int $tsTo, string $text, int $level = 1): int
     {
-        $this->q('INSERT INTO summaries(from_id,to_id,ts_from,ts_to,text) VALUES(?,?,?,?,?)', [$fromId, $toId, $tsFrom, $tsTo, $text]);
+        $this->q('INSERT INTO summaries(from_id,to_id,ts_from,ts_to,text,level) VALUES(?,?,?,?,?,?)', [$fromId, $toId, $tsFrom, $tsTo, $text, $level]);
         $id = (int)$this->db->lastInsertId();
-        $this->addDoc('summary', $id, 'summary of ' . date('Y-m-d', $tsFrom) . ($tsTo - $tsFrom > 86400 ? ' to ' . date('Y-m-d', $tsTo) : ''), $text, $tsTo);
+        $what = [2 => 'week summary', 3 => 'month summary'][$level] ?? 'summary';
+        $this->addDoc('summary', $id, "$what of " . date('Y-m-d', $tsFrom) . ($tsTo - $tsFrom > 86400 ? ' to ' . date('Y-m-d', $tsTo) : ''), $text, $tsTo);
         return $id;
     }
 

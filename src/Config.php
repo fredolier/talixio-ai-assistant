@@ -23,6 +23,7 @@ final class Config
     public string $timezone = 'UTC';
     public string $name = 'Talixio';
     public int $historyMessages = 40;
+    public int $historyTokens = 12000;
     public string $webPassword = '';
     public string $telegramToken = '';
     /** @var int[] */ public array $telegramAllowed = [];
@@ -142,7 +143,8 @@ final class Config
         if (!str_starts_with($c->dataDir, '/')) $c->dataDir = getcwd() . '/' . $c->dataDir; // child processes run elsewhere
         $c->timezone = $e('TALIXIO_TIMEZONE', 'UTC');
         $c->name = $e('TALIXIO_NAME', 'Talixio');
-        $c->historyMessages = (int)$e('TALIXIO_HISTORY_MESSAGES', '40');
+        $c->historyMessages = max(6, (int)$e('TALIXIO_HISTORY_MESSAGES', '40'));
+        $c->historyTokens = max(2000, (int)$e('TALIXIO_HISTORY_TOKENS', '12000'));
         $c->webPassword = $e('TALIXIO_WEB_PASSWORD');
         $c->telegramToken = $e('TALIXIO_TELEGRAM_TOKEN');
         $c->telegramAllowed = array_map('intval', array_filter(array_map('trim', explode(',', $e('TALIXIO_TELEGRAM_ALLOWED_IDS'))), 'strlen'));

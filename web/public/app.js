@@ -597,8 +597,23 @@ async function loadSkills() {
   }
 }
 
+function showDigest(d) {
+  const l = d.levels || {};
+  const parts = [l[3] && `${l[3]} month(s)`, l[2] && `${l[2]} week(s)`, l[1] && `${l[1]} recent summary(ies)`].filter(Boolean);
+  $('#digest-state').textContent = (parts.length ? 'Digest: ' + parts.join(', ') + '. ' : 'No digest yet. ') + `${d.waiting} message(s) word for word or waiting to be summarised.`;
+  $('#digest').innerHTML = d.digest ? md(d.digest) : '<p class="muted">Nothing compacted yet: it starts once the conversation grows.</p>';
+}
+async function loadDigest() { showDigest(await api('/api/memory/digest')); }
+$('#digest-compact').onclick = async () => {
+  const b = $('#digest-compact'); b.disabled = true; b.textContent = 'Compacting…';
+  try { const d = await post('/api/memory/compact'); showDigest(d); toast(d.done ? 'Conversation compacted.' : 'Nothing to compact yet.'); }
+  catch (e) { toast(e.message); }
+  b.disabled = false; b.textContent = 'Compact now';
+};
+
 async function loadMemory() {
   loadSkills().catch(e => toast(e.message));
+  loadDigest().catch(() => {});
   state.memFiles = (await api('/api/memory')).files;
   const tabs = $('#mem-tabs'); tabs.innerHTML = '';
   for (const f of Object.keys(state.memFiles)) {

@@ -16,7 +16,8 @@ final class Settings
             'assistant' => ['Assistant', '', [
                 ['TALIXIO_NAME', 'Name', 'text', 'Your assistant\'s name.'],
                 ['TALIXIO_TIMEZONE', 'Time zone', 'text', 'e.g. Europe/Paris. Used for reminders and the calendar.'],
-                ['TALIXIO_HISTORY_MESSAGES', 'Recent messages sent to the model', 'number', 'Older ones stay reachable through memory search.'],
+                ['TALIXIO_HISTORY_MESSAGES', 'Recent messages kept word for word (max)', 'number', 'Older ones are compacted into summaries (weeks and months get shorter over time) and stay searchable.'],
+                ['TALIXIO_HISTORY_TOKENS', 'Size of the recent messages (tokens)', 'number', 'Long messages (pasted documents…) are shortened or left to memory search beyond this. Fewer tokens = cheaper answers.'],
             ]],
             'brain' => ['AI model', 'The assistant\'s brain. "Check configuration" makes one test call per tier.', [
                 ['TALIXIO_PROVIDER', 'Provider', 'select', 'claude-code uses your Claude Pro/Max plan (installed with --with-claude-code).', ['anthropic' => 'Claude (API)', 'claude-code' => 'Claude Code (Pro/Max plan)', 'gemini' => 'Gemini (API)', 'openai' => 'OpenAI or compatible server (Ollama…)', 'echo' => 'Echo (test, no model)']],
@@ -128,7 +129,7 @@ final class Settings
 
     /** Defaults used by Config when nothing is set (shown in the app as placeholders). */
     public const DEFAULTS = [
-        'TALIXIO_NAME' => 'Talixio', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_PROVIDER' => 'anthropic',
+        'TALIXIO_NAME' => 'Talixio', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_HISTORY_TOKENS' => '12000', 'TALIXIO_PROVIDER' => 'anthropic',
         'TALIXIO_DEEP_THINKING_TOKENS' => '8000', 'TALIXIO_BUDGET_DAILY_USD' => '0', 'TALIXIO_BUDGET_MONTHLY_USD' => '0', 'TALIXIO_MAX_PARALLEL_JOBS' => '3',
         'TALIXIO_JOB_MAX_USD' => '0.50', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0',
         'TALIXIO_SMTP_PORT' => '587', 'TALIXIO_SMTP_SECURITY' => 'auto', 'TALIXIO_IMAP_PORT' => '993', 'TALIXIO_EMAIL_REQUIRE_AUTH' => '1',
