@@ -1,4 +1,7 @@
 'use strict';
+// The app can live under a prefix (assistant.example.com/fred/): the server sets <base>, every address here is relative.
+const BASE = new URL(document.baseURI).pathname.replace(/\/$/, ''); // '' at the root, '/fred' under a prefix
+const LSK = BASE ? BASE.slice(1) + ':' : ''; // this browser's preferences, kept apart per instance
 const nf = new Intl.NumberFormat();
 const $ = s => document.querySelector(s);
 const state = { lastId: 0, status: null, memFile: 'USER.md', memFiles: {}, sending: false, pollTimer: null };
@@ -138,9 +141,9 @@ function renderMessage(m) {
   if (m.id) { el.dataset.id = m.id; el.dataset.channel = m.channel; }
   const chip = CHANNEL[m.channel] ? `<span class="chip ${m.channel}">${CHANNEL[m.channel]}</span>` : '';
   const atts = (m.files || []).map(f => f.kind === 'image'
-      ? `<a href="/api/files/${f.id}" target="_blank" rel="noopener"><img src="/api/files/${f.id}" alt="${esc(f.name)}" loading="lazy"></a>`
-      : f.kind === 'audio' ? `<audio controls preload="none" src="/api/files/${f.id}"></audio>`
-      : `<a class="fchip" href="/api/files/${f.id}" target="_blank" rel="noopener">${f.kind === 'pdf' ? 'PDF' : 'File'} · ${esc(f.name)}</a>`).join('');
+      ? `<a href="api/files/${f.id}" target="_blank" rel="noopener"><img src="api/files/${f.id}" alt="${esc(f.name)}" loading="lazy"></a>`
+      : f.kind === 'audio' ? `<audio controls preload="none" src="api/files/${f.id}"></audio>`
+      : `<a class="fchip" href="api/files/${f.id}" target="_blank" rel="noopener">${f.kind === 'pdf' ? 'PDF' : 'File'} · ${esc(f.name)}</a>`).join('');
   const body = m.content.replace(/^\[attached [^\]]*\]$/gm, '').trim();
   const mt = m.meta;
   const usage = mt && (mt.in + mt.out) > 0 ? `<span class="tier" title="${esc(mt.model)} · ${nf.format(mt.in)} in / ${nf.format(mt.out)} out tokens">${esc(shortModel(mt.model))} · ${ktok(mt.in + mt.out)} tok${mt.cost_known ? ' · ' + money(mt.cost) : ''}</span>` : '';
@@ -175,7 +178,7 @@ async function messageAction(act, m, el) {
   if (!userEl) return toast('Nothing to answer again.');
   if ($('#input').value.trim() && act === 'edit' && !confirm('Replace the message you are writing?')) return;
   try {
-    const d = await post(`/api/messages/${userEl.dataset.id}/undo`);
+    const d = await post(`api/messages/${userEl.dataset.id}/undo`);
     for (const id of d.removed) $(`#thread [data-id="${id}"]`)?.remove();
     state.lastId = Math.max(0, ...[...$('#thread').querySelectorAll('[data-id]')].map(x => +x.dataset.id));
     state.pending = d.files.map(f => ({ id: f.id, info: f })); renderPending();
@@ -238,7 +241,7 @@ function appendMessages(list, notify = false) {
 async function loadEarlier() {
   if (!state.firstLoaded || state.firstLoaded <= state.firstId) return false;
   const thread = $('#thread');
-  const { messages } = await api(`/api/messages?space=${state.space}&before=${state.firstLoaded}`);
+  const { messages } = await api(`api/messages?space=${state.space}&before=${state.firstLoaded}`);
   if (!messages.length) { state.firstId = state.firstLoaded; earlierButton(); return false; }
   const h = thread.scrollHeight, top = thread.scrollTop;
   const anchor = thread.querySelector('.msg[data-id], .trigger, .jobcard');
@@ -272,7 +275,7 @@ async function jumpTo(id) {
 
 function notifyBrowser(m) {
   if (!('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) return;
-  try { new Notification(state.status?.name || 'Talixio', { body: m.content.slice(0, 180), icon: '/icon.svg', tag: 'talixio-' + m.id }); } catch {}
+  try { new Notification(state.status?.name || 'Talixio', { body: m.content.slice(0, 180), icon: 'icon.svg', tag: 'talixio-' + m.id }); } catch {}
 }
 
 async function poll() {
@@ -280,7 +283,7 @@ async function poll() {
   if (state.sending || document.hidden && !('Notification' in window && Notification.permission === 'granted')) return;
   try {
     const looking = !document.hidden && location.hash.split('/')[0] !== '#' && $('#view-chat').hidden === false;
-    const d = await api(`/api/messages?space=${state.space}&after=${state.lastId}${looking ? '&read=1' : ''}`);
+    const d = await api(`api/messages?space=${state.space}&after=${state.lastId}${looking ? '&read=1' : ''}`);
     appendMessages(d.messages, true); showOtherUnread(d.unread);
   } catch {}
 }
@@ -305,7 +308,7 @@ const TOOL_LABEL = (name, input = {}) => {
 state.space = 0; state.spaces = [];
 const spaceOf = id => state.spaces.find(x => x.id === id) || state.spaces[0] || { id: 0, name: 'General', slug: 'general', folder: '', color: '' };
 async function loadSpaces() {
-  try { const d = await api('/api/spaces'); state.spaces = d.spaces; state.spaceColors = d.colors; } catch { state.spaces = state.spaces.length ? state.spaces : [{ id: 0, name: 'General', slug: 'general', folder: '', color: '', unread: 0 }]; }
+  try { const d = await api('api/spaces'); state.spaces = d.spaces; state.spaceColors = d.colors; } catch { state.spaces = state.spaces.length ? state.spaces : [{ id: 0, name: 'General', slug: 'general', folder: '', color: '', unread: 0 }]; }
   renderSpaceHead();
 }
 function renderSpaceHead() {
@@ -319,13 +322,13 @@ function renderSpaceHead() {
 function showOtherUnread(n) { const b = $('#space-unread'); b.hidden = !n; b.textContent = n > 99 ? '99+' : n; b.title = n ? `${n} new answer(s) in other spaces` : ''; }
 async function switchSpace(id, opts = {}) {
   state.space = id;
-  try { localStorage.setItem('talixio.space', String(id)); } catch {}
+  try { localStorage.setItem(LSK + 'talixio.space', String(id)); } catch {}
   const sp = spaceOf(id);
   if (!opts.keepHash && location.hash.split('/')[0] === '#chat') history.replaceState(null, '', id ? `#chat/${sp.slug}` : '#chat');
   renderSpaceHead();
   state.lastId = 0; state.firstLoaded = 0; $('#thread').innerHTML = '';
   $('#input').value = ''; state.pending = []; renderPending(); autosize();
-  const first = await api(`/api/messages?space=${id}&read=1`);
+  const first = await api(`api/messages?space=${id}&read=1`);
   state.firstId = first.first_id;
   appendMessages(first.messages);
   restoreDraft();
@@ -375,19 +378,19 @@ async function openSpaceEditor(sp, prefill = {}) {
     const body = { name: $('#sp-name').value, folder: $('#sp-folder').value, tier: $('#sp-tier').value, color, instructions: $('#sp-instructions').value, code: $('#sp-code').value };
     if (editing) body.notes = $('#sp-notes').value;
     try {
-      const { space } = await post(editing ? `/api/spaces/${sp.id}` : '/api/spaces', body);
+      const { space } = await post(editing ? `api/spaces/${sp.id}` : 'api/spaces', body);
       d.close(); await loadSpaces(); toast(editing ? 'Space saved.' : `Space “${space.name}” created.`);
       if (!editing || location.hash.startsWith('#chat')) { if (location.hash.split('/')[0] !== '#chat') location.hash = '#chat'; await switchSpace(space.id); }
     } catch (err) { toast(err.message); }
   };
   $('#sp-archive').onclick = async () => {
-    try { await post(`/api/spaces/${sp.id}`, { ...sp, archived: !sp.archived }); d.close(); await loadSpaces(); if (!sp.archived) await switchSpace(0); toast(sp.archived ? 'Space restored.' : 'Space archived: its conversation is kept.'); }
+    try { await post(`api/spaces/${sp.id}`, { ...sp, archived: !sp.archived }); d.close(); await loadSpaces(); if (!sp.archived) await switchSpace(0); toast(sp.archived ? 'Space restored.' : 'Space archived: its conversation is kept.'); }
     catch (err) { toast(err.message); }
   };
   $('#sp-delete').onclick = async e => {
     const b = e.currentTarget;
     if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Delete its conversation?'; return; }
-    try { await post(`/api/spaces/${sp.id}/delete`); d.close(); await loadSpaces(); await switchSpace(0); toast('Space deleted. Its documents are still in the library.'); }
+    try { await post(`api/spaces/${sp.id}/delete`); d.close(); await loadSpaces(); await switchSpace(0); toast('Space deleted. Its documents are still in the library.'); }
     catch (err) { toast(err.message); }
   };
   loadFolderList();
@@ -395,11 +398,11 @@ async function openSpaceEditor(sp, prefill = {}) {
 }
 
 async function loadFolderList() {
-  try { const { tree } = await api('/api/library/tree'); $('#folder-list').innerHTML = tree.map(t => `<option value="${esc(t.path)}">`).join(''); } catch {}
+  try { const { tree } = await api('api/library/tree'); $('#folder-list').innerHTML = tree.map(t => `<option value="${esc(t.path)}">`).join(''); } catch {}
 }
 
 // ---- appearance: light / dark / automatic, accent colour (per device) ----
-function themePref() { try { return JSON.parse(localStorage.getItem('talixio.theme') || '{}'); } catch { return {}; } }
+function themePref() { try { return JSON.parse(localStorage.getItem(LSK + 'talixio.theme') || '{}'); } catch { return {}; } }
 function applyTheme() {
   const t = themePref();
   if (t.mode === 'light' || t.mode === 'dark') document.documentElement.dataset.theme = t.mode; else delete document.documentElement.dataset.theme;
@@ -420,7 +423,7 @@ function renderAppearance() {
   $('#theme-colors').innerHTML = colors.map(c => `<button type="button" class="swatch" role="radio" aria-checked="${(t.accent || '') === c}" aria-label="${c || 'default'}" title="${c || 'Default green'}" style="background:${c || '#0e7c6b'}" data-c="${c}"></button>`).join('');
   $('#theme-colors').querySelectorAll('.swatch').forEach(b => b.onclick = () => saveTheme({ ...themePref(), accent: b.dataset.c }));
 }
-function saveTheme(t) { try { localStorage.setItem('talixio.theme', JSON.stringify(t)); } catch {} applyTheme(); renderAppearance(); }
+function saveTheme(t) { try { localStorage.setItem(LSK + 'talixio.theme', JSON.stringify(t)); } catch {} applyTheme(); renderAppearance(); }
 $('#theme-mode').onchange = e => saveTheme({ ...themePref(), mode: e.target.value });
 applyTheme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTint);
@@ -437,7 +440,7 @@ async function chatSearch() {
   const q = $('#chat-search-q').value.trim(); const box = $('#chat-search-results');
   if (q.length < 2) { box.innerHTML = ''; return; }
   try {
-    const { results } = await api(`/api/messages/search?space=${state.space}&q=` + encodeURIComponent(q));
+    const { results } = await api(`api/messages/search?space=${state.space}&q=` + encodeURIComponent(q));
     if (q !== $('#chat-search-q').value.trim()) return;
     const mark = t => esc(t).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi'), x => `<mark>${x}</mark>`);
     box.innerHTML = results.length ? '' : '<p class="muted small">Nothing found.</p>';
@@ -472,7 +475,7 @@ async function send(opts = {}) {
   const approvalsTimer = setInterval(loadApprovals, 4000);
   const activity = t => { const a = live.querySelector('.activity'); a.hidden = !t; a.innerHTML = t ? SPIN + esc(t) : ''; thread.scrollTop = thread.scrollHeight; };
   try {
-    const res = await fetch('/api/chat', { method: 'POST', credentials: 'same-origin',
+    const res = await fetch('api/chat', { method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-Talixio': '1', Accept: 'text/event-stream' },
       body: JSON.stringify({ text, files, meeting: !!opts.meeting, stream: true, space: state.space }) });
     if (res.status === 401) { showLogin(); throw new Error('Please sign in.'); }
@@ -525,7 +528,7 @@ function sendMode(busy) {
 }
 async function stopAnswer() {
   const b = $('#send'); b.disabled = true;
-  try { await post('/api/chat/stop'); } catch (e) { toast(e.message); }
+  try { await post('api/chat/stop'); } catch (e) { toast(e.message); }
 }
 
 /** Offline: the message waits in the box and is sent as soon as the connection is back. */
@@ -540,7 +543,7 @@ window.addEventListener('online', () => {
 });
 
 /** The message being written (and its attachments) survives closing the app. */
-const draftKey = () => 'talixio.draft' + (state.space ? '.' + state.space : ''); // one draft per space
+const draftKey = () => LSK + 'talixio.draft' + (state.space ? '.' + state.space : ''); // one draft per space
 function saveDraft() {
   try {
     const text = $('#input').value; const files = state.pending.filter(f => f.id).map(f => ({ id: f.id, info: f.info }));
@@ -561,7 +564,7 @@ function restoreDraft() {
 // ---- approvals ----
 async function loadApprovals() {
   let list = [];
-  try { list = (await api('/api/approvals')).approvals; } catch { return; }
+  try { list = (await api('api/approvals')).approvals; } catch { return; }
   const box = $('#approvals'); box.hidden = !list.length; box.innerHTML = '';
   setBadge(list.length);
   for (const a of list) {
@@ -571,7 +574,7 @@ async function loadApprovals() {
       <div class="what">${esc(a.summary)}</div>`;
     el.querySelectorAll('button').forEach(b => b.onclick = async () => {
       el.querySelectorAll('button').forEach(x => x.disabled = true);
-      try { const r = await post(`/api/approvals/${a.id}/${b.dataset.d}`); appendMessages(r.messages); toast(b.dataset.d === 'approve' ? 'Approved' : 'Rejected'); }
+      try { const r = await post(`api/approvals/${a.id}/${b.dataset.d}`); appendMessages(r.messages); toast(b.dataset.d === 'approve' ? 'Approved' : 'Rejected'); }
       catch (e) { toast(e.message); }
       loadApprovals();
     });
@@ -597,7 +600,7 @@ function uploadFile(file, name, folder) {
     const fd = new FormData(); fd.append('file', file, name || file.name);
     if (folder) fd.append('folder', folder);
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/files'); xhr.setRequestHeader('X-Talixio', '1');
+    xhr.open('POST', 'api/files'); xhr.setRequestHeader('X-Talixio', '1');
     xhr.onload = () => { try { const d = JSON.parse(xhr.responseText); xhr.status < 300 ? resolve(d.file) : reject(new Error(d.error || 'Upload failed')); } catch { reject(new Error(`Upload failed (HTTP ${xhr.status})`)); } };
     xhr.onerror = () => reject(new Error('Upload failed: network error'));
     xhr.send(fd);
@@ -655,16 +658,16 @@ function autosize() { const i = $('#input'); i.style.height = 'auto'; i.style.he
 // ---- tasks ----
 async function runTaskNow(t, b) {
   b.disabled = true; b.textContent = 'Running…';
-  try { const r = await post(`/api/tasks/${t.id}/run`); toast('Done: the result is in the chat.'); if (r.space === state.space) poll(); }
+  try { const r = await post(`api/tasks/${t.id}/run`); toast('Done: the result is in the chat.'); if (r.space === state.space) poll(); }
   catch (e) { toast(e.message); }
   b.disabled = false; b.textContent = t.title === 'Morning briefing' ? 'Send it now' : 'Run now';
 }
 $('#brief-save').onclick = async () => {
-  try { await post('/api/tasks/briefing', { time: $('#brief-time').value, days: $('#brief-days').value }); toast('Morning briefing set up.'); loadTasks(); }
+  try { await post('api/tasks/briefing', { time: $('#brief-time').value, days: $('#brief-days').value }); toast('Morning briefing set up.'); loadTasks(); }
   catch (e) { toast(e.message); }
 };
 async function loadTasks() {
-  const { tasks } = await api('/api/tasks');
+  const { tasks } = await api('api/tasks');
   const brief = tasks.find(t => t.title === 'Morning briefing');
   if (brief) {
     const [mm, hh, , , days] = brief.cron.split(' ');
@@ -683,12 +686,12 @@ async function loadTasks() {
       <div class="actions">${tierSelect(t.tier, 'Model that runs this task')}<button class="btn small" data-a="run" title="Run it now">Run now</button><button class="btn small" data-a="toggle">${t.enabled ? 'Pause' : 'Resume'}</button><button class="btn small ghost" data-a="delete">Delete</button></div>
       <p class="prompt">${esc(t.prompt)}</p>`;
     el.querySelector('select').onchange = async e => {
-      try { await post(`/api/tasks/${t.id}/tier`, { tier: e.target.value }); toast(`"${t.title}" will run on the ${e.target.value} tier.`); }
+      try { await post(`api/tasks/${t.id}/tier`, { tier: e.target.value }); toast(`"${t.title}" will run on the ${e.target.value} tier.`); }
       catch (err) { toast(err.message); e.target.value = t.tier; }
     };
     el.querySelectorAll('button').forEach(b => b.onclick = async () => {
       if (b.dataset.a === 'run') return runTaskNow(t, b);
-      try { await post(`/api/tasks/${t.id}/${b.dataset.a}`); toast(b.dataset.a === 'delete' ? 'Task deleted' : (t.enabled ? 'Task paused' : 'Task resumed')); loadTasks(); }
+      try { await post(`api/tasks/${t.id}/${b.dataset.a}`); toast(b.dataset.a === 'delete' ? 'Task deleted' : (t.enabled ? 'Task paused' : 'Task resumed')); loadTasks(); }
       catch (e) { toast(e.message); }
     });
     box.append(el);
@@ -703,8 +706,8 @@ function tierSelect(current, label) {
     `<option value="${n}"${n === current ? ' selected' : ''}>${n}${tiers[n] ? ' · ' + esc(shortModel(tiers[n])) : ''}</option>`).join('')}</select>`;
 }
 
-const jobsFilter = (() => { try { return JSON.parse(localStorage.getItem('talixio.jobs') || '{}'); } catch { return {}; } })();
-function saveJobsFilter() { try { localStorage.setItem('talixio.jobs', JSON.stringify(jobsFilter)); } catch {} }
+const jobsFilter = (() => { try { return JSON.parse(localStorage.getItem(LSK + 'talixio.jobs') || '{}'); } catch { return {}; } })();
+function saveJobsFilter() { try { localStorage.setItem(LSK + 'talixio.jobs', JSON.stringify(jobsFilter)); } catch {} }
 const spaceChip = id => { const sp = spaceOf(+id); return `<span class="chip space-chip" data-space="${sp.id}" title="Show only the jobs of this space"><i class="space-dot" style="background:${esc(sp.color || 'var(--muted)')}"></i>${esc(sp.name)}</span>`; };
 const tagsOf = j => (j.tags || '').split(',').filter(Boolean);
 
@@ -712,7 +715,7 @@ async function loadJobs() {
   const q = new URLSearchParams();
   if (jobsFilter.space != null && jobsFilter.space !== '') q.set('space', jobsFilter.space);
   if (jobsFilter.tag) q.set('tag', jobsFilter.tag);
-  const { jobs, tags } = await api('/api/jobs?' + q);
+  const { jobs, tags } = await api('api/jobs?' + q);
   const s = state.status;
   if (s) $('#jobs-help').textContent = `Sub-agents the assistant starts for research and multi-step work: up to ${s.max_parallel_jobs} at once, each capped at $${s.job_max_usd.toFixed(2)}. Results come back in the chat of the space that started them.`;
   // filters: space, tags
@@ -756,7 +759,7 @@ async function loadJobs() {
         let done = false;
         const save = async keep => {
           if (done) return; done = true;
-          if (keep) { try { const r = await post(`/api/jobs/${j.id}/tags`, { tags: inp.value }); j.tags = r.job.tags; } catch (e) { toast(e.message); } }
+          if (keep) { try { const r = await post(`api/jobs/${j.id}/tags`, { tags: inp.value }); j.tags = r.job.tags; } catch (e) { toast(e.message); } }
           box.innerHTML = tagHtml(); wireTags();
           if (keep) loadJobs();
         };
@@ -766,11 +769,11 @@ async function loadJobs() {
     };
     wireTags();
     el.querySelector('[data-a=cancel]')?.addEventListener('click', async () => {
-      try { await post(`/api/jobs/${j.id}/cancel`); toast('Job cancelled'); loadJobs(); } catch (e) { toast(e.message); }
+      try { await post(`api/jobs/${j.id}/cancel`); toast('Job cancelled'); loadJobs(); } catch (e) { toast(e.message); }
     });
     el.querySelector('[data-a=rerun]')?.addEventListener('click', async () => {
       const tier = el.querySelector('select').value;
-      try { await post(`/api/jobs/${j.id}/rerun`, { tier }); toast(`Running again on the ${tier} tier: the report will come in the chat.`); loadJobs(); } catch (e) { toast(e.message); }
+      try { await post(`api/jobs/${j.id}/rerun`, { tier }); toast(`Running again on the ${tier} tier: the report will come in the chat.`); loadJobs(); } catch (e) { toast(e.message); }
     });
     box.append(el);
   }
@@ -949,8 +952,8 @@ const BICON = {
   warn: '<svg viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/></svg>',
   cal: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 14h3"/></svg>',
 };
-const boardPrefs = (() => { try { return JSON.parse(localStorage.getItem('talixio.board') || '{}'); } catch { return {}; } })();
-const saveBoardPrefs = () => { try { localStorage.setItem('talixio.board', JSON.stringify(boardPrefs)); } catch {} };
+const boardPrefs = (() => { try { return JSON.parse(localStorage.getItem(LSK + 'talixio.board') || '{}'); } catch { return {}; } })();
+const saveBoardPrefs = () => { try { localStorage.setItem(LSK + 'talixio.board', JSON.stringify(boardPrefs)); } catch {} };
 const fmtH = h => h == null ? '' : h === 0 ? '0h' : h >= 7 && h % 7 === 0 ? `${h / 7}d` : h < 1 ? `${Math.round(h * 60)}m` : `${+h.toFixed(2)}h`;
 const fmtDay = d => { if (!d) return ''; const t = new Date(d + 'T12:00:00'); return t.toLocaleDateString([], { day: 'numeric', month: 'short', ...(t.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }); };
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -974,10 +977,10 @@ async function loadBoard() {
   $('#board-changes').onclick = showBoardChanges;
   const sp = boardPrefs.space === '' ? '' : `space=${boardPrefs.space}&`;
   const q = new URLSearchParams(); if (boardPrefs.tag) q.set('tag', boardPrefs.tag); if (boardPrefs.q) q.set('q', boardPrefs.q);
-  if (mode === 'overall') await renderOverall(await api('/api/board/portfolio')); // arbitration is across all spaces
+  if (mode === 'overall') await renderOverall(await api('api/board/portfolio')); // arbitration is across all spaces
   else if (mode === 'calendar') await renderCalendar();
   else {
-    const d = await api(`/api/board?${sp}${q}`);
+    const d = await api(`api/board?${sp}${q}`);
     Object.assign(board, d);
     const names = Object.keys(d.tags || {});
     if (boardPrefs.tag && !names.includes(boardPrefs.tag)) names.unshift(boardPrefs.tag);
@@ -1038,13 +1041,13 @@ function renderBoard() {
       const id = +e.dataTransfer.getData('text/plain'); const b = beforeEl(e.clientY);
       col.querySelector('.kdrop')?.remove();
       if (!id) return;
-      try { await post(`/api/board/${id}/move`, { status: st, before: b ? +b.dataset.id : null }); } catch (err) { toast(err.message); }
+      try { await post(`api/board/${id}/move`, { status: st, before: b ? +b.dataset.id : null }); } catch (err) { toast(err.message); }
       loadBoard();
     };
     const quick = col.querySelector('.kquick');
     if (quick) quick.onkeydown = async e => {
       if (e.key !== 'Enter' || !quick.value.trim()) return;
-      try { const { card } = await post('/api/board', { space: +boardPrefs.space, title: quick.value.trim(), status: st }); quick.value = ''; toast(`${card.code} added`); await loadBoard(); root.querySelector(`.kcol.s-${st} .kquick`)?.focus(); }
+      try { const { card } = await post('api/board', { space: +boardPrefs.space, title: quick.value.trim(), status: st }); quick.value = ''; toast(`${card.code} added`); await loadBoard(); root.querySelector(`.kcol.s-${st} .kquick`)?.focus(); }
       catch (err) { toast(err.message); }
     };
     root.append(col);
@@ -1064,7 +1067,7 @@ async function renderOverall(d) {
   for (const c of d.cards) { const p = per[c.space] ||= { n: 0, h: 0, late: 0 }; p.n++; p.h += Math.max(0, (c.estimate_hours || 0) - (c.spent_hours || 0)); if (dueClass(c) === 'late') p.late++; }
   const sum = $('#board-summary'); sum.hidden = !d.cards.length;
   sum.innerHTML = Object.entries(per).map(([s, p]) => { const sp = spaceOf(+s); return `<span class="chip"><i class="space-dot" style="background:${esc(sp.color || 'var(--muted)')}"></i>${esc(sp.name)}: ${p.n} open${p.h ? ' · ' + fmtH(Math.round(p.h * 4) / 4) + ' left' : ''}${p.late ? ` · <b class="late">${p.late} late</b>` : ''}</span>`; }).join('');
-  const save = async ids => { try { await post('/api/board/order', { ids }); } catch (e) { toast(e.message); } loadBoard(); };
+  const save = async ids => { try { await post('api/board/order', { ids }); } catch (e) { toast(e.message); } loadBoard(); };
   const row = (c, i) => {
     const el = document.createElement('div'); el.className = 'orow' + (i == null ? ' unranked' : ''); el.dataset.id = c.id;
     el.draggable = i != null;
@@ -1075,7 +1078,7 @@ async function renderOverall(d) {
     const ids = ranked.map(x => x.id);
     el.querySelector('[data-a=up]')?.addEventListener('click', () => { if (i > 0) { [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]; save(ids); } });
     el.querySelector('[data-a=down]')?.addEventListener('click', () => { if (i < ids.length - 1) { [ids[i + 1], ids[i]] = [ids[i], ids[i + 1]]; save(ids); } });
-    el.querySelector('[data-a=out]')?.addEventListener('click', async () => { try { await post(`/api/board/${c.id}/unrank`); } catch (e) { toast(e.message); } loadBoard(); });
+    el.querySelector('[data-a=out]')?.addEventListener('click', async () => { try { await post(`api/board/${c.id}/unrank`); } catch (e) { toast(e.message); } loadBoard(); });
     el.querySelector('[data-a=in]')?.addEventListener('click', () => save([...ids, c.id]));
     if (i != null) {
       el.ondragstart = e => { el.classList.add('dragging'); e.dataTransfer.setData('text/plain', String(c.id)); };
@@ -1103,7 +1106,7 @@ async function openCard(id, prefill = {}) {
   if (!cardRte) cardRte = makeRte($('#cd-rte'));
   let d = { card: { space: prefill.space ?? state.space, status: prefill.status || 'todo', priority: 3, title: prefill.title || '', body: prefill.body || '', due_date: prefill.due_date || null,
     tags: [], links: prefill.links || [], depends_on: [], blocks: [], in_calendar: 0 }, history: [], time: [], depends_on: [], blocks: [] };
-  if (id) { try { d = await api(`/api/board/${id}`); } catch (e) { toast(e.message); return; } }
+  if (id) { try { d = await api(`api/board/${id}`); } catch (e) { toast(e.message); return; } }
   const c = d.card, isNew = !id;
   let deps = d.depends_on.slice();
   $('#cd-code').textContent = isNew ? 'New task' : c.code;
@@ -1133,7 +1136,7 @@ async function openCard(id, prefill = {}) {
   q.oninput = () => { clearTimeout(q.t); q.t = setTimeout(async () => {
     const term = q.value.trim(); if (!term) { hits.hidden = true; return; }
     try {
-      const { cards } = await api('/api/board/find?q=' + encodeURIComponent(term));
+      const { cards } = await api('api/board/find?q=' + encodeURIComponent(term));
       const list = cards.filter(x => x.id !== c.id && !deps.some(y => y.id === x.id) && !x.deleted_at);
       hits.innerHTML = list.length ? list.map(x => `<button type="button" data-id="${x.id}"><b>${esc(x.code)}</b> ${esc(x.title)} <span class="muted small">${esc(spaceOf(x.space).name)}</span></button>`).join('') : '<p class="muted small">No task found.</p>';
       hits.hidden = false;
@@ -1146,17 +1149,17 @@ async function openCard(id, prefill = {}) {
   const paintTime = (card, entries) => {
     $('#cd-time-sum').textContent = card.spent_hours || card.estimate_hours ? `· ${fmtH(card.spent_hours) || '0h'}${card.estimate_hours ? ' of ' + fmtH(card.estimate_hours) : ''}` : '';
     $('#cd-time-list').innerHTML = entries.map(t => `<div class="trow"><span>${fmtDay(t.day)}</span><b>${fmtH(+t.hours)}</b><span class="muted">${esc(t.note)}</span><button type="button" class="icon-btn" data-t="${t.id}" aria-label="Remove">×</button></div>`).join('');
-    $('#cd-time-list').querySelectorAll('[data-t]').forEach(b => b.onclick = async () => { await post(`/api/board/time/${b.dataset.t}/delete`); const r = await api(`/api/board/${c.id}`); paintTime(r.card, r.time); });
+    $('#cd-time-list').querySelectorAll('[data-t]').forEach(b => b.onclick = async () => { await post(`api/board/time/${b.dataset.t}/delete`); const r = await api(`api/board/${c.id}`); paintTime(r.card, r.time); });
   };
   if (!isNew) {
     paintTime(c, d.time);
     $('#cd-time-day').value = today(); $('#cd-time-h').value = ''; $('#cd-time-note').value = '';
     $('#cd-time-add').onclick = async () => {
-      try { await post(`/api/board/${c.id}/time`, { hours: $('#cd-time-h').value, day: $('#cd-time-day').value, note: $('#cd-time-note').value }); const r = await api(`/api/board/${c.id}`); paintTime(r.card, r.time); $('#cd-time-h').value = $('#cd-time-note').value = ''; c.version = r.card.version; }
+      try { await post(`api/board/${c.id}/time`, { hours: $('#cd-time-h').value, day: $('#cd-time-day').value, note: $('#cd-time-note').value }); const r = await api(`api/board/${c.id}`); paintTime(r.card, r.time); $('#cd-time-h').value = $('#cd-time-note').value = ''; c.version = r.card.version; }
       catch (e) { toast(e.message); }
     };
     $('#cd-history-list').innerHTML = d.history.map(h => `<div class="hrow"><span class="muted small">${new Date(h.ts * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span><span>${esc(h.what)}</span><span class="muted small">${esc(h.who)}</span>${h.can_undo ? `<button type="button" class="btn small ghost" data-h="${h.id}">Undo</button>` : '<span></span>'}</div>`).join('');
-    $('#cd-history-list').querySelectorAll('[data-h]').forEach(b => b.onclick = async () => { try { await post(`/api/board/undo/${b.dataset.h}`); toast('Undone'); dlg.close(); loadBoard(); openCard(c.id); } catch (e) { toast(e.message); } });
+    $('#cd-history-list').querySelectorAll('[data-h]').forEach(b => b.onclick = async () => { try { await post(`api/board/undo/${b.dataset.h}`); toast('Undone'); dlg.close(); loadBoard(); openCard(c.id); } catch (e) { toast(e.message); } });
   }
   $('#cd-time').open = false; $('#cd-history').open = false;
   const close = () => { dlg.close(); };
@@ -1165,7 +1168,7 @@ async function openCard(id, prefill = {}) {
   $('#cd-delete').onclick = async e => {
     const b = e.currentTarget;
     if (b.dataset.confirm !== '1' && c.blocks?.length) { b.dataset.confirm = '1'; b.textContent = `${c.blocks.length} task(s) wait for it: delete anyway?`; return; }
-    try { const r = await post(`/api/board/${c.id}/delete`); close(); toast(`${c.code} moved to the trash` + (r.waiting.length ? ` (${r.waiting.join(', ')} waited for it)` : '')); loadBoard(); } catch (err) { toast(err.message); }
+    try { const r = await post(`api/board/${c.id}/delete`); close(); toast(`${c.code} moved to the trash` + (r.waiting.length ? ` (${r.waiting.join(', ')} waited for it)` : '')); loadBoard(); } catch (err) { toast(err.message); }
   };
   $('#card-form').onsubmit = async e => {
     e.preventDefault();
@@ -1173,8 +1176,8 @@ async function openCard(id, prefill = {}) {
       due_date: $('#cd-due').value, estimate_hours: $('#cd-estimate').value.trim(), in_calendar: $('#cd-cal').checked, tags: $('#cd-tags').value,
       space: +$('#cd-space').value, depends_on: deps.map(x => x.id), ...(isNew && c.links?.length ? { links: c.links } : {}) };
     try {
-      if (isNew) { const r = await post('/api/board', body); toast(`${r.card.code} added`); }
-      else await post(`/api/board/${c.id}`, { ...body, version: c.version });
+      if (isNew) { const r = await post('api/board', body); toast(`${r.card.code} added`); }
+      else await post(`api/board/${c.id}`, { ...body, version: c.version });
       close(); loadBoard();
     } catch (err) {
       if (err.status === 409) { if (confirm(err.message + '\n\nReload it? (your changes in this window will be lost)')) { close(); openCard(c.id); } }
@@ -1195,7 +1198,7 @@ async function renderCalendar() {
   const gridStart = new Date(first); gridStart.setDate(1 - ((first.getDay() + 6) % 7));
   const gridEnd = new Date(last); gridEnd.setDate(last.getDate() + (7 - ((last.getDay() + 6) % 7) - 1));
   const sp = boardPrefs.space === '' ? '' : `&space=${boardPrefs.space}`;
-  const d = await api(`/api/board/calendar?from=${iso(gridStart)}&to=${iso(gridEnd)}${sp}${boardPrefs.agenda ? '&events=1' : ''}`);
+  const d = await api(`api/board/calendar?from=${iso(gridStart)}&to=${iso(gridEnd)}${sp}${boardPrefs.agenda ? '&events=1' : ''}`);
   board.refs = board.refs || {};
   const root = $('#board'); root.className = 'calendar'; root.innerHTML = '';
   $('#board-summary').hidden = true;
@@ -1256,7 +1259,7 @@ async function renderCalendar() {
         const id = +e.dataTransfer.getData('text/plain'); const c = d.cards.find(x => x.id === id); if (!c || c.due_date === k) return;
         const shift = (Date.parse(k) - Date.parse(c.due_date)) / 864e5; const body = { due_date: k, version: c.version };
         if (c.start_date) { const s = new Date(c.start_date + 'T12:00:00'); s.setDate(s.getDate() + shift); body.start_date = iso(s); }
-        try { await post(`/api/board/${id}`, body); toast(`${c.code}: due ${fmtDay(k)}`); } catch (err) { toast(err.message); }
+        try { await post(`api/board/${id}`, body); toast(`${c.code}: due ${fmtDay(k)}`); } catch (err) { toast(err.message); }
         loadBoard();
       };
       cell.onclick = e => { if (e.target === cell || e.target.classList.contains('cal-num')) openCard(null, { space: boardPrefs.space === '' ? state.space : +boardPrefs.space, due_date: k }); };
@@ -1271,7 +1274,7 @@ async function renderCalendar() {
 }
 
 async function showCalendarLink(google) {
-  const { url } = await api('/api/board/ics');
+  const { url } = await api('api/board/ics');
   $('#bs-title').textContent = 'Tasks in your calendar';
   $('#bs-list').innerHTML = `<p class="small">Tasks with <b>Show in my calendar</b> ticked appear as all-day events, from their start to their due date. The others stay here.</p>
     ${google ? '<p class="small">Google Calendar is connected: they are added there automatically and kept up to date.</p>' : ''}
@@ -1279,23 +1282,23 @@ async function showCalendarLink(google) {
     <div class="row"><input id="ics-url" readonly value="${esc(url)}" style="flex:1;min-width:0"><button type="button" class="btn small" id="ics-copy">Copy</button></div>
     <p class="muted small">Google Calendar: Other calendars → + → From URL. Subscribed calendars refresh every few hours. <button type="button" class="btn small ghost" id="ics-reset">Make a new link</button> (the old one stops working)</p>`;
   $('#ics-copy').onclick = () => copyText($('#ics-url').value);
-  $('#ics-reset').onclick = async () => { if (!confirm('Make a new link? Calendars subscribed to the old one will stop updating.')) return; await post('/api/board/ics'); showCalendarLink(google); };
+  $('#ics-reset').onclick = async () => { if (!confirm('Make a new link? Calendars subscribed to the old one will stop updating.')) return; await post('api/board/ics'); showCalendarLink(google); };
   $('#bs-close').onclick = () => $('#board-side').close();
   if (!$('#board-side').open) $('#board-side').showModal();
 }
 
 async function showBoardTrash() {
-  const { cards } = await api('/api/board/trash');
+  const { cards } = await api('api/board/trash');
   $('#bs-title').textContent = 'Trash';
   $('#bs-list').innerHTML = cards.length ? '<p class="muted small">Deleted tasks stay here for 30 days.</p>' + cards.map(c => `<div class="hrow"><b>${esc(c.code)}</b><span>${esc(c.title)}</span><span class="muted small">${new Date(c.deleted_at * 1000).toLocaleDateString()}</span><button type="button" class="btn small" data-id="${c.id}">Restore</button></div>`).join('')
     : '<p class="muted">The trash is empty.</p>';
-  $('#bs-list').querySelectorAll('[data-id]').forEach(b => b.onclick = async () => { try { await post(`/api/board/${b.dataset.id}/restore`); toast('Restored'); showBoardTrash(); loadBoard(); } catch (e) { toast(e.message); } });
+  $('#bs-list').querySelectorAll('[data-id]').forEach(b => b.onclick = async () => { try { await post(`api/board/${b.dataset.id}/restore`); toast('Restored'); showBoardTrash(); loadBoard(); } catch (e) { toast(e.message); } });
   $('#bs-close').onclick = () => $('#board-side').close();
   if (!$('#board-side').open) $('#board-side').showModal();
 }
 
 async function showBoardChanges() {
-  const { changes } = await api('/api/board/recent' + (boardPrefs.space !== '' ? '?space=' + boardPrefs.space : ''));
+  const { changes } = await api('api/board/recent' + (boardPrefs.space !== '' ? '?space=' + boardPrefs.space : ''));
   $('#bs-title').textContent = 'Recent changes';
   $('#bs-list').innerHTML = changes.length ? changes.map(h => `<div class="hrow"><span class="muted small">${new Date(h.ts * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span><span><a href="#board" data-id="${h.card}"><b>${esc(h.code)}</b></a> ${esc(h.what)}</span><span class="muted small">${esc(h.who)}</span><span></span></div>`).join('')
     : '<p class="muted">No changes yet.</p>';
@@ -1316,18 +1319,18 @@ async function enablePush() {
     throw new Error(/iPhone|iPad/.test(navigator.userAgent) ? 'On iPhone and iPad: Share → Add to Home Screen, open Talixio from there, then turn this on.' : 'This browser does not support push notifications. It needs HTTPS.');
   }
   if (await Notification.requestPermission() !== 'granted') throw new Error('Notifications are blocked for this site in your browser settings.');
-  const reg = await navigator.serviceWorker.register('/sw.js');
+  const reg = await navigator.serviceWorker.register('sw.js', { scope: './' });
   await navigator.serviceWorker.ready;
-  const { key } = await api('/api/push/key');
+  const { key } = await api('api/push/key');
   const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
-  await post('/api/push/subscribe', sub.toJSON());
+  await post('api/push/subscribe', sub.toJSON());
 }
 async function disablePush() {
   const sub = await pushSubscription();
-  if (sub) { await post('/api/push/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe(); }
+  if (sub) { await post('api/push/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe(); }
 }
 async function loadChannels() {
-  const { channels, notify_on } = await api('/api/channels');
+  const { channels, notify_on } = await api('api/channels');
   const mySub = await pushSubscription().catch(() => null);
   const box = $('#channels'); box.innerHTML = '';
   for (const c of channels) {
@@ -1354,7 +1357,7 @@ async function loadChannels() {
 // ---- updates ----
 async function loadUpdate() {
   let d;
-  try { d = await api('/api/update'); }
+  try { d = await api('api/update'); }
   catch { if (state.updating) setTimeout(loadUpdate, 3000); return; } // the app restarts during an update
   const box = $('#update'); box.hidden = false;
   if (!d.installed) { box.innerHTML = '<h3>Updates</h3><p class="muted small">Updates from the app work on an installation made with <code>git clone</code> + <code>install.sh</code>.</p>'; return; }
@@ -1375,7 +1378,7 @@ async function loadUpdate() {
   box.querySelectorAll('[data-u]').forEach(b => b.onclick = async () => {
     if (b.dataset.u !== 'check' && b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = b.dataset.u === 'update' ? 'Confirm: back up and update' : 'Confirm restore'; return; }
     try {
-      await post('/api/update/' + b.dataset.u);
+      await post('api/update/' + b.dataset.u);
       if (b.dataset.u === 'check') state.checkPolls = 10; else { state.updating = true; state.updateFrom = v.sha; }
       toast(b.dataset.u === 'check' ? 'Checking…' : b.dataset.u === 'update' ? 'Updating: a backup is made first. The app restarts at the end.' : 'Restoring…');
     } catch (e) { toast(e.message); }
@@ -1446,7 +1449,7 @@ async function saveSettings(el, g, reset) {
   if (!reset.length && !Object.keys(changes).length) { state.textContent = 'Nothing changed.'; return; }
   el.querySelectorAll('.err').forEach(e => { e.hidden = true; });
   try {
-    const res = await fetch('/api/settings', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Talixio': '1' }, body: JSON.stringify({ changes, reset }) });
+    const res = await fetch('api/settings', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Talixio': '1' }, body: JSON.stringify({ changes, reset }) });
     const d = await res.json();
     if (!res.ok) {
       for (const [k, msg] of Object.entries(d.errors || {})) { const e = el.querySelector(`[data-key="${k}"] .err`); if (e) { e.textContent = msg; e.hidden = false; } }
@@ -1464,18 +1467,18 @@ async function loadSettings() {
   loadConnectors();
   loadGoogle();
   loadSpotify();
-  renderGroups((await api('/api/settings')).groups);
+  renderGroups((await api('api/settings')).groups);
 }
 $('#doctor-run').onclick = async () => {
   const b = $('#doctor-run'); b.disabled = true; b.textContent = 'Checking…';
   const ul = $('#doctor'); ul.hidden = false; ul.innerHTML = '<li class="info">Running checks (this can take a few seconds)…</li>';
-  try { const { results } = await post('/api/doctor'); ul.innerHTML = results.map(r => `<li class="${r.status}">${esc(r.text)}</li>`).join(''); }
+  try { const { results } = await post('api/doctor'); ul.innerHTML = results.map(r => `<li class="${r.status}">${esc(r.text)}</li>`).join(''); }
   catch (e) { ul.innerHTML = `<li class="fail">${esc(e.message)}</li>`; }
   b.disabled = false; b.textContent = 'Run checks';
 };
 $('#pw-form').onsubmit = async e => {
   e.preventDefault();
-  try { await post('/api/settings/password', { current: $('#pw-current').value, new: $('#pw-new').value }); $('#pw-state').textContent = 'Password changed. Your other devices will ask for it again.'; $('#pw-current').value = $('#pw-new').value = ''; }
+  try { await post('api/settings/password', { current: $('#pw-current').value, new: $('#pw-new').value }); $('#pw-state').textContent = 'Password changed. Your other devices will ask for it again.'; $('#pw-current').value = $('#pw-new').value = ''; }
   catch (err) { $('#pw-state').textContent = err.message; }
 };
 
@@ -1491,10 +1494,10 @@ function showSpotify(g) {
   $('#spotify-connect').hidden = g.connected; $('#spotify-disconnect').hidden = !g.connected;
   $('#spotify-connect').disabled = !g.configured; $('#spotify-connect').title = g.configured ? '' : 'Fill in the client ID and secret first (step 3)';
 }
-async function loadSpotify() { try { showSpotify(await api('/api/spotify')); } catch {} }
+async function loadSpotify() { try { showSpotify(await api('api/spotify')); } catch {} }
 $('#spotify-copy').onclick = () => copyText($('#spotify-redirect').textContent);
-$('#spotify-connect').onclick = async () => { try { location.href = (await post('/api/spotify/connect')).url; } catch (e) { toast(e.message); } };
-$('#spotify-disconnect').onclick = async () => { try { showSpotify(await post('/api/spotify/disconnect')); toast('Spotify disconnected.'); } catch (e) { toast(e.message); } };
+$('#spotify-connect').onclick = async () => { try { location.href = (await post('api/spotify/connect')).url; } catch (e) { toast(e.message); } };
+$('#spotify-disconnect').onclick = async () => { try { showSpotify(await post('api/spotify/disconnect')); toast('Spotify disconnected.'); } catch (e) { toast(e.message); } };
 
 // ---- Google Calendar ----
 function showGoogle(g) {
@@ -1507,10 +1510,10 @@ function showGoogle(g) {
   $('#google-connect').hidden = g.connected; $('#google-disconnect').hidden = !g.connected;
   $('#google-connect').disabled = !g.configured; $('#google-connect').title = g.configured ? '' : 'Fill in the client ID and secret first (step 5)';
 }
-async function loadGoogle() { try { showGoogle(await api('/api/google')); } catch {} }
+async function loadGoogle() { try { showGoogle(await api('api/google')); } catch {} }
 $('#google-copy').onclick = () => copyText($('#google-redirect').textContent);
-$('#google-connect').onclick = async () => { try { location.href = (await post('/api/google/connect')).url; } catch (e) { toast(e.message); } };
-$('#google-disconnect').onclick = async () => { try { showGoogle(await post('/api/google/disconnect')); toast('Google Calendar disconnected.'); } catch (e) { toast(e.message); } };
+$('#google-connect').onclick = async () => { try { location.href = (await post('api/google/connect')).url; } catch (e) { toast(e.message); } };
+$('#google-disconnect').onclick = async () => { try { showGoogle(await post('api/google/disconnect')); toast('Google Calendar disconnected.'); } catch (e) { toast(e.message); } };
 
 // ---- connectors (MCP) and the sandbox ----
 function showConnectors(d) {
@@ -1524,23 +1527,23 @@ function showConnectors(d) {
     </div>`).join('') + (d.servers.some(x => x.tools.some(t => !t.read_only)) ? '<p class="muted small">✋ asks for your approval before running.</p>' : '');
   $('#shell-state').textContent = !d.shell.installed ? 'not installed (install.sh --with-shell).' : d.shell.mode === 'off' ? 'installed, off (Settings → Sandboxed shell).' : d.shell.mode === 'ask' ? 'on, asks before each command.' : 'on, runs without asking.';
 }
-async function loadConnectors() { try { showConnectors(await api('/api/mcp')); } catch {} }
+async function loadConnectors() { try { showConnectors(await api('api/mcp')); } catch {} }
 const mcpAction = async (path, body) => {
   $('#mcp-state').textContent = 'Connecting… (local servers can take a minute the first time)';
   try { showConnectors(await post(path, body)); $('#mcp-state').textContent = 'Done. New tools are available from the next message.'; }
   catch (e) { $('#mcp-state').textContent = e.message; }
 };
-$('#mcp-save').onclick = () => mcpAction('/api/mcp', { raw: $('#mcp-raw').value });
-$('#mcp-refresh').onclick = () => mcpAction('/api/mcp/refresh');
+$('#mcp-save').onclick = () => mcpAction('api/mcp', { raw: $('#mcp-raw').value });
+$('#mcp-refresh').onclick = () => mcpAction('api/mcp/refresh');
 $('#shell-test').onclick = async () => {
   const b = $('#shell-test'); b.disabled = true;
-  try { const r = await post('/api/shell/check'); toast(r.ok ? 'Sandbox works: ' + r.text.split('\n').pop() : r.text); } catch (e) { toast(e.message); }
+  try { const r = await post('api/shell/check'); toast(r.ok ? 'Sandbox works: ' + r.text.split('\n').pop() : r.text); } catch (e) { toast(e.message); }
   b.disabled = false;
 };
 
 // ---- two-step sign-in ----
 async function loadSecurity() {
-  try { showTotp((await api('/api/security')).totp); } catch { /* shown elsewhere */ }
+  try { showTotp((await api('api/security')).totp); } catch { /* shown elsewhere */ }
 }
 function showTotp(on) {
   $('#totp-badge').textContent = on ? '· on' : '· off';
@@ -1554,12 +1557,12 @@ function loadScript(src) {
 }
 $('#totp-setup').onclick = async () => {
   try {
-    const d = await post('/api/security/totp/setup');
+    const d = await post('api/security/totp/setup');
     $('#totp-secret').textContent = d.secret.replace(/(.{4})/g, '$1 ').trim();
     $('#totp-link').href = d.uri;
     $('#totp-off').hidden = true; $('#totp-enable').hidden = false; $('#totp-state').textContent = '';
     try {
-      await loadScript('/vendor/qrcode.js');
+      await loadScript('vendor/qrcode.js');
       const qr = qrcode(0, 'M'); qr.addData(d.uri); qr.make();
       $('#totp-qr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
     } catch { $('#totp-qr').textContent = ''; }
@@ -1568,12 +1571,12 @@ $('#totp-setup').onclick = async () => {
 };
 $('#totp-enable').onsubmit = async e => {
   e.preventDefault();
-  try { await post('/api/security/totp/enable', { code: $('#totp-code').value }); $('#totp-code').value = ''; showTotp(true); toast('Two-step sign-in is on.'); }
+  try { await post('api/security/totp/enable', { code: $('#totp-code').value }); $('#totp-code').value = ''; showTotp(true); toast('Two-step sign-in is on.'); }
   catch (err) { $('#totp-state').textContent = err.message; }
 };
 $('#totp-disable').onsubmit = async e => {
   e.preventDefault();
-  try { await post('/api/security/totp/disable', { password: $('#totp-dis-pw').value, code: $('#totp-dis-code').value }); $('#totp-dis-pw').value = $('#totp-dis-code').value = ''; showTotp(false); toast('Two-step sign-in is off.'); }
+  try { await post('api/security/totp/disable', { password: $('#totp-dis-pw').value, code: $('#totp-dis-code').value }); $('#totp-dis-pw').value = $('#totp-dis-code').value = ''; showTotp(false); toast('Two-step sign-in is off.'); }
   catch (err) { $('#totp-dis-state').textContent = err.message; }
 };
 
@@ -1585,7 +1588,7 @@ const MEM_HELP = {
   'HEARTBEAT.md': 'Checklist for periodic checks (needs TALIXIO_HEARTBEAT_MINUTES). It only messages you when something needs attention.',
 };
 async function loadSkills() {
-  const { skills } = await api('/api/skills');
+  const { skills } = await api('api/skills');
   const box = $('#skills'); box.innerHTML = '';
   if (!skills.length) { box.innerHTML = '<div class="placeholder">No skills yet. After multi-step tasks it writes down how it did them, so next time is faster and closer to what you want.</div>'; return; }
   for (const k of skills) {
@@ -1593,14 +1596,14 @@ async function loadSkills() {
     el.innerHTML = `<h4>${esc(k.name)}</h4><div class="actions"><button class="btn small" data-a="edit" type="button">Open</button><button class="btn small ghost" data-a="del" type="button">Delete</button></div>
       <p>${esc(k.description)}${k.used ? ` · used ${k.used}×` : ''}</p>`;
     el.querySelector('[data-a=edit]').onclick = async () => {
-      const { content } = await api('/api/skills/' + encodeURIComponent(k.name));
+      const { content } = await api('api/skills/' + encodeURIComponent(k.name));
       state.skill = k.name; $('#skill-editor').value = content; $('#skill-edit').hidden = false; $('#skill-state').textContent = '';
       $('#skill-editor').focus();
     };
     el.querySelector('[data-a=del]').onclick = async () => {
       const b = el.querySelector('[data-a=del]');
       if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Confirm delete'; return; }
-      try { await post(`/api/skills/${encodeURIComponent(k.name)}/delete`); toast('Skill deleted'); loadSkills(); } catch (e) { toast(e.message); }
+      try { await post(`api/skills/${encodeURIComponent(k.name)}/delete`); toast('Skill deleted'); loadSkills(); } catch (e) { toast(e.message); }
     };
     box.append(el);
   }
@@ -1612,10 +1615,10 @@ function showDigest(d) {
   $('#digest-state').textContent = (parts.length ? 'Digest: ' + parts.join(', ') + '. ' : 'No digest yet. ') + `${d.waiting} message(s) word for word or waiting to be summarised.`;
   $('#digest').innerHTML = d.digest ? md(d.digest) : '<p class="muted">Nothing compacted yet: it starts once the conversation grows.</p>';
 }
-async function loadDigest() { showDigest(await api('/api/memory/digest')); }
+async function loadDigest() { showDigest(await api('api/memory/digest')); }
 $('#digest-compact').onclick = async () => {
   const b = $('#digest-compact'); b.disabled = true; b.textContent = 'Compacting…';
-  try { const d = await post('/api/memory/compact'); showDigest(d); toast(d.done ? 'Conversation compacted.' : 'Nothing to compact yet.'); }
+  try { const d = await post('api/memory/compact'); showDigest(d); toast(d.done ? 'Conversation compacted.' : 'Nothing to compact yet.'); }
   catch (e) { toast(e.message); }
   b.disabled = false; b.textContent = 'Compact now';
 };
@@ -1623,7 +1626,7 @@ $('#digest-compact').onclick = async () => {
 async function loadMemory() {
   loadSkills().catch(e => toast(e.message));
   loadDigest().catch(() => {});
-  state.memFiles = (await api('/api/memory')).files;
+  state.memFiles = (await api('api/memory')).files;
   const tabs = $('#mem-tabs'); tabs.innerHTML = '';
   for (const f of Object.keys(state.memFiles)) {
     const b = document.createElement('button');
@@ -1658,7 +1661,7 @@ function libGo(folder) { location.hash = '#library' + (folder === '/' ? '' : fol
 
 async function loadLibrary() {
   lib.folder = libFolderFromHash() || '/';
-  const [tree, list] = await Promise.all([api('/api/library/tree'), api('/api/library?folder=' + encodeURIComponent(lib.folder))]);
+  const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
   lib.tree = tree.tree;
   lib.folder = list.folder;
   const st = list.stats;
@@ -1692,7 +1695,7 @@ function renderCrumbs() {
   $('#lib-crumbs').querySelectorAll('a').forEach(a => { a.onclick = e => { e.preventDefault(); libGo(a.dataset.path); }; dropTarget(a, a.dataset.path); });
   const fa = $('#lib-folder-actions');
   const zipName = (lib.folder === '/' ? 'Library' : lib.folder.split('/').pop()) + '-' + new Date().toLocaleDateString('sv-SE') + '.zip';
-  const zip = `<a class="btn small" href="/api/library/zip?folder=${encodeURIComponent(lib.folder)}" download="${esc(zipName)}" title="Download this folder and its subfolders as a ZIP">Download zip</a>`;
+  const zip = `<a class="btn small" href="api/library/zip?folder=${encodeURIComponent(lib.folder)}" download="${esc(zipName)}" title="Download this folder and its subfolders as a ZIP">Download zip</a>`;
   const ask = `<button class="btn small primary" data-a="ask" type="button" title="Ask the assistant about the documents in this folder">Ask about ${lib.folder === '/' ? 'my library' : 'this folder'}</button>`;
   const owner = lib.folder !== '/' && state.spaces.find(x => x.id && x.folder === lib.folder);
   const spaceBtn = lib.folder === '/' ? '' : owner ? `<a class="btn small" href="#chat/${esc(owner.slug)}" title="Open the conversation of this folder's space"><i class="space-dot" style="background:${esc(owner.color)};width:9px;height:9px;display:inline-block;margin-right:6px"></i>Open space</a>`
@@ -1703,11 +1706,11 @@ function renderCrumbs() {
     location.hash = '#chat';
     const i = $('#input'); i.value = lib.folder === '/' ? 'From my library: ' : `From my documents in ${lib.folder}: `; autosize(); i.focus(); saveDraft();
   });
-  fa.querySelector('[data-a=rename]')?.addEventListener('click', () => libInline(lib.folder, 'Folder path', async v => { const { folder } = await post('/api/library/folder/move', { from: lib.folder, to: v }); toast('Folder renamed'); libGo(folder); }));
+  fa.querySelector('[data-a=rename]')?.addEventListener('click', () => libInline(lib.folder, 'Folder path', async v => { const { folder } = await post('api/library/folder/move', { from: lib.folder, to: v }); toast('Folder renamed'); libGo(folder); }));
   fa.querySelector('[data-a=delete]')?.addEventListener('click', async e => {
     const b = e.currentTarget, node = lib.tree.find(t => t.path === lib.folder), n = node ? node.total : 0;
     if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = n ? `Delete with its ${n} file${n > 1 ? 's' : ''}?` : 'Confirm delete'; return; }
-    try { await post('/api/library/folder/delete', { path: lib.folder, recursive: true }); toast('Folder deleted'); libGo(lib.folder.split('/').slice(0, -1).join('/') || '/'); } catch (err) { toast(err.message); }
+    try { await post('api/library/folder/delete', { path: lib.folder, recursive: true }); toast('Folder deleted'); libGo(lib.folder.split('/').slice(0, -1).join('/') || '/'); } catch (err) { toast(err.message); }
   });
 }
 
@@ -1718,10 +1721,10 @@ function fileRow(f, sub) {
   const el = document.createElement('div'); el.className = 'lib-row'; el.draggable = true; el.tabIndex = 0; el.setAttribute('role', 'button');
   const ext = (f.name.match(/\.([a-z0-9]{1,4})$/i) || [])[1];
   const label = f.note ? 'NOTE' : isVideo(f) ? 'VID' : ['text', 'office'].includes(f.kind) && ext ? ext.toUpperCase() : KIND_LABEL[f.kind] || 'FILE';
-  const ico = f.kind === 'image' || f.kind === 'pdf' ? `<img src="/api/files/${f.id}/thumb" alt="" loading="lazy">` : label;
+  const ico = f.kind === 'image' || f.kind === 'pdf' ? `<img src="api/files/${f.id}/thumb" alt="" loading="lazy">` : label;
   const status = f.status === 'pending' || f.status === 'processing' ? '<span class="pill pending">reading…</span>' : f.status === 'failed' ? '<span class="pill failed">unreadable</span>' : '';
   el.innerHTML = `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>`
-    + `<span class="row-end">${status}<a class="btn ghost icon dl" href="/api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a></span>`;
+    + `<span class="row-end">${status}<a class="btn ghost icon dl" href="api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a></span>`;
   el.querySelector('.dl').onclick = e => e.stopPropagation();
   const sg = f.suggestion;
   if (sg) { // where it would go: one click to file it, or edit, or dismiss
@@ -1731,10 +1734,10 @@ function fileRow(f, sub) {
       + `<b class="small">→ ${esc(target.replace(/\/$/, ''))}</b>`
       + `<span class="acts"><button class="btn small primary" data-s="ok" type="button">File it</button><button class="btn small" data-s="edit" type="button">Change…</button><button class="btn small ghost" data-s="no" type="button" aria-label="Dismiss" title="Leave it here">✕</button></span>`;
     box.onclick = e => e.stopPropagation();
-    box.querySelector('[data-s=ok]').onclick = async () => { try { await post(`/api/files/${f.id}/file-it`); toast(`Filed in ${sg.folder}`); loadLibrary(); } catch (e) { toast(e.message); } };
-    box.querySelector('[data-s=no]').onclick = async () => { try { await post(`/api/files/${f.id}/dismiss`); loadLibrary(); } catch (e) { toast(e.message); } };
+    box.querySelector('[data-s=ok]').onclick = async () => { try { await post(`api/files/${f.id}/file-it`); toast(`Filed in ${sg.folder}`); loadLibrary(); } catch (e) { toast(e.message); } };
+    box.querySelector('[data-s=no]').onclick = async () => { try { await post(`api/files/${f.id}/dismiss`); loadLibrary(); } catch (e) { toast(e.message); } };
     box.querySelector('[data-s=edit]').onclick = () => libInline(Library_join(sg.folder, sg.name), 'Folder and name', async v => {
-      const i = v.lastIndexOf('/'); await post(`/api/files/${f.id}/file-it`, { folder: v.slice(0, i) || '/', name: v.slice(i + 1) }); toast('Filed'); loadLibrary();
+      const i = v.lastIndexOf('/'); await post(`api/files/${f.id}/file-it`, { folder: v.slice(0, i) || '/', name: v.slice(i + 1) }); toast('Filed'); loadLibrary();
     });
     el.classList.add('has-suggestion'); el.append(box);
   }
@@ -1758,7 +1761,7 @@ function renderList(list) {
   if (lib.folder === '/Inbox' && ready.length > 1) {
     const bar = document.createElement('div'); bar.className = 'suggest-bar';
     bar.innerHTML = `<span>${ready.length} documents have a suggested place.</span><button class="btn small primary" type="button">File them all</button>`;
-    bar.querySelector('button').onclick = async () => { try { const r = await post('/api/library/file-all'); toast(`${r.filed} documents filed`); loadLibrary(); } catch (e) { toast(e.message); } };
+    bar.querySelector('button').onclick = async () => { try { const r = await post('api/library/file-all'); toast(`${r.filed} documents filed`); loadLibrary(); } catch (e) { toast(e.message); } };
     box.append(bar);
   }
   for (const f of list.files) box.append(fileRow(f));
@@ -1772,7 +1775,7 @@ function dropTarget(el, path) {
   el.addEventListener('drop', async e => {
     e.preventDefault(); e.stopPropagation(); el.classList.remove('drop'); $('#lib-main').classList.remove('drag');
     const id = e.dataTransfer.getData('text/x-talixio-file');
-    if (id) { try { await post(`/api/files/${id}/move`, { folder: path }); toast('Moved to ' + path); loadLibrary(); } catch (err) { toast(err.message); } return; }
+    if (id) { try { await post(`api/files/${id}/move`, { folder: path }); toast('Moved to ' + path); loadLibrary(); } catch (err) { toast(err.message); } return; }
     libUpload([...(e.dataTransfer.files || [])], path);
   });
 }
@@ -1795,12 +1798,12 @@ function libInline(value, placeholder, onOk) {
   form.onsubmit = async e => { e.preventDefault(); try { await onOk(input.value.trim()); form.hidden = true; } catch (err) { toast(err.message); } };
 }
 
-const fileUrl = f => `/api/files/${f.id}/file/${encodeURIComponent(f.name)}`;
-const previewUrl = f => `/preview/${f.id}/${encodeURIComponent(f.name)}`;
+const fileUrl = f => `api/files/${f.id}/file/${encodeURIComponent(f.name)}`;
+const previewUrl = f => `preview/${f.id}/${encodeURIComponent(f.name)}`;
 /** Rendered documents are fetched as data and shown in a sandboxed srcdoc frame (no scripts, own origin). */
 async function fillPreview(frame, id) {
   frame.srcdoc = '<p style="font:14px sans-serif;color:#5b6a66;padding:16px">Loading…</p>';
-  try { frame.srcdoc = (await api(`/api/files/${id}/preview`)).html; }
+  try { frame.srcdoc = (await api(`api/files/${id}/preview`)).html; }
   catch (e) { frame.srcdoc = `<p style="font:14px sans-serif;color:#b42318;padding:16px">${esc(e.message)}</p>`; }
 }
 const FRAME_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox';
@@ -1812,7 +1815,7 @@ document.addEventListener('click', async e => {
   e.preventDefault();
   a.closest('dialog[open]')?.close();
   try {
-    const { file } = await api(`/api/files/${a.dataset.file}/text`);
+    const { file } = await api(`api/files/${a.dataset.file}/text`);
     lib.folder = file.folder; location.hash = '#library' + (file.folder === '/' ? '' : file.folder);
     setTimeout(() => openFile(+a.dataset.file, { page: +a.dataset.page || 0 }), 150);
   } catch (err) { toast(err.message.includes('not found') ? 'That document is no longer in the library.' : err.message); }
@@ -1821,7 +1824,7 @@ document.addEventListener('click', async e => {
 async function openFile(id, opts = {}) {
   const v = $('#viewer'), body = $('#viewer-body');
   let d;
-  try { d = await api(`/api/files/${id}/text`); } catch (e) { toast(e.message); return; }
+  try { d = await api(`api/files/${id}/text`); } catch (e) { toast(e.message); return; }
   const f = lib.file = d.file;
   v.hidden = false; $('#viewer-form').hidden = true;
   $('#viewer-name').textContent = f.name;
@@ -1829,7 +1832,7 @@ async function openFile(id, opts = {}) {
   const officePages = f.kind === 'office' && d.pages; // LibreOffice installed: the real pages
   const rendered = RENDERED.includes(f.kind) && !officePages;
   const opens = rendered || officePages || ['image', 'pdf', 'audio'].includes(f.kind);
-  $('#viewer-open').href = officePages ? `/api/files/${f.id}/pdf/${encodeURIComponent(f.name.replace(/\.[^.]+$/, ''))}.pdf` : rendered ? previewUrl(f) : fileUrl(f);
+  $('#viewer-open').href = officePages ? `api/files/${f.id}/pdf/${encodeURIComponent(f.name.replace(/\.[^.]+$/, ''))}.pdf` : rendered ? previewUrl(f) : fileUrl(f);
   $('#viewer-open').hidden = !opens;
   $('#viewer-download').href = fileUrl(f) + '?download=1'; $('#viewer-download').setAttribute('download', f.name);
   const del = $('#viewer-delete'); del.dataset.confirm = ''; del.textContent = 'Delete';
@@ -1875,7 +1878,7 @@ async function openFile(id, opts = {}) {
   });
   $('#viewer-save')?.addEventListener('click', async () => {
     try {
-      await post('/api/library/note', { id: f.id, folder: f.folder, name: f.name, content: $('#viewer-editor').value });
+      await post('api/library/note', { id: f.id, folder: f.folder, name: f.name, content: $('#viewer-editor').value });
       $('#viewer-state').textContent = 'Saved';
       const fr = $('#viewer-frame'); if (fr) fillPreview(fr, f.id);
       loadLibrary();
@@ -1890,18 +1893,18 @@ function viewerForm(value, onOk) {
   form.onsubmit = async e => { e.preventDefault(); try { await onOk(input.value.trim()); form.hidden = true; } catch (err) { toast(err.message); } };
 }
 function pdfPageHtml(id, n, total) {
-  return `<figure class="pdf-page"><img src="/api/files/${id}/page/${n}" alt="Page ${n}" loading="lazy"><figcaption>Page ${n} of ${total}</figcaption></figure>`;
+  return `<figure class="pdf-page"><img src="api/files/${id}/page/${n}" alt="Page ${n}" loading="lazy"><figcaption>Page ${n} of ${total}</figcaption></figure>`;
 }
 async function newNote() {
   const folder = lib.folder === '/' ? '/Notes' : lib.folder;
-  try { const { file } = await post('/api/library/note', { folder, name: '', content: '# ' }); await loadLibrary(); await openFile(file.id); $('#viewer-body [data-tab=edit]')?.click(); }
+  try { const { file } = await post('api/library/note', { folder, name: '', content: '# ' }); await loadLibrary(); await openFile(file.id); $('#viewer-body [data-tab=edit]')?.click(); }
   catch (e) { toast(e.message); }
 }
 
 // ---- mail to handle ----
 const MAIL_LABELS = { reply: 'To answer', action: 'To do', fyi: 'To read', low: 'Low priority' };
 async function loadMail() {
-  const d = await api('/api/mail' + ($('#mail-all').checked ? '?all=1' : ''));
+  const d = await api('api/mail' + ($('#mail-all').checked ? '?all=1' : ''));
   const box = $('#mail-list');
   if (!d.mailbox) { box.innerHTML = '<div class="placeholder">Connect your mailbox first: Settings → Configuration → Your mailbox.</div>'; return; }
   if (!d.enabled) { box.innerHTML = '<div class="placeholder">Email sorting is off: Settings → Your mailbox → Sort new emails.</div>'; return; }
@@ -1920,8 +1923,8 @@ async function loadMail() {
           ${m.label === 'reply' && m.status !== 'done' ? '<button class="btn small" data-a="draft" type="button">Prepare a reply</button>' : ''}
           ${m.status !== 'done' && m.label !== 'low' ? '<button class="btn small" data-a="task" type="button" title="Make it a task on the board">→ Task</button>' : ''}
           <button class="btn small ${m.status === 'done' ? '' : 'primary'}" data-a="${m.status === 'done' ? 'open' : 'done'}" type="button">${m.status === 'done' ? 'Reopen' : 'Done'}</button></div>`;
-      el.querySelector('select').onchange = async e => { try { await post(`/api/mail/${m.uid}/label`, { label: e.target.value }); toast('Moved: it will remember.'); loadMail(); } catch (err) { toast(err.message); } };
-      el.querySelector('[data-a=done], [data-a=open]').onclick = async e => { try { await post(`/api/mail/${m.uid}/${e.currentTarget.dataset.a}`); loadMail(); } catch (err) { toast(err.message); } };
+      el.querySelector('select').onchange = async e => { try { await post(`api/mail/${m.uid}/label`, { label: e.target.value }); toast('Moved: it will remember.'); loadMail(); } catch (err) { toast(err.message); } };
+      el.querySelector('[data-a=done], [data-a=open]').onclick = async e => { try { await post(`api/mail/${m.uid}/${e.currentTarget.dataset.a}`); loadMail(); } catch (err) { toast(err.message); } };
       el.querySelector('[data-a=task]')?.addEventListener('click', () => openCard(null, { space: state.space, title: m.subject, due_date: m.due || '',
         body: `From ${m.sender} <${m.email}>, ${new Date(m.ts * 1000).toLocaleDateString()}${m.summary ? '\n\n' + m.summary : ''}`, links: [{ type: 'email', ref: m.uid, label: m.subject }] }));
       el.querySelector('[data-a=draft]')?.addEventListener('click', async () => {
@@ -1936,14 +1939,14 @@ async function loadMail() {
 $('#mail-all').onchange = () => loadMail().catch(e => toast(e.message));
 $('#mail-run').onclick = async () => {
   const b = $('#mail-run'); b.disabled = true; $('#mail-state').textContent = 'Checking…';
-  try { const r = await post('/api/mail/run'); $('#mail-state').textContent = r.sorted ? `${r.sorted} new email(s) sorted.` : 'No new email.'; loadMail(); }
+  try { const r = await post('api/mail/run'); $('#mail-state').textContent = r.sorted ? `${r.sorted} new email(s) sorted.` : 'No new email.'; loadMail(); }
   catch (e) { $('#mail-state').textContent = e.message; }
   b.disabled = false;
 };
 
 // ---- people ----
 async function loadPeople() {
-  const { contacts } = await api('/api/contacts?q=' + encodeURIComponent($('#people-q').value.trim()));
+  const { contacts } = await api('api/contacts?q=' + encodeURIComponent($('#people-q').value.trim()));
   const box = $('#people-list'); box.innerHTML = '';
   if (!contacts.length) { box.innerHTML = '<div class="placeholder">No one yet. People you get emails from appear here, and the assistant adds what it learns.</div>'; return; }
   for (const c of contacts) {
@@ -1956,7 +1959,7 @@ async function loadPeople() {
 $('#people-search').onsubmit = e => { e.preventDefault(); loadPeople(); };
 $('#people-q').addEventListener('input', () => { clearTimeout(loadPeople.t); loadPeople.t = setTimeout(() => loadPeople().catch(() => {}), 300); });
 $('#people-new').onclick = () => showPerson({ contact: { id: 0, name: '', email: '', phone: '', org: '', notes: '' }, emails: [], documents: [], conversations: [] });
-async function openPerson(id) { try { showPerson(await api(`/api/contacts/${id}`)); } catch (e) { toast(e.message); } }
+async function openPerson(id) { try { showPerson(await api(`api/contacts/${id}`)); } catch (e) { toast(e.message); } }
 function showPerson(p) {
   const c = p.contact, box = $('#person'); box.hidden = false;
   box.innerHTML = `<div class="row"><h3>${esc(c.name || 'New contact')}</h3><span class="spacer"></span><button class="btn ghost icon" data-a="close" type="button" aria-label="Close">✕</button></div>
@@ -1975,18 +1978,18 @@ function showPerson(p) {
   box.querySelector('form').onsubmit = async e => {
     e.preventDefault();
     const body = Object.fromEntries(new FormData(e.target));
-    try { const r = await post(c.id ? `/api/contacts/${c.id}` : '/api/contacts', body); toast('Saved.'); loadPeople(); openPerson(r.contact.id); } catch (err) { toast(err.message); }
+    try { const r = await post(c.id ? `api/contacts/${c.id}` : 'api/contacts', body); toast('Saved.'); loadPeople(); openPerson(r.contact.id); } catch (err) { toast(err.message); }
   };
   box.querySelector('[data-a=ask]')?.addEventListener('click', () => { location.hash = '#chat'; $('#input').value = `About ${c.name}: `; autosize(); $('#input').focus(); });
   box.querySelector('[data-a=delete]')?.addEventListener('click', async e => {
     const b = e.currentTarget; if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Confirm delete'; return; }
-    try { await post(`/api/contacts/${c.id}/delete`); box.hidden = true; loadPeople(); } catch (err) { toast(err.message); }
+    try { await post(`api/contacts/${c.id}/delete`); box.hidden = true; loadPeople(); } catch (err) { toast(err.message); }
   });
 }
 
 // ---- activity ----
 async function loadHeartbeats(data) {
-  const d = data || await api('/api/heartbeats');
+  const d = data || await api('api/heartbeats');
   const name = state.status?.name || 'the assistant';
   $('#hb-info').textContent = !d.minutes ? `Off. Set "Periodic check (minutes)" in Settings → Notifications, and write what to check in Memory → HEARTBEAT.md.`
     : !d.checklist ? `Every ${d.minutes} min, but the checklist (Memory → HEARTBEAT.md) is empty, so nothing is checked.`
@@ -2000,7 +2003,7 @@ async function loadHeartbeats(data) {
 }
 $('#hb-run').onclick = async () => {
   const b = $('#hb-run'); b.disabled = true; b.textContent = 'Checking…';
-  try { const d = await post('/api/heartbeat/run'); loadHeartbeats(d); toast(d.message ? 'Something needs your attention: see the chat.' : 'Nothing needs your attention.'); if (d.message) poll(); }
+  try { const d = await post('api/heartbeat/run'); loadHeartbeats(d); toast(d.message ? 'Something needs your attention: see the chat.' : 'Nothing needs your attention.'); if (d.message) poll(); }
   catch (e) { toast(e.message); }
   b.disabled = false; b.textContent = 'Check now';
 };
@@ -2043,7 +2046,7 @@ function chartHover(chart) {
 
 async function loadActivity() {
   loadHeartbeats().catch(() => {});
-  const { usage, tools, budget, by_tier, by_source, memory, backup } = await api('/api/activity');
+  const { usage, tools, budget, by_tier, by_source, memory, backup } = await api('api/activity');
   const meter = (label, spent, limit) => {
     const pct = limit > 0 ? Math.min(100, spent / limit * 100) : 0;
     const cls = !limit ? '' : pct >= 100 ? 'blocked' : pct >= 80 ? 'low' : '';
@@ -2096,7 +2099,7 @@ function route() {
 
 async function refreshStatus() {
   try {
-    const s = state.status = await api('/api/status');
+    const s = state.status = await api('api/status');
     $('#brand-name').textContent = s.name; document.title = s.name;
     const ch = Object.entries(s.channels).filter(([, on]) => on).map(([k]) => k[0].toUpperCase() + k.slice(1)).join(', ');
     const b = s.budget, lim = b.daily_limit > 0 ? ` · $${b.today.toFixed(2)} of $${b.daily_limit.toFixed(2)} today` : '';
@@ -2111,7 +2114,7 @@ function showLogin() { $('#shell').hidden = true; $('#login').hidden = false; cl
 
 // ---- the menu on the left folds down to its icons ----
 function railCollapsed() {
-  let v = null; try { v = localStorage.getItem('talixio.rail'); } catch {}
+  let v = null; try { v = localStorage.getItem(LSK + 'talixio.rail'); } catch {}
   return v ? v === 'icons' : innerWidth < 1100; // narrow desktop windows start folded
 }
 function applyRail(collapsed) {
@@ -2123,7 +2126,7 @@ function applyRail(collapsed) {
 }
 $('#rail-toggle').onclick = () => {
   const c = !$('#shell').classList.contains('collapsed');
-  try { localStorage.setItem('talixio.rail', c ? 'icons' : 'full'); } catch {}
+  try { localStorage.setItem(LSK + 'talixio.rail', c ? 'icons' : 'full'); } catch {}
   applyRail(c);
 };
 applyRail(railCollapsed());
@@ -2135,7 +2138,7 @@ async function startApp() {
   await loadSpaces();
   const fromHash = location.hash.match(/^#chat\/([\w-]+)/);
   let sp = fromHash ? state.spaces.find(x => x.slug === fromHash[1]) : null;
-  if (!sp) { let saved = 0; try { saved = +(localStorage.getItem('talixio.space') || 0); } catch {} sp = state.spaces.find(x => x.id === saved && !x.archived); }
+  if (!sp) { let saved = 0; try { saved = +(localStorage.getItem(LSK + 'talixio.space') || 0); } catch {} sp = state.spaces.find(x => x.id === saved && !x.archived); }
   await switchSpace(sp ? sp.id : 0, { keepHash: !fromHash });
   loadApprovals();
   route();
@@ -2148,7 +2151,7 @@ async function startApp() {
 $('#login-form').onsubmit = async e => {
   e.preventDefault(); $('#login-error').textContent = '';
   try {
-    await post('/api/login', { password: $('#password').value, code: $('#login-code').value });
+    await post('api/login', { password: $('#password').value, code: $('#login-code').value });
     $('#password').value = $('#login-code').value = ''; $('#code-row').hidden = true;
     await start(); if (!previewId) handleLaunch();
   } catch (err) {
@@ -2156,7 +2159,7 @@ $('#login-form').onsubmit = async e => {
     if (err.data?.need_code) { $('#code-row').hidden = false; $('#login-code').value = ''; $('#login-code').focus(); }
   }
 };
-$('#logout').onclick = async () => { try { await post('/api/logout'); } catch {} showLogin(); };
+$('#logout').onclick = async () => { try { await post('api/logout'); } catch {} showLogin(); };
 $('#composer').onsubmit = e => { e.preventDefault(); if (state.sending) stopAnswer(); else send(); };
 $('#attach').onclick = () => $('#file-input').click();
 $('#file-input').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
@@ -2173,7 +2176,7 @@ $('#input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shift
 $('#test-notify').onclick = async () => {
   $('#test-result').textContent = 'Sending…';
   try {
-    const { results } = await post('/api/notify/test');
+    const { results } = await post('api/notify/test');
     $('#test-result').textContent = Object.entries(results).filter(([, r]) => r === 'sent' || r.startsWith('error')).map(([k, r]) => `${k}: ${r}`).join(' · ') || 'No notification channel is set up yet.';
     loadChannels();
   } catch (e) { $('#test-result').textContent = e.message; }
@@ -2183,21 +2186,21 @@ $('#search-form').onsubmit = async e => {
   const q = $('#search-q').value.trim(); const box = $('#search-results');
   if (!q) { box.hidden = true; return; }
   try {
-    const { results } = await api('/api/search?q=' + encodeURIComponent(q));
+    const { results } = await api('api/search?q=' + encodeURIComponent(q));
     box.hidden = false;
     box.innerHTML = results.length ? results.map(r => `<div class="hit"><div class="meta"><span class="chip">${esc(r.label)}</span><span>${new Date(r.ts * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>${r.sim != null ? `<span>${Math.round(r.sim * 100)}% similar</span>` : ''}</div>${esc(r.text.slice(0, 600))}</div>`).join('')
       : '<div class="placeholder">Nothing found.</div>';
   } catch (err) { toast(err.message); }
 };
 $('#skill-save').onclick = async () => {
-  try { await post('/api/skills/' + encodeURIComponent(state.skill), { content: $('#skill-editor').value }); $('#skill-state').textContent = 'Saved'; loadSkills(); }
+  try { await post('api/skills/' + encodeURIComponent(state.skill), { content: $('#skill-editor').value }); $('#skill-state').textContent = 'Saved'; loadSkills(); }
   catch (e) { toast(e.message); }
 };
 $('#skill-cancel').onclick = () => { $('#skill-edit').hidden = true; };
 $('#mem-editor').addEventListener('input', () => { $('#mem-state').textContent = 'Unsaved changes'; });
 $('#mem-save').onclick = async () => {
   try {
-    await post('/api/memory', { file: state.memFile, content: $('#mem-editor').value });
+    await post('api/memory', { file: state.memFile, content: $('#mem-editor').value });
     state.memFiles[state.memFile] = $('#mem-editor').value; $('#mem-state').textContent = 'Saved';
   } catch (e) { toast(e.message); }
 };
@@ -2209,7 +2212,7 @@ $('#lib-upload').onclick = () => $('#lib-upload-input').click();
 $('#lib-upload-input').onchange = e => { libUpload([...e.target.files]); e.target.value = ''; };
 $('#lib-newnote').onclick = newNote;
 $('#lib-newfolder').onclick = () => libInline(lib.folder === '/' ? '/' : lib.folder + '/', 'New folder path, e.g. /Clients/Alice', async v => {
-  const { folder } = await post('/api/library/folder', { path: v }); toast('Folder created'); libGo(folder);
+  const { folder } = await post('api/library/folder', { path: v }); toast('Folder created'); libGo(folder);
 });
 $('#lib-inline-cancel').onclick = () => { $('#lib-inline').hidden = true; };
 ['dragover', 'dragenter'].forEach(t => $('#lib-main').addEventListener(t, e => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); $('#lib-main').classList.add('drag'); } }));
@@ -2221,7 +2224,7 @@ $('#lib-search').onsubmit = async e => {
   if (!q) { box.hidden = true; $('#lib-list').hidden = false; return; }
   const folder = $('#lib-scope').checked ? lib.folder : '/';
   try {
-    const { results } = await api(`/api/library/search?q=${encodeURIComponent(q)}&folder=${encodeURIComponent(folder)}`);
+    const { results } = await api(`api/library/search?q=${encodeURIComponent(q)}&folder=${encodeURIComponent(folder)}`);
     box.hidden = false; box.innerHTML = '';
     const head = document.createElement('div'); head.className = 'row between';
     head.innerHTML = `<span class="muted small">${results.length ? results.length + ' result' + (results.length > 1 ? 's' : '') : 'Nothing found'}${folder !== '/' ? ' in ' + esc(folder) : ''}</span><button class="btn small ghost" type="button">Clear search</button>`;
@@ -2235,13 +2238,13 @@ $('#lib-search').onsubmit = async e => {
 $('#viewer-close').onclick = closeViewer;
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#viewer').hidden) closeViewer(); });
 $('#viewer-form-cancel').onclick = () => { $('#viewer-form').hidden = true; };
-$('#viewer-rename').onclick = () => viewerForm(lib.file.name, async v => { const { file } = await post(`/api/files/${lib.file.id}/rename`, { name: v }); await loadLibrary(); openFile(file.id); });
-$('#viewer-move').onclick = () => viewerForm(lib.file.folder, async v => { const { file } = await post(`/api/files/${lib.file.id}/move`, { folder: v }); toast('Moved to ' + file.folder); await loadLibrary(); openFile(file.id); });
-$('#viewer-reindex').onclick = async () => { try { await post(`/api/files/${lib.file.id}/reindex`); toast('It will be read again in a moment'); await loadLibrary(); openFile(lib.file.id); } catch (e) { toast(e.message); } };
+$('#viewer-rename').onclick = () => viewerForm(lib.file.name, async v => { const { file } = await post(`api/files/${lib.file.id}/rename`, { name: v }); await loadLibrary(); openFile(file.id); });
+$('#viewer-move').onclick = () => viewerForm(lib.file.folder, async v => { const { file } = await post(`api/files/${lib.file.id}/move`, { folder: v }); toast('Moved to ' + file.folder); await loadLibrary(); openFile(file.id); });
+$('#viewer-reindex').onclick = async () => { try { await post(`api/files/${lib.file.id}/reindex`); toast('It will be read again in a moment'); await loadLibrary(); openFile(lib.file.id); } catch (e) { toast(e.message); } };
 $('#viewer-delete').onclick = async () => {
   const b = $('#viewer-delete');
   if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Confirm delete'; return; }
-  try { await post(`/api/files/${lib.file.id}/delete`); toast('Deleted'); closeViewer(); loadLibrary(); } catch (e) { toast(e.message); }
+  try { await post(`api/files/${lib.file.id}/delete`); toast('Deleted'); closeViewer(); loadLibrary(); } catch (e) { toast(e.message); }
 };
 $('#viewer-ask').onclick = () => {
   const f = lib.file;
@@ -2300,7 +2303,7 @@ updateInstallUi();
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname))) return;
   try {
-    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+    const reg = await navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' });
     const offerUpdate = w => banner('A new version of Talixio is ready.', 'Reload', () => { state.updateAccepted = true; w.postMessage('update'); });
     if (reg.waiting && navigator.serviceWorker.controller) offerUpdate(reg.waiting);
     reg.addEventListener('updatefound', () => {
@@ -2333,20 +2336,20 @@ async function handleLaunch() {
   const token = params.get('share');
   if (params.has('google')) {
     const g = params.get('google');
-    history.replaceState(null, '', '/#settings');
+    history.replaceState(null, '', './#settings');
     toast(g === 'connected' ? 'Google Calendar connected.' : g);
     if (g === 'connected') setTimeout(() => { $('#google-card').open = true; $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
   }
   if (params.has('spotify')) {
     const g = params.get('spotify');
-    history.replaceState(null, '', '/#settings');
+    history.replaceState(null, '', './#settings');
     toast(g === 'connected' ? 'Spotify connected.' : g);
     setTimeout(() => { $('#spotify-card').open = true; $('#spotify-card').scrollIntoView({ block: 'center' }); }, 600);
   }
   if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', '/' + location.hash);
   if (token) {
     try {
-      const d = await post('/api/share/claim', { token });
+      const d = await post('api/share/claim', { token });
       if (d.text) { $('#input').value = d.text; autosize(); }
       for (const f of d.files) { state.pending.push({ id: f.id, info: f }); }
       renderPending();
@@ -2362,15 +2365,15 @@ async function handleLaunch() {
 }
 
 /** /preview/ID/name: one document full screen ("Open in a new tab"); the address keeps the file name. */
-const previewId = (location.pathname.match(/^\/preview\/(\d+)/) || [])[1];
+const previewId = (location.pathname.slice(BASE.length).match(/^\/preview\/(\d+)/) || [])[1];
 async function startPreview() {
   $('#login').hidden = true; $('#shell').hidden = true; $('#preview-page').hidden = false;
   try {
-    const { file: f } = await api(`/api/files/${previewId}/text`);
+    const { file: f } = await api(`api/files/${previewId}/text`);
     document.title = f.name;
     $('#pp-name').textContent = f.name; $('#pp-path').textContent = f.folder;
     $('#pp-download').href = fileUrl(f) + '?download=1'; $('#pp-download').setAttribute('download', f.name);
-    $('#pp-library').href = '/#library' + (f.folder === '/' ? '' : f.folder.split('/').map(encodeURIComponent).join('/'));
+    $('#pp-library').href = './#library' + (f.folder === '/' ? '' : f.folder.split('/').map(encodeURIComponent).join('/'));
     if (RENDERED.includes(f.kind)) { $('#pp-frame').hidden = false; await fillPreview($('#pp-frame'), f.id); }
     else location.replace(fileUrl(f)); // photos, PDFs, audio: the browser shows them itself
   } catch (e) { $('#pp-name').textContent = e.message; }
@@ -2378,4 +2381,4 @@ async function startPreview() {
 if (previewId) start = startPreview; // after sign-in, come back to the document
 
 registerServiceWorker();
-api('/api/status').then(async () => { await start(); if (!previewId) handleLaunch(); }).catch(() => showLogin());
+api('api/status').then(async () => { await start(); if (!previewId) handleLaunch(); }).catch(() => showLogin());

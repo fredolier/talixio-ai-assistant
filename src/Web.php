@@ -17,7 +17,8 @@ final class Web
             header('Content-Type: text/html; charset=utf-8');
             // previews of documents run in sandboxed srcdoc frames that inherit this policy: no inline scripts, web pictures and styles allowed
             header("Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:");
-            readfile(dirname(__DIR__) . '/web/public/app.html');
+            $html = (string)file_get_contents(dirname(__DIR__) . '/web/public/app.html');
+            echo preg_replace('/<head>/', '<head><base href="' . htmlspecialchars(Config::basePath() . '/') . '">', $html, 1); // every address in the app is relative to it
             return;
         }
         if ($path === '/api/google/callback' && $method === 'GET') { $this->googleCallback(); return; } // Google's redirect carries no session cookie (SameSite)
@@ -239,7 +240,7 @@ final class Web
             Log::warn("google: {$e->getMessage()}");
             $msg = $e->getMessage();
         }
-        header('Location: /?google=' . rawurlencode($msg) . '#settings', true, 303);
+        header('Location: ' . Config::basePath() . '/?google=' . rawurlencode($msg) . '#settings', true, 303);
     }
 
     /** Tasks board. The app acts as "you" and may change any space's cards. */
@@ -334,7 +335,7 @@ final class Web
             Log::warn("spotify: {$e->getMessage()}");
             $msg = $e->getMessage();
         }
-        header('Location: /?spotify=' . rawurlencode($msg) . '#settings', true, 303);
+        header('Location: ' . Config::basePath() . '/?spotify=' . rawurlencode($msg) . '#settings', true, 303);
     }
 
     private function heartbeats(): array
@@ -438,7 +439,7 @@ final class Web
             }
         }
         file_put_contents("$dir/meta.json", json_encode(['text' => mb_substr($text, 0, 20000), 'files' => $files, 'skipped' => $skipped, 'max_mb' => intdiv($maxBytes, 1_000_000)]));
-        header('Location: /?share=' . $token . '#chat', true, 303);
+        header('Location: ' . Config::basePath() . '/?share=' . $token . '#chat', true, 303);
     }
 
     /** Signed-in user takes a shared item: files are stored like uploads and prefilled in the composer. */
@@ -811,8 +812,9 @@ final class Web
         $dir = $this->app->cfg->dataDir . '/sessions';
         if (!is_dir($dir)) mkdir($dir, 0700, true);
         session_save_path($dir);
-        session_name('talixio');
-        session_set_cookie_params(['lifetime' => 60 * 60 * 24 * 30, 'httponly' => true, 'samesite' => 'Strict',
+        $base = Config::basePath();
+        session_name($base === '' ? 'talixio' : 'talixio_' . substr(sha1($base), 0, 8)); // instances under one address keep separate sessions
+        session_set_cookie_params(['lifetime' => 60 * 60 * 24 * 30, 'httponly' => true, 'samesite' => 'Strict', 'path' => $base . '/',
             'secure' => ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https' || !empty($_SERVER['HTTPS'])]);
         ini_set('session.gc_maxlifetime', (string)(60 * 60 * 24 * 30));
         session_start();

@@ -100,7 +100,7 @@ final class WebPush
     public function count(): int { return (int)$this->app->store->q('SELECT COUNT(*) FROM push_subs')->fetchColumn(); }
 
     /** Push to every subscribed device. Expired subscriptions are removed. Returns devices reached. */
-    public function notify(string $title, string $text, string $url = '/#chat'): int
+    public function notify(string $title, string $text, string $url = '#chat'): int
     {
         $subs = $this->app->store->q('SELECT * FROM push_subs')->fetchAll();
         $payload = json_encode(['title' => $title, 'body' => mb_substr(preg_replace('/[*_`#]/', '', $text), 0, 1500), 'url' => $url], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

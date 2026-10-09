@@ -5,6 +5,13 @@ namespace Talixio;
 /** All settings come from environment variables (see config/talixio.env.example). */
 final class Config
 {
+    /** Where the app is served: '' at the root of the site, '/fred' when several instances share one address (TALIXIO_BASE_PATH). */
+    public static function basePath(): string
+    {
+        $p = trim((string)getenv('TALIXIO_BASE_PATH'), " /");
+        return $p === '' || !preg_match('#^[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$#', $p) ? '' : '/' . $p;
+    }
+
     public string $provider = 'anthropic';      // anthropic | openai | claude-code | echo
     /** @var array<string,Tier> */ public array $tiers = [];
     public string $anthropicKey = '';

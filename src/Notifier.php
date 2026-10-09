@@ -27,7 +27,7 @@ final class Notifier
         $results = [];
         $sp = $this->app->spaces()->get($space) ?? $this->app->spaces()->general();
         if ($space) $title = "{$sp['name']} · $title";
-        $url = '/#chat/' . $sp['slug'];
+        $url = '#chat/' . $sp['slug']; // relative to the app (it may live under a prefix)
         $plain = $space ? "[{$sp['name']}] $text" : $text; // chat apps: say which space it comes from
         foreach ($this->channels() as $ch => $state) {
             if (!in_array($ch, $c->notify, true) || $state !== 'on') { $results[$ch] = in_array($ch, $c->notify, true) ? $state : 'off (TALIXIO_NOTIFY)'; continue; }
