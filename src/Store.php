@@ -50,7 +50,8 @@ final class Store
         if ($this->addColumn('files', 'status', "TEXT NOT NULL DEFAULT 'pending'")) { // pending | processing | ready | failed
             $this->db->exec("UPDATE files SET status = 'ready'"); // files from before the library: never re-read (no surprise transcription costs)
         }
-        $this->addColumn('files', 'note', 'INTEGER NOT NULL DEFAULT 0');           // 1 = Markdown note editable in the app
+        $this->addColumn('files', 'note', 'INTEGER NOT NULL DEFAULT 0');
+        $this->addColumn('files', 'suggestion', 'TEXT'); // where to file it (Filing): JSON, or {"done":true} / {"dismissed":true}           // 1 = Markdown note editable in the app
         $this->db->exec("CREATE TABLE IF NOT EXISTS folders(path TEXT PRIMARY KEY, created INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS files_folder ON files(folder);");
         // spaces: separate threads (0 = General), each with a library folder, instructions and notes

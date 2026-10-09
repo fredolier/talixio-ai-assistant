@@ -155,6 +155,11 @@ conversation.
   Copy any message; **edit** your last message or ask for a **new answer**. **Find in the
   conversation** (magnifier at the top) jumps to old messages. The message you are writing survives
   closing the app, and a message sent while offline goes out as soon as the connection is back.
+- **Filing the Inbox**: for each new document the app suggests a folder and a clear name
+  ("scan_0012.pdf → /Admin/Factures/Facture EDF 2026-10.pdf"); *File it*, *Change…* or *File them
+  all*. The folder is decided in embedding space from the documents you already filed (no model
+  call, and it learns from every move you make); the fast model is only asked when that is unclear or
+  the name is meaningless. Settings → *Filing new documents*: suggest, file the obvious ones, or off.
 - **Spaces**: separate conversations for separate subjects (a client, the house, health…), switched
   from the top of the chat. Each has its library folder (searched first; attachments are filed
   there), its instructions, its notes kept by the assistant, a default model and a colour. A space

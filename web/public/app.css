@@ -434,3 +434,11 @@ tr:last-child td{border-bottom:0}
 .topbar .topbar-actions{flex:none}
 .dialog select{font:inherit;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--sunk);color:var(--ink)}
 @media (max-width:760px){#notify-btn{display:none}}
+
+/* filing suggestions in the inbox */
+.lib-row.has-suggestion{row-gap:4px}
+.suggest-file{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 2px 52px;padding:6px 10px;border-radius:8px;background:var(--accent-soft);cursor:default}
+.suggest-file b{overflow-wrap:anywhere}
+.suggest-file .acts{display:flex;gap:6px;margin-left:auto}
+.suggest-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--accent-soft)}
+@media (max-width:760px){.suggest-file{margin-left:0}}

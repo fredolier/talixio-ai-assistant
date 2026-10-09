@@ -144,6 +144,15 @@ final class Web
             (bool)preg_match('#^/api/files/(\d+)/text$#', $path, $mm) => $this->fileText((int)$mm[1]),
             (bool)preg_match('#^/api/files/(\d+)/preview$#', $path, $mm) => $this->filePreview((int)$mm[1]),
             (bool)preg_match('#^/api/files/(\d+)/(move|rename|delete|reindex)$#', $path, $mm) && $m === 'POST' => $this->fileAction((int)$mm[1], $mm[2], $b),
+            (bool)preg_match('#^/api/files/(\d+)/file-it$#', $path, $mm) && $m === 'POST' => ['file' => $this->fileInfo((new Filing($this->app))->apply((int)$mm[1],
+                isset($b['folder']) ? (string)$b['folder'] : null, isset($b['name']) ? (string)$b['name'] : null))],
+            (bool)preg_match('#^/api/files/(\d+)/dismiss$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { (new Filing($this->app))->dismiss((int)$mm[1]); return ['ok' => true]; })(),
+            (bool)preg_match('#^/api/files/(\d+)/suggest$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { set_time_limit(120); return ['suggestion' => (new Filing($this->app))->suggest((int)$mm[1])]; })(),
+            $path === '/api/library/file-all' && $m === 'POST' => (function () {
+                $n = 0; $filing = new Filing($this->app);
+                foreach ($this->app->library()->list(Library::INBOX)['files'] as $f) if ($f['suggestion']) { $filing->apply($f['id']); $n++; }
+                return ['filed' => $n];
+            })(),
             $path === '/api/search' => ['results' => array_map(fn($h) => array_intersect_key($h, array_flip(['kind', 'ref', 'ts', 'label', 'text', 'keyword', 'sim'])),
                 $this->app->recall()->search((string)($_GET['q'] ?? ''), 20))],
             default => $this->fail(404, 'not found'),

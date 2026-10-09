@@ -77,6 +77,16 @@ final class Tools
                 return 'moved to ' . Library::join($f['folder'], $f['name']);
             });
 
+        $this->register('kb_inbox', "The documents waiting in the user's /Inbox, with where they would best be filed (folder and a clear name, guessed from similar documents). File them with kb_move when the user agrees.",
+            [], [], function () {
+                $lines = [];
+                foreach ($this->app->library()->list(Library::INBOX)['files'] as $f) {
+                    $s = $f['suggestion'];
+                    $lines[] = "#{$f['id']} {$f['name']}" . ($s ? " → " . Library::join($s['folder'], $s['name']) . " ({$s['confidence']} confidence" . ($s['why'] ? ": {$s['why']}" : '') . ')' : ($f['status'] !== 'ready' ? " (still being read)" : ''));
+                }
+                return $lines ? implode("\n", $lines) : 'the inbox is empty';
+            });
+
         $this->register('file_read', 'Read the text of a file by its id (#n in the conversation or from kb_search/kb_list): document, PDF, Office file, note, audio transcript or image description. Use offset to continue a long one.',
             ['id' => ['type' => 'integer'], 'offset' => ['type' => 'integer']], ['id'],
             function (array $a) {

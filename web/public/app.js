@@ -1055,6 +1055,7 @@ function renderCrumbs() {
 
 const DL_SVG = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
 const isVideo = f => (f.mime || '').startsWith('video/');
+const Library_join = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
 function fileRow(f, sub) {
   const el = document.createElement('div'); el.className = 'lib-row'; el.draggable = true; el.tabIndex = 0; el.setAttribute('role', 'button');
   const ext = (f.name.match(/\.([a-z0-9]{1,4})$/i) || [])[1];
@@ -1064,6 +1065,21 @@ function fileRow(f, sub) {
   el.innerHTML = `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>`
     + `<span class="row-end">${status}<a class="btn ghost icon dl" href="/api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a></span>`;
   el.querySelector('.dl').onclick = e => e.stopPropagation();
+  const sg = f.suggestion;
+  if (sg) { // where it would go: one click to file it, or edit, or dismiss
+    const target = (sg.folder !== f.folder ? sg.folder + '/' : '') + (sg.name !== f.name ? sg.name : (sg.folder !== f.folder ? '' : sg.name));
+    const box = document.createElement('div'); box.className = 'suggest-file';
+    box.innerHTML = `<span class="muted small" title="${esc(sg.why || '')}">${sg.by === 'similar' ? 'Like your other documents' : 'Suggested'}${sg.confidence === 'high' ? '' : ' (not sure)'}: </span>`
+      + `<b class="small">→ ${esc(target.replace(/\/$/, ''))}</b>`
+      + `<span class="acts"><button class="btn small primary" data-s="ok" type="button">File it</button><button class="btn small" data-s="edit" type="button">Change…</button><button class="btn small ghost" data-s="no" type="button" aria-label="Dismiss" title="Leave it here">✕</button></span>`;
+    box.onclick = e => e.stopPropagation();
+    box.querySelector('[data-s=ok]').onclick = async () => { try { await post(`/api/files/${f.id}/file-it`); toast(`Filed in ${sg.folder}`); loadLibrary(); } catch (e) { toast(e.message); } };
+    box.querySelector('[data-s=no]').onclick = async () => { try { await post(`/api/files/${f.id}/dismiss`); loadLibrary(); } catch (e) { toast(e.message); } };
+    box.querySelector('[data-s=edit]').onclick = () => libInline(Library_join(sg.folder, sg.name), 'Folder and name', async v => {
+      const i = v.lastIndexOf('/'); await post(`/api/files/${f.id}/file-it`, { folder: v.slice(0, i) || '/', name: v.slice(i + 1) }); toast('Filed'); loadLibrary();
+    });
+    el.classList.add('has-suggestion'); el.append(box);
+  }
   const th = el.querySelector('.ico img'); if (th) th.onerror = () => th.replaceWith(label);
   el.onclick = () => openFile(f.id);
   el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFile(f.id); } };
@@ -1079,6 +1095,13 @@ function renderList(list) {
     el.onclick = e => { e.preventDefault(); libGo(t.path); };
     dropTarget(el, t.path);
     box.append(el);
+  }
+  const ready = list.files.filter(f => f.suggestion);
+  if (lib.folder === '/Inbox' && ready.length > 1) {
+    const bar = document.createElement('div'); bar.className = 'suggest-bar';
+    bar.innerHTML = `<span>${ready.length} documents have a suggested place.</span><button class="btn small primary" type="button">File them all</button>`;
+    bar.querySelector('button').onclick = async () => { try { const r = await post('/api/library/file-all'); toast(`${r.filed} documents filed`); loadLibrary(); } catch (e) { toast(e.message); } };
+    box.append(bar);
   }
   for (const f of list.files) box.append(fileRow(f));
   if (!list.folders.length && !list.files.length) box.innerHTML = `<div class="placeholder">${lib.folder === '/' ? 'Your library is empty. Upload documents, or attach them in the chat: they land in Inbox.' : 'This folder is empty. Drop files here or use Upload.'}</div>`;

@@ -25,6 +25,7 @@ final class Config
     public int $historyMessages = 40;
     public int $historyTokens = 12000;
     public string $shell = 'off';
+    public string $autoFile = 'suggest';
     public string $googleClientId = '';
     public string $googleClientSecret = '';
     public string $googleAuthUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -159,6 +160,7 @@ final class Config
         foreach (['googleAuthUrl' => 'TALIXIO_GOOGLE_AUTH_URL', 'googleTokenUrl' => 'TALIXIO_GOOGLE_TOKEN_URL', 'googleRevokeUrl' => 'TALIXIO_GOOGLE_REVOKE_URL', 'googleApiBase' => 'TALIXIO_GOOGLE_API_BASE'] as $prop => $var) {
             if ($e($var) !== '') $c->$prop = rtrim($e($var), '/'); // tests point these at a fake server
         }
+        $c->autoFile = in_array($e('TALIXIO_AUTO_FILE', 'suggest'), ['off', 'suggest', 'auto'], true) ? $e('TALIXIO_AUTO_FILE', 'suggest') : 'suggest';
         $c->shell = in_array($e('TALIXIO_SHELL', 'off'), ['off', 'ask', 'auto'], true) ? $e('TALIXIO_SHELL', 'off') : 'off';
         $c->shellNetwork = $e('TALIXIO_SHELL_NETWORK', '0') === '1';
         $c->shellTimeout = max(5, min(3600, (int)$e('TALIXIO_SHELL_TIMEOUT', '120')));

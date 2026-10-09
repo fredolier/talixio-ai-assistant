@@ -88,8 +88,10 @@ final class Library
         $folder = self::normalize($folder);
         $subs = [];
         foreach ($this->tree() as $t) if ($t['path'] !== '/' && self::parent($t['path']) === $folder) $subs[] = $t;
-        $files = $this->app->store->q('SELECT id, name, mime, kind, size, duration, created, folder, status, note, LENGTH(text) chars FROM files WHERE folder = ? ORDER BY name COLLATE NOCASE', [$folder])->fetchAll();
-        return ['folder' => $folder, 'folders' => $subs, 'files' => array_map(fn($f) => ['id' => (int)$f['id'], 'size' => (int)$f['size'], 'note' => (bool)$f['note'], 'chars' => (int)$f['chars'], 'created' => (int)$f['created']] + $f, $files)];
+        $files = $this->app->store->q('SELECT id, name, mime, kind, size, duration, created, folder, status, note, suggestion, LENGTH(text) chars FROM files WHERE folder = ? ORDER BY name COLLATE NOCASE', [$folder])->fetchAll();
+        $sugg = fn(?string $j) => ($d = json_decode((string)$j, true)) && !empty($d['folder']) ? $d : null; // only real suggestions, not done/dismissed
+        return ['folder' => $folder, 'folders' => $subs, 'files' => array_map(fn($f) => ['id' => (int)$f['id'], 'size' => (int)$f['size'], 'note' => (bool)$f['note'], 'chars' => (int)$f['chars'],
+            'created' => (int)$f['created'], 'suggestion' => $sugg($f['suggestion'])] + $f, $files)];
     }
 
     public function createFolder(string $path): string

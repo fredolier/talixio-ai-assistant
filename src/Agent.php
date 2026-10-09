@@ -12,6 +12,9 @@ final class Agent
     {
         $c = $this->app->cfg; $ws = $this->app->ws;
         $cap = fn(string $f) => mb_substr(trim($ws->read($f)), 0, 12000);
+        if ($role === 'classify') {
+            return "You help {$c->name}, a personal assistant, sort the user's documents and messages. Be precise and brief. Reply with the JSON asked for, nothing else.";
+        }
         if ($role === 'summary') {
             return 'You write compact memory summaries of conversations between a user and their assistant, for the assistant to search later.';
         }
@@ -109,7 +112,7 @@ final class Agent
             if ($budget->status()['state'] === 'blocked') throw new Abort('budget exhausted during the run');
         };
         try {
-            $text = $this->app->provider($tier)->complete($this->systemPrompt($role), $role === 'summary' ? '' : $this->context($tier, $extra),
+            $text = $this->app->provider($tier)->complete($this->systemPrompt($role), in_array($role, ['summary', 'classify'], true) ? '' : $this->context($tier, $extra),
                 $history, $this->app->tools->only($toolset), $onUsage, $onEvent);
         } finally {
             if (Browser::running()) Browser::shutdown(); // each run starts with a fresh page

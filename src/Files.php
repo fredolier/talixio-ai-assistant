@@ -265,7 +265,9 @@ final class Files
             proc_close(self::$indexer);
             self::$indexer = null;
         }
-        if (!$this->app->store->q("SELECT 1 FROM files WHERE status = 'pending' LIMIT 1")->fetchColumn()) return;
+        $work = $this->app->store->q("SELECT 1 FROM files WHERE status = 'pending' LIMIT 1")->fetchColumn()
+            || ($this->app->cfg->autoFile !== 'off' && (new Filing($this->app))->pending());
+        if (!$work) return;
         $p = proc_open([PHP_BINARY, dirname(__DIR__) . '/bin/talixio', 'index'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', 'php://stderr', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes);
         if (is_resource($p)) self::$indexer = $p;
     }
@@ -281,6 +283,13 @@ final class Files
             if (microtime(true) > $until) break;
             try { $this->text((int)$r['id']); } catch (\Throwable $e) { Log::warn("indexing file {$r['id']}: {$e->getMessage()}"); }
             $n++;
+        }
+        if ($this->app->cfg->autoFile !== 'off') { // then: where should the new ones go?
+            $filing = new Filing($this->app);
+            foreach ($filing->pending() as $id) {
+                if (microtime(true) > $until) break;
+                try { $filing->suggest($id); } catch (\Throwable $e) { Log::warn("filing #$id: {$e->getMessage()}"); }
+            }
         }
         return $n;
     }

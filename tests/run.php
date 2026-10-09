@@ -931,6 +931,52 @@ $app->agent()->chat('web', 'are you there?', 'standard', [], function (array $e)
 check('agent: a message waiting for another turn tells the user it is queued', str_contains(json_encode($events), 'queued'), json_encode($events));
 proc_close($holder);
 
+// ---- filing the inbox: decided in embedding space from filed documents, the model only when unsure ----
+$fd = "$dir/filing"; @mkdir($fd); putenv("TALIXIO_DATA_DIR=$fd");
+$fa = App::fromEnv(); $fa->providerOverride = $fake;
+$fa->embeddings->fake = fn(array $texts) => array_map(function ($t) {
+    $v = array_fill(0, 8, 0.02);
+    foreach (['facture' => 0, 'edf' => 0, 'kwh' => 0, 'contrat' => 1, 'bail' => 1, 'ordonnance' => 2, 'docteur' => 2] as $w => $i) if (stripos($t, $w) !== false) $v[$i] += 1;
+    return $v;
+}, $texts);
+$mk = function (string $name, string $text, string $folder) use ($fa) { $id = $fa->files()->save(tap_tmp($text), $name, 'text/plain', $folder); $fa->files()->text($id); $fa->recall()->embedPending(); return $id; };
+$mk('Facture EDF 2026-08.txt', 'Facture EDF, consommation 320 kWh, montant 64 euros', '/Admin/Factures');
+$mk('Facture EDF 2026-09.txt', 'Facture EDF, consommation 290 kWh, montant 58 euros', '/Admin/Factures');
+$mk('Bail.txt', 'Contrat de bail entre M. Dupont et la SCI', '/Contrats');
+$mk('Contrat assurance.txt', 'Contrat assurance habitation', '/Contrats');
+$calls = 0;
+$fake->script = function ($last, $tools, $on) use ($usage, &$calls) {
+    $usage($on, 'claude-haiku-x'); $calls++;
+    if (str_contains($last, 'Its folder is already decided')) return '{"folder": "", "name": "Facture EDF 2026-10.txt", "confidence": "high", "why": "EDF invoice"}';
+    return '{"folder": "/Santé", "name": "Ordonnance Dr Martin.txt", "confidence": "low", "why": "a prescription"}';
+};
+$inv = $mk('Facture octobre.txt', 'Facture EDF, consommation 300 kWh, montant 61 euros', '/Inbox');
+$s1 = (new \Talixio\Filing($fa))->suggest($inv);
+check('filing: folder found from similar documents, no model call', $s1['folder'] === '/Admin/Factures' && $s1['by'] === 'similar' && $s1['confidence'] === 'high' && $calls === 0, json_encode($s1));
+$scan = $mk('scan_0012.txt', 'Facture EDF consommation 310 kWh', '/Inbox');
+$s2 = (new \Talixio\Filing($fa))->suggest($scan);
+check('filing: meaningless names get a clear one from the model', $s2['folder'] === '/Admin/Factures' && $s2['name'] === 'Facture EDF 2026-10.txt' && $calls === 1, json_encode($s2));
+$rx = $mk('rx.txt', 'Ordonnance du docteur Martin', '/Inbox');
+$s3 = (new \Talixio\Filing($fa))->suggest($rx);
+check('filing: unknown kind of document: the model proposes a folder', $s3['folder'] === '/Santé' && $s3['by'] === 'model' && $s3['confidence'] === 'low', json_encode($s3));
+$listed = $fa->library()->list('/Inbox')['files'];
+check('filing: suggestions shown in the inbox list', count(array_filter($listed, fn($f) => $f['suggestion'])) === 3);
+(new \Talixio\Filing($fa))->apply($rx, '/Santé/Ordonnances');
+check('filing: accepted (with the user\'s change), then not suggested again', $fa->files()->get($rx)['folder'] === '/Santé/Ordonnances' && $fa->files()->get($rx)['name'] === 'Ordonnance Dr Martin.txt'
+    && !in_array($rx, (new \Talixio\Filing($fa))->pending(), true));
+$rx2 = $mk('rx2.txt', 'Ordonnance docteur Bernard', '/Inbox');
+$mk('rx3.txt', 'Ordonnance docteur Petit', '/Santé/Ordonnances');
+$calls = 0; $s4 = (new \Talixio\Filing($fa))->suggest($rx2);
+check('filing: learns from what the user filed (no model call the next time)', $s4['folder'] === '/Santé/Ordonnances' && $calls === 0, json_encode($s4));
+putenv('TALIXIO_AUTO_FILE=auto'); $fa2 = App::fromEnv(); $fa2->embeddings->fake = $fa->embeddings->fake; $fa2->providerOverride = $fake;
+$inv2 = $mk('Facture novembre.txt', 'Facture EDF 280 kWh', '/Inbox');
+(new \Talixio\Filing($fa2))->suggest($inv2);
+check('filing: "auto" files the obvious ones', $fa2->files()->get($inv2)['folder'] === '/Admin/Factures');
+putenv('TALIXIO_AUTO_FILE');
+check('filing: generic names recognised', \Talixio\Filing::genericName('IMG_20261009_101112.jpg') && \Talixio\Filing::genericName('scan 3.pdf') && !\Talixio\Filing::genericName('Bail Dupont.pdf'));
+check('classifier: unsure when two labels are as close', !\Talixio\Classifier::rank(\Talixio\Embeddings::pack([1, 1]), [['a', \Talixio\Embeddings::pack([1, 0])], ['a', \Talixio\Embeddings::pack([1, 0])], ['b', \Talixio\Embeddings::pack([0, 1])], ['b', \Talixio\Embeddings::pack([0, 1])]])['confident']);
+putenv("TALIXIO_DATA_DIR=$dir");
+
 // ---- spaces: separate conversations with their own folder, instructions and notes ----
 $spd = "$dir/spaces"; @mkdir($spd); putenv("TALIXIO_DATA_DIR=$spd");
 $sa = App::fromEnv(); $sa->providerOverride = $fake; $sp = $sa->spaces();
