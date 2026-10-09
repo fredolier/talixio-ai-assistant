@@ -220,24 +220,44 @@ final class Agent
     }
 
     /** A scheduled task fires: the prompt is recorded in the thread so the conversation stays coherent. */
-    public function runTask(string $title, string $prompt): string
+    public function runTask(string $title, string $prompt, string $tier = 'standard'): string
     {
-        return $this->chat('schedule', "[Scheduled task \"$title\" is due now. Do it and write the message for the user.]\n$prompt");
+        return $this->chat('schedule', "[Scheduled task \"$title\" is due now. Do it and write the message for the user.]\n$prompt", in_array($tier, Tier::NAMES, true) ? $tier : 'standard');
     }
 
-    /** Heartbeat on the fast tier: returns a message for the user, or null when nothing needs attention. */
+    /**
+     * Heartbeat on the fast tier: returns a message for the user, or null when nothing needs attention.
+     * Every check is recorded (Activity page): what it looked at, and why it stayed quiet.
+     */
     public function heartbeat(): ?string
     {
         $store = $this->app->store;
         $history = $store->history(10);
         $check = "[Heartbeat check, not from the user] Read your HEARTBEAT.md checklist below and decide if anything needs the user's attention right now. "
-            . "If nothing does, reply exactly HEARTBEAT_OK and nothing else. Otherwise write the message to send.\n\n"
+            . "If nothing does, reply HEARTBEAT_OK followed by one short line saying what you checked and why nothing needs attention "
+            . "(e.g. \"HEARTBEAT_OK: calendar clear until 15:00, no urgent email\"). Otherwise write the message to send.\n\n"
             . $this->app->ws->read('HEARTBEAT.md');
         if ($history && end($history)['role'] === 'user') $history[count($history) - 1]['content'] .= "\n\n$check";
         else $history[] = ['role' => 'user', 'content' => $check];
-        [$reply, $meta] = $this->run('heartbeat', 'fast', 'heartbeat', $history);
-        if ($reply === '' || str_contains($reply, 'HEARTBEAT_OK')) return null;
+        $before = (int)$store->q('SELECT COALESCE(MAX(id),0) FROM tool_log')->fetchColumn();
+        $tools = fn() => array_column($store->q('SELECT tool FROM tool_log WHERE id > ? ORDER BY id', [$before])->fetchAll(), 'tool');
+        try {
+            [$reply, $meta] = $this->run('heartbeat', 'fast', 'heartbeat', $history);
+        } catch (Abort $e) {
+            $store->addHeartbeat('skipped', $e->getMessage(), $tools());
+            throw $e;
+        } catch (\Throwable $e) {
+            $store->addHeartbeat('error', $e->getMessage(), $tools());
+            throw $e;
+        }
+        $cost = $meta['cost_known'] ? $meta['cost'] : null;
+        if ($reply === '' || str_contains($reply, 'HEARTBEAT_OK')) {
+            $note = trim(preg_replace('/^.*?HEARTBEAT_OK\s*[:\-–—.]?\s*/s', '', $reply));
+            $store->addHeartbeat('quiet', $note !== '' ? $note : 'Nothing needs attention.', $tools(), $cost, $meta['model']);
+            return null;
+        }
         $store->addMessage('assistant', 'heartbeat', $reply, $meta);
+        $store->addHeartbeat('sent', $reply, $tools(), $cost, $meta['model']);
         return $reply;
     }
 }

@@ -344,3 +344,12 @@ tr:last-child td{border-bottom:0}
 .sres{display:flex;flex-direction:column;gap:2px;text-align:left;border:0;background:transparent;color:inherit;padding:8px 10px;border-radius:8px;cursor:pointer;font:inherit}
 .sres:hover{background:var(--sunk)}
 .sres mark{background:var(--accent-soft);color:inherit;border-radius:3px}
+
+/* periodic checks, tier choice */
+.hb-head{justify-content:space-between;margin-top:1.2rem}
+.hb-head h3{margin:0}
+.heartbeats{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto}
+.hb{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.hb p{flex-basis:100%;margin:0;font-size:.9rem;white-space:pre-wrap}
+.hb.quiet p{color:var(--muted)}
+.tier-select{font:inherit;font-size:.83rem;padding:4px 6px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}

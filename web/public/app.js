@@ -486,8 +486,12 @@ async function loadTasks() {
     const when = t.cron ? `Repeats · <code>${esc(t.cron)}</code>` : 'Once';
     const next = t.enabled && t.next_text ? `Next: ${esc(t.next_text)}` : (t.last_run ? `Last ran ${fmtTime(t.last_run)}` : 'Paused');
     el.innerHTML = `<div><h3>${esc(t.title)}</h3><div class="when"><span class="chip">${when}</span><span>${next}</span></div></div>
-      <div class="actions"><button class="btn small" data-a="toggle">${t.enabled ? 'Pause' : 'Resume'}</button><button class="btn small ghost" data-a="delete">Delete</button></div>
+      <div class="actions">${tierSelect(t.tier, 'Model that runs this task')}<button class="btn small" data-a="toggle">${t.enabled ? 'Pause' : 'Resume'}</button><button class="btn small ghost" data-a="delete">Delete</button></div>
       <p class="prompt">${esc(t.prompt)}</p>`;
+    el.querySelector('select').onchange = async e => {
+      try { await post(`/api/tasks/${t.id}/tier`, { tier: e.target.value }); toast(`"${t.title}" will run on the ${e.target.value} tier.`); }
+      catch (err) { toast(err.message); e.target.value = t.tier; }
+    };
     el.querySelectorAll('button').forEach(b => b.onclick = async () => {
       try { await post(`/api/tasks/${t.id}/${b.dataset.a}`); toast(b.dataset.a === 'delete' ? 'Task deleted' : (t.enabled ? 'Task paused' : 'Task resumed')); loadTasks(); }
       catch (e) { toast(e.message); }
@@ -497,6 +501,13 @@ async function loadTasks() {
 }
 
 // ---- jobs ----
+/** fast / standard / deep, with the model behind each. */
+function tierSelect(current, label) {
+  const tiers = state.status?.tiers || {};
+  return `<select class="tier-select" aria-label="${esc(label)}" title="${esc(label)}">${['fast', 'standard', 'deep'].map(n =>
+    `<option value="${n}"${n === current ? ' selected' : ''}>${n}${tiers[n] ? ' · ' + esc(shortModel(tiers[n])) : ''}</option>`).join('')}</select>`;
+}
+
 async function loadJobs() {
   const { jobs } = await api('/api/jobs');
   const s = state.status;
@@ -510,10 +521,15 @@ async function loadJobs() {
     const durText = dur == null ? 'waiting' : dur < 90 ? dur + ' s' : Math.round(dur / 60) + ' min';
     el.innerHTML = `<div><h3>${esc(j.title)}</h3><div class="when"><span class="pill ${j.status}">${j.status === 'running' ? '<span class="dot"></span>' : ''}${j.status}</span>
         <span class="chip">${esc(j.tier)}</span><span>${money(+j.cost_usd) || '$0'} of $${(+j.max_cost_usd).toFixed(2)}</span><span>${durText}</span><span>${fmtTime(j.created)}</span></div></div>
-      <div class="actions">${['queued', 'running'].includes(j.status) ? '<button class="btn small" data-a="cancel">Cancel</button>' : ''}</div>
+      <div class="actions">${['queued', 'running'].includes(j.status) ? '<button class="btn small" data-a="cancel">Cancel</button>'
+        : j.kind !== 'reflect' ? `${tierSelect(j.tier, 'Model for running it again')}<button class="btn small" data-a="rerun">Run again</button>` : ''}</div>
       <details><summary>Instructions${j.result ? ' and report' : ''}</summary><p class="report"><b>Instructions:</b> ${esc(j.instructions)}</p>${j.result ? `<p class="report"><b>Report:</b> ${esc(j.result)}</p>` : ''}</details>`;
     el.querySelector('[data-a=cancel]')?.addEventListener('click', async () => {
       try { await post(`/api/jobs/${j.id}/cancel`); toast('Job cancelled'); loadJobs(); } catch (e) { toast(e.message); }
+    });
+    el.querySelector('[data-a=rerun]')?.addEventListener('click', async () => {
+      const tier = el.querySelector('select').value;
+      try { await post(`/api/jobs/${j.id}/rerun`, { tier }); toast(`Running again on the ${tier} tier: the report will come in the chat.`); loadJobs(); } catch (e) { toast(e.message); }
     });
     box.append(el);
   }
@@ -1000,7 +1016,28 @@ async function newNote() {
 }
 
 // ---- activity ----
+async function loadHeartbeats(data) {
+  const d = data || await api('/api/heartbeats');
+  const name = state.status?.name || 'the assistant';
+  $('#hb-info').textContent = !d.minutes ? `Off. Set "Periodic check (minutes)" in Settings → Notifications, and write what to check in Memory → HEARTBEAT.md.`
+    : !d.checklist ? `Every ${d.minutes} min, but the checklist (Memory → HEARTBEAT.md) is empty, so nothing is checked.`
+    : `Every ${d.minutes} min, ${name} reads its checklist (Memory → HEARTBEAT.md) and only messages you when something needs attention. Next check ${d.next ? fmtTime(d.next) : 'soon'}.`;
+  const label = { quiet: 'nothing to report', sent: 'messaged you', skipped: 'skipped', error: 'failed' };
+  $('#heartbeats').innerHTML = d.checks.length ? d.checks.map(c => `<div class="hb ${c.outcome}">
+      <span class="pill ${c.outcome === 'sent' ? 'done' : c.outcome === 'error' ? 'failed' : 'queued'}">${label[c.outcome] || c.outcome}</span>
+      <span class="muted small">${fmtTime(c.ts)}${c.cost != null ? ' · ' + (money(+c.cost) || '$0') : ''}</span>
+      <p>${esc(c.note)}</p>${c.tools.length ? `<span class="muted small">Looked at: ${esc([...new Set(c.tools)].map(t => TOOL_LABEL(t).toLowerCase()).join(', '))}</span>` : ''}</div>`).join('')
+    : '<p class="muted small">No checks yet.</p>';
+}
+$('#hb-run').onclick = async () => {
+  const b = $('#hb-run'); b.disabled = true; b.textContent = 'Checking…';
+  try { const d = await post('/api/heartbeat/run'); loadHeartbeats(d); toast(d.message ? 'Something needs your attention: see the chat.' : 'Nothing needs your attention.'); if (d.message) poll(); }
+  catch (e) { toast(e.message); }
+  b.disabled = false; b.textContent = 'Check now';
+};
+
 async function loadActivity() {
+  loadHeartbeats().catch(() => {});
   const { usage, tools, budget, by_tier, by_source, memory, backup } = await api('/api/activity');
   const meter = (label, spent, limit) => {
     const pct = limit > 0 ? Math.min(100, spent / limit * 100) : 0;

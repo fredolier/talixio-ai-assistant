@@ -51,7 +51,7 @@ final class Worker
             $store->updateTask((int)$t['id'], $t['cron']
                 ? ['next_run' => Cron::next($t['cron'], $now), 'last_run' => $now]
                 : ['enabled' => 0, 'next_run' => null, 'last_run' => $now]);
-            $this->guard("task {$t['id']}", fn() => $app->notifier()->notify($t['title'], $app->agent()->runTask($t['title'], $t['prompt'])));
+            $this->guard("task {$t['id']}", fn() => $app->notifier()->notify($t['title'], $app->agent()->runTask($t['title'], $t['prompt'], (string)($t['tier'] ?? 'standard'))));
         }
         $every = $app->cfg->heartbeatMinutes * 60;
         if ($every > 0 && $now - (int)$store->get('heartbeat_last', '0') >= $every && $app->ws->hasContent('HEARTBEAT.md')) {

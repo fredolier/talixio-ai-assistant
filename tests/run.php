@@ -992,6 +992,22 @@ $before = $aj("/api/messages?before=" . ($firstQ + 1), null, 'd');
 check('chat: earlier messages page', end($before['messages'])['id'] === $firstQ && $before['first_id'] >= 1, json_encode($before));
 check('chat: stop request accepted', $aj('/api/chat/stop', [], 'd')['ok'] ?? false);
 
+// tiers for tasks and jobs, periodic check log
+$r = $aj('/api/chat', ['text' => 'hi'], 'd');
+$st3 = new \Talixio\Store("$ad/talixio.db");
+$tid = $st3->addTask('Weekly report', 'Write the weekly report', '0 8 * * 1', time() + 3600);
+check('tasks: tier changed from the app', ($aj("/api/tasks/$tid/tier", ['tier' => 'deep'], 'd')['ok'] ?? false) && $st3->task($tid)['tier'] === 'deep'
+    && $aj("/api/tasks/$tid/tier", ['tier' => 'huge'], 'd')['_code'] === 400);
+$jid = $st3->addJob('Compare bikes', 'Compare three e-bikes', 'fast', 0.5);
+$st3->updateJob($jid, ['status' => 'done', 'result' => 'A, B, C', 'finished' => time()]);
+$new = $aj("/api/jobs/$jid/rerun", ['tier' => 'deep'], 'd');
+check('jobs: a finished job runs again on another tier', ($st3->job((int)($new['id'] ?? 0))['tier'] ?? '') === 'deep' && $st3->job((int)$new['id'])['instructions'] === 'Compare three e-bikes', json_encode($new));
+check('jobs: a running job is not run twice', $aj('/api/jobs/' . $new['id'] . '/rerun', [], 'd')['_code'] === 400);
+check('heartbeat: needs a checklist to run by hand', $aj('/api/heartbeat/run', [], 'd')['_code'] === 400);
+(new \Talixio\Workspace("$ad/workspace"))->write('HEARTBEAT.md', "- Anything due today?\n");
+$hb = $aj('/api/heartbeat/run', [], 'd');
+check('heartbeat: a quiet check is logged with what it checked', array_key_exists('message', $hb) && $hb['message'] === null && ($hb['checks'][0]['outcome'] ?? '') === 'quiet' && $hb['checklist'] === true, json_encode($hb));
+
 $share = function () use ($webPort) {
     $ch = curl_init("http://127.0.0.1:$webPort/share");
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => ['text' => 'hello'], CURLOPT_HTTPHEADER => ['X-Forwarded-For: 203.0.113.50']]);

@@ -58,6 +58,20 @@ final class Web
             $path === '/api/chat' && $m === 'POST' => $this->chat((string)($b['text'] ?? ''), array_map('intval', (array)($b['files'] ?? [])), !empty($b['meeting'])),
             $path === '/api/tasks' => ['tasks' => array_map(fn($t) => $t + ['next_text' => $t['next_run'] ? date('D j M, H:i', (int)$t['next_run']) : null], $s->tasks())],
             (bool)preg_match('#^/api/tasks/(\d+)/(toggle|delete)$#', $path, $mm) && $m === 'POST' => $this->taskAction((int)$mm[1], $mm[2]),
+            (bool)preg_match('#^/api/tasks/(\d+)/tier$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b, $s) {
+                $s->task((int)$mm[1]) ?? $this->fail(404, 'no such task');
+                if (!in_array($b['tier'] ?? '', Tier::NAMES, true)) $this->fail(400, 'unknown tier');
+                $s->updateTask((int)$mm[1], ['tier' => $b['tier']]);
+                return ['ok' => true];
+            })(),
+            $path === '/api/heartbeats' => $this->heartbeats(),
+            $path === '/api/heartbeat/run' && $m === 'POST' => (function () {
+                set_time_limit(0);
+                if (!$this->app->ws->hasContent('HEARTBEAT.md')) $this->fail(400, 'The checklist (Memory → HEARTBEAT.md) is empty: write what to check first.');
+                $msg = $this->app->agent()->heartbeat();
+                if ($msg !== null) $this->app->notifier()->notify($this->app->cfg->name, $msg);
+                return ['message' => $msg] + $this->heartbeats();
+            })(),
             $path === '/api/memory' && $m === 'GET' => ['files' => $this->app->ws->all()],
             $path === '/api/memory/digest' && $m === 'GET' => $this->digest(),
             $path === '/api/memory/compact' && $m === 'POST' => (function () {
@@ -98,6 +112,7 @@ final class Web
             $path === '/api/push/unsubscribe' && $m === 'POST' => (function () use ($b) { $this->app->webPush()->unsubscribe((string)($b['endpoint'] ?? '')); return ['ok' => true]; })(),
             $path === '/api/notify/test' && $m === 'POST' => ['results' => $this->app->notifier()->notify($this->app->cfg->name, 'Test notification: this channel works.')],
             (bool)preg_match('#^/api/jobs/(\d+)/cancel$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->jobs()->cancel((int)$mm[1])],
+            (bool)preg_match('#^/api/jobs/(\d+)/rerun$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->rerun((int)$mm[1], (string)($b['tier'] ?? ''))],
             $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/')) + ['stats' => $this->app->library()->stats()],
             $path === '/api/library/tree' => ['tree' => $this->app->library()->tree(), 'stats' => $this->app->library()->stats()],
             $path === '/api/library/search' => ['results' => $this->app->library()->search((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/'), 30)],
@@ -113,6 +128,13 @@ final class Web
                 $this->app->recall()->search((string)($_GET['q'] ?? ''), 20))],
             default => $this->fail(404, 'not found'),
         };
+    }
+
+    private function heartbeats(): array
+    {
+        $c = $this->app->cfg; $last = (int)$this->app->store->get('heartbeat_last', '0');
+        return ['checks' => $this->app->store->heartbeats(60), 'minutes' => $c->heartbeatMinutes, 'checklist' => $this->app->ws->hasContent('HEARTBEAT.md'),
+            'next' => $c->heartbeatMinutes > 0 && $this->app->ws->hasContent('HEARTBEAT.md') ? max(time(), $last + $c->heartbeatMinutes * 60) : null];
     }
 
     private function status(): array

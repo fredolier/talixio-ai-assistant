@@ -209,10 +209,11 @@ conversation.
   (`TALIXIO_NOTIFY`); see and test them on the **Channels** page.
 - **Memory you can edit**: `USER.md` (about you), `MEMORY.md` (notes), `SOUL.md` (personality),
   `HEARTBEAT.md` (checklist), editable on the Memory page.
-- **Reminders and recurring tasks by chat**: "remind me tomorrow at 9", "every weekday at 8:00 send
+- **Reminders and recurring tasks by chat** (each with its model tier, changeable on the Tasks page; a finished job can be run again on another tier): "remind me tomorrow at 9", "every weekday at 8:00 send
   me a briefing". Visible and pausable on the Tasks page.
 - **Heartbeat** (off by default): every N minutes it reads `HEARTBEAT.md` and only messages you if
   something needs attention. Each check is a model call, so it costs tokens.
+  Every check is listed on the Activity page (what it looked at, why it stayed quiet), with *Check now*.
 - **Web search** (Claude's built-in search, or Brave / Tavily / SearXNG) and **page reading** that
   blocks internal network addresses.
 - **Searchable history (RAG in SQLite)**: messages, summaries, documents and transcripts are indexed

@@ -31,6 +31,17 @@ final class Jobs
         return $this->app->store->addJob($title, $instructions, $this->app->cfg->meetingTier, max($this->app->cfg->jobMaxUsd, 1.0), 'meeting', $fileId);
     }
 
+    /** Run a finished job again (same instructions), optionally with another tier. Returns the new job id. */
+    public function rerun(int $id, string $tier = ''): int
+    {
+        $j = $this->app->store->job($id) ?? throw new \InvalidArgumentException("no job $id");
+        if (in_array($j['status'], ['queued', 'running'], true)) throw new \InvalidArgumentException('This job is still running.');
+        if ($j['kind'] === 'reflect') throw new \InvalidArgumentException('Learning jobs are not run again.');
+        if ($tier !== '' && !in_array($tier, Tier::NAMES, true)) throw new \InvalidArgumentException('unknown tier');
+        if ($this->app->budget()->status()['state'] === 'blocked') throw new \InvalidArgumentException('The budget is used up.');
+        return $this->app->store->addJob($j['title'], $j['instructions'], $tier ?: $j['tier'], (float)$j['max_cost_usd'], $j['kind'], $j['file_id'] !== null ? (int)$j['file_id'] : null);
+    }
+
     public function cancel(int $id): bool
     {
         $j = $this->app->store->job($id);

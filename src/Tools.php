@@ -92,8 +92,8 @@ final class Tools
             fn(array $a) => $this->app->skills()->delete($a['name']) ? 'deleted' : 'error: no such skill');
 
         $this->register('schedule_task',
-            "Schedule a prompt that you will run later and send the result to the user (reminders, recurring reports, follow-ups). Give either `at` (local time 'YYYY-MM-DD HH:MM', timezone {$cfg->timezone}) for a one-off, or `cron` (5 fields, local time, e.g. '0 8 * * 1-5') for recurring. The prompt is an instruction to your future self, e.g. 'Remind the user to call the dentist.'",
-            ['title' => ['type' => 'string'], 'prompt' => ['type' => 'string'], 'at' => ['type' => 'string'], 'cron' => ['type' => 'string']],
+            "Schedule a prompt that you will run later and send the result to the user (reminders, recurring reports, follow-ups). Give either `at` (local time 'YYYY-MM-DD HH:MM', timezone {$cfg->timezone}) for a one-off, or `cron` (5 fields, local time, e.g. '0 8 * * 1-5') for recurring. The prompt is an instruction to your future self, e.g. 'Remind the user to call the dentist.' tier: the model that runs it: fast for simple reminders, standard (default) for briefings, deep only for demanding reports.",
+            ['title' => ['type' => 'string'], 'prompt' => ['type' => 'string'], 'at' => ['type' => 'string'], 'cron' => ['type' => 'string'], 'tier' => ['type' => 'string', 'enum' => Tier::NAMES]],
             ['title', 'prompt'], fn(array $a) => $this->schedule($a));
         $this->register('list_tasks', 'List scheduled tasks.', [], [], fn() => $this->listTasks());
         $this->register('cancel_task', 'Delete a scheduled task by id.', ['id' => ['type' => 'integer']], ['id'],
@@ -265,14 +265,15 @@ final class Tools
             $next = $dt->getTimestamp();
             if ($next < time() - 60) return 'error: that time is in the past';
         }
-        $id = $this->app->store->addTask($a['title'], $a['prompt'], $cron ?: null, $next);
-        return "scheduled task #$id, next run " . date('D Y-m-d H:i', $next) . " ({$this->app->cfg->timezone})";
+        $tier = in_array($a['tier'] ?? '', Tier::NAMES, true) ? $a['tier'] : 'standard';
+        $id = $this->app->store->addTask($a['title'], $a['prompt'], $cron ?: null, $next, $tier);
+        return "scheduled task #$id ($tier tier), next run " . date('D Y-m-d H:i', $next) . " ({$this->app->cfg->timezone})";
     }
 
     private function listTasks(): string
     {
-        $rows = array_map(fn($t) => sprintf('#%d %s | %s | next: %s%s', $t['id'], $t['title'],
-            $t['cron'] ? "cron {$t['cron']}" : 'once', $t['next_run'] ? date('Y-m-d H:i', (int)$t['next_run']) : '-',
+        $rows = array_map(fn($t) => sprintf('#%d %s | %s | %s tier | next: %s%s', $t['id'], $t['title'],
+            $t['cron'] ? "cron {$t['cron']}" : 'once', $t['tier'], $t['next_run'] ? date('Y-m-d H:i', (int)$t['next_run']) : '-',
             $t['enabled'] ? '' : ' (paused)'), $this->app->store->tasks());
         return $rows ? implode("\n", $rows) : 'no tasks';
     }

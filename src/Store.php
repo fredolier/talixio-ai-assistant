@@ -55,6 +55,9 @@ final class Store
             CREATE INDEX IF NOT EXISTS files_folder ON files(folder);");
         $this->addColumn('summaries', 'level', 'INTEGER NOT NULL DEFAULT 1'); // 1 stretch, 2 week, 3 month
         $this->addColumn('summaries', 'merged_into', 'INTEGER');               // set once folded into a higher level
+        $this->addColumn('tasks', 'tier', "TEXT NOT NULL DEFAULT 'standard'");
+        $this->db->exec('CREATE TABLE IF NOT EXISTS heartbeats(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, outcome TEXT NOT NULL, note TEXT NOT NULL,
+            tools TEXT NOT NULL DEFAULT \'[]\', cost REAL, model TEXT)');
         $this->addColumn('jobs', 'kind', "TEXT NOT NULL DEFAULT 'agent'");
         $this->addColumn('jobs', 'file_id', 'INTEGER');
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");
@@ -171,9 +174,9 @@ final class Store
     }
 
     // --- tasks ---
-    public function addTask(string $title, string $prompt, ?string $cron, int $nextRun): int
+    public function addTask(string $title, string $prompt, ?string $cron, int $nextRun, string $tier = 'standard'): int
     {
-        $this->q('INSERT INTO tasks(title,prompt,cron,next_run,enabled,created) VALUES(?,?,?,?,1,?)', [$title, $prompt, $cron, $nextRun, time()]);
+        $this->q('INSERT INTO tasks(title,prompt,cron,next_run,enabled,created,tier) VALUES(?,?,?,?,1,?,?)', [$title, $prompt, $cron, $nextRun, time(), $tier]);
         return (int)$this->db->lastInsertId();
     }
 
@@ -188,6 +191,18 @@ final class Store
     {
         $sets = implode(',', array_map(fn($k) => "$k=?", array_keys($fields)));
         $this->q("UPDATE $table SET $sets WHERE id=?", [...array_values($fields), $id]);
+    }
+
+    // --- periodic checks (heartbeat): what was checked and why nothing was sent ---
+    public function addHeartbeat(string $outcome, string $note, array $tools = [], ?float $cost = null, ?string $model = null): void
+    {
+        $this->q('INSERT INTO heartbeats(ts,outcome,note,tools,cost,model) VALUES(?,?,?,?,?,?)', [time(), $outcome, mb_substr($note, 0, 2000), json_encode(array_values($tools)), $cost, $model]);
+        $this->q('DELETE FROM heartbeats WHERE id <= (SELECT MAX(id) - 500 FROM heartbeats)');
+    }
+
+    public function heartbeats(int $limit = 50): array
+    {
+        return array_map(fn($r) => ['tools' => json_decode($r['tools'], true) ?: []] + $r, $this->q('SELECT * FROM heartbeats ORDER BY id DESC LIMIT ?', [$limit])->fetchAll());
     }
 
     // --- background jobs (sub-agents) ---
