@@ -587,12 +587,12 @@ const lib = { folder: '/', tree: [], timer: null, file: null, inline: null };
 
 function libFolderFromHash() {
   const m = location.hash.match(/^#library(\/.*)?$/);
-  return m && m[1] ? decodeURIComponent(m[1]) : null;
+  return m ? (m[1] ? decodeURIComponent(m[1]) : '/') : null; // '#library' alone is the top of the library
 }
 function libGo(folder) { location.hash = '#library' + (folder === '/' ? '' : folder.split('/').map(encodeURIComponent).join('/')); }
 
 async function loadLibrary() {
-  lib.folder = libFolderFromHash() || lib.folder || '/';
+  lib.folder = libFolderFromHash() || '/';
   const [tree, list] = await Promise.all([api('/api/library/tree'), api('/api/library?folder=' + encodeURIComponent(lib.folder))]);
   lib.tree = tree.tree;
   lib.folder = list.folder;
@@ -601,6 +601,8 @@ async function loadLibrary() {
     : 'Your documents, notes and recordings. Everything is searchable, by you and by the assistant.';
   $('#folder-list').innerHTML = lib.tree.map(t => `<option value="${esc(t.path)}">`).join('');
   renderTree(); renderCrumbs(); renderList(list);
+  // the Library tab reopens the last folder; the breadcrumb's "Library" goes to the top
+  document.querySelectorAll('a[data-view=library]').forEach(a => { a.href = '#library' + (lib.folder === '/' ? '' : lib.folder.split('/').map(encodeURIComponent).join('/')); });
   $('#lib-scope-label').textContent = lib.folder === '/' ? 'this folder only' : `only in ${lib.folder.split('/').pop()}`;
   $('#lib-scope').closest('label').hidden = lib.folder === '/';
   clearTimeout(lib.timer);
@@ -907,6 +909,10 @@ $('#mem-save').onclick = async () => {
     state.memFiles[state.memFile] = $('#mem-editor').value; $('#mem-state').textContent = 'Saved';
   } catch (e) { toast(e.message); }
 };
+// tapping the Library tab while already in the library goes back to the top
+document.querySelectorAll('.rail a[data-view=library]').forEach(a => a.addEventListener('click', e => {
+  if (!$('#view-library').hidden) { e.preventDefault(); libGo('/'); }
+}));
 $('#lib-upload').onclick = () => $('#lib-upload-input').click();
 $('#lib-upload-input').onchange = e => { libUpload([...e.target.files]); e.target.value = ''; };
 $('#lib-newnote').onclick = newNote;
