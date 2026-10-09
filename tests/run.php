@@ -62,7 +62,7 @@ check('mcp initialize', ($init['result']['serverInfo']['name'] ?? '') === 'talix
 check('mcp notification has no reply', $mcp->handle(['jsonrpc' => '2.0', 'method' => 'notifications/initialized']) === null);
 $list = $mcp->handle(['jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/list']);
 check('mcp tools/list', in_array('schedule_task', array_column($list['result']['tools'], 'name'), true));
-check('mcp schema encodes empty properties as object', str_contains(json_encode($list), '"name":"list_tasks","description":"List scheduled tasks.","inputSchema":{"type":"object","properties":{}'));
+check('mcp schema encodes empty properties as object', str_contains(json_encode($list), '"name":"board_changes","description":"Recent changes on the tasks of this space (General: all), with who made them.","inputSchema":{"type":"object","properties":{}'));
 $call = $mcp->handle(['jsonrpc' => '2.0', 'id' => 3, 'method' => 'tools/call', 'params' => ['name' => 'list_tasks', 'arguments' => []]]);
 check('mcp tools/call', str_contains($call['result']['content'][0]['text'], 'Brief'));
 
@@ -1310,6 +1310,64 @@ check('phone: navigation, call, sms, email', str_contains($pl('navigate', '12 ru
     && str_contains($pl('email', 'a@b.fr'), '(mailto:a@b.fr)'));
 try { $pl('web', 'javascript:alert(1)'); check('phone: only web addresses for web', false); } catch (\InvalidArgumentException) { check('phone: only web addresses for web', true); }
 
+// tasks board: codes, priorities, workload, dependencies across spaces, isolation, trash, history and undo
+putenv("TALIXIO_DATA_DIR=$ad"); $ba = App::fromEnv(); putenv("TALIXIO_DATA_DIR=$dir");
+$bsp = $ba->spaces()->save(['name' => 'Maison']); $bsp2 = $ba->spaces()->save(['name' => 'Clients Acme', 'code' => 'acm']);
+$bd = $ba->board();
+$c1 = $bd->create(['title' => 'Repeindre la cuisine', 'priority' => 3, 'estimate_hours' => '2d', 'due_date' => '2026-11-30'], (int)$bsp['id']);
+$c2 = $bd->create(['title' => 'Acheter la peinture', 'priority' => 1], (int)$bsp['id']);
+check('board: codes from the space name, workload in days of 7h', $c1['code'] === 'MAI-1' && $c2['code'] === 'MAI-2' && $c1['estimate_hours'] === 14.0 && $c1['status'] === 'todo');
+$col = array_column($bd->list(['space' => (int)$bsp['id'], 'status' => 'todo']), 'code');
+check('board: a new P1 goes above lower priorities', $col === ['MAI-2', 'MAI-1'], json_encode($col));
+$c3 = $bd->create(['title' => 'Devis Acme', 'due_date' => '2026-11-15'], (int)$bsp2['id']);
+check('board: code set for the space is used', $c3['code'] === 'ACM-1');
+$c1 = $bd->update($c1['id'], ['depends_on' => ['MAI-2', 'ACM-1']]);
+check('board: dependencies across spaces', $c1['depends_on'] === [$c2['id'], $c3['id']] || $c1['depends_on'] === [$c3['id'], $c2['id']]);
+try { $bd->update($c3['id'], ['depends_on' => ['MAI-1']]); check('board: loops refused', false); } catch (\InvalidArgumentException $e) { check('board: loops refused', str_contains($e->getMessage(), 'loop'), $e->getMessage()); }
+$bd->update($c3['id'], ['due_date' => '2026-12-05']);
+$w = array_column($bd->warnings($bd->get($c1['id'])), 'kind');
+check('board: warnings (waiting, due before what it waits for)', in_array('waiting', $w, true) && in_array('dates', $w, true), json_encode($w));
+try { $bd->update($c1['id'], ['title' => 'x'], 'you', 1); check('board: stale edits refused', false); } catch (\Talixio\Conflict) { check('board: stale edits refused', true); }
+$v = $bd->get($c1['id'])['version'];
+$c1 = $bd->update($c1['id'], ['priority' => 2, 'body' => "Étapes\n- [x] vider\n- [ ] poncer"], 'you', $v);
+check('board: checklist progress from the description', $c1['checklist'] === ['done' => 1, 'total' => 2]);
+$hist = $bd->history($c1['id']);
+$c1 = $bd->undo($hist[0]['id']);
+check('board: undo puts it back', $c1['priority'] === 3 && $c1['body'] === '' && $bd->history($c1['id'])[0]['action'] === 'undo');
+$moved = $bd->move($c2['id'], 'doing');
+check('board: moved to another column', $moved['status'] === 'doing');
+$bd->addTime($c1['id'], '1h30', '2026-10-09', 'ponçage');
+check('board: time spent recorded', $bd->get($c1['id'])['spent_hours'] === 1.5);
+// assistant tools: isolation between spaces
+$ba->space = (int)$bsp['id'];
+$r = $ba->tools->run('board_update', ['code' => 'ACM-1', 'priority' => 1]);
+check('board tools: a space cannot change another space\'s task', str_contains($r, 'another space'), $r);
+$r = $ba->tools->run('board_get', ['code' => 'ACM-1']);
+check('board tools: other spaces\' tasks show only title and status', str_contains($r, 'Devis Acme') && str_contains($r, 'details hidden'), $r);
+check('board tools: only General sees all spaces', str_contains($ba->tools->run('board_list', ['all_spaces' => true]), 'only General'));
+$r = $ba->tools->run('board_add', ['title' => 'Changer le joint', 'priority' => 2, 'workload' => '45m', 'tags' => ['plomberie'], 'depends_on' => ['MAI-2']]);
+check('board tools: add in this space', str_contains($r, 'MAI-3 Changer le joint') && str_contains($r, 'workload 45m') && str_contains($r, 'waits for MAI-2'), $r);
+$r = $ba->tools->run('board_update', ['code' => 'MAI-3', 'status' => 'done', 'add_note' => 'Fait le 9/10']);
+check('board tools: update and note', str_contains($r, 'Done') && str_contains($bd->find('MAI-3')['body'], 'Fait le 9/10'), $r);
+$r = $ba->tools->run('board_delete', ['code' => 'MAI-2']);
+check('board tools: delete says who was waiting', str_contains($r, 'trash') && str_contains($r, 'MAI-1'), $r);
+check('board: who changed it is logged', str_contains($bd->recent((int)$bsp['id'])[0]['who'], 'assistant in Maison'));
+$ba->space = 0;
+$r = $ba->tools->run('board_list', ['all_spaces' => true]);
+check('board tools: General sees all spaces', str_contains($r, 'ACM-1') && str_contains($r, 'MAI-1') && str_contains($r, 'space Clients Acme'), $r);
+$ba->tools->run('board_prioritize', ['codes' => ['ACM-1', 'MAI-1'], 'overall' => true]);
+$port = array_column($bd->list(['open' => true, 'global' => true]), 'code');
+check('board: General sets the overall order', array_slice($port, 0, 2) === ['ACM-1', 'MAI-1'], json_encode($port));
+// the app
+$bl = $aj('/api/board?space=' . $bsp['id'], null, 'd');
+check('board api: cards with warnings and the codes they refer to', count($bl['cards']) === 2 && isset($bl['refs'][$c3['id']]) && $bl['prefix'] === 'MAI', json_encode(array_keys($bl)));
+$nc = $aj('/api/board', ['space' => $bsp['id'], 'title' => 'Fixer l\'étagère', 'priority' => 5], 'd');
+$one = $aj('/api/board/' . $nc['card']['id'], null, 'd');
+check('board api: create and open (history, time)', $nc['card']['code'] === 'MAI-4' && $one['history'][0]['action'] === 'create');
+check('board api: stale edit gets 409', $aj('/api/board/' . $nc['card']['id'], ['title' => 'x', 'version' => 99], 'd')['_code'] === 409);
+$aj('/api/board/' . $nc['card']['id'] . '/delete', [], 'd');
+check('board api: trash and restore', count($aj('/api/board/trash', null, 'd')['cards']) === 2 && $aj('/api/board/' . $nc['card']['id'] . '/restore', [], 'd')['card']['deleted_at'] === null);
+check('board: trash emptied after 30 days', $bd->purge(-1) === 1 && $bd->find('MAI-2') === null);
 // morning briefing from the Tasks page
 $bt = $aj('/api/tasks/briefing', ['time' => '07:30', 'days' => '1-5'], 'd');
 check('briefing: created as a weekday task with calendar, email and weather', ($bt['task']['cron'] ?? '') === '30 7 * * 1-5' && str_contains($bt['task']['prompt'], 'mail_triage') && str_contains($bt['task']['prompt'], 'weather'), json_encode($bt));

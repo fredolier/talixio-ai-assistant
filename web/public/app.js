@@ -37,6 +37,7 @@ function md(src) {
     .replace(/^ {0,3}```[\w+-]*\n([\s\S]*?)\n? {0,3}```[ ]*$/gm, (_, code) => '\n' + keep(`<pre><code>${code}</code></pre>`) + '\n');
   const inline = t => t
     .replace(/`([^`\n]+)`/g, (_, c) => keep(`<code>${c}</code>`))
+    .replace(/\\(&gt;|&amp;|[\\`*_\[\]()#+\-.!|~])/g, (_, c) => keep(c)) // \* is a plain star
     .replace(/\*\*([^*\n]+?)\*\*|__([^_\n]+?)__/g, (_, a, b) => `<strong>${a ?? b}</strong>`)
     .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>')
     .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
@@ -52,7 +53,7 @@ function md(src) {
   const ph = l => /^\s*\u0000\d+\u0000\s*$/.test(l);
   const isTable = i => lines[i].includes('|') && i + 1 < n && SEP.test(lines[i + 1]);
   const startsBlock = i => HEAD.test(lines[i]) || HR.test(lines[i]) || LIST.test(lines[i]) || QUOTE.test(lines[i]) || ph(lines[i]) || isTable(i);
-  const cells = l => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+  const cells = l => l.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/).map(c => c.trim());
   const item = t => { const m = t.match(/^\[([ xX])\]\s+(.*)$/); return m ? `<span class="check${m[1] === ' ' ? '' : ' done'}">${m[1] === ' ' ? '☐' : '☑'}</span> ${inline(m[2])}` : inline(t); };
   let i = 0;
   const list = () => {
@@ -358,6 +359,7 @@ async function openSpaceEditor(sp, prefill = {}) {
   $('#sp-name').value = editing ? sp.name : (prefill.name || '');
   $('#sp-folder').value = editing ? sp.folder : (prefill.folder || '');
   $('#sp-tier').value = editing ? sp.tier : 'standard';
+  $('#sp-code').value = editing ? (sp.code || '') : '';
   $('#sp-instructions').value = editing ? sp.instructions : '';
   $('#sp-notes').value = editing ? sp.notes : ''; $('#sp-notes').closest('form').querySelector('label[for=sp-notes]').hidden = $('#sp-notes').hidden = !editing;
   let color = editing && sp.color ? sp.color : state.spaceColors[state.spaces.length % state.spaceColors.length];
@@ -370,7 +372,7 @@ async function openSpaceEditor(sp, prefill = {}) {
   $('#sp-cancel').onclick = () => d.close();
   $('#space-form').onsubmit = async e => {
     e.preventDefault();
-    const body = { name: $('#sp-name').value, folder: $('#sp-folder').value, tier: $('#sp-tier').value, color, instructions: $('#sp-instructions').value };
+    const body = { name: $('#sp-name').value, folder: $('#sp-folder').value, tier: $('#sp-tier').value, color, instructions: $('#sp-instructions').value, code: $('#sp-code').value };
     if (editing) body.notes = $('#sp-notes').value;
     try {
       const { space } = await post(editing ? `/api/spaces/${sp.id}` : '/api/spaces', body);
@@ -774,6 +776,429 @@ async function loadJobs() {
   }
   clearTimeout(loadJobs.t);
   if (jobs.some(j => ['queued', 'running'].includes(j.status)) && location.hash === '#jobs') loadJobs.t = setTimeout(() => { if (!document.querySelector('.tag-input')) loadJobs().catch(() => {}); }, 4000);
+}
+
+// ---- rich text editor: edits like a document, stores Markdown ----
+const RTE_BLOCKS = new Set(['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'BLOCKQUOTE', 'PRE', 'HR', 'TABLE', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'FIGURE', 'MAIN', 'ASIDE', 'NAV', 'DL']);
+/** HTML (the editor, or something pasted) → Markdown that md() renders back the same way. */
+function htmlToMd(root) {
+  const escText = t => t.replace(/\\/g, '\\\\').replace(/([*`[\]]|~~)/g, '\\$1');
+  const wrap = (mark, s) => { const m = s.match(/^(\s*)([\s\S]*?)(\s*)$/); return m[2] ? `${m[1]}${mark}${m[2]}${mark}${m[3]}` : s; };
+  const inline = node => { let s = ''; for (const n of node.childNodes) s += inl(n); return s; };
+  const inl = n => {
+    if (n.nodeType === 3) return escText(n.nodeValue.replace(/ /g, ' ').replace(/[ \t\r\n]+/g, ' '));
+    if (n.nodeType !== 1) return '';
+    switch (n.tagName) {
+      case 'B': case 'STRONG': return wrap('**', inline(n));
+      case 'I': case 'EM': return wrap('*', inline(n));
+      case 'S': case 'STRIKE': case 'DEL': return wrap('~~', inline(n));
+      case 'CODE': case 'KBD': case 'TT': return '`' + n.textContent.replace(/`/g, "'") + '`';
+      case 'BR': return '\n';
+      case 'A': {
+        const href = n.classList.contains('cite') ? `/files/${n.dataset.file}${n.dataset.page ? '#p' + n.dataset.page : ''}` : n.getAttribute('href') || '';
+        const text = inline(n).trim() || href;
+        if (!/^(https?:|\/files\/|tel:|sms:|mailto:|geo:|spotify:|intent:|deezer:|tg:|sgnl:|uber:|homeassistant:)/.test(href)) return text;
+        return `[${n.classList.contains('action') ? '▶ ' : ''}${text.replace(/[[\]]/g, '')}](${href.replace(/ /g, '%20').replace(/\)/g, '%29')})`;
+      }
+      case 'SPAN': return n.classList.contains('check') ? '' : inline(n);
+      case 'IMG': case 'SVG': case 'svg': case 'STYLE': case 'SCRIPT': case 'BUTTON': return '';
+      default: return RTE_BLOCKS.has(n.tagName) || n.tagName === 'LI' ? '\n' + block(n) + '\n' : inline(n);
+    }
+  };
+  const para = s => s.split('\n').map(l => l.trim()).filter((l, i, a) => l || (i > 0 && i < a.length - 1))
+    .map(l => l.replace(/^(#|[-+*]\s|&gt;|>|\d+[.)]\s)/, m => '\\' + m)).join('\n').replace(/\n{2,}/g, '\n');
+  const blocks = node => {
+    const parts = []; let text = '';
+    const flush = () => { const p = para(text); if (p.trim()) parts.push(p); text = ''; };
+    for (const n of node.childNodes) {
+      if (n.nodeType === 1 && (RTE_BLOCKS.has(n.tagName) || n.tagName === 'LI')) { flush(); const b = block(n); if (b.trim()) parts.push(b); }
+      else text += inl(n);
+    }
+    flush();
+    return parts.join('\n\n');
+  };
+  const list = (n, depth) => {
+    const ordered = n.tagName === 'OL'; let i = +(n.getAttribute('start') || 1); const lines = [];
+    for (const li of n.children) {
+      if (li.tagName === 'UL' || li.tagName === 'OL') { lines.push(list(li, depth + 1)); continue; }
+      if (li.tagName !== 'LI') continue;
+      let text = ''; const subs = [];
+      for (const c of li.childNodes) {
+        if (c.nodeType === 1 && (c.tagName === 'UL' || c.tagName === 'OL')) subs.push(list(c, depth + 1));
+        else if (c.nodeType === 1 && RTE_BLOCKS.has(c.tagName)) text += ' ' + inline(c);
+        else text += inl(c);
+      }
+      const task = li.classList.contains('chk') ? (li.dataset.done === '1' ? '[x] ' : '[ ] ') : '';
+      lines.push('   '.repeat(depth) + (ordered ? `${i++}. ` : '- ') + task + text.replace(/\s*\n\s*/g, ' ').trim());
+      lines.push(...subs);
+    }
+    return lines.join('\n');
+  };
+  const block = n => {
+    switch (n.tagName) {
+      case 'H1': case 'H2': case 'H3': return '# ' + inline(n).replace(/\s+/g, ' ').trim();
+      case 'H4': return '## ' + inline(n).replace(/\s+/g, ' ').trim();
+      case 'H5': case 'H6': return '### ' + inline(n).replace(/\s+/g, ' ').trim();
+      case 'UL': case 'OL': return list(n, 0);
+      case 'LI': return '- ' + inline(n).trim();
+      case 'BLOCKQUOTE': return blocks(n).split('\n').map(l => l ? '> ' + l : '>').join('\n');
+      case 'PRE': return '```\n' + n.textContent.replace(/\n$/, '') + '\n```';
+      case 'HR': return '---';
+      case 'TABLE': {
+        const rows = [...n.querySelectorAll('tr')].map(tr => [...tr.children].map(td => inline(td).replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|')));
+        if (!rows.length) return '';
+        const w = Math.max(...rows.map(r => r.length));
+        const line = r => '| ' + Array.from({ length: w }, (_, k) => r[k] ?? '').join(' | ') + ' |';
+        return [line(rows[0]), '|' + ' --- |'.repeat(w), ...rows.slice(1).map(line)].join('\n');
+      }
+      default: return blocks(n);
+    }
+  };
+  return blocks(root).replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** A Markdown editor that looks like the result. rte.value / rte.value = '...' */
+function makeRte(box) {
+  box.innerHTML = `<div class="rte-bar" role="toolbar" aria-label="Formatting">
+      <button type="button" data-c="bold" title="Bold (Ctrl+B)"><b>B</b></button><button type="button" data-c="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+      <button type="button" data-c="strike" title="Strikethrough"><s>S</s></button><button type="button" data-c="h" title="Heading">H</button>
+      <span class="sep"></span><button type="button" data-c="ul" title="List">•</button><button type="button" data-c="ol" title="Numbered list">1.</button>
+      <button type="button" data-c="task" title="Checklist">☑</button><button type="button" data-c="quote" title="Quote">❝</button>
+      <button type="button" data-c="code" title="Code">&lt;/&gt;</button><button type="button" data-c="link" title="Link">🔗</button>
+      <span class="spacer"></span><button type="button" data-c="src" title="Edit the Markdown source" class="src">MD</button></div>
+    <div class="rte-area doc" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Description" data-placeholder="Details, steps, links… (checklists count as progress)"></div>
+    <textarea class="rte-src" hidden aria-label="Description (Markdown)"></textarea>`;
+  const area = box.querySelector('.rte-area'), src = box.querySelector('.rte-src');
+  let srcMode = false;
+  const load = markdown => {
+    area.innerHTML = md(markdown || '');
+    area.querySelectorAll('li > span.check:first-child').forEach(s => {
+      const li = s.parentElement; li.classList.add('chk'); li.dataset.done = s.classList.contains('done') ? '1' : '0';
+      if (s.nextSibling?.nodeType === 3) s.nextSibling.nodeValue = s.nextSibling.nodeValue.replace(/^\s+/, '');
+      s.remove();
+    });
+    area.querySelectorAll('a').forEach(a => a.setAttribute('contenteditable', 'false'));
+    box.classList.toggle('empty', !markdown);
+  };
+  const exec = (c, v = null) => { area.focus(); document.execCommand(c, false, v); };
+  const blockOf = () => { const n = getSelection().anchorNode; const el = n && (n.nodeType === 1 ? n : n.parentElement); return el && area.contains(el) ? el : null; };
+  try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch {}
+  box.querySelector('.rte-bar').addEventListener('mousedown', e => { if (e.target.closest('button') && !e.target.closest('.src')) e.preventDefault(); }); // keep the selection
+  box.querySelector('.rte-bar').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const el = blockOf();
+    switch (b.dataset.c) {
+      case 'bold': exec('bold'); break;
+      case 'italic': exec('italic'); break;
+      case 'strike': exec('strikeThrough'); break;
+      case 'h': exec('formatBlock', el?.closest('h3,h4,h5') ? 'p' : 'h3'); break;
+      case 'ul': exec('insertUnorderedList'); break;
+      case 'ol': exec('insertOrderedList'); break;
+      case 'quote': exec('formatBlock', el?.closest('blockquote') ? 'p' : 'blockquote'); break;
+      case 'task': {
+        let li = el?.closest('li');
+        if (!li) { exec('insertUnorderedList'); li = blockOf()?.closest('li'); if (li) { li.classList.add('chk'); li.dataset.done = '0'; } }
+        else { const on = !li.classList.contains('chk'); li.parentElement.querySelectorAll(':scope > li').forEach(x => { x.classList.toggle('chk', on); x.dataset.done = x.dataset.done || '0'; }); }
+        break;
+      }
+      case 'code': { const t = getSelection().toString(); if (t.includes('\n')) exec('insertHTML', `<pre><code>${esc(t)}</code></pre><p><br></p>`); else exec('insertHTML', `<code>${esc(t || 'code')}</code>&nbsp;`); break; }
+      case 'link': {
+        const url = prompt('Link address (https://…)', 'https://');
+        if (url && /^(https?:|mailto:|tel:)/i.test(url.trim())) { if (getSelection().isCollapsed) exec('insertHTML', `<a href="${esc(url.trim())}">${esc(url.trim())}</a>&nbsp;`); else exec('createLink', url.trim()); }
+        break;
+      }
+      case 'src':
+        srcMode = !srcMode;
+        if (srcMode) { src.value = htmlToMd(area); src.style.height = Math.max(area.offsetHeight, 140) + 'px'; } else load(src.value);
+        area.hidden = srcMode; src.hidden = !srcMode; b.classList.toggle('on', srcMode);
+        box.querySelectorAll('.rte-bar button:not(.src)').forEach(x => x.disabled = srcMode);
+        (srcMode ? src : area).focus();
+        break;
+    }
+    box.classList.remove('empty');
+  });
+  area.addEventListener('click', e => { // tick a checklist item
+    const li = e.target.closest('li.chk');
+    if (li && e.target === li && e.offsetX < 22) { li.dataset.done = li.dataset.done === '1' ? '0' : '1'; }
+  });
+  area.addEventListener('keyup', e => {
+    if (e.key === 'Enter') { const li = blockOf()?.closest('li.chk'); if (li && !li.textContent.trim()) li.dataset.done = '0'; }
+  });
+  area.addEventListener('input', () => box.classList.toggle('empty', !area.textContent.trim() && !area.querySelector('li,hr,table')));
+  area.addEventListener('paste', e => { // keep the structure of what is pasted, never its scripts or styles
+    e.preventDefault();
+    const html = e.clipboardData.getData('text/html'), text = e.clipboardData.getData('text/plain');
+    if (html) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      exec('insertHTML', md(htmlToMd(doc.body)));
+    } else exec('insertText', text);
+  });
+  return {
+    get value() { return srcMode ? src.value.trim() : htmlToMd(area); },
+    set value(v) { srcMode = false; area.hidden = false; src.hidden = true; box.querySelector('.src').classList.remove('on'); box.querySelectorAll('.rte-bar button').forEach(x => x.disabled = false); load(v); },
+  };
+}
+
+// ---- tasks board ----
+const PRIO = { 1: 'Critical', 2: 'High', 3: 'Normal', 4: 'Low', 5: 'Someday' };
+const BICON = {
+  due: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
+  load: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 1M10 3h4"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></svg>',
+  lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+  warn: '<svg viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/></svg>',
+  cal: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 14h3"/></svg>',
+};
+const boardPrefs = (() => { try { return JSON.parse(localStorage.getItem('talixio.board') || '{}'); } catch { return {}; } })();
+const saveBoardPrefs = () => { try { localStorage.setItem('talixio.board', JSON.stringify(boardPrefs)); } catch {} };
+const fmtH = h => h == null ? '' : h === 0 ? '0h' : h >= 7 && h % 7 === 0 ? `${h / 7}d` : h < 1 ? `${Math.round(h * 60)}m` : `${+h.toFixed(2)}h`;
+const fmtDay = d => { if (!d) return ''; const t = new Date(d + 'T12:00:00'); return t.toLocaleDateString([], { day: 'numeric', month: 'short', ...(t.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }); };
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const dueClass = c => { if (!c.due_date || c.status === 'done') return ''; const t = today(); if (c.due_date < t) return 'late'; const soon = new Date(); soon.setDate(soon.getDate() + 3); return c.due_date <= soon.toISOString().slice(0, 10) ? 'soon' : ''; };
+const board = { cards: [], refs: {}, statuses: {} };
+
+async function loadBoard() {
+  if (!state.spaces.length) await loadSpaces();
+  if (boardPrefs.space === undefined) boardPrefs.space = String(state.space);
+  const sel = $('#board-space');
+  sel.innerHTML = `<option value="">All spaces</option>` + state.spaces.filter(x => !x.archived || String(x.id) === boardPrefs.space).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  if (![...sel.options].some(o => o.value === boardPrefs.space)) boardPrefs.space = '0';
+  sel.value = boardPrefs.space;
+  sel.onchange = () => { boardPrefs.space = sel.value; boardPrefs.tag = ''; saveBoardPrefs(); loadBoard(); };
+  const mode = boardPrefs.mode === 'overall' ? 'overall' : 'board';
+  document.querySelectorAll('#view-board .seg button').forEach(b => { b.classList.toggle('on', b.dataset.mode === mode); b.setAttribute('aria-selected', b.dataset.mode === mode); b.onclick = () => { boardPrefs.mode = b.dataset.mode; saveBoardPrefs(); loadBoard(); }; });
+  $('#board-q').value = boardPrefs.q || '';
+  $('#board-q').oninput = () => { clearTimeout(loadBoard.qt); loadBoard.qt = setTimeout(() => { boardPrefs.q = $('#board-q').value.trim(); saveBoardPrefs(); loadBoard(); }, 300); };
+  $('#board-new').onclick = () => openCard(null, { space: boardPrefs.space === '' ? state.space : +boardPrefs.space });
+  $('#board-trash').onclick = showBoardTrash;
+  $('#board-changes').onclick = showBoardChanges;
+  const sp = boardPrefs.space === '' ? '' : `space=${boardPrefs.space}&`;
+  const q = new URLSearchParams(); if (boardPrefs.tag) q.set('tag', boardPrefs.tag); if (boardPrefs.q) q.set('q', boardPrefs.q);
+  if (mode === 'overall') await renderOverall(await api('/api/board/portfolio')); // arbitration is across all spaces
+  else {
+    const d = await api(`/api/board?${sp}${q}`);
+    Object.assign(board, d);
+    const names = Object.keys(d.tags || {});
+    if (boardPrefs.tag && !names.includes(boardPrefs.tag)) names.unshift(boardPrefs.tag);
+    $('#board-tags').innerHTML = names.map(t => `<button type="button" class="tag${t === boardPrefs.tag ? ' on' : ''}" data-tag="${esc(t)}">#${esc(t)} <small>${d.tags[t] || 0}</small></button>`).join('');
+    $('#board-tags').querySelectorAll('.tag').forEach(b => b.onclick = () => { boardPrefs.tag = boardPrefs.tag === b.dataset.tag ? '' : b.dataset.tag; saveBoardPrefs(); loadBoard(); });
+    renderBoard();
+  }
+  $('#board-tags').hidden = mode === 'overall'; sel.hidden = mode === 'overall';
+  $('#board-q').hidden = mode === 'overall';
+  clearTimeout(loadBoard.t);
+  loadBoard.t = setTimeout(() => { if (location.hash.startsWith('#board') && !$('#card-dialog').open && !document.querySelector('.kcard.dragging, .kquick:focus')) loadBoard().catch(() => {}); }, 30000);
+}
+
+function cardHtml(c, opts = {}) {
+  const sp = spaceOf(c.space), waits = c.depends_on.filter(d => board.refs[d] && board.refs[d].status !== 'done' && !board.refs[d].deleted_at);
+  const warn = c.warnings.filter(w => w.kind !== 'waiting' && w.kind !== 'overdue');
+  const bits = [];
+  if (c.due_date) bits.push(`<span class="kb ${dueClass(c)}" title="Due ${esc(c.due_date)}${c.start_date ? ', starts ' + esc(c.start_date) : ''}">${BICON.due}${fmtDay(c.due_date)}</span>`);
+  if (c.estimate_hours != null || c.spent_hours) bits.push(`<span class="kb${c.estimate_hours && c.spent_hours > c.estimate_hours ? ' late' : ''}" title="Workload${c.spent_hours ? ': ' + fmtH(c.spent_hours) + ' spent' : ''}${c.estimate_hours != null ? ' of ' + fmtH(c.estimate_hours) + ' planned' : ''}">${BICON.load}${c.spent_hours ? fmtH(c.spent_hours) + '/' : ''}${fmtH(c.estimate_hours) || '?'}</span>`);
+  if (c.checklist.total) bits.push(`<span class="kb${c.checklist.done === c.checklist.total ? ' ok' : ''}" title="Checklist">${BICON.check}${c.checklist.done}/${c.checklist.total}</span>`);
+  if (waits.length) bits.push(`<span class="kb wait" title="Waits for ${esc(waits.map(d => board.refs[d].code + ' ' + board.refs[d].title).join(', '))}">${BICON.lock}${esc(waits.map(d => board.refs[d].code).join(', '))}</span>`);
+  if (warn.length) bits.push(`<span class="kb late" title="${esc(warn.map(w => w.text).join('\n'))}">${BICON.warn}</span>`);
+  if (c.in_calendar) bits.push(`<span class="kb" title="Shown in your calendar">${BICON.cal}</span>`);
+  return `<div class="kc-top"><span class="code">${esc(c.code)}</span>${opts.space ? `<span class="kc-space"><i style="background:${esc(sp.color || 'var(--muted)')}"></i>${esc(sp.name)}</span>` : ''}<span class="prio p${c.priority}" title="P${c.priority} · ${PRIO[c.priority]}">P${c.priority}</span></div>
+    <div class="kc-title">${esc(c.title)}</div>${bits.length ? `<div class="kc-meta">${bits.join('')}</div>` : ''}${c.tags.length ? `<div class="kc-tags">${c.tags.map(t => `<span>#${esc(t)}</span>`).join('')}</div>` : ''}`;
+}
+
+function renderBoard() {
+  const root = $('#board'); root.className = 'board'; root.innerHTML = '';
+  $('#board-summary').hidden = true;
+  const all = boardPrefs.space === '';
+  for (const [st, label] of Object.entries(board.statuses)) {
+    const cards = board.cards.filter(c => c.status === st);
+    const load = cards.reduce((a, c) => a + (c.estimate_hours || 0), 0);
+    const col = document.createElement('section');
+    col.className = `kcol s-${st}`; col.dataset.status = st;
+    col.innerHTML = `<header><b>${label}</b><span class="muted small">${cards.length}${load ? ' · ' + fmtH(load) : ''}</span></header><div class="kcards"></div>`
+      + (all ? '' : `<input class="kquick" placeholder="+ Add a task" aria-label="Add a task to ${esc(label)}" maxlength="200">`);
+    const list = col.querySelector('.kcards');
+    for (const c of cards) {
+      const el = document.createElement('article');
+      el.className = `kcard p${c.priority}`; el.dataset.id = c.id; el.draggable = true; el.tabIndex = 0;
+      el.innerHTML = cardHtml(c, { space: all });
+      el.onclick = () => openCard(c.id);
+      el.onkeydown = e => { if (e.key === 'Enter') openCard(c.id); };
+      el.ondragstart = e => { el.classList.add('dragging'); e.dataTransfer.setData('text/plain', String(c.id)); e.dataTransfer.effectAllowed = 'move'; };
+      el.ondragend = () => { el.classList.remove('dragging'); document.querySelectorAll('.kdrop').forEach(x => x.remove()); };
+      list.append(el);
+    }
+    if (!cards.length) list.innerHTML = `<p class="kempty muted small">${st === 'idea' ? 'Ideas for later' : st === 'blocked' ? 'Nothing blocked' : st === 'done' ? 'Done in the last 2 weeks' : 'Nothing here'}</p>`;
+    // drag and drop between and within columns
+    const marker = () => { let m = col.querySelector('.kdrop'); if (!m) { m = document.createElement('div'); m.className = 'kdrop'; } return m; };
+    const beforeEl = y => [...list.querySelectorAll('.kcard:not(.dragging)')].find(k => { const r = k.getBoundingClientRect(); return y < r.top + r.height / 2; });
+    col.ondragover = e => { e.preventDefault(); const b = beforeEl(e.clientY); const m = marker(); document.querySelectorAll('.kdrop').forEach(x => x !== m && x.remove()); b ? list.insertBefore(m, b) : list.append(m); };
+    col.ondragleave = e => { if (!col.contains(e.relatedTarget)) col.querySelector('.kdrop')?.remove(); };
+    col.ondrop = async e => {
+      e.preventDefault();
+      const id = +e.dataTransfer.getData('text/plain'); const b = beforeEl(e.clientY);
+      col.querySelector('.kdrop')?.remove();
+      if (!id) return;
+      try { await post(`/api/board/${id}/move`, { status: st, before: b ? +b.dataset.id : null }); } catch (err) { toast(err.message); }
+      loadBoard();
+    };
+    const quick = col.querySelector('.kquick');
+    if (quick) quick.onkeydown = async e => {
+      if (e.key !== 'Enter' || !quick.value.trim()) return;
+      try { const { card } = await post('/api/board', { space: +boardPrefs.space, title: quick.value.trim(), status: st }); quick.value = ''; toast(`${card.code} added`); await loadBoard(); root.querySelector(`.kcol.s-${st} .kquick`)?.focus(); }
+      catch (err) { toast(err.message); }
+    };
+    root.append(col);
+  }
+  if (!board.cards.length && !boardPrefs.q && !boardPrefs.tag) {
+    $('#board-summary').hidden = false;
+    $('#board-summary').innerHTML = '<p class="muted small">No tasks yet. Add one in a column, or ask in the chat: <q>add a task: repaint the kitchen before December, about 2 days</q>.</p>';
+  }
+}
+
+/** General's view: every open task, in the overall order you set; workload per space. */
+async function renderOverall(d) {
+  board.refs = d.refs;
+  const root = $('#board'); root.className = 'overall'; root.innerHTML = '';
+  const ranked = d.cards.filter(c => c.global_rank != null), rest = d.cards.filter(c => c.global_rank == null);
+  const per = {};
+  for (const c of d.cards) { const p = per[c.space] ||= { n: 0, h: 0, late: 0 }; p.n++; p.h += Math.max(0, (c.estimate_hours || 0) - (c.spent_hours || 0)); if (dueClass(c) === 'late') p.late++; }
+  const sum = $('#board-summary'); sum.hidden = !d.cards.length;
+  sum.innerHTML = Object.entries(per).map(([s, p]) => { const sp = spaceOf(+s); return `<span class="chip"><i class="space-dot" style="background:${esc(sp.color || 'var(--muted)')}"></i>${esc(sp.name)}: ${p.n} open${p.h ? ' · ' + fmtH(Math.round(p.h * 4) / 4) + ' left' : ''}${p.late ? ` · <b class="late">${p.late} late</b>` : ''}</span>`; }).join('');
+  const save = async ids => { try { await post('/api/board/order', { ids }); } catch (e) { toast(e.message); } loadBoard(); };
+  const row = (c, i) => {
+    const el = document.createElement('div'); el.className = 'orow' + (i == null ? ' unranked' : ''); el.dataset.id = c.id;
+    el.draggable = i != null;
+    el.innerHTML = `${i != null ? `<span class="grip" title="Drag to reorder">⋮⋮</span><b class="rank">${i + 1}</b>` : ''}<div class="ocard kcard p${c.priority}">${cardHtml(c, { space: true })}</div>
+      <span class="oacts">${i != null ? `<button type="button" class="icon-btn" data-a="up" title="Up" aria-label="Up">↑</button><button type="button" class="icon-btn" data-a="down" title="Down" aria-label="Down">↓</button><button type="button" class="icon-btn" data-a="out" title="Take out of the order" aria-label="Take out of the order">×</button>`
+        : '<button type="button" class="btn small" data-a="in">Add to the order</button>'}</span>`;
+    el.querySelector('.ocard').onclick = () => openCard(c.id);
+    const ids = ranked.map(x => x.id);
+    el.querySelector('[data-a=up]')?.addEventListener('click', () => { if (i > 0) { [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]; save(ids); } });
+    el.querySelector('[data-a=down]')?.addEventListener('click', () => { if (i < ids.length - 1) { [ids[i + 1], ids[i]] = [ids[i], ids[i + 1]]; save(ids); } });
+    el.querySelector('[data-a=out]')?.addEventListener('click', async () => { try { await post(`/api/board/${c.id}/unrank`); } catch (e) { toast(e.message); } loadBoard(); });
+    el.querySelector('[data-a=in]')?.addEventListener('click', () => save([...ids, c.id]));
+    if (i != null) {
+      el.ondragstart = e => { el.classList.add('dragging'); e.dataTransfer.setData('text/plain', String(c.id)); };
+      el.ondragend = () => el.classList.remove('dragging');
+      el.ondragover = e => { e.preventDefault(); el.classList.add('over'); };
+      el.ondragleave = () => el.classList.remove('over');
+      el.ondrop = e => { e.preventDefault(); const from = +e.dataTransfer.getData('text/plain'); const next = ids.filter(x => x !== from); next.splice(next.indexOf(c.id), 0, from); save(next); };
+    }
+    return el;
+  };
+  const h = (t, p) => { const x = document.createElement('div'); x.className = 'ohead'; x.innerHTML = `<b>${t}</b><span class="muted small">${p}</span>`; return x; };
+  const ask = document.createElement('button'); ask.type = 'button'; ask.className = 'btn small'; ask.textContent = 'Ask the assistant for a proposal';
+  ask.onclick = async () => { location.hash = '#chat'; if (state.space !== 0) await switchSpace(0); $('#input').value = 'Look at all my open tasks across spaces and propose an overall order (deadlines, dependencies, priorities, workload). Explain briefly, and set it only once I agree.'; autosize(); $('#input').focus(); };
+  root.append(ask);
+  root.append(h('Overall order', ranked.length ? 'What to do first, across your spaces. Drag, or use the arrows. The assistant in General can propose an order: ask it to arbitrate.' : 'Nothing ordered yet. Add tasks from below, or ask the assistant in General: <q>arbitrate my tasks across spaces</q>.'));
+  ranked.forEach((c, i) => root.append(row(c, i)));
+  if (rest.length) { root.append(h('Not in the order', `${rest.length} open tasks, by priority and due date`)); rest.forEach(c => root.append(row(c, null))); }
+  if (!d.cards.length) root.append(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'No open tasks.' }));
+}
+
+let cardRte = null;
+/** Open a task (id) or a new one (prefill: {space, status}). */
+async function openCard(id, prefill = {}) {
+  const dlg = $('#card-dialog');
+  if (!cardRte) cardRte = makeRte($('#cd-rte'));
+  let d = { card: { space: prefill.space ?? state.space, status: prefill.status || 'todo', priority: 3, title: '', body: '', tags: [], depends_on: [], blocks: [], in_calendar: 0 }, history: [], time: [], depends_on: [], blocks: [] };
+  if (id) { try { d = await api(`/api/board/${id}`); } catch (e) { toast(e.message); return; } }
+  const c = d.card, isNew = !id;
+  let deps = d.depends_on.slice();
+  $('#cd-code').textContent = isNew ? 'New task' : c.code;
+  $('#cd-space').innerHTML = state.spaces.filter(x => !x.archived || x.id === c.space).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  $('#cd-space').value = String(c.space);
+  $('#cd-space').title = 'Space';
+  $('#cd-title').value = c.title;
+  $('#cd-status').innerHTML = Object.entries(board.statuses && Object.keys(board.statuses).length ? board.statuses : { idea: 'Ideas', todo: 'To do', doing: 'In progress', blocked: 'Blocked', done: 'Done' }).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  $('#cd-status').value = c.status; $('#cd-priority').value = String(c.priority);
+  $('#cd-start').value = c.start_date || ''; $('#cd-due').value = c.due_date || '';
+  $('#cd-estimate').value = c.estimate_hours != null ? fmtH(c.estimate_hours) : '';
+  $('#cd-cal').checked = !!c.in_calendar;
+  $('#cd-tags').value = (c.tags || []).join(', ');
+  cardRte.value = c.body || '';
+  const warn = (c.warnings || []);
+  $('#cd-warn').hidden = !warn.length; $('#cd-warn').innerHTML = warn.map(w => `<div>${BICON.warn}<span>${esc(w.text)}</span></div>`).join('');
+  const paintDeps = () => {
+    $('#cd-deps').innerHTML = deps.map(x => { const sp = spaceOf(x.space); return `<span class="dep${x.status === 'done' ? ' done' : ''}" title="${esc(sp.name)} · ${esc(board.statuses?.[x.status] || x.status)}"><i style="background:${esc(sp.color || 'var(--muted)')}"></i><b>${esc(x.code)}</b> ${esc(x.title)}${x.status === 'done' ? ' ✓' : ''}<button type="button" data-id="${x.id}" aria-label="Remove">×</button></span>`; }).join('') || '<span class="muted small">Nothing: it can start any time.</span>';
+    $('#cd-deps').querySelectorAll('button').forEach(b => b.onclick = () => { deps = deps.filter(x => x.id !== +b.dataset.id); paintDeps(); });
+  };
+  paintDeps();
+  $('#cd-blocks').innerHTML = d.blocks.length ? 'Blocks: ' + d.blocks.map(x => `<b>${esc(x.code)}</b> ${esc(x.title)}`).join(', ') : '';
+  // dependency search
+  const q = $('#cd-dep-q'), hits = $('#cd-dep-hits'); q.value = ''; hits.hidden = true;
+  q.oninput = () => { clearTimeout(q.t); q.t = setTimeout(async () => {
+    const term = q.value.trim(); if (!term) { hits.hidden = true; return; }
+    try {
+      const { cards } = await api('/api/board/find?q=' + encodeURIComponent(term));
+      const list = cards.filter(x => x.id !== c.id && !deps.some(y => y.id === x.id) && !x.deleted_at);
+      hits.innerHTML = list.length ? list.map(x => `<button type="button" data-id="${x.id}"><b>${esc(x.code)}</b> ${esc(x.title)} <span class="muted small">${esc(spaceOf(x.space).name)}</span></button>`).join('') : '<p class="muted small">No task found.</p>';
+      hits.hidden = false;
+      hits.querySelectorAll('button').forEach(b => b.onclick = () => { deps.push(list.find(x => x.id === +b.dataset.id)); paintDeps(); q.value = ''; hits.hidden = true; q.focus(); });
+    } catch {}
+  }, 200); };
+  q.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); hits.querySelector('button')?.click(); } if (e.key === 'Escape') { e.stopPropagation(); hits.hidden = true; } };
+  // time and history (existing tasks)
+  $('#cd-time').hidden = $('#cd-history').hidden = $('#cd-delete').hidden = isNew;
+  const paintTime = (card, entries) => {
+    $('#cd-time-sum').textContent = card.spent_hours || card.estimate_hours ? `· ${fmtH(card.spent_hours) || '0h'}${card.estimate_hours ? ' of ' + fmtH(card.estimate_hours) : ''}` : '';
+    $('#cd-time-list').innerHTML = entries.map(t => `<div class="trow"><span>${fmtDay(t.day)}</span><b>${fmtH(+t.hours)}</b><span class="muted">${esc(t.note)}</span><button type="button" class="icon-btn" data-t="${t.id}" aria-label="Remove">×</button></div>`).join('');
+    $('#cd-time-list').querySelectorAll('[data-t]').forEach(b => b.onclick = async () => { await post(`/api/board/time/${b.dataset.t}/delete`); const r = await api(`/api/board/${c.id}`); paintTime(r.card, r.time); });
+  };
+  if (!isNew) {
+    paintTime(c, d.time);
+    $('#cd-time-day').value = today(); $('#cd-time-h').value = ''; $('#cd-time-note').value = '';
+    $('#cd-time-add').onclick = async () => {
+      try { await post(`/api/board/${c.id}/time`, { hours: $('#cd-time-h').value, day: $('#cd-time-day').value, note: $('#cd-time-note').value }); const r = await api(`/api/board/${c.id}`); paintTime(r.card, r.time); $('#cd-time-h').value = $('#cd-time-note').value = ''; c.version = r.card.version; }
+      catch (e) { toast(e.message); }
+    };
+    $('#cd-history-list').innerHTML = d.history.map(h => `<div class="hrow"><span class="muted small">${new Date(h.ts * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span><span>${esc(h.what)}</span><span class="muted small">${esc(h.who)}</span>${h.can_undo ? `<button type="button" class="btn small ghost" data-h="${h.id}">Undo</button>` : '<span></span>'}</div>`).join('');
+    $('#cd-history-list').querySelectorAll('[data-h]').forEach(b => b.onclick = async () => { try { await post(`/api/board/undo/${b.dataset.h}`); toast('Undone'); dlg.close(); loadBoard(); openCard(c.id); } catch (e) { toast(e.message); } });
+  }
+  $('#cd-time').open = false; $('#cd-history').open = false;
+  const close = () => { dlg.close(); };
+  $('#cd-close').onclick = $('#cd-cancel').onclick = close;
+  $('#cd-delete').dataset.confirm = ''; $('#cd-delete').textContent = 'Move to trash';
+  $('#cd-delete').onclick = async e => {
+    const b = e.currentTarget;
+    if (b.dataset.confirm !== '1' && c.blocks?.length) { b.dataset.confirm = '1'; b.textContent = `${c.blocks.length} task(s) wait for it: delete anyway?`; return; }
+    try { const r = await post(`/api/board/${c.id}/delete`); close(); toast(`${c.code} moved to the trash` + (r.waiting.length ? ` (${r.waiting.join(', ')} waited for it)` : '')); loadBoard(); } catch (err) { toast(err.message); }
+  };
+  $('#card-form').onsubmit = async e => {
+    e.preventDefault();
+    const body = { title: $('#cd-title').value, body: cardRte.value, status: $('#cd-status').value, priority: +$('#cd-priority').value, start_date: $('#cd-start').value,
+      due_date: $('#cd-due').value, estimate_hours: $('#cd-estimate').value.trim(), in_calendar: $('#cd-cal').checked, tags: $('#cd-tags').value,
+      space: +$('#cd-space').value, depends_on: deps.map(x => x.id) };
+    try {
+      if (isNew) { const r = await post('/api/board', body); toast(`${r.card.code} added`); }
+      else await post(`/api/board/${c.id}`, { ...body, version: c.version });
+      close(); loadBoard();
+    } catch (err) {
+      if (err.status === 409) { if (confirm(err.message + '\n\nReload it? (your changes in this window will be lost)')) { close(); openCard(c.id); } }
+      else toast(err.message);
+    }
+  };
+  dlg.showModal();
+  if (isNew) $('#cd-title').focus(); else dlg.focus(); // no keyboard popping up on phones
+}
+
+async function showBoardTrash() {
+  const { cards } = await api('/api/board/trash');
+  $('#bs-title').textContent = 'Trash';
+  $('#bs-list').innerHTML = cards.length ? '<p class="muted small">Deleted tasks stay here for 30 days.</p>' + cards.map(c => `<div class="hrow"><b>${esc(c.code)}</b><span>${esc(c.title)}</span><span class="muted small">${new Date(c.deleted_at * 1000).toLocaleDateString()}</span><button type="button" class="btn small" data-id="${c.id}">Restore</button></div>`).join('')
+    : '<p class="muted">The trash is empty.</p>';
+  $('#bs-list').querySelectorAll('[data-id]').forEach(b => b.onclick = async () => { try { await post(`/api/board/${b.dataset.id}/restore`); toast('Restored'); showBoardTrash(); loadBoard(); } catch (e) { toast(e.message); } });
+  $('#bs-close').onclick = () => $('#board-side').close();
+  if (!$('#board-side').open) $('#board-side').showModal();
+}
+
+async function showBoardChanges() {
+  const { changes } = await api('/api/board/recent' + (boardPrefs.space !== '' ? '?space=' + boardPrefs.space : ''));
+  $('#bs-title').textContent = 'Recent changes';
+  $('#bs-list').innerHTML = changes.length ? changes.map(h => `<div class="hrow"><span class="muted small">${new Date(h.ts * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span><span><a href="#board" data-id="${h.card}"><b>${esc(h.code)}</b></a> ${esc(h.what)}</span><span class="muted small">${esc(h.who)}</span><span></span></div>`).join('')
+    : '<p class="muted">No changes yet.</p>';
+  $('#bs-list').querySelectorAll('a[data-id]').forEach(a => a.onclick = e => { e.preventDefault(); $('#board-side').close(); openCard(+a.dataset.id); });
+  $('#bs-close').onclick = () => $('#board-side').close();
+  if (!$('#board-side').open) $('#board-side').showModal();
 }
 
 // ---- channels ----
@@ -1543,15 +1968,16 @@ async function loadActivity() {
 }
 
 // ---- shell ----
-const VIEWS = { chat: null, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity };
+const VIEWS = { chat: null, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity };
 function route() {
   const h = location.hash.slice(1) === 'channels' ? 'settings' : location.hash.slice(1).split('/')[0];
   const v = (h in VIEWS) ? h : 'chat';
   for (const k of Object.keys(VIEWS)) $('#view-' + k).hidden = k !== v;
   document.querySelectorAll('.rail a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
-  $('#more-btn').classList.toggle('active', ['jobs', 'activity', 'settings', 'mail', 'people'].includes(v));
+  $('#more-btn').classList.toggle('active', ['jobs', 'activity', 'settings', 'mail', 'people', 'tasks'].includes(v));
   $('#more-sheet').hidden = true;
   if (v !== 'library') closeViewer();
+  if (v !== 'board') { clearTimeout(loadBoard.t); }
   VIEWS[v]?.().catch(e => toast(e.message));
   if (v === 'chat') {
     const slug = (location.hash.match(/^#chat\/([\w-]+)/) || [])[1];

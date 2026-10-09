@@ -8,10 +8,10 @@ final class Tools
     /** Which tools each kind of run gets. Sub-agents can read and research but not change memory, schedules or spawn more jobs. */
     public const SETS = [
         'chat' => null, // everything
-        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'mail_triage', 'contact_find', 'file_read', 'kb_search', 'kb_list', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report'],
+        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'mail_triage', 'contact_find', 'file_read', 'kb_search', 'kb_list', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report', 'board_list', 'board_get'],
         'reflect' => ['skill_read', 'skill_save'],
         'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'kb_search', 'kb_list', 'calendar_events', 'mail_list', 'mail_read',
-            'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot', 'shell_run', 'mail_triage', 'contact_find'],
+            'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot', 'shell_run', 'mail_triage', 'contact_find', 'board_list', 'board_get'],
         'none' => [],
     ];
 
@@ -117,10 +117,10 @@ final class Tools
             fn(array $a) => $this->app->skills()->delete($a['name']) ? 'deleted' : 'error: no such skill');
 
         $this->register('schedule_task',
-            "Schedule a prompt that you will run later and send the result to the user (reminders, recurring reports, follow-ups). Give either `at` (local time 'YYYY-MM-DD HH:MM', timezone {$cfg->timezone}) for a one-off, or `cron` (5 fields, local time, e.g. '0 8 * * 1-5') for recurring. The prompt is an instruction to your future self, e.g. 'Remind the user to call the dentist.' tier: the model that runs it: fast for simple reminders, standard (default) for briefings, deep only for demanding reports.",
+            "A routine (not a to-do: those go on the tasks board): schedule a prompt that you will run later and send the result to the user (reminders, recurring reports, follow-ups). Give either `at` (local time 'YYYY-MM-DD HH:MM', timezone {$cfg->timezone}) for a one-off, or `cron` (5 fields, local time, e.g. '0 8 * * 1-5') for recurring. The prompt is an instruction to your future self, e.g. 'Remind the user to call the dentist.' tier: the model that runs it: fast for simple reminders, standard (default) for briefings, deep only for demanding reports.",
             ['title' => ['type' => 'string'], 'prompt' => ['type' => 'string'], 'at' => ['type' => 'string'], 'cron' => ['type' => 'string'], 'tier' => ['type' => 'string', 'enum' => Tier::NAMES]],
             ['title', 'prompt'], fn(array $a) => $this->schedule($a));
-        $this->register('list_tasks', 'List scheduled tasks.', [], [], fn() => $this->listTasks());
+        $this->register('list_tasks', 'List routines (scheduled prompts). The to-do tasks are on the board: board_list.', [], [], fn() => $this->listTasks());
         $this->register('cancel_task', 'Delete a scheduled task by id.', ['id' => ['type' => 'integer']], ['id'],
             fn(array $a) => $this->app->store->deleteTask((int)$a['id']) ? 'deleted' : 'error: no such task');
 
@@ -207,6 +207,7 @@ final class Tools
                 });
         }
         $this->app->mcp()->register($this);
+        $this->registerBoard();
         $this->app->spotify()->register($this);
         $this->register('phone_action',
             "Make a button that opens an app on the user's phone: they tap it in the app (a web page can't open apps by itself). Put the returned link in your answer as is. kind: app (open an app by name or Android package), music (search a song or artist; via spotify, youtube music or deezer), navigate (to an address; via maps or waze), call, sms, whatsapp, email (target = number or address, text = the message), video (YouTube search), web (an address)."
@@ -220,6 +221,103 @@ final class Tools
             $this->register('web_search', 'Search the web. Returns titles, URLs and snippets.',
                 ['query' => ['type' => 'string']], ['query'], fn(array $a) => Search::run($this->app->cfg, $a['query']));
         }
+    }
+
+    /** The tasks board of the current space (General sees and arbitrates all spaces). */
+    private function registerBoard(): void
+    {
+        $bd = fn() => $this->app->board();
+        $here = fn() => $this->app->space;
+        $who = fn() => 'assistant' . ($this->app->space ? ' in ' . ($this->app->spaces()->get($this->app->space)['name'] ?? '') : '');
+        $mine = function (string $code) use ($bd, $here): array {
+            $c = $bd()->need($code);
+            if ($here() !== 0 && $c['space'] !== $here()) throw new \InvalidArgumentException("{$c['code']} belongs to another space: only that space or General can change it.");
+            return $c;
+        };
+        $spaceArg = function (array $a) use ($here): ?int {
+            if (!isset($a['space']) || $a['space'] === '') return null;
+            if ($here() !== 0) throw new \InvalidArgumentException('Only General can put tasks in another space.');
+            return (int)(($this->app->spaces()->find((string)$a['space']) ?? throw new \InvalidArgumentException("no space \"{$a['space']}\""))['id']);
+        };
+        $fields = function (array $a) use ($spaceArg): array {
+            $map = ['title' => 'title', 'description' => 'body', 'status' => 'status', 'priority' => 'priority', 'start' => 'start_date', 'due' => 'due_date',
+                'workload' => 'estimate_hours', 'tags' => 'tags', 'in_calendar' => 'in_calendar', 'depends_on' => 'depends_on', 'add_depends_on' => 'add_depends_on', 'remove_depends_on' => 'remove_depends_on'];
+            $d = [];
+            foreach ($map as $k => $f) if (array_key_exists($k, $a)) $d[$f] = $a[$k];
+            if (($s = $spaceArg($a)) !== null) $d['space'] = $s;
+            return $d;
+        };
+        $common = ['description' => ['type' => 'string', 'description' => 'Markdown; checklists as "- [ ] item"'],
+            'status' => ['type' => 'string', 'enum' => array_keys(Board::STATUSES)], 'priority' => ['type' => 'integer', 'description' => '1 (most urgent) to 5'],
+            'start' => ['type' => 'string', 'description' => 'YYYY-MM-DD, "" to clear'], 'due' => ['type' => 'string', 'description' => 'YYYY-MM-DD, "" to clear'],
+            'workload' => ['type' => 'string', 'description' => 'estimated work: "3h", "45m", "2d" (7h days)'], 'tags' => ['type' => 'array', 'items' => ['type' => 'string']],
+            'depends_on' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'codes of tasks this one waits for (any space)'],
+            'in_calendar' => ['type' => 'boolean', 'description' => "also show it in the user's calendar"], 'space' => ['type' => 'string', 'description' => 'General only: the space to put it in']];
+        $this->register('board_list',
+            "The user's tasks board (to-dos, not routines): this space's tasks by column, with code, priority (P1 most urgent), dates, workload, dependencies and warnings. In General, all_spaces=true shows every space (for arbitration).",
+            ['status' => ['type' => 'string', 'enum' => array_keys(Board::STATUSES)], 'tag' => ['type' => 'string'], 'query' => ['type' => 'string'], 'all_spaces' => ['type' => 'boolean']], [],
+            function (array $a) use ($bd, $here) {
+                $all = !empty($a['all_spaces']);
+                if ($all && $here() !== 0) return 'error: only General sees the other spaces\' tasks; list this space\'s.';
+                $cards = $bd()->list(['space' => $all ? null : $here(), 'status' => $a['status'] ?? '', 'tag' => $a['tag'] ?? '', 'q' => $a['query'] ?? '', 'global' => $all]);
+                if (!$cards) return 'no tasks' . (!empty($a['status']) || !empty($a['tag']) || !empty($a['query']) ? ' match' : ' yet');
+                $out = [];
+                foreach ($all ? ['all' => $cards] : array_reduce($cards, function ($g, $c) { $g[$c['status']][] = $c; return $g; }, []) as $k => $list) {
+                    $out[] = ($all ? '## Open tasks of all spaces, in overall order' : '## ' . Board::STATUSES[$k]) . "\n" . implode("\n", array_map(fn($c) => '- ' . $bd()->line($c, $all), $list));
+                }
+                return implode("\n", $out);
+            });
+        $this->register('board_get', 'One task in full (description, dependencies, links). Tasks of other spaces show only their title and status, unless you are in General.',
+            ['code' => ['type' => 'string']], ['code'], function (array $a) use ($bd, $here) {
+                $c = $bd()->need((string)$a['code']);
+                if ($here() !== 0 && $c['space'] !== $here()) return $bd()->line($bd()->brief($c) + ['estimate_hours' => null, 'spent_hours' => 0, 'checklist' => ['total' => 0], 'tags' => [], 'depends_on' => [], 'global_rank' => null, 'in_calendar' => 0, 'body' => ''], true) . ' (another space: details hidden)';
+                return $bd()->describeCard($c);
+            });
+        $this->register('board_add', "Add a task to this space's board. Choose the priority from what the user says (default 3). Its code (e.g. MAI-12) is generated.",
+            ['title' => ['type' => 'string']] + $common, ['title'], function (array $a) use ($bd, $here, $fields, $who) {
+                $c = $bd()->create($fields($a), $here(), $who());
+                return 'added ' . $bd()->line($c);
+            });
+        $this->register('board_update', "Change a task of this space: any field, status (move to a column), dependencies (add_depends_on / remove_depends_on), or add_note to append to its description.",
+            ['code' => ['type' => 'string'], 'title' => ['type' => 'string'], 'add_note' => ['type' => 'string'],
+             'add_depends_on' => ['type' => 'array', 'items' => ['type' => 'string']], 'remove_depends_on' => ['type' => 'array', 'items' => ['type' => 'string']]] + $common, ['code'],
+            function (array $a) use ($bd, $mine, $fields, $who) {
+                $c = $mine((string)$a['code']);
+                $d = $fields($a);
+                if (!empty($a['add_note'])) $d['body'] = rtrim($d['body'] ?? $c['body']) . "\n\n" . trim((string)$a['add_note']);
+                $n = $bd()->update($c['id'], $d, $who());
+                return 'updated ' . $bd()->line($n);
+            });
+        $this->register('board_delete', 'Move a task to the trash (the user can restore it for 30 days). Tell the user which tasks were waiting for it.',
+            ['code' => ['type' => 'string']], ['code'], function (array $a) use ($bd, $mine, $who) {
+                $c = $mine((string)$a['code']);
+                $waiting = $bd()->delete($c['id'], $who());
+                return "{$c['code']} moved to the trash" . ($waiting ? '. These tasks were waiting for it: ' . implode(', ', $waiting) : '');
+            });
+        $this->register('board_prioritize',
+            "Order tasks: the codes given come first, in this order, in their columns. In General with overall=true: set the overall order across all spaces (arbitration) — propose it to the user first.",
+            ['codes' => ['type' => 'array', 'items' => ['type' => 'string']], 'overall' => ['type' => 'boolean']], ['codes'],
+            function (array $a) use ($bd, $here, $mine, $who) {
+                if (!empty($a['overall'])) {
+                    if ($here() !== 0) return 'error: only General sets the overall order.';
+                    $bd()->setGlobalOrder((array)$a['codes'], $who());
+                    return 'overall order set: ' . implode(' > ', (array)$a['codes']);
+                }
+                foreach ((array)$a['codes'] as $code) $mine((string)$code);
+                $bd()->reorder((array)$a['codes'], $who());
+                return 'reordered: ' . implode(' > ', (array)$a['codes']);
+            });
+        $this->register('board_log_time', 'Record time spent on a task (e.g. "1h30", "45m", "1d").',
+            ['code' => ['type' => 'string'], 'time' => ['type' => 'string'], 'day' => ['type' => 'string', 'description' => 'YYYY-MM-DD, default today'], 'note' => ['type' => 'string']], ['code', 'time'],
+            function (array $a) use ($bd, $mine, $who) {
+                $c = $mine((string)$a['code']);
+                $n = $bd()->addTime($c['id'], (string)$a['time'], (string)($a['day'] ?? ''), (string)($a['note'] ?? ''), $who());
+                return "logged on {$n['code']}: " . Board::fmtHours($n['spent_hours']) . ' spent in total' . ($n['estimate_hours'] ? ' of ' . Board::fmtHours($n['estimate_hours']) . ' planned' : '');
+            });
+        $this->register('board_changes', 'Recent changes on the tasks of this space (General: all), with who made them.', [], [], function () use ($bd, $here) {
+            $rows = $bd()->recent($here() ?: null, 30);
+            return $rows ? implode("\n", array_map(fn($r) => date('Y-m-d H:i', (int)$r['ts']) . " {$r['code']} ({$r['title']}): {$r['what']} — by {$r['who']}", $rows)) : 'no changes yet';
+        });
     }
 
     /** $approval: fn(args): summary. When given, the tool waits for the user's approval instead of running. */

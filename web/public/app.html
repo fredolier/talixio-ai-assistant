@@ -40,8 +40,9 @@
     <div class="brand"><div class="mark" aria-hidden="true"></div><span id="brand-name">Talixio</span>
       <button id="rail-toggle" class="rail-toggle" type="button" aria-label="Collapse the menu" title="Collapse the menu"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg></button></div>
     <a href="#chat" data-view="chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></svg><span>Chat</span></a>
+    <a href="#board" data-view="board"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/><path d="M5.5 8h1.5M11 8h2M17 8h1.5M11 12h2"/></svg><span>Tasks</span></a>
     <a href="#library" data-view="library"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Library</span></a>
-    <a href="#tasks" data-view="tasks"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Tasks</span></a>
+    <a href="#tasks" data-view="tasks" class="secondary"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Routines</span></a>
     <a href="#mail" data-view="mail" class="secondary"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>Mail</span></a>
     <a href="#people" data-view="people" class="secondary"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg><span>People</span></a>
     <a href="#jobs" data-view="jobs" class="secondary"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Jobs</span></a>
@@ -126,9 +127,27 @@
       </div>
     </section>
 
+    <section id="view-board" class="view page board-page" hidden>
+      <header class="board-head">
+        <div class="board-title"><h2>Tasks</h2>
+          <select id="board-space" aria-label="Space"></select>
+          <div class="seg" role="tablist" aria-label="View"><button type="button" data-mode="board" role="tab">Board</button><button type="button" data-mode="overall" role="tab">Overall order</button></div>
+        </div>
+        <div class="board-tools">
+          <input id="board-q" type="search" placeholder="Search tasks" aria-label="Search tasks">
+          <button id="board-new" class="btn primary small" type="button">+ New task</button>
+          <button id="board-changes" class="btn small ghost" type="button" title="What changed recently, and who did it">Changes</button>
+          <button id="board-trash" class="btn small ghost" type="button">Trash</button>
+        </div>
+        <div id="board-tags" class="tagbar"></div>
+      </header>
+      <div id="board-summary" class="board-summary" hidden></div>
+      <div id="board" class="board"></div>
+    </section>
+
     <section id="view-tasks" class="view page" hidden>
-      <header class="page-head"><h2>Scheduled tasks</h2>
-        <p class="muted">Ask in chat to create them: <q>remind me tomorrow at 9 to call the bank</q>, <q>every weekday at 8:00 send me a briefing</q>.</p></header>
+      <header class="page-head"><h2>Routines</h2>
+        <p class="muted">What the assistant does on a schedule: reminders, briefings, recurring reports. (Things to do are on the <a href="#board">Tasks</a> board.) Ask in chat to create them: <q>remind me tomorrow at 9 to call the bank</q>, <q>every weekday at 8:00 send me a briefing</q>.</p></header>
       <div class="card briefing-card" id="briefing-card">
         <div><b>Morning briefing</b><p class="muted small">Your day at a glance: calendar, emails to handle, reminders, weather.</p></div>
         <div class="row wrap">
@@ -321,6 +340,7 @@
     <label for="sp-name">Name</label><input id="sp-name" required maxlength="60" placeholder="Maison, Client Alice, Santé…">
     <label for="sp-folder">Library folder</label><input id="sp-folder" list="folder-list" placeholder="/Maison (optional)">
     <label>Colour</label><div id="sp-colors" class="swatches" role="radiogroup"></div>
+    <label for="sp-code">Task code</label><input id="sp-code" maxlength="6" placeholder="MAI (from the name if empty)" autocomplete="off" style="text-transform:uppercase">
     <label for="sp-tier">Model</label><select id="sp-tier"><option value="standard">standard</option><option value="fast">fast</option><option value="deep">deep</option></select>
     <label for="sp-instructions">Instructions for this space</label>
     <textarea id="sp-instructions" rows="4" placeholder="Context, tone, language, what to watch for…"></textarea>
@@ -329,6 +349,39 @@
     <div class="row wrap"><button class="btn primary" type="submit">Save</button><button id="sp-cancel" class="btn" type="button">Cancel</button>
       <span class="spacer"></span><button id="sp-archive" class="btn ghost" type="button">Archive</button><button id="sp-delete" class="btn ghost danger" type="button">Delete</button></div>
   </form>
+</dialog>
+<dialog id="card-dialog" class="dialog card-dialog" aria-labelledby="cd-title" tabindex="-1">
+  <form id="card-form" method="dialog">
+    <div class="cd-head"><span id="cd-code" class="code"></span><select id="cd-space" aria-label="Space"></select><span class="spacer"></span>
+      <button id="cd-close" class="icon-btn" type="button" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <input id="cd-title" class="cd-title" required maxlength="200" placeholder="What needs doing?" aria-label="Title" autocomplete="off">
+    <div id="cd-warn" class="cd-warn" hidden></div>
+    <div class="cd-grid">
+      <label>Status<select id="cd-status"></select></label>
+      <label>Priority<select id="cd-priority"><option value="1">P1 · Critical</option><option value="2">P2 · High</option><option value="3">P3 · Normal</option><option value="4">P4 · Low</option><option value="5">P5 · Someday</option></select></label>
+      <label>Start<input id="cd-start" type="date"></label>
+      <label>Due<input id="cd-due" type="date"></label>
+      <label>Workload<input id="cd-estimate" placeholder="3h, 45m, 2d" autocomplete="off"></label>
+      <label class="cd-check"><input id="cd-cal" type="checkbox"> Show in my calendar</label>
+    </div>
+    <label class="cd-tags">Tags<input id="cd-tags" placeholder="separated by commas" autocomplete="off"></label>
+    <div class="cd-label">Description</div>
+    <div id="cd-rte" class="rte"></div>
+    <div class="cd-label">Waits for</div>
+    <div class="deps"><div id="cd-deps" class="dep-list"></div>
+      <div class="dep-add"><input id="cd-dep-q" placeholder="Add a task it waits for: code or words…" autocomplete="off" aria-label="Add a dependency"><div id="cd-dep-hits" class="dep-hits" hidden></div></div></div>
+    <div id="cd-blocks" class="muted small"></div>
+    <details id="cd-time" class="cd-sec"><summary>Time spent <span id="cd-time-sum" class="muted small"></span></summary>
+      <div class="row wrap"><input id="cd-time-h" placeholder="1h30" size="6" aria-label="Time"><input id="cd-time-day" type="date" aria-label="Day"><input id="cd-time-note" placeholder="What was done (optional)" aria-label="Note"><button id="cd-time-add" class="btn small" type="button">Add</button></div>
+      <div id="cd-time-list"></div></details>
+    <details id="cd-history" class="cd-sec"><summary>History</summary><div id="cd-history-list"></div></details>
+    <div class="row wrap cd-foot"><button class="btn primary" type="submit">Save</button><button id="cd-cancel" class="btn" type="button">Cancel</button>
+      <span class="spacer"></span><button id="cd-delete" class="btn ghost danger" type="button">Move to trash</button></div>
+  </form>
+</dialog>
+<dialog id="board-side" class="dialog">
+  <h3 id="bs-title"></h3><div id="bs-list" class="bs-list"></div>
+  <div class="row"><span class="spacer"></span><button id="bs-close" class="btn" type="button">Close</button></div>
 </dialog>
 <div id="banner" class="banner" role="status" hidden><span id="banner-text"></span><button id="banner-action" class="btn small" type="button" hidden></button></div>
 <div id="install-help" class="sheet" hidden>
@@ -366,6 +419,7 @@
 <datalist id="folder-list"></datalist>
 <div id="more-sheet" class="sheet" hidden>
   <div class="sheet-card more-card" role="dialog" aria-label="More">
+    <a href="#tasks" data-view="tasks">Routines</a>
     <a href="#mail" data-view="mail">Mail to handle</a>
     <a href="#people" data-view="people">People</a>
     <a href="#jobs" data-view="jobs">Background jobs</a>

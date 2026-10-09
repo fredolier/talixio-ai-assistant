@@ -16,7 +16,7 @@ final class Spaces
 
     public function general(): array
     {
-        return ['id' => 0, 'name' => 'General', 'slug' => 'general', 'folder' => '', 'instructions' => '', 'notes' => '', 'tier' => 'standard', 'color' => '', 'archived' => 0];
+        return ['id' => 0, 'name' => 'General', 'slug' => 'general', 'code' => 'GEN', 'folder' => '', 'instructions' => '', 'notes' => '', 'tier' => 'standard', 'color' => '', 'archived' => 0];
     }
 
     public function get(int $id): ?array
@@ -67,6 +67,11 @@ final class Spaces
             'tier' => $tier, 'color' => $color];
         if (array_key_exists('notes', $d)) $fields['notes'] = mb_substr((string)$d['notes'], 0, 20000);
         if (array_key_exists('archived', $d)) $fields['archived'] = $d['archived'] ? 1 : 0;
+        if (trim((string)($d['code'] ?? '')) !== '') {
+            $fields['code'] = Board::cleanPrefix((string)$d['code']);
+            if ($fields['code'] === 'GEN' || $this->app->store->q('SELECT 1 FROM spaces WHERE code = ? AND id != ?', [$fields['code'], $id ?? 0])->fetchColumn())
+                throw new \InvalidArgumentException("The task code {$fields['code']} is already used by another space.");
+        }
         $st = $this->app->store;
         if ($id === null) {
             $fields['created'] = time();
@@ -89,6 +94,8 @@ final class Spaces
         foreach ($st->q('SELECT id FROM summaries WHERE space = ?', [$id])->fetchAll() as $r) $st->deleteDocs(['summary'], (int)$r['id']);
         $st->q('DELETE FROM summaries WHERE space = ?', [$id]);
         $st->q('UPDATE tasks SET space = 0 WHERE space = ?', [$id]);
+        $this->app->board(); // its tables exist
+        $st->q('UPDATE cards SET space = 0 WHERE space = ?', [$id]); // its tasks keep their codes, in General
         $st->q('DELETE FROM spaces WHERE id = ?', [$id]);
         $st->set(Store::summarizedKey($id), '0');
     }

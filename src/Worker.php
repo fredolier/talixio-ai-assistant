@@ -93,6 +93,7 @@ final class Worker
         $this->guard('embeddings', fn() => $app->recall()->embedPending());
         if ($now % 600 < 15) $this->guard('update', fn() => $app->updater()->notifyIfNew());
         if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));
+        if ($now % 3600 < 15) $this->guard('tasks trash', fn() => $app->board()->purge());
     }
 
     private function guard(string $what, callable $fn): void

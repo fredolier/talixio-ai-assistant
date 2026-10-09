@@ -39,6 +39,8 @@ final class Web
             if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/')); return; }
             if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
             $this->json($this->route($method, $path, $body));
+        } catch (Conflict $e) {
+            $this->json(['error' => $e->getMessage(), 'conflict' => true], 409);
         } catch (\InvalidArgumentException $e) {
             $this->json(['error' => $e->getMessage()], 400);
         } catch (\Throwable $e) {
@@ -125,6 +127,7 @@ final class Web
             })(),
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
             $path === '/api/activity' => $this->activity(),
+            str_starts_with($path, '/api/board') => $this->board($m, $path, $b),
             $path === '/api/jobs' => ['jobs' => $s->jobs(100, isset($_GET['space']) && $_GET['space'] !== '' ? (int)$_GET['space'] : null, (string)($_GET['tag'] ?? '')), 'tags' => $s->jobTags()],
             (bool)preg_match('#^/api/jobs/(\d+)/tags$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->setTags((int)$mm[1], $b['tags'] ?? [])],
             $path === '/api/channels' => $this->channels(),
@@ -236,6 +239,52 @@ final class Web
             $msg = $e->getMessage();
         }
         header('Location: /?google=' . rawurlencode($msg) . '#settings', true, 303);
+    }
+
+    /** Tasks board. The app acts as "you" and may change any space's cards. */
+    private function board(string $m, string $path, array $b): array
+    {
+        $bd = $this->app->board();
+        $card = fn(array $c) => $c + ['warnings' => $bd->warnings($c)];
+        $brief = fn(int $id) => ($x = $bd->get($id)) ? $bd->brief($x) : null;
+        if ($path === '/api/board' && $m === 'GET') {
+            $f = ['space' => $_GET['space'] ?? null, 'tag' => $_GET['tag'] ?? '', 'q' => $_GET['q'] ?? '', 'done_days' => (int)($_GET['done_days'] ?? 14)];
+            $cards = array_map($card, $bd->list($f));
+            $codes = [];
+            foreach ($cards as $c) foreach ([...$c['depends_on'], ...$c['blocks']] as $d) $codes[$d] ??= $brief($d);
+            return ['cards' => $cards, 'statuses' => Board::STATUSES, 'tags' => $bd->tags(($f['space'] ?? '') === '' ? null : (int)$f['space']),
+                'refs' => array_filter($codes), 'prefix' => ($f['space'] ?? '') === '' ? null : $bd->prefix((int)$f['space'])];
+        }
+        if ($path === '/api/board' && $m === 'POST') return ['card' => $card($bd->create($b, (int)($b['space'] ?? 0)))];
+        if ($path === '/api/board/portfolio') {
+            $cards = array_map($card, $bd->list(['open' => true, 'global' => true, 'space' => isset($_GET['space']) && $_GET['space'] !== '' ? (int)$_GET['space'] : null]));
+            $codes = [];
+            foreach ($cards as $c) foreach ([...$c['depends_on'], ...$c['blocks']] as $d) $codes[$d] ??= $brief($d);
+            return ['cards' => $cards, 'refs' => array_filter($codes)];
+        }
+        if ($path === '/api/board/trash') return ['cards' => $bd->list(['trash' => true])];
+        if ($path === '/api/board/recent') return ['changes' => $bd->recent(isset($_GET['space']) && $_GET['space'] !== '' ? (int)$_GET['space'] : null)];
+        if ($path === '/api/board/find') return ['cards' => array_map($bd->brief(...), array_slice($bd->list(['q' => (string)($_GET['q'] ?? ''), 'done_days' => 365]), 0, 20))];
+        if ($path === '/api/board/order' && $m === 'POST') { $bd->setGlobalOrder((array)($b['ids'] ?? [])); return ['ok' => true]; }
+        if (preg_match('#^/api/board/undo/(\d+)$#', $path, $mm) && $m === 'POST') return ['card' => $card($bd->undo((int)$mm[1]))];
+        if (preg_match('#^/api/board/time/(\d+)/delete$#', $path, $mm) && $m === 'POST') { $bd->deleteTime((int)$mm[1]); return ['ok' => true]; }
+        if (!preg_match('#^/api/board/(\d+)(?:/(\w+))?$#', $path, $mm)) $this->fail(404, 'not found');
+        $id = (int)$mm[1]; $act = $mm[2] ?? '';
+        if ($act === '' && $m === 'GET') {
+            $c = $bd->get($id) ?? $this->fail(404, 'no such task');
+            return ['card' => $card($c), 'history' => $bd->history($id), 'time' => $bd->timeEntries($id),
+                'depends_on' => array_values(array_filter(array_map($brief, $c['depends_on']))), 'blocks' => array_values(array_filter(array_map($brief, $c['blocks'])))];
+        }
+        if ($m !== 'POST') $this->fail(405, 'method not allowed');
+        return match ($act) {
+            '' => ['card' => $card($bd->update($id, $b, 'you', isset($b['version']) ? (int)$b['version'] : null))],
+            'move' => ['card' => $card($bd->move($id, (string)($b['status'] ?? ''), isset($b['before']) ? (int)$b['before'] : null))],
+            'delete' => ['waiting' => $bd->delete($id)],
+            'restore' => ['card' => $card($bd->restore($id))],
+            'time' => ['card' => $card($bd->addTime($id, $b['hours'] ?? null, (string)($b['day'] ?? ''), (string)($b['note'] ?? '')))],
+            'unrank' => (function () use ($bd, $id) { $bd->clearGlobalRank($id); return ['ok' => true]; })(),
+            default => $this->fail(404, 'not found'),
+        };
     }
 
     private function spotifyState(): array

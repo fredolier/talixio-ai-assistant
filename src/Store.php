@@ -59,6 +59,7 @@ final class Store
             instructions TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', tier TEXT NOT NULL DEFAULT 'standard', color TEXT NOT NULL DEFAULT '',
             archived INTEGER NOT NULL DEFAULT 0, last_read INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)");
         foreach (['messages', 'tasks', 'summaries', 'jobs', 'approvals', 'docs'] as $t) $this->addColumn($t, 'space', 'INTEGER NOT NULL DEFAULT 0');
+        $this->addColumn('spaces', 'code', "TEXT NOT NULL DEFAULT ''"); // prefix of the space's task codes (MAI-12)
         $this->db->exec('CREATE INDEX IF NOT EXISTS messages_space ON messages(space, id)');
         $this->addColumn('summaries', 'level', 'INTEGER NOT NULL DEFAULT 1'); // 1 stretch, 2 week, 3 month
         $this->addColumn('summaries', 'merged_into', 'INTEGER');               // set once folded into a higher level
@@ -80,7 +81,7 @@ final class Store
         }
     }
 
-    private function addColumn(string $table, string $col, string $def): bool
+    public function addColumn(string $table, string $col, string $def): bool
     {
         $cols = array_column($this->db->query("PRAGMA table_info($table)")->fetchAll(), 'name');
         if (in_array($col, $cols, true)) return false;

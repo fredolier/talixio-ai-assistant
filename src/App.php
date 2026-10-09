@@ -13,6 +13,7 @@ final class App
     public static bool $inWorker = false;
     /** The space the current conversation turn belongs to (0 = General). */
     public int $space = 0;
+    private ?Board $board = null;
     /** Set in tests to replace the configured model. */
     public ?Provider $providerOverride = null;
 
@@ -59,6 +60,7 @@ final class App
     public function contacts(): Contacts { return new Contacts($this); }
     public function triage(): Triage { return new Triage($this); }
     public function spaces(): Spaces { return new Spaces($this); }
+    public function board(): Board { return $this->board ??= new Board($this); }
     public function google(): Google { return new Google($this); }
     public function spotify(): Spotify { return new Spotify($this); }
     public function shell(): Shell { return new Shell($this); }

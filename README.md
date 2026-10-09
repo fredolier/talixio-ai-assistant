@@ -166,8 +166,18 @@ conversation.
   Move an email to another group and it learns. *Prepare a reply* asks the assistant for a draft.
 - **People**: everyone you hear from by email becomes a contact; the assistant adds what it learns
   (`contact_save`). A person's page shows notes, recent emails, documents and conversations mentioning them.
-- **Morning briefing** (Tasks page): at the time and days you choose: today's calendar, emails to
+- **Morning briefing** (Routines page): at the time and days you choose: today's calendar, emails to
   handle, reminders and deadlines, the weather. *Send it now* to try it; every task has *Run now*.
+- **Tasks** (a board per space, like Trello): columns Ideas / To do / In progress / Blocked / Done,
+  codes per space (MAI-12; set the prefix in the space settings), priority P1 (most urgent) to P5,
+  start and due dates, workload ("3h", "2d" of 7h) and time spent (logged per day, for planning and
+  a future Gantt chart), tags, a description edited like a document (stored as Markdown; checklists
+  count as progress) and dependencies, also across spaces (loops refused; a task due before what it
+  waits for is flagged). Drag cards between columns; on a phone, swipe between columns. Each space's
+  assistant manages its own tasks and only sees the title and status of other spaces' tasks; General
+  sees them all and keeps an **overall order** across spaces (ask it to propose one). Deleted tasks
+  stay in a trash for 30 days, every change is logged with who made it and can be undone, and an
+  edit made in two places at once is refused instead of overwriting.
 - **Spaces**: separate conversations for separate subjects (a client, the house, health…), switched
   from the top of the chat. Each has its library folder (searched first; attachments are filed
   there), its instructions, its notes kept by the assistant, a default model and a colour. A space
@@ -251,8 +261,8 @@ conversation.
   (`TALIXIO_NOTIFY`); see and test them on the **Channels** page.
 - **Memory you can edit**: `USER.md` (about you), `MEMORY.md` (notes), `SOUL.md` (personality),
   `HEARTBEAT.md` (checklist), editable on the Memory page.
-- **Reminders and recurring tasks by chat** (each with its model tier, changeable on the Tasks page; a finished job can be run again on another tier): "remind me tomorrow at 9", "every weekday at 8:00 send
-  me a briefing". Visible and pausable on the Tasks page.
+- **Reminders and recurring tasks by chat** (each with its model tier, changeable on the Routines page; a finished job can be run again on another tier): "remind me tomorrow at 9", "every weekday at 8:00 send
+  me a briefing". Visible and pausable on the Routines page.
 - **Heartbeat** (off by default): every N minutes it reads `HEARTBEAT.md` and only messages you if
   something needs attention. Each check is a model call, so it costs tokens.
   Every check is listed on the Activity page (what it looked at, why it stayed quiet), with *Check now*.
