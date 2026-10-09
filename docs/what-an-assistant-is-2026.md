@@ -78,19 +78,19 @@ A chatbot answers. An assistant acts, remembers, and checks in on its own.
 - Logs, costs, scheduled jobs, memory and skills visible in one place (a small web admin page).
 - Easy to pause, stop, or roll back.
 
-## Where Talixio is today (v0.8)
+## Where Talixio is today (v0.9)
 
 | # | Capability | Status |
 |---|---|---|
 | 1 | Always on, channels | systemd services. Web app (installable, push notifications), email, Signal, Telegram, terminal, ntfy. One shared thread. |
 | 2 | Models | Claude API, Claude Code (Pro/Max plan), Gemini, OpenAI, local. Three tiers, budgets, cost tracking, prompt caching, live streaming. |
-| 3 | Memory | Editable Markdown files + whole history in SQLite (FTS5 + embeddings), automatic recall, summaries, searchable files and transcripts. |
+| 3 | Memory | Editable Markdown files + whole history in SQLite (FTS5 + embeddings), automatic recall, summaries. A personal library in folders (PDF, Office, email, notes, photos, recordings) searchable by folder. |
 | 4 | Skills | Learned procedures as Markdown, written automatically after multi-step tasks, editable. |
 | 5 | Tools | Web search, safe page reading, headless browser, calendar (iCal/CalDAV), your mailbox, files and images. No shell or MCP connectors yet. |
 | 6 | Proactive | Reminders and cron tasks by chat, heartbeat, push to phone. |
 | 7 | Planning | Background sub-agents in parallel with cost caps; meeting summaries as background jobs. |
 | 8 | Safety | Approvals for anything with outside effects, allowlists, internal-address blocking (fetch and browser), audit log, budgets, nightly backups. |
-| 9 | Multimodal | Images, PDFs, voice notes, meeting recordings with speaker labels. No spoken replies yet. |
+| 9 | Multimodal | Images (described for search), PDFs (scans read), Office files, voice notes, meeting recordings with speaker labels. No spoken replies yet. |
 | 10 | Observability | Pages for jobs, approvals, memory, skills, channels, activity and costs. |
 
 ## Build plan (PHP, shipped as the `talixio-ai-assistant` .deb)

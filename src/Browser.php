@@ -261,7 +261,9 @@ final class Browser
         $r = $this->call('Page.captureScreenshot', ['format' => 'jpeg', 'quality' => 70]);
         $tmp = tempnam(sys_get_temp_dir(), 'shot');
         file_put_contents($tmp, base64_decode($r['data'] ?? ''));
-        return $this->app->files()->save($tmp, 'screenshot-' . date('Ymd-His') . '.jpg', 'image/jpeg');
+        $id = $this->app->files()->save($tmp, 'screenshot-' . date('Ymd-His') . '.jpg', 'image/jpeg', Library::SCREENSHOTS);
+        $this->app->store->q("UPDATE files SET status = 'ready' WHERE id = ?", [$id]); // the model sees it already; not worth describing
+        return $id;
     }
 
     private const SNAPSHOT_JS = <<<'JS'

@@ -8,9 +8,9 @@ final class Tools
     /** Which tools each kind of run gets. Sub-agents can read and research but not change memory, schedules or spawn more jobs. */
     public const SETS = [
         'chat' => null, // everything
-        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'file_read', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report'],
+        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'file_read', 'kb_search', 'kb_list', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report'],
         'reflect' => ['skill_read', 'skill_save'],
-        'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'calendar_events', 'mail_list', 'mail_read',
+        'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'kb_search', 'kb_list', 'calendar_events', 'mail_list', 'mail_read',
             'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot'],
         'none' => [],
     ];
@@ -47,7 +47,33 @@ final class Tools
                 return $hits ? Recall::format($hits) : 'nothing found';
             });
 
-        $this->register('file_read', 'Read the text of an attached document, PDF or audio transcript by its id (#n in the conversation). Use offset to continue a long one.',
+        $this->register('kb_search',
+            "Search the user's library (knowledge base: their documents, notes, PDFs, Office files, emails, transcripts, image descriptions) by keywords and meaning. folder limits the search to a folder and its subfolders, e.g. '/Clients/Alice'. Then read a whole file with file_read. Cite files by path.",
+            ['query' => ['type' => 'string'], 'folder' => ['type' => 'string'], 'limit' => ['type' => 'integer']], ['query'],
+            function (array $a) {
+                $hits = $this->app->library()->search($a['query'], (string)($a['folder'] ?? '/'), min(20, max(1, (int)($a['limit'] ?? 8))));
+                if (!$hits) return 'nothing found' . (!empty($a['folder']) ? " in {$a['folder']}" : '');
+                return implode("\n", array_map(fn($h) => '- ' . Library::join($h['folder'], $h['name']) . " (file #{$h['id']}): {$h['snippet']}", $hits));
+            });
+        $this->register('kb_list', "List a folder of the user's library: its subfolders and files (id, size, date). folder '/' is the top; omit it to see the whole folder tree.",
+            ['folder' => ['type' => 'string']], [], fn(array $a) => $this->kbList($a['folder'] ?? null));
+        $this->register('kb_save_note',
+            "Save a Markdown note in the user's library (it becomes searchable), e.g. meeting notes, a summary of research, a checklist. Give id to update an existing note.",
+            ['folder' => ['type' => 'string'], 'name' => ['type' => 'string'], 'content' => ['type' => 'string'], 'id' => ['type' => 'integer']], ['content'],
+            function (array $a) {
+                $f = $this->app->library()->saveNote((string)($a['folder'] ?? Library::NOTES), (string)($a['name'] ?? ''), $a['content'], isset($a['id']) ? (int)$a['id'] : null);
+                return 'saved ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']})";
+            });
+        $this->register('kb_move', "File a document in the user's library: move it to a folder (created if needed), optionally renaming it. Use to tidy attachments out of /Inbox when the user asks.",
+            ['id' => ['type' => 'integer'], 'folder' => ['type' => 'string'], 'name' => ['type' => 'string']], ['id', 'folder'],
+            function (array $a) {
+                $lib = $this->app->library();
+                $f = $lib->moveFile((int)$a['id'], $a['folder']);
+                if (!empty($a['name'])) $f = $lib->renameFile((int)$a['id'], $a['name']);
+                return 'moved to ' . Library::join($f['folder'], $f['name']);
+            });
+
+        $this->register('file_read', 'Read the text of a file by its id (#n in the conversation or from kb_search/kb_list): document, PDF, Office file, note, audio transcript or image description. Use offset to continue a long one.',
             ['id' => ['type' => 'integer'], 'offset' => ['type' => 'integer']], ['id'],
             function (array $a) {
                 $text = $this->app->files()->text((int)$a['id']);
@@ -162,6 +188,19 @@ final class Tools
         $copy = clone $this;
         $copy->tools = array_intersect_key($this->tools, array_flip($names));
         return $copy;
+    }
+
+    private function kbList(?string $folder): string
+    {
+        $lib = $this->app->library();
+        if ($folder === null || $folder === '') {
+            $tree = $lib->tree();
+            return $tree ? implode("\n", array_map(fn($t) => str_repeat('  ', $t['depth'] - 1) . "{$t['path']} ({$t['total']} files)", $tree)) : 'the library is empty';
+        }
+        $l = $lib->list($folder);
+        $lines = array_map(fn($t) => "[folder] {$t['path']} ({$t['total']} files)", $l['folders']);
+        foreach ($l['files'] as $f) $lines[] = "#{$f['id']} {$f['name']} ({$f['kind']}, " . max(1, (int)round($f['size'] / 1024)) . ' KB, ' . date('Y-m-d', $f['created']) . ($f['status'] !== 'ready' ? ", {$f['status']}" : '') . ')';
+        return $lines ? "{$l['folder']}:\n" . implode("\n", $lines) : "{$l['folder']} is empty";
     }
 
     public function names(): array { return array_keys($this->tools); }

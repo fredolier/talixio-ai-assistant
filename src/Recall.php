@@ -21,13 +21,20 @@ final class Recall
      * @param int $beforeMessageId ignore messages with id >= this (they are already in the prompt)
      * @return array<array{kind:string,ref:int,ts:int,label:string,text:string,score:float,sim:?float,keyword:bool}>
      */
-    public function search(string $query, int $limit = 8, int $beforeMessageId = PHP_INT_MAX): array
+    public function search(string $query, int $limit = 8, int $beforeMessageId = PHP_INT_MAX, ?array $kinds = null, ?array $refs = null): array
     {
-        $exclude = fn(array $d) => $d['kind'] === 'message' && (int)$d['ref'] >= $beforeMessageId;
+        $refSet = $refs !== null ? array_flip($refs) : null;
+        $exclude = fn(array $d) => ($d['kind'] === 'message' && (int)$d['ref'] >= $beforeMessageId)
+            || ($kinds !== null && !in_array($d['kind'], $kinds, true)) || ($refSet !== null && !isset($refSet[(int)$d['ref']]));
+        if ($refs === []) return [];
+        // when restricted to some sources, filter inside SQL so other documents do not crowd them out
+        $only = ''; $onlyArgs = [];
+        if ($kinds !== null) { $only .= ' AND d.kind IN (' . implode(',', array_fill(0, count($kinds), '?')) . ')'; $onlyArgs = $kinds; }
+        if ($refs !== null && count($refs) <= 900) { $only .= ' AND d.ref IN (' . implode(',', array_map('intval', $refs)) . ')'; }
         $hits = [];
         $fq = self::ftsQuery($query);
         if ($fq !== '') {
-            $rows = $this->store->q("SELECT d.* FROM docs_fts f JOIN docs d ON d.id = f.rowid WHERE docs_fts MATCH ? ORDER BY bm25(docs_fts) LIMIT 40", [$fq])->fetchAll();
+            $rows = $this->store->q("SELECT d.* FROM docs_fts f JOIN docs d ON d.id = f.rowid WHERE docs_fts MATCH ?$only ORDER BY bm25(docs_fts) LIMIT 40", [$fq, ...$onlyArgs])->fetchAll();
             $rank = 0;
             foreach ($rows as $d) {
                 if ($exclude($d)) continue;
@@ -38,7 +45,9 @@ final class Recall
             try {
                 $q = $this->emb->embed([$query], 'query')[0];
                 $sims = [];
-                $rows = $this->store->q('SELECT e.doc_id, e.vec FROM embeddings e WHERE e.model = ? ORDER BY e.doc_id DESC LIMIT 20000', [$this->emb->model()])->fetchAll();
+                $rows = $only === ''
+                    ? $this->store->q('SELECT e.doc_id, e.vec FROM embeddings e WHERE e.model = ? ORDER BY e.doc_id DESC LIMIT 20000', [$this->emb->model()])->fetchAll()
+                    : $this->store->q("SELECT e.doc_id, e.vec FROM embeddings e JOIN docs d ON d.id = e.doc_id WHERE e.model = ?$only ORDER BY e.doc_id DESC LIMIT 20000", [$this->emb->model(), ...$onlyArgs])->fetchAll();
                 foreach ($rows as $r) $sims[$r['doc_id']] = Embeddings::dot($q, $r['vec']);
                 arsort($sims);
                 $rank = 0;

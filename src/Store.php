@@ -46,6 +46,13 @@ final class Store
         $this->addColumn('messages', 'meta', 'TEXT');
         $this->addColumn('messages', 'files', 'TEXT');
         $this->addColumn('approvals', 'mode', "TEXT NOT NULL DEFAULT 'deferred'");
+        $this->addColumn('files', 'folder', "TEXT NOT NULL DEFAULT '/Inbox'");
+        if ($this->addColumn('files', 'status', "TEXT NOT NULL DEFAULT 'pending'")) { // pending | processing | ready | failed
+            $this->db->exec("UPDATE files SET status = 'ready'"); // files from before the library: never re-read (no surprise transcription costs)
+        }
+        $this->addColumn('files', 'note', 'INTEGER NOT NULL DEFAULT 0');           // 1 = Markdown note editable in the app
+        $this->db->exec("CREATE TABLE IF NOT EXISTS folders(path TEXT PRIMARY KEY, created INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS files_folder ON files(folder);");
         $this->addColumn('jobs', 'kind', "TEXT NOT NULL DEFAULT 'agent'");
         $this->addColumn('jobs', 'file_id', 'INTEGER');
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");
@@ -60,10 +67,12 @@ final class Store
         }
     }
 
-    private function addColumn(string $table, string $col, string $def): void
+    private function addColumn(string $table, string $col, string $def): bool
     {
         $cols = array_column($this->db->query("PRAGMA table_info($table)")->fetchAll(), 'name');
-        if (!in_array($col, $cols, true)) $this->db->exec("ALTER TABLE $table ADD COLUMN $col $def");
+        if (in_array($col, $cols, true)) return false;
+        $this->db->exec("ALTER TABLE $table ADD COLUMN $col $def");
+        return true;
     }
 
     public function q(string $sql, array $args = []): \PDOStatement
@@ -195,6 +204,14 @@ final class Store
     }
 
     // --- searchable documents ---
+    /** Remove a source from the search index (and its vectors). */
+    public function deleteDocs(array $kinds, int $ref): void
+    {
+        $in = implode(',', array_fill(0, count($kinds), '?'));
+        $this->q("DELETE FROM embeddings WHERE doc_id IN (SELECT id FROM docs WHERE kind IN ($in) AND ref = ?)", [...$kinds, $ref]);
+        $this->q("DELETE FROM docs WHERE kind IN ($in) AND ref = ?", [...$kinds, $ref]);
+    }
+
     /** Index text for search. Long texts (documents, transcripts) are split into overlapping chunks. */
     public function addDoc(string $kind, int $ref, string $label, string $text, ?int $ts = null): void
     {

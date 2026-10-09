@@ -47,6 +47,7 @@ final class App
     public function notifier(): Notifier { return new Notifier($this); }
     public function email(): Email { return new Email($this); }
     public function files(): Files { return new Files($this); }
+    public function library(): Library { return new Library($this); }
     public function approvals(): Approvals { return new Approvals($this); }
     public function skills(): Skills { return new Skills($this); }
     public function backup(): Backup { return new Backup($this); }

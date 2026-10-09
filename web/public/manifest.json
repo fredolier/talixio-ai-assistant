@@ -23,6 +23,7 @@
   "shortcuts": [
     { "name": "New message", "short_name": "Chat", "url": "/?source=shortcut#chat", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Record a meeting", "short_name": "Record", "url": "/?action=record#chat", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Library", "short_name": "Library", "url": "/?source=shortcut#library", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Scheduled tasks", "short_name": "Tasks", "url": "/?source=shortcut#tasks", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ],
   "share_target": {

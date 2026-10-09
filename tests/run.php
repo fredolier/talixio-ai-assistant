@@ -658,6 +658,126 @@ check('doctor: missing model explained with the pull command', (bool)preg_grep('
 putenv('TALIXIO_EMBEDDINGS'); putenv('TALIXIO_OLLAMA_URL'); putenv('TALIXIO_EMBEDDINGS_MODEL'); putenv('TALIXIO_EMBEDDINGS_DIMS');
 proc_terminate($ollama); proc_close($ollama);
 
+// ---- library: folders, extraction of many formats, folder-scoped search, notes, web API ----
+$ld = "$dir/lib"; @mkdir($ld);
+putenv("TALIXIO_DATA_DIR=$ld"); putenv('TALIXIO_PROVIDER=echo'); putenv('TALIXIO_EMBEDDINGS=off');
+$la = App::fromEnv(); $lib = $la->library(); $lf = $la->files();
+check('library: folder paths cleaned', \Talixio\Library::normalize('..//Clients/./Alice/../') === '/Clients/Alice' && \Talixio\Library::normalize('') === '/');
+$mk = function (string $name, string $content) use ($ld) { $p = "$ld/up-" . bin2hex(random_bytes(3)); file_put_contents($p, $content); return $p; };
+$zip = function (array $entries) use ($ld) { $p = "$ld/z-" . bin2hex(random_bytes(3)) . '.zip'; $z = new ZipArchive(); $z->open($p, ZipArchive::CREATE); foreach ($entries as $n => $c) $z->addFromString($n, $c); $z->close(); return $p; };
+$docx = $zip(['word/document.xml' => '<w:document><w:body><w:p><w:r><w:t>Facture n°42 pour Alice</w:t></w:r></w:p><w:p><w:r><w:t>Montant : 1 200 &amp; TVA</w:t></w:r></w:p></w:body></w:document>']);
+$idDocx = $lf->save($docx, 'facture-alice.docx', 'application/octet-stream', '/Clients/Alice');
+$xlsx = $zip(['xl/sharedStrings.xml' => '<sst><si><t>Client</t></si><si><t>Montant</t></si><si><t>Bob</t></si></sst>',
+    'xl/worksheets/sheet1.xml' => '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>870</v></c></row></sheetData></worksheet>']);
+$idXlsx = $lf->save($xlsx, 'ventes.xlsx', '', '/Clients/Bob');
+$pptx = $zip(['ppt/slides/slide1.xml' => '<p:sld><a:p><a:r><a:t>Roadmap 2027</a:t></a:r></a:p></p:sld>', 'ppt/slides/slide2.xml' => '<p:sld><a:p><a:r><a:t>Lancement en mars</a:t></a:r></a:p></p:sld>']);
+$idPptx = $lf->save($pptx, 'plan.pptx', '', '/Projets');
+$odt = $zip(['content.xml' => '<office:document-content><text:h>Bail</text:h><text:p>Loyer révisé chaque janvier</text:p></office:document-content>']);
+$idOdt = $lf->save($odt, 'bail.odt', '', '/Admin/Logement');
+$idHtml = $lf->save($mk('x', '<html><head><style>p{}</style></head><body><h1>Recette</h1><p>Facture du plombier: 340 euros</p><script>evil()</script></body></html>'), 'plombier.html', 'text/html', '/Admin/Logement');
+$idEml = $lf->save($mk('x', "From: =?UTF-8?Q?Ren=C3=A9?= <rene@example.com>\r\nTo: fred@example.com\r\nSubject: Devis toiture\r\nDate: Mon, 5 Oct 2026 10:00:00 +0200\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nVoici le devis pour la toiture: 4 800 euros.\r\n"), 'devis.eml', 'message/rfc822', '/Admin/Logement');
+$idCsv = $lf->save($mk('x', "date,montant\n2026-10-01,12.50\n"), 'depenses.csv', 'text/csv');
+check('library: uploads wait in the queue, unknown types are just stored', $lf->get($idDocx)['status'] === 'pending' && $lf->get($idCsv)['folder'] === '/Inbox'
+    && $lf->get($lf->save($mk('x', "\x00\x01bin"), 'blob.bin', 'application/octet-stream', '/Misc'))['status'] === 'ready');
+check('library: the worker reads and indexes them', $lf->processPending(30) >= 7 && (int)$la->store->q("SELECT COUNT(*) FROM files WHERE status != 'ready'")->fetchColumn() === 0);
+check('library: Word text extracted', str_contains($lf->text($idDocx), "Facture n°42 pour Alice\nMontant : 1 200 & TVA"), $lf->text($idDocx));
+check('library: Excel cells with shared strings', str_contains($lf->text($idXlsx), "Client\tMontant\nBob\t870"), $lf->text($idXlsx));
+check('library: PowerPoint slides in order', (bool)preg_match('/Slide 1\nRoadmap 2027.*Slide 2\nLancement en mars/s', $lf->text($idPptx)));
+check('library: OpenDocument text', str_contains($lf->text($idOdt), 'Loyer révisé chaque janvier'));
+check('library: HTML as readable text (no scripts or styles)', str_contains($lf->text($idHtml), 'Facture du plombier') && !str_contains($lf->text($idHtml), 'evil') && !str_contains($lf->text($idHtml), 'p{}'));
+check('library: email with decoded headers', str_contains($lf->text($idEml), 'From: René <rene@example.com>') && str_contains($lf->text($idEml), 'Subject: Devis toiture') && str_contains($lf->text($idEml), '4 800 euros'));
+$label = $la->store->q("SELECT label FROM docs WHERE kind = 'file' AND ref = ?", [$idDocx])->fetchColumn();
+check('library: search entries carry the folder path', $label === "/Clients/Alice/facture-alice.docx #$idDocx", (string)$label);
+$tree = array_column($lib->tree(), null, 'path');
+check('library: tree with parent folders and counts', isset($tree['/Admin'], $tree['/Admin/Logement'], $tree['/Meetings'], $tree['/Notes']) && $tree['/Admin']['total'] === 3 && $tree['/Admin']['files'] === 0 && $tree['/Admin/Logement']['depth'] === 2);
+$l = $lib->list('/Admin');
+check('library: listing shows direct subfolders and files', array_column($l['folders'], 'path') === ['/Admin/Logement'] && $l['files'] === []);
+$all = array_column($lib->search('facture'), 'id');
+$alice = array_column($lib->search('facture', '/Clients'), 'id');
+check('library: search everywhere vs. in one folder (and its subfolders)', in_array($idDocx, $all) && in_array($idHtml, $all) && $alice === [$idDocx], json_encode([$all, $alice]));
+check('library: no confusion between /Client and /Clients', $lib->search('facture', '/Client') === [] && $lib->search('facture', '/Clients/Al') === []);
+$la->providerOverride = $fake;
+$fake->calls = [];
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return $tools->run('kb_search', ['query' => 'devis toiture', 'folder' => '/Admin']); };
+[$out] = $la->agent()->run('test', 'standard', 'chat', [['role' => 'user', 'content' => 'x']]);
+check('library: kb_search tool cites paths and file ids', str_contains($out, "/Admin/Logement/devis.eml (file #$idEml)"), $out);
+check('library: the assistant is told about the library', str_contains($fake->calls[0]['system'], 'kb_search') && in_array('kb_save_note', $fake->calls[0]['tools']));
+check('library: kb_list shows the tree and a folder', str_contains($la->tools->run('kb_list', []), '/Admin/Logement (3 files)') && str_contains($la->tools->run('kb_list', ['folder' => '/Clients/Bob']), "#$idXlsx ventes.xlsx (office"));
+$r = $la->tools->run('kb_move', ['id' => $idCsv, 'folder' => '/Admin/Budget', 'name' => 'depenses-octobre.csv']);
+check('library: kb_move files an attachment', $r === '/Admin/Budget/depenses-octobre.csv' || $r === 'moved to /Admin/Budget/depenses-octobre.csv', $r);
+$lib->moveFolder('/Admin', '/Perso/Admin');
+check('library: moving a folder moves subfolders, files and search labels', $lf->get($idEml)['folder'] === '/Perso/Admin/Logement'
+    && $la->store->q("SELECT label FROM docs WHERE kind = 'file' AND ref = ?", [$idEml])->fetchColumn() === "/Perso/Admin/Logement/devis.eml #$idEml"
+    && !$lib->exists('/Admin') && $lib->exists('/Perso/Admin/Budget'));
+try { $lib->moveFolder('/Perso', '/Perso/Admin/x'); check('library: a folder cannot go inside itself', false); } catch (\InvalidArgumentException) { check('library: a folder cannot go inside itself', true); }
+try { $lib->deleteFolder('/Perso'); check('library: deleting a non-empty folder needs confirmation', false); } catch (\InvalidArgumentException) { check('library: deleting a non-empty folder needs confirmation', true); }
+$p = $lf->get($idOdt)['path'];
+$lib->deleteFile($idOdt);
+check('library: deleting a file removes it from disk and from search', !is_file($p) && !$lf->get($idOdt) && !$la->store->q("SELECT 1 FROM docs WHERE kind = 'file' AND ref = ?", [$idOdt])->fetchColumn());
+$note = $lib->saveNote('/Notes', 'Idées cadeaux', "- Livre de cuisine pour Marie\n");
+check('library: notes are Markdown files, searchable right away', $note['note'] == 1 && $note['name'] === 'Idées cadeaux.md' && array_column($lib->search('cuisine Marie'), 'id') === [(int)$note['id']]);
+$lib->saveNote('/Notes', 'Idées cadeaux.md', "- Vélo pour Paul\n", (int)$note['id']);
+check('library: editing a note re-indexes it', $lib->search('cuisine Marie') === [] && array_column($lib->search('vélo Paul'), 'id') === [(int)$note['id']]);
+// images: described by the fast model when allowed (skipped with the echo provider)
+$png = (function () { $im = imagecreatetruecolor(40, 30); ob_start(); imagepng($im); return (string)ob_get_clean(); })();
+$idImg = $lf->save($mk('x', $png), 'ticket.png', 'image/png', '/Perso/Admin/Budget');
+$lf->processPending(10);
+check('library: images not described with the echo provider', $lf->get($idImg)['status'] === 'ready' && (string)$lf->get($idImg)['text'] === '');
+$la->cfg->provider = 'gemini';
+$fake->calls = [];
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on, 'gemini-x', 900, 40); return 'Receipt from Boulangerie Martin, 12,50 EUR, 3 October 2026.'; };
+$lib->deleteFile($idImg);
+$idImg = $lf->save($mk('x', $png), 'ticket.png', 'image/png', '/Perso/Admin/Budget');
+$lf->processPending(10);
+check('library: photos described by the fast model and searchable', str_contains($lf->get($idImg)['text'], 'Boulangerie Martin') && array_column($lib->search('boulangerie'), 'id') === [$idImg]
+    && ($fake->calls[0]['messages'][0]['content'][1]['type'] ?? '') === 'image' && $fake->calls[0]['tools'] === []);
+check('library: indexing cost is tracked', (bool)array_filter($la->store->usageBy('source', strtotime('today')), fn($r) => $r['name'] === 'indexing'));
+$la->cfg->provider = 'echo';
+// two readers never extract the same file twice
+$idTxt = $lf->save($mk('x', 'abc def'), 'a.txt', 'text/plain', '/Inbox');
+$la->store->q("UPDATE files SET status = 'processing' WHERE id = ?", [$idTxt]);
+$t0 = microtime(true);
+$child = proc_open([PHP_BINARY, '-r', 'sleep(1); $db = new PDO("sqlite:' . $la->cfg->dbPath() . '"); $db->exec("UPDATE files SET status=\'ready\', text=\'from the other reader\' WHERE id=' . $idTxt . '");'], [], $cp);
+check('library: a file being read elsewhere is waited for, not read twice', $lf->text($idTxt) === 'from the other reader' && microtime(true) - $t0 >= 0.9);
+proc_close($child);
+// web API
+$webPort = $freePort();
+$env = ['TALIXIO_DATA_DIR' => $ld, 'TALIXIO_PROVIDER' => 'echo', 'TALIXIO_EMBEDDINGS' => 'off', 'TALIXIO_WEB_PASSWORD' => 'pw', 'PATH' => getenv('PATH'), 'TALIXIO_NOTIFY' => 'none'];
+$ws = proc_open([PHP_BINARY, '-S', "127.0.0.1:$webPort", '-t', dirname(__DIR__) . '/web/public', dirname(__DIR__) . '/web/router.php'],
+    [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$dir/web2.log", 'w'], 2 => ['file', "$dir/web2.log", 'a']], $pp, null, $env);
+$waitPort($webPort);
+$ck = "$dir/cookies2";
+$wj = fn(string $path, ?array $body = null) => json_decode($req($path, $body), true);
+$req = function (string $path, ?array $body = null, ?array $multipart = null) use ($webPort, $ck) {
+    $ch = curl_init("http://127.0.0.1:$webPort$path");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIEJAR => $ck, CURLOPT_COOKIEFILE => $ck, CURLOPT_TIMEOUT => 20,
+        CURLOPT_HTTPHEADER => $multipart ? ['X-Talixio: 1'] : ['X-Talixio: 1', 'Content-Type: application/json']]
+        + ($multipart ? [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $multipart] : ($body !== null ? [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($body)] : [])));
+    $out = (string)curl_exec($ch); curl_close($ch); return $out;
+};
+$wj = fn(string $path, ?array $body = null) => json_decode($req($path, $body), true);
+$wj('/api/login', ['password' => 'pw']);
+$up = json_decode($req('/api/files', null, ['file' => new CURLFile($mk('x', 'Contrat de maintenance chaudière'), 'text/plain', 'chaudiere.txt'), 'folder' => '/Perso/Maison']), true);
+check('library web: upload into a folder', ($up['file']['folder'] ?? '') === '/Perso/Maison' && $up['file']['status'] === 'pending', json_encode($up));
+$lf->processPending(5);
+$lst = $wj('/api/library?folder=' . urlencode('/Perso'));
+check('library web: folder listing with stats', array_column($lst['folders'], 'path') === ['/Perso/Admin', '/Perso/Maison'] && $lst['stats']['files'] >= 8, json_encode($lst));
+$sr = $wj('/api/library/search?q=chaudiere&folder=' . urlencode('/Perso'));
+check('library web: search without accents finds accented text', ($sr['results'][0]['id'] ?? 0) === $up['file']['id'], json_encode($sr));
+check('library web: file text for the viewer', ($wj("/api/files/{$up['file']['id']}/text")['text'] ?? '') === 'Contrat de maintenance chaudière');
+check('library web: create, rename and delete folders', ($wj('/api/library/folder', ['path' => '/Vide'])['folder'] ?? '') === '/Vide'
+    && ($wj('/api/library/folder/move', ['from' => '/Vide', 'to' => '/Vide2'])['folder'] ?? '') === '/Vide2'
+    && ($wj('/api/library/folder/delete', ['path' => '/Vide2'])['deleted_files'] ?? -1) === 0);
+$bad = $wj('/api/library/folder/delete', ['path' => '/Perso']);
+check('library web: errors are explained (400, not a server error)', str_contains($bad['error'] ?? '', 'not empty'), json_encode($bad));
+check('library web: move and rename a file', ($wj("/api/files/{$up['file']['id']}/move", ['folder' => '/Perso/Admin'])['file']['folder'] ?? '') === '/Perso/Admin'
+    && ($wj("/api/files/{$up['file']['id']}/rename", ['name' => '../contrat.txt'])['file']['name'] ?? '') === 'contrat.txt');
+$nt = $wj('/api/library/note', ['folder' => '/Notes', 'name' => 'Courses', 'content' => 'lait, oeufs']);
+check('library web: notes', ($nt['file']['name'] ?? '') === 'Courses.md' && $nt['file']['status'] === 'ready' && ($wj('/api/library/tree')['tree'] ?? []) !== []);
+check('library web: delete a file', ($wj("/api/files/{$nt['file']['id']}/delete", [])['ok'] ?? false) === true && $lf->get($nt['file']['id']) === null);
+proc_terminate($ws); proc_close($ws);
+putenv('TALIXIO_EMBEDDINGS'); putenv("TALIXIO_DATA_DIR=$dir");
+
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
 exit($fails ? 1 : 0);

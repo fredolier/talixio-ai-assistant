@@ -94,11 +94,12 @@ final class Settings
                 ['VOYAGE_API_KEY', 'Voyage key', 'secret', ''],
                 ['TALIXIO_OLLAMA_URL', 'Ollama address', 'url', ''],
             ]],
-            'audio' => ['Audio and meetings', '', [
+            'audio' => ['Audio, meetings and library', '', [
                 ['TALIXIO_TRANSCRIBE', 'Transcription', 'select', 'auto: Gemini when its key is set.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'off' => 'off']],
                 ['TALIXIO_TRANSCRIBE_MODEL', 'Transcription model', 'text', 'Empty = automatic.'],
                 ['TALIXIO_MEETING_TIER', 'Tier for meeting summaries', 'select', '', ['standard' => 'standard', 'deep' => 'deep', 'fast' => 'fast']],
                 ['TALIXIO_VOICE_NOTE_MAX_SECONDS', 'Longer than this (seconds) = a meeting', 'number', ''],
+                ['TALIXIO_VISION_INDEX', 'Read images and scanned PDFs', 'select', 'Library: the fast model describes photos and transcribes scans so they can be searched (small cost per image or page).', ['1' => 'on', '0' => 'off']],
             ]],
             'browser' => ['Browser and approvals', '', [
                 ['TALIXIO_BROWSER', 'Browser', 'select', 'Installed with install.sh --with-browser.', ['auto' => 'on when installed', 'off' => 'off']],
@@ -132,7 +133,7 @@ final class Settings
         'TALIXIO_JOB_MAX_USD' => '0.50', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0',
         'TALIXIO_SMTP_PORT' => '587', 'TALIXIO_SMTP_SECURITY' => 'auto', 'TALIXIO_IMAP_PORT' => '993', 'TALIXIO_EMAIL_REQUIRE_AUTH' => '1',
         'TALIXIO_MAILBOX_IMAP_PORT' => '993', 'TALIXIO_MAILBOX_SMTP_PORT' => '465', 'TALIXIO_SEARCH' => 'auto', 'TALIXIO_EMBEDDINGS' => 'auto',
-        'TALIXIO_OLLAMA_URL' => 'http://127.0.0.1:11434', 'TALIXIO_EMBEDDINGS_DIMS' => '', 'TALIXIO_TRANSCRIBE' => 'auto', 'TALIXIO_MEETING_TIER' => 'standard', 'TALIXIO_VOICE_NOTE_MAX_SECONDS' => '180',
+        'TALIXIO_OLLAMA_URL' => 'http://127.0.0.1:11434', 'TALIXIO_EMBEDDINGS_DIMS' => '', 'TALIXIO_TRANSCRIBE' => 'auto', 'TALIXIO_MEETING_TIER' => 'standard', 'TALIXIO_VOICE_NOTE_MAX_SECONDS' => '180', 'TALIXIO_VISION_INDEX' => '1',
         'TALIXIO_BROWSER' => 'auto', 'TALIXIO_BROWSER_LANG' => 'en-US', 'TALIXIO_BROWSER_ALLOW_PRIVATE' => '0', 'TALIXIO_BROWSER_NO_SANDBOX' => '0',
         'TALIXIO_APPROVAL_WAIT_SECONDS' => '600', 'TALIXIO_LEARN' => '1', 'TALIXIO_LEARN_MIN_STEPS' => '4', 'TALIXIO_BACKUP_KEEP' => '7',
         'TALIXIO_BACKUP_FILES' => '1', 'TALIXIO_AUTO_UPDATE' => '0', 'TALIXIO_CLAUDE_BIN' => 'claude', 'TALIXIO_SIGNAL_CLI' => 'signal-cli',

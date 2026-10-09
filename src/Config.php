@@ -16,6 +16,7 @@ final class Config
     public string $transcribeModel = '';
     public string $meetingTier = 'standard';
     public int $voiceNoteMaxSeconds = 180;       // longer audio is treated as a meeting recording
+    public bool $visionIndex = true;             // library: describe images and read scanned PDFs with the fast model
     public string $openaiBaseUrl = 'https://api.openai.com/v1';
     public string $claudeBin = 'claude';
     public string $dataDir = 'data';
@@ -135,6 +136,7 @@ final class Config
         $c->transcribeModel = $e('TALIXIO_TRANSCRIBE_MODEL', match ($c->transcribe) { 'openai' => 'gpt-4o-transcribe', default => '' });
         $c->meetingTier = $e('TALIXIO_MEETING_TIER', 'standard');
         $c->voiceNoteMaxSeconds = (int)$e('TALIXIO_VOICE_NOTE_MAX_SECONDS', '180');
+        $c->visionIndex = $e('TALIXIO_VISION_INDEX', '1') !== '0';
         $c->claudeBin = $e('TALIXIO_CLAUDE_BIN', 'claude');
         $c->dataDir = rtrim($e('TALIXIO_DATA_DIR', 'data'), '/');
         if (!str_starts_with($c->dataDir, '/')) $c->dataDir = getcwd() . '/' . $c->dataDir; // child processes run elsewhere

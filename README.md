@@ -142,12 +142,23 @@ Create a bot with @BotFather, set `TALIXIO_TELEGRAM_TOKEN`, restart, and message
 with your chat id; put it in `TALIXIO_TELEGRAM_ALLOWED_IDS`. Telegram and the web app share the same
 conversation.
 
-## What it can do (v0.8)
+## What it can do (v0.9)
 - **Live answers**: replies appear as they are written, with what it's doing ("Searching the web…",
   "Reading example.com…").
-- **Photos, PDFs, documents**: attach (or paste, or drag) files in the web app, or send them on
-  Telegram/Signal. Images are shown to the model; PDF and text files are read (scanned PDFs aren't
-  OCR'd yet) and become searchable.
+- **Library (your knowledge base)**: every file is kept in folders you organise (`/Clients/Alice`,
+  `/Admin/Taxes`...), browsable in the **Library** page (folder tree, breadcrumb, preview, drag and
+  drop to upload or move, rename, delete, Markdown notes you can edit). Chat and Signal/Telegram
+  attachments land in `/Inbox`, recordings in `/Meetings`. In the background each file is read and
+  indexed for search: PDF (scanned pages are transcribed by the fast model), Word/Excel/PowerPoint
+  and OpenDocument, HTML, emails (.eml), Markdown/CSV/text, audio (transcribed) and photos
+  (described, text in them transcribed: receipts, whiteboards). Search the whole library or one
+  folder, from the page or by asking: the assistant has `kb_search`, `kb_list`, `kb_save_note`
+  and `kb_move`, cites files by path, and can file attachments for you ("put this invoice in
+  Clients/Alice"). "Ask about this" on a file opens the chat with it attached. Reading images and
+  scans costs a little per image/page (fast tier, counted under "indexing" on the Activity page);
+  turn it off with `TALIXIO_VISION_INDEX=0`.
+- **Photos, PDFs, documents in the chat**: attach (or paste, or drag) files in the web app, or send
+  them on Telegram/Signal. Images are shown to the model; documents are read.
 - **Voice notes**: tap the microphone in the web app, or send a voice message on Telegram/Signal:
   it's transcribed and answered.
 - **Meeting summaries**: record a meeting in the web app (microphone → "Summarise meeting"; keep
@@ -216,7 +227,7 @@ $3/$15, Opus $5/$25 per million tokens). Check your provider's pricing and overr
 `TALIXIO_PRICES` if they differ.
 
 Not yet: shell/code tools, MCP connectors, Google Calendar writing (needs Google sign-in),
-Microsoft 365 mail (needs OAuth), OCR of scanned PDFs, WhatsApp, Slack, Teams, spoken replies.
+Microsoft 365 mail (needs OAuth), WhatsApp, Slack, Teams, spoken replies.
 
 ## Files
 ```

@@ -15,6 +15,10 @@ final class Cli
                 case 'job':
                     $app->jobs()->runJob((int)($argv[2] ?? 0));
                     return 0;
+                case 'index': // started by the worker: read and index library files
+                    $n = $app->files()->processPending(600);
+                    if ($n) Log::info("library: indexed $n file(s)");
+                    return 0;
                 case 'mcp':
                     (new McpServer($app->tools))->serve();
                     return 0;
@@ -32,7 +36,7 @@ final class Cli
                 case 'doctor':
                     return self::doctor($app);
                 default:
-                    fwrite(STDERR, "usage: talixio worker|chat|doctor|backup|mcp|job ID\n");
+                    fwrite(STDERR, "usage: talixio worker|chat|doctor|backup|mcp|index|job ID\n");
                     return 2;
             }
         } catch (\Throwable $e) {

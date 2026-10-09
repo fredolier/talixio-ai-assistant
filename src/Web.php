@@ -31,6 +31,8 @@ final class Web
             if (preg_match('#^/api/files/(\d+)$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1]); return; }
             if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
             $this->json($this->route($method, $path, $body));
+        } catch (\InvalidArgumentException $e) {
+            $this->json(['error' => $e->getMessage()], 400);
         } catch (\Throwable $e) {
             Log::error("web: {$e->getMessage()}");
             $this->json(['error' => $e->getMessage()], 500);
@@ -77,6 +79,16 @@ final class Web
             $path === '/api/push/unsubscribe' && $m === 'POST' => (function () use ($b) { $this->app->webPush()->unsubscribe((string)($b['endpoint'] ?? '')); return ['ok' => true]; })(),
             $path === '/api/notify/test' && $m === 'POST' => ['results' => $this->app->notifier()->notify($this->app->cfg->name, 'Test notification: this channel works.')],
             (bool)preg_match('#^/api/jobs/(\d+)/cancel$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->jobs()->cancel((int)$mm[1])],
+            $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/')) + ['stats' => $this->app->library()->stats()],
+            $path === '/api/library/tree' => ['tree' => $this->app->library()->tree(), 'stats' => $this->app->library()->stats()],
+            $path === '/api/library/search' => ['results' => $this->app->library()->search((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/'), 30)],
+            $path === '/api/library/folder' && $m === 'POST' => ['folder' => $this->app->library()->createFolder((string)($b['path'] ?? ''))],
+            $path === '/api/library/folder/move' && $m === 'POST' => ['folder' => $this->app->library()->moveFolder((string)($b['from'] ?? ''), (string)($b['to'] ?? ''))],
+            $path === '/api/library/folder/delete' && $m === 'POST' => ['deleted_files' => $this->app->library()->deleteFolder((string)($b['path'] ?? ''), !empty($b['recursive']))],
+            $path === '/api/library/note' && $m === 'POST' => ['file' => $this->fileInfo($this->app->library()->saveNote((string)($b['folder'] ?? Library::NOTES),
+                (string)($b['name'] ?? ''), (string)($b['content'] ?? ''), isset($b['id']) ? (int)$b['id'] : null))],
+            (bool)preg_match('#^/api/files/(\d+)/text$#', $path, $mm) => $this->fileText((int)$mm[1]),
+            (bool)preg_match('#^/api/files/(\d+)/(move|rename|delete|reindex)$#', $path, $mm) && $m === 'POST' => $this->fileAction((int)$mm[1], $mm[2], $b),
             $path === '/api/search' => ['results' => array_map(fn($h) => array_intersect_key($h, array_flip(['kind', 'ref', 'ts', 'label', 'text', 'keyword', 'sim'])),
                 $this->app->recall()->search((string)($_GET['q'] ?? ''), 20))],
             default => $this->fail(404, 'not found'),
@@ -173,7 +185,7 @@ final class Web
         $out = [];
         foreach ($meta['files'] as $i => $f) {
             if (!is_file("$dir/$i")) continue;
-            $id = $this->app->files()->save("$dir/$i", $f['name'] ?: 'shared-file', $f['type']);
+            $id = $this->app->files()->save("$dir/$i", $f['name'] ?: 'shared-file', $f['type'], Library::INBOX);
             $out[] = array_intersect_key($this->app->files()->get($id), array_flip(['id', 'name', 'mime', 'kind', 'size', 'duration']));
         }
         exec('rm -rf ' . escapeshellarg($dir));
@@ -259,9 +271,35 @@ final class Web
             $err = $f['error'] ?? -1;
             $this->fail(400, $err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE ? 'File too large.' : 'Upload failed.');
         }
-        $id = $this->app->files()->save($f['tmp_name'], (string)$f['name'], (string)($f['type'] ?? ''));
-        $info = $this->app->files()->get($id);
-        return ['file' => array_intersect_key($info, array_flip(['id', 'name', 'mime', 'kind', 'size', 'duration']))];
+        $id = $this->app->files()->save($f['tmp_name'], (string)$f['name'], (string)($f['type'] ?? ''), (string)($_POST['folder'] ?? Library::INBOX));
+        return ['file' => $this->fileInfo($this->app->files()->get($id))];
+    }
+
+    private function fileInfo(array $f): array
+    {
+        return array_intersect_key($f, array_flip(['id', 'name', 'mime', 'kind', 'size', 'duration', 'folder', 'status', 'note', 'created']));
+    }
+
+    private function fileText(int $id): array
+    {
+        $f = $this->app->files()->get($id) ?? $this->fail(404, 'not found');
+        $text = $f['status'] === 'ready' || $f['status'] === 'failed' ? (string)$f['text'] : '';
+        if ($f['note'] || ($f['kind'] === 'text' && $f['size'] < 2_000_000)) $text = (string)file_get_contents($f['path']); // the source, for editing
+        return ['file' => $this->fileInfo($f), 'text' => mb_substr($text, 0, 200000), 'truncated' => mb_strlen($text) > 200000];
+    }
+
+    private function fileAction(int $id, string $action, array $b): array
+    {
+        $lib = $this->app->library();
+        return match ($action) {
+            'move' => ['file' => $this->fileInfo($lib->moveFile($id, (string)($b['folder'] ?? '')))],
+            'rename' => ['file' => $this->fileInfo($lib->renameFile($id, (string)($b['name'] ?? '')))],
+            'delete' => (function () use ($lib, $id) { $lib->deleteFile($id); return ['ok' => true]; })(),
+            'reindex' => (function () use ($id) {
+                $this->app->store->q("UPDATE files SET status = 'pending', text = NULL WHERE id = ? AND status != 'processing'", [$id]);
+                return ['file' => $this->fileInfo($this->app->files()->get($id) ?? $this->fail(404, 'not found'))];
+            })(),
+        };
     }
 
     /** Images, PDFs and audio are shown inline; anything else is downloaded, never rendered on this origin. */

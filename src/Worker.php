@@ -20,6 +20,7 @@ final class Worker
             . ' signal=' . ($this->app->signal()->enabled() ? 'on' : 'off') . ' ntfy=' . ($cfg->ntfyUrl ? 'on' : 'off') . " heartbeat={$cfg->heartbeatMinutes}m budget=\${$cfg->budgetDaily}/day,\${$cfg->budgetMonthly}/month tz={$cfg->timezone}");
         App::$inWorker = true;
         $this->app->jobs()->recoverInterrupted();
+        $this->app->files()->recoverInterrupted();
         $tg = $cfg->telegramToken !== '' ? new Telegram($cfg, $this->app) : null;
         $settingsFile = Settings::file($cfg->dataDir);
         $settingsAt = @filemtime($settingsFile) ?: 0;
@@ -72,6 +73,7 @@ final class Worker
             $this->lastEmail = $now;
             $this->guard('email', fn() => $app->email()->poll());
         }
+        if (App::$inWorker) $this->guard('library', fn() => $app->files()->startIndexer());
         $this->guard('embeddings', fn() => $app->recall()->embedPending());
         if ($now % 600 < 15) $this->guard('update', fn() => $app->updater()->notifyIfNew());
         if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));

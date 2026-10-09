@@ -23,6 +23,7 @@ final class Jobs
     public function createMeeting(int $fileId, string $note = ''): int
     {
         $f = $this->app->files()->get($fileId);
+        if ($f && $f['folder'] === Library::INBOX) $this->app->library()->moveFile($fileId, Library::MEETINGS);
         $title = 'Meeting summary: ' . ($f ? preg_replace('/\.[a-z0-9]+$/i', '', $f['name']) : "recording #$fileId");
         $instructions = "Summarise this meeting for the user." . ($note !== '' ? " The user said: \"$note\"." : '')
             . "\n\nWrite, in the meeting's language:\n1. **Summary** (5-10 lines)\n2. **Decisions**\n3. **Action items**: who, what, by when (\"not stated\" if unknown)\n"
