@@ -168,6 +168,7 @@ final class Library
         $this->app->store->deleteDocs(['file', 'transcript'], $id);
         $this->app->store->q('DELETE FROM files WHERE id = ?', [$id]);
         if ($f['path'] !== '' && is_file($f['path'])) @unlink($f['path']);
+        $this->app->files()->dropPreviews($id);
     }
 
     /** Create or update a Markdown note. */

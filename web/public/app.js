@@ -624,7 +624,9 @@ function renderCrumbs() {
   $('#lib-crumbs').innerHTML = items.map(([path, name]) => `<li><a href="#" data-path="${esc(path)}">${esc(name)}</a></li>`).join('');
   $('#lib-crumbs').querySelectorAll('a').forEach(a => { a.onclick = e => { e.preventDefault(); libGo(a.dataset.path); }; dropTarget(a, a.dataset.path); });
   const fa = $('#lib-folder-actions');
-  fa.innerHTML = lib.folder === '/' ? '' : '<button class="btn small" data-a="rename" type="button">Rename folder</button><button class="btn small ghost danger" data-a="delete" type="button">Delete folder</button>';
+  const zipName = (lib.folder === '/' ? 'Library' : lib.folder.split('/').pop()) + '-' + new Date().toLocaleDateString('sv-SE') + '.zip';
+  const zip = `<a class="btn small" href="/api/library/zip?folder=${encodeURIComponent(lib.folder)}" download="${esc(zipName)}" title="Download this folder and its subfolders as a ZIP">Download zip</a>`;
+  fa.innerHTML = zip + (lib.folder === '/' ? '' : '<button class="btn small" data-a="rename" type="button" title="Rename or move this folder">Rename</button><button class="btn small ghost danger" data-a="delete" type="button" title="Delete this folder">Delete</button>');
   fa.querySelector('[data-a=rename]')?.addEventListener('click', () => libInline(lib.folder, 'Folder path', async v => { const { folder } = await post('/api/library/folder/move', { from: lib.folder, to: v }); toast('Folder renamed'); libGo(folder); }));
   fa.querySelector('[data-a=delete]')?.addEventListener('click', async e => {
     const b = e.currentTarget, node = lib.tree.find(t => t.path === lib.folder), n = node ? node.total : 0;
@@ -633,12 +635,19 @@ function renderCrumbs() {
   });
 }
 
+const DL_SVG = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
+const isVideo = f => (f.mime || '').startsWith('video/');
 function fileRow(f, sub) {
-  const el = document.createElement('button'); el.type = 'button'; el.className = 'lib-row'; el.draggable = true;
-  const ico = f.kind === 'image' ? `<img src="/api/files/${f.id}" alt="" loading="lazy">` : (f.note ? 'NOTE' : KIND_LABEL[f.kind] || 'FILE');
+  const el = document.createElement('div'); el.className = 'lib-row'; el.draggable = true; el.tabIndex = 0; el.setAttribute('role', 'button');
+  const label = f.note ? 'NOTE' : isVideo(f) ? 'VID' : KIND_LABEL[f.kind] || 'FILE';
+  const ico = f.kind === 'image' || f.kind === 'pdf' ? `<img src="/api/files/${f.id}/thumb" alt="" loading="lazy">` : label;
   const status = f.status === 'pending' || f.status === 'processing' ? '<span class="pill pending">reading…</span>' : f.status === 'failed' ? '<span class="pill failed">unreadable</span>' : '';
-  el.innerHTML = `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>${status}`;
+  el.innerHTML = `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>`
+    + `<span class="row-end">${status}<a class="btn ghost icon dl" href="/api/files/${f.id}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a></span>`;
+  el.querySelector('.dl').onclick = e => e.stopPropagation();
+  const th = el.querySelector('.ico img'); if (th) th.onerror = () => th.replaceWith(label);
   el.onclick = () => openFile(f.id);
+  el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFile(f.id); } };
   el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/x-talixio-file', String(f.id)); e.dataTransfer.effectAllowed = 'move'; });
   return el;
 }
@@ -694,18 +703,35 @@ async function openFile(id) {
   v.hidden = false; $('#viewer-form').hidden = true;
   $('#viewer-name').textContent = f.name;
   $('#viewer-path').textContent = `${f.folder} · ${fmtSize(f.size)} · ${fmtDate(f.created)} · #${f.id}`;
-  $('#viewer-open').href = `/api/files/${f.id}`;
-  $('#viewer-open').textContent = ['image', 'pdf', 'audio'].includes(f.kind) ? 'Open' : 'Download';
+  const viewable = ['image', 'pdf', 'audio'].includes(f.kind) || (f.kind === 'text' && /^text\/(plain|markdown|csv)/.test(f.mime));
+  $('#viewer-open').href = `/api/files/${f.id}`; $('#viewer-open').hidden = !viewable;
+  $('#viewer-download').href = `/api/files/${f.id}?download=1`; $('#viewer-download').setAttribute('download', f.name);
   const del = $('#viewer-delete'); del.dataset.confirm = ''; del.textContent = 'Delete';
   const editable = f.note || (f.kind === 'text' && f.size < 2_000_000 && !/\.(html?|eml)$/i.test(f.name));
+  const markdown = editable && (f.note || /\.(md|markdown)$/i.test(f.name));
   let html = '';
-  if (f.kind === 'image') html += `<img src="/api/files/${f.id}" alt="${esc(f.name)}">`;
-  if (f.kind === 'audio') html += `<audio controls preload="metadata" src="/api/files/${f.id}"></audio>`;
-  if (editable) html += `<textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea><div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span></div>`;
+  if (f.kind === 'image') html += `<a href="/api/files/${f.id}" target="_blank" rel="noopener" title="Open full size"><img src="/api/files/${f.id}" alt="${esc(f.name)}"></a>`;
+  if (f.kind === 'audio') html += isVideo(f) ? `<video controls playsinline preload="metadata" src="/api/files/${f.id}"></video>` : `<audio controls preload="metadata" src="/api/files/${f.id}"></audio>`;
+  if (f.kind === 'pdf' && d.pages) {
+    const first = Math.min(d.pages, 5);
+    html += `<div class="pdf-pages" id="pdf-pages">${Array.from({ length: first }, (_, i) => pdfPageHtml(f.id, i + 1, d.pages)).join('')}</div>`
+      + (d.pages > first ? `<button id="pdf-more" class="btn small" type="button" data-next="${first + 1}">Show more pages (${d.pages - first} left)</button>` : '');
+  }
+  if (markdown) html += `<div class="row"><div class="tabs" role="tablist"><button class="tab" id="tab-view" type="button" aria-selected="true">View</button><button class="tab" id="tab-edit" type="button" aria-selected="false">Edit</button></div></div>`
+    + `<div id="viewer-md" class="viewer-md bubble">${md(d.text)}</div>`;
+  if (editable) html += `<div id="viewer-edit-box" class="viewer-edit" ${markdown ? 'hidden' : ''}><textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea><div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span></div></div>`;
   else if (f.status === 'pending' || f.status === 'processing') html += '<p class="muted">Reading this file… it will be searchable in a moment.</p>';
   else if (d.text) html += `<h4>${f.kind === 'audio' ? 'Transcript' : f.kind === 'image' ? 'What the assistant sees' : 'Text'}</h4><pre class="extracted">${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
   else if (f.kind === 'other') html += '<p class="muted">This kind of file cannot be read; it is stored and can be downloaded.</p>';
   body.innerHTML = html;
+  const more = $('#pdf-more');
+  if (more) more.onclick = () => {
+    const from = +more.dataset.next, to = Math.min(d.pages, from + 9);
+    for (let n = from; n <= to; n++) $('#pdf-pages').insertAdjacentHTML('beforeend', pdfPageHtml(f.id, n, d.pages));
+    more.dataset.next = to + 1; more.textContent = `Show more pages (${d.pages - to} left)`; more.hidden = to >= d.pages;
+  };
+  const showTab = edit => { $('#tab-view').setAttribute('aria-selected', String(!edit)); $('#tab-edit').setAttribute('aria-selected', String(edit)); $('#viewer-md').hidden = edit; $('#viewer-edit-box').hidden = !edit; if (edit) $('#viewer-editor').focus(); else $('#viewer-md').innerHTML = md($('#viewer-editor').value); };
+  if (markdown) { $('#tab-view').onclick = () => showTab(false); $('#tab-edit').onclick = () => showTab(true); }
   $('#viewer-save')?.addEventListener('click', async () => {
     try { await post('/api/library/note', { id: f.id, folder: f.folder, name: f.name, content: $('#viewer-editor').value }); $('#viewer-state').textContent = 'Saved'; loadLibrary(); }
     catch (e) { toast(e.message); }
@@ -718,9 +744,12 @@ function viewerForm(value, onOk) {
   form.hidden = false; input.value = value; input.focus(); input.select();
   form.onsubmit = async e => { e.preventDefault(); try { await onOk(input.value.trim()); form.hidden = true; } catch (err) { toast(err.message); } };
 }
+function pdfPageHtml(id, n, total) {
+  return `<figure class="pdf-page"><img src="/api/files/${id}/page/${n}" alt="Page ${n}" loading="lazy"><figcaption>Page ${n} of ${total}</figcaption></figure>`;
+}
 async function newNote() {
   const folder = lib.folder === '/' ? '/Notes' : lib.folder;
-  try { const { file } = await post('/api/library/note', { folder, name: '', content: '# ' }); await loadLibrary(); openFile(file.id); setTimeout(() => $('#viewer-editor')?.focus(), 50); }
+  try { const { file } = await post('/api/library/note', { folder, name: '', content: '# ' }); await loadLibrary(); await openFile(file.id); $('#tab-edit')?.click(); }
   catch (e) { toast(e.message); }
 }
 

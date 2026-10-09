@@ -28,7 +28,9 @@ final class Web
             session_write_close(); // don't hold the session lock during long model calls
             if ($path === '/api/chat' && $method === 'POST' && !empty($body['stream'])) { $this->chatStream($body); return; }
             if ($path === '/api/files' && $method === 'POST') { $this->json($this->upload()); return; }
-            if (preg_match('#^/api/files/(\d+)$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1]); return; }
+            if (preg_match('#^/api/files/(\d+)$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1], !empty($_GET['download'])); return; }
+            if (preg_match('#^/api/files/(\d+)/(thumb|page/(\d+))$#', $path, $fm) && $method === 'GET') { $this->servePreview((int)$fm[1], (int)($fm[3] ?? 0)); return; }
+            if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/')); return; }
             if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
             $this->json($this->route($method, $path, $body));
         } catch (\InvalidArgumentException $e) {
@@ -285,7 +287,8 @@ final class Web
         $f = $this->app->files()->get($id) ?? $this->fail(404, 'not found');
         $text = $f['status'] === 'ready' || $f['status'] === 'failed' ? (string)$f['text'] : '';
         if ($f['note'] || ($f['kind'] === 'text' && $f['size'] < 2_000_000)) $text = (string)file_get_contents($f['path']); // the source, for editing
-        return ['file' => $this->fileInfo($f), 'text' => mb_substr($text, 0, 200000), 'truncated' => mb_strlen($text) > 200000];
+        return ['file' => $this->fileInfo($f), 'text' => mb_substr($text, 0, 200000), 'truncated' => mb_strlen($text) > 200000,
+            'pages' => $f['kind'] === 'pdf' ? $this->app->files()->pdfPageCount($id) : null];
     }
 
     private function fileAction(int $id, string $action, array $b): array
@@ -302,20 +305,91 @@ final class Web
         };
     }
 
-    /** Images, PDFs and audio are shown inline; anything else is downloaded, never rendered on this origin. */
-    private function serveFile(int $id): void
+    /**
+     * Images, PDFs, audio, video and plain text are shown inline (?download=1 forces a download);
+     * anything else is downloaded, never rendered on this origin. Supports Range (seeking in audio and video).
+     */
+    private function serveFile(int $id, bool $download = false): void
     {
         $f = $this->app->files()->get($id);
         if (!$f || !is_file($f['path'])) $this->fail(404, 'not found');
+        $mime = $f['mime'];
+        $safe = !str_contains($mime, 'svg') && !str_contains($mime, 'html') && !str_contains($mime, 'xml');
+        $inline = !$download && $safe && (in_array($f['kind'], ['image', 'pdf', 'audio'], true) || ($f['kind'] === 'text' && preg_match('#^text/(plain|markdown|csv)#', $mime)));
+        $type = $inline ? ($f['kind'] === 'text' ? preg_replace('/;.*/', '', $mime) . '; charset=utf-8' : $mime) : 'application/octet-stream';
+        // PDFs need the browser's own viewer, which a sandboxed response blocks; they still get no scripts or network access
+        $this->sendPath($f['path'], $type, self::disposition($inline ? 'inline' : 'attachment', $f['name']),
+            $f['kind'] === 'pdf' && $inline ? "default-src 'none'; object-src 'self'" : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox");
+    }
+
+    private function servePreview(int $id, int $page): void
+    {
+        $files = $this->app->files();
+        try {
+            $p = $page > 0 ? $files->pdfPage($id, $page) : $files->thumb($id);
+        } catch (\Throwable $e) {
+            $this->fail(404, $e->getMessage());
+        }
+        if ($p === null) $this->fail(404, 'no preview');
+        $this->sendPath($p, 'image/jpeg', 'inline', "default-src 'none'; sandbox");
+    }
+
+    private function serveZip(string $folder): void
+    {
+        set_time_limit(0);
+        $folder = Library::normalize($folder);
+        try { $tmp = $this->app->files()->zipFolder($folder); }
+        catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+        $name = ($folder === '/' ? 'Library' : basename($folder)) . '-' . date('Y-m-d') . '.zip';
+        try { $this->sendPath($tmp, 'application/zip', self::disposition('attachment', $name), "default-src 'none'; sandbox", false); }
+        finally { @unlink($tmp); }
+    }
+
+    /** Content-Disposition with an ASCII fallback name and the exact UTF-8 one. */
+    private static function disposition(string $type, string $name): string
+    {
+        $ascii = trim(preg_replace('/[^A-Za-z0-9._ ()-]+/', '_', iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name) ?: ''), '_ ') ?: 'file';
+        return "$type; filename=\"$ascii\"; filename*=UTF-8''" . rawurlencode($name);
+    }
+
+    /** Send a file with ETag revalidation and single Range support. */
+    private function sendPath(string $path, string $type, string $disposition, string $csp, bool $cache = true): void
+    {
         while (ob_get_level() > 0) ob_end_clean();
-        $inline = in_array($f['kind'], ['image', 'pdf', 'audio'], true) && !str_contains($f['mime'], 'svg') && !str_contains($f['mime'], 'html');
-        header('Content-Type: ' . ($inline ? $f['mime'] : 'application/octet-stream'));
-        header('Content-Disposition: ' . ($inline ? 'inline' : 'attachment') . "; filename*=UTF-8''" . rawurlencode($f['name']));
+        $size = filesize($path);
+        $etag = '"' . substr(md5($path . '|' . $size . '|' . filemtime($path)), 0, 16) . '"';
+        header('Content-Type: ' . $type);
+        header('Content-Disposition: ' . $disposition);
         header('X-Content-Type-Options: nosniff');
-        header("Content-Security-Policy: default-src 'none'; sandbox");
-        header('Cache-Control: private, max-age=86400');
-        header('Content-Length: ' . filesize($f['path']));
-        readfile($f['path']);
+        header('Content-Security-Policy: ' . $csp);
+        header('Accept-Ranges: bytes');
+        if ($cache) {
+            header('Cache-Control: private, no-cache');
+            header('ETag: ' . $etag);
+            if (trim((string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) === $etag) { http_response_code(304); return; }
+        } else {
+            header('Cache-Control: no-store');
+        }
+        $start = 0; $end = $size - 1;
+        if ($size > 0 && preg_match('/^bytes=(\d*)-(\d*)$/', (string)($_SERVER['HTTP_RANGE'] ?? ''), $r) && ($r[1] !== '' || $r[2] !== '')) {
+            if ($r[1] === '') { $start = max(0, $size - (int)$r[2]); }
+            else { $start = (int)$r[1]; if ($r[2] !== '') $end = min($end, (int)$r[2]); }
+            if ($start > $end) { http_response_code(416); header("Content-Range: bytes */$size"); return; }
+            http_response_code(206);
+            header("Content-Range: bytes $start-$end/$size");
+        }
+        header('Content-Length: ' . ($end - $start + 1));
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD' || $size === 0) return;
+        $fh = fopen($path, 'rb');
+        fseek($fh, $start);
+        $left = $end - $start + 1;
+        while ($left > 0 && !feof($fh) && !connection_aborted()) {
+            $chunk = fread($fh, (int)min(262144, $left));
+            if ($chunk === false || $chunk === '') break;
+            echo $chunk; flush();
+            $left -= strlen($chunk);
+        }
+        fclose($fh);
     }
 
     private function taskAction(int $id, string $action): array

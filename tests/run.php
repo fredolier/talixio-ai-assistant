@@ -775,6 +775,53 @@ check('library web: move and rename a file', ($wj("/api/files/{$up['file']['id']
 $nt = $wj('/api/library/note', ['folder' => '/Notes', 'name' => 'Courses', 'content' => 'lait, oeufs']);
 check('library web: notes', ($nt['file']['name'] ?? '') === 'Courses.md' && $nt['file']['status'] === 'ready' && ($wj('/api/library/tree')['tree'] ?? []) !== []);
 check('library web: delete a file', ($wj("/api/files/{$nt['file']['id']}/delete", [])['ok'] ?? false) === true && $lf->get($nt['file']['id']) === null);
+// downloading and viewing
+$raw = function (string $path, array $headers = []) use ($webPort, $ck) {
+    $ch = curl_init("http://127.0.0.1:$webPort$path");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true, CURLOPT_COOKIEFILE => $ck, CURLOPT_TIMEOUT => 20, CURLOPT_HTTPHEADER => $headers]);
+    $out = (string)curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $hs = curl_getinfo($ch, CURLINFO_HEADER_SIZE); curl_close($ch);
+    return [$code, strtolower(substr($out, 0, $hs)), substr($out, $hs)];
+};
+$cid = $up['file']['id'];
+[$code, $h, $body] = $raw("/api/files/$cid");
+check('library web: text files viewable in the browser', $code === 200 && str_contains($h, 'content-type: text/plain; charset=utf-8') && str_contains($h, 'content-disposition: inline') && $body === 'Contrat de maintenance chaudière');
+[$code, $h] = $raw("/api/files/$cid?download=1");
+check('library web: download forces a file save with the name', str_contains($h, 'content-type: application/octet-stream') && str_contains($h, 'attachment; filename="contrat.txt"; filename*=utf-8\'\'contrat.txt'));
+[$code, $h, $body] = $raw("/api/files/$cid", ['Range: bytes=0-7']);
+check('library web: byte ranges (seeking in audio and video)', $code === 206 && $body === 'Contrat ' && str_contains($h, 'content-range: bytes 0-7/'));
+preg_match('/etag: (".*?")/', $h, $em);
+check('library web: unchanged files are revalidated, not re-sent', $raw("/api/files/$cid", ['If-None-Match: ' . ($em[1] ?? 'x')])[0] === 304);
+[$code, $h] = $raw("/api/files/$idHtml");
+check('library web: HTML is never rendered on the app origin', str_contains($h, 'attachment') && str_contains($h, 'sandbox'));
+// a real two-page PDF
+$pdfObjs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R /Resources << /Font << /F1 7 0 R >> >> >>', null,
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 6 0 R /Resources << /Font << /F1 7 0 R >> >> >>', null, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+foreach ([4 => 'Bon de commande 77', 6 => 'Page deux'] as $i => $txt) { $st = "BT /F1 18 Tf 20 100 Td ($txt) Tj ET"; $pdfObjs[$i - 1] = "<< /Length " . strlen($st) . " >>\nstream\n$st\nendstream"; }
+$pdf = "%PDF-1.4\n"; $offs = [];
+foreach ($pdfObjs as $i => $o) { $offs[] = strlen($pdf); $pdf .= ($i + 1) . " 0 obj\n$o\nendobj\n"; }
+$xref = strlen($pdf); $pdf .= "xref\n0 " . (count($pdfObjs) + 1) . "\n0000000000 65535 f \n" . implode('', array_map(fn($o) => sprintf("%010d 00000 n \n", $o), $offs)) . "trailer\n<< /Size " . (count($pdfObjs) + 1) . " /Root 1 0 R >>\nstartxref\n$xref\n%%EOF\n";
+$pid = $lf->save($mk('x', $pdf), 'commande.pdf', 'application/pdf', '/Perso/Admin');
+$lf->processPending(10);
+$pt = $wj("/api/files/$pid/text");
+check('library web: PDF text and page count for the viewer', ($pt['pages'] ?? 0) === 2 && str_contains($pt['text'] ?? '', 'Bon de commande 77'), json_encode($pt));
+[$code, $h, $body] = $raw("/api/files/$pid/page/2");
+$im = @getimagesizefromstring($body);
+check('library web: PDF pages rendered as images (every device)', $code === 200 && str_contains($h, 'image/jpeg') && $im && $im[0] > 300);
+[$code, , $body] = $raw("/api/files/$pid/thumb");
+$im = @getimagesizefromstring($body);
+check('library web: thumbnails for PDFs and photos', $code === 200 && $im && max($im[0], $im[1]) <= 160);
+check('library web: no preview for other files', $raw("/api/files/$cid/thumb")[0] === 404 && $raw("/api/files/$cid/page/1")[0] === 404);
+[$code, $h, $body] = $raw('/api/library/zip?folder=' . urlencode('/Perso'));
+file_put_contents("$ld/dl.zip", $body);
+$z = new ZipArchive(); $names = [];
+if ($z->open("$ld/dl.zip") === true) { for ($i = 0; $i < $z->numFiles; $i++) $names[] = $z->getNameIndex($i); $cont = $z->getFromName('Admin/contrat.txt'); $z->close(); }
+sort($names);
+check('library web: download a folder as a ZIP with its tree', $code === 200 && str_contains($h, "perso-") && in_array('Admin/contrat.txt', $names) && in_array('Admin/commande.pdf', $names)
+    && in_array('Admin/Logement/devis.eml', $names) && ($cont ?? '') === 'Contrat de maintenance chaudière', json_encode($names));
+$lib->deleteFile($pid);
+check('library: previews removed with the file', glob("$ld/previews/$pid-*") === []);
+
 proc_terminate($ws); proc_close($ws);
 putenv('TALIXIO_EMBEDDINGS'); putenv("TALIXIO_DATA_DIR=$dir");
 

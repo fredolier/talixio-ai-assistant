@@ -147,7 +147,9 @@ conversation.
   "Reading example.com…").
 - **Library (your knowledge base)**: every file is kept in folders you organise (`/Clients/Alice`,
   `/Admin/Taxes`...), browsable in the **Library** page (folder tree, breadcrumb, preview, drag and
-  drop to upload or move, rename, delete, Markdown notes you can edit). Chat and Signal/Telegram
+  drop to upload or move, rename, delete, Markdown notes you can view and edit). Every file can
+  be downloaded, or viewed in the app: photos, PDFs page by page (works on phones too), audio and
+  video with seeking, text and notes; a whole folder downloads as a ZIP keeping its subfolders. Chat and Signal/Telegram
   attachments land in `/Inbox`, recordings in `/Meetings`. In the background each file is read and
   indexed for search: PDF (scanned pages are transcribed by the fast model), Word/Excel/PowerPoint
   and OpenDocument, HTML, emails (.eml), Markdown/CSV/text, audio (transcribed) and photos

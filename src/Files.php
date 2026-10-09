@@ -256,6 +256,85 @@ final class Files
         return ['type' => 'image', 'mime' => $mime, 'data' => base64_encode($data)];
     }
 
+    // ---- previews (cached in data/previews; rebuilt when the file changes) ----
+
+    private function previewPath(array $f, string $what): string
+    {
+        $dir = $this->app->cfg->dataDir . '/previews';
+        if (!is_dir($dir)) mkdir($dir, 0750, true);
+        return "$dir/{$f['id']}-$what-" . substr(md5($f['size'] . '|' . @filemtime($f['path'])), 0, 8) . '.jpg';
+    }
+
+    public function dropPreviews(int $id): void
+    {
+        foreach (glob($this->app->cfg->dataDir . "/previews/$id-*") ?: [] as $p) @unlink($p);
+    }
+
+    /** Small JPEG for lists (images and the first page of PDFs); null when there is none. */
+    public function thumb(int $id): ?string
+    {
+        $f = $this->get($id);
+        if (!$f || !is_file($f['path'])) return null;
+        $out = $this->previewPath($f, 'thumb');
+        if (is_file($out)) return $out;
+        $src = null;
+        if ($f['kind'] === 'image') $src = (string)file_get_contents($f['path']);
+        elseif ($f['kind'] === 'pdf') $src = is_file($p = $this->pdfPage($id, 1)) ? (string)file_get_contents($p) : null;
+        if ($src === null || !function_exists('imagecreatefromstring') || !($img = @imagecreatefromstring($src))) return null;
+        $w = imagesx($img); $h = imagesy($img); $scale = min(1, 160 / max($w, $h));
+        $t = imagescale($img, max(1, (int)($w * $scale)), max(1, (int)($h * $scale)));
+        imagejpeg($t, $out, 80);
+        return $out;
+    }
+
+    public function pdfPageCount(int $id): int
+    {
+        $f = $this->get($id);
+        if (!$f || $f['kind'] !== 'pdf') return 0;
+        preg_match('/^Pages:\s+(\d+)/m', (string)shell_exec('pdfinfo ' . escapeshellarg($f['path']) . ' 2>/dev/null'), $m);
+        return (int)($m[1] ?? 0);
+    }
+
+    /** One PDF page as a JPEG (works on every device, unlike embedded PDF viewers). */
+    public function pdfPage(int $id, int $page): string
+    {
+        $f = $this->get($id);
+        if (!$f || $f['kind'] !== 'pdf') throw new \InvalidArgumentException('not a PDF');
+        $page = max(1, $page);
+        $out = $this->previewPath($f, "p$page");
+        if (!is_file($out)) {
+            $base = substr($out, 0, -4);
+            exec('pdftoppm -jpeg -jpegopt quality=80 -r 110 -singlefile -f ' . $page . ' -l ' . $page . ' ' . escapeshellarg($f['path']) . ' ' . escapeshellarg($base) . ' 2>/dev/null', $o, $code);
+            if ($code !== 0 || !is_file($out)) throw new \RuntimeException('could not render this page');
+        }
+        return $out;
+    }
+
+    /** Zip of a folder and its subfolders, keeping the tree. Returns a temporary file path. */
+    public function zipFolder(string $folder): string
+    {
+        if (!class_exists(\ZipArchive::class)) throw new \RuntimeException('Downloading folders needs php-zip: run sudo ./install.sh again');
+        $folder = Library::normalize($folder);
+        [$w, $a] = Library::within($folder);
+        $rows = $this->app->store->q("SELECT id, name, folder, path, size FROM files WHERE $w ORDER BY folder, name", $a)->fetchAll();
+        if (array_sum(array_column($rows, 'size')) > 4_000_000_000) throw new \InvalidArgumentException('This folder is too large to download at once (over 4 GB): download its subfolders.');
+        $tmp = tempnam(sys_get_temp_dir(), 'talixio-zip');
+        $zip = new \ZipArchive();
+        $zip->open($tmp, \ZipArchive::OVERWRITE);
+        $used = [];
+        foreach ($rows as $r) {
+            if (!is_file($r['path'])) continue;
+            $rel = ltrim(substr($r['folder'], strlen(rtrim($folder, '/'))) . '/', '/') . $r['name'];
+            if (isset($used[mb_strtolower($rel)])) $rel = preg_replace('/(\.[^.\/]+)?$/', " ({$r['id']})$1", $rel, 1);
+            $used[mb_strtolower($rel)] = true;
+            $zip->addFile($r['path'], $rel);
+            if (preg_match('/\.(jpe?g|png|gif|webp|zip|docx|xlsx|pptx|mp3|m4a|mp4|mov|ogg|opus|webm)$/i', $r['name'])) $zip->setCompressionName($rel, \ZipArchive::CM_STORE);
+        }
+        if (!$rows) $zip->addEmptyDir(basename($folder) ?: 'Library');
+        $zip->close();
+        return $tmp;
+    }
+
     /** Content parts for a message with attachments. */
     public function parts(string $text, array $ids): array
     {
