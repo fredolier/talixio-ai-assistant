@@ -39,6 +39,7 @@ final class Config
     public float $jobMaxUsd = 0.5;
     public string $embeddings = 'off';           // resolved to ollama | openai | voyage | off
     public string $embeddingsModel = '';
+    public int $embeddingsDims = -1;             // -1 = automatic, 0 = full size
     public string $ollamaUrl = 'http://127.0.0.1:11434';
     public string $voyageKey = '';
     public float $recallMinSim = 0.5;
@@ -177,9 +178,10 @@ final class Config
             };
         }
         $c->embeddingsModel = $e('TALIXIO_EMBEDDINGS_MODEL', match ($c->embeddings) {
-            'ollama' => 'nomic-embed-text', 'openai' => 'text-embedding-3-small', 'voyage' => 'voyage-3.5-lite', 'gemini' => 'gemini-embedding-001', default => '',
+            'ollama' => 'qwen3-embedding:0.6b', 'openai' => 'text-embedding-3-small', 'voyage' => 'voyage-3.5-lite', 'gemini' => 'gemini-embedding-001', default => '',
         });
-        $c->recallMinSim = (float)$e('TALIXIO_RECALL_MIN_SIMILARITY', '0.5');
+        $c->embeddingsDims = $e('TALIXIO_EMBEDDINGS_DIMS') === '' ? -1 : (int)$e('TALIXIO_EMBEDDINGS_DIMS');
+        $c->recallMinSim = (float)$e('TALIXIO_RECALL_MIN_SIMILARITY', $c->embeddings === 'ollama' && str_contains($c->embeddingsModel, 'qwen3') ? '0.45' : '0.5');
         $list = fn(string $v) => array_values(array_filter(array_map(fn($x) => strtolower(trim($x)), explode(',', $v)), 'strlen'));
         $c->smtpHost = $e('TALIXIO_SMTP_HOST');
         $c->smtpPort = (int)$e('TALIXIO_SMTP_PORT', '587');

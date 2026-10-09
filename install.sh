@@ -6,11 +6,13 @@
 #   sudo ./install.sh --with-claude-code      also install the Claude Code CLI (use a Claude Pro/Max plan)
 #   sudo ./install.sh --with-signal           also install signal-cli (Signal channel)
 #   sudo ./install.sh --with-browser          also install Chromium/Chrome (headless browser tools)
+#   sudo ./install.sh --with-ollama           also install Ollama + a local embedding model for memory search
+#                                             (--with-ollama=docker to run it in Docker instead; OLLAMA_EMBED_MODEL to pick the model)
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 ORIG_ARGS="$(printf '%q ' "$@")"   # remembered for updates from the web app
 
-DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; WITH_BROWSER=0 ; BIND_ARG=""
+DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; WITH_BROWSER=0 ; WITH_OLLAMA="" ; BIND_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="${2:?--domain needs a value}"; shift 2 ;;
@@ -18,7 +20,9 @@ while [ $# -gt 0 ]; do
     --with-claude-code) WITH_CLAUDE=1; shift ;;
     --with-signal) WITH_SIGNAL=1; shift ;;
     --with-browser) WITH_BROWSER=1; shift ;;
-    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+    --with-ollama) WITH_OLLAMA=native; shift ;;
+    --with-ollama=*) WITH_OLLAMA="${1#*=}"; shift ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -74,12 +78,16 @@ done < "$SRC/config/talixio.env.example"
 [ -n "$BIND_ARG" ] && sed -i "s|^TALIXIO_WEB_BIND=.*|TALIXIO_WEB_BIND=$BIND_ARG|" "$ENV"
 chown root:talixio "$ENV"; chmod 640 "$ENV"
 
-if [ "$WITH_CLAUDE" = 1 ]; then
+if [ "$WITH_CLAUDE" = 1 ] && [ -x "$DATA/.local/bin/claude" ]; then
+  echo "    Claude Code already installed (it updates itself)"
+elif [ "$WITH_CLAUDE" = 1 ]; then
   say "Installing Claude Code CLI for the talixio user"
   runuser -u talixio -- env HOME="$DATA" bash -c 'curl -fsSL https://claude.ai/install.sh | bash' || echo "Claude Code install failed; see https://docs.claude.com/en/docs/claude-code/setup" >&2
 fi
 
-if [ "$WITH_SIGNAL" = 1 ]; then
+if [ "$WITH_SIGNAL" = 1 ] && [ -x /usr/local/bin/signal-cli ]; then
+  echo "    signal-cli already installed"
+elif [ "$WITH_SIGNAL" = 1 ]; then
   say "Installing signal-cli (native build, no Java needed)"
   if [ "$(uname -m)" != "x86_64" ]; then
     echo "signal-cli's native build is x86_64 only. On $(uname -m), install signal-cli with Java 21+ manually: https://github.com/AsamK/signal-cli" >&2
@@ -113,6 +121,42 @@ if [ "$WITH_BROWSER" = 1 ]; then
     rm -rf "$TMP"
   else
     echo "    No packaged browser for $(uname -m) on ${ID:-this system}: install Chromium yourself and set TALIXIO_CHROME_BIN" >&2
+  fi
+fi
+
+if [ -n "$WITH_OLLAMA" ]; then
+  MODEL="${OLLAMA_EMBED_MODEL:-qwen3-embedding:0.6b}"
+  case "$WITH_OLLAMA" in
+    docker)
+      if ! command -v docker >/dev/null; then say "Installing Docker"; apt-get install -y -qq docker.io >/dev/null; systemctl enable -q --now docker; fi
+      if ! docker inspect ollama >/dev/null 2>&1; then
+        say "Starting Ollama in Docker (port 11434, this machine only)"
+        docker run -d --name ollama --restart unless-stopped -v ollama:/root/.ollama -p 127.0.0.1:11434:11434 ollama/ollama >/dev/null
+      else
+        docker start ollama >/dev/null 2>&1 || true
+      fi
+      OLLAMA_CMD=(docker exec ollama ollama) ;;
+    native|1|yes)
+      if ! command -v ollama >/dev/null; then
+        say "Installing Ollama (official script, systemd service on 127.0.0.1:11434)"
+        apt-get install -y -qq zstd >/dev/null 2>&1 || true
+        curl -fsSL https://ollama.com/install.sh | sh
+      fi
+      systemctl enable -q --now ollama 2>/dev/null || true
+      OLLAMA_CMD=(ollama) ;;
+    *) echo "unknown --with-ollama=$WITH_OLLAMA (use native or docker)" >&2; exit 2 ;;
+  esac
+  for i in $(seq 1 60); do curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1 && break; sleep 1; done
+  if curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
+    say "Downloading the embedding model $MODEL (about 0.6 GB, once)"
+    "${OLLAMA_CMD[@]}" pull "$MODEL" >/dev/null && echo "    $MODEL ready"
+    # use it for memory search unless something else was chosen in the config file
+    if grep -qE '^TALIXIO_EMBEDDINGS=(auto)?$' "$ENV"; then
+      sed -i "s|^TALIXIO_EMBEDDINGS=.*|TALIXIO_EMBEDDINGS=ollama|; s|^TALIXIO_EMBEDDINGS_MODEL=.*|TALIXIO_EMBEDDINGS_MODEL=$MODEL|; s|^TALIXIO_OLLAMA_URL=.*|TALIXIO_OLLAMA_URL=http://127.0.0.1:11434|" "$ENV"
+      echo "    memory search now uses Ollama ($MODEL); existing memory is re-indexed in the background"
+    fi
+  else
+    echo "    Ollama did not answer on 127.0.0.1:11434: check 'systemctl status ollama' (or 'docker logs ollama')" >&2
   fi
 fi
 
@@ -158,4 +202,4 @@ esac
 echo "  Config:    sudo nano $ENV   then  sudo systemctl restart talixio-worker talixio-web"
 echo "  Check:     sudo talixio doctor"
 echo "  Logs:      journalctl -u talixio-worker -u talixio-web -f"
-echo "  Update:    git pull && sudo ./install.sh"
+echo "  Update:    Settings → Updates in the app (or: git pull && sudo ./install.sh)"

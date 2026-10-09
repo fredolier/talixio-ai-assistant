@@ -11,7 +11,34 @@ final class Embeddings
     public function __construct(private Config $cfg) {}
 
     public function enabled(): bool { return $this->fake !== null || $this->cfg->embeddings !== 'off'; }
-    public function model(): string { return $this->fake ? 'fake' : $this->cfg->embeddingsBackend() . ':' . $this->cfg->embeddingsModel; }
+    /** Identifies the vectors: changing backend, model or size re-indexes memory in the background. */
+    public function model(): string
+    {
+        if ($this->fake) return 'fake';
+        $dims = $this->dims();
+        return $this->cfg->embeddingsBackend() . ':' . $this->cfg->embeddingsModel . ($dims ? "@$dims" : '');
+    }
+
+    /** Vector size kept. Models trained for it (Qwen3, EmbeddingGemma) keep almost all quality at 512 and search twice as fast. */
+    public function dims(): int
+    {
+        if ($this->cfg->embeddingsDims >= 0) return $this->cfg->embeddingsDims; // 0 = full size
+        return preg_match('/qwen3-embedding|embeddinggemma|text-embedding-3|gemini-embedding/i', $this->cfg->embeddingsModel) ? 512 : 0;
+    }
+
+    /** Some models expect an instruction or prefix, different for queries and documents. */
+    public static function prepare(string $model, string $text, string $type): string
+    {
+        $m = strtolower($model);
+        return match (true) {
+            str_contains($m, 'qwen3-embedding') => $type === 'query'
+                ? "Instruct: Given a message from the user, retrieve past conversations, notes and documents that help answer it\nQuery:$text" : $text,
+            str_contains($m, 'embeddinggemma') => $type === 'query' ? "task: search result | query: $text" : "title: none | text: $text",
+            str_contains($m, 'nomic') => ($type === 'query' ? 'search_query: ' : 'search_document: ') . $text,
+            str_contains($m, 'mxbai-embed') => $type === 'query' ? "Represent this sentence for searching relevant passages: $text" : $text,
+            default => $text,
+        };
+    }
 
     /**
      * @param string[] $texts
@@ -28,12 +55,13 @@ final class Embeddings
             'voyage' => $this->voyage($texts, $type),
             default => throw new \RuntimeException('embeddings are off'),
         };
-        return array_map([self::class, 'pack'], $vecs);
+        $dims = $this->fake ? 0 : $this->dims();
+        return array_map(fn($v) => self::pack($dims > 0 && count($v) > $dims ? array_slice($v, 0, $dims) : $v), $vecs);
     }
 
     public static function pack(array $v): string
     {
-        $n = sqrt(array_sum(array_map(fn($x) => $x * $x, $v))) ?: 1.0;
+        $n = sqrt(array_sum(array_map(fn($x) => $x * $x, $v))) ?: 1.0; // re-normalised, also after truncation
         return pack('g*', ...array_map(fn($x) => $x / $n, $v));
     }
 
@@ -47,9 +75,12 @@ final class Embeddings
 
     private function ollama(array $texts, string $type): array
     {
-        $prefix = str_contains($this->cfg->embeddingsModel, 'nomic') ? ($type === 'query' ? 'search_query: ' : 'search_document: ') : '';
-        $r = Http::json($this->cfg->ollamaUrl . '/api/embed', ['model' => $this->cfg->embeddingsModel, 'input' => array_map(fn($t) => $prefix . $t, $texts)], [], 120);
-        return $r['embeddings'] ?? throw new \RuntimeException('ollama: no embeddings in response');
+        $model = $this->cfg->embeddingsModel;
+        $r = Http::json($this->cfg->ollamaUrl . '/api/embed', [
+            'model' => $model, 'input' => array_map(fn($t) => self::prepare($model, $t, $type), $texts),
+            'keep_alive' => '1h', // stay loaded: the first call after a pause would otherwise reload the model
+        ], [], 300);
+        return $r['embeddings'] ?? throw new \RuntimeException('ollama: no embeddings in response' . (isset($r['error']) ? ": {$r['error']}" : ''));
     }
 
     private function openai(array $texts, string $base, string $key): array

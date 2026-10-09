@@ -195,18 +195,45 @@ final class Store
     }
 
     // --- searchable documents ---
-    public function addDoc(string $kind, int $ref, string $label, string $text): void
+    /** Index text for search. Long texts (documents, transcripts) are split into overlapping chunks. */
+    public function addDoc(string $kind, int $ref, string $label, string $text, ?int $ts = null): void
     {
         if (mb_strlen(trim($text)) < 3) return;
-        $this->q('INSERT INTO docs(kind,ref,ts,label,text) VALUES(?,?,?,?,?)', [$kind, $ref, time(), $label, $text]);
+        $chunks = self::chunks($text);
+        $n = count($chunks);
+        foreach ($chunks as $i => $chunk) {
+            $this->q('INSERT INTO docs(kind,ref,ts,label,text) VALUES(?,?,?,?,?)', [$kind, $ref, $ts ?? time(), $n > 1 ? "$label (part " . ($i + 1) . "/$n)" : $label, $chunk]);
+        }
+    }
+
+    /**
+     * Split text into ~2000-character chunks with ~200 characters of overlap, cutting at paragraph or
+     * sentence boundaries, so search finds the right passage of a long document (max 400 chunks).
+     * @return string[]
+     */
+    public static function chunks(string $text, int $size = 2000, int $overlap = 200): array
+    {
+        $text = trim(str_replace("\r\n", "\n", $text));
+        if (mb_strlen($text) <= (int)($size * 1.2)) return [$text];
+        $out = []; $pos = 0; $len = mb_strlen($text);
+        while ($pos < $len && count($out) < 400) {
+            $piece = mb_substr($text, $pos, $size);
+            if ($pos + $size < $len) {
+                $cut = max(mb_strrpos($piece, "\n\n") ?: 0, mb_strrpos($piece, ". ") ?: 0, mb_strrpos($piece, "\n") ?: 0);
+                if ($cut > $size * 0.5) $piece = mb_substr($piece, 0, $cut + 1);
+            }
+            $out[] = trim($piece);
+            if ($pos + mb_strlen($piece) >= $len) break;
+            $pos += max(1, mb_strlen($piece) - $overlap);
+        }
+        return $out;
     }
 
     public function addSummary(int $fromId, int $toId, int $tsFrom, int $tsTo, string $text): int
     {
         $this->q('INSERT INTO summaries(from_id,to_id,ts_from,ts_to,text) VALUES(?,?,?,?,?)', [$fromId, $toId, $tsFrom, $tsTo, $text]);
         $id = (int)$this->db->lastInsertId();
-        $this->q('INSERT INTO docs(kind,ref,ts,label,text) VALUES(?,?,?,?,?)',
-            ['summary', $id, $tsTo, 'summary of ' . date('Y-m-d', $tsFrom) . ($tsTo - $tsFrom > 86400 ? ' to ' . date('Y-m-d', $tsTo) : ''), $text]);
+        $this->addDoc('summary', $id, 'summary of ' . date('Y-m-d', $tsFrom) . ($tsTo - $tsFrom > 86400 ? ' to ' . date('Y-m-d', $tsTo) : ''), $text, $tsTo);
         return $id;
     }
 

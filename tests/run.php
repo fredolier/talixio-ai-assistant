@@ -618,6 +618,46 @@ try { $app->updater()->request('update'); check('updates: refused when not insta
 catch (\RuntimeException $e) { check('updates: refused when not installed with install.sh', str_contains($e->getMessage(), 'git clone')); }
 try { $app->updater()->request('rm -rf /'); check('updates: unknown requests refused', false); } catch (\InvalidArgumentException) { check('updates: unknown requests refused', true); }
 
+// ---- local embeddings with Ollama (fake server) and chunked documents ----
+$op = $freePort();
+file_put_contents("$dir/ollama.php", '<?php
+$req = json_decode(file_get_contents("php://input"), true); header("Content-Type: application/json");
+if (str_ends_with($_SERVER["REQUEST_URI"], "/api/tags")) { echo json_encode(["models" => [["name" => "qwen3-embedding:0.6b"]]]); return; }
+file_put_contents(__DIR__ . "/ollama-req.jsonl", json_encode($req) . "\n", FILE_APPEND);
+// deterministic 1024-d vectors: topic words light up dimensions
+$vec = function ($t) { $v = array_fill(0, 1024, 0.001); foreach (["contrat" => 3, "signer" => 3, "contract" => 3, "dentiste" => 7, "dentist" => 7, "facture" => 11] as $w => $i) if (stripos($t, $w) !== false) $v[$i] += 1; return $v; };
+echo json_encode(["model" => $req["model"], "embeddings" => array_map($vec, (array)$req["input"])]);');
+$ollama = proc_open([PHP_BINARY, '-S', "127.0.0.1:$op", "$dir/ollama.php"], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp);
+$waitPort($op);
+putenv("TALIXIO_DATA_DIR=$dir"); putenv('TALIXIO_EMBEDDINGS=ollama'); putenv("TALIXIO_OLLAMA_URL=http://127.0.0.1:$op"); putenv('TALIXIO_EMBEDDINGS_MODEL'); putenv('TALIXIO_EMBEDDINGS_DIMS');
+$oa = App::fromEnv();
+check('ollama: qwen3-embedding:0.6b by default, 512 dims', $oa->cfg->embeddingsModel === 'qwen3-embedding:0.6b' && $oa->embeddings->model() === 'ollama:qwen3-embedding:0.6b@512');
+$q = $oa->embeddings->embed(['Quand dois-je signer le contrat ?'], 'query')[0];
+$req = json_decode((string)file_get_contents("$dir/ollama-req.jsonl"), true);
+check('ollama: query sent with the Qwen3 instruction and kept loaded', str_starts_with($req['input'][0], "Instruct: Given a message from the user") && str_ends_with($req['input'][0], "\nQuery:Quand dois-je signer le contrat ?") && $req['keep_alive'] === '1h');
+check('ollama: vector shortened to 512 and re-normalised', strlen($q) === 512 * 4 && abs(\Talixio\Embeddings::dot($q, $q) - 1.0) < 1e-4);
+check('embeddings: documents get no instruction, gemma gets its own format', \Talixio\Embeddings::prepare('qwen3-embedding:0.6b', 'x', 'document') === 'x'
+    && \Talixio\Embeddings::prepare('embeddinggemma', 'x', 'document') === 'title: none | text: x');
+// a long document is chunked; meaning-based search finds the right passage
+$long = str_repeat("Introduction générale sans rapport. ", 80) . "\n\nClause 7 : le contrat doit être signé avant le 30 octobre par Frédéric.\n\n" . str_repeat("Annexe technique sans rapport. ", 80);
+$oa->store->addDoc('file', 999, 'file: accord.pdf', $long);
+$parts = $oa->store->q("SELECT label, text FROM docs WHERE ref = 999 AND kind = 'file'")->fetchAll();
+check('chunks: long document split into labelled parts', count($parts) >= 3 && str_contains($parts[0]['label'], '(part 1/'));
+$n = $oa->recall()->embedPending(16, 30);
+[$done, $total] = $oa->recall()->coverage();
+check('ollama: whole memory indexed in the background', $n > 0 && $done === $total, "$done/$total");
+$hits = $oa->recall()->search('deadline for the contract?', 3); // English question, French document: only meaning can match
+$docHits = array_values(array_filter($hits, fn($h) => str_contains($h['label'], 'accord.pdf')));
+check('rag: semantic search ranks the right chunk of the document first', str_contains($docHits[0]['text'] ?? '', 'Clause 7'), json_encode(array_column($hits, 'label')));
+putenv('TALIXIO_EMBEDDINGS_DIMS=256');
+$ob = App::fromEnv();
+check('embeddings: changing the size re-indexes (old vectors ignored)', $ob->recall()->coverage()[0] === 0 && $ob->recall()->embedPending(16, 30) === $total && $ob->recall()->coverage()[0] === $total);
+check('doctor: reports the Ollama model and index coverage', (bool)preg_grep('/search by meaning \(ollama: qwen3-embedding:0.6b\): 256 dimensions, \d+ ms; \d+ of \d+ memory items indexed/', array_column((new \Talixio\Doctor($ob))->run(false), 'text')));
+putenv('TALIXIO_EMBEDDINGS_MODEL=bge-m3');
+check('doctor: missing model explained with the pull command', (bool)preg_grep('/ollama pull bge-m3/', array_column((new \Talixio\Doctor(App::fromEnv()))->run(false), 'text')));
+putenv('TALIXIO_EMBEDDINGS'); putenv('TALIXIO_OLLAMA_URL'); putenv('TALIXIO_EMBEDDINGS_MODEL'); putenv('TALIXIO_EMBEDDINGS_DIMS');
+proc_terminate($ollama); proc_close($ollama);
+
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
 exit($fails ? 1 : 0);

@@ -30,7 +30,21 @@ final class Doctor
             'anthropic' => $c->anthropicKey !== '', 'openai' => $c->openaiKey !== '' || !str_contains($c->openaiBaseUrl, 'openai.com'),
             'gemini' => $c->openaiKey !== '', 'claude-code', 'echo' => true, default => false,
         }, "{$c->provider} credentials");
-        if ($c->embeddings !== 'off') $this->attempt("search by meaning ({$c->embeddings}:{$c->embeddingsModel})", fn() => $app->embeddings->embed(['test'], 'query') ? '' : '');
+        if ($c->embeddings !== 'off') {
+            $this->attempt("search by meaning ({$c->embeddings}: {$c->embeddingsModel})", function () use ($app, $c) {
+                if ($c->embeddings === 'ollama') {
+                    [$code, $body] = Http::request('GET', $c->ollamaUrl . '/api/tags', [], null, 10);
+                    $names = array_column(json_decode($body, true)['models'] ?? [], 'name');
+                    if (!in_array($c->embeddingsModel, $names, true) && !in_array($c->embeddingsModel . ':latest', $names, true)) {
+                        throw new \RuntimeException("model not installed in Ollama: run \"ollama pull {$c->embeddingsModel}\"");
+                    }
+                }
+                $t = microtime(true);
+                $v = $app->embeddings->embed(['Rendez-vous chez le dentiste mardi à 14 h'], 'query')[0];
+                [$done, $total] = $app->recall()->coverage();
+                return sprintf('%d dimensions, %.0f ms; %d of %d memory items indexed', strlen($v) / 4, (microtime(true) - $t) * 1000, $done, $total);
+            });
+        }
         if ($c->transcribe !== 'off') $this->info("transcription: {$c->transcribe}");
         if ($app->email()->canSend()) $this->attempt("SMTP {$c->smtpHost}:{$c->smtpPort}", fn() => (new Smtp($c->smtpHost, $c->smtpPort, $c->smtpSecurity, $c->smtpUser, $c->smtpPassword))->check() ?? 'login OK');
         if ($c->imapHost !== '') {

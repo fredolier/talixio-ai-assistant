@@ -145,7 +145,7 @@ final class Web
                 'messages' => (int)$s->q('SELECT COUNT(*) FROM messages')->fetchColumn(),
                 'summaries' => (int)$s->q('SELECT COUNT(*) FROM summaries')->fetchColumn(),
                 'docs' => (int)$s->q('SELECT COUNT(*) FROM docs')->fetchColumn(),
-                'embedded' => (int)$s->q('SELECT COUNT(*) FROM embeddings')->fetchColumn(),
+                'embedded' => $this->app->recall()->coverage()[0], 'embeddings_model' => $this->app->embeddings->enabled() ? $this->app->embeddings->model() : null,
                 'skills' => count($this->app->skills()->all()),
             ], 'backup' => ['last' => (int)$s->get('backup_last', '0') ?: null, 'file' => basename($s->get('backup_last_file')) ?: null, 'keep' => $this->app->cfg->backupKeep]];
     }

@@ -34,6 +34,11 @@ Options:
   Allow port 8080 only from the proxy (`ufw allow from <proxy-ip> to any port 8080`).
 - HTTPS (either way) is needed to add the web app to your phone's home screen.
 - `sudo ./install.sh --with-claude-code` installs the Claude Code CLI for the `talixio` user.
+- `sudo ./install.sh --with-ollama` installs [Ollama](https://ollama.com) (official script, systemd
+  service listening on 127.0.0.1 only) and the local embedding model **qwen3-embedding:0.6b**, and
+  uses it for memory search: free, private, works in French. `--with-ollama=docker` runs Ollama in
+  a Docker container instead. Another model: `OLLAMA_EMBED_MODEL=embeddinggemma sudo ./install.sh --with-ollama`.
+  Needs about 1 GB of RAM while indexing.
 
 **Updates:** in the app, **Settings → Updates** shows new versions from the repository (checked
 every 6 hours), with **Update now** (backup, `git pull`, reinstall, restart) and **Restore previous
@@ -173,8 +178,12 @@ conversation.
   something needs attention. Each check is a model call, so it costs tokens.
 - **Web search** (Claude's built-in search, or Brave / Tavily / SearXNG) and **page reading** that
   blocks internal network addresses.
-- **Searchable history (RAG in SQLite)**: every message is indexed with FTS5 keyword search; with an
-  embeddings backend (Ollama, OpenAI or Voyage) meaning-based search is added. Finished stretches of
+- **Searchable history (RAG in SQLite)**: messages, summaries, documents and transcripts are indexed
+  with FTS5 keyword search, and with an embeddings model for search by meaning (hybrid ranking).
+  Long documents are split into overlapping chunks so the right passage is found. Recommended
+  local model: `qwen3-embedding:0.6b` through Ollama (best multilingual score among small models,
+  Apache 2.0, 32k context), vectors kept at 512 dimensions for speed. Changing the model re-indexes
+  memory in the background. Gemini, OpenAI and Voyage embeddings work too. Finished stretches of
   conversation are summarised. Relevant past snippets are added to the prompt automatically, and the
   assistant can call `search_memory`. You can search too, on the Memory page.
 - **Model tiers**: fast (heartbeat, summaries, simple lookups), standard (chat), deep (hard reasoning,

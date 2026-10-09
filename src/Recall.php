@@ -38,7 +38,7 @@ final class Recall
             try {
                 $q = $this->emb->embed([$query], 'query')[0];
                 $sims = [];
-                $rows = $this->store->q('SELECT e.doc_id, e.vec FROM embeddings e ORDER BY e.doc_id DESC LIMIT 20000')->fetchAll();
+                $rows = $this->store->q('SELECT e.doc_id, e.vec FROM embeddings e WHERE e.model = ? ORDER BY e.doc_id DESC LIMIT 20000', [$this->emb->model()])->fetchAll();
                 foreach ($rows as $r) $sims[$r['doc_id']] = Embeddings::dot($q, $r['vec']);
                 arsort($sims);
                 $rank = 0;
@@ -71,17 +71,32 @@ final class Recall
             preg_replace('/\s+/', ' ', mb_substr($h['text'], 0, $chars))), $hits));
     }
 
-    /** Compute missing embeddings (called by the worker). Returns how many were added. */
-    public function embedPending(int $batch = 32): int
+    /**
+     * Compute missing embeddings, newest first (called by the worker). Also re-indexes everything after a
+     * model change. Stops after $seconds so a slow local model never blocks the worker for long.
+     */
+    public function embedPending(int $batch = 8, float $seconds = 8.0, int $max = 10000): int
     {
         if (!$this->emb->enabled()) return 0;
-        $docs = $this->store->q('SELECT id, text FROM docs WHERE id NOT IN (SELECT doc_id FROM embeddings) ORDER BY id DESC LIMIT ?', [$batch])->fetchAll();
-        if (!$docs) return 0;
-        $vecs = $this->emb->embed(array_column($docs, 'text'), 'document');
         $model = $this->emb->model();
-        foreach ($docs as $i => $d) {
-            if (isset($vecs[$i])) $this->store->q('INSERT OR REPLACE INTO embeddings(doc_id, model, vec) VALUES(?,?,?)', [$d['id'], $model, $vecs[$i]]);
-        }
-        return count($docs);
+        $done = 0; $until = microtime(true) + $seconds;
+        do {
+            $docs = $this->store->q('SELECT d.id, d.text FROM docs d WHERE NOT EXISTS (SELECT 1 FROM embeddings e WHERE e.doc_id = d.id AND e.model = ?) ORDER BY d.id DESC LIMIT ?',
+                [$model, $batch])->fetchAll();
+            if (!$docs) break;
+            $vecs = $this->emb->embed(array_column($docs, 'text'), 'document');
+            foreach ($docs as $i => $d) {
+                if (isset($vecs[$i])) $this->store->q('INSERT OR REPLACE INTO embeddings(doc_id, model, vec) VALUES(?,?,?)', [$d['id'], $model, $vecs[$i]]);
+            }
+            $done += count($docs);
+        } while (microtime(true) < $until && $done < $max);
+        return $done;
+    }
+
+    /** [indexed for the current model, total] */
+    public function coverage(): array
+    {
+        return [(int)$this->store->q('SELECT COUNT(*) FROM embeddings WHERE model = ?', [$this->emb->model()])->fetchColumn(),
+            (int)$this->store->q('SELECT COUNT(*) FROM docs')->fetchColumn()];
     }
 }

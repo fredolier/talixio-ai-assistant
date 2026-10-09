@@ -588,7 +588,7 @@ async function loadActivity() {
   $('#by-tier tbody').innerHTML = rows(by_tier);
   $('#by-source tbody').innerHTML = rows(by_source);
   const bk = backup || {};
-  $('#memstats').textContent = (bk.last ? `Last backup ${fmtTime(bk.last)} (${bk.file}, keeping ${bk.keep}). ` : 'No backup yet (the worker makes one every night). ') + `Skills: ${memory.skills}. Memory index: ${nf.format(memory.messages)} messages, ${nf.format(memory.summaries)} summaries, ${nf.format(memory.docs)} searchable items, ${nf.format(memory.embedded)} with embeddings${state.status?.embeddings === 'off' ? ' (embeddings off: keyword search only)' : ''}.`;
+  $('#memstats').textContent = (bk.last ? `Last backup ${fmtTime(bk.last)} (${bk.file}, keeping ${bk.keep}). ` : 'No backup yet (the worker makes one every night). ') + `Skills: ${memory.skills}. Memory index: ${nf.format(memory.messages)} messages, ${nf.format(memory.summaries)} summaries, ${nf.format(memory.docs)} searchable items, ${memory.embeddings_model ? `${nf.format(memory.embedded)} indexed by meaning with ${memory.embeddings_model}${memory.embedded < memory.docs ? ' (indexing in progress)' : ''}` : 'search by meaning off (keyword search only)'}.`;
   const sum = k => usage.reduce((a, d) => a + (+d[k] || 0), 0);
   const cost = usage.reduce((a, d) => a + (d.cost == null ? 0 : +d.cost), 0);
   const max = Math.max(1, ...usage.map(d => +d.input + +d.output));
