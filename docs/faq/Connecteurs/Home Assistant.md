@@ -61,12 +61,22 @@ Enregistrez : Talixio liste les outils de Home Assistant (`mcp_homeassistant_…
 | `cannot reach …` | Home Assistant n'est pas joignable depuis le serveur : adresse, port 8123, pare-feu, VPN |
 | HTTP 401 | jeton mal copié, ou `Bearer ` oublié devant |
 | HTTP 403 | compte non administrateur alors que l'option « compte administrateur exigé » est cochée |
+| HTTP 400 `Bad Request`, sans autre texte | Home Assistant refuse la requête venue par un proxy (Caddy, Nginx…) qu'il ne connaît pas ; son journal dit *« A request from a reverse proxy was received from … »*. Utilisez l'adresse locale (`http://IP:8123/api/mcp`), ou déclarez ce proxy dans Home Assistant (voir plus bas) |
 | HTTP 404 | il manque `/api/mcp` à la fin de l'adresse, ou Home Assistant est trop ancien |
 | Aucun appareil, « je ne trouve pas la lumière » | l'appareil n'est pas exposé à Assist |
 
 Pour tester depuis le serveur (sous Docker) :
 `docker exec talixio-fred curl -s -o /dev/null -w '%{http_code}\n' http://192.168.1.10:8123/api/` :
 `401` veut dire « joignable » (il manque juste le jeton), une erreur ou `000` veut dire « pas joignable ».
+
+Pour garder une adresse publique (`https://ha.example.com`) servie par un proxy, Home Assistant doit
+connaître ce proxy. Dans son `configuration.yaml`, puis redémarrez Home Assistant :
+```yaml
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 192.168.0.31   # l'adresse du proxy, telle que l'indique le journal de Home Assistant
+```
 
 ## Notes
 - Le jeton est gardé dans `data/mcp.json`, dans votre assistant. Pour couper l'accès, supprimez le jeton
