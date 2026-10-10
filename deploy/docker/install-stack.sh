@@ -64,6 +64,8 @@ else # updates from the admin page build the branch this clone is on
     if grep -q '^GIT_BRANCH=' "$ENV"; then sed -i "s|^GIT_BRANCH=.*|GIT_BRANCH=$BR|" "$ENV"; else echo "GIT_BRANCH=$BR" >> "$ENV"; fi
   fi
 fi
+# Ollama (search by meaning for everyone) gets half the processors: indexing a library would otherwise take them all
+grep -q '^OLLAMA_CPUS=' "$ENV" || echo "OLLAMA_CPUS=$(n=$(nproc); [ "$n" -gt 1 ] && echo $((n / 2)) || echo 1)" >> "$ENV"
 if [ -n "$PROXY" ]; then # HTTPS is done by another proxy: plain HTTP on this port, 443 kept to this machine
   sed -i '/^BEHIND_PROXY=/d; /^HTTP_PUBLISH=/d; /^HTTPS_PUBLISH=/d' "$ENV"
   printf 'BEHIND_PROXY=1\nHTTP_PUBLISH=%s\nHTTPS_PUBLISH=127.0.0.1:8443\n' "$PROXY" >> "$ENV"
@@ -131,8 +133,15 @@ docker exec talixio-agent php /opt/talixio/deploy/docker/fleetctl.php reload >/d
 # the existing assistants move to the image just built
 docker exec talixio-agent php -r 'require "/opt/talixio/src/autoload.php"; $f = new Talixio\Fleet("/state"); foreach (array_keys($f->state()["instances"]) as $id) { $f->recreate($id); echo "    $id restarted on the new image\n"; }'
 
-say "Downloading the embedding model for memory search (in the background)"
-( docker exec talixio-ollama ollama pull qwen3-embedding:0.6b >/dev/null 2>&1 && echo "    model ready" ) &
+# the shared Ollama: off in the admin page = stopped (its memory goes to the assistants); on = its model downloaded
+OLLAMA_SET="$(docker exec talixio-agent php -r 'require "/opt/talixio/src/autoload.php"; $s = (new Talixio\Fleet("/state"))->state()["settings"]; echo ($s["ollama"] ? "on" : "off"), " ", $s["ollama_model"];')"
+if [ "${OLLAMA_SET%% *}" = off ]; then
+  docker stop talixio-ollama >/dev/null 2>&1 || true
+  echo "    shared Ollama stopped (turned off in the admin page)"
+else
+  say "Downloading the embedding model ${OLLAMA_SET#* } for memory search (in the background)"
+  ( docker exec talixio-ollama ollama pull "${OLLAMA_SET#* }" >/dev/null 2>&1 && echo "    model ready" ) &
+fi
 
 CODE="$(docker logs talixio-admin 2>&1 | grep -o 'setup code: [A-Z0-9]*' | tail -1 | cut -d' ' -f3 || true)"
 echo

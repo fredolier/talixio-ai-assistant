@@ -7,7 +7,7 @@ final class Store
 {
     public \PDO $db;
 
-    public function __construct(string $path)
+    public function __construct(public readonly string $path)
     {
         if ($path !== ':memory:' && !is_dir(dirname($path))) mkdir(dirname($path), 0750, true);
         $this->db = new \PDO("sqlite:$path", null, null, [

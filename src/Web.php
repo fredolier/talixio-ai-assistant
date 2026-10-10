@@ -131,6 +131,10 @@ final class Web
             $path === '/api/spotify' => $this->spotifyState(),
             $path === '/api/spotify/connect' && $m === 'POST' => ['url' => $this->app->spotify()->authUrl(Spotify::redirectUri())],
             $path === '/api/spotify/disconnect' && $m === 'POST' => (function () { $this->app->spotify()->disconnect(); return $this->spotifyState(); })(),
+            $path === '/api/meaning' && $m === 'GET' => (new Meaning($this->app))->status(),
+            $path === '/api/meaning/choose' && $m === 'POST' => (new Meaning($this->app))->choose((string)($b['preset'] ?? '')),
+            $path === '/api/meaning/pull' && $m === 'POST' => (function () { $mn = new Meaning($this->app); $mn->startPull($this->app->cfg->embeddingsModel); return ['ok' => true]; })(),
+            $path === '/api/meaning/measure' && $m === 'POST' => (function () { set_time_limit(0); return (new Meaning($this->app))->measure(); })(),
             $path === '/api/mcp' && $m === 'GET' => $this->connectors(),
             $path === '/api/mcp' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcp()->saveRaw((string)($b['raw'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/mcp/oauth/start' && $m === 'POST' => (function () use ($b) {

@@ -5,6 +5,34 @@ namespace Talixio;
 /** Text embeddings for semantic memory search. Backends: ollama (local), openai, voyage. */
 final class Embeddings
 {
+    /**
+     * The choices shown in Settings → Search by meaning. Local ones run in Ollama (on this server, or the stack's shared
+     * one); memory figures are what Ollama holds while it computes, approximate.
+     */
+    public const PRESETS = [
+        'local-tiny' => ['backend' => 'ollama', 'model' => 'hf.co/TwinSunsLLC/multilingual-e5-small-gguf:Q8_0', 'memory_mb' => 300, 'speed' => 5,
+            'label' => 'On this server: very light', 'about' => 'multilingual-e5-small (118 M parameters, community conversion). About 5 times lighter than the quality model; a little less precise, in French too.'],
+        'local-light' => ['backend' => 'ollama', 'model' => 'embeddinggemma', 'memory_mb' => 700, 'speed' => 2,
+            'label' => 'On this server: light', 'about' => 'EmbeddingGemma (300 M parameters, Google, multilingual). About twice as light as the quality model, close to it in quality.'],
+        'local-quality' => ['backend' => 'ollama', 'model' => 'qwen3-embedding:0.6b', 'memory_mb' => 1500, 'speed' => 1,
+            'label' => 'On this server: best quality', 'about' => 'Qwen3-Embedding 0.6B: the most precise local model, good in French. Wants a recent processor (AVX2) and 1.5 GB.'],
+        'gemini' => ['backend' => 'gemini', 'model' => 'gemini-embedding-001', 'memory_mb' => 0, 'speed' => 0,
+            'label' => 'Google Gemini', 'about' => 'Nothing to compute here. Needs the Gemini key; on the free tier Google may use the texts to improve its models.'],
+        'openai' => ['backend' => 'openai', 'model' => 'text-embedding-3-small', 'memory_mb' => 0, 'speed' => 0,
+            'label' => 'OpenAI', 'about' => 'Nothing to compute here. Needs the OpenAI key; a few cents a month.'],
+        'voyage' => ['backend' => 'voyage', 'model' => 'voyage-3.5-lite', 'memory_mb' => 0, 'speed' => 0,
+            'label' => 'Voyage AI', 'about' => 'Nothing to compute here. Needs a Voyage key; a free allowance, then a few cents a month.'],
+        'off' => ['backend' => 'off', 'model' => '', 'memory_mb' => 0, 'speed' => 0,
+            'label' => 'Off', 'about' => 'Search by words only. Nothing is computed or sent.'],
+    ];
+
+    /** The preset matching the current settings, or 'custom'. */
+    public static function presetOf(Config $c): string
+    {
+        foreach (self::PRESETS as $k => $p) if ($p['backend'] === $c->embeddings && ($p['model'] === '' || $p['model'] === $c->embeddingsModel)) return $k;
+        return 'custom';
+    }
+
     /** @var callable|null test hook: fn(array $texts, string $type): array<array<float>> */
     public $fake = null;
 
@@ -38,6 +66,7 @@ final class Embeddings
                 ? "Instruct: Given a message from the user, retrieve past conversations, notes and documents that help answer it\nQuery:$text" : $text,
             str_contains($m, 'embeddinggemma') => $type === 'query' ? "task: search result | query: $text" : "title: none | text: $text",
             str_contains($m, 'nomic') => ($type === 'query' ? 'search_query: ' : 'search_document: ') . $text,
+            str_contains($m, '-e5-') || str_starts_with($m, 'e5-') => ($type === 'query' ? 'query: ' : 'passage: ') . $text,
             str_contains($m, 'mxbai-embed') => $type === 'query' ? "Represent this sentence for searching relevant passages: $text" : $text,
             default => $text,
         };

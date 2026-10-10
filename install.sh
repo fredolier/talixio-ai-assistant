@@ -46,6 +46,19 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq php-cli php-curl php-sqlite3 php-mbstring php-gd php-zip php-xml rsync curl ca-certificates git ffmpeg poppler-utils >/dev/null
 php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || { echo "PHP 8.2+ required (found $(php -r 'echo PHP_VERSION;')). Use Debian 12+ or Ubuntu 24.04+." >&2; exit 1; }
+# sqlite-vec: SQLite compares the vectors of search by meaning in C (much faster than PHP); optional
+VEC=0.1.9
+if [ ! -f /usr/local/lib/sqlite-vec/vec0.so ] && case "$(uname -m)" in x86_64|aarch64) true ;; *) false ;; esac; then
+  T="$(mktemp -d)"
+  if curl -fsSL "https://github.com/asg017/sqlite-vec/releases/download/v$VEC/sqlite-vec-$VEC-loadable-linux-$(uname -m).tar.gz" | tar -xz -C "$T" 2>/dev/null; then
+    install -D -m 644 "$T/vec0.so" /usr/local/lib/sqlite-vec/vec0.so
+  else echo "    sqlite-vec could not be downloaded: search by meaning compares vectors in PHP (slower)"; fi
+  rm -rf "$T"
+fi
+if [ -f /usr/local/lib/sqlite-vec/vec0.so ]; then
+  for d in /etc/php/*/cli/conf.d; do echo 'sqlite3.extension_dir=/usr/local/lib/sqlite-vec' > "$d/30-sqlite-vec.ini"; done
+  php -r '$d = new SQLite3(":memory:"); $d->loadExtension("vec0.so");' 2>/dev/null || { echo "    sqlite-vec does not load here: left out"; rm -f /etc/php/*/cli/conf.d/30-sqlite-vec.ini; }
+fi
 
 say "Creating user and directories"
 id talixio >/dev/null 2>&1 || useradd --system --home-dir "$DATA" --shell /usr/sbin/nologin talixio

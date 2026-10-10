@@ -405,7 +405,7 @@ final class Fleet
         $cpu = ['cores' => (int)(is_array($info) ? ($info['NCPU'] ?? 0) : 0) ?: (int)trim((string)shell_exec('nproc')), 'model' => $model, 'load' => $load, 'busy_pct' => self::cpuBusy()];
         $host = ['os' => is_array($info) ? (string)($info['OperatingSystem'] ?? '') : '', 'kernel' => is_array($info) ? (string)($info['KernelVersion'] ?? '') : '',
             'docker' => is_array($info) ? (string)($info['ServerVersion'] ?? '') : '', 'uptime_s' => (int)(float)@file_get_contents('/proc/uptime')];
-        $out = ['memory_mb' => $mem, 'volumes_mb' => $vol, 'disk' => $disk, 'cpu' => $cpu, 'host' => $host, 'image' => $this->state()['image'], 'git_branch' => getenv('TALIXIO_GIT_BRANCH') ?: 'main', 'services' => $this->services()];
+        $out = ['memory_mb' => $mem, 'volumes_mb' => $vol, 'disk' => $disk, 'cpu' => $cpu, 'host' => $host, 'image' => $this->state()['image'], 'ollama_models' => $this->ollamaModels(), 'git_branch' => getenv('TALIXIO_GIT_BRANCH') ?: 'main', 'services' => $this->services()];
         $out['sizing'] = self::sizing($out, $this->state());
         return $out;
     }
@@ -450,6 +450,7 @@ final class Fleet
                     if (is_array($st) && isset($st['memory_stats']['usage'])) $row['mem_used_mb'] = (int)round(($st['memory_stats']['usage'] - ($st['memory_stats']['stats']['inactive_file'] ?? 0)) / 1048576);
                 }
             }
+            if ($name === 'ollama' && empty($this->state()['settings']['ollama'])) $row['disabled'] = true; // turned off on purpose
             if ($name === 'agent') $row += ['answers' => true, 'ms' => 0, 'http' => 200]; // it is answering this very request
             elseif ($d['probe'] && $row['state'] === 'running') $row += $probe($d['probe']);
             $out[] = $row;
@@ -639,13 +640,39 @@ final class Fleet
         return false;
     }
 
-    /** Ollama: the model the instances use for embeddings (downloaded once, shared). */
-    public function pullModel(): string
+    /** Ollama: the model the instances use for embeddings (downloaded once, shared), or another one people chose in their Settings. */
+    public function pullModel(?string $model = null): string
     {
-        $m = $this->state()['settings']['ollama_model'];
+        $m = $model ?: $this->state()['settings']['ollama_model'];
+        if (!preg_match('/^[a-z0-9][a-z0-9._:\/-]{0,100}$/i', $m)) throw new \InvalidArgumentException('Unexpected model name.');
+        if ($this->ollamaState() !== 'running') throw new \RuntimeException('The shared Ollama is stopped: turn it on first (Settings → Shared memory search).');
         [$code, $out] = $this->exec('talixio-ollama', ['ollama', 'pull', $m], 1800);
         if ($code !== 0) throw new \RuntimeException("ollama pull $m: " . trim(mb_substr($out, -300)));
         return "$m ready";
+    }
+
+    /** The shared Ollama: turned off in the admin page = stopped, its memory and processors go to the assistants. */
+    public function setOllama(bool $on): void
+    {
+        $this->ok($this->docker('POST', '/containers/talixio-ollama/' . ($on ? 'start' : 'stop'), null, [], 60), ($on ? 'start' : 'stop') . ' Ollama', [204, 304]);
+    }
+
+    public function ollamaState(): string
+    {
+        [$code, $c] = $this->docker('GET', '/containers/talixio-ollama/json', null, [], 10);
+        return $code === 200 ? (string)($c['State']['Status'] ?? '?') : 'missing';
+    }
+
+    /** Models downloaded in the shared Ollama (when it runs). */
+    public function ollamaModels(): array
+    {
+        if ($this->ollamaState() !== 'running') return [];
+        try {
+            [$code, $out] = $this->exec('talixio-ollama', ['ollama', 'list'], 20);
+        } catch (\Throwable) { return []; }
+        if ($code !== 0) return [];
+        $rows = array_slice(array_filter(explode("\n", trim($out))), 1); // NAME  ID  SIZE  MODIFIED
+        return array_values(array_map(fn($l) => ['name' => preg_split('/\s+/', trim($l))[0], 'size' => preg_match('/\s(\d+(?:\.\d+)?\s?[KMG]B)\s/', $l, $m) ? $m[1] : ''], $rows));
     }
 
     public static function password(): string { return substr(strtr(base64_encode(random_bytes(18)), '+/=', 'xyz'), 0, 20); }

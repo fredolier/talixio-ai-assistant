@@ -27,6 +27,9 @@ final class Cli
                 case 'job':
                     $app->jobs()->runJob((int)($argv[2] ?? 0));
                     return 0;
+                case 'embeddings-pull': // started by Settings → Search by meaning: download a model into this server's Ollama
+                    (new Meaning($app))->pull((string)($argv[2] ?? ''));
+                    return 0;
                 case 'index': // started by the worker: read and index library files
                     $n = $app->files()->processPending(600);
                     if ($n) Log::info("library: indexed $n file(s)");

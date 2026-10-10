@@ -18,7 +18,7 @@ try {
     match ($kind) {
         'update' => $fleet->update($arg !== '' ? $arg : 'main', $progress),
         'rollback' => $fleet->rollback($progress),
-        'pull-model' => $progress('done', $fleet->pullModel()),
+        'pull-model' => $progress('done', $fleet->pullModel($arg !== '' ? $arg : null)),
         'transfer' => (function () use ($fleet, $arg, $progress) { // arg: JSON {id, name, source, code, final}
             $a = json_decode($arg, true) ?: [];
             $fleet->transferIn((string)($a['id'] ?? ''), (string)($a['name'] ?? ''), (string)($a['source'] ?? ''), (string)($a['code'] ?? ''), !empty($a['final']), $progress);

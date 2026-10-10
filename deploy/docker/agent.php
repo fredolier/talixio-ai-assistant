@@ -61,6 +61,7 @@ try {
             $before = $fleet->state()['settings'];
             $after = $fleet->setSettings($b);
             $fleet->reloadCaddy();
+            if (($before['ollama'] ?? true) !== $after['ollama']) { try { $fleet->setOllama($after['ollama']); } catch (\Throwable $e) { error_log('ollama: ' . $e->getMessage()); } }
             // what instances get from these settings changed: make their containers again
             $keys = ['mode', 'ollama', 'ollama_model', 'google_client_id', 'google_client_secret', 'apparmor_unconfined', 'domain'];
             $redo = array_filter($keys, fn($k) => ($before[$k] ?? null) !== ($after[$k] ?? null));
@@ -72,7 +73,7 @@ try {
         $path === '/job' => $json(json_decode((string)@file_get_contents("$state/job.json"), true) ?: ['state' => 'none']),
         $path === '/update' && $method === 'POST' => $background('update', (string)($b['branch'] ?? (getenv('TALIXIO_GIT_BRANCH') ?: 'main'))),
         $path === '/rollback' && $method === 'POST' => $background('rollback'),
-        $path === '/pull-model' && $method === 'POST' => $background('pull-model'),
+        $path === '/pull-model' && $method === 'POST' => $background('pull-model', (string)($b['model'] ?? '')),
         $path === '/transfer' && $method === 'POST' => (function () use ($background, $b) {
             if (!Fleet::validId((string)($b['id'] ?? ''))) throw new \InvalidArgumentException('The identifier is 2 to 30 lower-case letters, digits or dashes, starting with a letter.');
             if (!preg_match('#^https?://\S+$#', (string)($b['source'] ?? '')) || !preg_match('/^tx-[0-9a-f]{40}$/', (string)($b['code'] ?? ''))) throw new \InvalidArgumentException('The old assistant\'s address and its transfer code (tx-…) are needed.');

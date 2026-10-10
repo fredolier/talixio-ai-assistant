@@ -73,8 +73,9 @@
         <div class="row wrap"><label class="inline">Memory (MB)<input id="st-mem" type="number" min="256" step="128"></label><label class="inline">CPUs<input id="st-cpus" type="number" min="0.25" step="0.25"></label></div>
       </fieldset>
       <fieldset><legend>Shared memory search (Ollama)</legend>
-        <label class="check"><input id="st-ollama" type="checkbox"> <span>Assistants search their memory by meaning with the server's Ollama (no API key needed). They only get embeddings from it.</span></label>
-        <div class="row wrap"><label class="inline">Model<input id="st-model" size="28"></label><button id="pull-btn" class="btn small" type="button">Download the model</button></div>
+        <label class="check"><input id="st-ollama" type="checkbox"> <span>Assistants search their memory by meaning with the server's Ollama (no API key needed). They only get embeddings from it. Off: Ollama is stopped and its memory goes to the assistants; each person can still use an online service (their Settings → Web search and memory).</span></label>
+        <div class="row wrap"><label class="inline">Model<select id="st-model"></select></label><button id="pull-btn" class="btn small" type="button">Download the model</button></div>
+        <p id="ollama-models" class="muted small"></p>
       </fieldset>
       <fieldset><legend>Google Calendar for everyone (optional)</legend>
         <p class="muted small">One Google OAuth client for all the assistants: each person then just presses "Connect" in their Settings. Add each address below as an authorised redirect URI of the client.</p>

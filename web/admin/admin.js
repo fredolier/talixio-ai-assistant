@@ -115,6 +115,7 @@ function renderHost(s) {
 
 /** One container's health in a few words: [level, text]. */
 function healthWords(x) {
+  if (x.disabled && x.state !== 'running') return ['muted', t('turned off')];
   if (x.state !== 'running') return ['off', t(x.state === 'missing' ? 'missing' : 'stopped')];
   if (x.health === 'unhealthy' || x.answers === false) return ['off', t('not answering')];
   if (x.health === 'starting') return ['warn', t('starting')];
@@ -238,7 +239,7 @@ function renderSettings() {
   const s = state.settings;
   if (document.activeElement?.closest('#settings')) return; // don't overwrite what is being typed
   $('#st-domain').value = s.domain; document.querySelectorAll('[name=mode]').forEach(r => r.checked = r.value === s.mode);
-  $('#st-mem').value = s.memory_mb; $('#st-cpus').value = s.cpus; $('#st-ollama').checked = !!s.ollama; $('#st-model').value = s.ollama_model;
+  $('#st-mem').value = s.memory_mb; $('#st-cpus').value = s.cpus; $('#st-ollama').checked = !!s.ollama; renderModels(s.ollama_model);
   $('#st-gid').value = s.google_client_id; $('#st-apparmor').checked = !!s.apparmor_unconfined;
   $('#st-redirects').textContent = state.instances.map(p => p.url + 'api/google/callback').join('\n') || '(add people first)';
 }
@@ -251,7 +252,18 @@ $('#settings').onsubmit = async e => {
   try { const r = await api('api/settings', body); $('#st-msg').textContent = r.recreated ? 'Saved; the assistants were restarted.' : 'Saved.'; $('#st-gsecret').value = ''; document.activeElement.blur(); load(); }
   catch (err) { $('#st-msg').textContent = err.message; }
 };
-$('#pull-btn').onclick = async () => { try { await api('api/pull-model', {}); document.querySelector('[data-tab=update]').click(); renderJob(await api('api/job')); } catch (e) { toast(e.message); } };
+/** The shared Ollama's model: the three local choices people also see in their Settings, and what is downloaded. */
+const MODELS = [['hf.co/TwinSunsLLC/multilingual-e5-small-gguf:Q8_0', 'very light (multilingual-e5-small, ≈ 0.3 GB)'], ['embeddinggemma', 'light (EmbeddingGemma, ≈ 0.7 GB)'], ['qwen3-embedding:0.6b', 'best quality (Qwen3-Embedding 0.6B, ≈ 1.5 GB)']];
+function renderModels(current) {
+  const have = (state.server?.ollama_models || []).map(m => m.name);
+  const isHere = m => have.some(h => h === m || h === m + ':latest');
+  const opts = MODELS.some(([m]) => m === current) ? MODELS : [...MODELS, [current, current]];
+  $('#st-model').innerHTML = opts.map(([m, l]) => `<option value="${esc(m)}" ${m === current ? 'selected' : ''}>${esc(t(l))}${isHere(m) ? ' ✓' : ''}</option>`).join('');
+  $('#ollama-models').textContent = state.settings.ollama
+    ? (have.length ? t('Downloaded: {list}. People can pick any of them in their Settings.', { list: (state.server.ollama_models || []).map(m => m.name + (m.size ? ` (${m.size})` : '')).join(', ') }) : t('No model downloaded yet.'))
+    : t('Ollama is turned off.');
+}
+$('#pull-btn').onclick = async () => { try { await api('api/pull-model', { model: $('#st-model').value }); document.querySelector('[data-tab=update]').click(); renderJob(await api('api/job')); } catch (e) { toast(e.message); } };
 
 // ---- security ----
 $('#ips').onsubmit = async e => { e.preventDefault(); try { await api('api/allow-ips', { list: $('#ips-list').value }); $('#ips-msg').textContent = 'Saved.'; } catch (err) { $('#ips-msg').textContent = err.message; } };

@@ -35,6 +35,6 @@ s'il a été arrêté par manque de mémoire. Dans ce cas, augmentez sa limite (
 `https://<domaine>/<personne>/` par défaut, ou `https://<personne>.<domaine>/` (il faut alors un DNS en joker).
 
 ## Bon à savoir
-- Chaque assistant est limité (1 Go et 1,5 processeur par défaut) ; Ollama prend 1,5 Go.
+- Chaque assistant est limité (1 Go et 1,5 processeur par défaut) ; Ollama prend jusqu'à 1,5 Go et la moitié des processeurs ; décoché dans les réglages de l'admin, il est arrêté.
 - La transcription locale (modèle large) a besoin de 2 Go pour la personne.
 - L'administrateur peut techniquement accéder aux volumes de données.

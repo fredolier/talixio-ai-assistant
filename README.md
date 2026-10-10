@@ -348,7 +348,10 @@ content-free.
   Long documents are split into overlapping chunks so the right passage is found. Recommended
   local model: `qwen3-embedding:0.6b` through Ollama (best multilingual score among small models,
   Apache 2.0, 32k context), vectors kept at 512 dimensions for speed. Changing the model re-indexes
-  memory in the background. Gemini, OpenAI and Voyage embeddings work too. Relevant past snippets are
+  memory in the background. Gemini, OpenAI and Voyage embeddings work too. Settings → Web search and
+  memory offers the choices side by side, lighter local models included (EmbeddingGemma,
+  multilingual-e5-small) for modest servers, with *Measure on this server*. With sqlite-vec (in the
+  Docker image; `install.sh` adds it) SQLite compares the vectors, about 6 times faster than PHP. Relevant past snippets are
   added to the prompt automatically, and the assistant can call `search_memory`. You can search too,
   on the Memory page.
 - **Compaction with progressive forgetting**: the latest messages are sent word for word, within a

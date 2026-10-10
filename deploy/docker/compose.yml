@@ -35,6 +35,7 @@ services:
     volumes: [ollama:/root/.ollama]
     networks: [ollama]
     mem_limit: 1536m
+    cpus: ${OLLAMA_CPUS:-2}   # indexing a library keeps it busy: leave processors to the assistants
     security_opt: [no-new-privileges]
 
   agent:                      # the only part with Docker access; a closed list of actions (src/Fleet.php)

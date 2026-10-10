@@ -776,3 +776,15 @@ span.privacy-badge{cursor:default;min-height:26px;padding:0 9px}
 .cl-steps{display:flex;flex-direction:column;gap:12px;padding-left:1.2em;margin:8px 0}
 .cl-steps .btn{margin-top:6px;display:inline-block}
 .cl-steps form{margin-top:6px} .cl-steps input{flex:1;min-width:0}
+
+/* Settings → Search by meaning */
+.meaning{display:flex;flex-direction:column;gap:8px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.meaning-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.meaning-opt{display:flex;flex-direction:column;gap:4px;text-align:left;padding:10px 12px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font:inherit}
+.meaning-opt small{font-size:.8rem;line-height:1.35}
+.meaning-opt.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.meaning-opt.ask{border-color:var(--accent);border-style:dashed}
+.meaning-opt[aria-disabled=true]{opacity:.6}
+.meaning-opt .mo-head{display:flex;align-items:center;gap:6px;justify-content:space-between}
+.meaning-opt .pill{font-size:.7rem;padding:1px 7px;border-radius:99px;background:var(--sunk);border:1px solid var(--line);white-space:nowrap}
+.meaning-opt .pill.out{color:var(--muted)}

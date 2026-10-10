@@ -3,6 +3,7 @@ declare(strict_types=1);
 // Run: php tests/run.php   (no network, no API key needed)
 require __DIR__ . '/../src/autoload.php';
 use Talixio\{App, Config, Cron, Email, GeminiModels, Skills, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker, Privacy};
+use Talixio\{Embeddings, Meaning, Settings};
 
 $fails = 0;
 function tap_tmp(string $content): string { $t = tempnam(sys_get_temp_dir(), 'tt'); file_put_contents($t, $content); return $t; }
@@ -133,6 +134,34 @@ $n = $app->recall()->embedPending(500);
 check('embeddings computed for pending docs', $n > 40 && $app->recall()->embedPending() === 0);
 $hits = $app->recall()->search('rail journey', 3, $oldId + 1);
 check('semantic hit without shared keywords', ($hits[0]['ref'] ?? 0) === $oldId && $hits[0]['keyword'] === false, json_encode($hits[0] ?? null));
+$qv = $app->embeddings->embed(['rail journey'], 'query')[0];
+if (Recall::vec($app->store->path)) { // run with -d sqlite3.extension_dir=<folder of vec0.so> to cover it
+    $sv = $app->recall()->similarities($qv); putenv('TALIXIO_SQLITE_VEC=0'); $sp = $app->recall()->similarities($qv); putenv('TALIXIO_SQLITE_VEC');
+    $top = fn(array $x) => array_map(fn($v) => round($v, 4), array_slice(array_values($x), 0, 10));
+    check('sqlite-vec: same similarities as the PHP comparison', $top($sv) === $top($sp) && array_key_first($sv) !== null && isset($sp[array_key_first($sv)]), json_encode([$top($sv), $top($sp)]));
+    check('sqlite-vec: reported as the engine', str_starts_with(Recall::vecEngine($app->store->path), 'sqlite-vec v'));
+} else check('sqlite-vec: absent here, vectors compared in PHP', Recall::vecEngine($app->store->path) === 'php' && count($app->recall()->similarities($qv)) > 0);
+$app->embeddings->fake = null;
+
+// search by meaning: presets, prefixes, choosing
+check('embeddings: e5 models get their query/passage prefixes', Embeddings::prepare('hf.co/TwinSunsLLC/multilingual-e5-small-gguf:Q8_0', 'x', 'query') === 'query: x'
+    && Embeddings::prepare('hf.co/TwinSunsLLC/multilingual-e5-small-gguf:Q8_0', 'x', 'document') === 'passage: x');
+check('meaning: an Ollama model is found with or without its tag', Meaning::installed('embeddinggemma', ['embeddinggemma:latest']) && Meaning::installed('qwen3-embedding:0.6b', ['qwen3-embedding:0.6b'])
+    && !Meaning::installed('embeddinggemma', ['qwen3-embedding:0.6b']));
+$mc = Config::fromEnv(); $mc->embeddings = 'ollama'; $mc->embeddingsModel = 'embeddinggemma';
+check('meaning: the current preset is recognised', Embeddings::presetOf($mc) === 'local-light' && ($mc->embeddingsModel = 'bge-m3') && Embeddings::presetOf($mc) === 'custom');
+$mn = new Meaning($app);
+$err = ''; try { $app->cfg->voyageKey = ''; $mn->choose('voyage'); } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
+check('meaning: an online service needs its key first', str_contains($err, 'key'));
+putenv('TALIXIO_OLLAMA_URL=http://127.0.0.1:9'); $app->cfg->ollamaUrl = 'http://127.0.0.1:9';
+$ms0 = $mn->status();
+check('meaning: status lists the choices, what each one lacks, and the index', count($ms0['presets']) === count(Embeddings::PRESETS) && !$ms0['ollama']['up']
+    && array_column($ms0['presets'], 'problem', 'id')['local-light'] === 'no-ollama' && isset($ms0['index']['total']) && $ms0['engine'] !== '');
+check('meaning: choosing writes the settings', $mn->choose('off')['ok'] && (Settings::load($dir)['TALIXIO_EMBEDDINGS'] ?? '') === 'off');
+Settings::save($dir, [], ['TALIXIO_EMBEDDINGS', 'TALIXIO_EMBEDDINGS_MODEL']); putenv('TALIXIO_OLLAMA_URL');
+$app->embeddings->fake = fn(array $texts) => array_map(fn($t) => [1.0, strlen($t) / 100, 0.5], $texts);
+$mr = $mn->measure();
+check('meaning: measure gives search, indexing and comparison times', isset($mr['search_ms'], $mr['passage_ms'], $mr['scan_ms']) && $mr['vectors'] >= 0 && $app->store->get('meaning_measure') !== '');
 $app->embeddings->fake = null;
 
 // summaries

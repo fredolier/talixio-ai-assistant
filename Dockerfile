@@ -21,7 +21,7 @@ RUN set -eux; mkdir -p /out; \
 FROM ${BASE}
 
 # Optional parts (each adds size): headless browser, LibreOffice previews, sandboxed shell, Node (MCP + Claude Code),
-# whisper.cpp (local transcription), signal-cli (Signal channel)
+# whisper.cpp (local transcription), signal-cli (Signal channel), sqlite-vec (fast search by meaning)
 ARG WITH_WHISPER=1
 ARG WITH_SIGNAL=1
 ARG WITH_BROWSER=1
@@ -29,6 +29,8 @@ ARG WITH_OFFICE=1
 ARG WITH_SHELL=1
 ARG WITH_NODE=1
 ARG WITH_CLAUDE_CODE=1
+ARG WITH_SQLITE_VEC=1
+ARG SQLITE_VEC_VERSION=0.1.9
 
 ENV DEBIAN_FRONTEND=noninteractive
 # signal-cli: the native build (no Java) needs x86_64 and a recent processor (x86-64-v2 or more); a virtual
@@ -55,6 +57,15 @@ RUN set -eux; \
           ln -s /opt/signal-cli/bin/signal-cli /usr/local/bin/signal-cli; \
         else echo "WARNING: signal-cli could not be installed; the image has no Signal channel"; rm -rf /opt/signal-cli; fi; \
       fi; \
+    fi; \
+    if [ "$WITH_SQLITE_VEC" = 1 ]; then \
+      v="$SQLITE_VEC_VERSION"; arch="$(uname -m)"; \
+      if curl -fsSL "https://github.com/asg017/sqlite-vec/releases/download/v$v/sqlite-vec-$v-loadable-linux-$arch.tar.gz" | tar -xz -C /tmp \
+         && install -D -m 644 /tmp/vec0.so /usr/local/lib/sqlite-vec/vec0.so \
+         && for d in /etc/php/*/cli/conf.d; do echo 'sqlite3.extension_dir=/usr/local/lib/sqlite-vec' > "$d/30-sqlite-vec.ini"; done \
+         && php -r '$d = new SQLite3(":memory:"); $d->loadExtension("vec0.so"); echo "sqlite-vec ", $d->querySingle("select vec_version()"), "\n";'; then :; \
+      else echo "WARNING: sqlite-vec not installed; search by meaning compares vectors in PHP (slower)"; rm -rf /usr/local/lib/sqlite-vec /etc/php/*/cli/conf.d/30-sqlite-vec.ini; fi; \
+      rm -f /tmp/vec0.so; \
     fi; \
     if [ "$WITH_NODE" = 1 ] && [ "$WITH_CLAUDE_CODE" = 1 ]; then npm install -g --omit=dev @anthropic-ai/claude-code && npm cache clean --force; fi; \
     rm -rf /var/lib/apt/lists/* /root/.npm; \

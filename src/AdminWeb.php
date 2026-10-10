@@ -257,8 +257,9 @@ final class AdminWeb
         }
         foreach (['update', 'rollback', 'pull-model'] as $long) {
             if ($path === "/api/$long" && $m === 'POST') {
-                $this->agent('POST', "/$long", $long === 'update' ? ['branch' => (string)($b['branch'] ?? 'main')] : []);
-                $this->audit($long, $long === 'update' ? ['branch' => (string)($b['branch'] ?? 'main')] : []);
+                $arg = match ($long) { 'update' => ['branch' => (string)($b['branch'] ?? 'main')], 'pull-model' => ['model' => (string)($b['model'] ?? '')], default => [] };
+                $this->agent('POST', "/$long", $arg);
+                $this->audit($long, $arg);
                 $this->json(['ok' => true]);
                 return;
             }

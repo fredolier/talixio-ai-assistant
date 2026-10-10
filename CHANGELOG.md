@@ -3,6 +3,19 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.17.0 (2026-10-10)
+- Settings → Web search and memory: a choice for search by meaning. On this server (Ollama): very light
+  (multilingual-e5-small, ≈ 0.3 GB), light (EmbeddingGemma, ≈ 0.7 GB) or best quality (Qwen3-Embedding,
+  ≈ 1.5 GB); online: Gemini, OpenAI, Voyage; or off. Each says what it needs; a local model is downloaded
+  when chosen; switching re-indexes in the background, with the progress shown.
+- *Measure on this server*: the time of a search, of indexing a passage, and of comparing every vector.
+- sqlite-vec (Docker image, and `install.sh`): SQLite compares the vectors in C, about 6 times faster than
+  PHP (20 000 passages: 0.15 s instead of 0.95 s on a test machine). Without it, PHP still does it.
+- Docker: Ollama is limited to half the processors (`OLLAMA_CPUS`); turned off in the admin page, it is
+  stopped and its memory goes to the assistants. The admin page picks the shared model among the three and
+  lists those downloaded.
+- e5 models get their `query:` / `passage:` prefixes.
+
 ## 0.16.3 (2026-10-10)
 - Library search in two passes: documents with the words show at once, then the search by meaning (the
   local model, slower) completes the list. A spinner says it is running; *Cancel* (or Esc) stops it and keeps
