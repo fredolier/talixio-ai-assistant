@@ -201,7 +201,7 @@ final class AdminWeb
         if ($path === '/api/logout' && $m === 'POST') { session_start(); session_destroy(); $this->json(['ok' => true]); return; }
         if ($path === '/api/state') {
             $inst = $this->agent('GET', '/instances');
-            $this->json($inst + ['server' => $this->agent('GET', '/server'), 'job' => $this->agent('GET', '/job'), 'allow_ips' => $this->conf()['allow_ips'] ?? [], 'my_ip' => Auth::clientIp()]);
+            $this->json($inst + ['server' => $this->agent('GET', '/server'), 'job' => $this->agent('GET', '/job'), 'allow_ips' => $this->conf()['allow_ips'] ?? [], 'my_ip' => Auth::clientIp(), 'version' => Version::get()]);
             return;
         }
         if ($path === '/api/job') { $this->json($this->agent('GET', '/job')); return; }

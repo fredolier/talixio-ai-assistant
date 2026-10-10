@@ -389,7 +389,7 @@ final class Web
         return ['name' => $c->name, 'provider' => $c->provider, 'model' => $c->tier('standard')->label(), 'timezone' => $c->timezone,
             'tiers' => array_map(fn(Tier $t) => $t->label(), $c->tiers), 'budget' => $this->app->budget()->status(),
             'embeddings' => $c->embeddings, 'max_parallel_jobs' => $c->maxParallelJobs, 'job_max_usd' => $c->jobMaxUsd, 'job_max_usd_limit' => $c->jobMaxUsdLimit, 'job_effort' => $c->jobEffort,
-            'version' => $this->app->updater()->version()['short'] ?? null,
+            'version' => Version::get()['number'], 'version_label' => Version::get()['label'],
             'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()),
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],

@@ -55,7 +55,11 @@ check() {
   local range="origin/$BRANCH"
   if [ -n "$CURRENT" ] && git_src cat-file -e "$CURRENT^{commit}" 2>/dev/null; then range="$CURRENT..origin/$BRANCH"; else range="HEAD..origin/$BRANCH"; fi
   COMMITS="$(git_src log --no-merges --format='%h%x09%ad%x09%s' --date=short "$range" | head -50)"
-  if [ "$LATEST" = "$CURRENT" ] || [ -z "$COMMITS" ]; then status up_to_date "You have the latest version."; else status available "$(printf '%s\n' "$COMMITS" | grep -c .) new change(s) available."; fi
+  if [ "$LATEST" = "$CURRENT" ] || [ -z "$COMMITS" ]; then status up_to_date "You have the latest version."; else
+    NEXT="$(git_src show "origin/$BRANCH:VERSION" 2>/dev/null | head -1 | tr -cd '0-9A-Za-z.-')"
+    N="$(printf '%s\n' "$COMMITS" | grep -c .)"
+    if [ -n "$NEXT" ] && [ "$NEXT" != "$(cat "$APP/VERSION" 2>/dev/null)" ]; then status available "Version $NEXT is available ($N new change(s))."; else status available "$N new change(s) available."; fi
+  fi
 }
 
 update() {

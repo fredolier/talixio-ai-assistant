@@ -59,6 +59,9 @@ Everything is configurable in the app: **Settings** (AI model, keys, budget, not
 your mailbox, calendar, Signal, Telegram, search, audio, browser, approvals, backups, password).
 Values saved there are kept in `/var/lib/talixio/settings.json` and override
 `/etc/talixio/talixio.env`; "reset" returns to the file's value. Secrets are never shown back.
+The version you run is at the bottom of the menu, in Settings → *Updates* and with
+`talixio version`; what each version brought is in `CHANGELOG.md`.
+
 **Run checks** tests the logins and makes one call per model tier (same as `sudo talixio doctor`).
 
 The interface is in English and French (Settings → Assistant → *Interface language*; automatic =
@@ -164,7 +167,7 @@ installation can be moved into it. See [deploy/docker/README.md](deploy/docker/R
 sudo deploy/docker/install-stack.sh --domain assistant.example.com --email you@example.com [--migrate fred]
 ```
 
-## What it can do (v0.9)
+## What it can do
 - **Live answers**: replies appear as they are written, with what it's doing ("Searching the web…",
   "Reading example.com…"). The send button becomes **Stop** while it writes (what was written is kept).
   Copy any message; **edit** your last message or ask for a **new answer**. **Find in the

@@ -1376,13 +1376,13 @@ async function loadUpdate() {
   try { d = await api('api/update'); }
   catch { if (state.updating) setTimeout(loadUpdate, 3000); return; } // the app restarts during an update
   const box = $('#update'); box.hidden = false;
-  if (!d.installed) { box.innerHTML = '<h3>Updates</h3><p class="muted small">Updates from the app work on an installation made with <code>git clone</code> + <code>install.sh</code>.</p>'; return; }
+  if (!d.installed) { box.innerHTML = `<div class="row between"><h3>Updates</h3><span class="version">${esc(t('Version {v}', { v: d.version?.label || '?' }))}</span></div><p class="muted small">Updates from the app work on an installation made with <code>git clone</code> + <code>install.sh</code>.</p>`; return; }
   const v = d.version || {}, st = d.status || {};
   const busy = ['updating', 'checking'].includes(st.state);
   if (state.updating && !busy && state.updateFrom && v.sha !== state.updateFrom) { toast('Updated. Reloading…'); setTimeout(() => location.reload(), 1200); return; }
   if (state.updating && !busy && ['failed', 'done', 'rolled_back'].includes(st.state)) { state.updating = false; if (st.state !== 'failed') { setTimeout(() => location.reload(), 1200); } }
   const when = t => t ? new Date(t * 1000).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' }) : 'never';
-  box.innerHTML = `<div class="row between"><h3>Updates</h3><span class="version">${esc(v.short || '?')} · ${esc((v.date || '').slice(0, 10))}</span></div>
+  box.innerHTML = `<div class="row between"><h3>Updates</h3><span class="version">${esc(t('Version {v}', { v: v.number || '?' }))} · ${esc(v.short || '?')} · ${esc((v.date || '').slice(0, 10))}</span></div>
     <p class="small ${st.state === 'failed' ? 'error' : 'muted'}">${esc(st.message || 'Not checked yet.')} ${st.checked_at ? '· checked ' + when(st.checked_at) : ''}${d.auto ? ' · installs automatically at night' : ''}</p>
     ${st.state === 'available' && st.commits?.length ? `<ul>${st.commits.map(c => `<li>${esc(c.subject)} <span class="muted small">${esc(c.date)}</span></li>`).join('')}</ul>` : ''}
     ${busy || st.state === 'failed' ? `<div class="log">${esc((st.log || '').split('\n').slice(-14).join('\n'))}</div>` : ''}
@@ -2176,6 +2176,7 @@ async function refreshStatus() {
     const st = $('#status'); st.className = 'status ' + (s.worker_online ? 'on' : 'off');
     st.querySelector('span').textContent = s.worker_online ? 'Running' : 'Worker offline';
     st.title = s.worker_online ? 'Background worker is running: schedules and chat apps work.' : 'Background worker is not running: schedules and Telegram are paused. Check: systemctl status talixio-worker';
+    for (const el of [$('#app-version'), $('#more-version')]) { el.textContent = 'Talixio ' + s.version; el.title = s.version_label; }
   } catch {}
 }
 

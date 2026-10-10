@@ -16,7 +16,7 @@ final class Worker
     public function run(): never
     {
         $cfg = $this->app->cfg;
-        Log::info("worker started: provider={$cfg->provider} tiers=" . implode(',', array_map(fn(Tier $t) => "{$t->name}:{$t->label()}", $cfg->tiers))
+        Log::info('worker started: version ' . Version::get()['label'] . " provider={$cfg->provider} tiers=" . implode(',', array_map(fn(Tier $t) => "{$t->name}:{$t->label()}", $cfg->tiers))
             . " search={$cfg->search} embeddings={$cfg->embeddings} telegram=" . ($cfg->telegramToken ? 'on' : 'off')
             . ' email=' . ($this->app->email()->canReceive() ? 'in+out' : ($this->app->email()->canSend() ? 'out' : 'off'))
             . ' signal=' . ($this->app->signal()->enabled() ? 'on' : 'off') . ' ntfy=' . ($cfg->ntfyUrl ? 'on' : 'off') . " heartbeat={$cfg->heartbeatMinutes}m budget=\${$cfg->budgetDaily}/day,\${$cfg->budgetMonthly}/month tz={$cfg->timezone}");

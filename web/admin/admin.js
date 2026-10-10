@@ -77,7 +77,7 @@ async function load() {
     + (s.disk ? ` · Disk ${s.disk.free_gb} GB free of ${s.disk.total_gb}` : '');
   renderPeople(); renderSettings(); renderJob(state.job);
   const img = s.image || {};
-  $('#version').textContent = img.built ? `Running ${img.built} (branch ${img.branch || '?'}, built ${when(img.built_at)}).` : 'Running the image built at installation.';
+  $('#version').textContent = (img.built ? t('Running {sha} (branch {branch}, built {when}).', { sha: img.built, branch: img.branch || '?', when: when(img.built_at) }) : t('Running the image built at installation.')) + ' ' + t('Version {v}.', { v: state.version?.number || '?' });
   $('#rollback-btn').disabled = !img.previous;
   $('#ips-list').value = (state.allow_ips || []).join('\n'); $('#my-ip').textContent = state.my_ip || '';
 }

@@ -13,7 +13,7 @@ final class Updater
     public function installed(): bool { return is_file('/etc/talixio/install.conf') && is_file($this->appDir() . '/VERSION.json'); }
     private function appDir(): string { return dirname(__DIR__); }
 
-    public function version(): ?array { return json_decode((string)@file_get_contents($this->appDir() . '/VERSION.json'), true) ?: null; }
+    public function version(): array { return Version::get(); }
     public function status(): array { return json_decode((string)@file_get_contents($this->app->cfg->dataDir . '/update-status.json'), true) ?: ['state' => 'unknown']; }
 
     /** $what: check | update | rollback */

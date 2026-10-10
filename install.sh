@@ -59,7 +59,7 @@ ln -sf "$APP/deploy/talixio-cli" /usr/local/bin/talixio
 OWNER="$(stat -c %U "$SRC")"
 gitsrc() { runuser -u "$OWNER" -- git -C "$SRC" "$@"; }   # as the clone's owner: git refuses root on someone else's repository
 if command -v git >/dev/null && gitsrc rev-parse HEAD >/dev/null 2>&1; then
-  php -r 'file_put_contents($argv[1], json_encode(["sha" => $argv[2], "short" => substr($argv[2], 0, 7), "branch" => $argv[3], "date" => $argv[4], "subject" => $argv[5], "installed_at" => time()], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));' \
+  php -r 'file_put_contents($argv[1], json_encode(["number" => trim((string)@file_get_contents(dirname($argv[1]) . "/VERSION")), "sha" => $argv[2], "short" => substr($argv[2], 0, 7), "branch" => $argv[3], "date" => $argv[4], "subject" => $argv[5], "installed_at" => time()], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));' \
     "$APP/VERSION.json" "$(gitsrc rev-parse HEAD)" "$(gitsrc rev-parse --abbrev-ref HEAD)" "$(gitsrc log -1 --format=%cI)" "$(gitsrc log -1 --format=%s)"
   install -d -m 755 "$ETC"
   printf 'SRC=%q\nOWNER=%q\nBRANCH=%q\nARGS=%q\n' "$SRC" "$OWNER" "$(gitsrc rev-parse --abbrev-ref HEAD)" "$ORIG_ARGS" > "$ETC/install.conf"

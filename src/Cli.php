@@ -7,6 +7,7 @@ final class Cli
     public static function main(array $argv): int
     {
         $cmd = $argv[1] ?? 'help';
+        if (in_array($cmd, ['version', '--version', '-v'], true)) { echo 'Talixio ' . Version::get()['label'] . "\n"; return 0; }
         try {
             $app = App::fromEnv();
             switch ($cmd) {
@@ -65,7 +66,7 @@ final class Cli
                     echo "Two-step sign-in is off. Turn it on again in Settings.\n";
                     return 0;
                 default:
-                    fwrite(STDERR, "usage: talixio worker|chat|doctor|backup|password|totp [off]|mcp|index|job ID\n");
+                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|backup|password|totp [off]|mcp|index|job ID\n");
                     return 2;
             }
         } catch (\Throwable $e) {
@@ -76,7 +77,7 @@ final class Cli
 
     private static function doctor(App $app): int
     {
-        echo "Talixio doctor\n";
+        echo "Talixio doctor, version " . Version::get()['label'] . "\n";
         $ok = true;
         foreach ((new Doctor($app))->run() as $r) {
             echo match ($r['status']) { 'ok' => ' ok  ', 'fail' => ' !!  ', default => '     ' }, $r['text'], "\n";

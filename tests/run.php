@@ -276,6 +276,13 @@ $again = $app->jobs()->continue($cid);
 check('continue: continuing again keeps one "(continued)" and the same cap', $s->job($again)['title'] === 'Long research (continued)' && (float)$s->job($again)['max_cost_usd'] === 4.0);
 $app->jobs()->cancel($again);
 
+// ---- version ----
+$ver = \Talixio\Version::get();
+check('version: the number from VERSION, the commit of the clone', $ver['number'] === trim(file_get_contents(dirname(__DIR__) . '/VERSION')) && preg_match('/^\d+\.\d+\.\d+$/', $ver['number'])
+    && (!is_dir(dirname(__DIR__) . '/.git') || strlen($ver['short']) === 7) && str_starts_with($ver['label'], $ver['number']), json_encode($ver));
+check('version: talixio version', str_starts_with((string)shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(dirname(__DIR__) . '/bin/talixio') . ' version'), 'Talixio ' . $ver['number']));
+check('version: listed in the changelog', str_contains((string)file_get_contents(dirname(__DIR__) . '/CHANGELOG.md'), '## ' . $ver['number'] . ' '));
+
 // ---- i18n: the server's own sentences follow the interface language ----
 check('i18n: English by default', \Talixio\I18n::t($app, 'Cancelled: {what}', ['what' => 'x']) === 'Cancelled: x');
 \Talixio\I18n::remember($app, 'fr-FR,fr;q=0.9,en;q=0.8');
@@ -865,6 +872,7 @@ $req = function (string $path, ?array $body = null) use ($webPort, $ck) {
 };
 $login = $req('/api/login', ['password' => 'pw']);
 $status = json_decode($req('/api/status'), true);
+check('version: shown by the app', ($status['version'] ?? '') === \Talixio\Version::get()['number'] && str_starts_with($status['version_label'] ?? '', $status['version']));
 check('web: requests that log warnings still answer JSON', $login === '{"ok":true}' && ($status['provider'] ?? '') === 'gemini', $login . ' ' . substr((string)file_get_contents("$dir/web.log"), 0, 300));
 check('web: the warning went to the log', str_contains((string)file_get_contents("$dir/web.log"), 'WARN gemini: could not list models'));
 proc_terminate($ws); proc_close($ws);
