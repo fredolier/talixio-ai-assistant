@@ -123,6 +123,7 @@ final class Web
             (bool)preg_match('#^/api/tasks/(\d+)/run$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $s) {
                 set_time_limit(0);
                 $t = $s->task((int)$mm[1]) ?? $this->fail(404, 'no such task');
+                if (!empty($t['job'])) return ['reply' => $this->app->jobs()->runScheduled($t), 'space' => (int)$t['space']];
                 $reply = $this->app->agent()->runTask($t['title'], $t['prompt'], (string)$t['tier'], (int)$t['space']);
                 return ['reply' => $reply, 'space' => (int)$t['space']];
             })(),
@@ -169,7 +170,11 @@ final class Web
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
             $path === '/api/activity' => $this->activity(),
             str_starts_with($path, '/api/board') => $this->board($m, $path, $b),
-            $path === '/api/jobs' => ['jobs' => $s->jobs(100, isset($_GET['space']) && $_GET['space'] !== '' ? (int)$_GET['space'] : null, (string)($_GET['tag'] ?? '')), 'tags' => $s->jobTags()],
+            $path === '/api/jobs' => $this->jobList(),
+            $path === '/api/jobs/archive-finished' && $m === 'POST' => ['count' => $this->app->jobs()->archiveFinished(isset($b['space']) && $b['space'] !== '' ? (int)$b['space'] : null, (string)($b['tag'] ?? ''))],
+            (bool)preg_match('#^/api/jobs/(\d+)/archive$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->archive((int)$mm[1], ($b['archived'] ?? true) !== false)],
+            (bool)preg_match('#^/api/jobs/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->jobs()->delete((int)$mm[1]); return ['ok' => true]; })(),
+            (bool)preg_match('#^/api/jobs/(\d+)/schedule$#', $path, $mm) && $m === 'POST' => ['task' => $this->app->jobs()->schedule((int)$mm[1], (string)($b['cron'] ?? ''), (string)($b['at'] ?? ''))],
             (bool)preg_match('#^/api/jobs/(\d+)/tags$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->setTags((int)$mm[1], $b['tags'] ?? [])],
             $path === '/api/channels' => $this->channels(),
             $path === '/api/settings' && $m === 'GET' => ['groups' => Settings::describe($this->app->cfg->dataDir)],
@@ -1001,6 +1006,22 @@ final class Web
             $left -= strlen($chunk);
         }
         fclose($fh);
+    }
+
+    /** Jobs page: active or archived jobs, filtered, each with its report note (where it is now, or that it was deleted) and its routines. */
+    private function jobList(): array
+    {
+        $s = $this->app->store;
+        $jobs = $s->jobs(200, isset($_GET['space']) && $_GET['space'] !== '' ? (int)$_GET['space'] : null, (string)($_GET['tag'] ?? ''), !empty($_GET['archived']), (string)($_GET['q'] ?? ''));
+        $routines = [];
+        foreach ($s->q('SELECT id, job, cron, enabled FROM tasks WHERE job IS NOT NULL')->fetchAll() as $t) $routines[(int)$t['job']][] = $t;
+        foreach ($jobs as &$j) {
+            $f = $j['report_file'] ? $this->app->files()->get((int)$j['report_file']) : null;
+            $j['report'] = $j['report_file'] ? ($f && empty($f['deleted_at']) ? ['id' => (int)$f['id'], 'name' => $f['name'], 'folder' => $f['folder']] : ['deleted' => true]) : null;
+            $j['routines'] = $routines[(int)$j['id']] ?? [];
+        }
+        unset($j);
+        return ['jobs' => $jobs, 'tags' => $s->jobTags(), 'archived_count' => (int)$s->q('SELECT COUNT(*) FROM jobs WHERE archived = 1')->fetchColumn(), 'archive_days' => Jobs::ARCHIVE_DAYS];
     }
 
     private function taskAction(int $id, string $action): array

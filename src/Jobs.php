@@ -114,6 +114,73 @@ final class Jobs
         return true;
     }
 
+    /** Finished jobs are put away on their own after this many days (still searchable under Archived). */
+    public const ARCHIVE_DAYS = 30;
+
+    /** Put a finished job away (or bring it back). Its report note in the library is not touched. */
+    public function archive(int $id, bool $archived = true): array
+    {
+        $j = $this->app->store->job($id) ?? throw new \InvalidArgumentException("no job $id");
+        if ($archived && in_array($j['status'], ['queued', 'running'], true)) throw new \InvalidArgumentException('This job is still running.');
+        $this->app->store->updateJob($id, ['archived' => (int)$archived]);
+        return $this->app->store->job($id);
+    }
+
+    /** Put away every finished job of a space and/or tag (all of them by default). Returns how many. */
+    public function archiveFinished(?int $space = null, string $tag = '', int $olderThan = 0): int
+    {
+        $n = 0;
+        foreach ($this->app->store->jobs(100000, $space, $tag, false) as $j) {
+            if (in_array($j['status'], ['queued', 'running'], true) || ($olderThan && (int)($j['finished'] ?: $j['created']) > $olderThan)) continue;
+            $this->app->store->updateJob((int)$j['id'], ['archived' => 1]); $n++;
+        }
+        return $n;
+    }
+
+    /** Worker, hourly: finished jobs older than ARCHIVE_DAYS go to the archive. */
+    public function autoArchive(int $now): int { return $this->archiveFinished(null, '', $now - self::ARCHIVE_DAYS * 86400); }
+
+    /** Delete a finished job and its steps for good. Its report note stays in the library; its costs stay in the usage history. */
+    public function delete(int $id): void
+    {
+        $s = $this->app->store;
+        $j = $s->job($id) ?? throw new \InvalidArgumentException("no job $id");
+        if (in_array($j['status'], ['queued', 'running'], true)) throw new \InvalidArgumentException('This job is still running: cancel it first.');
+        if ($t = $s->q('SELECT title FROM tasks WHERE job = ?', [$id])->fetch()) throw new \InvalidArgumentException("The routine \"{$t['title']}\" runs this job: delete the routine first, or archive the job instead.");
+        $s->q('DELETE FROM tool_log WHERE job_id = ?', [$id]);
+        $s->q('UPDATE jobs SET parent = NULL WHERE parent = ?', [$id]);
+        $s->q('DELETE FROM jobs WHERE id = ?', [$id]);
+    }
+
+    /**
+     * Make a routine that runs this job again (same instructions, tier, effort, cap and report folder):
+     * $cron (5 fields, local time) for a recurring one, or $at ('YYYY-MM-DD HH:MM') for once. Returns the routine.
+     */
+    public function schedule(int $id, string $cron = '', string $at = ''): array
+    {
+        $s = $this->app->store;
+        $j = $s->job($id) ?? throw new \InvalidArgumentException("no job $id");
+        if ($j['kind'] !== 'agent') throw new \InvalidArgumentException('Only research jobs can be scheduled.');
+        $cron = trim($cron); $at = trim($at);
+        if (($cron === '') === ($at === '')) throw new \InvalidArgumentException('Give either a repeat (cron) or a date and time.');
+        if ($cron !== '') $next = Cron::next($cron, time());
+        else {
+            $dt = \DateTimeImmutable::createFromFormat('!Y-m-d H:i', str_replace('T', ' ', $at)) ?: throw new \InvalidArgumentException('Date and time: YYYY-MM-DD HH:MM');
+            $next = $dt->getTimestamp();
+            if ($next < time() - 60) throw new \InvalidArgumentException('That time is in the past.');
+        }
+        $title = preg_replace('/ \(continued( \d+)?\)$/', '', $j['title']);
+        $tid = $s->addTask($title, "Runs background job #$id again: $title", $cron ?: null, $next, (string)$j['tier'], (int)$j['space'], $id);
+        return $s->task($tid);
+    }
+
+    /** A routine made with schedule() is due: start the job again. Returns what to tell the user. */
+    public function runScheduled(array $task): string
+    {
+        $new = $this->rerun((int)$task['job']);
+        return "Job #$new started again: the report will come in the chat when it is done.";
+    }
+
     /** Worker startup: jobs left "running" by a previous worker were killed with it. */
     public function recoverInterrupted(): void
     {

@@ -69,6 +69,11 @@ final class Worker
             $store->updateTask((int)$t['id'], $t['cron']
                 ? ['next_run' => Cron::next($t['cron'], $now), 'last_run' => $now]
                 : ['enabled' => 0, 'next_run' => null, 'last_run' => $now]);
+            if (!empty($t['job'])) { // a scheduled job: start it, its report comes when it is done
+                try { $app->jobs()->runScheduled($t); }
+                catch (\Throwable $e) { $this->guard("task {$t['id']}", fn() => $app->notifier()->notify($t['title'], I18n::t($app, 'The scheduled job could not start: {e}', ['e' => $e->getMessage()]), (int)($t['space'] ?? 0))); }
+                continue;
+            }
             $this->guard("task {$t['id']}", fn() => $app->notifier()->notify($t['title'], $app->agent()->runTask($t['title'], $t['prompt'], (string)($t['tier'] ?? 'standard'), (int)($t['space'] ?? 0)), (int)($t['space'] ?? 0)));
         }
         $every = $app->cfg->heartbeatMinutes * 60;
@@ -105,6 +110,7 @@ final class Worker
         if ($now % 600 < 15) $this->guard('update', fn() => $app->updater()->notifyIfNew());
         if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));
         if ($now % 3600 < 15) $this->guard('tasks trash', fn() => $app->board()->purge());
+        if ($now % 3600 < 15) $this->guard('jobs archive', fn() => $app->jobs()->autoArchive($now));
         if ($now % 3600 < 15) $this->guard('library trash', fn() => $app->library()->purgeTrash());
         if ($now % 86400 < 15) $this->guard('old shares', fn() => $app->shares()->purge());
         if ($now % 86400 < 15) $this->guard('privacy journal', fn() => $app->privacy()->purge());

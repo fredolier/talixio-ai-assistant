@@ -299,7 +299,7 @@ const TOOL_LABEL = (name, input = {}) => {
     fetch_url: `Reading ${host(input.url)}`, WebFetch: `Reading ${host(input.url)}`, Read: 'Looking at the image',
     search_memory: 'Searching past conversations', memory_read: 'Reading memory', memory_append: 'Saving to memory', memory_replace: 'Updating memory',
     schedule_task: 'Scheduling', list_tasks: 'Checking scheduled tasks', cancel_task: 'Cancelling a task',
-    delegate: `Starting a background job${input.title ? ': ' + input.title : ''}`, list_jobs: 'Checking jobs', cancel_job: 'Cancelling a job',
+    delegate: `Starting a background job${input.title ? ': ' + input.title : ''}`, list_jobs: 'Checking jobs', cancel_job: 'Cancelling a job', archive_job: 'Archiving jobs', schedule_job: 'Scheduling a job',
     usage_report: 'Checking spending', file_read: 'Reading the attachment',
     skill_read: `Following a skill${input.name ? ': ' + input.name : ''}`, skill_save: 'Saving a skill', skill_delete: 'Removing a skill',
     calendar_events: 'Checking your calendar', calendar_add: 'Preparing a calendar event', mail_list: 'Looking through your email',
@@ -855,7 +855,9 @@ async function loadJobs() {
   const q = new URLSearchParams();
   if (jobsFilter.space != null && jobsFilter.space !== '') q.set('space', jobsFilter.space);
   if (jobsFilter.tag) q.set('tag', jobsFilter.tag);
-  const { jobs, tags } = await api('api/jobs?' + q);
+  if (jobsFilter.archived) q.set('archived', '1');
+  if (jobsFilter.q) q.set('q', jobsFilter.q);
+  const { jobs, tags, archived_count, archive_days } = await api('api/jobs?' + q);
   const s = state.status;
   if (s) $('#jobs-help').textContent = `Sub-agents the assistant starts for research and multi-step work: up to ${s.max_parallel_jobs} at once, each capped at $${s.job_max_usd.toFixed(2)} unless you give a budget (up to $${(+s.job_max_usd_limit).toFixed(2)}, Settings → Budget). Results come back in the chat of the space that started them; a job stopped by its cap can Continue from where it stopped.`;
   // filters: space, tags
@@ -863,29 +865,49 @@ async function loadJobs() {
   sel.innerHTML = `<option value="">All spaces</option>` + state.spaces.filter(x => !x.archived || x.id === +jobsFilter.space).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
   sel.value = jobsFilter.space ?? '';
   sel.onchange = () => { jobsFilter.space = sel.value; saveJobsFilter(); loadJobs(); };
+  const arch = $('#jobs-archived');
+  arch.options[1].textContent = (archived_count ? t('Archived ({n})', { n: archived_count }) : t('Archived'));
+  arch.title = t('Finished jobs go to the archive on their own after {n} days.', { n: archive_days });
+  arch.value = jobsFilter.archived ? '1' : '';
+  arch.onchange = () => { jobsFilter.archived = !!arch.value; saveJobsFilter(); loadJobs(); };
+  const search = $('#jobs-search');
+  if (document.activeElement !== search) search.value = jobsFilter.q || '';
+  search.oninput = () => { clearTimeout(search.t); search.t = setTimeout(() => { jobsFilter.q = search.value.trim(); saveJobsFilter(); loadJobs(); }, 300); };
+  const all = $('#jobs-archive-all');
+  all.hidden = !!jobsFilter.archived || !jobs.some(j => !['queued', 'running'].includes(j.status));
+  all.onclick = async () => {
+    if (!confirm(t('Archive every finished job of this view? Their reports stay in the library, and you find them again under Archived.'))) return;
+    try { const r = await post('api/jobs/archive-finished', { space: jobsFilter.space ?? '', tag: jobsFilter.tag || '' }); toast(t('{n} job(s) archived', { n: r.count })); loadJobs(); } catch (e) { toast(e.message); }
+  };
   const names = Object.keys(tags || {});
   if (jobsFilter.tag && !names.includes(jobsFilter.tag)) names.unshift(jobsFilter.tag);
   $('#jobs-tags').innerHTML = names.length ? names.map(t => `<button type="button" class="tag${t === jobsFilter.tag ? ' on' : ''}" data-tag="${esc(t)}">#${esc(t)}${tags?.[t] ? ` <small>${tags[t]}</small>` : ''}</button>`).join('') : '<span class="muted small">No tags yet: the assistant tags the jobs it starts, and you can add yours.</span>';
   $('#jobs-tags').querySelectorAll('.tag').forEach(b => b.onclick = () => { jobsFilter.tag = jobsFilter.tag === b.dataset.tag ? '' : b.dataset.tag; saveJobsFilter(); loadJobs(); });
   const box = $('#jobs'); box.innerHTML = '';
-  const filtered = (jobsFilter.space ?? '') !== '' || jobsFilter.tag;
+  const filtered = (jobsFilter.space ?? '') !== '' || jobsFilter.tag || jobsFilter.q || jobsFilter.archived;
   if (!jobs.length) {
     box.innerHTML = filtered ? '<div class="placeholder">No job matches these filters. <a href="#jobs" data-a="clear">Show them all</a></div>'
       : '<div class="placeholder">No jobs yet. Ask for research, e.g. <q>compare the three best e-bikes under €2000</q>.</div>';
-    box.querySelector('[data-a=clear]')?.addEventListener('click', e => { e.preventDefault(); jobsFilter.space = ''; jobsFilter.tag = ''; saveJobsFilter(); loadJobs(); });
+    box.querySelector('[data-a=clear]')?.addEventListener('click', e => { e.preventDefault(); jobsFilter.space = ''; jobsFilter.tag = ''; jobsFilter.q = ''; jobsFilter.archived = false; saveJobsFilter(); loadJobs(); });
     return;
   }
   for (const j of jobs) {
     const el = document.createElement('div');
-    el.className = 'task job';
+    el.className = 'task job' + (+j.archived ? ' archived' : '');
+    const busy = ['queued', 'running'].includes(j.status);
+    const reportHtml = j.report ? (j.report.deleted ? `<span class="muted">${esc(t('Report note deleted from the library'))}</span>`
+      : `${md(`[${j.report.name.replace(/[[\]]/g, '')}](/files/${j.report.id})`)}<span class="muted">${esc(j.report.folder)}</span>`) : '';
+    const routineHtml = (j.routines || []).map(r => `<a class="chip" href="#tasks" title="${esc(t('A routine runs this job again'))}">⏰ ${r.cron ? esc(t('scheduled')) : esc(t('once'))}${+r.enabled ? '' : ' · ' + esc(t('paused'))}</a>`).join('');
+    const moreHtml = busy ? '' : `<div class="more">${j.kind === 'agent' ? `<button class="btn small ghost" data-a="schedule" title="${esc(t('Run it again on a schedule, as a routine'))}">${esc(t('Schedule…'))}</button>` : ''}`
+      + `<button class="btn small ghost" data-a="archive">${esc(t(+j.archived ? 'Unarchive' : 'Archive'))}</button><button class="btn small ghost" data-a="delete">${esc(t('Delete'))}</button></div>`;
     const dur = j.started ? Math.max(1, Math.round(((j.finished || Date.now() / 1000) - j.started))) : null;
     const durText = dur == null ? 'waiting' : dur < 90 ? dur + ' s' : Math.round(dur / 60) + ' min';
     const tagHtml = () => tagsOf(j).map(t => `<span class="tag small" data-tag="${esc(t)}">#${esc(t)}</span>`).join('') + '<button type="button" class="tag small add" data-a="tags" title="Edit the tags">＋ tag</button>';
     el.innerHTML = `<div><h3>${esc(j.title)}</h3><div class="when"><span class="pill ${j.status}">${j.status === 'running' ? '<span class="dot"></span>' : ''}${j.status}</span>
         ${spaceChip(j.space)}<span class="chip">${esc(j.tier)}</span>${j.kind === 'agent' ? `<span class="chip" title="Effort">${esc(EFFORTS[j.effort || state.status?.job_effort] || j.effort || '')}</span>` : ''}<span>${money(+j.cost_usd) || '$0'} of ${+j.max_cost_usd > 0 ? '$' + (+j.max_cost_usd).toFixed(2) : 'no cap'}</span><span>${durText}</span><span>${fmtTime(j.created)}</span>${j.parent ? `<span class="chip" title="Carries on from job #${j.parent}">continues #${j.parent}</span>` : ''}</div>
-        <div class="jtags">${tagHtml()}</div></div>
+        <div class="jtags">${tagHtml()}</div>${reportHtml || routineHtml ? `<div class="jreport">${reportHtml ? '📄 ' + reportHtml : ''}${routineHtml}</div>` : ''}</div>
       <div class="actions">${['queued', 'running'].includes(j.status) ? '<button class="btn small" data-a="cancel">Cancel</button>'
-        : j.kind !== 'reflect' ? `${tierSelect(j.tier, 'Model for running it again')}${j.kind === 'agent' ? effortSelect(j.effort || state.status?.job_effort || 'medium') : ''}<label class="cap" title="Cost cap for running it again (up to $${(+(state.status?.job_max_usd_limit ?? 10)).toFixed(2)})">$<input type="number" min="0.05" step="0.5" value="${(+j.max_cost_usd > 0 ? (j.status === 'failed' && /cost cap/.test(j.result || '') ? Math.min(+j.max_cost_usd * 2, +(state.status?.job_max_usd_limit ?? 10) || +j.max_cost_usd * 2) : +j.max_cost_usd) : (+(state.status?.job_max_usd) || 2)).toFixed(2)}" aria-label="Cost cap ($)"></label>${j.kind === 'agent' ? `<button class="btn small${j.status === 'failed' && /cost cap/.test(j.result || '') ? ' primary' : ''}" data-a="continue" title="Carry on from where it stopped, with the cap and effort chosen here">Continue</button>` : ''}<button class="btn small" data-a="rerun" title="Start over with the same instructions">Run again</button>` : ''}</div>
+        : j.kind !== 'reflect' ? `${tierSelect(j.tier, 'Model for running it again')}${j.kind === 'agent' ? effortSelect(j.effort || state.status?.job_effort || 'medium') : ''}<label class="cap" title="Cost cap for running it again (up to $${(+(state.status?.job_max_usd_limit ?? 10)).toFixed(2)})">$<input type="number" min="0.05" step="0.5" value="${(+j.max_cost_usd > 0 ? (j.status === 'failed' && /cost cap/.test(j.result || '') ? Math.min(+j.max_cost_usd * 2, +(state.status?.job_max_usd_limit ?? 10) || +j.max_cost_usd * 2) : +j.max_cost_usd) : (+(state.status?.job_max_usd) || 2)).toFixed(2)}" aria-label="Cost cap ($)"></label>${j.kind === 'agent' ? `<button class="btn small${j.status === 'failed' && /cost cap/.test(j.result || '') ? ' primary' : ''}" data-a="continue" title="Carry on from where it stopped, with the cap and effort chosen here">Continue</button>` : ''}<button class="btn small" data-a="rerun" title="Start over with the same instructions">Run again</button>` : ''}${moreHtml}</div>
       <details><summary>${j.result ? 'Report and instructions' : 'Instructions'}</summary>
         ${j.result ? `<div class="doc-label">Report</div><div class="doc">${md(j.result)}</div>` : ''}
         <details class="instr"${j.result ? '' : ' open'}><summary class="doc-label">Instructions</summary><div class="doc">${md(j.instructions)}</div></details></details>`;
@@ -910,6 +932,32 @@ async function loadJobs() {
     wireTags();
     el.querySelector('[data-a=cancel]')?.addEventListener('click', async () => {
       try { await post(`api/jobs/${j.id}/cancel`); toast('Job cancelled'); loadJobs(); } catch (e) { toast(e.message); }
+    });
+    el.querySelector('[data-a=archive]')?.addEventListener('click', async () => {
+      try { await post(`api/jobs/${j.id}/archive`, { archived: !+j.archived }); toast(t(+j.archived ? 'Back in the list' : 'Archived: find it again under Archived')); loadJobs(); } catch (e) { toast(e.message); }
+    });
+    el.querySelector('[data-a=delete]')?.addEventListener('click', async () => {
+      if (!confirm(t('Delete job "{title}" for good? Its report note stays in the library.', { title: j.title }))) return;
+      try { await post(`api/jobs/${j.id}/delete`); toast(t('Job deleted')); loadJobs(); } catch (e) { toast(e.message); }
+    });
+    el.querySelector('[data-a=schedule]')?.addEventListener('click', () => {
+      if (el.querySelector('.jsched')) return el.querySelector('.jsched').remove();
+      const p = document.createElement('div'); p.className = 'jsched';
+      const days = [1, 2, 3, 4, 5, 6, 0].map(d => `<option value="${d}">${esc(new Date(2024, 0, 7 + d).toLocaleDateString(undefined, { weekday: 'long' }))}</option>`).join('');
+      p.innerHTML = `<select data-f="rep"><option value="week">${esc(t('Every week'))}</option><option value="day">${esc(t('Every day'))}</option><option value="weekdays">${esc(t('Every weekday'))}</option><option value="month">${esc(t('Every month, on the 1st'))}</option><option value="once">${esc(t('Once'))}</option></select>`
+        + `<select data-f="dow">${days}</select><input data-f="date" type="date" hidden><input data-f="time" type="time" value="08:00">`
+        + `<button class="btn small primary" data-f="ok">${esc(t('Schedule'))}</button><span class="muted">${esc(t('Same instructions, model, effort and cap; the report comes in the chat and in the library.'))}</span>`;
+      const f = n => p.querySelector(`[data-f=${n}]`);
+      const sync = () => { f('dow').hidden = f('rep').value !== 'week'; f('date').hidden = f('rep').value !== 'once'; };
+      f('rep').onchange = sync; sync();
+      f('date').value = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+      f('ok').onclick = async () => {
+        const [hh, mm] = (f('time').value || '08:00').split(':').map(Number), rep = f('rep').value;
+        const body = rep === 'once' ? { at: `${f('date').value} ${f('time').value || '08:00'}` }
+          : { cron: `${mm} ${hh} ${rep === 'month' ? 1 : '*'} * ${rep === 'week' ? f('dow').value : rep === 'weekdays' ? '1-5' : '*'}` };
+        try { const r = await post(`api/jobs/${j.id}/schedule`, body); toast(t('Routine made: next run {when}. Pause or delete it in Routines.', { when: new Date(r.task.next_run * 1000).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' }) })); loadJobs(); } catch (e) { toast(e.message); }
+      };
+      el.append(p);
     });
     el.querySelector('[data-a=continue]')?.addEventListener('click', async () => {
       const effort = el.querySelector('.effort-select')?.value || '', max_usd = parseFloat(el.querySelector('.cap input').value);

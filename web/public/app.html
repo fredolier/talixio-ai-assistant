@@ -190,7 +190,10 @@
       <header class="page-head"><h2>Background jobs</h2>
         <p class="muted" id="jobs-help">Sub-agents the assistant starts for research and multi-step work. Each one has its own model tier and a cost cap; results come back in the chat.</p></header>
       <div class="row wrap filters" id="jobs-filters">
+        <input id="jobs-search" type="search" placeholder="Search jobs" aria-label="Search jobs">
         <select id="jobs-space" aria-label="Space"></select>
+        <select id="jobs-archived" aria-label="Active or archived jobs"><option value="">Active</option><option value="1">Archived</option></select>
+        <button type="button" class="btn small ghost" id="jobs-archive-all" title="Put away every finished job shown here; their reports stay in the library">Archive finished</button>
         <div id="jobs-tags" class="tagbar"></div>
       </div>
       <div id="jobs" class="list"></div>

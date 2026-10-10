@@ -252,6 +252,47 @@ $rf2 = $app->files()->get((int)$s->job($fid)['report_file']);
 check('job report saved in the folder asked for', $rf2 && $rf2['folder'] === '/Projects/Hotels', json_encode($rf2));
 check('rerun keeps the report folder', $s->job($app->jobs()->rerun($fid))['folder'] === '/Projects/Hotels');
 
+// job management: archive, search, delete, schedule
+$jb = $app->jobs();
+$q1 = $s->addJob('Queued one', 'x', 'fast', 1.0);
+$err = ''; try { $jb->archive($q1); } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
+check('a queued job cannot be archived', str_contains($err, 'still running'));
+$jb->archive($fid);
+check('archived job leaves the active list', !in_array($fid, array_column($s->jobs(200, null, '', false), 'id')) && in_array($fid, array_column($s->jobs(200, null, '', true), 'id')));
+check('job search matches title and report', array_column($s->jobs(200, null, '', false, 'hotels Part-Dieu'), 'id') === [(int)$job['id']] && $s->jobs(200, null, '', false, 'nothing-like-this') === []);
+check('list_jobs shows the report link', str_contains($tools->run('list_jobs', ['all' => true]), "/files/{$rf['id']})"));
+check('list_jobs archived option', str_contains($tools->run('list_jobs', ['all' => true, 'archived' => true]), "#$fid Filed"));
+$jb->archive($fid, false);
+$old = $s->addJob('Old one', 'x', 'fast', 1.0);
+$s->updateJob($old, ['status' => 'done', 'finished' => time() - 40 * 86400]);
+check('auto-archive takes only old finished jobs', $jb->autoArchive(time()) === 1 && (int)$s->job($old)['archived'] === 1 && (int)$s->job($fid)['archived'] === 0);
+$n = $jb->archiveFinished();
+check('archive finished leaves queued jobs', $n > 0 && (int)$s->job($q1)['archived'] === 0 && (int)$s->job((int)$job['id'])['archived'] === 1);
+$s->updateJob($q1, ['status' => 'cancelled']);
+$jb->delete($old);
+check('job deleted, its report note kept', $s->job($old) === null);
+$jb->delete((int)$job['id']);
+check('deleting a job keeps its report note and costs', $s->job((int)$job['id']) === null && $app->files()->get((int)$rf['id']) !== null
+    && (int)$s->q("SELECT COUNT(*) FROM usage WHERE job_id=?", [$job['id']])->fetchColumn() === 1);
+$err = ''; try { $jb->schedule($fid, '', '2001-01-01 08:00'); } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
+check('a job cannot be scheduled in the past', str_contains($err, 'past'));
+$task = $jb->schedule($fid, '0 8 * * 1');
+check('schedule makes a routine for the job', (int)$task['job'] === $fid && $task['cron'] === '0 8 * * 1' && (int)$task['next_run'] > time() && $task['title'] === 'Filed');
+$err = ''; try { $jb->delete($fid); } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
+check('a job run by a routine cannot be deleted', str_contains($err, 'delete the routine first'));
+$once = $jb->schedule($fid, '', date('Y-m-d H:i', time() + 3600));
+$before = count($s->jobs(1000, null, '', null));
+$s->updateTask((int)$once['id'], ['next_run' => time() - 5]);
+$callsBefore = count($fake->calls);
+(new Worker($app))->tick(time());
+$newest = $s->jobs(1, null, '', null)[0];
+check('worker reruns a scheduled job without the model', count($s->jobs(1000, null, '', null)) === $before + 1 && $newest['title'] === 'Filed'
+    && $newest['folder'] === '/Projects/Hotels' && (int)$s->task((int)$once['id'])['enabled'] === 0, json_encode($newest));
+$st = $tools->run('schedule_job', ['id' => $fid, 'cron' => '30 7 * * *']);
+check('schedule_job tool', str_contains($st, 'Filed') && (int)$s->q('SELECT COUNT(*) FROM tasks WHERE job = ?', [$fid])->fetchColumn() === 3, $st);
+$s->q('DELETE FROM tasks WHERE job IS NOT NULL');
+$s->q("DELETE FROM jobs WHERE status = 'queued'");
+
 // job cost cap and cancellation
 $fake->script = function ($last, $tools, $on) use ($usage) { for ($i = 0; $i < 10; $i++) $usage($on, 'claude-opus-x', 100000, 10000); return 'never'; };
 $id = $s->addJob('Expensive', 'Dig forever', 'deep', 0.5);

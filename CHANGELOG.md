@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.19.8 (2026-10-10)
+- Jobs page: search (title, instructions, report), Active / Archived switch, and per finished job: the link
+  to its report note (found by id, so it follows the note when it is moved; says so when it was deleted),
+  *Archive* / *Unarchive*, *Delete* (the report note and the usage history stay) and *Schedule…*, which
+  makes a routine that runs the job again once or on a repeat, without going through the model.
+  *Archive finished* puts away every finished job of the view; finished jobs older than 30 days are
+  archived on their own. New assistant tools `archive_job` and `schedule_job`; `list_jobs` can search and
+  show archived jobs and gives the report links.
+
 ## 0.19.7 (2026-10-10)
 - Jobs: the full report is saved as a note in the library when the job finishes, so nothing is lost when the
   chat relays it in short: in the Inbox ("Job - title - date"), in the folder the user named when asking

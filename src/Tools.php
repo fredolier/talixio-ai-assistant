@@ -193,8 +193,25 @@ final class Tools
              'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => '1-3 short topic tags so the user can find it later, e.g. ["bikes", "comparison"]; reuse existing tags (list_jobs shows them)'],
              'folder' => ['type' => 'string', 'description' => 'library folder where its full report is saved as a note, when the user names one; default: the Inbox']],
             ['title', 'instructions'], fn(array $a) => $this->delegate($a));
-        $this->register('list_jobs', 'List recent background jobs (space, tags, status). tag: only jobs with this tag; all_spaces: not only this space.',
-            ['tag' => ['type' => 'string'], 'all_spaces' => ['type' => 'boolean']], [], fn(array $a) => $this->listJobs((string)($a['tag'] ?? ''), !empty($a['all_spaces'])));
+        $this->register('list_jobs', 'List recent background jobs (space, tags, status, report note). tag: only jobs with this tag; search: words in the title, instructions or report; all_spaces: not only this space; archived: the archived ones instead.',
+            ['tag' => ['type' => 'string'], 'search' => ['type' => 'string'], 'all_spaces' => ['type' => 'boolean'], 'archived' => ['type' => 'boolean']], [],
+            fn(array $a) => $this->listJobs((string)($a['tag'] ?? ''), !empty($a['all_spaces']), !empty($a['archived']), (string)($a['search'] ?? '')));
+        $this->register('archive_job', 'Archive finished background jobs the user no longer needs in the list (archived: false brings one back). Their report notes stay in the library. Give ids, or all_finished: true for every finished job of this space.',
+            ['ids' => ['type' => 'array', 'items' => ['type' => 'integer']], 'all_finished' => ['type' => 'boolean'], 'archived' => ['type' => 'boolean']], [],
+            function (array $a) {
+                if (!empty($a['all_finished'])) return sprintf('%d job(s) archived', $this->app->jobs()->archiveFinished($this->app->space));
+                $ids = array_map('intval', (array)($a['ids'] ?? []));
+                if (!$ids) return 'error: give ids or all_finished';
+                foreach ($ids as $id) $this->app->jobs()->archive($id, ($a['archived'] ?? true) !== false);
+                return sprintf('%d job(s) %s', count($ids), ($a['archived'] ?? true) !== false ? 'archived' : 'back in the list');
+            });
+        $this->register('schedule_job', "Make a routine that runs a finished research job again on a schedule (same instructions, model, effort, cap and report folder), e.g. a weekly watch. Give `cron` (5 fields, local time {$cfg->timezone}, e.g. '0 8 * * 1') for recurring, or `at` ('YYYY-MM-DD HH:MM') for once. Each run's report comes in the chat and is saved in the library.",
+            ['id' => ['type' => 'integer'], 'cron' => ['type' => 'string'], 'at' => ['type' => 'string']], ['id'],
+            function (array $a) {
+                $t = $this->app->jobs()->schedule((int)$a['id'], (string)($a['cron'] ?? ''), (string)($a['at'] ?? ''));
+                return sprintf('routine #%d "%s" made: %s, next run %s (%s). The user can pause or delete it in Routines.', $t['id'], $t['title'],
+                    $t['cron'] ? "cron {$t['cron']}" : 'once', date('D Y-m-d H:i', (int)$t['next_run']), $this->app->cfg->timezone);
+            });
         $this->register('continue_job', "Carry on a background job from where it stopped (cost cap reached, or the user wants it to go further): a new job that starts from the earlier run's steps and findings. Only when the user asks. max_usd: its cost cap (default: the same as before; up to \${$cfg->jobMaxUsdLimit}); effort: optional; note: what the user wants added or changed.",
             ['id' => ['type' => 'integer'], 'max_usd' => ['type' => 'number'], 'effort' => ['type' => 'string', 'enum' => Tier::EFFORTS], 'note' => ['type' => 'string']], ['id'],
             function (array $a) {
@@ -581,14 +598,19 @@ final class Tools
             $id, $tier, $j['effort'] ?: $this->app->cfg->jobEffort, (float)$j['max_cost_usd'] > 0 ? sprintf('$%.2f', $j['max_cost_usd']) : 'none', $j['folder'] ?: Library::INBOX);
     }
 
-    private function listJobs(string $tag = '', bool $all = false): string
+    private function listJobs(string $tag = '', bool $all = false, bool $archived = false, string $search = ''): string
     {
         $names = array_column($this->app->spaces()->all(), 'name', 'id') + [0 => 'General'];
+        $report = function (array $j) {
+            if (!$j['report_file']) return '';
+            $f = $this->app->files()->get((int)$j['report_file']);
+            return $f ? sprintf(' | report: [%s](/files/%d) in %s', str_replace(['[', ']'], '', $f['name']), $f['id'], $f['folder']) : ' | report note deleted';
+        };
         $rows = array_map(fn($j) => sprintf('#%d %s | %s | %s | $%.3f of $%.2f', $j['id'], $j['title'], $j['tier'], $j['status'], $j['cost_usd'], $j['max_cost_usd'])
-            . ($all ? ' | space ' . ($names[$j['space']] ?? $j['space']) : '') . ($j['tags'] !== '' ? ' | tags: ' . implode(', ', Store::tagList($j['tags'])) : ''),
-            $this->app->store->jobs(15, $all ? null : $this->app->space, $tag));
+            . ($all ? ' | space ' . ($names[$j['space']] ?? $j['space']) : '') . ($j['tags'] !== '' ? ' | tags: ' . implode(', ', Store::tagList($j['tags'])) : '') . $report($j),
+            $this->app->store->jobs(15, $all ? null : $this->app->space, $tag, $archived, $search));
         $tags = array_keys($this->app->store->jobTags());
-        return ($rows ? implode("\n", $rows) : 'no jobs' . ($tag !== '' ? " tagged \"$tag\"" : '') . ($all ? '' : ' in this space'))
+        return ($rows ? implode("\n", $rows) : 'no ' . ($archived ? 'archived ' : '') . 'jobs' . ($tag !== '' ? " tagged \"$tag\"" : '') . ($search !== '' ? " matching \"$search\"" : '') . ($all ? '' : ' in this space'))
             . ($tags ? "\nTags in use: " . implode(', ', array_slice($tags, 0, 30)) : '');
     }
 

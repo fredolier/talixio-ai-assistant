@@ -75,6 +75,8 @@ final class Store
         $this->addColumn('jobs', 'parent', 'INTEGER'); // the job this one continues
         $this->addColumn('jobs', 'folder', "TEXT NOT NULL DEFAULT ''"); // where its report is saved ('' = the Inbox)
         $this->addColumn('jobs', 'report_file', 'INTEGER'); // the library note holding its full report
+        $this->addColumn('jobs', 'archived', 'INTEGER NOT NULL DEFAULT 0'); // put away: hidden from the list, kept for history
+        $this->addColumn('tasks', 'job', 'INTEGER'); // a routine that runs this job again, instead of a prompt
         // the assistant's mind (Mind): observations from the history, beliefs built from them, a journal of how it changes
         $this->db->exec("CREATE TABLE IF NOT EXISTS mind_obs(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, strength INTEGER NOT NULL DEFAULT 1,
                 space INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'chat', messages TEXT NOT NULL DEFAULT '[]', processed INTEGER NOT NULL DEFAULT 0);
@@ -213,9 +215,9 @@ final class Store
     }
 
     // --- tasks ---
-    public function addTask(string $title, string $prompt, ?string $cron, int $nextRun, string $tier = 'standard', int $space = 0): int
+    public function addTask(string $title, string $prompt, ?string $cron, int $nextRun, string $tier = 'standard', int $space = 0, ?int $job = null): int
     {
-        $this->q('INSERT INTO tasks(title,prompt,cron,next_run,enabled,created,tier,space) VALUES(?,?,?,?,1,?,?,?)', [$title, $prompt, $cron, $nextRun, time(), $tier, $space]);
+        $this->q('INSERT INTO tasks(title,prompt,cron,next_run,enabled,created,tier,space,job) VALUES(?,?,?,?,1,?,?,?,?)', [$title, $prompt, $cron, $nextRun, time(), $tier, $space, $job]);
         return (int)$this->db->lastInsertId();
     }
 
@@ -252,12 +254,17 @@ final class Store
     }
 
     public function job(int $id): ?array { return $this->q('SELECT * FROM jobs WHERE id=?', [$id])->fetch() ?: null; }
-    /** Newest first; optionally only one space and/or one tag. */
-    public function jobs(int $limit = 50, ?int $space = null, string $tag = ''): array
+    /** Newest first; optionally only one space and/or one tag, archived or not, matching some words. */
+    public function jobs(int $limit = 50, ?int $space = null, string $tag = '', ?bool $archived = null, string $search = ''): array
     {
         $where = []; $args = [];
         if ($space !== null) { $where[] = 'space = ?'; $args[] = $space; }
         if ($tag !== '') { $where[] = "tags LIKE ? ESCAPE '\\'"; $args[] = '%,' . addcslashes(mb_strtolower($tag), '%_\\') . ',%'; }
+        if ($archived !== null) { $where[] = 'archived = ?'; $args[] = (int)$archived; }
+        foreach (preg_split('/\s+/', trim($search), -1, PREG_SPLIT_NO_EMPTY) as $w) {
+            $where[] = "(title LIKE ? ESCAPE '\\' OR instructions LIKE ? ESCAPE '\\' OR result LIKE ? ESCAPE '\\')";
+            $like = '%' . addcslashes($w, '%_\\') . '%'; array_push($args, $like, $like, $like);
+        }
         $args[] = $limit;
         return $this->q('SELECT * FROM jobs' . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY id DESC LIMIT ?', $args)->fetchAll();
     }
@@ -266,7 +273,7 @@ final class Store
     public function jobTags(): array
     {
         $count = [];
-        foreach ($this->q("SELECT tags FROM jobs WHERE tags != ''")->fetchAll(\PDO::FETCH_COLUMN) as $t) foreach (self::tagList($t) as $x) $count[$x] = ($count[$x] ?? 0) + 1;
+        foreach ($this->q("SELECT tags FROM jobs WHERE tags != '' AND archived = 0")->fetchAll(\PDO::FETCH_COLUMN) as $t) foreach (self::tagList($t) as $x) $count[$x] = ($count[$x] ?? 0) + 1;
         arsort($count);
         return $count;
     }
