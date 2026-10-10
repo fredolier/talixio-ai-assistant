@@ -27,6 +27,9 @@ final class Cli
                 case 'job':
                     $app->jobs()->runJob((int)($argv[2] ?? 0));
                     return 0;
+                case 'connector-install': // started by Settings → Connectors: dependencies, then the connector is added
+                    (new ConnectorPackage($app))->finish();
+                    return 0;
                 case 'embeddings-pull': // started by Settings → Search by meaning: download a model into this server's Ollama
                     (new Meaning($app))->pull((string)($argv[2] ?? ''));
                     return 0;

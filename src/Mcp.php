@@ -144,7 +144,9 @@ final class Mcp
         foreach ((array)($s['env'] ?? []) as $k => $v) $env[(string)$k] = (string)$v;
         $cmd = array_merge([(string)$s['command']], array_map('strval', (array)($s['args'] ?? [])));
         $err = tempnam(sys_get_temp_dir(), 'mcp');
-        $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $err, 'w']], $pipes, $s['cwd'] ?? $this->app->cfg->dataDir, $env);
+        $cwd = (string)($s['cwd'] ?? ''); // relative: inside the data folder (connectors installed from the library)
+        $cwd = $cwd === '' ? $this->app->cfg->dataDir : ($cwd[0] === '/' ? $cwd : $this->app->cfg->dataDir . '/' . $cwd);
+        $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $err, 'w']], $pipes, $cwd, $env);
         if (!is_resource($proc)) throw new \RuntimeException("could not start {$s['command']}");
         try {
             $send = fn(array $m) => fwrite($pipes[0], json_encode(['jsonrpc' => '2.0'] + $m, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");

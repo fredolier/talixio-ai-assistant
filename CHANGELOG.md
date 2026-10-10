@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.18.0 (2026-10-10)
+- Install your own connector without an administrator: put the MCP server's folder as a .zip in the library
+  (e.g. /Connecteurs), then *Install as a connector* on the file (or Settings → Connectors → *Install from
+  the library…*). Talixio finds how to start it and the settings it reads (address, account, password),
+  unpacks it in the assistant, installs its Node dependencies (builds it if needed), declares it and lists
+  its tools. Reinstalling the same name updates it and keeps a password left empty.
+- Connectors may give a working folder relative to the data folder: they keep working after a move.
+
 ## 0.17.0 (2026-10-10)
 - Settings → Web search and memory: a choice for search by meaning. On this server (Ollama): very light
   (multilingual-e5-small, ≈ 0.3 GB), light (EmbeddingGemma, ≈ 0.7 GB) or best quality (Qwen3-Embedding,

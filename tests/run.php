@@ -1963,6 +1963,42 @@ $hits = $app->library()->search('code de transfert', '/FAQ');
 check('faq: indexed, found by search', $hits && str_contains(json_encode($hits, JSON_UNESCAPED_UNICODE), 'Transférer'), json_encode($hits, JSON_UNESCAPED_UNICODE));
 $quick = $app->library()->search('code de transfert', '/FAQ', 30, false);
 check('library search: the quick pass finds by words alone, without the meaning model', $quick && str_contains(json_encode($quick, JSON_UNESCAPED_UNICODE), 'Transférer') && !array_filter(array_column($quick, 'sim'), fn($x) => $x !== null));
+
+// a connector installed from a .zip in the library (no SSH): unpacked, declared, its tools listed
+$zp = "$dir/anki-mcp.zip"; $zz = new \ZipArchive(); $zz->open($zp, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+$zz->addFromString('mcp/package.json', json_encode(['name' => '@me/talixio-tasks', 'type' => 'module', 'bin' => ['talixio-tasks' => './src/server.js']]));
+$zz->addFromString('mcp/README.md', "Set TALIXIO_URL=https://anki.example.com\n");
+$zz->addFromString('mcp/src/server.js', <<<'JS'
+import readline from 'node:readline';
+const url = process.env.TALIXIO_URL, who = process.env['TALIXIO_EMAIL']; const pw = process.env.TALIXIO_PASSWORD;
+const rl = readline.createInterface({ input: process.stdin });
+const send = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n');
+rl.on('line', l => { const m = JSON.parse(l); if (m.id === undefined) return;
+  if (m.method === 'initialize') send(m.id, { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'tasks', version: '1' } });
+  else if (m.method === 'tools/list') send(m.id, { tools: [{ name: 'open_tasks', description: 'Open tasks at ' + url, inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } }] });
+  else if (m.method === 'tools/call') send(m.id, { content: [{ type: 'text', text: `3 open tasks at ${url} for ${who} (${pw ? 'signed in' : 'no password'})` }] });
+  else send(m.id, {}); });
+JS);
+$zz->addFromString('../evil.txt', 'outside');
+$zz->close();
+Library::$system = true; $zid = $app->files()->save($zp, 'anki-mcp.zip', 'application/zip', '/Connecteurs'); Library::$system = false;
+$cp = new \Talixio\ConnectorPackage($app);
+$ci = $cp->inspect($zid);
+check('connector: found in the library and read (start file, settings it reads, name)', in_array($zid, array_column($cp->packages(), 'id'), true) && $ci['entry'] === 'src/server.js' && $ci['runtime'] === 'node'
+    && $ci['name'] === 'talixio-tasks' && !array_diff(['TALIXIO_URL', 'TALIXIO_EMAIL', 'TALIXIO_PASSWORD'], $ci['env']) && !$ci['deps'], json_encode($ci));
+if (trim((string)shell_exec('command -v node')) !== '') {
+    $cp->install($zid, 'anki', ['TALIXIO_URL' => 'https://anki.example.com', 'TALIXIO_EMAIL' => 'me@example.com', 'TALIXIO_PASSWORD' => 's3cret', 'bad key' => 'x'], false);
+    $cp->finish();
+    $cs = $cp->status(); $srv = $app->mcp()->servers()['anki'] ?? [];
+    check('connector: installed, declared and answering', $cs['state'] === 'done' && $cs['tools'] === 1 && ($srv['args'][0] ?? '') === 'src/server.js' && ($srv['cwd'] ?? '') === 'connectors/anki' && is_file("$dir/connectors/anki/src/server.js")
+        && ($srv['env']['TALIXIO_PASSWORD'] ?? '') === 's3cret' && !isset($srv['env']['bad key']) && !isset($cs['env']), json_encode([$cs, $srv]));
+    check('connector: nothing written outside its folder', !file_exists("$dir/connectors/evil.txt") && !file_exists("$dir/evil.txt") && !file_exists("$dir/connectors/anki/../evil.txt"));
+    $out = $app->mcp()->call('anki', 'open_tasks', []);
+    check('connector: its tool works with the settings given', str_contains(is_string($out) ? $out : json_encode($out), '3 open tasks at https://anki.example.com for me@example.com (signed in)'), is_string($out) ? $out : json_encode($out));
+    $cp->install($zid, 'anki', ['TALIXIO_URL' => 'https://anki2.example.com', 'TALIXIO_PASSWORD' => ''], false); $cp->finish();
+    $srv = $app->mcp()->servers()['anki'];
+    check('connector: reinstalling keeps a secret left empty', $srv['env']['TALIXIO_PASSWORD'] === 's3cret' && $srv['env']['TALIXIO_URL'] === 'https://anki2.example.com' && $cp->status()['state'] === 'done');
+}
 $fid = (int)$s->q("SELECT id FROM files WHERE folder = '/FAQ/Utilisation' LIMIT 1")->fetchColumn();
 $ro = function (callable $fn) { try { $fn(); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), 'read-only'); } };
 $tmpf = "$dir/x.txt"; file_put_contents($tmpf, 'hello');

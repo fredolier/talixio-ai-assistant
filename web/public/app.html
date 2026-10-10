@@ -299,6 +299,7 @@
         <summary><b>Connectors (MCP)</b> <span id="mcp-badge" class="muted small"></span></summary>
         <div class="fields">
           <p class="muted small">Give the assistant tools from MCP servers: GitHub, Notion, your home automation, your own scripts… Local servers are started by command (Node servers need <code>install.sh --with-node</code>); remote ones by URL with a token in <code>headers</code>, or <b>Sign in</b> for services that use OAuth (Notion, Linear, Atlassian…). Tools that change something wait for your approval, unless the server has <code>"trust": "all"</code>. Saved in <code>data/mcp.json</code>.</p>
+          <div class="row wrap"><button id="conn-install" class="btn" type="button">Install from the library…</button><span class="muted small">Your own connector: put its folder as a .zip in the library (e.g. /Connecteurs), then install it here.</span></div>
           <div id="mcp-servers" class="mcp-servers"></div>
           <label for="mcp-raw">Configuration</label>
           <textarea id="mcp-raw" class="editor mono" rows="10" spellcheck="false" placeholder='{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "…"}}}}'></textarea>
@@ -372,6 +373,18 @@
     </section>
   </main>
 </div>
+<dialog id="conn-dialog" class="dialog" aria-labelledby="conn-title">
+  <form id="conn-form" method="dialog" class="fields">
+    <h3 id="conn-title">Install a connector</h3>
+    <p class="muted small">From a .zip of the connector's folder in your library. It is unpacked in your assistant, its dependencies installed, and its tools added.</p>
+    <label for="conn-file">Package</label><select id="conn-file"></select>
+    <div id="conn-info" class="muted small"></div>
+    <label for="conn-name">Name</label><input id="conn-name" required maxlength="40" pattern="[a-z0-9-]+" placeholder="anki">
+    <div id="conn-env" class="fields"></div>
+    <p id="conn-state" class="small" role="status"></p>
+    <div class="row wrap"><button id="conn-go" class="btn primary" type="submit">Install</button><button id="conn-close" class="btn" type="button">Close</button></div>
+  </form>
+</dialog>
 <dialog id="space-dialog" class="dialog">
   <form id="space-form" method="dialog" class="fields">
     <h3 id="space-dialog-title">New space</h3>
@@ -490,6 +503,7 @@
     <button id="viewer-rename" class="btn small" type="button">Rename</button>
     <button id="viewer-move" class="btn small" type="button">Move</button>
     <button id="viewer-reindex" class="btn small ghost" type="button">Read again</button>
+    <button id="viewer-connector" class="btn small" type="button" hidden>Install as a connector</button>
     <button id="viewer-delete" class="btn small ghost danger" type="button">Delete</button>
   </div>
   <form id="viewer-form" class="lib-inline" hidden><input id="viewer-input" list="folder-list" required><button class="btn primary small" type="submit">OK</button><button id="viewer-form-cancel" class="btn small" type="button">Cancel</button></form>

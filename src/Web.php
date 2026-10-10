@@ -135,6 +135,10 @@ final class Web
             $path === '/api/meaning/choose' && $m === 'POST' => (new Meaning($this->app))->choose((string)($b['preset'] ?? '')),
             $path === '/api/meaning/pull' && $m === 'POST' => (function () { $mn = new Meaning($this->app); $mn->startPull($this->app->cfg->embeddingsModel); return ['ok' => true]; })(),
             $path === '/api/meaning/measure' && $m === 'POST' => (function () { set_time_limit(0); return (new Meaning($this->app))->measure(); })(),
+            $path === '/api/connectors/packages' => ['packages' => (new ConnectorPackage($this->app))->packages()],
+            $path === '/api/connectors/inspect' => (new ConnectorPackage($this->app))->inspect((int)($_GET['file'] ?? 0)),
+            $path === '/api/connectors/install' && $m === 'POST' => (new ConnectorPackage($this->app))->install((int)($b['file'] ?? 0), (string)($b['name'] ?? ''), (array)($b['env'] ?? [])),
+            $path === '/api/connectors/install' && $m === 'GET' => (new ConnectorPackage($this->app))->status(),
             $path === '/api/mcp' && $m === 'GET' => $this->connectors(),
             $path === '/api/mcp' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcp()->saveRaw((string)($b['raw'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/mcp/oauth/start' && $m === 'POST' => (function () use ($b) {

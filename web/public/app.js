@@ -1769,6 +1769,52 @@ const mcpAction = async (path, body) => {
   catch (e) { $('#mcp-state').textContent = e.message; }
 };
 $('#mcp-save').onclick = () => mcpAction('api/mcp', { raw: $('#mcp-raw').value });
+
+/** A connector from a .zip in the library: pick it, fill in what it reads (address, account…), install. */
+async function connectorDialog(fileId) {
+  const d = $('#conn-dialog'), state = $('#conn-state');
+  state.textContent = ''; $('#conn-go').disabled = false;
+  const { packages } = await api('api/connectors/packages');
+  if (!packages.length) { toast(t('Put the connector\'s folder as a .zip in the library first (e.g. in /Connecteurs).')); return; }
+  $('#conn-file').innerHTML = packages.map(p => `<option value="${p.id}">${esc(joinPath(p.folder, p.name))}</option>`).join('');
+  if (fileId) $('#conn-file').value = String(fileId);
+  let info = null;
+  const inspect = async () => {
+    $('#conn-info').textContent = t('Reading the package…'); $('#conn-env').innerHTML = '';
+    try {
+      info = await api('api/connectors/inspect?file=' + $('#conn-file').value);
+      $('#conn-name').value = info.name;
+      $('#conn-info').textContent = info.entry
+        ? t('Starts with {cmd} {entry}', { cmd: info.runtime === 'python' ? 'python3' : 'node', entry: info.entry }) + (info.deps ? ' · ' + t('its dependencies will be installed') : '') + (info.installed ? ' · ' + t('already installed: this replaces it') : '')
+        : info.build ? t('Will be built (npm run build) before it starts.') : t('No server file found in this package.');
+      const secret = k => /PASS|SECRET|TOKEN|KEY/.test(k);
+      $('#conn-env').innerHTML = info.env.length ? `<p class="muted small">${esc(t('Settings it reads (leave empty what you do not need):'))}</p>` + info.env.map(k => `<label for="conn-env-${k}">${esc(k)}</label>
+        <input id="conn-env-${k}" data-k="${esc(k)}" ${secret(k) ? `type="password" autocomplete="new-password" placeholder="${esc(info.installed && info.values[k] === '' ? t('unchanged') : '')}"` : 'type="text"'} value="${esc(info.values[k] || '')}">`).join('') : '';
+      $('#conn-go').disabled = !info.entry && !info.build;
+    } catch (e) { $('#conn-info').textContent = e.message; $('#conn-go').disabled = true; }
+  };
+  $('#conn-file').onchange = inspect;
+  $('#conn-close').onclick = () => d.close();
+  $('#conn-form').onsubmit = async e => {
+    e.preventDefault();
+    const env = {}; $('#conn-env').querySelectorAll('[data-k]').forEach(i => { env[i.dataset.k] = i.value; });
+    $('#conn-go').disabled = true; state.textContent = t('Unpacking…');
+    try {
+      const r = await post('api/connectors/install', { file: +$('#conn-file').value, name: $('#conn-name').value.trim(), env });
+      const poll = async () => {
+        const s = await api('api/connectors/install');
+        if (s.state === 'running') { state.textContent = t({ unpacked: 'Unpacked…', 'installing dependencies': 'Installing its dependencies (npm)…', building: 'Building…', connecting: 'Starting it and listing its tools…' }[s.step] || 'Installing…'); setTimeout(poll, 2000); return; }
+        if (s.state === 'done') { state.textContent = t('Ready: {n} tool(s) from “{name}”. The assistant can use them from the next message.', { n: s.tools, name: r.name }); loadConnectors(); }
+        else { state.textContent = s.error || t('It did not work.'); $('#conn-go').disabled = false; loadConnectors(); }
+      };
+      setTimeout(poll, 1500);
+    } catch (err) { state.textContent = err.message; $('#conn-go').disabled = false; }
+  };
+  d.showModal();
+  await inspect();
+}
+$('#conn-install').onclick = () => connectorDialog().catch(e => toast(e.message));
+$('#viewer-connector').onclick = () => connectorDialog(lib.file.id).catch(e => toast(e.message));
 $('#mcp-refresh').onclick = () => mcpAction('api/mcp/refresh');
 $('#shell-test').onclick = async () => {
   const b = $('#shell-test'); b.disabled = true;
@@ -2247,6 +2293,7 @@ async function openFile(id, opts = {}) {
   const del = $('#viewer-delete'); del.dataset.confirm = ''; del.textContent = 'Delete';
   const ro = isReadonly(f.folder);
   for (const b of ['#viewer-rename', '#viewer-move', '#viewer-reindex', '#viewer-delete']) $(b).hidden = ro;
+  $('#viewer-connector').hidden = !/\.zip$/i.test(lib.file?.name || '');
   const editable = !ro && f.note || !ro && (f.kind === 'text' && f.size < 2_000_000 && !/\.(html?|eml)$/i.test(f.name));
   const hasText = !editable && (f.kind === 'office' || f.kind === 'pdf' || /\.(html?|eml)$/i.test(f.name)) && d.text && !/^\(No text found/.test(d.text);
   const paged = officePages || (f.kind === 'pdf' && d.pages);
