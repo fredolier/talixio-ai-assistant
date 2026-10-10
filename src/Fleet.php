@@ -618,7 +618,7 @@ final class Fleet
                 throw new \RuntimeException("$id did not start on the new version (back on the previous one).");
             }
         }
-        $progress('done', 'Every instance runs the new version.');
+        $this->refreshStack($progress, 'Every instance runs the new version.');
     }
 
     /** Back to the image before the last update. */
@@ -630,7 +630,64 @@ final class Fleet
         $this->tag($img['Id'], self::IMAGE, 'current');
         if (is_array($cur) && isset($cur['Id'])) $this->tag($cur['Id'], self::IMAGE, 'previous');
         foreach (array_keys($this->state()['instances']) as $id) { $progress('rolling', "Moving $id back…"); $this->recreate($id); }
-        $progress('done', 'Back on the previous version.');
+        $this->refreshStack($progress, 'Back on the previous version.');
+    }
+
+    /**
+     * The admin page and the agent run talixio:current too: move them to it last, so the admin page shows the new
+     * version. The agent replaces itself: the new one starts under its name, then the old one (running this job) is
+     * removed; if the new one does not answer, the old one stays.
+     */
+    private function refreshStack(callable $progress, string $done): void
+    {
+        [, $img] = $this->docker('GET', '/images/' . rawurlencode(self::IMAGE . ':current') . '/json');
+        $want = is_array($img) ? ($img['Id'] ?? '') : '';
+        $admin = self::PREFIX . 'admin';
+        [$code, $c] = $this->docker('GET', "/containers/$admin/json");
+        if ($code === 200 && $want !== '' && $c['Image'] !== $want) {
+            $progress('rolling', 'Moving the admin page to the new version…');
+            $this->docker('POST', "/containers/$admin/stop", null, ['t' => 10], 30);
+            $this->ok($this->docker('DELETE', "/containers/$admin", null, ['force' => 'true']), "remove $admin");
+            try { $this->respawn($c, $admin, self::IMAGE . ':current'); } catch (\Throwable $e) { $this->respawn($c, $admin, $c['Image']); throw $e; }
+        }
+        $agent = self::PREFIX . 'agent';
+        [$code, $c] = $this->docker('GET', "/containers/$agent/json");
+        if ($code !== 200 || $want === '' || $c['Image'] === $want) { $progress('done', $done); return; }
+        $progress('done', "$done The admin page and its agent restart on it: reload the page in a few seconds.");
+        $this->docker('DELETE', "/containers/$agent-old", null, ['force' => 'true']); // left by an earlier try
+        $this->ok($this->docker('POST', "/containers/$agent/rename", null, ['name' => "$agent-old"]), 'rename the agent');
+        try {
+            $this->respawn($c, $agent, self::IMAGE . ':current');
+            for ($t = 0; $t < 45; $t++) {
+                sleep(2);
+                $ch = curl_init("http://$agent:8090/health");
+                curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 3]);
+                $ok = curl_exec($ch) !== false && curl_getinfo($ch, CURLINFO_RESPONSE_CODE) === 200;
+                curl_close($ch);
+                if ($ok) { $this->docker('DELETE', "/containers/$agent-old", null, ['force' => 'true']); return; } // ends this process too
+            }
+            throw new \RuntimeException('the new agent did not answer');
+        } catch (\Throwable $e) {
+            $this->docker('DELETE', "/containers/$agent", null, ['force' => 'true']);
+            $this->docker('POST', "/containers/$agent-old/rename", null, ['name' => $agent]);
+            $progress('done', "$done The agent stayed on the previous version ({$e->getMessage()}); run install-stack.sh to move it.");
+        }
+    }
+
+    /** A container like the inspected one $c (same settings, networks and aliases), from $image. */
+    private function respawn(array $c, string $name, string $image): void
+    {
+        $cfg = $c['Config'];
+        unset($cfg['Hostname']);
+        $cfg['Image'] = $image;
+        $cfg['HostConfig'] = $c['HostConfig'];
+        $short = substr($c['Id'], 0, 12);
+        $eps = [];
+        foreach ($c['NetworkSettings']['Networks'] ?? [] as $net => $n)
+            $eps[$net] = ['Aliases' => array_values(array_filter($n['Aliases'] ?? [], fn($a) => $a !== $short && $a !== ltrim($c['Name'] ?? '', '/')))];
+        $cfg['NetworkingConfig'] = ['EndpointsConfig' => $eps];
+        $this->ok($this->docker('POST', '/containers/create', $cfg, ['name' => $name]), "create $name");
+        $this->ok($this->docker('POST', "/containers/$name/start"), "start $name");
     }
 
     private function tag(string $image, string $repo, string $tag): void

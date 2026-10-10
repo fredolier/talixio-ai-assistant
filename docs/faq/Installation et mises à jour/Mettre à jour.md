@@ -12,6 +12,9 @@
 - Page d'administration → **Mises à jour** : l'image est reconstruite depuis le dépôt, puis chaque
   assistant passe dessus l'un après l'autre. Si l'un ne démarre pas, il revient à la version précédente
   et la mise à jour s'arrête. *Revenir à la version précédente* annule la dernière.
+- L'onglet indique s'il existe une version plus récente sur la branche, et ce qui change. En fin de mise
+  à jour, la page d'administration et son agent passent aussi sur la nouvelle version (depuis 0.19.6) :
+  rechargez la page quelques secondes après.
 - L'image est faite en deux étages. Les **dépendances** (paquets système, Chromium, LibreOffice,
   whisper.cpp, signal-cli…) sont une image à part, `talixio-base`, reconstruite seulement quand
   `deploy/docker/base.Dockerfile` change (plusieurs minutes). L'**application** se pose dessus : une mise

@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.19.6 (2026-10-10)
+- Docker: updating from the admin page now also moves the admin page and its agent to the new version (they
+  stayed on the image of the installation, so new admin features never showed). The agent replaces itself
+  last; if the new one does not answer, the old one stays and the job says so.
+
 ## 0.19.5 (2026-10-10)
 - Admin page, Updates: says whether the branch has a newer version than the one running (its number, date
   and last change) and lists the changelog entries in between; checked when the tab opens and with
