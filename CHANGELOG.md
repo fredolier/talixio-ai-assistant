@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.16.2 (2026-10-10)
+- Admin page, *Update everyone*: the branch field shows the branch running now (or the one the stack was
+  installed from) instead of always `main`. Running `install-stack.sh` again records the branch the clone is on.
+
 ## 0.16.1 (2026-10-10)
 - Archiving a space asks for a second click: it was one click, next to *Delete*, and easy to hit by mistake.
 - An archived space says so above its conversation, with *Restore*.

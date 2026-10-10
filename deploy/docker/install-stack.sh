@@ -58,6 +58,11 @@ GIT_URL=$GIT_URL
 GIT_BRANCH=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)
 EOF
   chmod 600 "$ENV"
+else # updates from the admin page build the branch this clone is on
+  BR="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [ -n "$BR" ] && [ "$BR" != HEAD ]; then
+    if grep -q '^GIT_BRANCH=' "$ENV"; then sed -i "s|^GIT_BRANCH=.*|GIT_BRANCH=$BR|" "$ENV"; else echo "GIT_BRANCH=$BR" >> "$ENV"; fi
+  fi
 fi
 if [ -n "$PROXY" ]; then # HTTPS is done by another proxy: plain HTTP on this port, 443 kept to this machine
   sed -i '/^BEHIND_PROXY=/d; /^HTTP_PUBLISH=/d; /^HTTPS_PUBLISH=/d' "$ENV"

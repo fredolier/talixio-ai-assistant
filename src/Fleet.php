@@ -405,7 +405,7 @@ final class Fleet
         $cpu = ['cores' => (int)(is_array($info) ? ($info['NCPU'] ?? 0) : 0) ?: (int)trim((string)shell_exec('nproc')), 'model' => $model, 'load' => $load, 'busy_pct' => self::cpuBusy()];
         $host = ['os' => is_array($info) ? (string)($info['OperatingSystem'] ?? '') : '', 'kernel' => is_array($info) ? (string)($info['KernelVersion'] ?? '') : '',
             'docker' => is_array($info) ? (string)($info['ServerVersion'] ?? '') : '', 'uptime_s' => (int)(float)@file_get_contents('/proc/uptime')];
-        $out = ['memory_mb' => $mem, 'volumes_mb' => $vol, 'disk' => $disk, 'cpu' => $cpu, 'host' => $host, 'image' => $this->state()['image'], 'services' => $this->services()];
+        $out = ['memory_mb' => $mem, 'volumes_mb' => $vol, 'disk' => $disk, 'cpu' => $cpu, 'host' => $host, 'image' => $this->state()['image'], 'git_branch' => getenv('TALIXIO_GIT_BRANCH') ?: 'main', 'services' => $this->services()];
         $out['sizing'] = self::sizing($out, $this->state());
         return $out;
     }

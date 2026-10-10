@@ -79,6 +79,9 @@ async function load() {
   const img = s.image || {};
   $('#version').textContent = (img.built ? t('Running {sha} (branch {branch}, built {when}).', { sha: img.built, branch: img.branch || '?', when: when(img.built_at) }) : t('Running the image built at installation.')) + ' ' + t('Version {v}.', { v: state.version?.number || '?' });
   $('#rollback-btn').disabled = !img.previous;
+  // the branch to build: the one running now (or the one the stack was installed from), unless the admin typed another
+  const br = $('#branch'); if (!br.dataset.edited) br.value = img.branch || s.git_branch || 'main';
+  br.oninput = () => { br.dataset.edited = '1'; };
   $('#ips-list').value = (state.allow_ips || []).join('\n'); $('#my-ip').textContent = state.my_ip || '';
 }
 
