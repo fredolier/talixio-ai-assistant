@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.11.2 (2026-10-10)
+- Fix: in French, the page could freeze when switching spaces (the message field's hint was translated again and
+  again). The interface never translates its own translations any more.
+
 ## 0.11.1 (2026-10-10)
 - Fix: after an update, the installed app could show the new page with the previous version's scripts until
   "Reload" was pressed, so new buttons (Share) did nothing. A page now always gets the scripts of its own version.

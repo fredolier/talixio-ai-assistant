@@ -25,6 +25,9 @@
 
   const norm = s => s.replace(/\s+/g, ' ').trim();
   const exact = new Map(), patterns = [], templates = new Map(); // templates: every key as written, for t()
+  // every text this file wrote: never translated again ("Message {a}…" → "Message à {a}…" would match its own pattern
+  // forever, and the page observer would loop on it)
+  const produced = new Set();
   if (dict) {
     for (const [k, v] of Object.entries(dict)) {
       if (typeof v !== 'string' || v === '') continue;
@@ -48,6 +51,7 @@
   function lookup(text) {
     if ((!dict && !collect) || !text || !/[A-Za-z]{2}/.test(text)) return null;
     const key = norm(text);
+    if (produced.has(key)) return null;
     let out = exact.get(key);
     if (out === undefined) {
       for (const p of patterns) {
@@ -59,6 +63,7 @@
       }
     }
     if (out === undefined) { collect?.add(key); return null; }
+    produced.add(norm(out));
     const lead = text.match(/^\s*/)[0], trail = text.match(/\s*$/)[0];
     return lead + out + trail;
   }
