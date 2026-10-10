@@ -1837,6 +1837,13 @@ $fs['settings']['mode'] = 'subdomain';
 $cf = $fl->caddyfile($fs);
 check('fleet: subdomain mode, certificates on demand only for existing people', str_contains($cf, '*.assistant.example.com {') && str_contains($cf, '@alice host alice.assistant.example.com') && str_contains($cf, 'ask http://talixio-agent:8090/ask')
     && in_array('TALIXIO_BASE_PATH=', $fl->spec('alice', $fs)['Env'], true));
+putenv('TALIXIO_BEHIND_PROXY=1');
+$fs['settings']['mode'] = 'path'; $cfp = $fl->caddyfile($fs);
+check('fleet: behind another proxy: plain HTTP for any host, no certificates', str_contains($cfp, 'auto_https off') && str_contains($cfp, "\n:80 {") && str_contains($cfp, 'trusted_proxies static private_ranges')
+    && str_contains($cfp, 'handle_path /alice/*') && !str_contains($cfp, 'email '));
+$fs['settings']['mode'] = 'subdomain'; $cfp = $fl->caddyfile($fs);
+check('fleet: behind another proxy, subdomains are routed by host', str_contains($cfp, '@alice host alice.assistant.example.com') && !str_contains($cfp, 'on_demand'));
+putenv('TALIXIO_BEHIND_PROXY');
 file_put_contents("$dir/fleet/fleet.json", json_encode($fs));
 check('fleet: /ask says yes only for existing people', $fl->ask('alice.assistant.example.com') && !$fl->ask('bob.assistant.example.com') && !$fl->ask('alice.evil.com') && !$fl->ask('assistant.example.com'));
 try { $fl->setSettings(['domain' => 'bad domain; rm']); check('fleet: bad domain refused', false); } catch (\InvalidArgumentException) { check('fleet: bad domain refused', true); }

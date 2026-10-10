@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.13.1 (2026-10-10)
+- Docker stack behind a reverse proxy you already have (`install-stack.sh --behind-proxy 8080`): plain HTTP on
+  one port, HTTPS stays on your proxy.
+
 ## 0.13.0 (2026-10-10)
 - Privacy: a page showing where your data goes (worked out from your settings), what each service may do with
   it and how to fix it; a journal of every request to the outside (never the content), CSV export, and a record

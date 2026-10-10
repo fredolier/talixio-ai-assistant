@@ -9,7 +9,7 @@ services:
     image: caddy:2-alpine
     container_name: talixio-caddy
     restart: unless-stopped
-    ports: ["80:80", "443:443", "443:443/udp"]
+    ports: ["${HTTP_PUBLISH:-80}:80", "${HTTPS_PUBLISH:-443}:443", "${HTTPS_PUBLISH:-443}:443/udp"]   # --behind-proxy: HTTP on the chosen port only
     volumes:
       - type: volume                     # Caddyfile written by the agent (not Caddy's sample)
         source: caddy-conf
@@ -47,6 +47,7 @@ services:
       TALIXIO_AGENT_TOKEN: ${AGENT_TOKEN}
       TALIXIO_DOMAIN: ${DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
+      TALIXIO_BEHIND_PROXY: ${BEHIND_PROXY:-0}
       TALIXIO_GIT_URL: ${GIT_URL}
       TALIXIO_GIT_BRANCH: ${GIT_BRANCH:-main}
       TALIXIO_STATE_DIR: /state

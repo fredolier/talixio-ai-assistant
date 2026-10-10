@@ -344,14 +344,19 @@ final class Fleet
         $common = "\tencode zstd gzip\n\theader {\n\t\t-Server\n\t\tStrict-Transport-Security \"max-age=31536000\"\n\t\tX-Content-Type-Options nosniff\n\t\tReferrer-Policy same-origin\n\t}\n";
         $admin = "\tredir /admin /admin/\n\thandle_path /admin/* {\n\t\treverse_proxy talixio-admin:8080\n\t}\n";
         $home = "\thandle {\n\t\theader Content-Type \"text/html; charset=utf-8\"\n\t\trespond \"<!doctype html><meta name=viewport content='width=device-width'><title>Talixio</title><p style='font:16px system-ui;margin:3em auto;max-width:30em'>Talixio. Open the address you were given.</p>\" 404\n\t}\n";
-        $out = "# managed by the Talixio agent: changes here are overwritten\n{\n\temail " . (getenv('ACME_EMAIL') ?: 'admin@' . $dom) . "\n"
-            . ($set['mode'] === 'subdomain' ? "\ton_demand_tls {\n\t\task http://talixio-agent:8090/ask\n\t}\n" : '') . "}\n\n";
-        $site = ($dom === 'localhost' ? 'http://localhost' : $dom) . " {\n$common$admin";
+        $proxied = self::behindProxy();
+        $out = "# managed by the Talixio agent: changes here are overwritten\n{\n" . ($proxied
+                // another proxy in front does HTTPS: plain HTTP here, and the visitor's address from its headers
+                ? "\tauto_https off\n\tservers {\n\t\ttrusted_proxies static private_ranges\n\t}\n"
+                : "\temail " . (getenv('ACME_EMAIL') ?: 'admin@' . $dom) . "\n" . ($set['mode'] === 'subdomain' ? "\ton_demand_tls {\n\t\task http://talixio-agent:8090/ask\n\t}\n" : '')) . "}\n\n";
+        $site = ($proxied ? ':80' : ($dom === 'localhost' ? 'http://localhost' : $dom)) . " {\n$common$admin";
         if ($set['mode'] === 'path') {
             foreach ($ids as $id) $site .= "\tredir /$id /$id/\n\thandle_path /$id/* {\n\t\treverse_proxy {$this->containerName($id)}:8080\n\t}\n";
+        } elseif ($proxied) { // subdomains: the proxy in front sends *.domain here
+            foreach ($ids as $id) $site .= "\t@$id host $id.$dom\n\thandle @$id {\n\t\treverse_proxy {$this->containerName($id)}:8080\n\t}\n";
         }
         $out .= $site . $home . "}\n\n";
-        if ($set['mode'] === 'subdomain' && $dom !== 'localhost') {
+        if ($set['mode'] === 'subdomain' && $dom !== 'localhost' && !$proxied) {
             $out .= "*.$dom {\n\ttls {\n\t\ton_demand\n\t}\n$common";
             foreach ($ids as $id) $out .= "\t@$id host $id.$dom\n\thandle @$id {\n\t\treverse_proxy {$this->containerName($id)}:8080\n\t}\n";
             $out .= $home . "}\n\n";
@@ -360,6 +365,9 @@ final class Fleet
         $out .= "http://:11434 {\n\t@embed path /api/embed /api/embeddings /api/tags /api/version\n\thandle @embed {\n\t\treverse_proxy talixio-ollama:11434\n\t}\n\trespond 403\n}\n";
         return $out;
     }
+
+    /** Another reverse proxy (on another machine) does HTTPS in front of the stack: install-stack.sh --behind-proxy. */
+    public static function behindProxy(): bool { return getenv('TALIXIO_BEHIND_PROXY') === '1'; }
 
     /** May Caddy get a certificate for this host? (subdomain mode: only for existing instances) */
     public function ask(string $host): bool

@@ -39,6 +39,19 @@ the authenticator code. Then **People → New person**: an identifier (`alice` g
 `https://assistant.example.com/alice/`), a name; you get a first password to send them. They add
 their own API keys in their Settings.
 
+### Behind a reverse proxy you already have
+
+When another machine already does HTTPS (a Caddy, nginx or Traefik in front of this server), the
+stack doesn't take ports 80/443 nor get certificates: its Caddy serves plain HTTP on one port.
+
+```bash
+sudo deploy/docker/install-stack.sh --domain assistant.example.com --behind-proxy 8080
+```
+
+On the proxy in front: `assistant.example.com { reverse_proxy <this server>:8080 }` (for the
+subdomain mode, also `*.assistant.example.com` with a wildcard certificate). Allow that port only
+from the proxy (`ufw allow from <proxy-ip> to any port 8080`).
+
 ### Moving an existing installation (made with install.sh)
 
 ```bash

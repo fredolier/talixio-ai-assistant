@@ -7,17 +7,22 @@
 #   --migrate ID  move an installation made with install.sh (this server) into the assistant "ID",
 #                 with its data, settings and password; the old services are stopped (not deleted)
 #   --name NAME   the person's name for --migrate
+#   --behind-proxy [ADDR:]PORT
+#                 another reverse proxy (e.g. Caddy on another machine) does HTTPS and forwards to this server:
+#                 the stack then serves plain HTTP on this port only (e.g. 8080), no certificates here.
+#                 That proxy:  assistant.example.com { reverse_proxy <this server>:8080 }
 # Run it again to rebuild the image from this clone and restart the stack (the data stays).
 set -euo pipefail
 cd "$(dirname "$0")"
 STACK="$PWD"; REPO="$(cd ../.. && pwd)"
-DOMAIN=""; EMAIL=""; MIGRATE=""; NAME=""
+DOMAIN=""; EMAIL=""; MIGRATE=""; NAME=""; PROXY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="$2"; shift 2 ;;
     --email) EMAIL="$2"; shift 2 ;;
     --migrate) MIGRATE="$2"; shift 2 ;;
     --name) NAME="$2"; shift 2 ;;
+    --behind-proxy) PROXY="$2"; shift 2 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -49,6 +54,10 @@ GIT_URL=$GIT_URL
 GIT_BRANCH=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)
 EOF
   chmod 600 "$ENV"
+fi
+if [ -n "$PROXY" ]; then # HTTPS is done by another proxy: plain HTTP on this port, 443 kept to this machine
+  sed -i '/^BEHIND_PROXY=/d; /^HTTP_PUBLISH=/d; /^HTTPS_PUBLISH=/d' "$ENV"
+  printf 'BEHIND_PROXY=1\nHTTP_PUBLISH=%s\nHTTPS_PUBLISH=127.0.0.1:8443\n' "$PROXY" >> "$ENV"
 fi
 set -a; . "$ENV"; set +a
 
@@ -98,6 +107,7 @@ say "Downloading the embedding model for memory search (in the background)"
 CODE="$(docker logs talixio-admin 2>&1 | grep -o 'setup code: [A-Z0-9]*' | tail -1 | cut -d' ' -f3 || true)"
 echo
 say "Done"
+[ "${BEHIND_PROXY:-0}" = 1 ] && echo "  Your proxy:  $DOMAIN { reverse_proxy <this server>:${HTTP_PUBLISH##*:} }   (HTTPS stays there)"
 echo "  Admin page:  https://$DOMAIN/admin/"
 [ -n "$CODE" ] && echo "  Setup code:  $CODE   (first visit: you choose the admin password and scan the authenticator code)"
 [ -n "$MIGRATE" ] && echo "  Your assistant: https://$DOMAIN/$MIGRATE/  (same password as before; install the app again on your phone from this address)"
