@@ -11,11 +11,14 @@
 #                 another reverse proxy (e.g. Caddy on another machine) does HTTPS and forwards to this server:
 #                 the stack then serves plain HTTP on this port only (e.g. 8080), no certificates here.
 #                 That proxy:  assistant.example.com { reverse_proxy <this server>:8080 }
+#   --whisper-model NAME
+#                 the model for transcription on the server (whisper.cpp, shared by everyone): large-v3-turbo-q5_0
+#                 by default (about 1 GB of memory while it runs), small (lighter), medium; none = no model
 # Run it again to rebuild the image from this clone and restart the stack (the data stays).
 set -euo pipefail
 cd "$(dirname "$0")"
 STACK="$PWD"; REPO="$(cd ../.. && pwd)"
-DOMAIN=""; EMAIL=""; MIGRATE=""; NAME=""; PROXY=""
+DOMAIN=""; EMAIL=""; MIGRATE=""; NAME=""; PROXY=""; WMODEL="large-v3-turbo-q5_0"
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="$2"; shift 2 ;;
@@ -23,6 +26,7 @@ while [ $# -gt 0 ]; do
     --migrate) MIGRATE="$2"; shift 2 ;;
     --name) NAME="$2"; shift 2 ;;
     --behind-proxy) PROXY="$2"; shift 2 ;;
+    --whisper-model) WMODEL="$2"; shift 2 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -67,6 +71,21 @@ docker build -t talixio:current \
   --build-arg VERSION_DATE="$(git -C "$REPO" log -1 --format=%cI 2>/dev/null || true)" \
   --build-arg VERSION_SUBJECT="$(git -C "$REPO" log -1 --format=%s 2>/dev/null || true)" "$REPO"
 
+# the whisper.cpp model, in a volume every assistant reads: taken from this server when install.sh put it here
+WVOL=talixio-whisper
+if [ "$WMODEL" != none ] && ! docker run --rm --entrypoint test -v "$WVOL:/m" talixio:current -s "/m/ggml-$WMODEL.bin" 2>/dev/null; then
+  docker volume create "$WVOL" >/dev/null
+  if [ -s "/opt/whisper.cpp/models/ggml-$WMODEL.bin" ]; then
+    say "Copying the transcription model $WMODEL from this server"
+    docker run --rm --user 0 --entrypoint cp -v /opt/whisper.cpp/models:/src:ro -v "$WVOL:/m" talixio:current "/src/ggml-$WMODEL.bin" /m/
+  else
+    say "Downloading the transcription model $WMODEL (0.2 to 1.5 GB)"
+    docker run --rm --user 0 --entrypoint sh -v "$WVOL:/m" talixio:current -c \
+      "curl -fL --retry 3 -o /m/ggml-$WMODEL.bin.part https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$WMODEL.bin && mv /m/ggml-$WMODEL.bin.part /m/ggml-$WMODEL.bin" \
+      || echo "    could not download the model: transcription on the server stays off (run this again later)" >&2
+  fi
+fi
+
 if [ -n "$MIGRATE" ]; then
   [ -d /var/lib/talixio ] || { echo "No installation in /var/lib/talixio to migrate." >&2; exit 1; }
   say "Moving the current installation into the assistant \"$MIGRATE\""
@@ -96,6 +115,10 @@ for i in $(seq 1 30); do docker exec talixio-agent php -r 'exit(0);' 2>/dev/null
 
 if [ -n "$MIGRATE" ]; then
   docker exec talixio-agent php /opt/talixio/deploy/docker/fleetctl.php adopt "$MIGRATE" "$NAME"
+  case "$WMODEL" in large*|medium*) # the model needs about 1 GB on top of the app while it transcribes
+    docker exec talixio-agent php -r 'require "/opt/talixio/src/autoload.php"; $f = new Talixio\Fleet("/state"); $i = $f->state()["instances"][$argv[1]];
+      if ($i["memory_mb"] < 2048) { $f->setLimits($argv[1], 2048, max(2.0, (float)$i["cpus"])); echo "    2 GB and 2 processors for $argv[1] (transcription on the server)\n"; }' "$MIGRATE" ;;
+  esac
 fi
 docker exec talixio-agent php /opt/talixio/deploy/docker/fleetctl.php reload >/dev/null 2>&1 || true
 # the existing assistants move to the image just built
@@ -111,6 +134,8 @@ say "Done"
 echo "  Admin page:  https://$DOMAIN/admin/"
 [ -n "$CODE" ] && echo "  Setup code:  $CODE   (first visit: you choose the admin password and scan the authenticator code)"
 [ -n "$MIGRATE" ] && echo "  Your assistant: https://$DOMAIN/$MIGRATE/  (same password as before; install the app again on your phone from this address)"
+[ "$WMODEL" != none ] && echo "  Transcription: on the server (whisper.cpp, $WMODEL). Large models need 2 GB for the person: admin page → People → limits"
+echo "  Signal:      docker exec -it talixio-<person> talixio signal register   (see deploy/docker/README.md)"
 echo "  Status:      docker compose -f $STACK/compose.yml ps"
 echo "  Logs:        docker logs -f talixio-<person>"
 wait

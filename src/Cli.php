@@ -65,8 +65,14 @@ final class Cli
                     Settings::setTotp($app->cfg->dataDir, '');
                     echo "Two-step sign-in is off. Turn it on again in Settings.\n";
                     return 0;
+                case 'signal': // signal-cli for the assistant's number (register, verify, link...); in the container, where Settings hold the number
+                    $c = $app->cfg;
+                    if ($c->signalNumber === '') { fwrite(STDERR, "Set the assistant's number in Settings → Signal first.\n"); return 1; }
+                    @mkdir($c->dataDir . '/signal', 0700, true);
+                    $p = proc_open(array_merge([$c->signalCli, '--config', $c->dataDir . '/signal', '-a', $c->signalNumber], array_slice($argv, 2)), [STDIN, STDOUT, STDERR], $pipes);
+                    return is_resource($p) ? proc_close($p) : 1;
                 default:
-                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|backup|password|totp [off]|mcp|index|job ID\n");
+                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|backup|password|totp [off]|signal ARGS|mcp|index|job ID\n");
                     return 2;
             }
         } catch (\Throwable $e) {

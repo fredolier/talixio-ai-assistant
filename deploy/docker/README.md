@@ -62,7 +62,27 @@ The data of `/var/lib/talixio` is copied into the assistant `fred` (the original
 is), the settings of `/etc/talixio/talixio.env` are imported, the password stays the same. The old
 services (talixio-web, talixio-worker, Caddy, Ollama) are stopped and disabled, not removed. The
 address becomes `https://assistant.example.com/fred/`: open it once and install the app again on
-your phone. Signal (signal-cli) is not in the image yet.
+your phone. A transcription model already installed by `install.sh --with-whisper` is reused, and the
+person gets 2 GB and 2 processors so that it fits.
+
+### Transcription on the server (whisper.cpp)
+
+The image includes whisper.cpp. The model is in the volume `talixio-whisper`, shared read-only by every
+assistant: `install-stack.sh` fills it (`--whisper-model large-v3-turbo-q5_0` by default, `small`, `medium`,
+or `none`). With Transcription on "auto", an assistant without a Gemini key transcribes on the server; a
+Confidential space always does. The large model needs about 1 GB while it runs: give the person 2 GB
+(admin page → People → limits), or choose `small`. A one-hour meeting takes 30 to 60 minutes on 2 processors.
+
+### Signal
+
+signal-cli is in the image (x86_64 servers). Its registration lives in the person's volume
+(`/data/signal`). Put the assistant's number and yours in Settings → Signal, then:
+```bash
+docker exec -it talixio-fred talixio signal register        # captcha asked: see the main README (Signal)
+docker exec -it talixio-fred talixio signal verify 123456   # the code received by SMS
+docker exec -it talixio-fred talixio signal updateProfile --given-name Talixio
+docker restart talixio-fred
+```
 
 ## Updates
 

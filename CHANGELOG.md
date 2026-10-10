@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.14.0 (2026-10-10)
+- The Docker image includes whisper.cpp (transcription on the server, the model shared by every assistant
+  in one volume) and signal-cli (Signal channel). Moving an install made with `--with-whisper` reuses its model.
+- Local transcription uses only the processors the container is given, and says when the memory is too small.
+
 ## 0.13.1 (2026-10-10)
 - Docker stack behind a reverse proxy you already have (`install-stack.sh --behind-proxy 8080`): plain HTTP on
   one port, HTTPS stays on your proxy.

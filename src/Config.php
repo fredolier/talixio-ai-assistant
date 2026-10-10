@@ -164,7 +164,7 @@ final class Config
             $c->transcribe = match (true) {
                 $c->geminiKey !== '' => 'gemini',
                 $c->provider === 'openai' && $c->openaiKey !== '' && str_contains($c->openaiBaseUrl, 'api.openai.com') => 'openai',
-                is_file(Transcriber::WHISPER_DIR . '/build/bin/whisper-cli') => 'local', // install.sh --with-whisper
+                Transcriber::whisperReady() => 'local', // install.sh --with-whisper, or the Docker image with a model in its volume
                 default => 'off',
             };
         }

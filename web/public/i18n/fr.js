@@ -90,7 +90,7 @@ window.I18N.fr = {
 "A mailing list": "Une liste de diffusion",
 "a name is needed": "un nom est requis",
 "A new version of Talixio is ready.": "Une nouvelle version de Talixio est prête.",
-"A number dedicated to the assistant, registered with \"sudo talixio signal register\" (see the README).": "Un numéro dédié à l'assistant, enregistré avec « sudo talixio signal register » (voir le README).",
+"A number dedicated to the assistant, registered with \"sudo talixio signal register\" (in Docker: \"docker exec -it talixio-<you> talixio signal register\"; see the README).": "Un numéro dédié à l'assistant, enregistré avec « sudo talixio signal register » (sous Docker : « docker exec -it talixio-<vous> talixio signal register » ; voir le README).",
 "a page": "une page",
 "A separate conversation about this folder": "Une conversation à part sur ce dossier",
 "A separate conversation for one subject, with its own documents folder, instructions and notes. It doesn't see your other spaces unless you ask.": "Une conversation à part pour un sujet, avec son propre dossier de documents, ses instructions et ses notes. Elle ne voit pas vos autres espaces, sauf si vous le demandez.",

@@ -130,7 +130,28 @@ final class Transcriber
         $bin = trim((string)shell_exec('command -v whisper-cli 2>/dev/null')) ?: (is_file(self::WHISPER_DIR . '/build/bin/whisper-cli') ? self::WHISPER_DIR . '/build/bin/whisper-cli' : '');
         $m = $c->transcribeModel !== '' ? $c->transcribeModel : self::WHISPER_MODEL;
         $model = str_contains($m, '/') ? $m : self::WHISPER_DIR . "/models/ggml-$m.bin";
+        if ($c->transcribeModel === '' && !is_file($model)) $model = (glob(self::WHISPER_DIR . '/models/ggml-*.bin') ?: [$model])[0]; // another model was installed
         return [$bin, $model];
+    }
+
+    /** Whether local transcription can run: the program and a model. */
+    public static function whisperReady(): bool
+    {
+        return is_file(self::WHISPER_DIR . '/build/bin/whisper-cli') && glob(self::WHISPER_DIR . '/models/ggml-*.bin');
+    }
+
+    /** How to install it, where this runs. */
+    public static function whisperHint(): string
+    {
+        return getenv('TALIXIO_MANAGED') === '1' ? 'the administrator runs deploy/docker/install-stack.sh, which downloads the model' : 'sudo ./install.sh --with-whisper';
+    }
+
+    /** Cores this process may use: the container's CPU limit when there is one, else the machine's. */
+    private static function cores(): int
+    {
+        $n = (int)trim((string)shell_exec('nproc 2>/dev/null')) ?: 2;
+        if (preg_match('/^(\d+) (\d+)/', (string)@file_get_contents('/sys/fs/cgroup/cpu.max'), $m) && (int)$m[2] > 0) $n = min($n, (int)ceil((int)$m[1] / (int)$m[2]));
+        return max(1, min(8, $n));
     }
 
     public const WHISPER_DIR = '/opt/whisper.cpp';
@@ -140,17 +161,18 @@ final class Transcriber
     private function local(string $path, bool $meeting): string
     {
         [$bin, $model] = self::whisper($this->app->cfg);
-        if ($bin === '') throw new \RuntimeException('local transcription: whisper.cpp is not installed (sudo ./install.sh --with-whisper)');
-        if (!is_file($model)) throw new \RuntimeException("local transcription: model file not found: $model (sudo ./install.sh --with-whisper)");
+        if ($bin === '') throw new \RuntimeException('local transcription: whisper.cpp is not installed (' . self::whisperHint() . ')');
+        if (!is_file($model)) throw new \RuntimeException("local transcription: model file not found: $model (" . self::whisperHint() . ')');
         $tmp = tempnam(sys_get_temp_dir(), 'talixio-whisper');
         $wav = "$tmp.wav";
         try {
             exec('ffmpeg -nostdin -loglevel error -y -i ' . escapeshellarg($path) . ' -vn -ac 1 -ar 16000 -c:a pcm_s16le ' . escapeshellarg($wav) . ' 2>&1', $o, $code);
             if ($code !== 0 || !is_file($wav)) throw new \RuntimeException('local transcription: ffmpeg could not read the audio: ' . mb_substr(implode(' ', $o), 0, 200));
-            $threads = max(1, min(8, (int)trim((string)shell_exec('nproc 2>/dev/null')) ?: 2));
+            $threads = self::cores();
             $cmd = 'nice -n 10 ' . escapeshellarg($bin) . ' -m ' . escapeshellarg($model) . ' -f ' . escapeshellarg($wav) . " -l auto -t $threads -np -oj -of " . escapeshellarg($tmp) . ' 2>&1';
             $o = []; exec($cmd, $o, $code);
             $json = json_decode((string)@file_get_contents("$tmp.json"), true);
+            if ($code === 137) throw new \RuntimeException('local transcription: not enough memory for the model ' . basename($model) . ' (about 1 GB): give this assistant 2 GB, or choose the model "small" in Settings');
             if ($code !== 0 || !is_array($json)) throw new \RuntimeException("local transcription failed ($code): " . mb_substr(implode(' ', array_slice($o, -5)), 0, 300));
             $lines = [];
             foreach ($json['transcription'] ?? [] as $seg) {

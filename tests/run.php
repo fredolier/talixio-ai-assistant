@@ -1829,6 +1829,7 @@ $hc = $spec['HostConfig'];
 check('fleet: containers are locked down (no privileges, read-only, limits, own network)', $hc['Privileged'] === false && $hc['CapDrop'] === ['ALL'] && $hc['ReadonlyRootfs'] && $hc['Memory'] === 1024 * 1048576
     && $hc['NanoCpus'] === 1500000000 && $hc['NetworkMode'] === 'talixio-i-alice' && in_array('no-new-privileges', $hc['SecurityOpt'], true) && !isset($hc['Binds']) && $hc['Mounts'][0]['Source'] === 'talixio-alice'
     && str_starts_with(implode("\n", $hc['SecurityOpt']), 'no-new-privileges') && json_decode(substr($hc['SecurityOpt'][1], 8), true)['defaultAction'] === 'SCMP_ACT_ERRNO');
+check('fleet: the shared whisper models are mounted read-only', $hc['Mounts'][1] === ['Type' => 'volume', 'Source' => 'talixio-whisper', 'Target' => '/opt/whisper.cpp/models', 'ReadOnly' => true] && !\Talixio\Fleet::validId('whisper'));
 check('fleet: instance settings (prefix, shared Ollama through Caddy)', in_array('TALIXIO_BASE_PATH=alice', $spec['Env'], true) && in_array('TALIXIO_OLLAMA_URL=http://talixio-caddy:11434', $spec['Env'], true));
 $cf = $fl->caddyfile($fs);
 check('fleet: Caddy routes the admin page and each assistant under its path', str_contains($cf, "assistant.example.com {") && str_contains($cf, 'handle_path /admin/*') && str_contains($cf, "handle_path /alice/* {\n\t\treverse_proxy talixio-alice:8080") && !str_contains($cf, 'on_demand'));

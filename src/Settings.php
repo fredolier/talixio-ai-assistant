@@ -90,7 +90,7 @@ final class Settings
                 ['TALIXIO_SPOTIFY_CLIENT_SECRET', 'Spotify client secret', 'secret', ''],
                 ['TALIXIO_SPOTIFY_DEVICE', 'Usual device', 'text', 'Where to play when nothing is playing, e.g. "Galaxy S25 Ultra". Empty = your phone.'],
             ]],
-            'signal' => ['Signal', 'A number dedicated to the assistant, registered with "sudo talixio signal register" (see the README).', [
+            'signal' => ['Signal', 'A number dedicated to the assistant, registered with "sudo talixio signal register" (in Docker: "docker exec -it talixio-<you> talixio signal register"; see the README).', [
                 ['TALIXIO_SIGNAL_NUMBER', 'Assistant\'s number', 'text', '+33…'],
                 ['TALIXIO_SIGNAL_ALLOWED', 'Your numbers', 'list', 'The only numbers it answers.'],
             ]],

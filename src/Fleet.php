@@ -15,9 +15,10 @@ namespace Talixio;
 final class Fleet
 {
     public const IMAGE = 'talixio';
+    public const WHISPER = 'talixio-whisper';  // whisper.cpp models, shared read-only by everyone (install-stack.sh fills it)
     public const PREFIX = 'talixio-';          // containers, volumes and networks of instances: talixio-<id>
     public const CADDY = 'talixio-caddy';
-    public const RESERVED = ['admin', 'api', 'cal', 'share', 'static', 'assets', 'www', 'mail', 'caddy', 'agent', 'ollama', 'control', 'current', 'previous'];
+    public const RESERVED = ['admin', 'api', 'cal', 'share', 'static', 'assets', 'www', 'mail', 'caddy', 'agent', 'ollama', 'control', 'current', 'previous', 'whisper'];
 
     private string $socket;
     private string $stateFile;
@@ -109,7 +110,8 @@ final class Fleet
             'Labels' => ['talixio.instance' => $id, 'talixio.managed' => '1'],
             'Healthcheck' => ['Test' => ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8080/sw.js'], 'Interval' => 30_000_000_000, 'Timeout' => 5_000_000_000, 'StartPeriod' => 20_000_000_000],
             'HostConfig' => [
-                'Mounts' => [['Type' => 'volume', 'Source' => self::PREFIX . $id, 'Target' => '/data']],
+                'Mounts' => [['Type' => 'volume', 'Source' => self::PREFIX . $id, 'Target' => '/data'],
+                    ['Type' => 'volume', 'Source' => self::WHISPER, 'Target' => '/opt/whisper.cpp/models', 'ReadOnly' => true]], // shared transcription models
                 'Memory' => (int)$i['memory_mb'] * 1048576,
                 'MemoryReservation' => (int)min(512, (int)$i['memory_mb'] / 2) * 1048576,
                 'NanoCpus' => (int)round((float)$i['cpus'] * 1e9),
