@@ -1886,5 +1886,11 @@ window.I18N.fr = {
 "Deleted files, restorable for 30 days": "Fichiers supprimés, restaurables pendant 30 jours",
 "Searching…": "Recherche…",
 "Looking for similar messages…": "Recherche de messages proches…",
-"Searching by meaning…": "Recherche par le sens…"
+"Searching by meaning…": "Recherche par le sens…",
+  "What changes": "Ce qui change",
+  "Looking for a new version on {branch}…": "Recherche d'une nouvelle version sur {branch}…",
+  "Version {v}": "Version {v}",
+  "New on {branch}: {what}.": "Nouveau sur {branch} : {what}.",
+  "Up to date with {branch}: {what}.": "À jour avec {branch} : {what}.",
+  "Could not check: {e}": "Vérification impossible : {e}"
 };

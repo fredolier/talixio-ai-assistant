@@ -638,16 +638,12 @@ final class Fleet
         $this->ok($this->docker('POST', '/images/' . rawurlencode($image) . '/tag', null, ['repo' => $repo, 'tag' => $tag]), 'tag', [200, 201]);
     }
 
-    /** The branch, without its history, in a temporary folder. */
-    private function checkout(string $url, string $branch): string
+    /** The branch, without its history, in a temporary folder. $light: no file contents until read (git show). */
+    private function checkout(string $url, string $branch, bool $light = false): string
     {
         $dir = sys_get_temp_dir() . '/talixio-src-' . bin2hex(random_bytes(4));
-        $env = ['GIT_TERMINAL_PROMPT' => '0'];
         $token = getenv('TALIXIO_GIT_TOKEN') ?: '';
-        if ($token !== '') // a private repository: the credentials as a header, out of the address and the command line
-            $env += ['GIT_CONFIG_COUNT' => '1', 'GIT_CONFIG_KEY_0' => 'http.extraHeader',
-                'GIT_CONFIG_VALUE_0' => 'Authorization: Basic ' . base64_encode((getenv('TALIXIO_GIT_USER') ?: 'x-access-token') . ":$token")];
-        [$code, $out] = self::run(['git', 'clone', '-q', '--depth', '1', '--branch', $branch, '--', $url, $dir], $env);
+        [$code, $out] = self::run(['git', 'clone', '-q', '--depth', '1', ...($light ? ['--filter=blob:none', '--no-checkout'] : []), '--branch', $branch, '--', $url, $dir], self::gitEnv());
         if ($code !== 0) {
             self::run(['rm', '-rf', $dir]);
             $out = mb_substr(str_replace(array_filter([$url, $token]), ['<repository>', '<token>'], $out), 0, 300);
@@ -657,6 +653,64 @@ final class Fleet
             throw new \RuntimeException('Could not fetch the code: ' . $out);
         }
         return $dir;
+    }
+
+    private static function gitEnv(): array
+    {
+        $env = ['GIT_TERMINAL_PROMPT' => '0'];
+        $token = getenv('TALIXIO_GIT_TOKEN') ?: '';
+        if ($token !== '') // a private repository: the credentials as a header, out of the address and the command line
+            $env += ['GIT_CONFIG_COUNT' => '1', 'GIT_CONFIG_KEY_0' => 'http.extraHeader',
+                'GIT_CONFIG_VALUE_0' => 'Authorization: Basic ' . base64_encode((getenv('TALIXIO_GIT_USER') ?: 'x-access-token') . ":$token")];
+        return $env;
+    }
+
+    /**
+     * What runs (read in a running assistant) and the latest commit of the branch, with the changelog entries in
+     * between. The branch's files are fetched again only when its last commit changed.
+     */
+    public function checkUpdate(string $branch): array
+    {
+        $url = getenv('TALIXIO_GIT_URL') ?: '';
+        if ($url === '') throw new \RuntimeException('TALIXIO_GIT_URL is not set (in the stack\'s .env).');
+        if (!preg_match('/^[A-Za-z0-9._\/-]{1,100}$/', $branch)) throw new \InvalidArgumentException('bad branch name');
+        $current = null;
+        foreach ($this->list() as $i) {
+            if ($i['state'] !== 'running') continue;
+            [$c1, $v] = $this->exec($this->containerName($i['id']), ['cat', '/opt/talixio/VERSION.json'], 20);
+            [$c2, $n] = $this->exec($this->containerName($i['id']), ['cat', '/opt/talixio/VERSION'], 20);
+            $v = $c1 === 0 ? (json_decode($v, true) ?: []) : [];
+            $current = ['sha' => (string)($v['sha'] ?? ''), 'date' => (string)($v['date'] ?? ''), 'subject' => (string)($v['subject'] ?? ''), 'number' => $c2 === 0 ? trim($n) : ''];
+            break;
+        }
+        [$code, $out] = self::run(['git', 'ls-remote', '--', $url, "refs/heads/$branch"], self::gitEnv());
+        if ($code !== 0) $this->checkout($url, $branch, true); // throws with the explanation (private repository…)
+        $sha = (string)strtok($out, "\t");
+        if (!preg_match('/^[0-9a-f]{40}$/', $sha)) throw new \RuntimeException("No branch $branch in the repository.");
+        $cache = "$this->stateDir/latest.json";
+        $latest = json_decode((string)@file_get_contents($cache), true) ?: [];
+        if (($latest['sha'] ?? '') !== $sha) {
+            $src = $this->checkout($url, $branch, true);
+            try {
+                $git = fn(string ...$a) => self::run(['git', '-C', $src, ...$a], self::gitEnv())[1];
+                $latest = ['sha' => $sha, 'number' => trim($git('show', 'HEAD:VERSION')), 'date' => trim($git('log', '-1', '--format=%cI')),
+                    'subject' => trim($git('log', '-1', '--format=%s')), 'changelog' => $git('show', 'HEAD:CHANGELOG.md')];
+            } finally {
+                self::run(['rm', '-rf', $src]);
+            }
+            @file_put_contents($cache, json_encode($latest));
+        }
+        // the changelog's entries newer than what runs
+        $changes = [];
+        foreach (preg_split('/^(?=## )/m', (string)($latest['changelog'] ?? '')) as $sec) {
+            if (!preg_match('/^## (\d+\.\d+\.\d+)/', $sec, $m)) continue;
+            if ($current && $current['number'] !== '' && version_compare($m[1], $current['number'], '<=')) break;
+            $changes[] = trim($sec);
+            if (count($changes) >= 15) break;
+        }
+        unset($latest['changelog']);
+        return ['branch' => $branch, 'current' => $current, 'latest' => $latest, 'checked_at' => time(),
+            'new' => $current === null || $current['sha'] !== $sha, 'changes' => mb_substr(implode("\n\n", $changes), 0, 12000)];
     }
 
     /** [exit code, output] of a fixed command. */

@@ -20,3 +20,34 @@ Claude ne prend pas l'audio en entrée : la transcription est une étape à part
   moitié de la durée de l'enregistrement sur 4 cœurs) et sans noms d'intervenants.
 - **auto** : Gemini si une clé est renseignée, sinon local si whisper.cpp est installé.
 - Dans un espace **Confidentiel**, la transcription se fait toujours en local.
+
+## Quel modèle choisir ? (Réglages → Audio → Modèle de transcription)
+Laissé vide, le choix est automatique, et c'est le bon réglage dans la plupart des cas.
+
+**Gemini** (le nom commence par `gemini`) :
+
+| Modèle | Pour quoi |
+|---|---|
+| `gemini-2.5-flash` | Le choix par défaut. Bonne qualité, noms des intervenants, peu cher. |
+| `gemini-2.5-flash-lite` | Le moins cher. Suffit pour les notes vocales ; un peu moins fiable sur les longues réunions à plusieurs voix. |
+| `gemini-2.5-pro` | Plus cher et plus lent, rarement meilleur pour une transcription. |
+| `gemini-3-flash-preview`, … | Les modèles plus récents de votre clé marchent aussi (la liste est dans Réglages → Modèle IA). |
+
+Vide : le modèle « standard » de Gemini si Gemini est votre fournisseur, sinon `gemini-2.5-flash`.
+Un nom de modèle whisper laissé dans ce champ est ignoré par Gemini.
+
+**Local (whisper.cpp)** : le nom d'un fichier `ggml-<nom>.bin` dans `/opt/whisper.cpp/models`, ou son chemin.
+
+| Modèle | Taille | Qualité en français | Vitesse |
+|---|---|---|---|
+| `large-v3-turbo-q5_0` | 0,55 Go | Très bonne | Le choix par défaut, le meilleur compromis |
+| `large-v3-turbo` | 1,6 Go | Très bonne | Comme ci-dessus, plus de mémoire |
+| `large-v3` | 3,1 Go | La meilleure | Environ 4 fois plus lent que turbo |
+| `medium` (`medium-q5_0` : 0,5 Go) | 1,5 Go | Bonne | Plus lent que turbo |
+| `small` (`small-q5_1` : 0,2 Go) | 0,5 Go | Correcte (noms propres et chiffres moins sûrs) | Rapide |
+| `base`, `tiny` | 0,15 / 0,08 Go | Faible en français | Très rapide |
+
+Le modèle doit être téléchargé sur le serveur : `sudo ./install.sh --with-whisper` (variable
+`WHISPER_MODEL=small` pour en choisir un autre), ou sous Docker
+`install-stack.sh --whisper-model small`. Les fichiers viennent de
+huggingface.co/ggerganov/whisper.cpp. Prévoyez environ deux fois la taille du modèle en mémoire.

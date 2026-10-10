@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.19.5 (2026-10-10)
+- Admin page, Updates: says whether the branch has a newer version than the one running (its number, date
+  and last change) and lists the changelog entries in between; checked when the tab opens and with
+  *Check now*. Only the branch's last commit is fetched (and its files only when it changed).
+- FAQ (Audio and meetings): the transcription models available for Gemini and whisper.cpp, and which to pick.
+
 ## 0.19.4 (2026-10-10)
 - Admin page: **Log** in each assistant's Actions menu shows the end of its log (errors, warnings and failed
   requests; every line on demand), without a terminal on the server. Reading it is in the audit trail.

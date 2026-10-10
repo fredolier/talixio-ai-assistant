@@ -71,6 +71,7 @@ try {
         })(),
         $path === '/server' => $json($fleet->server()),
         $path === '/caddyfile' => $json(['caddyfile' => $fleet->caddyfile()]),
+        $path === '/check-update' => $json($fleet->checkUpdate((string)($_GET['branch'] ?? (getenv('TALIXIO_GIT_BRANCH') ?: 'main')))),
         $path === '/job' => $json(json_decode((string)@file_get_contents("$state/job.json"), true) ?: ['state' => 'none']),
         $path === '/update' && $method === 'POST' => $background('update', (string)($b['branch'] ?? (getenv('TALIXIO_GIT_BRANCH') ?: 'main'))),
         $path === '/rollback' && $method === 'POST' => $background('rollback'),

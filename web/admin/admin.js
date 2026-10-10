@@ -62,6 +62,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.tab').forEach(t => t.hidden = t.id !== 'tab-' + b.dataset.tab);
   if (b.dataset.tab === 'activity') loadAudit();
+  if (b.dataset.tab === 'update' && Date.now() - (checkUpdate.at || 0) > 600000) checkUpdate();
 });
 
 async function start() {
@@ -234,6 +235,22 @@ function renderJob(j) {
   clearTimeout(renderJob.t);
   if (j.state === 'running') renderJob.t = setTimeout(async () => { try { renderJob(await api('api/job')); } catch {} }, 3000);
 }
+/** Whether the branch has a newer version than the one running, and what changes. */
+async function checkUpdate() {
+  const msg = $('#latest-msg'), ch = $('#latest-changes'), branch = $('#branch').value.trim() || 'main';
+  checkUpdate.at = Date.now();
+  msg.textContent = t('Looking for a new version on {branch}…', { branch }); $('#check-btn').disabled = true;
+  try {
+    const r = await api('api/check-update?branch=' + encodeURIComponent(branch)), l = r.latest || {};
+    const what = (l.number ? t('Version {v}', { v: l.number }) : l.sha?.slice(0, 7)) + ' (' + when(Date.parse(l.date) / 1000) + (l.subject ? ' · ' + l.subject : '') + ')';
+    msg.textContent = r.new ? t('New on {branch}: {what}.', { branch, what }) : t('Up to date with {branch}: {what}.', { branch, what });
+    msg.className = r.new ? 'new' : 'muted small';
+    $('#update-btn').classList.toggle('pulse', !!r.new);
+    ch.hidden = !(r.new && r.changes); ch.querySelector('pre').textContent = r.changes || ''; ch.open = !!r.new;
+  } catch (e) { msg.textContent = t('Could not check: {e}', { e: e.message }); msg.className = 'err small'; }
+  $('#check-btn').disabled = false;
+}
+$('#check-btn').onclick = () => checkUpdate();
 $('#update-btn').onclick = async () => {
   if (!await ask('Update everyone?', { html: `<p>Builds branch <b>${esc($('#branch').value)}</b> (several minutes), then restarts each assistant on it, one by one.</p>`, ok: 'Update' })) return;
   try { await api('api/update', { branch: $('#branch').value.trim() || 'main' }); renderJob(await api('api/job')); } catch (e) { toast(e.message); }

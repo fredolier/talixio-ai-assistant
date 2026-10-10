@@ -204,6 +204,7 @@ final class AdminWeb
             $this->json($inst + ['server' => $this->agent('GET', '/server'), 'job' => $this->agent('GET', '/job'), 'allow_ips' => $this->conf()['allow_ips'] ?? [], 'my_ip' => Auth::clientIp(), 'version' => Version::get()]);
             return;
         }
+        if ($path === '/api/check-update') { $this->json($this->agent('GET', '/check-update?' . http_build_query(['branch' => (string)($_GET['branch'] ?? 'main')]), null, 120)); return; }
         if ($path === '/api/job') { $this->json($this->agent('GET', '/job')); return; }
         if ($path === '/api/audit') {
             $lines = array_slice(file("$this->dir/audit.log", FILE_IGNORE_NEW_LINES) ?: [], -200);
