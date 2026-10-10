@@ -74,6 +74,7 @@
         <div class="topbar-actions">
           <button id="privacy-badge" class="privacy-badge" type="button" title="Confidentiality of this space"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></svg><span></span></button>
           <a id="notify-btn" class="btn ghost small" href="#settings" hidden>Turn on notifications</a>
+          <button id="capture-btn" class="btn ghost icon" type="button" aria-label="Quick capture" title="Quick capture: a task or a note"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
           <button id="chat-search-btn" class="btn ghost icon" type="button" aria-label="Find in the conversation" title="Find in the conversation"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></button>
         </div>
       </header>
@@ -169,6 +170,34 @@
           <button id="brief-run" class="btn small" type="button" hidden>Send it now</button>
         </div>
       </div>
+      <div class="card briefing-card" id="weekly-card">
+        <div><b>Weekly review</b><p class="muted small">What was done, what slipped, the week ahead and 3 priorities. The full review is saved as a note.</p></div>
+        <div class="row wrap">
+          <select id="weekly-day" aria-label="Day"><option value="0">Sunday</option><option value="1">Monday</option><option value="5">Friday</option><option value="6">Saturday</option></select>
+          <label class="small">At <input id="weekly-time" type="time" value="18:00"></label>
+          <label class="small">In <input id="weekly-folder" placeholder="/Notes/Weekly reviews" size="18"></label>
+          <button id="weekly-save" class="btn primary small" type="button">Set up</button>
+          <button id="weekly-run" class="btn small" type="button" hidden>Run now</button>
+        </div>
+      </div>
+      <details class="card briefing-card watch-card" id="watch-card">
+        <summary><b>Watch and draft</b><span class="muted small">Follows topics for you (a newsletter, a market, a technology…) and writes the draft of the next issue in your library.</span></summary>
+        <form id="watch-form" class="fields">
+          <input type="hidden" id="watch-id">
+          <label for="watch-name">Name</label><input id="watch-name" required maxlength="80" value="Fil IA">
+          <label for="watch-topics">What to watch</label><textarea id="watch-topics" rows="2" required placeholder="AI news that matters for small businesses: new models, tools, regulation…"></textarea>
+          <label for="watch-sources">Sources to look at first (optional)</label><textarea id="watch-sources" rows="2" placeholder="Sites, newsletters, people…"></textarea>
+          <label for="watch-audience">For whom (optional)</label><input id="watch-audience" placeholder="Business owners, not technical">
+          <label for="watch-format">Format of the draft (optional)</label><textarea id="watch-format" rows="2" placeholder="A title, a 2-line intro, 5 items with a short comment and the link"></textarea>
+          <div class="row wrap">
+            <select id="watch-every" aria-label="How often"><option value="weekly">every week</option><option value="daily">every day</option><option value="monthly">every month</option></select>
+            <select id="watch-day" aria-label="Day"><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option></select>
+            <label class="small">At <input id="watch-time" type="time" value="08:00"></label>
+            <label class="small">Drafts in <input id="watch-folder" placeholder="/Drafts/Fil IA" size="18"></label>
+          </div>
+          <div class="row wrap"><button id="watch-save" class="btn primary small" type="submit">Set up</button><button id="watch-new" class="btn small ghost" type="button" hidden>New watch</button><span id="watch-state" class="muted small"></span></div>
+        </form>
+      </details>
       <div id="tasks" class="list"></div>
     </section>
 
@@ -377,6 +406,15 @@
     </section>
   </main>
 </div>
+<dialog id="capture-dialog" class="dialog capture-dialog" aria-labelledby="cap-title">
+  <form id="capture-form" method="dialog" class="fields">
+    <div class="row wrap"><h3 id="cap-title">Quick capture</h3><span class="spacer"></span>
+      <div class="seg" role="tablist" aria-label="Kind"><button type="button" data-kind="task" role="tab" class="on">Task</button><button type="button" data-kind="note" role="tab">Note</button></div></div>
+    <textarea id="cap-text" rows="4" required placeholder="Call the bank about the loan !2"></textarea>
+    <p id="cap-hint" class="muted small"></p>
+    <div class="row wrap"><button id="cap-save" class="btn primary" type="submit">Add</button><button id="cap-close" class="btn" type="button">Close</button></div>
+  </form>
+</dialog>
 <dialog id="trash-dialog" class="dialog trash-dialog" aria-labelledby="trash-title">
   <h3 id="trash-title">Trash</h3>
   <p id="trash-note" class="muted small"></p>

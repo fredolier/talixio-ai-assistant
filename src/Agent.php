@@ -5,6 +5,8 @@ namespace Talixio;
 /** The assistant. One conversation thread shared by all channels (web, Telegram, schedules, jobs). */
 final class Agent
 {
+    private int $routine = 0; // the routine whose message is being written (runTask)
+
     public function __construct(private App $app) {}
 
     /** Stable part of the instructions (cached by the provider). $role: main | job | summary */
@@ -42,8 +44,8 @@ final class Agent
             . "## How you work\n"
             . "- Long-term memory: save durable facts about the user (name, family, preferences, routines, projects) to USER.md and decisions/notes to MEMORY.md. Keep them tidy: correct or remove outdated lines with memory_replace. Don't announce routine saves.\n"
             . "- Older parts of the conversation are compacted into summaries (below); everything stays searchable with search_memory. Relevant snippets may also be added automatically; use them only if they really apply.\n"
-            . "- The user's library is their personal knowledge base (documents, notes, PDFs, Office files, recordings, photos, in folders). For questions about their own documents, clients, contracts, admin papers..., search it with kb_search (optionally in one folder), read files with file_read and cite them with the link kb_search gives, e.g. [Bail Dupont p. 3](/files/12#p3): the user clicks it to open the document at that page. Save useful write-ups there with kb_save_note when asked. To give someone outside access to a document or folder, share_create makes a link (the user approves it). Attachments land in /Inbox; file them with kb_move when the user asks. Deleted files stay in the trash for 30 days: kb_trash lists and restores them. Questions about Talixio itself (how to use it, settings, installing, updating, administration, privacy, what a version brought): search the read-only folder /FAQ with kb_search and answer from it, citing the page. When the user asks \"from my documents in /Folder\", search that folder (several searches if needed), answer only from what you found, cite the files, and say clearly when the documents don't contain the answer.\n"
-            . "- Reminders, follow-ups and recurring reports: use schedule_task (a \"routine\") and confirm the exact time back.\n"
+            . "- The user's library is their personal knowledge base (documents, notes, PDFs, Office files, recordings, photos, in folders). For questions about their own documents, clients, contracts, admin papers..., search it with kb_search (optionally in one folder), read files with file_read and cite them with the link kb_search gives, e.g. [Bail Dupont p. 3](/files/12#p3): the user clicks it to open the document at that page. Save useful write-ups there with kb_save_note when asked. To give someone outside access to a document or folder, share_create makes a link (the user approves it). Attachments land in /Inbox; file them with kb_move when the user asks. Deleted files stay in the trash for 30 days: kb_trash lists and restores them. When the user asks where a file or folder is (\"où est…\", \"where is…\"), use kb_find for names (kb_search for what is inside) and answer with the path and the link. Questions about Talixio itself (how to use it, settings, installing, updating, administration, privacy, what a version brought): search the read-only folder /FAQ with kb_search and answer from it, citing the page. When the user asks \"from my documents in /Folder\", search that folder (several searches if needed), answer only from what you found, cite the files, and say clearly when the documents don't contain the answer.\n"
+            . "- Reminders, follow-ups and recurring reports: use schedule_task (a \"routine\") and confirm the exact time back. When the user reacts to what a routine sent (\"less of this\", \"that was useful\", \"stop telling me about X\"), record it with routine_feedback so its next runs take it into account.\n"
             . "- Tasks (to-dos): each space has a tasks board (board_list, board_add, board_update...): things to do, with a code like MAI-12, priority P1 (most urgent) to P5, dates, workload and dependencies. When the user says \"add a task\", \"I need to...\", it goes on the board, not into a routine. Keep tasks up to date when the user reports progress (status, notes, time spent). In General you can see all spaces' tasks and propose an overall order; set it only once the user agrees.\n"
             . "- Phone: the user often chats from their Android phone. To open an app, start navigation, call or text someone, use phone_action: it gives a button the user taps (you can't open apps by yourself)."
             . ($this->app->spotify()->connected() ? ' Music: spotify_play plays directly on their phone or speaker; spotify_control, spotify_now, spotify_save for the rest.' : '') . "\n"
@@ -159,6 +161,14 @@ final class Agent
                 return $this->app->approvals()->decide($id, $ans[0], $channel);
             }
         }
+        // "t: call the bank" adds a task, "n: …" saves a note: at once, without a model call
+        if (!$files && !in_array($channel, ['schedule', 'job', 'heartbeat'], true) && ($cap = Routines::parseCapture($text)) !== null) {
+            $store->addMessage('user', $channel, $text, null, [], $space);
+            try { $done = $this->app->routines()->capture($cap[0], $cap[1], $space); $reply = $done['reply']; }
+            catch (\Throwable $e) { $reply = I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]); }
+            $store->addMessage('assistant', $channel, $reply, ['capture' => $cap[0]], [], $space);
+            return $reply;
+        }
         $privacy = $this->app->privacy();
         $level = $privacy->spaceLevel($space);
         if ($channel === 'telegram' && $level !== 'internal') return I18n::t($this->app, '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).', ['name' => $spaces->get($space)['name']]);
@@ -234,8 +244,10 @@ final class Agent
                 $reply = I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]);
             }
             $trace = Privacy::end();
-            $store->addMessage('assistant', $channel, $reply, $trace ? ($meta ?? []) + ['trace' => $trace, 'level' => $level] : $meta, [], $space);
-            if ($meta !== null) $this->maybeLearn($prompt, $reply, $toolsBefore);
+            if ($trace) $meta = ($meta ?? []) + ['trace' => $trace, 'level' => $level];
+            if ($this->routine) $meta = ($meta ?? []) + ['routine' => $this->routine]; // its items can be rated 👍/👎
+            $store->addMessage('assistant', $channel, $reply, $meta, [], $space);
+            if (isset($meta['model'])) $this->maybeLearn($prompt, $reply, $toolsBefore);
             return $reply;
         } finally {
             $this->app->space = $previousSpace;
@@ -292,9 +304,13 @@ final class Agent
     }
 
     /** A scheduled task fires: the prompt is recorded in the thread so the conversation stays coherent. */
-    public function runTask(string $title, string $prompt, string $tier = 'standard', int $space = 0): string
+    public function runTask(string $title, string $prompt, string $tier = 'standard', int $space = 0, int $taskId = 0): string
     {
-        return $this->chat('schedule', "[Scheduled task \"$title\" is due now. Do it and write the message for the user.]\n$prompt", in_array($tier, Tier::NAMES, true) ? $tier : 'standard', [], null, $space);
+        $this->routine = $taskId;
+        try {
+            return $this->chat('schedule', "[Scheduled task \"$title\" is due now. Do it and write the message for the user.]\n$prompt"
+                . ($taskId ? $this->app->routines()->feedbackPrompt($taskId) : ''), in_array($tier, Tier::NAMES, true) ? $tier : 'standard', [], null, $space);
+        } finally { $this->routine = 0; }
     }
 
     /**

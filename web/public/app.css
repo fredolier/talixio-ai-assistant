@@ -816,3 +816,24 @@ span.privacy-badge{cursor:default;min-height:26px;padding:0 9px}
 .folder-pick button.cur{font-weight:600}
 .folder-pick button:disabled{opacity:.45;cursor:default}
 .folder-pick .fp-note{padding:6px 10px}
+
+/* routines: rated lines, watch card, quick capture */
+.bubble.routine ul,.bubble.routine ol{list-style:none;padding-left:0;display:flex;flex-direction:column;gap:6px}
+.bubble.routine li{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin:0}
+.bubble.routine li>.rate{margin-left:auto}
+.rate{display:inline-flex;gap:2px;flex:none}
+.rate button{border:0;background:none;cursor:pointer;font-size:.95rem;padding:2px 4px;border-radius:6px;opacity:.45;filter:grayscale(1)}
+.rate button:hover{opacity:.9;filter:none;background:var(--sunk)}
+.rate button.on{opacity:1;filter:none;background:var(--accent-soft)}
+.watch-card{display:block}
+.watch-card summary{cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.watch-card .fields{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.watch-card .fields label{font-size:.83rem;color:var(--muted)}
+.watch-card textarea,.watch-card input:not([type=time]){font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--sunk);color:var(--ink);width:100%;box-sizing:border-box}
+.watch-card .row input{width:auto}
+.feedback-list{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--sunk)}
+.feedback-list li{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.capture-dialog form{display:flex;flex-direction:column;gap:10px;min-width:min(480px,86vw)}
+.capture-dialog textarea{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--sunk);color:var(--ink);resize:vertical}
+.search-sub{margin:10px 2px 4px;font-weight:600}
+a.cite.folder svg{fill:none;stroke:currentColor;stroke-width:2}

@@ -46,6 +46,7 @@ function md(src) {
     .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>')
     .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
     .replace(/\[([^\]]+)\]\(\/files\/(\d+)(?:#p(\d+))?\)/g, (_, t, id, pg) => `<a href="#" class="cite" data-file="${id}"${pg ? ` data-page="${pg}"` : ''} title="Open the document${pg ? ' at page ' + pg : ''}">${CITE_SVG}${t}</a>`)
+    .replace(/\[([^\]]+)\]\((#library(?:\/[^\s)]*)?)\)/g, (_, t, h) => `<a href="${h}" class="cite folder">${FOLDER_SVG}${t}</a>`) // a library folder ("where is…?")
     // buttons that open an app on the phone (phone_action, Spotify): custom schemes only from this list
     .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|intent|deezer|tg|sgnl|uber|homeassistant):[^\s)]+)\)/g, (_, t, h) => `<a href="${h}" class="action">${t.replace(/^▶\s*/, '')}</a>`)
     .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" class="action" target="_blank" rel="noopener">$1</a>')
@@ -154,9 +155,34 @@ function renderMessage(m) {
   const tr = mt && mt.trace;
   const trace = tr ? `<button type="button" class="trace-btn" aria-expanded="false" title="What left the server for this answer">${traceLine(tr)}</button>` : '';
   el.innerHTML = `${atts ? `<div class="attachments">${atts}</div>` : ''}${body ? `<div class="bubble">${m.role === 'user' ? esc(body) : md(body)}</div>` : ''}<div class="meta">${chip}<span>${fmtTime(m.ts)}</span>${usage}${trace}${acts}</div>${tr ? `<div class="trace-detail" hidden>${traceDetail(tr)}</div>` : ''}`;
+  if (mt?.routine && m.id && body) routineCards(el, m);
   el.querySelectorAll('.act').forEach(b => b.onclick = () => messageAction(b.dataset.act, m, el));
   el.querySelector('.trace-btn')?.addEventListener('click', e => { const dt = el.querySelector('.trace-detail'); dt.hidden = !dt.hidden; e.currentTarget.setAttribute('aria-expanded', String(!dt.hidden)); });
   return el;
+}
+
+/** A routine's message (morning briefing, weekly review...): each line is a card the user can rate 👍/👎; its next runs follow it. */
+const feedbackItem = text => Array.from(text.replace(/[ \t\r\n]+/g, ' ').trim()).slice(0, 300).join('');
+function routineCards(el, m) {
+  const bubble = el.querySelector('.bubble');
+  const lists = [...bubble.children].filter(x => x.tagName === 'UL' || x.tagName === 'OL');
+  const items = lists.length ? lists.flatMap(l => [...l.children].filter(x => x.tagName === 'LI')) : [];
+  const votes = m.meta.votes || {};
+  const buttons = item => `<span class="rate" data-item="${esc(item)}"><button type="button" data-v="1" class="${votes[item] === 1 ? 'on' : ''}" title="${esc(t('Useful'))}" aria-label="${esc(t('Useful'))}">👍</button>`
+    + `<button type="button" data-v="-1" class="${votes[item] === -1 ? 'on' : ''}" title="${esc(t('Not useful'))}" aria-label="${esc(t('Not useful'))}">👎</button></span>`;
+  if (items.length) {
+    bubble.classList.add('routine');
+    items.forEach(li => { const item = feedbackItem(li.textContent); if (item) li.insertAdjacentHTML('beforeend', buttons(item)); });
+  } else el.querySelector('.meta').insertAdjacentHTML('beforeend', buttons(feedbackItem(m.content.split('\n').find(l => l.trim()) || '').slice(0, 120) || 'message'));
+  el.querySelectorAll('.rate button').forEach(b => b.onclick = async () => {
+    const box = b.parentElement, v = b.classList.contains('on') ? 0 : +b.dataset.v; // clicking again removes the vote
+    try {
+      await post('api/feedback', { task: m.meta.routine, message: m.id, item: box.dataset.item, vote: v });
+      box.querySelectorAll('button').forEach(x => x.classList.toggle('on', +x.dataset.v === v));
+      if (v) { m.meta.votes = { ...(m.meta.votes || {}), [box.dataset.item]: v }; toast(t(v > 0 ? 'Noted: more like this.' : 'Noted: less of this next time.')); }
+      else if (m.meta.votes) delete m.meta.votes[box.dataset.item];
+    } catch (e) { toast(e.message); }
+  });
 }
 
 const ICON = {
@@ -843,14 +869,58 @@ async function runTaskNow(t, b) {
   b.disabled = true; b.textContent = 'Running…';
   try { const r = await post(`api/tasks/${t.id}/run`); toast('Done: the result is in the chat.'); if (r.space === state.space) poll(); }
   catch (e) { toast(e.message); }
-  b.disabled = false; b.textContent = t.title === 'Morning briefing' ? 'Send it now' : 'Run now';
+  b.disabled = false; b.textContent = window.t(t.title === 'Morning briefing' ? 'Send it now' : 'Run now');
 }
 $('#brief-save').onclick = async () => {
   try { await post('api/tasks/briefing', { time: $('#brief-time').value, days: $('#brief-days').value }); toast('Morning briefing set up.'); loadTasks(); }
   catch (e) { toast(e.message); }
 };
+$('#weekly-save').onclick = async () => {
+  try { await post('api/tasks/weekly', { day: +$('#weekly-day').value, time: $('#weekly-time').value, folder: $('#weekly-folder').value.trim() }); toast(t('Weekly review set up.')); loadTasks(); }
+  catch (e) { toast(e.message); }
+};
+folderPicker($('#weekly-folder')); folderPicker($('#watch-folder'));
+$('#watch-every').onchange = () => { $('#watch-day').hidden = $('#watch-every').value === 'daily'; };
+$('#watch-name').oninput = () => { $('#watch-folder').placeholder = '/Drafts/' + ($('#watch-name').value.trim() || '…'); };
+function fillWatch(w) {
+  $('#watch-id').value = w?.id ?? '';
+  for (const k of ['name', 'topics', 'sources', 'audience', 'format', 'every', 'time', 'folder']) $('#watch-' + k).value = w ? (w[k] ?? '') : ({ name: 'Fil IA', every: 'weekly', time: '08:00' }[k] ?? '');
+  $('#watch-day').value = String(w?.day ?? 1);
+  $('#watch-every').onchange(); $('#watch-name').oninput();
+  $('#watch-save').textContent = t(w ? 'Update' : 'Set up');
+  $('#watch-new').hidden = !w;
+  $('#watch-state').textContent = w ? t('Editing "{name}"', { name: w.name }) : '';
+}
+$('#watch-new').onclick = () => fillWatch(null);
+$('#watch-form').onsubmit = async e => {
+  e.preventDefault();
+  const b = { id: $('#watch-id').value || null, day: +$('#watch-day').value };
+  for (const k of ['name', 'topics', 'sources', 'audience', 'format', 'every', 'time', 'folder']) b[k] = $('#watch-' + k).value.trim();
+  try { const { task } = await post('api/tasks/watch', b); toast(t('"{name}" set up: its drafts go to {folder}.', { name: task.title, folder: b.folder || '/Drafts/' + b.name })); state.watches = null; await loadTasks(); fillWatch((state.watches || []).find(w => w.id === task.id)); }
+  catch (err) { toast(err.message); }
+};
+/** What the user rated on a routine's messages, with a way to remove a vote. */
+async function showFeedback(task, box) {
+  if (!box.hidden) { box.hidden = true; return; }
+  try {
+    const { feedback } = await api(`api/tasks/${task.id}/feedback`);
+    box.innerHTML = feedback.length ? `<ul class="plain">${feedback.map(f => `<li>${f.vote > 0 ? '👍' : '👎'} <span>${esc(f.item)}</span>${f.note ? ` <span class="muted">(${esc(f.note)})</span>` : ''} <span class="muted small">${fmtTime(f.ts)}</span> <button class="btn small ghost" type="button" data-id="${f.id}">${esc(t('Remove'))}</button></li>`).join('')}</ul>`
+      : `<p class="muted small">${esc(t('No feedback yet: rate the lines of its messages with 👍/👎 in the chat.'))}</p>`;
+    box.querySelectorAll('button[data-id]').forEach(b => b.onclick = async () => { try { await post(`api/feedback/${b.dataset.id}/delete`); b.closest('li').remove(); } catch (e) { toast(e.message); } });
+    box.hidden = false;
+  } catch (e) { toast(e.message); }
+}
 async function loadTasks() {
-  const { tasks } = await api('api/tasks');
+  const [{ tasks }, { watches }] = await Promise.all([api('api/tasks'), api('api/tasks/watches')]);
+  state.watches = watches;
+  const weekly = tasks.find(t => t.title === 'Weekly review');
+  if (weekly) {
+    const [mm, hh, , , day] = weekly.cron.split(' ');
+    $('#weekly-time').value = `${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`; $('#weekly-day').value = day;
+    $('#weekly-folder').value = (weekly.prompt.match(/kb_save_note \(folder "([^"]+)"/) || [])[1] || '';
+    $('#weekly-save').textContent = t('Update');
+    $('#weekly-run').hidden = false; $('#weekly-run').onclick = () => runTaskNow(weekly, $('#weekly-run'));
+  }
   const brief = tasks.find(t => t.title === 'Morning briefing');
   if (brief) {
     const [mm, hh, , , days] = brief.cron.split(' ');
@@ -866,14 +936,16 @@ async function loadTasks() {
     const when = t.cron ? `Repeats · <code>${esc(t.cron)}</code>` : 'Once';
     const next = t.enabled && t.next_text ? `Next: ${esc(t.next_text)}` : (t.last_run ? `Last ran ${fmtTime(t.last_run)}` : 'Paused');
     el.innerHTML = `<div><h3>${esc(t.title)}</h3><div class="when"><span class="chip">${when}</span>${t.space_name ? `<span class="chip" title="Answers in this space">${esc(t.space_name)}</span>` : ''}<span>${next}</span></div></div>
-      <div class="actions">${tierSelect(t.tier, 'Model that runs this task')}<button class="btn small" data-a="run" title="Run it now">Run now</button><button class="btn small" data-a="toggle">${t.enabled ? 'Pause' : 'Resume'}</button><button class="btn small ghost" data-a="delete">Delete</button></div>
-      <p class="prompt">${esc(t.prompt)}</p>`;
+      <div class="actions">${tierSelect(t.tier, 'Model that runs this task')}${watches.some(w => w.id === t.id) ? '<button class="btn small" data-a="watch">Settings</button>' : ''}${t.feedback ? `<button class="btn small ghost" data-a="feedback" title="${esc(window.t('What you rated on its messages'))}">👍👎 ${t.feedback}</button>` : ''}<button class="btn small" data-a="run" title="Run it now">Run now</button><button class="btn small" data-a="toggle">${t.enabled ? 'Pause' : 'Resume'}</button><button class="btn small ghost" data-a="delete">Delete</button></div>
+      <p class="prompt">${esc(t.prompt)}</p><div class="feedback-list" hidden></div>`;
     el.querySelector('select').onchange = async e => {
       try { await post(`api/tasks/${t.id}/tier`, { tier: e.target.value }); toast(`"${t.title}" will run on the ${e.target.value} tier.`); }
       catch (err) { toast(err.message); e.target.value = t.tier; }
     };
     el.querySelectorAll('button').forEach(b => b.onclick = async () => {
       if (b.dataset.a === 'run') return runTaskNow(t, b);
+      if (b.dataset.a === 'feedback') return showFeedback(t, el.querySelector('.feedback-list'));
+      if (b.dataset.a === 'watch') { fillWatch(watches.find(w => w.id === t.id)); $('#watch-card').open = true; $('#watch-card').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
       try { await post(`api/tasks/${t.id}/${b.dataset.a}`); toast(b.dataset.a === 'delete' ? 'Task deleted' : (t.enabled ? 'Task paused' : 'Task resumed')); loadTasks(); }
       catch (e) { toast(e.message); }
     });
@@ -2422,7 +2494,7 @@ const RENDERED = ['text', 'office'];
 /** A citation in an answer: open the document in the library, at its page. */
 document.addEventListener('click', async e => {
   const a = e.target.closest('a.cite');
-  if (!a || a.closest('[contenteditable=true]')) return;
+  if (!a || a.closest('[contenteditable=true]') || !a.dataset.file) return; // a folder link is a plain #library link
   e.preventDefault();
   a.closest('dialog[open]')?.close();
   try {
@@ -2844,11 +2916,14 @@ $('#lib-main').addEventListener('drop', e => { e.preventDefault(); $('#lib-main'
  */
 const SPIN_SVG = '<svg class="spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
 function libSearchRender() {
-  const box = $('#lib-results'), { q, folder, results, phase } = libSearch;
+  const box = $('#lib-results'), { q, folder, phase } = libSearch;
   box.hidden = false; $('#lib-list').hidden = true; box.innerHTML = '';
   const where = folder !== '/' ? ' ' + t('in {folder}', { folder }) : '';
   const head = document.createElement('div'); head.className = 'search-head';
-  const n = results?.length || 0;
+  const names = libSearch.names || { files: [], folders: [] };
+  const byName = new Set(names.files.map(f => f.id));
+  const results = libSearch.results?.filter(r => !byName.has(r.id)); // a file found by its name is listed once
+  const n = (results?.length || 0) + names.files.length + names.folders.length;
   const found = () => n === 1 ? t('1 result for “{q}”', { q }) : t('{n} results for “{q}”', { n, q });
   const status = phase === 'quick' ? t('Searching for “{q}”…', { q }) + where
     : phase === 'meaning' ? (n ? found() : t('No word match for “{q}”', { q })) + where + ' · ' + t('looking by meaning…')
@@ -2859,7 +2934,20 @@ function libSearchRender() {
   head.querySelector('[data-a=stop]')?.addEventListener('click', () => libSearchStop());
   head.querySelector('[data-a=close]').onclick = () => libSearchClose();
   box.append(head);
-  if (n) {
+  if (names.files.length || names.folders.length) { // "where is…": matching names first
+    const sub = document.createElement('div'); sub.className = 'search-sub muted small'; sub.textContent = t('By name'); box.append(sub);
+    const list = document.createElement('div'); list.className = 'lib-list';
+    for (const d of names.folders) {
+      const el = document.createElement('a'); el.href = '#'; el.className = 'lib-row';
+      el.innerHTML = `<span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(d.path.split('/').pop())}</b><span class="snippet">${esc(d.path)} · ${esc(d.total === 1 ? t('1 file') : t('{n} files', { n: d.total }))}</span></span>`;
+      el.onclick = e => { e.preventDefault(); libSearchClose(); libGo(d.path); };
+      list.append(el);
+    }
+    for (const f of names.files) list.append(fileRow({ ...f, size: 0, created: 0, status: 'ready' }, f.folder));
+    box.append(list);
+    if (results?.length) { const s2 = document.createElement('div'); s2.className = 'search-sub muted small'; s2.textContent = t('In the content'); box.append(s2); }
+  }
+  if (results?.length) {
     const list = document.createElement('div'); list.className = 'lib-list';
     for (const r of results) list.append(fileRow({ ...r, size: 0, created: 0, status: 'ready' }, `${joinPath(r.folder, r.name)} · ${r.snippet}`));
     box.append(list);
@@ -2874,7 +2962,7 @@ function libSearchStop() {
 }
 /** Back to the folder's list. */
 function libSearchClose() {
-  libSearch.ctl?.abort(); libSearch.ctl = null; libSearch.phase = ''; libSearch.results = null;
+  libSearch.ctl?.abort(); libSearch.ctl = null; libSearch.phase = ''; libSearch.results = null; libSearch.names = null;
   $('#lib-results').hidden = true; $('#lib-results').innerHTML = ''; $('#lib-list').hidden = false;
 }
 $('#lib-search').onsubmit = async e => {
@@ -2884,13 +2972,13 @@ $('#lib-search').onsubmit = async e => {
   if (!q) return libSearchClose();
   const folder = $('#lib-scope').checked ? lib.folder : '/';
   const ctl = new AbortController();
-  Object.assign(libSearch, { ctl, q, folder, results: null, phase: 'quick' });
+  Object.assign(libSearch, { ctl, q, folder, results: null, names: null, phase: 'quick' });
   libSearchRender();
   const url = `api/library/search?q=${encodeURIComponent(q)}&folder=${encodeURIComponent(folder)}`;
   try {
     const quick = await api(url + '&mode=quick', { signal: ctl.signal });
     if (libSearch.ctl !== ctl) return; // stopped, or another search started
-    libSearch.results = quick.results;
+    libSearch.results = quick.results; libSearch.names = quick.names;
     if (!quick.more) { libSearch.ctl = null; libSearch.phase = 'done'; return libSearchRender(); }
     libSearch.phase = 'meaning'; libSearchRender();
     const full = await api(url, { signal: ctl.signal });
@@ -3036,11 +3124,48 @@ async function handleLaunch() {
       $('#input').focus();
     } catch (e) { toast(e.message); }
   }
+  if (params.get('action') === 'capture') { location.hash = '#chat'; openCapture(); }
   if (params.get('action') === 'record') {
     location.hash = '#chat';
     banner('Ready to record a meeting.', 'Start recording', () => { banner(''); startRecording(); });
   }
 }
+
+/** Quick capture: a task on the board or a note in the library in one step, without the assistant ("t: …" / "n: …" in the chat does the same). */
+let captureKind = 'task';
+function openCapture(kind) {
+  const d = $('#capture-dialog');
+  setCaptureKind(kind || captureKind);
+  if (!d.open) d.showModal();
+  $('#cap-text').focus();
+}
+function setCaptureKind(kind) {
+  captureKind = kind;
+  document.querySelectorAll('#capture-dialog .seg button').forEach(b => b.classList.toggle('on', b.dataset.kind === kind));
+  const sp = spaceOf(state.space);
+  $('#cap-text').placeholder = t(kind === 'task' ? 'Call the bank about the loan !2' : 'Idea for the newsletter: …');
+  $('#cap-hint').textContent = kind === 'task'
+    ? t('First line: the title; the next lines: the description. !1 to !5 sets the priority. Goes to the board of {space}.', { space: sp.name })
+    : t('Saved as a note in {folder}. The first line gives its name.', { folder: sp.folder || '/Inbox' });
+}
+document.querySelectorAll('#capture-dialog .seg button').forEach(b => b.onclick = () => { setCaptureKind(b.dataset.kind); $('#cap-text').focus(); });
+$('#capture-btn').onclick = () => openCapture();
+$('#cap-close').onclick = () => $('#capture-dialog').close();
+$('#cap-text').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('#capture-form').requestSubmit(); } });
+$('#capture-form').onsubmit = async e => {
+  e.preventDefault();
+  const text = $('#cap-text').value.trim();
+  if (!text) return;
+  $('#cap-save').disabled = true;
+  try {
+    const r = await post('api/capture', { kind: captureKind, text, space: state.space });
+    $('#cap-text').value = '';
+    $('#capture-dialog').close();
+    toast(r.reply.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1'));
+    if (location.hash.startsWith('#board') && typeof loadBoard === 'function') loadBoard();
+  } catch (err) { toast(err.message); }
+  finally { $('#cap-save').disabled = false; }
+};
 
 /** /preview/ID/name: one document full screen ("Open in a new tab"); the address keeps the file name. */
 const previewId = (location.pathname.slice(BASE.length).match(/^\/preview\/(\d+)/) || [])[1];

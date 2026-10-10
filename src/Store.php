@@ -103,6 +103,17 @@ final class Store
         $this->addColumn('usage', 'job_id', 'INTEGER');
         $this->addColumn('usage', 'cache_read', 'INTEGER NOT NULL DEFAULT 0');
         $this->addColumn('usage', 'cache_write', 'INTEGER NOT NULL DEFAULT 0');
+        // the user's 👍/👎 on what routines send (Routines), fed back into their next runs
+        $this->db->exec('CREATE TABLE IF NOT EXISTS routine_feedback(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, task INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL,
+                item TEXT NOT NULL, vote INTEGER NOT NULL, note TEXT NOT NULL DEFAULT \'\', message INTEGER);
+            CREATE INDEX IF NOT EXISTS routine_feedback_task ON routine_feedback(task);');
+        if ($this->get('briefing_v2') === '') { // the morning briefing becomes 5 rated lines; keep what the user added ("Also: …")
+            foreach ($this->q("SELECT id, prompt FROM tasks WHERE title = 'Morning briefing' AND job IS NULL")->fetchAll() as $t) {
+                $i = strpos((string)$t['prompt'], "\nAlso: ");
+                $this->q('UPDATE tasks SET prompt = ? WHERE id = ?', [Routines::briefingPrompt($i === false ? '' : trim(substr($t['prompt'], $i + 7))), $t['id']]);
+            }
+            $this->set('briefing_v2', '1');
+        }
         if ($this->get('docs_backfilled') === '') { // index history written before RAG existed
             $this->db->exec("INSERT INTO docs(kind, ref, ts, label, text)
                 SELECT 'message', id, ts, role || ' via ' || channel, content FROM messages

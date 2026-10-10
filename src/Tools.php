@@ -8,9 +8,9 @@ final class Tools
     /** Which tools each kind of run gets. Sub-agents can read and research but not change memory, schedules or spawn more jobs. */
     public const SETS = [
         'chat' => null, // everything
-        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'mail_triage', 'contact_find', 'file_read', 'kb_search', 'kb_list', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report', 'board_list', 'board_get'],
+        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'mail_triage', 'contact_find', 'file_read', 'kb_search', 'kb_find', 'kb_list', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report', 'board_list', 'board_get'],
         'reflect' => ['skill_read', 'skill_save'],
-        'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'kb_search', 'kb_list', 'calendar_events', 'mail_list', 'mail_read',
+        'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'kb_search', 'kb_find', 'kb_list', 'calendar_events', 'mail_list', 'mail_read',
             'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot', 'shell_run', 'mail_triage', 'contact_find', 'board_list', 'board_get'],
         'none' => [],
     ];
@@ -69,6 +69,27 @@ final class Tools
                 if (!$hits) return 'nothing found in ' . $folder . ($folder !== '/' ? " (search folder '/' to look in the whole library)" : '');
                 return implode("\n", array_map(fn($h) => '- ' . Library::join($h['folder'], $h['name']) . " (file #{$h['id']}" . ($h['page'] ? ", page {$h['page']}" : '') . ', cite as ['
                     . preg_replace('/[\[\]]/', '', $h['name']) . ($h['page'] ? " p. {$h['page']}" : '') . "](/files/{$h['id']}" . ($h['page'] ? "#p{$h['page']}" : '') . ")): {$h['snippet']}", $hits));
+            });
+        $this->register('kb_find',
+            "Find files and folders of the user's library by their name (\"where is my lease?\", \"the Alice folder\"): every word must be in the name, case and accents ignored. For what is inside documents, use kb_search.",
+            ['query' => ['type' => 'string']], ['query'],
+            function (array $a) {
+                $r = $this->app->library()->find((string)$a['query'], 15);
+                $files = $this->app->privacy()->readable($r['files']);
+                $folders = $this->app->privacy()->readable(array_map(fn($f) => $f + ['folder' => $f['path']], $r['folders']));
+                Privacy::local('Library search');
+                if (!$files && !$folders) return "no file or folder named like '{$a['query']}' (kb_search looks inside the documents)";
+                return implode("\n", array_merge(
+                    array_map(fn($f) => "- folder {$f['path']} ({$f['total']} files), link: [" . preg_replace('/[\[\]]/', '', $f['path']) . '](#library' . implode('/', array_map('rawurlencode', explode('/', $f['path']))) . ')', $folders),
+                    array_map(fn($f) => '- ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']}), link: [" . preg_replace('/[\[\]]/', '', $f['name']) . "](/files/{$f['id']})", $files)));
+            });
+        $this->register('routine_feedback',
+            "Record the user's opinion on what a routine sent (morning briefing, weekly review, a watch...) when they say they liked it or not (\"stop telling me the weather\", \"the bit on X was great\"): its next runs follow it. routine: its title or id; item: what they rated, in a few words; vote: up or down; note: why, if they said.",
+            ['routine' => ['type' => 'string'], 'item' => ['type' => 'string'], 'vote' => ['type' => 'string', 'enum' => ['up', 'down']], 'note' => ['type' => 'string']], ['routine', 'item', 'vote'],
+            function (array $a) {
+                $r = trim((string)$a['routine']);
+                $this->app->routines()->vote(ctype_digit($r) ? (int)$r : 0, (string)$a['item'], $a['vote'] === 'down' ? -1 : 1, (string)($a['note'] ?? ''), null, ctype_digit($r) ? '' : $r);
+                return 'noted: its next runs will take it into account';
             });
         $this->register('kb_list', "List a folder of the user's library: its subfolders and files (id, size, date). folder '/' is the top; omit it to see the whole folder tree.",
             ['folder' => ['type' => 'string']], [], fn(array $a) => $this->kbList($a['folder'] ?? null));

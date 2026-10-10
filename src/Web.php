@@ -99,7 +99,8 @@ final class Web
             $path === '/api/chat/stop' && $m === 'POST' => (function () use ($s) { $s->set('chat_stop', (string)microtime(true)); return ['ok' => true]; })(),
             $path === '/api/chat' && $m === 'POST' => $this->chat((string)($b['text'] ?? ''), array_map('intval', (array)($b['files'] ?? [])), !empty($b['meeting']), null, (int)($b['space'] ?? 0)),
             $path === '/api/tasks' => ['tasks' => array_map(fn($t) => $t + ['next_text' => $t['next_run'] ? date('D j M, H:i', (int)$t['next_run']) : null,
-                'space_name' => (int)$t['space'] ? ($this->app->spaces()->get((int)$t['space'])['name'] ?? null) : null], $s->tasks())],
+                'space_name' => (int)$t['space'] ? ($this->app->spaces()->get((int)$t['space'])['name'] ?? null) : null,
+                'feedback' => (int)$s->q('SELECT COUNT(*) FROM routine_feedback WHERE task = ?', [$t['id']])->fetchColumn()], $s->tasks())],
             (bool)preg_match('#^/api/tasks/(\d+)/(toggle|delete)$#', $path, $mm) && $m === 'POST' => $this->taskAction((int)$mm[1], $mm[2]),
             (bool)preg_match('#^/api/tasks/(\d+)/tier$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b, $s) {
                 $s->task((int)$mm[1]) ?? $this->fail(404, 'no such task');
@@ -119,12 +120,22 @@ final class Web
             (bool)preg_match('#^/api/contacts/(\d+)$#', $path, $mm) && $m === 'GET' => $this->app->contacts()->profile((int)$mm[1]),
             (bool)preg_match('#^/api/contacts/(\d+)$#', $path, $mm) && $m === 'POST' => ['contact' => $this->app->contacts()->save(['id' => (int)$mm[1]] + $b)],
             (bool)preg_match('#^/api/contacts/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->contacts()->delete((int)$mm[1]); return ['ok' => true]; })(),
-            $path === '/api/tasks/briefing' && $m === 'POST' => ['task' => $this->briefing($b)],
+            $path === '/api/tasks/briefing' && $m === 'POST' => ['task' => $this->app->routines()->setupBriefing((string)($b['time'] ?? ''), (string)($b['days'] ?? '1-5'), isset($b['extra']) ? (string)$b['extra'] : null)],
+            $path === '/api/tasks/weekly' && $m === 'POST' => ['task' => $this->app->routines()->setupWeekly((string)($b['time'] ?? ''), (int)($b['day'] ?? 0), (string)($b['folder'] ?? ''))],
+            $path === '/api/tasks/watches' => ['watches' => $this->app->routines()->watches()],
+            $path === '/api/tasks/watch' && $m === 'POST' => ['task' => $this->app->routines()->setupWatch($b, isset($b['id']) && $b['id'] !== '' && $b['id'] !== null ? (int)$b['id'] : null)],
+            (bool)preg_match('#^/api/tasks/(\d+)/feedback$#', $path, $mm) => ['feedback' => $this->app->routines()->feedback((int)$mm[1])],
+            $path === '/api/feedback' && $m === 'GET' => ['feedback' => $this->app->routines()->feedback()],
+            $path === '/api/feedback' && $m === 'POST' => ['id' => $this->app->routines()->vote((int)($b['task'] ?? 0), (string)($b['item'] ?? ''), (int)($b['vote'] ?? 0),
+                (string)($b['note'] ?? ''), isset($b['message']) ? (int)$b['message'] : null)],
+            (bool)preg_match('#^/api/feedback/(\d+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->routines()->forget((int)$mm[1])],
+            // quick capture: a task or a note in one step, without the model
+            $path === '/api/capture' && $m === 'POST' => $this->app->routines()->capture(($b['kind'] ?? '') === 'note' ? 'note' : 'task', (string)($b['text'] ?? ''), (int)($b['space'] ?? 0)),
             (bool)preg_match('#^/api/tasks/(\d+)/run$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $s) {
                 set_time_limit(0);
                 $t = $s->task((int)$mm[1]) ?? $this->fail(404, 'no such task');
                 if (!empty($t['job'])) return ['reply' => $this->app->jobs()->runScheduled($t), 'space' => (int)$t['space']];
-                $reply = $this->app->agent()->runTask($t['title'], $t['prompt'], (string)$t['tier'], (int)$t['space']);
+                $reply = $this->app->agent()->runTask($t['title'], $t['prompt'], (string)$t['tier'], (int)$t['space'], (int)$t['id']);
                 return ['reply' => $reply, 'space' => (int)$t['space']];
             })(),
             $path === '/api/google' => $this->googleState(),
@@ -227,6 +238,7 @@ final class Web
             $path === '/api/library/tree' => ['tree' => $this->app->library()->tree(), 'stats' => $this->app->library()->stats()],
             // mode=quick: keywords only, at once; then the full search (with meaning) completes it. more: a full search would add something
             $path === '/api/library/search' => ['results' => $this->app->library()->search((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/'), 30, ($_GET['mode'] ?? '') !== 'quick'),
+                'names' => $this->app->library()->find((string)($_GET['q'] ?? ''), 20, (string)($_GET['folder'] ?? '/')),
                 'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
             $path === '/api/library/folder' && $m === 'POST' => ['folder' => $this->app->library()->createFolder((string)($b['path'] ?? ''))],
             $path === '/api/library/folder/move' && $m === 'POST' => ['folder' => $this->app->library()->moveFolder((string)($b['from'] ?? ''), (string)($b['to'] ?? ''))],
@@ -268,28 +280,6 @@ final class Web
                     'read_only' => Mcp::readOnly($t)], $c['tools'] ?? [])];
         }
         return ['raw' => $mcp->raw(), 'servers' => $out, 'shell' => ['mode' => $this->app->cfg->shell, 'installed' => Shell::binary() !== null]];
-    }
-
-    /** The morning briefing: one scheduled task, created or updated from the Tasks page. */
-    private function briefing(array $b): array
-    {
-        if (!preg_match('/^([01]?\d|2[0-3]):([0-5]\d)$/', (string)($b['time'] ?? ''), $t)) $this->fail(400, 'Give a time like 07:30.');
-        $days = in_array($b['days'] ?? '', ['1-5', '*', '1-6', '0,6'], true) ? $b['days'] : '1-5';
-        $cron = (int)$t[2] . ' ' . (int)$t[1] . " * * $days";
-        $prompt = "Morning briefing for the user. Gather, in this order, only what is useful today:\n"
-            . "1. Today's calendar (calendar_events): times, places, what to prepare or bring.\n"
-            . "2. Emails waiting (mail_triage): to answer and to do first, with due dates.\n"
-            . "3. Tasks (board_list with all_spaces): overdue, due today and in the next 3 days, blocked ones; then the next routines and reminders (list_tasks).\n"
-            . "4. The weather today in the user's town (from USER.md; skip it if unknown) with a quick web search.\n"
-            . "5. One line on anything else that matters today (follow-ups promised, birthdays in USER.md...).\n"
-            . "Short and easy to scan: a heading per part, bullets, under 200 words, in the user's language. Skip empty parts."
-            . (trim((string)($b['extra'] ?? '')) !== '' ? "\nAlso: " . trim((string)$b['extra']) : '');
-        $s = $this->app->store;
-        $next = Cron::next($cron, time());
-        $id = (int)$s->q("SELECT id FROM tasks WHERE title = 'Morning briefing' ORDER BY id LIMIT 1")->fetchColumn();
-        if ($id) $s->updateTask($id, ['cron' => $cron, 'prompt' => $prompt, 'next_run' => $next, 'enabled' => 1]);
-        else $id = $s->addTask('Morning briefing', $prompt, $cron, $next, 'standard', 0);
-        return $s->task($id);
     }
 
     private function googleState(): array

@@ -302,6 +302,38 @@ final class Library
         return $out;
     }
 
+    /** "Where is…?": files and folders whose name holds every word of $q (case and accents ignored), the closest matches first. */
+    public function find(string $q, int $limit = 20, string $folder = '/'): array
+    {
+        $words = array_values(array_filter(preg_split('/\s+/u', self::fold($q)), fn($w) => $w !== ''));
+        if (!$words) return ['files' => [], 'folders' => []];
+        $folder = self::normalize($folder);
+        $match = function (string $name) use ($words): ?int {
+            $n = self::fold($name);
+            foreach ($words as $w) if (!str_contains($n, $w)) return null;
+            return (str_starts_with($n, $words[0]) ? 0 : 1) * 1000 + mb_strlen($n); // starts with it, then the shortest
+        };
+        $folders = [];
+        foreach ($this->tree() as $t) {
+            if ($folder !== '/' && !str_starts_with($t['path'], "$folder/")) continue;
+            if (($r = $match($t['name'])) !== null) $folders[] = ['path' => $t['path'], 'total' => $t['total'], 'r' => $r];
+        }
+        [$w, $a] = self::within($folder);
+        $files = [];
+        foreach ($this->app->store->q("SELECT id, name, folder, kind FROM files WHERE deleted_at IS NULL AND $w", $a) as $f)
+            if (($r = $match((string)$f['name'])) !== null) $files[] = ['id' => (int)$f['id'], 'name' => $f['name'], 'folder' => $f['folder'], 'kind' => $f['kind'], 'r' => $r];
+        $sort = function (array $l) use ($limit) { usort($l, fn($x, $y) => $x['r'] <=> $y['r']); return array_map(function ($x) { unset($x['r']); return $x; }, array_slice($l, 0, $limit)); };
+        return ['files' => $sort($files), 'folders' => $sort($folders)];
+    }
+
+    /** Lower case without accents, for comparing names. */
+    public static function fold(string $s): string
+    {
+        $s = mb_strtolower($s);
+        if (class_exists(\Normalizer::class)) return preg_replace('/\p{Mn}+/u', '', \Normalizer::normalize($s, \Normalizer::FORM_D));
+        return strtr($s, ['à'=>'a','â'=>'a','ä'=>'a','á'=>'a','ç'=>'c','é'=>'e','è'=>'e','ê'=>'e','ë'=>'e','î'=>'i','ï'=>'i','í'=>'i','ô'=>'o','ö'=>'o','ó'=>'o','ù'=>'u','û'=>'u','ü'=>'u','ú'=>'u','ÿ'=>'y','ñ'=>'n','œ'=>'oe','æ'=>'ae']);
+    }
+
     /** In a passage spanning several pages, the page where the searched words are. */
     private static function bestPage(array $f, string $query, int $from, int $to): int
     {

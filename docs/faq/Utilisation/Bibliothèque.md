@@ -20,6 +20,9 @@
 - Tout est lu et indexé en arrière-plan : PDF (y compris scannés), Word/Excel/PowerPoint, e-mails,
   texte, audio (transcrit), photos (décrites, texte lu).
 - Cherchez dans la page, ou demandez à l'assistant : « d'après mes documents dans /Clients/Alice, … ».
+- **« Où est… ? »** : la recherche de la page montre d'abord les dossiers et fichiers dont le **nom** correspond
+  (sans tenir compte des accents ni des majuscules ; un clic sur un dossier l'ouvre), puis ceux dont le contenu
+  correspond. Dans la discussion, « où est le contrat Dupont ? » donne le chemin et le lien.
 - La recherche se fait en deux temps : les documents qui contiennent **les mots** s'affichent tout de suite,
   puis la recherche **par le sens** (modèle local) complète la liste quelques secondes plus tard. Un spinner
   l'indique ; *Annuler* (ou Échap) l'arrête en gardant ce qui est déjà trouvé. Changer de dossier ou lancer

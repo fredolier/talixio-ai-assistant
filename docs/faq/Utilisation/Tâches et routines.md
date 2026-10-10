@@ -8,10 +8,35 @@
 - Corbeille de 30 jours, historique de chaque modification, annulable.
 - Un e-mail devient une tâche en un clic ; les actions d'une réunion aussi.
 
+## Capture rapide
+- Dans la discussion, commencez par **t:** pour créer une tâche ou **n:** pour une note, sans passer par le modèle
+  (rien n'est envoyé, réponse immédiate) : « t: appeler la banque pour le prêt !2 », « n: idée pour la newsletter… ».
+  Aussi : « tâche: », « todo: », « note: ».
+- Pour une tâche : la première ligne est le titre, les suivantes la description ; **!1** à **!5** fixe la priorité.
+  Elle va dans le tableau de l'espace courant.
+- Pour une note : elle est enregistrée dans le dossier de l'espace (sinon /Inbox), nommée d'après sa première ligne.
+- Le bouton **+** en haut ouvre la même capture (Ctrl+Entrée pour valider). Sur téléphone, un appui long
+  sur l'icône de l'app propose *Capture* (raccourci de l'app installée).
+
 ## Rappels et routines
 - Par la conversation : « rappelle-moi demain à 9 h », « chaque jour ouvré à 8 h, envoie-moi un briefing ».
 - Page **Routines** : les voir, les mettre en pause, *Lancer maintenant*, changer le niveau de modèle.
-- **Briefing du matin** : agenda du jour, e-mails à traiter, tâches, rappels, météo.
+- **Briefing du matin** : 5 lignes au plus, la plus importante d'abord (agenda du jour, e-mails à traiter,
+  tâches, rappels, météo), chacune affichée comme une carte.
+- **👍 / 👎** : chaque ligne d'un message envoyé par une routine se note d'un clic (un second clic retire la note).
+  La routine en tient compte à ses prochaines exécutions : plus de ce qui est utile, moins du reste.
+  Vous pouvez aussi le dire dans la discussion (« arrête de me parler de la météo »). Sur la page Routines,
+  le bouton 👍👎 d'une routine liste ses notes et permet d'en retirer.
+- **Revue de la semaine** (page Routines) : le dimanche à 18 h par défaut (jour, heure et dossier réglables).
+  Ce qui a été fait, ce qui a glissé, la semaine à venir, les e-mails en attente, puis **3 priorités**.
+  La revue complète est enregistrée en note dans /Notes/Weekly reviews ; le message ne donne que les priorités et le lien.
+- **Veille et brouillon** (page Routines) : suit des sujets pour vous (une newsletter, un marché, une
+  technologie…) et rédige le brouillon du prochain numéro. Donnez un nom (« Fil IA » par défaut), quoi surveiller,
+  des sources à regarder en premier, pour qui, le format voulu, la fréquence (jour, semaine, ou mois : le premier
+  jour choisi du mois) et le dossier des brouillons (/Drafts/<nom> par défaut). Chaque exécution lance un travail
+  de fond qui cherche, trie et écrit ; le brouillon arrive dans la bibliothèque et le lien dans la discussion.
+  Plusieurs veilles sont possibles ; *Réglages* sur une routine de veille rouvre ses paramètres. Si une compétence
+  porte le même sujet (ex. votre style de newsletter), la veille la suit.
 
 ## Travaux de fond (Jobs)
 Pour les recherches longues, l'assistant lance des sous-agents (jusqu'à 3 en parallèle), chacun avec

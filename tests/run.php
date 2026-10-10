@@ -2139,6 +2139,53 @@ check('transfer: the code ends with the final copy', str_contains($err, 'refused
 proc_terminate($tws); proc_close($tws);
 $dpdo = $spdo = null;
 
+// ---- lot 1: quick capture, rated routines, weekly review, watch and draft, "where is…" ----
+use Talixio\Routines;
+check('capture: "t:" and "n:" are recognised, anything else is not', Routines::parseCapture('t: call Bob') === ['task', 'call Bob']
+    && Routines::parseCapture("Tâche : relancer\nle devis") === ['task', "relancer\nle devis"] && Routines::parseCapture('n: idée') === ['note', 'idée']
+    && Routines::parseCapture('note that I am late') === null && Routines::parseCapture('t:') === null);
+$rt = $app->routines();
+$ct = $rt->capture('task', "Call the bank !2\nabout the loan", 0);
+$ctask = $app->board()->find($ct['code']) ?? [];
+check('capture: a task gets its priority and description, without "!2" in its title', $ct['kind'] === 'task' && str_contains($ct['reply'], 'Call the bank (P2)')
+    && ($ctask['title'] ?? '') === 'Call the bank' && (int)($ctask['priority'] ?? 0) === 2, json_encode([$ct, $ctask]));
+$cn = $rt->capture('note', "Idée newsletter\nparler des agents", 0);
+$cf = $app->files()->get($cn['id']);
+check('capture: a note goes to the Inbox, named after its first line, with a link', ($cf['folder'] ?? '') === \Talixio\Library::INBOX && str_starts_with((string)($cf['name'] ?? ''), 'Idée newsletter')
+    && str_contains($cn['reply'], "(/files/{$cn['id']})"), json_encode([$cn, $cf]));
+try { $rt->capture('note', '  ', 0); $err = ''; } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
+check('capture: nothing to capture is refused', $err === 'Nothing to capture.');
+$wk = $rt->setupWeekly('18:00', 0, '');
+check('weekly review: Sunday 18:00, saved in /Notes/Weekly reviews, set up once', $wk['cron'] === '0 18 * * 0' && str_contains($wk['prompt'], '/Notes/Weekly reviews')
+    && $rt->setupWeekly('19:30', 5, '/Revues')['id'] === $wk['id'] && $app->store->task($wk['id'])['cron'] === '30 19 * * 5');
+$mid = $app->store->addMessage('assistant', 'web', "- 📅 Meeting\n- 🌦️ Rain", ['routine' => $wk['id']], [], 0);
+$rt->vote($wk['id'], "🌦️  Rain\n", -1, 'not needed', $mid);
+$rt->vote($wk['id'], '📅 Meeting', 1, '', $mid);
+$rt->vote($wk['id'], '📅 Meeting', 1, '', $mid); // the same vote again replaces it
+$fp = $rt->feedbackPrompt($wk['id']);
+check('feedback: votes are kept once per line, shown on the message and fed into the next runs', count($rt->feedback($wk['id'])) === 2
+    && (json_decode((string)$app->store->q('SELECT meta FROM messages WHERE id = ?', [$mid])->fetchColumn(), true)['votes'] ?? []) === ['🌦️ Rain' => -1, '📅 Meeting' => 1]
+    && str_contains($fp, '👎') && str_contains($fp, '"🌦️ Rain" (not needed)') && str_contains($fp, '👍'), $fp);
+$rt->vote($wk['id'], '🌦️ Rain', 0, '', $mid);
+check('feedback: clicking again removes the vote', count($rt->feedback($wk['id'])) === 1 && !isset(json_decode((string)$app->store->q('SELECT meta FROM messages WHERE id = ?', [$mid])->fetchColumn(), true)['votes']['🌦️ Rain']));
+try { $rt->setupWatch(['name' => 'Fil IA', 'topics' => '']); $err = ''; } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
+$wa = $rt->setupWatch(['name' => 'Fil IA', 'topics' => 'AI for small businesses', 'every' => 'monthly', 'day' => 2, 'time' => '08:15']);
+$ws = $rt->watches();
+check('watch and draft: needs topics; monthly on the first Tuesday; drafts in /Drafts/Fil IA by a background job', $err === 'Say what to watch.' && $wa['cron'] === '15 8 1-7 * 2'
+    && str_contains($wa['prompt'], 'delegate') && str_contains($wa['prompt'], '/Drafts/Fil IA') && count($ws) === 1 && $ws[0]['id'] === $wa['id'] && $ws[0]['topics'] === 'AI for small businesses');
+$rt->setupWatch(['name' => 'Fil IA', 'topics' => 'AI', 'every' => 'weekly', 'day' => 1, 'time' => '08:00'], $wa['id']);
+$app->store->q('DELETE FROM tasks WHERE id = ?', [$wk['id']]);
+check('watch and draft: updated in place; a deleted routine leaves no settings behind', $app->store->task($wa['id'])['cron'] === '0 8 * * 1' && count($rt->watches()) === 1);
+$app->store->q('DELETE FROM tasks WHERE id = ?', [$wa['id']]);
+check('watch and draft: its settings go with it', $rt->watches() === []);
+$app->library()->createFolder('/Clients/Société Générale');
+$app->library()->saveNote('/Clients/Société Générale', 'Contrat cadre.md', 'x');
+$fd = $app->library()->find('societe');
+$fd2 = $app->library()->find('contrat generale');
+check('where is…: names are found without accents or case, folders too', in_array('/Clients/Société Générale', array_column($fd['folders'], 'path'), true)
+    && in_array('Contrat cadre.md', array_column($app->library()->find('CONTRAT')['files'], 'name'), true) && $fd2['files'] === [] && $app->library()->find('contrat', 20, '/Autre')['files'] === [], json_encode($fd));
+check('where is…: the kb_find tool answers with paths and links', str_contains($ff = $tools->run('kb_find', ['query' => 'contrat cadre']), '/Clients/Société Générale') && str_contains($ff, '/files/'), $ff);
+
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
 exit($fails ? 1 : 0);

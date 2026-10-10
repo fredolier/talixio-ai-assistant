@@ -74,7 +74,7 @@ final class Worker
                 catch (\Throwable $e) { $this->guard("task {$t['id']}", fn() => $app->notifier()->notify($t['title'], I18n::t($app, 'The scheduled job could not start: {e}', ['e' => $e->getMessage()]), (int)($t['space'] ?? 0))); }
                 continue;
             }
-            $this->guard("task {$t['id']}", fn() => $app->notifier()->notify($t['title'], $app->agent()->runTask($t['title'], $t['prompt'], (string)($t['tier'] ?? 'standard'), (int)($t['space'] ?? 0)), (int)($t['space'] ?? 0)));
+            $this->guard("task {$t['id']}", fn() => $app->notifier()->notify($t['title'], $app->agent()->runTask($t['title'], $t['prompt'], (string)($t['tier'] ?? 'standard'), (int)($t['space'] ?? 0), (int)$t['id']), (int)($t['space'] ?? 0)));
         }
         $every = $app->cfg->heartbeatMinutes * 60;
         if (!$paused && $every > 0 && $now - (int)$store->get('heartbeat_last', '0') >= $every && $app->ws->hasContent('HEARTBEAT.md')) {

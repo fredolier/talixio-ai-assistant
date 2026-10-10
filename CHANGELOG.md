@@ -3,6 +3,24 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.20.0 (2026-10-10)
+- Quick capture: a chat message starting with `t:` (or `task:`, `todo:`, `tâche:`) adds a task to the space's
+  board, `n:` (or `note:`) saves a note in the space's folder or the Inbox, at once and without calling the
+  model. `!1`..`!5` sets the priority; the first line is the title or the note's name. A **+** button in the
+  top bar and a "Capture" shortcut of the installed app open the same capture as a dialog.
+- Routines learn from 👍/👎: each line of a message sent by a routine (shown as cards) can be rated; the votes
+  stay on the message, are listed (and removable) per routine on the Routines page, and are given to the
+  routine's next runs. New assistant tool `routine_feedback` for feedback said in words.
+- Morning briefing: 5 lines at most, most important first, one emoji per kind. Existing briefings are updated
+  (what you added to them is kept).
+- Weekly review, ready-made on the Routines page (Sunday 18:00 by default): done, slipped, the week ahead,
+  waiting emails and 3 priorities; the full review is saved as a note in /Notes/Weekly reviews.
+- Watch and draft: a ready-made routine that follows topics (sources, audience, format, daily/weekly/monthly)
+  and has a background job write the draft of the next issue in /Drafts/<name> (default name "Fil IA").
+  Several watches can be set up and edited.
+- "Where is…?": the library search lists the folders and files whose **name** matches first (accents and case
+  ignored), then the content matches. New assistant tool `kb_find`; folder links in the chat open the folder.
+
 ## 0.19.9 (2026-10-10)
 - Library: moving a file (and choosing a folder for a new folder, a renamed folder or a space) shows the whole
   folder tree under the field, indented, filtered as you type, with the keyboard or a click. The old list
