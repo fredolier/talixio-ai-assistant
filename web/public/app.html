@@ -82,6 +82,11 @@
         <div id="chat-search-results" class="sresults"></div>
       </div>
       <div id="paused" class="paused-note" role="status" hidden></div>
+      <div id="setup-model" class="setup-model" role="status" hidden>
+        <b>No AI model is set up yet</b>
+        <p class="small">The assistant needs one to answer. The simplest: sign in with your Claude account (Pro or Max plan). Or paste an API key (Claude, Gemini or OpenAI).</p>
+        <div class="row wrap"><button id="setup-claude" class="btn primary" type="button">Sign in with Claude</button><a class="btn" href="#settings/brain">Use an API key</a></div>
+      </div>
       <div id="thread" class="thread" aria-live="polite"></div>
       <div id="approvals" class="approvals" hidden></div>
       <div id="recorder" class="recorder" hidden>
@@ -413,6 +418,17 @@
     <div class="row wrap cd-foot"><button class="btn primary" type="submit">Save</button><button id="cd-cancel" class="btn" type="button">Cancel</button>
       <span class="spacer"></span><button id="cd-delete" class="btn ghost danger" type="button">Move to trash</button></div>
   </form>
+</dialog>
+<dialog id="claude-dialog" class="dialog" aria-labelledby="cl-title">
+  <h3 id="cl-title">Sign in with Claude</h3>
+  <ol class="cl-steps small">
+    <li>Open Claude's sign-in page and accept (your Pro or Max plan is used; Talixio never sees your password).<br>
+      <a id="cl-link" class="btn primary" target="_blank" rel="noopener" hidden>Open Claude's sign-in page</a><span id="cl-wait" class="muted">Preparing the link…</span></li>
+    <li>Claude then shows a code: copy it and paste it here.
+      <form id="cl-form" class="row"><input id="cl-code" required autocomplete="off" spellcheck="false" placeholder="Code from Claude's page" aria-label="Code from Claude's page"><button class="btn primary" type="submit">Connect</button></form></li>
+  </ol>
+  <p id="cl-state" class="small" role="status"></p>
+  <div class="row"><span class="spacer"></span><button id="cl-close" class="btn" type="button">Close</button></div>
 </dialog>
 <dialog id="share-dialog" class="dialog share-dialog" aria-labelledby="sh-title">
   <h3 id="sh-title">Share</h3>

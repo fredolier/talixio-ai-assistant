@@ -1550,6 +1550,13 @@ function renderGroups(groups) {
     });
     el.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => saveSettings(el, g, [b.dataset.reset]));
     el.querySelector('[data-save]').onclick = () => saveSettings(el, g, []);
+    if (g.id === 'brain' && state.status?.claude_code) { // the simplest way: the Claude plan, signed in from here
+      const r = document.createElement('div'); r.className = 'row wrap';
+      r.innerHTML = `<button class="btn" type="button">${esc(t('Sign in with Claude'))}</button><span class="muted small">${esc(t('Uses your Claude Pro or Max plan; no API key needed.'))}</span>`;
+      r.querySelector('button').onclick = claudeSignIn;
+      el.querySelector('.fields').prepend(r);
+    }
+    if (g.id === 'brain' && location.hash === '#settings/brain') { el.open = true; setTimeout(() => el.scrollIntoView({ block: 'start' }), 50); }
     box.append(el);
   }
 }
@@ -1593,6 +1600,29 @@ $('#pw-form').onsubmit = async e => {
   try { await post('api/settings/password', { current: $('#pw-current').value, new: $('#pw-new').value }); $('#pw-state').textContent = 'Password changed. Your other devices will ask for it again.'; $('#pw-current').value = $('#pw-new').value = ''; }
   catch (err) { $('#pw-state').textContent = err.message; }
 };
+
+// ---- signing in with Claude (Claude Code's own sign-in, driven from here) ----
+async function claudeSignIn() {
+  const d = $('#claude-dialog');
+  $('#cl-link').hidden = true; $('#cl-wait').hidden = false; $('#cl-wait').textContent = t('Preparing the link…');
+  $('#cl-state').textContent = ''; $('#cl-code').value = ''; $('#cl-form').querySelector('button').disabled = false;
+  $('#cl-close').onclick = () => d.close();
+  let ready = false;
+  $('#cl-form').onsubmit = async e => {
+    e.preventDefault();
+    if (!ready) return;
+    const b = $('#cl-form').querySelector('button'); b.disabled = true; $('#cl-state').textContent = t('Checking with Claude…');
+    try {
+      await post('api/claude-login/code', { code: $('#cl-code').value.trim() });
+      d.close(); toast('Connected: the assistant now uses your Claude plan.'); refreshStatus();
+      if (!$('#view-settings').hidden) loadSettings();
+    } catch (err) { $('#cl-state').textContent = err.message; b.disabled = false; }
+  };
+  d.showModal();
+  try { const { url } = await post('api/claude-login/start'); $('#cl-link').href = url; $('#cl-link').hidden = false; $('#cl-wait').hidden = true; ready = true; }
+  catch (e) { $('#cl-wait').textContent = e.message; }
+}
+$('#setup-claude').onclick = claudeSignIn;
 
 // ---- moving to another server ----
 async function loadTransfer() {
@@ -1877,15 +1907,36 @@ async function loadLibrary() {
   if (list.files.some(f => f.status === 'pending' || f.status === 'processing')) lib.timer = setTimeout(() => { if (!$('#view-library').hidden) loadLibrary().catch(() => {}); }, 4000);
 }
 
+/** Folders opened in the tree (this browser); the current folder's parents are always open. */
+const treeOpen = (() => { try { return new Set(JSON.parse(localStorage.getItem(LSK + 'talixio.tree.open') || '[]')); } catch { return new Set(); } })();
+const saveTreeOpen = () => { try { localStorage.setItem(LSK + 'talixio.tree.open', JSON.stringify([...treeOpen])); } catch {} };
+const CHEVRON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+
 function renderTree() {
   const nav = $('#lib-tree');
   const total = lib.tree.filter(t => t.depth === 1).reduce((a, t) => a + t.total, 0);
-  const link = (path, name, depth, count) => `<a href="#" data-path="${esc(path)}" class="${path === lib.folder ? 'active' : ''}" style="padding-left:${8 + (depth - 1) * 14}px">${FOLDER_SVG}<span>${esc(name)}</span>${count ? `<small>${count}</small>` : ''}</a>`;
-  nav.innerHTML = link('/', 'All files', 1, total) + lib.tree.map(t => link(t.path, t.name, t.depth + 1, t.total)).join('');
+  const parentOf = p => p.slice(0, p.lastIndexOf('/')) || '/';
+  const hasKids = new Set(lib.tree.map(t => parentOf(t.path)));
+  for (let p = lib.folder; p !== '/'; p = parentOf(p)) if (p !== lib.folder) treeOpen.add(p); // the way to the current folder
+  const shown = t => { for (let p = parentOf(t.path); p !== '/'; p = parentOf(p)) if (!treeOpen.has(p)) return false; return true; };
+  const row = (path, name, depth, count, kids) => `<div class="tree-row${path === lib.folder ? ' active' : ''}" style="padding-left:${(depth - 1) * 14}px">`
+    + (kids ? `<button class="tw${treeOpen.has(path) ? ' open' : ''}" type="button" data-toggle="${esc(path)}" aria-expanded="${treeOpen.has(path)}" aria-label="${esc(t(treeOpen.has(path) ? 'Fold {name}' : 'Unfold {name}', { name }))}">${CHEVRON_SVG}</button>` : '<span class="tw"></span>')
+    + `<a href="#" data-path="${esc(path)}" class="${path === lib.folder ? 'active' : ''}">${FOLDER_SVG}<span>${esc(name)}</span>${count ? `<small>${count}</small>` : ''}</a></div>`;
+  const anyOpen = lib.tree.some(t => treeOpen.has(t.path) && hasKids.has(t.path));
+  nav.innerHTML = `<div class="tree-head"><a href="#" data-path="/" class="${lib.folder === '/' ? 'active' : ''}">${FOLDER_SVG}<span>${esc(t('All files'))}</span>${total ? `<small>${total}</small>` : ''}</a>`
+    + (anyOpen ? `<button class="tw fold-all" type="button" data-fold-all title="${esc(t('Fold every folder'))}" aria-label="${esc(t('Fold every folder'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11l5-5 5 5M7 18l5-5 5 5"/></svg></button>` : '') + '</div>'
+    + lib.tree.filter(shown).map(x => row(x.path, x.name, x.depth, x.total, hasKids.has(x.path))).join('');
   nav.querySelectorAll('a').forEach(a => {
     a.onclick = e => { e.preventDefault(); libGo(a.dataset.path); };
     dropTarget(a, a.dataset.path);
   });
+  nav.querySelectorAll('[data-toggle]').forEach(b => {
+    b.onclick = () => { const p = b.dataset.toggle; if (treeOpen.has(p)) { for (const x of [...treeOpen]) if (x === p || x.startsWith(p + '/')) treeOpen.delete(x); } else treeOpen.add(p); saveTreeOpen(); renderTree(); };
+    let timer; // dragging a file over a folded folder opens it
+    b.parentElement.addEventListener('dragenter', () => { if (!treeOpen.has(b.dataset.toggle)) timer = setTimeout(() => { treeOpen.add(b.dataset.toggle); saveTreeOpen(); renderTree(); }, 700); });
+    b.parentElement.addEventListener('dragleave', () => clearTimeout(timer));
+  });
+  nav.querySelector('[data-fold-all]')?.addEventListener('click', () => { treeOpen.clear(); saveTreeOpen(); renderTree(); });
 }
 
 function renderCrumbs() {
@@ -2411,6 +2462,8 @@ async function refreshStatus() {
     st.querySelector('span').textContent = s.worker_online ? 'Running' : 'Worker offline';
     st.title = s.worker_online ? 'Background worker is running: schedules and chat apps work.' : 'Background worker is not running: schedules and Telegram are paused. Check: systemctl status talixio-worker';
     for (const el of [$('#app-version'), $('#more-version')]) { el.textContent = 'Talixio ' + s.version; el.title = s.version_label; }
+    $('#setup-model').hidden = !s.model_problem;
+    $('#setup-claude').hidden = !s.claude_code;
     if (JSON.stringify(s.paused || null) !== $('#paused').dataset.p) { $('#paused').dataset.p = JSON.stringify(s.paused || null); renderPaused(s.paused); }
   } catch {}
 }

@@ -66,6 +66,11 @@ final class I18n
             'Cet espace est Secret : rien ne doit quitter le serveur, et l\'assistant fonctionne avec un service extérieur. La bibliothèque et les tâches de cet espace fonctionnent toujours ; pour discuter ici, utilisez un modèle installé sur ce serveur (Réglages → Modèle d\'IA).',
         'This is a Confidential space: only a model under business terms (Claude API, OpenAI API, paid Gemini) may read its content, and the current one is not. Change the model in Settings → AI model, or the level of the space.' =>
             'Cet espace est Confidentiel : seul un modèle sous contrat professionnel (API Claude, API OpenAI, Gemini payant) peut en lire le contenu, ce qui n\'est pas le cas du modèle actuel. Changez de modèle dans Réglages → Modèle d\'IA, ou le niveau de l\'espace.',
+        // no model yet
+        'No AI model is set up yet, so I cannot answer. In Settings → AI model: sign in with your Claude account (Pro/Max plan), or paste an API key (Claude, Gemini or OpenAI).' =>
+            "Aucun modèle d'IA n'est encore configuré : je ne peux pas répondre. Dans Réglages → Modèle d'IA : connectez-vous avec votre compte Claude (offre Pro/Max), ou collez une clé d'API (Claude, Gemini ou OpenAI).",
+        'Claude Code is not installed on this server, so your Claude plan cannot be used. Choose another model in Settings → AI model, or install it (sudo ./install.sh --with-claude-code).' =>
+            "Claude Code n'est pas installé sur ce serveur : votre abonnement Claude ne peut pas être utilisé. Choisissez un autre modèle dans Réglages → Modèle d'IA, ou installez-le (sudo ./install.sh --with-claude-code).",
         // moving to another server
         'Transfer' => 'Transfert',
         'Your assistant was moved to another server ({to}). This one is paused: it no longer answers or runs routines.' =>

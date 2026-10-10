@@ -1,5 +1,18 @@
 # Choisir le modèle (le « cerveau »)
 
+## Le plus simple : se connecter avec Claude
+Avec un abonnement Claude Pro ou Max : Réglages → *Modèle d'IA* → **Se connecter avec Claude**
+(ou le bouton affiché dans la conversation tant qu'aucun modèle n'est réglé).
+1. Ouvrez la page de connexion de Claude et acceptez.
+2. Claude affiche un code : copiez-le et collez-le dans Talixio, puis *Connecter*.
+C'est la connexion officielle de Claude Code (installé sur le serveur, et inclus dans l'image Docker) ;
+Talixio ne voit jamais votre mot de passe. Le jeton obtenu vaut un an.
+
+L'utilisation compte dans les limites de votre abonnement. Les conditions d'Anthropic sur l'usage d'un
+abonnement par des outils comme celui-ci ont changé plusieurs fois en 2026 : vérifiez-les.
+Pour un usage professionnel, une **clé d'API** (facturée à l'usage, sous contrat pro) reste la voie la plus sûre.
+
+## Les autres choix
 Réglages → *Modèle d'IA* :
 
 | Option | Réglage |

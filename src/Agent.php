@@ -213,15 +213,19 @@ final class Agent
             $toolsBefore = (int)$store->q('SELECT COALESCE(MAX(id),0) FROM tool_log')->fetchColumn();
             try {
                 if (($why = $privacy->modelBlocked($level)) !== null) throw new PrivacyBlocked($why);
+                if (($why = $this->app->cfg->modelProblem()) !== null) throw new PrivacyBlocked($why); // nothing to answer with yet: say how to set it up
                 [$reply, $meta] = $this->run($channel, $tier, 'chat', $history,
                     $recalled !== '' ? "## Possibly relevant from past conversations\n$recalled" : '', 'main', null, null, $onEvent);
                 $reply = $reply ?: I18n::t($this->app, '(no response)');
             } catch (PrivacyBlocked $e) {
-                $reply = in_array($e->getMessage(), ['secret', 'confidential'], true) && $privacy->modelBlocked($level) !== null
+                $reply = in_array($e->getMessage(), ['no-key', 'no-claude-code'], true) ? I18n::t($this->app, $e->getMessage() === 'no-claude-code'
+                    ? 'Claude Code is not installed on this server, so your Claude plan cannot be used. Choose another model in Settings → AI model, or install it (sudo ./install.sh --with-claude-code).'
+                    : 'No AI model is set up yet, so I cannot answer. In Settings → AI model: sign in with your Claude account (Pro/Max plan), or paste an API key (Claude, Gemini or OpenAI).')
+                    : (in_array($e->getMessage(), ['secret', 'confidential'], true) && $privacy->modelBlocked($level) !== null
                     ? I18n::t($this->app, $level === 'secret'
                         ? 'This is a Secret space: nothing may leave the server, and the assistant runs on a service outside. The library and tasks of this space still work; to chat here, use a model on this server (Settings → AI model).'
                         : 'This is a Confidential space: only a model under business terms (Claude API, OpenAI API, paid Gemini) may read its content, and the current one is not. Change the model in Settings → AI model, or the level of the space.')
-                    : I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]);
+                    : I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]));
             } catch (Abort $e) {
                 if ($e->getMessage() === 'stopped by the user') $reply = (trim($partial) !== '' ? trim($partial) . "\n\n" : '') . I18n::t($this->app, '*(stopped)*');
                 else $reply = I18n::t($this->app, "I've reached my spending limit, so I'm not calling the model right now. {budget}\nRaise TALIXIO_BUDGET_DAILY_USD / TALIXIO_BUDGET_MONTHLY_USD if needed.", ['budget' => $this->app->budget()->describe()]);

@@ -302,6 +302,20 @@ final class Config
 
     public function tier(string $name): Tier { return $this->tiers[$name] ?? $this->tiers['standard']; }
     public function embeddingsBackend(): string { return $this->embeddings; }
+    /** Why no model can answer yet ('no-key', 'no-claude-code'), or null when the chosen provider is set up. */
+    public function modelProblem(): ?string
+    {
+        return match ($this->provider) {
+            'echo' => null,
+            'anthropic' => $this->anthropicKey === '' ? 'no-key' : null,
+            'gemini' => $this->geminiKey === '' ? 'no-key' : null,
+            'openai' => $this->openaiKey === '' && str_contains($this->openaiBaseUrl, 'api.openai.com') ? 'no-key' : null, // a local server needs none
+            'claude-code' => !ClaudeLogin::installed($this) ? 'no-claude-code'
+                : ((getenv('CLAUDE_CODE_OAUTH_TOKEN') ?: '') === '' && $this->anthropicKey === '' && !is_file((getenv('HOME') ?: '') . '/.claude/.credentials.json') ? 'no-key' : null),
+            default => null,
+        };
+    }
+
     public function filesDir(): string { return $this->dataDir . '/files'; }
     public function dbPath(): string { return $this->dataDir . '/talixio.db'; }
     public function workspaceDir(): string { return $this->dataDir . '/workspace'; }

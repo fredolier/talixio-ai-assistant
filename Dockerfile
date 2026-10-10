@@ -21,7 +21,7 @@ RUN set -eux; mkdir -p /out; \
 FROM ${BASE}
 
 # Optional parts (each adds size): headless browser, LibreOffice previews, sandboxed shell, Node (MCP + Claude Code),
-# whisper.cpp (local transcription), signal-cli (Signal channel, x86_64 only)
+# whisper.cpp (local transcription), signal-cli (Signal channel)
 ARG WITH_WHISPER=1
 ARG WITH_SIGNAL=1
 ARG WITH_BROWSER=1
@@ -31,6 +31,8 @@ ARG WITH_NODE=1
 ARG WITH_CLAUDE_CODE=1
 
 ENV DEBIAN_FRONTEND=noninteractive
+# signal-cli: the native build (no Java) needs x86_64 and a recent processor (x86-64-v2 or more); a virtual
+# machine with an old processor model gets the Java build instead
 RUN set -eux; \
     pkgs="php-cli php-curl php-sqlite3 php-mbstring php-gd php-zip php-xml curl ca-certificates git ffmpeg poppler-utils tini tzdata"; \
     [ "$WITH_BROWSER" = 1 ] && pkgs="$pkgs chromium fonts-liberation fonts-noto-color-emoji"; \
@@ -39,11 +41,20 @@ RUN set -eux; \
     [ "$WITH_NODE" = 1 ] && pkgs="$pkgs nodejs npm"; \
     [ "$WITH_WHISPER" = 1 ] && pkgs="$pkgs libgomp1"; \
     apt-get update; apt-get install -y --no-install-recommends $pkgs; \
-    if [ "$WITH_SIGNAL" = 1 ] && [ "$(dpkg --print-architecture)" = amd64 ]; then \
-      url="$(curl -fsSL https://api.github.com/repos/AsamK/signal-cli/releases/latest | grep -oE '"browser_download_url": *"[^"]*Linux-native\.tar\.gz"' | head -1 | cut -d'"' -f4 || true)"; \
-      if [ -n "$url" ] && install -d /opt/signal-cli && curl -fsSL "$url" | tar -xz -C /opt/signal-cli; then \
-        ln -s "$(find /opt/signal-cli -type f -name signal-cli -perm -u+x | head -1)" /usr/local/bin/signal-cli; signal-cli --version; \
-      else echo "WARNING: signal-cli could not be downloaded; the image has no Signal channel"; rm -rf /opt/signal-cli; fi; \
+    if [ "$WITH_SIGNAL" = 1 ]; then \
+      assets="$(curl -fsSL https://api.github.com/repos/AsamK/signal-cli/releases/latest | grep -oE '"browser_download_url": *"[^"]*\.tar\.gz"' | cut -d'"' -f4 || true)"; \
+      native="$(echo "$assets" | grep -- '-Linux-native\.tar\.gz$' | head -1)"; java="$(echo "$assets" | grep -v -- '-Linux' | grep -E '/signal-cli-[0-9.]+\.tar\.gz$' | head -1)"; \
+      install -d /opt/signal-cli; \
+      if [ -n "$native" ] && [ "$(dpkg --print-architecture)" = amd64 ] && curl -fsSL "$native" | tar -xz -C /opt/signal-cli \
+         && "$(find /opt/signal-cli -type f -name signal-cli -perm -u+x | head -1)" --version; then \
+        ln -s "$(find /opt/signal-cli -type f -name signal-cli -perm -u+x | head -1)" /usr/local/bin/signal-cli; \
+      else \
+        rm -rf /opt/signal-cli; install -d /opt/signal-cli; echo "signal-cli: native build unusable here, using the Java build"; \
+        if [ -n "$java" ] && apt-get install -y --no-install-recommends default-jre-headless && curl -fsSL "$java" | tar -xz -C /opt/signal-cli --strip-components=1 \
+           && /opt/signal-cli/bin/signal-cli --version; then \
+          ln -s /opt/signal-cli/bin/signal-cli /usr/local/bin/signal-cli; \
+        else echo "WARNING: signal-cli could not be installed; the image has no Signal channel"; rm -rf /opt/signal-cli; fi; \
+      fi; \
     fi; \
     if [ "$WITH_NODE" = 1 ] && [ "$WITH_CLAUDE_CODE" = 1 ]; then npm install -g --omit=dev @anthropic-ai/claude-code && npm cache clean --force; fi; \
     rm -rf /var/lib/apt/lists/* /root/.npm; \

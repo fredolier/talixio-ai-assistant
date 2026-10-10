@@ -25,12 +25,29 @@ final class App
     public function __construct(public Config $cfg)
     {
         $this->store = new Store($cfg->dbPath());
+        if ($this->store->get('data_dir', '') !== $cfg->dataDir) $this->relocate(); // the data was moved (Docker, another server)
         if ($cfg->provider === 'gemini') GeminiModels::apply($cfg, $this->store);
         $this->ws = new Workspace($cfg->workspaceDir());
         $this->embeddings = new Embeddings($cfg);
         $this->tools = new Tools($this);
         Content::$imageLoader = fn(int $id) => $this->files()->imagePart($id);
         Http::$hook = fn(string $url, int $bytes) => $this->privacy()->outbound($url, $bytes); // every request to the outside is checked and logged
+    }
+
+    /**
+     * The files are recorded with their full path; when the data folder moves (install.sh → Docker, a transfer to
+     * another server), point them at where they are now. Once per data folder.
+     */
+    private function relocate(): void
+    {
+        $st = $this->store; $dir = $this->cfg->filesDir(); $n = 0;
+        foreach ($st->q("SELECT id, path FROM files WHERE path != '' AND path NOT LIKE ? ESCAPE '\\'", [addcslashes($dir, '%_\\') . '/%'])->fetchAll() as $f) {
+            if (!preg_match('#/files/(\d{4}/\d{2}/[^/]+)$#', (string)$f['path'], $m) || !is_file("$dir/{$m[1]}")) continue;
+            $st->q('UPDATE files SET path = ? WHERE id = ?', ["$dir/{$m[1]}", $f['id']]);
+            $n++;
+        }
+        if ($n) Log::info("data folder moved to {$this->cfg->dataDir}: $n file path(s) updated");
+        $st->set('data_dir', $this->cfg->dataDir);
     }
 
     public static function fromEnv(): self { return new self(Config::fromEnv()); }

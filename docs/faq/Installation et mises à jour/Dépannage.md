@@ -4,6 +4,16 @@
 Réglages → *Lancer les vérifications* (ou `sudo talixio doctor`, sous Docker
 `docker exec talixio-<vous> talixio doctor`) : chaque ligne en rouge dit ce qui ne va pas.
 
+## « Aucun modèle d'IA n'est encore configuré »
+L'assistant n'a ni clé d'API ni connexion Claude. Un encart dans la conversation propose
+*Se connecter avec Claude* ou *Utiliser une clé d'API*. Après un passage à Docker, ce peut être l'import
+des réglages qui a échoué : voir *Administration / Passer en multi-utilisateur*.
+
+## Mes documents n'apparaissent plus ou ne s'ouvrent plus après un déménagement
+Depuis la 0.16, les chemins des fichiers sont remis à jour automatiquement au démarrage quand le dossier
+de données a changé (installation simple → Docker, transfert). Si un document reste introuvable, vérifiez
+qu'il est bien dans le volume (`docker exec talixio-<vous> ls /data/files`).
+
 ## « Worker hors ligne »
 Les routines, Telegram et les tâches de fond sont arrêtés. Installation simple :
 `systemctl status talixio-worker` et `journalctl -u talixio-worker -n 50`. Docker : `docker logs talixio-<vous>`.

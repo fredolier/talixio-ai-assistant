@@ -1886,6 +1886,28 @@ $ho = \Talixio\Fleet::healthOf(['RestartCount' => 3, 'State' => ['OOMKilled' => 
 check('health: restarts, out-of-memory stop, failed checks, average check time and the last error', $ho['restarts'] === 3 && $ho['oom'] && $ho['failing'] === 2
     && $ho['check_ms'] === 2530 && $ho['check_error'] === 'curl: (28) Operation timed out', json_encode($ho));
 
+// ---- a moved data folder (install.sh → Docker, another server): the files follow ----
+$mv = "$dir/moved"; mkdir("$mv/a", 0777, true);
+putenv("TALIXIO_DATA_DIR=$mv/a");
+$ma = App::fromEnv();
+file_put_contents("$mv/doc.txt", 'contrat de bail'); $mid = $ma->files()->save("$mv/doc.txt", 'Bail.txt', 'text/plain', '/Admin');
+$ma = null;
+exec('cp -a ' . escapeshellarg("$mv/a") . ' ' . escapeshellarg("$mv/b") . ' && rm -rf ' . escapeshellarg("$mv/a"));
+putenv("TALIXIO_DATA_DIR=$mv/b");
+$mb = App::fromEnv();
+putenv("TALIXIO_DATA_DIR=$dir");
+check('moved data folder: the documents are found where they are now', ($mb->files()->get($mid)['path'] ?? '') === "$mv/b/files/" . date('Y/m') . "/$mid-Bail.txt" && is_file($mb->files()->get($mid)['path']));
+$mb = null;
+
+// ---- no model set up yet: the chat says how to set one up ----
+$keep = [$app->cfg->provider, $app->cfg->anthropicKey];
+$app->cfg->provider = 'anthropic'; $app->cfg->anthropicKey = '';
+$r = $app->agent()->chat('web', 'Bonjour ?');
+check('no model: the answer says where to set it up, without calling anything', str_contains($r, 'Settings → AI model') || str_contains($r, "Réglages → Modèle d'IA"), $r);
+check('no model: the problem is known (for the app to show it)', $app->cfg->modelProblem() === 'no-key');
+[$app->cfg->provider, $app->cfg->anthropicKey] = $keep;
+check('the echo test provider needs nothing', $app->cfg->modelProblem() === null);
+
 // ---- the FAQ: the notes about Talixio in the library, read-only, one page per version ----
 use Talixio\Faq;
 use Talixio\Library;

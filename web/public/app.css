@@ -297,6 +297,18 @@ tr:last-child td{border-bottom:0}
 .lib-tree a:hover{background:var(--sunk)}
 .lib-tree a.active{background:var(--accent-soft);font-weight:600}
 .lib-tree a.active svg{color:var(--accent)}
+.tree-head{display:flex;align-items:center;gap:4px}
+.tree-head a{flex:1}
+.tree-head .fold-all{flex:none;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:0;background:none;color:var(--muted);border-radius:6px;cursor:pointer}
+.tree-head .fold-all:hover{background:var(--sunk);color:var(--ink)}
+.tree-head .fold-all svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.tree-row{display:flex;align-items:center;gap:0;min-width:0}
+.tree-row a{flex:1}
+.tree-row .tw{flex:none;width:22px;height:28px;display:flex;align-items:center;justify-content:center;border:0;background:none;padding:0;color:var(--muted);cursor:pointer;border-radius:6px}
+.tree-row button.tw:hover{background:var(--sunk);color:var(--ink)}
+.tree-row .tw svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+.tree-row .tw.open svg{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.tree-row .tw svg{transition:none}}
 .lib-tree a.drop,.lib-row.drop{outline:2px dashed var(--accent);outline-offset:-2px}
 .lib-main{display:flex;flex-direction:column;gap:10px;min-width:0;border-radius:var(--r)}
 .lib-main.drag{outline:2px dashed var(--accent);outline-offset:4px}
@@ -754,3 +766,10 @@ span.privacy-badge{cursor:default;min-height:26px;padding:0 9px}
 .paused-note{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:8px 12px 0;padding:10px 12px;border-radius:var(--r);background:var(--sunk);border:1px solid var(--line);font-size:.9rem}
 .paused-note .btn{margin-left:auto}
 #transfer-state code{word-break:break-all;user-select:all}
+
+/* no AI model yet: how to set one up, above the conversation */
+.setup-model{display:flex;flex-direction:column;gap:6px;margin:8px 12px 0;padding:12px 14px;border-radius:var(--r);background:var(--accent-soft,var(--sunk));border:1px solid var(--line)}
+.setup-model p{margin:0}
+.cl-steps{display:flex;flex-direction:column;gap:12px;padding-left:1.2em;margin:8px 0}
+.cl-steps .btn{margin-top:6px;display:inline-block}
+.cl-steps form{margin-top:6px} .cl-steps input{flex:1;min-width:0}

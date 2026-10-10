@@ -19,6 +19,7 @@ final class Cli
                 echo Transfer::pull(Config::fromEnv()->dataDir, $pos[0], $pos[1], $final, $url, fn($m) => print("$m\n")), "\n";
                 return 0;
             }
+            if ($cmd === 'claude-login') { ClaudeLogin::run(Config::fromEnv()); return 0; } // started by the web app (Sign in with Claude)
             $app = App::fromEnv();
             switch ($cmd) {
                 case 'worker':

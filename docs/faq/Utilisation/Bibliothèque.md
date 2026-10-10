@@ -12,6 +12,9 @@
   Elle apprend de vos rangements. Réglages → *Rangement des nouveaux documents* : proposer, ranger
   les évidents, ou désactivé.
 - Dossiers : créer, renommer, déplacer, supprimer ; un dossier se télécharge en ZIP.
+- L'arborescence se **plie et se déplie** (la flèche devant chaque dossier ; le bouton en haut replie tout).
+  Le chemin du dossier ouvert reste déplié, et l'état est retenu sur cet appareil. En glissant un fichier,
+  un dossier replié s'ouvre si l'on reste dessus un instant.
 
 ## Retrouver
 - Tout est lu et indexé en arrière-plan : PDF (y compris scannés), Word/Excel/PowerPoint, e-mails,

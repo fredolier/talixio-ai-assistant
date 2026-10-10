@@ -71,6 +71,10 @@ everything the app shows. Another language: a dictionary file, its `<script>` in
 
 ### Choose the brain
 
+The simplest with a Claude Pro/Max plan: Settings → AI model → **Sign in with Claude** (also offered in the
+conversation while no model is set up). It runs Claude Code's own sign-in from the web app: open Claude's
+page, paste the code back. Needs Claude Code on the server (`--with-claude-code`; in the Docker image).
+
 | Option | Settings |
 |---|---|
 | Gemini API | `TALIXIO_PROVIDER=gemini`, `GEMINI_API_KEY=...` (create one at https://aistudio.google.com/apikey) |

@@ -34,8 +34,7 @@ $background = function (string $kind, string $arg = '') use ($state, $json): voi
     $job = json_decode((string)@file_get_contents("$state/job.json"), true) ?: [];
     if (in_array($job['state'] ?? '', ['running'], true) && time() - (int)($job['updated'] ?? 0) < 3600) { $json(['error' => 'Another long action is running: ' . ($job['kind'] ?? '')], 409); return; }
     file_put_contents("$state/job.json", json_encode(['kind' => $kind, 'state' => 'running', 'message' => 'Starting…', 'log' => [], 'started' => time(), 'updated' => time()]));
-    $cmd = ['setsid', PHP_BINARY, __DIR__ . '/fleet-job.php', $kind, $arg];
-    proc_close(proc_open($cmd, [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$state/job.out", 'a'], 2 => ['file', "$state/job.out", 'a']], $pipes));
+    Talixio\Background::start([PHP_BINARY, __DIR__ . '/fleet-job.php', $kind, $arg], "$state/job.out");
     $json(['ok' => true]);
 };
 

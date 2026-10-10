@@ -3,6 +3,18 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.16.0 (2026-10-10)
+- Sign in with Claude: Settings → AI model (or the card in the conversation) runs Claude Code's own sign-in
+  for a Pro/Max plan from the web app: open Claude's page, paste the code back, done. No terminal needed.
+- No model set up: the conversation says so and how to fix it (a card with *Sign in with Claude* and
+  *Use an API key*), instead of an API error.
+- Documents found again after the data folder moves (install.sh → Docker, a transfer): their paths are
+  updated at start. A migrated library was listed but its files could not be opened.
+- Library: the folder tree folds and unfolds (remembered per device; the current folder's path stays open).
+- Docker image: signal-cli falls back to its Java build when the native one cannot run on the processor
+  (virtual machines with an older processor model); the build no longer fails on it.
+- Background actions (admin page jobs, Claude sign-in) are fully detached from the web server.
+
 ## 0.15.1 (2026-10-10)
 - Admin page: a Server panel with memory, processors (load, model) and disk (images, data, build cache), whether
   the server is well sized for the people on it (limits promised against the machine, load, swap, free disk) and

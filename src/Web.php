@@ -75,6 +75,8 @@ final class Web
         return match (true) {
             $path === '/api/logout' => $this->logout(),
             $path === '/api/status' => $this->status(),
+            $path === '/api/claude-login/start' && $m === 'POST' => (new ClaudeLogin($this->app))->start(),
+            $path === '/api/claude-login/code' && $m === 'POST' => (new ClaudeLogin($this->app))->finish((string)($b['code'] ?? '')),
             $path === '/api/transfer' => (new Transfer($this->app))->status(),
             $path === '/api/transfer/code' && $m === 'POST' => (new Transfer($this->app))->create(),
             $path === '/api/transfer/cancel' && $m === 'POST' => (function () { (new Transfer($this->app))->cancel(); return ['ok' => true]; })(),
@@ -421,7 +423,8 @@ final class Web
             'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()),
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
-            'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store)];
+            'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store),
+            'model_problem' => $c->modelProblem(), 'claude_code' => ClaudeLogin::installed($c)];
     }
 
     private function channels(): array
