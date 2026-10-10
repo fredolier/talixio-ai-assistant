@@ -44,13 +44,14 @@ try {
         $path === '/instances' && $method === 'GET' => $json(['instances' => $fleet->list(), 'settings' => $fleet->state()['settings']]),
         $path === '/instances' && $method === 'POST' => $json($fleet->create((string)($b['id'] ?? ''), (string)($b['name'] ?? ''), (string)($b['email'] ?? ''),
             isset($b['memory_mb']) ? (int)$b['memory_mb'] : null, isset($b['cpus']) ? (float)$b['cpus'] : null)),
-        (bool)preg_match('#^/instances/([a-z0-9-]+)/(start|stop|restart|recreate|reset-password|reset-totp|doctor|backup|limits|remove)$#', $path, $m) && $method === 'POST' => (function () use ($fleet, $m, $b, $json) {
+        (bool)preg_match('#^/instances/([a-z0-9-]+)/(start|stop|restart|recreate|reset-password|reset-totp|doctor|logs|backup|limits|remove)$#', $path, $m) && $method === 'POST' => (function () use ($fleet, $m, $b, $json) {
             [, $id, $act] = $m;
             $r = match ($act) {
                 'start' => $fleet->start($id), 'stop' => $fleet->stop($id), 'restart' => $fleet->restart($id), 'recreate' => $fleet->recreate($id),
                 'reset-password' => ['password' => $fleet->resetPassword($id)],
                 'reset-totp' => $fleet->resetTotp($id),
                 'doctor' => ['text' => $fleet->doctor($id)],
+                'logs' => ['text' => $fleet->logs($id, !empty($b['all']))],
                 'backup' => ['text' => $fleet->backup($id)],
                 'limits' => $fleet->setLimits($id, (int)($b['memory_mb'] ?? 1024), (float)($b['cpus'] ?? 1.5)),
                 'remove' => $fleet->remove($id, !empty($b['delete_data'])),

@@ -91,6 +91,7 @@ final class Files
             return $text;
         } catch (\Throwable $e) {
             $this->app->store->q("UPDATE files SET status='failed', text=? WHERE id=?", ['(could not read this file: ' . $e->getMessage() . ')', $id]);
+            Log::warn("reading file #$id ({$f['kind']}): {$e->getMessage()}");
             throw $e;
         } finally {
             Privacy::$taint = $taint;

@@ -146,7 +146,7 @@ function renderPeople() {
       <div class="acts"><select aria-label="Action"><option value="">Actions…</option>
         ${p.state === 'running' ? '<option value="restart">Restart</option><option value="stop">Stop</option>' : '<option value="start">Start</option>'}
         <option value="reset-password">New password (forgotten)</option><option value="reset-totp">Turn off two-step sign-in (lost phone)</option>
-        <option value="limits">Memory and CPU…</option><option value="doctor">Check (doctor)</option><option value="backup">Back up now</option>
+        <option value="limits">Memory and CPU…</option><option value="doctor">Check (doctor)</option><option value="logs">Log</option><option value="backup">Back up now</option>
         <option value="recreate">Rebuild the container</option><option value="remove">Remove…</option></select></div>`;
     el.querySelector('select').onchange = e => { const a = e.target.value; e.target.value = ''; if (a) act(p, a); };
     box.append(el);
@@ -166,6 +166,15 @@ async function act(p, a) {
     } else if (a === 'limits') {
       const v = await ask(`Limits for ${p.id}`, { fields: [{ id: 'memory_mb', label: 'Memory (MB)', type: 'number', value: p.memory_mb }, { id: 'cpus', label: 'CPUs', type: 'number', value: p.cpus, attrs: ' step="0.25"' }], ok: 'Apply (restarts it)' });
       if (!v) return; await run({ memory_mb: +v.memory_mb, cpus: +v.cpus }); toast('Applied');
+    } else if (a === 'logs') {
+      for (let all = false; ; all = true) { // errors and warnings first; every request line on demand
+        const r = await run({ all });
+        const html = `<p class="muted small">${all ? t('Last 500 lines, requests included.') : t('Errors, warnings and failed requests (the latest at the bottom).')}</p><pre class="out logs">${esc(r.text || t('Nothing logged.'))}</pre>`;
+        const shown = ask(t('Log of {id}', { id: p.id }), { html, ok: all ? 'OK' : t('Show every line'), cancel: !all });
+        $('#dlg-body pre.logs').scrollTop = 1e9; // the latest at the bottom, in view
+        const go = await shown;
+        if (all || !go) break;
+      }
     } else if (a === 'doctor' || a === 'backup') {
       const r = await run();
       await ask(a === 'doctor' ? `Check of ${p.id}` : 'Backup', { html: `<pre class="out">${esc(r.text)}</pre>`, cancel: false });

@@ -345,6 +345,19 @@ final class Fleet
         $this->reloadCaddy();
     }
 
+    /** The end of an instance's log (errors, warnings, what it logs), without the request noise of php -S unless $all. */
+    public function logs(string $id, bool $all = false): string
+    {
+        $this->need($id);
+        [$code, $raw] = $this->docker('GET', '/containers/' . $this->containerName($id) . '/logs', null, ['stdout' => 'true', 'stderr' => 'true', 'tail' => $all ? '500' : '5000', 'timestamps' => 'true'], 20);
+        if ($code !== 200 || !is_string($raw)) throw new \RuntimeException("logs: HTTP $code");
+        $lines = explode("\n", rtrim(self::demux($raw)));
+        // php -S writes Accepted/Closing and one line per request: keep only failed requests
+        if (!$all) $lines = array_filter($lines, fn($l) => !preg_match('/\]\s\S+:\d+ (Accepted|Closing)$|\]\s\S+:\d+ \[[23]\d\d\]: /', $l));
+        $lines = array_map(fn($l) => preg_replace('/^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)\.\d+Z/', '$1Z', $l), array_slice(array_values($lines), -300));
+        return implode("\n", $lines);
+    }
+
     public function doctor(string $id): string { $this->need($id); return $this->exec($this->containerName($id), ['php', '/opt/talixio/bin/talixio', 'doctor'], 120)[1]; }
     public function backup(string $id): string { $this->need($id); [$code, $out] = $this->exec($this->containerName($id), ['php', '/opt/talixio/bin/talixio', 'backup'], 900); if ($code) throw new \RuntimeException(trim($out)); return trim($out); }
 

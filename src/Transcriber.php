@@ -48,7 +48,7 @@ final class Transcriber
     private function model(): string
     {
         $c = $this->app->cfg;
-        if ($c->transcribeModel !== '') return $c->transcribeModel;
+        if (str_starts_with($c->transcribeModel, 'gemini')) return $c->transcribeModel; // a whisper.cpp model name left from local transcription is not one
         return $c->provider === 'gemini' && $c->tier('standard')->model !== '' ? $c->tier('standard')->model : GeminiModels::FALLBACK['standard'];
     }
 

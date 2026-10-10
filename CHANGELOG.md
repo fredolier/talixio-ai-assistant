@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.19.4 (2026-10-10)
+- Admin page: **Log** in each assistant's Actions menu shows the end of its log (errors, warnings and failed
+  requests; every line on demand), without a terminal on the server. Reading it is in the audit trail.
+- A file that cannot be read (transcription, image reading, PDF…) now writes why in the log.
+- Transcription with Gemini: a whisper.cpp model name left in "Transcription model" is no longer sent to
+  Gemini (it was rejected); the Gemini model is then chosen automatically.
+
 ## 0.19.3 (2026-10-10)
 - Docker: updating from the admin page works with a private repository: put a read-only token in
   `GIT_TOKEN` in `deploy/docker/.env` and run `install-stack.sh` once; the agent sends it as a header when it
