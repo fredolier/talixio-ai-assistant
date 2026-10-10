@@ -81,6 +81,12 @@ final class Store
             CREATE TABLE IF NOT EXISTS mind_links(belief INTEGER NOT NULL, obs INTEGER NOT NULL, polarity INTEGER NOT NULL, PRIMARY KEY(belief, obs));
             CREATE TABLE IF NOT EXISTS mind_journal(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL);");
         $this->addColumn('mind_journal', 'space', 'INTEGER NOT NULL DEFAULT 0');
+        // links to library documents for people outside (Shares)
+        $this->db->exec("CREATE TABLE IF NOT EXISTS shares(id INTEGER PRIMARY KEY, token TEXT NOT NULL UNIQUE, file_id INTEGER, folder TEXT, label TEXT NOT NULL DEFAULT '',
+                message TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, expires INTEGER, password TEXT, download INTEGER NOT NULL DEFAULT 1,
+                notify INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL DEFAULT 'you', revoked INTEGER NOT NULL DEFAULT 0, views INTEGER NOT NULL DEFAULT 0, last_access INTEGER);
+            CREATE TABLE IF NOT EXISTS share_access(id INTEGER PRIMARY KEY, share_id INTEGER NOT NULL, ts INTEGER NOT NULL, ip TEXT NOT NULL, agent TEXT NOT NULL, action TEXT NOT NULL, file_id INTEGER);
+            CREATE INDEX IF NOT EXISTS share_access_share ON share_access(share_id);");
         if ($this->addColumn('tool_log', 'job_id', 'INTEGER')) $this->db->exec('CREATE INDEX IF NOT EXISTS tool_log_job ON tool_log(job_id) WHERE job_id IS NOT NULL');
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");
         $this->addColumn('usage', 'job_id', 'INTEGER');

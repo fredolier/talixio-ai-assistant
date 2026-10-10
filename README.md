@@ -310,6 +310,15 @@ sudo deploy/docker/install-stack.sh --domain assistant.example.com --email you@e
   month's weeks into an even shorter month summary. The assistant reads this digest before every
   answer (Memory page → *Conversation digest*), so it keeps the thread of months of conversation for
   a fixed cost, while details fade. Nothing is deleted: every message and summary stays searchable.
+- **Sharing documents with people outside**: Library → *Share* on a document or a folder makes a
+  link (`/s/<random>`): for whom, a message, until when (1, 7, 30, 90 days or no end), an optional
+  password, view only or download. The page needs no account, is in the visitor's language and is
+  not indexed by search engines; a folder link shows its subfolders as they are when opened and can
+  be downloaded as a zip. *Shares* lists every link: copy, email, extend by 30 days, revoke, and who
+  opened what and when; you are told when a link is opened the first time. Links follow a folder
+  when it is moved; ended links are forgotten after 90 days. The assistant can share too
+  (`share_create`, after your approval). Set Settings → Assistant → *Public address* if the links
+  must use another address than the one you open the app with.
 - **Character and values, learned by itself** (`TALIXIO_MIND`): each compacted stretch of
   conversation is read again for what it shows beyond facts: what matters to you (values), how you
   decide and work (patterns), and how it should be (lessons about itself); the assistant also notes

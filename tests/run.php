@@ -1026,6 +1026,27 @@ $t0 = microtime(true);
 $child = proc_open([PHP_BINARY, '-r', 'sleep(1); $db = new PDO("sqlite:' . $la->cfg->dbPath() . '"); $db->exec("UPDATE files SET status=\'ready\', text=\'from the other reader\' WHERE id=' . $idTxt . '");'], [], $cp);
 check('library: a file being read elsewhere is waited for, not read twice', $lf->text($idTxt) === 'from the other reader' && microtime(true) - $t0 >= 0.9);
 proc_close($child);
+// shares: the rules behind the links
+$shs = $la->shares();
+$lib->createFolder('/Dossier Client/2026');
+$sf = $shs->create(['folder' => '/Dossier Client'], ['label' => 'Expert-comptable', 'days' => 1]);
+check('shares: the whole library cannot be shared', (function () use ($shs) { try { $shs->create(['folder' => '/']); return false; } catch (\InvalidArgumentException) { return true; } })());
+check('shares: no address yet = a path, said by the assistant tool', !str_starts_with($sf['url'], 'http'));
+$lib->moveFolder('/Dossier Client', '/Clients/Dupont');
+check('shares: a link to a folder follows it when it is moved', $shs->get($sf['id'])['folder'] === '/Clients/Dupont');
+$row = $la->store->q('SELECT * FROM shares WHERE id = ?', [$sf['id']])->fetch();
+$la->store->q('UPDATE shares SET expires = ? WHERE id = ?', [time() - 1, $sf['id']]);
+check('shares: an expired link no longer opens', $shs->byToken($row['token']) === null && $shs->get($sf['id'])['state'] === 'expired' && $shs->list() === []);
+$la->store->q('UPDATE shares SET expires = ? WHERE id = ?', [time() - 100 * 86400, $sf['id']]);
+check('shares: links ended long ago are forgotten', $shs->purge() === 1 && $shs->get($sf['id']) === null);
+$pw = $shs->create(['file' => $idTxt], ['password' => 'abcd']);
+$prow = $la->store->q('SELECT * FROM shares WHERE id = ?', [$pw['id']])->fetch();
+$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+for ($i = 0; $i < 10; $i++) $shs->unlock($prow, 'wrong');
+check('shares: password tries are limited', (function () use ($shs, $prow) { try { $shs->unlock($prow, 'abcd'); return false; } catch (\RuntimeException $e) { return str_contains($e->getMessage(), 'Too many'); } })());
+check('shares: too short a password is refused', (function () use ($shs, $idTxt) { try { $shs->create(['file' => $idTxt], ['password' => 'ab']); return false; } catch (\InvalidArgumentException) { return true; } })());
+check('shares: the assistant needs the user\'s approval to share', $la->tools->needsApproval('share_create') && !$la->tools->needsApproval('share_list') && !$la->tools->needsApproval('share_revoke'));
+$shs->revoke($pw['id']);
 // web API
 $webPort = $freePort();
 $env = ['TALIXIO_DATA_DIR' => $ld, 'TALIXIO_PROVIDER' => 'echo', 'TALIXIO_EMBEDDINGS' => 'off', 'TALIXIO_WEB_PASSWORD' => 'pw', 'PATH' => getenv('PATH'), 'TALIXIO_NOTIFY' => 'none'];
@@ -1072,6 +1093,49 @@ $raw = function (string $path, array $headers = []) use ($webPort, $ck) {
 check('i18n: the page loads the translations and says the chosen language', $code === 200 && str_contains($body, '<html lang="en" data-lang="auto">')
     && str_contains($body, '<script src="i18n/fr.js"></script>') && strpos($body, 'i18n.js') < strpos($body, 'app.js'));
 $cid = $up['file']['id'];
+// links for people outside
+$anon = function (string $path, array $headers = [], ?array $post = null, ?string $jar = null) use ($webPort) {
+    $ch = curl_init("http://127.0.0.1:$webPort$path");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true, CURLOPT_TIMEOUT => 20, CURLOPT_HTTPHEADER => $headers]
+        + ($jar ? [CURLOPT_COOKIEJAR => $jar, CURLOPT_COOKIEFILE => $jar] : []) + ($post !== null ? [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($post)] : []));
+    $out = (string)curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $hs = curl_getinfo($ch, CURLINFO_HEADER_SIZE); curl_close($ch);
+    return [$code, strtolower(substr($out, 0, $hs)), substr($out, $hs)];
+};
+$sh = $wj('/api/shares', ['file' => $cid, 'label' => 'Notaire', 'message' => 'Voici le contrat.', 'days' => 7, 'download' => false])['share'] ?? [];
+check('shares: a link with the address the app was opened with', str_starts_with($sh['url'] ?? '', "http://127.0.0.1:$webPort/s/") && strlen(basename($sh['url'])) === 32 && $sh['state'] === 'active'
+    && $sh['label'] === 'Notaire' && !$sh['download'] && abs($sh['expires'] - time() - 7 * 86400) < 10, json_encode($sh));
+$tok = '/s/' . basename($sh['url']);
+[$code, $h, $body] = $anon($tok, ['Accept-Language: fr-FR,fr;q=0.9']);
+check('shares: the page opens without an account, in the visitor\'s language', $code === 200 && str_contains($body, 'contrat.txt') && str_contains($body, 'Voici le contrat.')
+    && str_contains($body, '>Voir<') && !str_contains($body, '/download/') && str_contains($body, 'Consultation seulement') && str_contains($h, 'x-robots-tag: noindex')
+    && str_contains($h, "frame-ancestors 'none'") && str_contains($h, 'referrer-policy: no-referrer'), $body);
+check('shares: view only = no download', $anon("$tok/download/$cid")[0] === 403);
+[$code, $h, $body] = $anon("$tok/view/$cid");
+check('shares: the document can be viewed', $code === 200 && str_contains($body, 'Contrat de maintenance'), "$code $body");
+check('shares: other documents are out of reach', $anon("$tok/view/" . ($cid + 999))[0] === 404 && $anon("$tok/view/" . (int)$wj('/api/library/note', ['folder' => '/Perso', 'name' => 'Secret', 'content' => 'x'])['file']['id'])[0] === 404);
+check('shares: a made-up link shows "not available"', $anon('/s/' . str_repeat('A', 32))[0] === 404);
+$sh1 = $wj("/api/shares?scope=active&file=$cid")['shares'][0] ?? [];
+$log = $wj("/api/shares/{$sh['id']}/log")['log'] ?? [];
+check('shares: every opening is logged, the page counts as one view', $sh1['views'] === 1 && $sh1['last_access'] > 0 && in_array('view', array_column($log, 'action'), true) && in_array('open', array_column($log, 'action'), true));
+// a folder, with a password
+$fsh = $wj('/api/shares', ['folder' => '/Perso', 'password' => 'secret1', 'days' => 0])['share'] ?? [];
+$ftok = '/s/' . basename($fsh['url'] ?? '');
+$jar = "$dir/share-cookies";
+[$code, , $body] = $anon($ftok, [], null, $jar);
+check('shares: a password is asked first', $code === 200 && str_contains($body, 'type="password"') && !str_contains($body, 'contrat.txt') && $fsh['expires'] === null && $fsh['password'] === true);
+check('shares: a wrong password is refused', $anon($ftok, [], ['password' => 'nope'], $jar)[0] === 403);
+[$code, $h] = $anon($ftok, [], ['password' => 'secret1'], $jar);
+[$code2, , $body] = $anon($ftok, [], null, $jar);
+check('shares: the right password opens the folder, subfolders included', $code === 303 && str_contains($h, 'set-cookie: tlxs') && $code2 === 200 && str_contains($body, 'contrat.txt') && str_contains($body, 'Secret.md') && str_contains($body, '/zip'), $body);
+[$code, $h] = $anon("$ftok/zip", [], null, $jar);
+check('shares: download everything as a zip', $code === 200 && str_contains($h, 'application/zip'));
+[, , $nb] = $anon("$ftok/download/$cid");
+[, $dh, $db] = $anon("$ftok/download/$cid", [], null, $jar);
+check('shares: the files need the password too', str_contains($nb, 'type="password"') && !str_contains($nb, 'Contrat de maintenance') && str_contains($dh, 'attachment') && $db === 'Contrat de maintenance chaudière');
+$lib2 = $wj('/api/library?folder=/Perso');
+check('shares: shared files and folders are marked in the library', in_array($cid, $lib2['shared']['files'] ?? [], true) && in_array('/Perso', $lib2['shared']['folders'] ?? [], true));
+check('shares: extend, then revoke', ($wj("/api/shares/{$sh['id']}", ['days' => 30])['share']['expires'] ?? 0) > time() + 29 * 86400 && ($wj("/api/shares/{$sh['id']}/revoke", [])['ok'] ?? false) === true
+    && $anon($tok)[0] === 404 && !in_array($sh['id'], array_column($wj('/api/shares')['shares'], 'id'), true) && in_array($sh['id'], array_column($wj('/api/shares?scope=all')['shares'], 'id'), true));
 [$code, $h, $body] = $raw("/api/files/$cid");
 check('library web: text files viewable in the browser', $code === 200 && str_contains($h, 'content-type: text/plain; charset=utf-8') && str_contains($h, 'content-disposition: inline') && $body === 'Contrat de maintenance chaudière');
 [$code, $h] = $raw("/api/files/$cid?download=1");

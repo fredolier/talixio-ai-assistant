@@ -17,6 +17,7 @@ final class Settings
                 ['TALIXIO_NAME', 'Name', 'text', 'Your assistant\'s name.'],
                 ['TALIXIO_LANG', 'Interface language', 'select', 'Automatic: the language of your browser. The assistant always answers in the language you write in.', ['auto' => 'Automatic', 'en' => 'English', 'fr' => 'Français']],
                 ['TALIXIO_TIMEZONE', 'Time zone', 'text', 'e.g. Europe/Paris. Used for reminders and the calendar.'],
+                ['TALIXIO_PUBLIC_URL', 'Public address', 'url', 'For links you share with people outside, e.g. https://assistant.example.com/fred. Empty: the address you open the app with.'],
                 ['TALIXIO_HISTORY_MESSAGES', 'Recent messages kept word for word (max)', 'number', 'Older ones are compacted into summaries (weeks and months get shorter over time) and stay searchable.'],
                 ['TALIXIO_HISTORY_TOKENS', 'Size of the recent messages (tokens)', 'number', 'Long messages (pasted documents…) are shortened or left to memory search beyond this. Fewer tokens = cheaper answers.'],
             ]],

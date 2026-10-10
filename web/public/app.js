@@ -1731,7 +1731,7 @@ function libGo(folder) { location.hash = '#library' + (folder === '/' ? '' : fol
 async function loadLibrary() {
   lib.folder = libFolderFromHash() || '/';
   const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
-  lib.tree = tree.tree;
+  lib.tree = tree.tree; lib.shared = list.shared;
   lib.folder = list.folder;
   const st = list.stats;
   $('#lib-stats').textContent = st.files ? `${nf.format(st.files)} files · ${fmtSize(st.bytes)}${st.failed ? ` · ${st.failed} unreadable` : ''}. ${st.pending ? `Reading ${st.pending} new file${st.pending > 1 ? 's' : ''} to make ${st.pending > 1 ? 'them' : 'it'} searchable…` : 'Everything is searchable, by you and by the assistant.'}`
@@ -1769,7 +1769,8 @@ function renderCrumbs() {
   const owner = lib.folder !== '/' && state.spaces.find(x => x.id && x.folder === lib.folder);
   const spaceBtn = lib.folder === '/' ? '' : owner ? `<a class="btn small" href="#chat/${esc(owner.slug)}" title="Open the conversation of this folder's space"><i class="space-dot" style="background:${esc(owner.color)};width:9px;height:9px;display:inline-block;margin-right:6px"></i>Open space</a>`
     : '<button class="btn small" data-a="space" type="button" title="A separate conversation about this folder">New space here</button>';
-  fa.innerHTML = ask + spaceBtn + zip + (lib.folder === '/' ? '' : '<button class="btn small" data-a="rename" type="button" title="Rename or move this folder">Rename</button><button class="btn small ghost danger" data-a="delete" type="button" title="Delete this folder">Delete</button>');
+  fa.innerHTML = ask + spaceBtn + zip + (lib.folder === '/' ? '' : '<button class="btn small" data-a="share" type="button" title="A link to this folder for people outside">Share</button><button class="btn small" data-a="rename" type="button" title="Rename or move this folder">Rename</button><button class="btn small ghost danger" data-a="delete" type="button" title="Delete this folder">Delete</button>');
+  fa.querySelector('[data-a=share]')?.addEventListener('click', () => openShare({ folder: lib.folder }, lib.folder.split('/').pop()));
   fa.querySelector('[data-a=space]')?.addEventListener('click', () => openSpaceEditor(null, { folder: lib.folder, name: lib.folder.split('/').pop() }));
   fa.querySelector('[data-a=ask]').addEventListener('click', () => {
     location.hash = '#chat';
@@ -1784,6 +1785,86 @@ function renderCrumbs() {
 }
 
 const DL_SVG = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
+const LINK_SVG = '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>';
+
+// ---- shared links (documents for people outside) ----
+const SHARE_STATE = { active: 'active', expired: 'expired', revoked: 'revoked', missing: 'document deleted' };
+function shareLine(s, opts = {}) {
+  const until = s.expires ? t('until {date}', { date: fmtDate(s.expires) }) : t('no end date');
+  const seen = s.views ? t(s.views === 1 ? 'opened once, last {when}' : 'opened {n} times, last {when}', { n: s.views, when: fmtTime(s.last_access) }) : t('not opened yet');
+  const el = document.createElement('div'); el.className = 'share-line ' + s.state;
+  el.innerHTML = `<div class="sl-main">${opts.withName ? `<b>${s.file_id ? '' : '📁 '}${esc(s.path || s.name)}</b>` : ''}
+      <div>${s.label ? `<span class="sl-for">${esc(t('For {who}', { who: s.label }))}</span>` : `<span class="muted">${esc(t('Link'))} #${s.id}</span>`}
+      <span class="pill ${s.state === 'active' ? 'on' : 'off'}">${esc(SHARE_STATE[s.state] || s.state)}</span></div>
+      <div class="muted small"><span>${esc(until)}</span> · <span>${esc(seen)}</span>${s.password ? ` · <span>${esc(t('password'))}</span>` : ''}${s.download ? '' : ` · <span>${esc(t('view only'))}</span>`}${s.created_by === 'assistant' ? ` · <span>${esc(t('made by the assistant'))}</span>` : ''}</div>
+      <div class="sl-log" hidden></div></div>
+    <div class="sl-acts">${s.state === 'active' ? `<button class="btn small primary" data-a="copy" type="button">Copy link</button>
+      <a class="btn small" data-a="mail" href="mailto:?subject=${encodeURIComponent(s.name)}&body=${encodeURIComponent((s.message ? s.message + '\n\n' : '') + s.url)}">Email</a>
+      <button class="btn small" data-a="extend" type="button" title="30 more days from today">+30 days</button>` : ''}
+      <button class="btn small ghost" data-a="log" type="button">Who opened it</button>
+      ${s.state === 'active' ? '<button class="btn small ghost danger" data-a="revoke" type="button">Revoke</button>' : ''}</div>`;
+  const q = a => el.querySelector(`[data-a=${a}]`);
+  q('copy')?.addEventListener('click', () => copyText(s.url));
+  q('extend')?.addEventListener('click', async () => { try { await post(`api/shares/${s.id}`, { days: 30 }); toast('Extended by 30 days from today.'); opts.refresh?.(); } catch (e) { toast(e.message); } });
+  q('revoke')?.addEventListener('click', async e => {
+    const b = e.currentTarget;
+    if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Revoke now?'; return; }
+    try { await post(`api/shares/${s.id}/revoke`); toast('Link revoked: it no longer opens.'); opts.refresh?.(); } catch (err) { toast(err.message); }
+  });
+  q('log').addEventListener('click', async () => {
+    const box = el.querySelector('.sl-log');
+    if (!box.hidden) { box.hidden = true; return; }
+    const { log } = await api(`api/shares/${s.id}/log`);
+    const what = { open: 'opened the page', view: 'viewed', download: 'downloaded', zip: 'downloaded everything' };
+    box.innerHTML = log.length ? `<ul>${log.map(l => `<li><span class="muted small">${esc(fmtTime(l.ts))}</span> ${esc(t(what[l.action] || l.action))}${l.name ? ' ' + esc(l.name) : ''} <span class="muted small" title="${esc(l.agent)}">${esc(l.ip)}</span></li>`).join('')}</ul>` : `<p class="muted small">${esc(t('Nobody has opened it yet.'))}</p>`;
+    box.hidden = false;
+  });
+  return el;
+}
+
+/** Share one file ({file: id}) or a folder ({folder: path}): its links, and a form for a new one. */
+async function openShare(what, name) {
+  const dlg = $('#share-dialog');
+  $('#sh-title').textContent = t('Share "{name}"', { name });
+  $('#sh-what').textContent = what.folder ? t('The folder {path} and its subfolders, as they are when the link is opened.', { path: what.folder }) : t('This document only.');
+  const refresh = async () => {
+    const { shares, base } = await api('api/shares?scope=active&' + (what.file ? 'file=' + what.file : 'folder=' + encodeURIComponent(what.folder)));
+    const box = $('#sh-existing'); box.innerHTML = '';
+    if (!base) box.innerHTML = `<p class="small error">${esc(t('The app does not know its public address yet: set it in Settings → Assistant → Public address.'))}</p>`;
+    if (shares.length) { const h = document.createElement('h4'); h.textContent = t('Active links'); box.append(h); }
+    for (const s of shares) box.append(shareLine(s, { refresh }));
+  };
+  $('#sh-form').reset();
+  $('#sh-form').onsubmit = async e => {
+    e.preventDefault();
+    try {
+      const { share } = await post('api/shares', { ...what, label: $('#sh-label').value, message: $('#sh-message').value, days: +$('#sh-days').value,
+        password: $('#sh-password').value, download: $('#sh-download').checked, notify: $('#sh-notify').checked });
+      copyText(share.url);
+      toast('Link created and copied.');
+      $('#sh-form').reset(); refresh(); loadLibrary().catch(() => {});
+    } catch (err) { toast(err.message); }
+  };
+  $('#sh-close').onclick = () => dlg.close();
+  await refresh().catch(e => toast(e.message));
+  dlg.showModal();
+}
+
+async function openSharesManager() {
+  const dlg = $('#shares-dialog');
+  const refresh = async () => {
+    const { shares } = await api('api/shares?scope=' + ($('#shs-all').checked ? 'all' : 'active'));
+    const box = $('#shs-list'); box.innerHTML = '';
+    if (!shares.length) box.innerHTML = `<div class="placeholder">${esc(t('No shared links. Open a document or a folder and press Share.'))}</div>`;
+    for (const s of shares) box.append(shareLine(s, { withName: true, refresh }));
+  };
+  $('#shs-all').onchange = () => refresh().catch(e => toast(e.message));
+  $('#shs-close').onclick = () => dlg.close();
+  await refresh().catch(e => toast(e.message));
+  dlg.showModal();
+}
+$('#lib-shares').onclick = () => openSharesManager();
+$('#viewer-share').onclick = () => lib.file && openShare({ file: lib.file.id }, lib.file.name);
 const isVideo = f => (f.mime || '').startsWith('video/');
 const Library_join = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
 function fileRow(f, sub) {
@@ -1793,7 +1874,7 @@ function fileRow(f, sub) {
   const ico = f.kind === 'image' || f.kind === 'pdf' ? `<img src="api/files/${f.id}/thumb" alt="" loading="lazy">` : label;
   const status = f.status === 'pending' || f.status === 'processing' ? '<span class="pill pending">reading…</span>' : f.status === 'failed' ? '<span class="pill failed">unreadable</span>' : '';
   el.innerHTML = `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>`
-    + `<span class="row-end">${status}<a class="btn ghost icon dl" href="api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a></span>`;
+    + `<span class="row-end">${status}${lib.shared?.files?.includes(f.id) ? `<span class="shared-mark" title="${esc(t('Shared by link'))}">${LINK_SVG}</span>` : ''}<a class="btn ghost icon dl" href="api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a></span>`;
   el.querySelector('.dl').onclick = e => e.stopPropagation();
   const sg = f.suggestion;
   if (sg) { // where it would go: one click to file it, or edit, or dismiss
@@ -1821,7 +1902,7 @@ function renderList(list) {
   const box = $('#lib-list'); box.innerHTML = '';
   for (const t of list.folders) {
     const el = document.createElement('a'); el.href = '#'; el.className = 'lib-row';
-    el.innerHTML = `<span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(t.name)}</b><span>${t.total} file${t.total === 1 ? '' : 's'}</span></span><span></span>`;
+    el.innerHTML = `<span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(t.name)}</b><span>${t.total} file${t.total === 1 ? '' : 's'}</span></span><span class="row-end">${lib.shared?.folders?.includes(t.path) ? `<span class="shared-mark" title="${esc(window.t('Shared by link'))}">${LINK_SVG}</span>` : ''}</span>`;
     el.onclick = e => { e.preventDefault(); libGo(t.path); };
     dropTarget(el, t.path);
     box.append(el);

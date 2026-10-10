@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.11.0 (2026-10-10)
+- Share library documents with people outside: a link to a file or a folder (with its subfolders), for a
+  set time or without end, optional password, view only or download, a message for them. Library →
+  Share / Shares: copy, email, extend, revoke, and who opened what. You are told the first time a link is
+  opened. The assistant can make links too (`share_create`), always with your approval.
+
 ## 0.10.0 (2026-10-10)
 - Interface in French (Settings → Assistant → Interface language; automatic = the browser's).
 - Character and values learned by itself from the history, a character per space (Memory page).

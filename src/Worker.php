@@ -100,6 +100,7 @@ final class Worker
         if ($now % 600 < 15) $this->guard('update', fn() => $app->updater()->notifyIfNew());
         if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));
         if ($now % 3600 < 15) $this->guard('tasks trash', fn() => $app->board()->purge());
+        if ($now % 86400 < 15) $this->guard('old shares', fn() => $app->shares()->purge());
         $this->guard('tasks calendar', fn() => $app->board()->syncGoogle());
         $this->guard('tasks reminder', fn() => $app->board()->remind($now));
     }

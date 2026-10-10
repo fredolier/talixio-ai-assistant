@@ -12,6 +12,7 @@ final class Web
         if ($path === '/sw.js') { $this->serviceWorker(); return; }
         if ($path === '/share' && $method === 'POST') { $this->shareInbox(); return; }
         if (preg_match('#^/cal/tasks-([0-9a-f]{40})\.ics$#', $path, $cm) && $method === 'GET') { $this->tasksIcs($cm[1]); return; } // calendar apps have no session
+        if (preg_match('#^/s/([A-Za-z0-9_-]{20,64})(?:/(view|download|thumb|zip)(?:/(\d+))?)?/?$#', $path, $sm)) { $this->sharePage($sm[1], $sm[2] ?? '', (int)($sm[3] ?? 0), $method); return; } // links for people outside
         if ($path === '/' || !str_starts_with($path, '/api/')) {
             header('Cache-Control: no-cache');
             header('Content-Type: text/html; charset=utf-8');
@@ -20,6 +21,7 @@ final class Web
             $html = (string)file_get_contents(dirname(__DIR__) . '/web/public/app.html');
             $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '">', $html, 1); // the interface language (i18n.js)
             if ($this->app->cfg->lang === 'auto') I18n::remember($this->app, (string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
+            Shares::remember($this->app); // the address for links sent outside
             echo preg_replace('/<head>/', '<head><base href="' . htmlspecialchars(Config::basePath() . '/') . '">', $html, 1); // every address in the app is relative to it
             return;
         }
@@ -179,7 +181,13 @@ final class Web
             (bool)preg_match('#^/api/jobs/(\d+)/cancel$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->jobs()->cancel((int)$mm[1])],
             (bool)preg_match('#^/api/jobs/(\d+)/continue$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->continue((int)$mm[1], is_numeric($b['max_usd'] ?? null) ? (float)$b['max_usd'] : null, (string)($b['effort'] ?? ''), (string)($b['note'] ?? ''))],
             (bool)preg_match('#^/api/jobs/(\d+)/rerun$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->rerun((int)$mm[1], (string)($b['tier'] ?? ''), is_numeric($b['max_usd'] ?? null) ? (float)$b['max_usd'] : null, (string)($b['effort'] ?? ''))],
-            $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/')) + ['stats' => $this->app->library()->stats()],
+            $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/')) + ['stats' => $this->app->library()->stats(), 'shared' => $this->app->shares()->sharedIndex()],
+            $path === '/api/shares' && $m === 'GET' => ['shares' => $this->app->shares()->list((string)($_GET['scope'] ?? 'active'), isset($_GET['file']) ? (int)$_GET['file'] : null, isset($_GET['folder']) ? (string)$_GET['folder'] : null),
+                'base' => $this->app->shares()->baseUrl()],
+            $path === '/api/shares' && $m === 'POST' => ['share' => $this->app->shares()->create(isset($b['file']) ? ['file' => (int)$b['file']] : ['folder' => (string)($b['folder'] ?? '')], $b)],
+            (bool)preg_match('#^/api/shares/(\d+)$#', $path, $mm) && $m === 'POST' => ['share' => $this->app->shares()->update((int)$mm[1], $b)],
+            (bool)preg_match('#^/api/shares/(\d+)/revoke$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->shares()->revoke((int)$mm[1])],
+            (bool)preg_match('#^/api/shares/(\d+)/log$#', $path, $mm) => ['log' => $this->app->shares()->accessLog((int)$mm[1])],
             $path === '/api/library/tree' => ['tree' => $this->app->library()->tree(), 'stats' => $this->app->library()->stats()],
             $path === '/api/library/search' => ['results' => $this->app->library()->search((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/'), 30)],
             $path === '/api/library/folder' && $m === 'POST' => ['folder' => $this->app->library()->createFolder((string)($b['path'] ?? ''))],
@@ -783,6 +791,108 @@ final class Web
         $name = ($folder === '/' ? 'Library' : basename($folder)) . '-' . date('Y-m-d') . '.zip';
         try { $this->sendPath($tmp, 'application/zip', self::disposition('attachment', $name), "default-src 'none'; sandbox", false); }
         finally { @unlink($tmp); }
+    }
+
+    // ---- links for people outside (Shares) ----
+
+    /** /s/<token>[/view|download|thumb|zip[/<file id>]]: the shared documents, for someone without an account. */
+    private function sharePage(string $token, string $action, int $fileId, string $method): void
+    {
+        $shares = $this->app->shares();
+        $lang = I18n::visitor((string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
+        $tr = fn(string $t, array $v = []) => I18n::tl($lang, $t, $v);
+        header('X-Robots-Tag: noindex, nofollow');
+        header('Referrer-Policy: no-referrer');
+        $s = $shares->byToken($token);
+        if (!$s) { $this->shareHtml(404, $lang, $tr('Link not available'), '<p>' . htmlspecialchars($tr('This link has expired or was removed. Ask the person who sent it for a new one.')) . '</p>'); return; }
+        $error = '';
+        if (!$shares->unlocked($s)) {
+            if ($method === 'POST') {
+                try { if ($shares->unlock($s, (string)($_POST['password'] ?? ''))) { header('Location: ' . Config::basePath() . "/s/$token", true, 303); return; } $error = $tr('Wrong password.'); }
+                catch (\RuntimeException $e) { $error = $tr($e->getMessage()); }
+            }
+            $this->shareHtml($error ? 403 : 200, $lang, $tr('Protected documents'), '<form method="post" class="pw"><label for="pw">' . htmlspecialchars($tr('This link is protected. Password:')) . '</label>'
+                . '<input id="pw" name="password" type="password" autocomplete="off" required autofocus><button type="submit">' . htmlspecialchars($tr('Open')) . '</button>'
+                . ($error ? '<p class="err">' . htmlspecialchars($error) . '</p>' : '') . '</form>');
+            return;
+        }
+        $files = $shares->files($s);
+        $base = Config::basePath() . "/s/$token";
+        if ($action !== '') {
+            if ($action === 'zip') {
+                if (!$s['download'] || $s['folder'] === null) { $this->shareHtml(403, $lang, $tr('Not allowed'), '<p>' . htmlspecialchars($tr('This link is for viewing only.')) . '</p>'); return; }
+                $shares->logAccess($s, 'zip');
+                $this->serveZip((string)$s['folder']);
+                return;
+            }
+            $f = $files[$fileId] ?? null;
+            if (!$f) { $this->shareHtml(404, $lang, $tr('Not found'), '<p>' . htmlspecialchars($tr('This document is not part of the link.')) . '</p>'); return; }
+            if ($action === 'thumb') { $this->servePreview($fileId, 0); return; }
+            if ($action === 'download') {
+                if (!$s['download']) { $this->shareHtml(403, $lang, $tr('Not allowed'), '<p>' . htmlspecialchars($tr('This link is for viewing only.')) . '</p>'); return; }
+                $shares->logAccess($s, 'download', $fileId);
+                $this->serveFile($fileId, true);
+                return;
+            }
+            if (!self::shareViewable($f) && !$s['download']) { $this->shareHtml(403, $lang, $tr('Not allowed'), '<p>' . htmlspecialchars($tr('This kind of document can only be downloaded, and this link is for viewing only.')) . '</p>'); return; }
+            $shares->logAccess($s, 'view', $fileId);
+            if ($f['kind'] === 'office' && Files::officeBinary()) { $this->serveOfficePdf($fileId); return; }
+            if (Preview::renders($f)) { $this->serveView($fileId); return; }
+            $this->serveFile($fileId);
+            return;
+        }
+        $shares->logAccess($s, 'open');
+        $h = fn(string $x) => htmlspecialchars($x, ENT_QUOTES);
+        $rows = '';
+        foreach ($files as $f) {
+            $sub = $s['folder'] !== null ? ltrim(mb_substr($f['folder'], mb_strlen((string)$s['folder'])), '/') : '';
+            $thumb = in_array($f['kind'], ['image', 'pdf', 'office'], true) ? '<img class="th" loading="lazy" alt="" src="' . $h("$base/thumb/{$f['id']}") . '">' : '<span class="th ext">' . $h(strtoupper(pathinfo($f['name'], PATHINFO_EXTENSION) ?: '?')) . '</span>';
+            $acts = (self::shareViewable($f) ? '<a class="btn" href="' . $h("$base/view/{$f['id']}") . '" target="_blank" rel="noopener">' . $h($tr('View')) . '</a>' : '')
+                . ($s['download'] ? '<a class="btn" href="' . $h("$base/download/{$f['id']}") . '">' . $h($tr('Download')) . '</a>' : '');
+            $rows .= "<li>$thumb<div class=\"meta\"><b>" . $h($f['name']) . '</b><span>' . ($sub !== '' ? $h($sub) . ' · ' : '') . $h(self::shareSize((int)$f['size'])) . '</span></div><div class="acts">' . $acts . '</div></li>';
+        }
+        $title = $s['file_id'] ? (reset($files)['name'] ?? $tr('Document')) : basename((string)$s['folder']);
+        $intro = ($s['message'] !== '' ? '<blockquote>' . nl2br($h($s['message'])) . '</blockquote>' : '')
+            . '<p class="muted">' . $h($s['expires'] ? $tr('Available until {date}.', ['date' => date($lang === 'fr' ? 'd/m/Y' : 'Y-m-d', (int)$s['expires'])]) : $tr('Shared with you.'))
+            . ($s['download'] ? '' : ' ' . $h($tr('View only.'))) . '</p>';
+        $all = $s['folder'] !== null && $s['download'] && count($files) > 1 ? '<p><a class="btn primary" href="' . $h("$base/zip") . '">' . $h($tr('Download everything (zip)')) . '</a></p>' : '';
+        $this->shareHtml(200, $lang, $title, $intro . $all . ($rows !== '' ? "<ul class=\"files\">$rows</ul>" : '<p class="muted">' . $h($tr('This folder is empty.')) . '</p>'));
+    }
+
+    private static function shareViewable(array $f): bool
+    {
+        $mime = (string)$f['mime'];
+        if (str_contains($mime, 'svg') || str_contains($mime, 'xml') && $f['kind'] !== 'office') return false;
+        return in_array($f['kind'], ['image', 'pdf', 'audio', 'text', 'office'], true);
+    }
+
+    private static function shareSize(int $b): string
+    {
+        return $b < 1024 ? "$b B" : ($b < 1048576 ? round($b / 1024) . ' KB' : number_format($b / 1048576, 1) . ' MB');
+    }
+
+    private function shareHtml(int $code, string $lang, string $title, string $body): void
+    {
+        while (ob_get_level() > 0) ob_end_clean();
+        http_response_code($code);
+        header('Content-Type: text/html; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+        header("Content-Security-Policy: default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+        $t = htmlspecialchars($title);
+        echo "<!doctype html><html lang=\"$lang\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"robots\" content=\"noindex\"><title>$t</title><style>"
+            . ':root{--bg:#f2f5f4;--card:#fff;--ink:#16211e;--muted:#5d6b67;--line:#dfe6e3;--accent:#0e7c6b;--accent-ink:#fff;color-scheme:light dark}'
+            . '@media (prefers-color-scheme:dark){:root{--bg:#0d1412;--card:#141d1a;--ink:#e6efec;--muted:#93a39e;--line:#26332f;--accent:#3dc9a7;--accent-ink:#06231c}}'
+            . 'body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:760px;margin:0 auto;padding:32px 16px}'
+            . 'h1{font-size:1.4rem;margin:0 0 8px;overflow-wrap:anywhere}.muted{color:var(--muted);font-size:.92rem}blockquote{margin:12px 0;padding:10px 14px;background:var(--card);border-left:3px solid var(--accent);border-radius:8px}'
+            . '.files{list-style:none;padding:0;margin:16px 0;display:flex;flex-direction:column;gap:8px}.files li{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}'
+            . '.th{width:48px;height:48px;object-fit:cover;border-radius:6px;flex:none;background:var(--bg)}.ext{display:grid;place-items:center;font-size:.7rem;font-weight:700;color:var(--muted)}'
+            . '.meta{flex:1;min-width:0;display:flex;flex-direction:column}.meta b{overflow-wrap:anywhere}.meta span{color:var(--muted);font-size:.85rem}.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}'
+            . '.btn{display:inline-block;padding:6px 12px;border:1px solid var(--line);border-radius:8px;color:var(--ink);text-decoration:none;font-size:.9rem;background:var(--card)}.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}'
+            . '.pw{display:flex;flex-direction:column;gap:8px;max-width:340px}input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}'
+            . 'button{font:inherit;padding:8px 12px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);cursor:pointer}.err{color:#b42318}footer{margin-top:32px;color:var(--muted);font-size:.8rem}'
+            . "@media (max-width:520px){.files li{flex-wrap:wrap}.acts{width:100%;justify-content:flex-start}}</style></head><body><main><h1>$t</h1>$body<footer>"
+            . htmlspecialchars(I18n::tl($lang, 'Shared with Talixio.')) . '</footer></main></body></html>';
     }
 
     /** Content-Disposition with an ASCII fallback name and the exact UTF-8 one. */

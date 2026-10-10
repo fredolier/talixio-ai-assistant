@@ -34,7 +34,49 @@ final class I18n
             'Nouveau savoir-faire : **{name}** : {description}' . "\n" . 'Vous pouvez le voir ou le modifier dans la page Mémoire.',
         'Updated a skill: **{name}**: {description}' . "\n" . 'You can see or edit it on the Memory page.' =>
             'Savoir-faire mis à jour : **{name}** : {description}' . "\n" . 'Vous pouvez le voir ou le modifier dans la page Mémoire.',
+        // shared links: the page people outside see (in their browser's language), and the notification
+        'Link not available' => 'Lien indisponible',
+        'This link has expired or was removed. Ask the person who sent it for a new one.' => "Ce lien a expiré ou a été supprimé. Demandez-en un nouveau à la personne qui vous l'a envoyé.",
+        'Wrong password.' => 'Mot de passe incorrect.',
+        'Too many wrong passwords. Try again in 15 minutes.' => 'Trop de mots de passe incorrects. Réessayez dans 15 minutes.',
+        'Protected documents' => 'Documents protégés',
+        'This link is protected. Password:' => 'Ce lien est protégé. Mot de passe :',
+        'Open' => 'Ouvrir',
+        'Not allowed' => 'Non autorisé',
+        'This link is for viewing only.' => 'Ce lien permet seulement de consulter.',
+        'Not found' => 'Introuvable',
+        'This document is not part of the link.' => 'Ce document ne fait pas partie du lien.',
+        'This kind of document can only be downloaded, and this link is for viewing only.' => 'Ce type de document peut seulement être téléchargé, et ce lien permet seulement de consulter.',
+        'View' => 'Voir',
+        'Download' => 'Télécharger',
+        'Document' => 'Document',
+        'Available until {date}.' => "Disponible jusqu'au {date}.",
+        'Shared with you.' => 'Partagé avec vous.',
+        'View only.' => 'Consultation seulement.',
+        'Download everything (zip)' => 'Tout télécharger (zip)',
+        'This folder is empty.' => 'Ce dossier est vide.',
+        'Shared with Talixio.' => 'Partagé avec Talixio.',
+        'Shared link opened' => 'Lien partagé ouvert',
+        '"{name}"{who} was opened for the first time.' => '« {name} »{who} a été ouvert pour la première fois.',
+        ' (for {label})' => ' (pour {label})',
     ];
+
+    /** The language of someone outside (a shared link), from their browser. */
+    public static function visitor(string $acceptLanguage): string
+    {
+        foreach (explode(',', strtolower($acceptLanguage)) as $part) {
+            $k = substr(trim($part), 0, 2);
+            if (in_array($k, self::LANGS, true)) return $k;
+        }
+        return 'en';
+    }
+
+    public static function tl(string $lang, string $text, array $vars = []): string
+    {
+        $out = $lang === 'fr' ? (self::FR[$text] ?? $text) : $text;
+        foreach ($vars as $k => $v) $out = str_replace('{' . $k . '}', (string)$v, $out);
+        return $out;
+    }
 
     public static function lang(App $app): string
     {
@@ -46,18 +88,9 @@ final class I18n
     /** The language of the browser that opens the app (when the interface language is automatic). */
     public static function remember(App $app, string $acceptLanguage): void
     {
-        $l = 'en';
-        foreach (explode(',', strtolower($acceptLanguage)) as $part) {
-            $k = substr(trim($part), 0, 2);
-            if (in_array($k, self::LANGS, true)) { $l = $k; break; }
-        }
+        $l = self::visitor($acceptLanguage);
         if ($app->store->get('ui_lang') !== $l) $app->store->set('ui_lang', $l);
     }
 
-    public static function t(App $app, string $text, array $vars = []): string
-    {
-        $out = self::lang($app) === 'fr' ? (self::FR[$text] ?? $text) : $text;
-        foreach ($vars as $k => $v) $out = str_replace('{' . $k . '}', (string)$v, $out);
-        return $out;
-    }
+    public static function t(App $app, string $text, array $vars = []): string { return self::tl(self::lang($app), $text, $vars); }
 }

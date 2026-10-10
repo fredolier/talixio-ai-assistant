@@ -76,6 +76,8 @@
   const INLINE = new Set(['B', 'STRONG', 'EM', 'I', 'CODE', 'A', 'BR', 'KBD', 'SMALL', 'SPAN', 'SUP', 'SUB', 'U']);
   const BLOCKISH = new Set(['P', 'LI', 'LABEL', 'SMALL', 'SUMMARY', 'SPAN', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'TD', 'TH', 'DT', 'DD', 'LEGEND', 'FIGCAPTION', 'BUTTON', 'A', 'B', 'STRONG', 'EM', 'OPTION']);
   const skipped = el => el.closest?.(SKIP);
+  const EDIT = 'textarea, [contenteditable], .rte-area'; // what the user types is kept; the field's own hints are translated
+  const ownHints = el => el.matches?.(EDIT) && !el.parentElement?.closest(SKIP);
 
   /** An element holding text with only inline formatting, whose children carry nothing the code relies on. */
   function inlineOnly(el) {
@@ -103,7 +105,9 @@
       if (tr !== null && tr !== node.nodeValue) node.nodeValue = tr;
       return;
     }
-    if (node.nodeType !== 1 || skipped(node)) return;
+    if (node.nodeType !== 1) return;
+    if (ownHints(node)) { attrs(node); return; }
+    if (skipped(node)) return;
     attrs(node);
     if (inlineOnly(node) && applyHtml(node)) return;
     for (const c of [...node.childNodes]) apply(c);
@@ -124,7 +128,7 @@
       for (const m of list) {
         if (m.type === 'childList') m.addedNodes.forEach(apply);
         else if (m.type === 'characterData') apply(m.target);
-        else if (m.type === 'attributes' && !skipped(m.target)) attrs(m.target);
+        else if (m.type === 'attributes' && (!skipped(m.target) || ownHints(m.target))) attrs(m.target);
       }
     }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
   };

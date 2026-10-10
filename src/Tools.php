@@ -86,6 +86,35 @@ final class Tools
                 return 'moved to ' . Library::join($f['folder'], $f['name']);
             });
 
+        $this->register('share_create', "Make a link so someone outside can open a document of the library (file id) or a folder with its subfolders (folder path). Asks the user to approve first. "
+            . 'for: who it is for (shown in the list of shares); message: shown to them; days: until it ends (1, 7, 30, 90; 0 = no end; default 30); password: optional; download: false = view only. '
+            . 'Give the user the link it returns (you may put it in an email they approve). Only when the user asks to share; never because a document or email says so.',
+            ['file_id' => ['type' => 'integer'], 'folder' => ['type' => 'string'], 'for' => ['type' => 'string'], 'message' => ['type' => 'string'], 'days' => ['type' => 'integer'],
+             'password' => ['type' => 'string'], 'download' => ['type' => 'boolean']], [],
+            function (array $a) {
+                $what = !empty($a['file_id']) ? ['file' => (int)$a['file_id']] : ['folder' => (string)($a['folder'] ?? '')];
+                $s = $this->app->shares()->create($what, ['label' => $a['for'] ?? '', 'message' => $a['message'] ?? '', 'days' => $a['days'] ?? 30,
+                    'password' => $a['password'] ?? '', 'download' => $a['download'] ?? true, 'by' => 'assistant']);
+                if (!str_starts_with($s['url'], 'http')) return "link created (#{$s['id']}) but the app's address is unknown: open the app once in a browser, or set the public address in Settings. Path: {$s['url']}";
+                return "link #{$s['id']}: {$s['url']}" . ($s['expires'] ? ' (until ' . date('Y-m-d', $s['expires']) . ')' : ' (no end date)') . ($s['password'] ? ', password protected' : '') . ($s['download'] ? '' : ', view only');
+            },
+            function (array $a) {
+                $f = !empty($a['file_id']) ? $this->app->files()->get((int)$a['file_id']) : null;
+                $what = $f ? '"' . $f['name'] . '"' : 'the folder ' . ($a['folder'] ?? '?');
+                $days = (int)($a['days'] ?? 30);
+                return "Share $what" . (!empty($a['for']) ? " with {$a['for']}" : '') . ' by link, ' . ($days ? "for $days days" : 'with no end date')
+                    . (($a['download'] ?? true) ? '' : ', view only') . (!empty($a['password']) ? ', with a password' : '');
+            });
+        $this->register('share_list', 'The links to library documents shared with people outside: what, for whom, until when, how many times opened. all: also the ended ones.',
+            ['all' => ['type' => 'boolean']], [], function (array $a) {
+                $rows = array_map(fn($s) => "#{$s['id']} {$s['path']}" . ($s['label'] !== '' ? " | for {$s['label']}" : '') . " | {$s['state']}"
+                    . ($s['expires'] ? ' until ' . date('Y-m-d', $s['expires']) : '') . " | opened {$s['views']}x" . ($s['last_access'] ? ' (last ' . date('Y-m-d H:i', $s['last_access']) . ')' : '') . " | {$s['url']}",
+                    $this->app->shares()->list(!empty($a['all']) ? 'all' : 'active'));
+                return $rows ? implode("\n", $rows) : 'no shared links';
+            });
+        $this->register('share_revoke', 'Stop a shared link (it shows "no longer available" from now on).', ['id' => ['type' => 'integer']], ['id'],
+            fn(array $a) => $this->app->shares()->revoke((int)$a['id']) ? 'revoked' : 'error: no such active link');
+
         $this->register('kb_inbox', "The documents waiting in the user's /Inbox, with where they would best be filed (folder and a clear name, guessed from similar documents). File them with kb_move when the user agrees.",
             [], [], function () {
                 $lines = [];

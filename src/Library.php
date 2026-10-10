@@ -115,7 +115,7 @@ final class Library
         $st->db->beginTransaction();
         try {
             $len = mb_strlen($from);
-            foreach (['folders' => 'path', 'files' => 'folder'] as $table => $col) {
+            foreach (['folders' => 'path', 'files' => 'folder', 'shares' => 'folder'] as $table => $col) { // links to a folder follow it
                 [$w, $a] = self::within($from, $col);
                 $st->q("UPDATE $table SET $col = ? || substr($col, ?) WHERE $w", [$to, $len + 1, ...$a]);
             }
