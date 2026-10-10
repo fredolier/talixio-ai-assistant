@@ -806,3 +806,13 @@ span.privacy-badge{cursor:default;min-height:26px;padding:0 9px}
 .meaning-opt .mo-head{display:flex;align-items:center;gap:6px;justify-content:space-between}
 .meaning-opt .pill{font-size:.7rem;padding:1px 7px;border-radius:99px;background:var(--sunk);border:1px solid var(--line);white-space:nowrap}
 .meaning-opt .pill.out{color:var(--muted)}
+.fp-wrap{position:relative;display:flex;flex:1;min-width:0}
+.fp-wrap>input{flex:1;min-width:0;width:100%}
+.folder-pick{position:absolute;top:calc(100% + 4px);left:0;width:100%;min-width:240px;box-sizing:border-box;max-height:min(320px,50vh);overflow:auto;z-index:60;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px}
+.folder-pick button{display:flex;width:100%;justify-content:space-between;gap:8px;align-items:center;text-align:left;background:none;border:0;
+  border-radius:6px;padding:6px 10px;font:inherit;color:inherit;cursor:pointer}
+.folder-pick button:hover,.folder-pick button.active{background:var(--sunk)}
+.folder-pick button.cur{font-weight:600}
+.folder-pick button:disabled{opacity:.45;cursor:default}
+.folder-pick .fp-note{padding:6px 10px}

@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.19.9 (2026-10-10)
+- Library: moving a file (and choosing a folder for a new folder, a renamed folder or a space) shows the whole
+  folder tree under the field, indented, filtered as you type, with the keyboard or a click. The old list
+  was empty because it only kept the folders matching the current path. A path that does not exist yet
+  is still accepted and created on save.
+
 ## 0.19.8 (2026-10-10)
 - Jobs page: search (title, instructions, report), Active / Archived switch, and per finished job: the link
   to its report note (found by id, so it follows the note when it is moved; says so when it was deleted),

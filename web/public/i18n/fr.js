@@ -1923,5 +1923,8 @@ window.I18N.fr = {
 "Routine made: next run {when}. Pause or delete it in Routines.": "Routine créée : prochaine exécution {when}. Mettez-la en pause ou supprimez-la dans Routines.",
 "Archiving jobs": "Archivage de jobs",
 "Scheduling a job": "Programmation d'un job",
-"The scheduled job could not start: {e}": "Le job programmé n'a pas pu démarrer : {e}"
+"The scheduled job could not start: {e}": "Le job programmé n'a pas pu démarrer : {e}",
+"Loading folders…": "Chargement des dossiers…",
+"New folder, created on save: {path}": "Nouveau dossier, créé à l'enregistrement : {path}",
+"No folder matches": "Aucun dossier ne correspond"
 };

@@ -382,6 +382,7 @@ async function openSpaceEditor(sp, prefill = {}) {
   $('#space-dialog-title').textContent = editing ? `Edit “${sp.name}”` : 'New space';
   $('#sp-name').value = editing ? sp.name : (prefill.name || '');
   $('#sp-folder').value = editing ? sp.folder : (prefill.folder || '');
+  folderPicker($('#sp-folder'));
   $('#sp-tier').value = editing ? sp.tier : 'standard';
   $('#sp-code').value = editing ? (sp.code || '') : '';
   $('#sp-instructions').value = editing ? sp.instructions : '';
@@ -498,6 +499,54 @@ async function loadPrivacy() {
   $('#pv-journal').innerHTML = `<h4>Today</h4>` + (j.today.length ? `<div class="pv-bars">${j.today.map(r => `<span class="no-i18n">${esc(shortService(r.name))} <span class="muted small">· ${esc(t(PURPOSE[r.purpose] || r.purpose))}</span></span>
       <i style="--w:${Math.max(4, Math.round(100 * r.calls / max))}%" class="${+r.blocked ? 'blocked' : ''}"></i><span class="no-i18n">${r.calls}${+r.blocked ? ` <span class="muted small">(${blk(r.blocked)})</span>` : ''}</span>`).join('')}</div>` : '<p class="muted small">Nothing went out today.</p>')
     + (j.spaces.length ? `<h4>Last 7 days, per space</h4><ul class="pv-perspace no-i18n">${j.spaces.map(s => `<li>${esc(names[s.space] || '#' + s.space)} <span class="muted small">· ${req(s.calls)}${+s.blocked ? ' · ' + blk(s.blocked) : ''}</span></li>`).join('')}</ul>` : '');
+}
+
+/**
+ * A folder chooser under a text input: the whole library tree, indented, shown on focus and filtered as you
+ * type (arrows + Enter, or click). Typing a path that does not exist yet still works: it is created on save.
+ */
+function folderPicker(input, on = true) {
+  input.removeAttribute('list');
+  if (!input._fp) {
+    const wrap = document.createElement('span'); wrap.className = 'fp-wrap';
+    input.replaceWith(wrap); wrap.append(input);
+    const box = document.createElement('div'); box.className = 'folder-pick'; box.hidden = true; box.setAttribute('role', 'listbox'); wrap.append(box);
+    const fp = input._fp = { on: true, tree: [], start: '', active: -1, box };
+    const items = () => [...box.querySelectorAll('button')];
+    const choose = path => { input.value = path; box.hidden = true; input.focus(); input.dispatchEvent(new Event('change')); };
+    fp.render = () => {
+      if (!fp.on) { box.hidden = true; return; }
+      const v = input.value.trim(), lv = v.toLowerCase();
+      const list = !v || v === fp.start ? fp.tree : fp.tree.filter(f => f.path.toLowerCase().includes(lv.replace(/\/+$/, '')));
+      const fresh = v.startsWith('/') && v !== '/' && !fp.tree.some(f => f.path.toLowerCase() === lv.replace(/\/+$/, ''));
+      box.innerHTML = (fp.tree.length ? '' : `<div class="muted small fp-note">${esc(t('Loading folders…'))}</div>`)
+        + list.map(f => `<button type="button" role="option" data-p="${esc(f.path)}" class="${f.path === fp.start ? 'cur' : ''}" style="padding-left:${10 + 14 * (f.depth - 1)}px"${f.readonly ? ' disabled' : ''}>`
+          + `<span class="no-i18n">📁 ${esc(f.name)}</span>${f.total ? `<span class="muted small">${f.total}</span>` : ''}</button>`).join('')
+        + (fresh ? `<div class="muted small fp-note">${esc(t('New folder, created on save: {path}', { path: v }))}</div>` : '')
+        + (fp.tree.length && !list.length && !fresh ? `<div class="muted small fp-note">${esc(t('No folder matches'))}</div>` : '');
+      fp.active = -1; box.hidden = false;
+      box.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
+    };
+    box.addEventListener('mousedown', e => e.preventDefault()); // keep the focus in the input
+    box.addEventListener('click', e => { const b = e.target.closest('button[data-p]'); if (b) choose(b.dataset.p); });
+    input.addEventListener('focus', () => fp.render());
+    input.addEventListener('input', () => fp.render());
+    input.addEventListener('blur', () => setTimeout(() => { box.hidden = true; }, 150));
+    input.addEventListener('keydown', e => {
+      if (box.hidden) return;
+      const bs = items().filter(b => !b.disabled);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); if (!bs.length) return;
+        fp.active = (fp.active + (e.key === 'ArrowDown' ? 1 : bs.length - 1 + (fp.active < 0 ? 1 : 0))) % bs.length;
+        bs.forEach((b, i) => b.classList.toggle('active', i === fp.active)); bs[fp.active].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter' && fp.active >= 0) { e.preventDefault(); choose(bs[fp.active].dataset.p); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); box.hidden = true; }
+    });
+  }
+  const fp = input._fp;
+  fp.on = on; fp.start = input.value.trim();
+  if (!on) { fp.box.hidden = true; return; }
+  api('api/library/tree').then(({ tree }) => { fp.tree = tree; if (document.activeElement === input) fp.render(); }).catch(() => {});
 }
 
 async function loadFolderList() {
@@ -2300,7 +2349,7 @@ function fileRow(f, sub) {
     box.querySelector('[data-s=no]').onclick = async () => { try { await post(`api/files/${f.id}/dismiss`); loadLibrary(); } catch (e) { toast(e.message); } };
     box.querySelector('[data-s=edit]').onclick = () => libInline(Library_join(sg.folder, sg.name), 'Folder and name', async v => {
       const i = v.lastIndexOf('/'); await post(`api/files/${f.id}/file-it`, { folder: v.slice(0, i) || '/', name: v.slice(i + 1) }); toast('Filed'); loadLibrary();
-    });
+    }, false);
     el.classList.add('has-suggestion'); el.append(box);
   }
   const th = el.querySelector('.ico img'); if (th) th.onerror = () => th.replaceWith(label);
@@ -2354,9 +2403,9 @@ async function libUpload(files, folder = lib.folder) {
   loadLibrary().catch(e => toast(e.message));
 }
 
-function libInline(value, placeholder, onOk) {
+function libInline(value, placeholder, onOk, folders = true) {
   const form = $('#lib-inline'), input = $('#lib-inline-input');
-  form.hidden = false; input.value = value; input.placeholder = placeholder; input.setAttribute('list', 'folder-list'); input.focus(); input.select();
+  form.hidden = false; input.value = value; input.placeholder = placeholder; folderPicker(input, folders); input.focus(); input.select();
   form.onsubmit = async e => { e.preventDefault(); try { await onOk(input.value.trim()); form.hidden = true; } catch (err) { toast(err.message); } };
 }
 
@@ -2452,9 +2501,9 @@ async function openFile(id, opts = {}) {
   $('#viewer-editor')?.addEventListener('input', () => { $('#viewer-state').textContent = 'Unsaved changes'; });
 }
 function closeViewer() { $('#viewer').hidden = true; lib.file = null; }
-function viewerForm(value, onOk) {
+function viewerForm(value, onOk, folders = false) {
   const form = $('#viewer-form'), input = $('#viewer-input');
-  form.hidden = false; input.value = value; input.focus(); input.select();
+  form.hidden = false; input.value = value; folderPicker(input, folders); input.focus(); input.select();
   form.onsubmit = async e => { e.preventDefault(); try { await onOk(input.value.trim()); form.hidden = true; } catch (err) { toast(err.message); } };
 }
 function pdfPageHtml(id, n, total) {
@@ -2862,7 +2911,7 @@ $('#viewer-close').onclick = closeViewer;
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#viewer').hidden) closeViewer(); });
 $('#viewer-form-cancel').onclick = () => { $('#viewer-form').hidden = true; };
 $('#viewer-rename').onclick = () => viewerForm(lib.file.name, async v => { const { file } = await post(`api/files/${lib.file.id}/rename`, { name: v }); await loadLibrary(); openFile(file.id); });
-$('#viewer-move').onclick = () => viewerForm(lib.file.folder, async v => { const { file } = await post(`api/files/${lib.file.id}/move`, { folder: v }); toast('Moved to ' + file.folder); await loadLibrary(); openFile(file.id); });
+$('#viewer-move').onclick = () => viewerForm(lib.file.folder, async v => { const { file } = await post(`api/files/${lib.file.id}/move`, { folder: v }); toast('Moved to ' + file.folder); await loadLibrary(); openFile(file.id); }, true);
 $('#viewer-reindex').onclick = async () => { try { await post(`api/files/${lib.file.id}/reindex`); toast('It will be read again in a moment'); await loadLibrary(); openFile(lib.file.id); } catch (e) { toast(e.message); } };
 $('#viewer-delete').onclick = async () => {
   const b = $('#viewer-delete');
