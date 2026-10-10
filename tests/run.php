@@ -276,6 +276,25 @@ $again = $app->jobs()->continue($cid);
 check('continue: continuing again keeps one "(continued)" and the same cap', $s->job($again)['title'] === 'Long research (continued)' && (float)$s->job($again)['max_cost_usd'] === 4.0);
 $app->jobs()->cancel($again);
 
+// ---- i18n: the server's own sentences follow the interface language ----
+check('i18n: English by default', \Talixio\I18n::t($app, 'Cancelled: {what}', ['what' => 'x']) === 'Cancelled: x');
+\Talixio\I18n::remember($app, 'fr-FR,fr;q=0.9,en;q=0.8');
+check('i18n: automatic = the language of the browser that opened the app', \Talixio\I18n::lang($app) === 'fr' && \Talixio\I18n::t($app, 'Cancelled: {what}', ['what' => 'envoi']) === 'Annulé : envoi');
+check('i18n: unknown sentences stay in English', \Talixio\I18n::t($app, 'Something new') === 'Something new');
+\Talixio\I18n::remember($app, 'de-DE,de;q=0.9');
+check('i18n: an unsupported language falls back to English', \Talixio\I18n::lang($app) === 'en');
+$app->cfg->lang = 'fr';
+check('i18n: a chosen language wins', \Talixio\I18n::lang($app) === 'fr' && str_contains($app->agent()->chat('web', '/space'), 'Espaces : '));
+$app->cfg->lang = 'auto';
+$fr = (string)file_get_contents(dirname(__DIR__) . '/web/public/i18n/fr.js');
+check('i18n: the French dictionary is valid and keeps the placeholders', (function () use ($fr) {
+    if (!preg_match('/^window\.I18N\.fr = (\{.*\});\s*$/s', preg_replace('#^/\*.*?\*/\s*#s', '', preg_replace('/^window\.I18N = window\.I18N \|\| \{\};\s*/', '', $fr)), $m)) return false;
+    $d = json_decode($m[1], true);
+    if (!is_array($d) || count($d) < 500) return false;
+    foreach ($d as $k => $v) { preg_match_all('/\{[a-z0-9_]+\}/i', $k, $a); preg_match_all('/\{[a-z0-9_]+\}/i', $v, $b); $x = array_unique($a[0]); $y = array_unique($b[0]); sort($x); sort($y); if ($x !== $y) return false; }
+    return true;
+})());
+
 // ---- mind: values, ways and character learned from the history ----
 $app->cfg->provider = 'anthropic'; // the echo provider never learns
 $mind = $app->mind();
@@ -355,6 +374,24 @@ $before = (int)$s->q('SELECT COUNT(*) FROM mind_obs')->fetchColumn();
 $mind->tick($now); while ($s->get('mind_bootstrap') !== 'done') $mind->tick($now);
 $h = $s->q("SELECT * FROM mind_obs WHERE source = 'history' ORDER BY id DESC LIMIT 1")->fetch();
 check('mind: learns from older history once, as hints', $h && $h['text'] === 'Attentif aux coûts' && (int)$h['strength'] === 1, json_encode($h));
+// a character of its own in each space
+$msp = $app->spaces()->save(['name' => 'Clients Pro', 'instructions' => 'Vouvoiement, ton professionnel.']);
+foreach (['Vouvoie les clients dans les brouillons', 'Veut des mails clients sans emoji', 'Relit deux fois les chiffres des devis'] as $i => $t) $mind->addObservation('pattern', $t, 2, $msp['id'], 'chat', [], $now - $i * $day);
+$fake->calls = [];
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return str_contains($last, 'Write how you are in the space "Clients Pro"') ? "Ici je vouvoie et je vérifie chaque chiffre.\n---\nJ'ai appris à être plus formel ici." : 'NOTHING'; };
+check('mind: a space with its own history gets its own character', $mind->reflectSpace($msp['id'], $now) && $s->get('mind_portrait_' . $msp['id']) === 'Ici je vouvoie et je vérifie chaque chiffre.');
+check('mind: built from the space instructions, its observations and the general portrait', str_contains($fake->calls[0]['messages'][0]['content'], 'Vouvoiement, ton professionnel.')
+    && str_contains($fake->calls[0]['messages'][0]['content'], 'Relit deux fois') && str_contains($fake->calls[0]['messages'][0]['content'], 'Je suis direct et bref'));
+$app->space = $msp['id'];
+check('mind: the space character joins the general one in that space only', str_contains($app->agent()->systemPrompt(), "### In this space (Clients Pro)\nIci je vouvoie") && str_contains($app->agent()->systemPrompt(), 'Je suis direct et bref'));
+$app->space = 0;
+check('mind: not elsewhere', !str_contains($app->agent()->systemPrompt(), 'Ici je vouvoie'));
+$ov = $mind->overview();
+check('mind: space characters and their journal on the Memory page', ($ov['spaces'][0]['name'] ?? '') === 'Clients Pro' && in_array('Clients Pro', array_column($ov['journal'], 'space_name'), true));
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return 'NOTHING'; };
+check('mind: nothing particular yet = portrait kept', !$mind->reflectSpace($msp['id'], $now) && $s->get('mind_portrait_' . $msp['id']) === 'Ici je vouvoie et je vérifie chaque chiffre.');
+$e = $app->spaces()->save(['name' => 'Vide']);
+check('mind: no character without material', !$mind->reflectSpace($e['id'], $now));
 $app->cfg->mind = false;
 check('mind: off = nothing in the answers', !str_contains($app->agent()->systemPrompt(), 'Who you have become') && !$mind->tick($now));
 $app->cfg->mind = true;
@@ -1023,6 +1060,9 @@ $raw = function (string $path, array $headers = []) use ($webPort, $ck) {
     $out = (string)curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $hs = curl_getinfo($ch, CURLINFO_HEADER_SIZE); curl_close($ch);
     return [$code, strtolower(substr($out, 0, $hs)), substr($out, $hs)];
 };
+[$code, $h, $body] = $raw('/', ['Accept-Language: fr-FR,fr;q=0.9,en;q=0.8']);
+check('i18n: the page loads the translations and says the chosen language', $code === 200 && str_contains($body, '<html lang="en" data-lang="auto">')
+    && str_contains($body, '<script src="i18n/fr.js"></script>') && strpos($body, 'i18n.js') < strpos($body, 'app.js'));
 $cid = $up['file']['id'];
 [$code, $h, $body] = $raw("/api/files/$cid");
 check('library web: text files viewable in the browser', $code === 200 && str_contains($h, 'content-type: text/plain; charset=utf-8') && str_contains($h, 'content-disposition: inline') && $body === 'Contrat de maintenance chaudière');

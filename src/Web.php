@@ -18,6 +18,8 @@ final class Web
             // previews of documents run in sandboxed srcdoc frames that inherit this policy: no inline scripts, web pictures and styles allowed
             header("Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:");
             $html = (string)file_get_contents(dirname(__DIR__) . '/web/public/app.html');
+            $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '">', $html, 1); // the interface language (i18n.js)
+            if ($this->app->cfg->lang === 'auto') I18n::remember($this->app, (string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
             echo preg_replace('/<head>/', '<head><base href="' . htmlspecialchars(Config::basePath() . '/') . '">', $html, 1); // every address in the app is relative to it
             return;
         }
@@ -156,8 +158,7 @@ final class Web
             $path === '/api/mind/reflect' && $m === 'POST' => (function () {
                 $mind = $this->app->mind();
                 if (!$mind->enabled()) $this->fail(400, 'Learning is off (Settings → Learning, backups, updates).');
-                $now = time(); $did = $mind->consolidate($now); $did = $mind->reflect($now) || $did;
-                return $mind->overview() + ['done' => $did];
+                return $mind->overview() + ['done' => $mind->thinkNow(time())];
             })(),
             (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'GET' => ['content' => $this->app->skills()->raw($mm[1]) ?? $this->fail(404, 'no such skill')],
             (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) { $this->app->skills()->writeRaw($mm[1], (string)($b['content'] ?? '')); return ['ok' => true]; })(),
@@ -425,7 +426,7 @@ final class Web
     {
         $root = dirname(__DIR__);
         $sig = '';
-        foreach (array_merge(glob("$root/web/public/*") ?: [], ["$root/web/sw.template.js", "$root/VERSION.json"]) as $f) $sig .= $f . @filemtime($f) . @filesize($f);
+        foreach (array_merge(glob("$root/web/public/*") ?: [], glob("$root/web/public/i18n/*") ?: [], ["$root/web/sw.template.js", "$root/VERSION.json"]) as $f) $sig .= $f . @filemtime($f) . @filesize($f);
         header('Content-Type: text/javascript; charset=utf-8');
         header('Cache-Control: no-cache');
         header('Service-Worker-Allowed: /');

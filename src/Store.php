@@ -80,6 +80,7 @@ final class Store
                 last_seen INTEGER, created INTEGER NOT NULL, merged_into INTEGER);
             CREATE TABLE IF NOT EXISTS mind_links(belief INTEGER NOT NULL, obs INTEGER NOT NULL, polarity INTEGER NOT NULL, PRIMARY KEY(belief, obs));
             CREATE TABLE IF NOT EXISTS mind_journal(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL);");
+        $this->addColumn('mind_journal', 'space', 'INTEGER NOT NULL DEFAULT 0');
         if ($this->addColumn('tool_log', 'job_id', 'INTEGER')) $this->db->exec('CREATE INDEX IF NOT EXISTS tool_log_job ON tool_log(job_id) WHERE job_id IS NOT NULL');
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");
         $this->addColumn('usage', 'job_id', 'INTEGER');

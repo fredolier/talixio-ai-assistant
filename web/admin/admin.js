@@ -10,8 +10,8 @@ async function api(path, body) {
   return d;
 }
 function toast(t) { const el = $('#toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 4000); }
-const ago = ts => { if (!ts) return '—'; const s = Date.now() / 1000 - ts; return s < 90 ? 'just now' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 129600 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago'; };
-const when = ts => new Date(ts * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const ago = ts => { if (!ts) return '—'; const s = Date.now() / 1000 - ts; return s < 90 ? t('just now') : s < 5400 ? t('{n} min ago', { n: Math.round(s / 60) }) : s < 129600 ? t('{n} h ago', { n: Math.round(s / 3600) }) : t('{n} days ago', { n: Math.round(s / 86400) }); };
+const when = ts => new Date(ts * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 /** A small dialog. fields: [{id, label, type, value, placeholder}], or html. Resolves with values or null. */
 function ask(title, { html = '', fields = [], ok = 'OK', danger = false, cancel = true } = {}) {

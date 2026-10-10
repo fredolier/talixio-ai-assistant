@@ -61,6 +61,11 @@ Values saved there are kept in `/var/lib/talixio/settings.json` and override
 `/etc/talixio/talixio.env`; "reset" returns to the file's value. Secrets are never shown back.
 **Run checks** tests the logins and makes one call per model tier (same as `sudo talixio doctor`).
 
+The interface is in English and French (Settings → Assistant → *Interface language*; automatic =
+your browser's language). The assistant answers in the language you write in. Translations are in
+`web/public/i18n/<lang>.js` (English text → translation); `web/public/i18n.js` applies them to
+everything the app shows. Another language: a dictionary file, its `<script>` in `app.html`, and its code in `I18n::LANGS`.
+
 ### Choose the brain
 
 | Option | Settings |

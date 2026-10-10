@@ -143,11 +143,11 @@ final class Agent
         if (!$spaces->get($space)) $space = 0;
         // "/space Maison" (or "/espace") switches a chat app to another space; "/space" alone lists them
         if (!$files && preg_match('#^/(?:space|espace)\b\s*(.*)$#isu', trim($text), $m)) {
-            if (trim($m[1]) === '') return 'Spaces: ' . implode(', ', array_map(fn($x) => $x['name'] . ($x['id'] === $space ? ' (current)' : ''), $spaces->all())) . '. Switch with "/space name".';
+            if (trim($m[1]) === '') return I18n::t($this->app, 'Spaces: {list}. Switch with "/space name".', ['list' => implode(', ', array_map(fn($x) => $x['name'] . ($x['id'] === $space ? I18n::t($this->app, ' (current)') : ''), $spaces->all()))]);
             $to = $spaces->find($m[1]);
-            if (!$to || $to['archived']) return "No space called \"{$m[1]}\". Spaces: " . implode(', ', array_column($spaces->all(), 'name')) . '.';
+            if (!$to || $to['archived']) return I18n::t($this->app, 'No space called "{name}". Spaces: {list}.', ['name' => $m[1], 'list' => implode(', ', array_column($spaces->all(), 'name'))]);
             $spaces->setForChannel($channel, (int)$to['id']);
-            return "Now in the space \"{$to['name']}\". \"/space general\" to come back.";
+            return I18n::t($this->app, 'Now in the space "{name}". "/space general" to come back.', ['name' => $to['name']]);
         }
         // "yes 12" / "non" answers a pending approval request directly, without a model call
         if (!$files && ($ans = Approvals::parseReply($text)) !== null) {
@@ -207,14 +207,13 @@ final class Agent
             try {
                 [$reply, $meta] = $this->run($channel, $tier, 'chat', $history,
                     $recalled !== '' ? "## Possibly relevant from past conversations\n$recalled" : '', 'main', null, null, $onEvent);
-                $reply = $reply ?: '(no response)';
+                $reply = $reply ?: I18n::t($this->app, '(no response)');
             } catch (Abort $e) {
-                if ($e->getMessage() === 'stopped by the user') $reply = trim($partial) !== '' ? trim($partial) . "\n\n*(stopped)*" : '*(stopped)*';
-                else $reply = "I've reached my spending limit, so I'm not calling the model right now. " . $this->app->budget()->describe()
-                    . "\nRaise TALIXIO_BUDGET_DAILY_USD / TALIXIO_BUDGET_MONTHLY_USD if needed.";
+                if ($e->getMessage() === 'stopped by the user') $reply = (trim($partial) !== '' ? trim($partial) . "\n\n" : '') . I18n::t($this->app, '*(stopped)*');
+                else $reply = I18n::t($this->app, "I've reached my spending limit, so I'm not calling the model right now. {budget}\nRaise TALIXIO_BUDGET_DAILY_USD / TALIXIO_BUDGET_MONTHLY_USD if needed.", ['budget' => $this->app->budget()->describe()]);
             } catch (\Throwable $e) {
                 Log::error("agent: {$e->getMessage()}");
-                $reply = "I couldn't answer: {$e->getMessage()}";
+                $reply = I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]);
             }
             $store->addMessage('assistant', $channel, $reply, $meta, [], $space);
             if ($meta !== null) $this->maybeLearn($prompt, $reply, $toolsBefore);
@@ -238,7 +237,7 @@ final class Agent
         if ($long) {
             $id = $this->app->jobs()->createMeeting($fileId, $caption, $space);
             $mins = $f['duration'] ? ' (' . max(1, (int)round($f['duration'] / 60)) . ' min)' : '';
-            $msg = "Got the recording{$mins}. I'm transcribing and summarising it in the background (job #$id): you'll get the summary, decisions and action items here.";
+            $msg = I18n::t($this->app, 'Got the recording{mins}. I\'m transcribing and summarising it in the background (job #{id}): you\'ll get the summary, decisions and action items here.', ['mins' => $mins, 'id' => $id]);
             $this->app->store->addMessage('user', $channel, trim("$caption\n" . $this->app->files()->reference([$fileId])), null, [$fileId], $space);
             $this->app->store->addMessage('assistant', $channel, $msg, null, [], $space);
             return $msg;

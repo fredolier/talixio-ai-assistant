@@ -15,6 +15,7 @@ final class Settings
         return [
             'assistant' => ['Assistant', '', [
                 ['TALIXIO_NAME', 'Name', 'text', 'Your assistant\'s name.'],
+                ['TALIXIO_LANG', 'Interface language', 'select', 'Automatic: the language of your browser. The assistant always answers in the language you write in.', ['auto' => 'Automatic', 'en' => 'English', 'fr' => 'Français']],
                 ['TALIXIO_TIMEZONE', 'Time zone', 'text', 'e.g. Europe/Paris. Used for reminders and the calendar.'],
                 ['TALIXIO_HISTORY_MESSAGES', 'Recent messages kept word for word (max)', 'number', 'Older ones are compacted into summaries (weeks and months get shorter over time) and stay searchable.'],
                 ['TALIXIO_HISTORY_TOKENS', 'Size of the recent messages (tokens)', 'number', 'Long messages (pasted documents…) are shortened or left to memory search beyond this. Fewer tokens = cheaper answers.'],
@@ -152,7 +153,7 @@ final class Settings
 
     /** Defaults used by Config when nothing is set (shown in the app as placeholders). */
     public const DEFAULTS = [
-        'TALIXIO_NAME' => 'Talixio', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_HISTORY_TOKENS' => '12000', 'TALIXIO_PROVIDER' => 'anthropic',
+        'TALIXIO_NAME' => 'Talixio', 'TALIXIO_LANG' => 'auto', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_HISTORY_TOKENS' => '12000', 'TALIXIO_PROVIDER' => 'anthropic',
         'TALIXIO_DEEP_THINKING_TOKENS' => '8000', 'TALIXIO_BUDGET_DAILY_USD' => '0', 'TALIXIO_BUDGET_MONTHLY_USD' => '0', 'TALIXIO_MAX_PARALLEL_JOBS' => '3',
         'TALIXIO_JOB_MAX_USD' => '2.00', 'TALIXIO_JOB_MAX_USD_LIMIT' => '10', 'TALIXIO_JOB_EFFORT' => 'medium', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0', 'TALIXIO_TASK_REMINDER' => '18:00', 'TALIXIO_TASKS_GOOGLE' => '1',
         'TALIXIO_SMTP_PORT' => '587', 'TALIXIO_SMTP_SECURITY' => 'auto', 'TALIXIO_IMAP_PORT' => '993', 'TALIXIO_EMAIL_REQUIRE_AUTH' => '1',

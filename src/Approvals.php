@@ -61,22 +61,22 @@ final class Approvals
     {
         $st = $this->app->store;
         $a = $this->get($id);
-        if (!$a) return "There's no approval request #$id.";
-        if ($a['status'] !== 'pending') return "Request #$id was already {$a['status']}.";
+        if (!$a) return I18n::t($this->app, "There's no approval request #{id}.", ['id' => $id]);
+        if ($a['status'] !== 'pending') return I18n::t($this->app, 'Request #{id} was already {status}.', ['id' => $id, 'status' => $a['status']]);
         // claim it atomically so two clicks can't run it twice
         if ($st->q("UPDATE approvals SET status=?, decided=? WHERE id=? AND status='pending'", [$approve ? 'approved' : 'rejected', time(), $id])->rowCount() !== 1) {
-            return "Request #$id was already handled.";
+            return I18n::t($this->app, 'Request #{id} was already handled.', ['id' => $id]);
         }
         if (!$approve) {
-            $msg = "Cancelled: {$a['summary']}";
+            $msg = I18n::t($this->app, 'Cancelled: {what}', ['what' => $a['summary']]);
             $st->addMessage('assistant', 'approval', $msg, null, [], (int)$a['space']);
             return $msg;
         }
-        if ($a['mode'] === 'inline') return "Approved: {$a['summary']}. Continuing."; // the waiting session carries on
+        if ($a['mode'] === 'inline') return I18n::t($this->app, 'Approved: {what}. Continuing.', ['what' => $a['summary']]); // the waiting session carries on
         $result = $this->app->tools->execute($a['tool'], json_decode($a['args'], true) ?: []);
         $ok = !str_starts_with($result, 'error');
         $st->q('UPDATE approvals SET result=?, status=? WHERE id=?', [mb_substr($result, 0, 4000), $ok ? 'done' : 'failed', $id]);
-        $msg = ($ok ? "Done: {$a['summary']}" : "Failed: {$a['summary']}") . "\n\n" . mb_substr($result, 0, 600);
+        $msg = I18n::t($this->app, $ok ? 'Done: {what}' : 'Failed: {what}', ['what' => $a['summary']]) . "\n\n" . mb_substr($result, 0, 600);
         $st->addMessage('assistant', 'approval', $msg, null, [], (int)$a['space']);
         return $msg;
     }

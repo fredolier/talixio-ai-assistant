@@ -137,7 +137,8 @@ final class AdminWeb
         header('Referrer-Policy: same-origin');
         if (!str_starts_with($path, '/api/')) {
             $root = dirname(__DIR__) . '/web';
-            $static = ['/admin.js' => ['admin/admin.js', 'text/javascript'], '/admin.css' => ['admin/admin.css', 'text/css'], '/qrcode.js' => ['public/vendor/qrcode.js', 'text/javascript'], '/icon.svg' => ['public/icon.svg', 'image/svg+xml']];
+            $static = ['/admin.js' => ['admin/admin.js', 'text/javascript'], '/admin.css' => ['admin/admin.css', 'text/css'], '/qrcode.js' => ['public/vendor/qrcode.js', 'text/javascript'], '/icon.svg' => ['public/icon.svg', 'image/svg+xml'],
+                '/i18n.js' => ['public/i18n.js', 'text/javascript'], '/i18n/fr.js' => ['public/i18n/fr.js', 'text/javascript']];
             if (isset($static[$path])) { header('Content-Type: ' . $static[$path][1] . '; charset=utf-8'); header('Cache-Control: no-cache'); readfile("$root/" . $static[$path][0]); return; }
             header('Content-Type: text/html; charset=utf-8'); header('Cache-Control: no-cache');
             echo preg_replace('/<head>/', '<head><base href="' . htmlspecialchars(Config::basePath() . '/') . '">', (string)file_get_contents("$root/admin/admin.html"), 1);

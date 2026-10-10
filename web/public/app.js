@@ -2,7 +2,7 @@
 // The app can live under a prefix (assistant.example.com/fred/): the server sets <base>, every address here is relative.
 const BASE = new URL(document.baseURI).pathname.replace(/\/$/, ''); // '' at the root, '/fred' under a prefix
 const LSK = BASE ? BASE.slice(1) + ':' : ''; // this browser's preferences, kept apart per instance
-const nf = new Intl.NumberFormat();
+const nf = new Intl.NumberFormat(LOCALE);
 const $ = s => document.querySelector(s);
 const state = { lastId: 0, status: null, memFile: 'USER.md', memFiles: {}, sending: false, pollTimer: null };
 
@@ -120,7 +120,7 @@ function md(src) {
 const CHANNEL = { web: null, approval: 'Approval', learn: 'Learning', cli: 'Terminal', telegram: 'Telegram', email: 'Email', signal: 'Signal', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
 const money = v => v == null ? '' : v === 0 ? '$0' : v < 0.01 ? '<$0.01' : '$' + v.toFixed(v < 1 ? 3 : 2);
 const ktok = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
-const fmtTime = ts => new Date(ts * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+const fmtTime = ts => new Date(ts * 1000).toLocaleString(LOCALE, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
 function renderMessage(m) {
   const el = document.createElement('div');
@@ -446,7 +446,7 @@ async function chatSearch() {
     box.innerHTML = results.length ? '' : '<p class="muted small">Nothing found.</p>';
     for (const r of results) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'sres';
-      b.innerHTML = `<span class="muted small">${r.role === 'user' ? 'You' : esc(state.status?.name || 'Assistant')} · ${new Date(r.ts * 1000).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${r.exact ? '' : ' · similar'}</span><span>${mark(r.snippet)}</span>`;
+      b.innerHTML = `<span class="muted small">${r.role === 'user' ? 'You' : esc(state.status?.name || 'Assistant')} · ${new Date(r.ts * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${r.exact ? '' : ' · similar'}</span><span>${mark(r.snippet)}</span>`;
       b.onclick = () => { jumpTo(r.id); if (matchMedia('(max-width: 760px)').matches) $('#chat-search').hidden = true; };
       box.append(b);
     }
@@ -971,7 +971,7 @@ const BICON = {
 const boardPrefs = (() => { try { return JSON.parse(localStorage.getItem(LSK + 'talixio.board') || '{}'); } catch { return {}; } })();
 const saveBoardPrefs = () => { try { localStorage.setItem(LSK + 'talixio.board', JSON.stringify(boardPrefs)); } catch {} };
 const fmtH = h => h == null ? '' : h === 0 ? '0h' : h >= 7 && h % 7 === 0 ? `${h / 7}d` : h < 1 ? `${Math.round(h * 60)}m` : `${+h.toFixed(2)}h`;
-const fmtDay = d => { if (!d) return ''; const t = new Date(d + 'T12:00:00'); return t.toLocaleDateString([], { day: 'numeric', month: 'short', ...(t.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }); };
+const fmtDay = d => { if (!d) return ''; const t = new Date(d + 'T12:00:00'); return t.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', ...(t.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }); };
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const dueClass = c => { if (!c.due_date || c.status === 'done') return ''; const t = today(); if (c.due_date < t) return 'late'; const soon = new Date(); soon.setDate(soon.getDate() + 3); return c.due_date <= soon.toISOString().slice(0, 10) ? 'soon' : ''; };
 const board = { cards: [], refs: {}, statuses: {} };
@@ -1174,7 +1174,7 @@ async function openCard(id, prefill = {}) {
       try { await post(`api/board/${c.id}/time`, { hours: $('#cd-time-h').value, day: $('#cd-time-day').value, note: $('#cd-time-note').value }); const r = await api(`api/board/${c.id}`); paintTime(r.card, r.time); $('#cd-time-h').value = $('#cd-time-note').value = ''; c.version = r.card.version; }
       catch (e) { toast(e.message); }
     };
-    $('#cd-history-list').innerHTML = d.history.map(h => `<div class="hrow"><span class="muted small">${new Date(h.ts * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span><span>${esc(h.what)}</span><span class="muted small">${esc(h.who)}</span>${h.can_undo ? `<button type="button" class="btn small ghost" data-h="${h.id}">Undo</button>` : '<span></span>'}</div>`).join('');
+    $('#cd-history-list').innerHTML = d.history.map(h => `<div class="hrow"><span class="muted small">${new Date(h.ts * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span><span>${esc(h.what)}</span><span class="muted small">${esc(h.who)}</span>${h.can_undo ? `<button type="button" class="btn small ghost" data-h="${h.id}">Undo</button>` : '<span></span>'}</div>`).join('');
     $('#cd-history-list').querySelectorAll('[data-h]').forEach(b => b.onclick = async () => { try { await post(`api/board/undo/${b.dataset.h}`); toast('Undone'); dlg.close(); loadBoard(); openCard(c.id); } catch (e) { toast(e.message); } });
   }
   $('#cd-time').open = false; $('#cd-history').open = false;
@@ -1219,7 +1219,7 @@ async function renderCalendar() {
   const root = $('#board'); root.className = 'calendar'; root.innerHTML = '';
   $('#board-summary').hidden = true;
   const bar = document.createElement('div'); bar.className = 'cal-bar';
-  bar.innerHTML = `<button type="button" class="icon-btn" data-m="-1" aria-label="Previous month">‹</button><b>${first.toLocaleDateString([], { month: 'long', year: 'numeric' })}</b>
+  bar.innerHTML = `<button type="button" class="icon-btn" data-m="-1" aria-label="Previous month">‹</button><b>${first.toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' })}</b>
     <button type="button" class="icon-btn" data-m="1" aria-label="Next month">›</button><button type="button" class="btn small ghost" data-m="0">Today</button>
     <label class="small"><input type="checkbox" id="cal-agenda"${boardPrefs.agenda ? ' checked' : ''}${d.calendar ? '' : ' disabled'}> Show my agenda</label>
     <span class="spacer"></span><button type="button" class="btn small" id="cal-link">${BICON.cal} Calendar link</button>`;
@@ -1239,7 +1239,7 @@ async function renderCalendar() {
   }
   for (const e of d.events) {
     const s = new Date(e.start * 1000), en = new Date((e.end || e.start) * 1000 - (e.all_day ? 1000 : 0));
-    for (const t = new Date(s.getFullYear(), s.getMonth(), s.getDate()); t <= en; t.setDate(t.getDate() + 1)) put(iso(t), { e, time: e.all_day ? '' : s.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+    for (const t = new Date(s.getFullYear(), s.getMonth(), s.getDate()); t <= en; t.setDate(t.getDate() + 1)) put(iso(t), { e, time: e.all_day ? '' : s.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }) });
   }
   const t0 = iso(now);
   const chip = it => {
@@ -1256,7 +1256,7 @@ async function renderCalendar() {
     if (late.length && boardPrefs.month === t0.slice(0, 7)) list.innerHTML = `<h4 class="late">Overdue</h4>` + late.map(c => chip({ c, kind: 'due' })).join('');
     for (const t = new Date(first); t <= last; t.setDate(t.getDate() + 1)) {
       const k = iso(t); if (!days[k] || (k < t0 && boardPrefs.month === t0.slice(0, 7))) continue;
-      list.innerHTML += `<h4${k === t0 ? ' class="today"' : ''}>${t.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</h4>` + sortDay(days[k]).map(chip).join('');
+      list.innerHTML += `<h4${k === t0 ? ' class="today"' : ''}>${t.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' })}</h4>` + sortDay(days[k]).map(chip).join('');
     }
     if (!list.innerHTML) list.innerHTML = '<p class="muted">Nothing dated this month.</p>';
     root.append(list);
@@ -1306,7 +1306,7 @@ async function showCalendarLink(google) {
 async function showBoardTrash() {
   const { cards } = await api('api/board/trash');
   $('#bs-title').textContent = 'Trash';
-  $('#bs-list').innerHTML = cards.length ? '<p class="muted small">Deleted tasks stay here for 30 days.</p>' + cards.map(c => `<div class="hrow"><b>${esc(c.code)}</b><span>${esc(c.title)}</span><span class="muted small">${new Date(c.deleted_at * 1000).toLocaleDateString()}</span><button type="button" class="btn small" data-id="${c.id}">Restore</button></div>`).join('')
+  $('#bs-list').innerHTML = cards.length ? '<p class="muted small">Deleted tasks stay here for 30 days.</p>' + cards.map(c => `<div class="hrow"><b>${esc(c.code)}</b><span>${esc(c.title)}</span><span class="muted small">${new Date(c.deleted_at * 1000).toLocaleDateString(LOCALE)}</span><button type="button" class="btn small" data-id="${c.id}">Restore</button></div>`).join('')
     : '<p class="muted">The trash is empty.</p>';
   $('#bs-list').querySelectorAll('[data-id]').forEach(b => b.onclick = async () => { try { await post(`api/board/${b.dataset.id}/restore`); toast('Restored'); showBoardTrash(); loadBoard(); } catch (e) { toast(e.message); } });
   $('#bs-close').onclick = () => $('#board-side').close();
@@ -1316,7 +1316,7 @@ async function showBoardTrash() {
 async function showBoardChanges() {
   const { changes } = await api('api/board/recent' + (boardPrefs.space !== '' ? '?space=' + boardPrefs.space : ''));
   $('#bs-title').textContent = 'Recent changes';
-  $('#bs-list').innerHTML = changes.length ? changes.map(h => `<div class="hrow"><span class="muted small">${new Date(h.ts * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span><span><a href="#board" data-id="${h.card}"><b>${esc(h.code)}</b></a> ${esc(h.what)}</span><span class="muted small">${esc(h.who)}</span><span></span></div>`).join('')
+  $('#bs-list').innerHTML = changes.length ? changes.map(h => `<div class="hrow"><span class="muted small">${new Date(h.ts * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span><span><a href="#board" data-id="${h.card}"><b>${esc(h.code)}</b></a> ${esc(h.what)}</span><span class="muted small">${esc(h.who)}</span><span></span></div>`).join('')
     : '<p class="muted">No changes yet.</p>';
   $('#bs-list').querySelectorAll('a[data-id]').forEach(a => a.onclick = e => { e.preventDefault(); $('#board-side').close(); openCard(+a.dataset.id); });
   $('#bs-close').onclick = () => $('#board-side').close();
@@ -1381,7 +1381,7 @@ async function loadUpdate() {
   const busy = ['updating', 'checking'].includes(st.state);
   if (state.updating && !busy && state.updateFrom && v.sha !== state.updateFrom) { toast('Updated. Reloading…'); setTimeout(() => location.reload(), 1200); return; }
   if (state.updating && !busy && ['failed', 'done', 'rolled_back'].includes(st.state)) { state.updating = false; if (st.state !== 'failed') { setTimeout(() => location.reload(), 1200); } }
-  const when = t => t ? new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'never';
+  const when = t => t ? new Date(t * 1000).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' }) : 'never';
   box.innerHTML = `<div class="row between"><h3>Updates</h3><span class="version">${esc(v.short || '?')} · ${esc((v.date || '').slice(0, 10))}</span></div>
     <p class="small ${st.state === 'failed' ? 'error' : 'muted'}">${esc(st.message || 'Not checked yet.')} ${st.checked_at ? '· checked ' + when(st.checked_at) : ''}${d.auto ? ' · installs automatically at night' : ''}</p>
     ${st.state === 'available' && st.commits?.length ? `<ul>${st.commits.map(c => `<li>${esc(c.subject)} <span class="muted small">${esc(c.date)}</span></li>`).join('')}</ul>` : ''}
@@ -1654,19 +1654,21 @@ function showMind(d) {
   const est = d.beliefs.filter(b => b.status === 'established'), emerging = d.beliefs.filter(b => b.status !== 'established');
   const item = b => `<li class="belief" data-id="${b.id}"><div class="b-text">${esc(b.text)}${b.space_name ? ` <span class="chip small">${esc(b.space_name)}</span>` : ''}</div>
       <div class="b-meta"><span class="conf" title="Confidence ${Math.round(b.confidence * 100)}%"><i style="width:${Math.round(b.confidence * 100)}%"></i></span>
-      <span>seen ${b.support}× over ${b.days} day${b.days > 1 ? 's' : ''}${b.last_seen ? ', last ' + fmtDate(b.last_seen) : ''}</span>
+      <span>${t(b.days > 1 ? 'seen {n}× over {d} days' : 'seen {n}× on {d} day', { n: b.support, d: b.days })}</span>${b.last_seen ? `<span>${t('last {date}', { date: fmtDate(b.last_seen) })}</span>` : ''}
       <button class="linkish" data-a="why" type="button">Why?</button><button class="linkish danger" data-a="forget" type="button">Forget</button></div><div class="b-why" hidden></div></li>`;
   const group = (list, empty) => Object.entries(MIND_KIND).map(([k, label]) => {
     const l = list.filter(b => b.kind === k);
     return l.length ? `<h4>${label}</h4><ul class="beliefs">${l.map(item).join('')}</ul>` : '';
   }).join('') || `<p class="muted small">${empty}</p>`;
-  const status = d.learning_history ? 'Learning from your past conversations…' : `${nf.format(d.observations)} observation${d.observations === 1 ? '' : 's'} so far${d.pending ? `, ${d.pending} not yet thought over` : ''}${d.consolidated ? ` · last thought over ${fmtTime(d.consolidated)}` : ''}.`;
-  box.innerHTML = `<div class="card portrait"><div class="row"><h4>Who it has become</h4><span class="muted small">${d.reflected ? 'Portrait of ' + fmtDate(d.reflected) : ''}</span></div>
-      ${d.portrait ? `<div class="doc">${md(d.portrait)}</div>` : '<p class="muted">No portrait yet: it writes one once it has learned enough, then updates it every week.</p>'}</div>
+  const status = d.learning_history ? t('Learning from your past conversations…') : [t(d.observations === 1 ? '{n} observation so far' : '{n} observations so far', { n: nf.format(d.observations) }),
+    d.pending ? t('{n} not yet thought over', { n: d.pending }) : '', d.consolidated ? t('last thought over {when}', { when: fmtTime(d.consolidated) }) : ''].filter(Boolean).join(' · ');
+  box.innerHTML = `<div class="card portrait"><div class="row"><h4>Who it has become</h4><span class="muted small">${d.reflected ? t('Portrait of {date}', { date: fmtDate(d.reflected) }) : ''}</span></div>
+      ${d.portrait ? `<div class="doc">${md(d.portrait)}</div>` : '<p class="muted">No portrait yet: it writes one once it has learned enough, then updates it every week.</p>'}
+      ${(d.spaces || []).map(sp => `<details class="space-portrait"><summary><i class="space-dot" style="background:${esc(sp.color || 'var(--muted)')}"></i>${t('In {name}', { name: esc(sp.name) })}</summary><div class="doc">${md(sp.portrait)}</div></details>`).join('')}</div>
     <div class="row"><span class="muted small">${status}</span><button id="mind-reflect" class="btn" type="button">Think it over now</button></div>
     ${group(est, 'Nothing established yet: beliefs need to be confirmed on several days.')}
     ${emerging.length ? `<details class="card emerging"><summary>Emerging (${emerging.length}): not sure yet, not used in its choices</summary>${group(emerging, '')}</details>` : ''}
-    ${d.journal.length ? `<details class="card"><summary>Journal</summary><ul class="journal">${d.journal.map(j => `<li><span class="muted small">${fmtTime(j.ts)}</span><div class="doc">${md(j.text)}</div></li>`).join('')}</ul></details>` : ''}`;
+    ${d.journal.length ? `<details class="card"><summary>Journal</summary><ul class="journal">${d.journal.map(j => `<li><span class="muted small">${fmtTime(j.ts)}${j.space_name ? ' · ' + esc(j.space_name) : ''}</span><div class="doc">${md(j.text)}</div></li>`).join('')}</ul></details>` : ''}`;
   box.querySelectorAll('.belief').forEach(li => {
     const id = li.dataset.id;
     li.querySelector('[data-a=why]').onclick = async () => {
@@ -1716,7 +1718,7 @@ function loadMemoryTab() {
 const KIND_LABEL = { pdf: 'PDF', office: 'DOC', text: 'TXT', audio: 'AUD', image: 'IMG', other: 'FILE' };
 const FOLDER_SVG = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const fmtSize = b => b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b / 1024) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
-const fmtDate = ts => new Date(ts * 1000).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+const fmtDate = ts => new Date(ts * 1000).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' });
 const joinPath = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
 const lib = { folder: '/', tree: [], timer: null, file: null, inline: null };
 
@@ -1993,7 +1995,7 @@ async function loadMail() {
       el.querySelector('select').onchange = async e => { try { await post(`api/mail/${m.uid}/label`, { label: e.target.value }); toast('Moved: it will remember.'); loadMail(); } catch (err) { toast(err.message); } };
       el.querySelector('[data-a=done], [data-a=open]').onclick = async e => { try { await post(`api/mail/${m.uid}/${e.currentTarget.dataset.a}`); loadMail(); } catch (err) { toast(err.message); } };
       el.querySelector('[data-a=task]')?.addEventListener('click', () => openCard(null, { space: state.space, title: m.subject, due_date: m.due || '',
-        body: `From ${m.sender} <${m.email}>, ${new Date(m.ts * 1000).toLocaleDateString()}${m.summary ? '\n\n' + m.summary : ''}`, links: [{ type: 'email', ref: m.uid, label: m.subject }] }));
+        body: `From ${m.sender} <${m.email}>, ${new Date(m.ts * 1000).toLocaleDateString(LOCALE)}${m.summary ? '\n\n' + m.summary : ''}`, links: [{ type: 'email', ref: m.uid, label: m.subject }] }));
       el.querySelector('[data-a=draft]')?.addEventListener('click', async () => {
         location.hash = '#chat'; if (state.space) await switchSpace(0);
         $('#input').value = `Prepare a reply to the email from ${m.sender} "${m.subject}" (uid ${m.uid}) and save it as a draft. `; autosize(); $('#input').focus();
@@ -2080,7 +2082,7 @@ function tokenChart(days, byDay, costDay) {
   const max = Math.max(0, ...days.map(d => byDay[d] || 0));
   const step = niceStep(max / 4); const top = Math.max(step, Math.ceil(max / step) * step);
   const ticks = []; for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v);
-  const short = d => new Date(d + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'short' });
+  const short = d => new Date(d + 'T12:00').toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
   return `<div class="chart" role="img" aria-label="Tokens per day over the last 30 days, up to ${nf.format(max)} a day">
     <div class="y-axis">${ticks.map(v => `<span style="bottom:${(v / top * 100).toFixed(2)}%">${ktok(v)}</span>`).join('')}</div>
     <div class="plot">${ticks.map(v => `<i class="grid" style="bottom:${(v / top * 100).toFixed(2)}%"></i>`).join('')}
@@ -2255,7 +2257,7 @@ $('#search-form').onsubmit = async e => {
   try {
     const { results } = await api('api/search?q=' + encodeURIComponent(q));
     box.hidden = false;
-    box.innerHTML = results.length ? results.map(r => `<div class="hit"><div class="meta"><span class="chip">${esc(r.label)}</span><span>${new Date(r.ts * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>${r.sim != null ? `<span>${Math.round(r.sim * 100)}% similar</span>` : ''}</div>${esc(r.text.slice(0, 600))}</div>`).join('')
+    box.innerHTML = results.length ? results.map(r => `<div class="hit"><div class="meta"><span class="chip">${esc(r.label)}</span><span>${new Date(r.ts * 1000).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' })}</span>${r.sim != null ? `<span>${Math.round(r.sim * 100)}% similar</span>` : ''}</div>${esc(r.text.slice(0, 600))}</div>`).join('')
       : '<div class="placeholder">Nothing found.</div>';
   } catch (err) { toast(err.message); }
 };

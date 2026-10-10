@@ -5,7 +5,7 @@
 const VERSION = '__VERSION__';
 const CACHE = 'talixio-' + VERSION + new URL(self.registration.scope).pathname;
 const ROOT = new URL(self.registration.scope).pathname; // '/' or '/fred/'
-const SHELL = ['', 'app.css', 'app.js', 'manifest.json', 'icon.svg', 'icons/icon-192.png', 'icons/badge-96.png'].map(u => ROOT + u);
+const SHELL = ['', 'app.css', 'app.js', 'i18n.js', 'i18n/fr.js', 'manifest.json', 'icon.svg', 'icons/icon-192.png', 'icons/badge-96.png'].map(u => ROOT + u);
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))));

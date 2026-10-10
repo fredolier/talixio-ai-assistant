@@ -223,8 +223,8 @@ final class Jobs
         $store->updateJob($id, ['status' => 'done', 'result' => $saved ? implode("\n", array_column($saved, 'result')) : 'Nothing worth keeping.', 'cost_usd' => $meta['cost'], 'finished' => time()]);
         foreach ($saved as $s) {
             $a = json_decode($s['args'], true) ?: [];
-            $store->addMessage('assistant', 'learn', '📘 ' . (str_starts_with($s['result'], 'updated') ? 'Updated' : 'Learned') . " a skill: **" . Skills::slug($a['name'] ?? '?') . "**: "
-                . ($a['description'] ?? '') . "\nYou can see or edit it on the Memory page.");
+            $store->addMessage('assistant', 'learn', '📘 ' . I18n::t($this->app, (str_starts_with($s['result'], 'updated') ? 'Updated' : 'Learned') . " a skill: **{name}**: {description}\nYou can see or edit it on the Memory page.",
+                ['name' => Skills::slug($a['name'] ?? '?'), 'description' => $a['description'] ?? '']));
         }
     }
 

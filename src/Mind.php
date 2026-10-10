@@ -190,9 +190,11 @@ final class Mind
     public function reflect(int $now): bool
     {
         $s = $this->app->store;
-        $b = $s->q("SELECT kind, text, confidence, status FROM mind_beliefs WHERE status IN ('established', 'emerging') ORDER BY confidence DESC LIMIT 60")->fetchAll();
+        $b = $s->q("SELECT kind, text, confidence, status, space FROM mind_beliefs WHERE status IN ('established', 'emerging') ORDER BY space = 0 DESC, confidence DESC LIMIT 60")->fetchAll();
         if (!$b) return false;
-        $fmt = fn(string $k) => implode("\n", array_map(fn($x) => sprintf('- (%s, %.2f) %s', $x['status'], $x['confidence'], $x['text']), array_filter($b, fn($x) => $x['kind'] === $k))) ?: '(nothing yet)';
+        $names = array_column($this->app->spaces()->all(), 'name', 'id');
+        $fmt = fn(string $k) => implode("\n", array_map(fn($x) => sprintf('- (%s, %.2f%s) %s', $x['status'], $x['confidence'], $x['space'] ? ', only in the space ' . ($names[$x['space']] ?? '?') : '', $x['text']),
+            array_filter($b, fn($x) => $x['kind'] === $k))) ?: '(nothing yet)';
         $prev = $s->get('mind_portrait');
         $text = $this->ask('standard', "Write your self-portrait as the user's personal assistant, in the first person, in the language of the beliefs below, at most 220 words: "
             . "who you are for this user now: your character and tone, how you make choices for them and what you weigh, what you have learned about yourself, what you care about because they do. "
@@ -210,6 +212,61 @@ final class Mind
         $s->q("INSERT INTO mind_journal(ts, kind, text) VALUES(?, 'portrait', ?)", [$now, $portrait]);
         if ($entry !== '') $s->q("INSERT INTO mind_journal(ts, kind, text) VALUES(?, 'entry', ?)", [$now, $entry]);
         return true;
+    }
+
+    /** Spaces with enough of their own history for a character of their own: [id => space]. */
+    private function spacesWithMaterial(int $now): array
+    {
+        $out = [];
+        foreach ($this->app->spaces()->all() as $sp) {
+            if (!$sp['id']) continue;
+            $obs = (int)$this->app->store->q('SELECT COUNT(*) FROM mind_obs WHERE space = ? AND ts > ?', [$sp['id'], $now - 90 * 86400])->fetchColumn();
+            $own = (int)$this->app->store->q("SELECT COUNT(*) FROM mind_beliefs WHERE space = ? AND status IN ('established', 'emerging')", [$sp['id']])->fetchColumn();
+            if ($obs >= 3 || $own > 0) $out[$sp['id']] = $sp;
+        }
+        return $out;
+    }
+
+    /**
+     * The character it has in one space: how it differs there from its general self (tone, what it weighs, habits),
+     * from what happened in that space, the space's instructions and its general portrait. Returns false when nothing particular emerges.
+     */
+    public function reflectSpace(int $space, int $now): bool
+    {
+        $s = $this->app->store;
+        $sp = $this->app->spaces()->get($space);
+        if (!$sp || !$space) return false;
+        $b = $s->q("SELECT kind, text, confidence, status FROM mind_beliefs WHERE space = ? AND status IN ('established', 'emerging') ORDER BY confidence DESC LIMIT 30", [$space])->fetchAll();
+        $obs = $s->q('SELECT kind, text, ts FROM mind_obs WHERE space = ? AND ts > ? ORDER BY ts DESC LIMIT 40', [$space, $now - 90 * 86400])->fetchAll();
+        if (!$b && count($obs) < 3) return false;
+        $prev = $s->get("mind_portrait_$space");
+        $text = $this->ask('standard', "You are the user's personal assistant. Besides your general character, you live in several spaces (separate conversations on different subjects). "
+            . "Write how you are in the space \"{$sp['name']}\": only what is particular there compared with your general portrait (tone, register, what you weigh first, habits, what the user expects from you there), "
+            . "in the first person, in the language of the material below, at most 120 words. Don't repeat the general portrait. Stay continuous with your previous portrait for this space; "
+            . "change only what the evidence supports. Keep your integrity (honest, able to say no). If nothing particular emerges yet, reply NOTHING. "
+            . "Otherwise, after the portrait, a line with only ---, then one sentence on what changed there.\n\n"
+            . "## Your general portrait\n" . ($s->get('mind_portrait') ?: '(not written yet)')
+            . (trim((string)$sp['instructions']) !== '' ? "\n\n## The user's instructions for this space\n" . mb_substr(trim($sp['instructions']), 0, 2000) : '')
+            . "\n\n## Your previous portrait in this space\n" . ($prev !== '' ? $prev : '(none yet)')
+            . "\n\n## Beliefs specific to this space\n" . (implode("\n", array_map(fn($x) => sprintf('- (%s, %s, %.2f) %s', $x['kind'], $x['status'], $x['confidence'], $x['text']), $b)) ?: '(none yet)')
+            . "\n\n## Recent observations in this space\n" . (implode("\n", array_map(fn($o) => '- [' . $o['kind'] . ', ' . date('Y-m-d', (int)$o['ts']) . '] ' . $o['text'], $obs)) ?: '(none)'));
+        $s->set("mind_reflected_$space", (string)$now); // also when nothing emerged: try again next week
+        if ($text === null || preg_match('/^\W*NOTHING\W*$/', trim($text))) return false;
+        [$portrait, $entry] = array_map('trim', array_pad(preg_split('/^\s*---\s*$/m', $text, 2), 2, ''));
+        if ($portrait === '' || $portrait === $prev) return false;
+        $s->set("mind_portrait_$space", $portrait);
+        $s->q("INSERT INTO mind_journal(ts, kind, text, space) VALUES(?, 'portrait', ?, ?)", [$now, $portrait, $space]);
+        if ($entry !== '') $s->q("INSERT INTO mind_journal(ts, kind, text, space) VALUES(?, 'entry', ?, ?)", [$now, $entry, $space]);
+        return true;
+    }
+
+    /** "Think it over now": consolidate, then every portrait. */
+    public function thinkNow(int $now): bool
+    {
+        $did = $this->consolidate($now);
+        $did = $this->reflect($now) || $did;
+        foreach (array_keys($this->spacesWithMaterial($now)) as $id) $did = $this->reflectSpace($id, $now) || $did;
+        return $did;
     }
 
     // ---- the worker's rhythm ----
@@ -232,6 +289,11 @@ final class Mind
         if ($pending > 0 && ($since >= 20 * 3600 || $pending >= 40)) return $this->consolidate($now);
         $hasBeliefs = (int)$s->q("SELECT COUNT(*) FROM mind_beliefs WHERE status IN ('established', 'emerging')")->fetchColumn() > 0;
         if ($hasBeliefs && $now - (int)$s->get('mind_reflected', '0') >= 7 * 86400 - 3600) return $this->reflect($now);
+        if ($s->get('mind_portrait') !== '') { // then each space with enough of its own history, one per call
+            foreach (array_keys($this->spacesWithMaterial($now)) as $id) {
+                if ($now - (int)$s->get("mind_reflected_$id", '0') >= 7 * 86400 - 3600) { $this->reflectSpace($id, $now); return true; }
+            }
+        }
         if ($now - (int)$s->get('mind_decayed', '0') >= 86400) { $this->recompute($now); $s->set('mind_decayed', (string)$now); } // fading happens even when nothing new comes
         return false;
     }
@@ -246,10 +308,12 @@ final class Mind
         $rows = $s->q("SELECT kind, text FROM mind_beliefs WHERE status = 'established' AND space IN (0, ?) ORDER BY confidence DESC LIMIT 30", [$space])->fetchAll();
         $by = fn(string $k, int $n) => implode("\n", array_map(fn($r) => '- ' . $r['text'], array_slice(array_filter($rows, fn($r) => $r['kind'] === $k), 0, $n)));
         $portrait = $withPortrait ? $s->get('mind_portrait') : '';
+        $here = $withPortrait && $space ? $s->get("mind_portrait_$space") : '';
         $values = $by('value', 12); $patterns = $by('pattern', 8); $self = $withPortrait ? $by('self', 6) : '';
-        if ($portrait === '' && $values === '' && $patterns === '' && $self === '') return '';
+        if ($portrait === '' && $here === '' && $values === '' && $patterns === '' && $self === '') return '';
         return "\n\n## Who you have become\nLearned by yourself from your history with the user (it keeps evolving)."
             . ($portrait !== '' ? "\n\n$portrait" : '')
+            . ($here !== '' ? "\n\n### In this space (" . ($this->app->spaces()->get($space)['name'] ?? '') . ")\n$here" : '')
             . ($values !== '' ? "\n\n### What matters to the user\n$values" : '')
             . ($patterns !== '' ? "\n\n### How they work and decide\n$patterns" : '')
             . ($self !== '' ? "\n\n### Lessons about yourself\n$self" : '')
@@ -269,9 +333,11 @@ final class Mind
             'portrait' => $s->get('mind_portrait'), 'reflected' => (int)$s->get('mind_reflected', '0'), 'consolidated' => (int)$s->get('mind_consolidated', '0'),
             'learning_history' => $s->get('mind_bootstrap') !== 'done' && $this->enabled(),
             'beliefs' => $beliefs,
+            'spaces' => array_values(array_filter(array_map(fn($sp) => ['id' => $sp['id'], 'name' => $sp['name'], 'color' => $sp['color'] ?? '',
+                'portrait' => $s->get("mind_portrait_{$sp['id']}"), 'reflected' => (int)$s->get("mind_reflected_{$sp['id']}", '0')], $this->app->spaces()->all()), fn($x) => $x['id'] && $x['portrait'] !== '')),
             'pending' => (int)$s->q('SELECT COUNT(*) FROM mind_obs WHERE processed = 0')->fetchColumn(),
             'observations' => (int)$s->q('SELECT COUNT(*) FROM mind_obs')->fetchColumn(),
-            'journal' => $s->q("SELECT * FROM mind_journal WHERE kind IN ('entry', 'changes') ORDER BY id DESC LIMIT 30")->fetchAll(),
+            'journal' => array_map(fn($j) => $j + ['space_name' => $j['space'] ? ($names[$j['space']] ?? '') : ''], $s->q("SELECT * FROM mind_journal WHERE kind IN ('entry', 'changes') ORDER BY id DESC LIMIT 30")->fetchAll()),
         ];
     }
 
