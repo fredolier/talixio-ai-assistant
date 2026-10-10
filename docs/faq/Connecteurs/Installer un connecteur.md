@@ -33,4 +33,4 @@ Un serveur MCP « local » est un petit programme (Node.js ou Python). Pour l'in
 - Un projet TypeScript qui doit être compilé l'est (`npm run build`) si le paquet n'a pas de fichier prêt.
 - Python : seuls les serveurs sans dépendances à installer sont pris en charge pour l'instant.
 
-Exemple pas à pas : *Connecteurs / anki.talixio.com*.
+Exemples pas à pas : *Connecteurs / anki.talixio.com* (un connecteur à installer) et *Connecteurs / Home Assistant* (un service distant, par son adresse).
