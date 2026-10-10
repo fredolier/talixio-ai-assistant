@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.16.3 (2026-10-10)
+- Library search in two passes: documents with the words show at once, then the search by meaning (the
+  local model, slower) completes the list. A spinner says it is running; *Cancel* (or Esc) stops it and keeps
+  what was found.
+- One search at a time: opening another folder or starting another search stops the running one, and an
+  answer that comes late is dropped. Results and the folder's list are never shown together any more (a slow
+  search used to land on top of the folder opened meanwhile). *Close the search* goes back to the folder.
+
 ## 0.16.2 (2026-10-10)
 - Admin page, *Update everyone*: the branch field shows the branch running now (or the one the stack was
   installed from) instead of always `main`. Running `install-stack.sh` again records the branch the clone is on.

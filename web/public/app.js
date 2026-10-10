@@ -12,6 +12,7 @@ async function api(path, opts = {}) {
     headers: { 'Content-Type': 'application/json', 'X-Talixio': '1' },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
     credentials: 'same-origin',
+    signal: opts.signal,
   });
   const raw = await res.text();
   let data;
@@ -1895,6 +1896,7 @@ const fmtSize = b => b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b / 1024) + 
 const fmtDate = ts => new Date(ts * 1000).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' });
 const joinPath = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
 const lib = { folder: '/', tree: [], timer: null, file: null, inline: null };
+const libSearch = { ctl: null, q: '', folder: '/', results: null, phase: '' };
 
 function libFolderFromHash() {
   const m = location.hash.match(/^#library(\/.*)?$/);
@@ -1905,7 +1907,9 @@ const isReadonly = p => p === '/FAQ' || (p || '').startsWith('/FAQ/');
 function libGo(folder) { location.hash = '#library' + (folder === '/' ? '' : folder.split('/').map(encodeURIComponent).join('/')); }
 
 async function loadLibrary() {
+  const was = lib.folder;
   lib.folder = libFolderFromHash() || '/';
+  if (was !== undefined && was !== lib.folder && libSearch.phase) libSearchClose(); // another folder: its content, not old results
   const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
   lib.tree = tree.tree; lib.shared = list.shared; lib.level = list.level || 'internal';
   lib.folder = list.folder; lib.readonly = !!list.readonly;
@@ -2592,23 +2596,76 @@ $('#lib-inline-cancel').onclick = () => { $('#lib-inline').hidden = true; };
 ['dragover', 'dragenter'].forEach(t => $('#lib-main').addEventListener(t, e => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); $('#lib-main').classList.add('drag'); } }));
 $('#lib-main').addEventListener('dragleave', e => { if (!$('#lib-main').contains(e.relatedTarget)) $('#lib-main').classList.remove('drag'); });
 $('#lib-main').addEventListener('drop', e => { e.preventDefault(); $('#lib-main').classList.remove('drag'); libUpload([...(e.dataTransfer?.files || [])]); });
-$('#lib-search').onsubmit = async e => {
-  e.preventDefault();
-  const q = $('#lib-q').value.trim(), box = $('#lib-results');
-  if (!q) { box.hidden = true; $('#lib-list').hidden = false; return; }
-  const folder = $('#lib-scope').checked ? lib.folder : '/';
-  try {
-    const { results } = await api(`api/library/search?q=${encodeURIComponent(q)}&folder=${encodeURIComponent(folder)}`);
-    box.hidden = false; box.innerHTML = '';
-    const head = document.createElement('div'); head.className = 'row between';
-    head.innerHTML = `<span class="muted small">${results.length ? results.length + ' result' + (results.length > 1 ? 's' : '') : 'Nothing found'}${folder !== '/' ? ' in ' + esc(folder) : ''}</span><button class="btn small ghost" type="button">Clear search</button>`;
-    head.querySelector('button').onclick = () => { $('#lib-q').value = ''; box.hidden = true; $('#lib-list').hidden = false; };
+/**
+ * Library search: keywords first (instant), then by meaning (slower: the local model), which completes the list.
+ * One search at a time: a new one, another folder or Cancel stops it, and an answer that comes late is dropped.
+ * While results are shown, the folder's list is hidden: never both.
+ */
+const SPIN_SVG = '<svg class="spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
+function libSearchRender() {
+  const box = $('#lib-results'), { q, folder, results, phase } = libSearch;
+  box.hidden = false; $('#lib-list').hidden = true; box.innerHTML = '';
+  const where = folder !== '/' ? ' ' + t('in {folder}', { folder }) : '';
+  const head = document.createElement('div'); head.className = 'search-head';
+  const n = results?.length || 0;
+  const found = () => n === 1 ? t('1 result for “{q}”', { q }) : t('{n} results for “{q}”', { n, q });
+  const status = phase === 'quick' ? t('Searching for “{q}”…', { q }) + where
+    : phase === 'meaning' ? (n ? found() : t('No word match for “{q}”', { q })) + where + ' · ' + t('looking by meaning…')
+    : (n ? found() : t('Nothing found for “{q}”', { q })) + where + (phase === 'stopped' ? ' · ' + t('word matches only (stopped)') : '');
+  head.innerHTML = `${phase === 'quick' || phase === 'meaning' ? SPIN_SVG : ''}<span class="small">${esc(status)}</span><span class="spacer"></span>`
+    + (phase === 'quick' || phase === 'meaning' ? `<button class="btn small" type="button" data-a="stop">${esc(t('Cancel'))}</button>` : '')
+    + `<button class="btn small ghost" type="button" data-a="close">${esc(t('Close the search'))}</button>`;
+  head.querySelector('[data-a=stop]')?.addEventListener('click', () => libSearchStop());
+  head.querySelector('[data-a=close]').onclick = () => libSearchClose();
+  box.append(head);
+  if (n) {
     const list = document.createElement('div'); list.className = 'lib-list';
     for (const r of results) list.append(fileRow({ ...r, size: 0, created: 0, status: 'ready' }, `${joinPath(r.folder, r.name)} · ${r.snippet}`));
-    box.append(head); if (results.length) box.append(list);
-    $('#lib-list').hidden = results.length > 0;
-  } catch (err) { toast(err.message); }
+    box.append(list);
+  }
+}
+/** Stop the running search; what was found so far stays (nothing yet: back to the folder). */
+function libSearchStop() {
+  if (!libSearch.ctl) return;
+  libSearch.ctl.abort(); libSearch.ctl = null;
+  if (libSearch.phase === 'quick') return libSearchClose();
+  libSearch.phase = 'stopped'; libSearchRender();
+}
+/** Back to the folder's list. */
+function libSearchClose() {
+  libSearch.ctl?.abort(); libSearch.ctl = null; libSearch.phase = ''; libSearch.results = null;
+  $('#lib-results').hidden = true; $('#lib-results').innerHTML = ''; $('#lib-list').hidden = false;
+}
+$('#lib-search').onsubmit = async e => {
+  e.preventDefault();
+  libSearch.ctl?.abort(); libSearch.ctl = null; // a new search replaces the running one
+  const q = $('#lib-q').value.trim();
+  if (!q) return libSearchClose();
+  const folder = $('#lib-scope').checked ? lib.folder : '/';
+  const ctl = new AbortController();
+  Object.assign(libSearch, { ctl, q, folder, results: null, phase: 'quick' });
+  libSearchRender();
+  const url = `api/library/search?q=${encodeURIComponent(q)}&folder=${encodeURIComponent(folder)}`;
+  try {
+    const quick = await api(url + '&mode=quick', { signal: ctl.signal });
+    if (libSearch.ctl !== ctl) return; // stopped, or another search started
+    libSearch.results = quick.results;
+    if (!quick.more) { libSearch.ctl = null; libSearch.phase = 'done'; return libSearchRender(); }
+    libSearch.phase = 'meaning'; libSearchRender();
+    const full = await api(url, { signal: ctl.signal });
+    if (libSearch.ctl !== ctl) return;
+    libSearch.ctl = null; libSearch.results = full.results; libSearch.phase = 'done'; libSearchRender();
+  } catch (err) {
+    if (err.name === 'AbortError' || libSearch.ctl !== ctl) return;
+    libSearch.ctl = null;
+    if (libSearch.phase === 'meaning') { libSearch.phase = 'stopped'; libSearchRender(); toast(err.message); }
+    else { libSearchClose(); toast(err.message); }
+  }
 };
+document.addEventListener('keydown', e => { // Esc: stops a running search (then closes it), unless a document or a dialog is open
+  if (e.key !== 'Escape' || !libSearch.phase || $('#view-library').hidden || !$('#viewer').hidden || document.querySelector('dialog[open]')) return;
+  e.preventDefault(); libSearch.ctl ? libSearchStop() : libSearchClose();
+});
 $('#viewer-close').onclick = closeViewer;
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#viewer').hidden) closeViewer(); });
 $('#viewer-form-cancel').onclick = () => { $('#viewer-form').hidden = true; };

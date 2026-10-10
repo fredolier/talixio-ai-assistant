@@ -220,11 +220,11 @@ final class Library
         return $files->get($id);
     }
 
-    /** Search the library (optionally one folder and its subfolders). */
-    public function search(string $query, string $folder = '/', int $limit = 10): array
+    /** Search the library (optionally one folder and its subfolders). $meaning false: keywords only (instant). */
+    public function search(string $query, string $folder = '/', int $limit = 10, bool $meaning = true): array
     {
         $folder = self::normalize($folder);
-        $hits = $this->app->recall()->search($query, $limit, PHP_INT_MAX, ['file', 'transcript'], $folder === '/' ? null : $this->fileIds($folder));
+        $hits = $this->app->recall()->search($query, $limit, PHP_INT_MAX, ['file', 'transcript'], $folder === '/' ? null : $this->fileIds($folder), null, $meaning);
         $out = [];
         foreach ($hits as $h) {
             $f = $this->app->files()->get((int)$h['ref']);

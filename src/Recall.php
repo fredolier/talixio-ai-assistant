@@ -22,7 +22,7 @@ final class Recall
      * @return array<array{kind:string,ref:int,ts:int,label:string,text:string,score:float,sim:?float,keyword:bool}>
      */
     /** @param int|null $space conversations of this space only (documents are shared); null = every space */
-    public function search(string $query, int $limit = 8, int $beforeMessageId = PHP_INT_MAX, ?array $kinds = null, ?array $refs = null, ?int $space = null): array
+    public function search(string $query, int $limit = 8, int $beforeMessageId = PHP_INT_MAX, ?array $kinds = null, ?array $refs = null, ?int $space = null, bool $meaning = true): array
     {
         $refSet = $refs !== null ? array_flip($refs) : null;
         $exclude = fn(array $d) => ($d['kind'] === 'message' && (int)$d['ref'] >= $beforeMessageId) || ($space !== null && in_array($d['kind'], ['message', 'summary'], true) && (int)$d['space'] !== $space)
@@ -43,7 +43,7 @@ final class Recall
                 $hits[$d['id']] = $d + ['score' => 1 / (60 + ++$rank), 'sim' => null, 'keyword' => true];
             }
         }
-        if ($this->emb->enabled()) {
+        if ($meaning && $this->emb->enabled()) { // without it: keywords only, instant (the library shows those first)
             try {
                 $q = $this->emb->embed([$query], 'query')[0];
                 $sims = [];
@@ -79,6 +79,8 @@ final class Recall
         }
         return array_values(array_slice($hits, 0, $limit));
     }
+
+    public function meaningEnabled(): bool { return $this->emb->enabled(); }
 
     /** Snippets worth adding to the prompt automatically: keyword matches or clearly similar meaning. */
     public function autoRecall(string $query, int $beforeMessageId, float $minSim, int $space = 0): string

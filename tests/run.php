@@ -1932,6 +1932,8 @@ check('faq: release notes, one page per version', (bool)$s->q("SELECT 1 FROM fil
 check('faq: nothing to do when the version did not change', $faq->sync() === 0);
 $hits = $app->library()->search('code de transfert', '/FAQ');
 check('faq: indexed, found by search', $hits && str_contains(json_encode($hits, JSON_UNESCAPED_UNICODE), 'Transférer'), json_encode($hits, JSON_UNESCAPED_UNICODE));
+$quick = $app->library()->search('code de transfert', '/FAQ', 30, false);
+check('library search: the quick pass finds by words alone, without the meaning model', $quick && str_contains(json_encode($quick, JSON_UNESCAPED_UNICODE), 'Transférer') && !array_filter(array_column($quick, 'sim'), fn($x) => $x !== null));
 $fid = (int)$s->q("SELECT id FROM files WHERE folder = '/FAQ/Utilisation' LIMIT 1")->fetchColumn();
 $ro = function (callable $fn) { try { $fn(); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), 'read-only'); } };
 $tmpf = "$dir/x.txt"; file_put_contents($tmpf, 'hello');

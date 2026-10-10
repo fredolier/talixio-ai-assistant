@@ -20,6 +20,10 @@
 - Tout est lu et indexé en arrière-plan : PDF (y compris scannés), Word/Excel/PowerPoint, e-mails,
   texte, audio (transcrit), photos (décrites, texte lu).
 - Cherchez dans la page, ou demandez à l'assistant : « d'après mes documents dans /Clients/Alice, … ».
+- La recherche se fait en deux temps : les documents qui contiennent **les mots** s'affichent tout de suite,
+  puis la recherche **par le sens** (modèle local) complète la liste quelques secondes plus tard. Un spinner
+  l'indique ; *Annuler* (ou Échap) l'arrête en gardant ce qui est déjà trouvé. Changer de dossier ou lancer
+  une autre recherche arrête la précédente ; *Fermer la recherche* revient au dossier.
   Il cite le document et la page ; un clic l'ouvre à cette page.
 - *Demander à propos de ce dossier* lance une question sur ses documents.
 

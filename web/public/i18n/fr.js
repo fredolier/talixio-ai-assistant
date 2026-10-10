@@ -1789,5 +1789,14 @@ window.I18N.fr = {
 "confidentiality: {level}": "confidentialité : {level}",
 "folder: {folder}": "dossier : {folder}",
 "by the assistant": "par l'assistant",
-"in the app": "dans l'appli"
+"in the app": "dans l'appli",
+"in {folder}": "dans {folder}",
+"Searching for “{q}”…": "Recherche de « {q} »…",
+"1 result for “{q}”": "1 résultat pour « {q} »",
+"{n} results for “{q}”": "{n} résultats pour « {q} »",
+"No word match for “{q}”": "Aucun mot trouvé pour « {q} »",
+"Nothing found for “{q}”": "Rien trouvé pour « {q} »",
+"looking by meaning…": "recherche par le sens…",
+"word matches only (stopped)": "mots exacts seulement (recherche par le sens annulée)",
+"Close the search": "Fermer la recherche"
 };

@@ -211,7 +211,9 @@ final class Web
             (bool)preg_match('#^/api/shares/(\d+)/revoke$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->shares()->revoke((int)$mm[1])],
             (bool)preg_match('#^/api/shares/(\d+)/log$#', $path, $mm) => ['log' => $this->app->shares()->accessLog((int)$mm[1])],
             $path === '/api/library/tree' => ['tree' => $this->app->library()->tree(), 'stats' => $this->app->library()->stats()],
-            $path === '/api/library/search' => ['results' => $this->app->library()->search((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/'), 30)],
+            // mode=quick: keywords only, at once; then the full search (with meaning) completes it. more: a full search would add something
+            $path === '/api/library/search' => ['results' => $this->app->library()->search((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/'), 30, ($_GET['mode'] ?? '') !== 'quick'),
+                'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
             $path === '/api/library/folder' && $m === 'POST' => ['folder' => $this->app->library()->createFolder((string)($b['path'] ?? ''))],
             $path === '/api/library/folder/move' && $m === 'POST' => ['folder' => $this->app->library()->moveFolder((string)($b['from'] ?? ''), (string)($b['to'] ?? ''))],
             $path === '/api/library/folder/delete' && $m === 'POST' => ['deleted_files' => $this->app->library()->deleteFolder((string)($b['path'] ?? ''), !empty($b['recursive']))],
