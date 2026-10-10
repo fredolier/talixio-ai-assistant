@@ -1778,5 +1778,16 @@ window.I18N.fr = {
 "Fold {name}": "Replier {name}",
 "Unfold {name}": "Déplier {name}",
 "Fold every folder": "Replier tous les dossiers",
-"Fold all": "Tout replier"
+"Fold all": "Tout replier",
+"This space is archived": "Cet espace est archivé",
+"It is no longer in the spaces list; its conversation, notes and tasks are kept.": "Il n'apparaît plus dans la liste des espaces ; sa conversation, ses notes et ses tâches sont conservées.",
+"Archive it? It leaves the list": "L'archiver ? Il quittera la liste",
+"renamed (was {name})": "renommé (avant : {name})",
+"space created": "espace créé",
+"archived": "archivé",
+"restored": "restauré",
+"confidentiality: {level}": "confidentialité : {level}",
+"folder: {folder}": "dossier : {folder}",
+"by the assistant": "par l'assistant",
+"in the app": "dans l'appli"
 };

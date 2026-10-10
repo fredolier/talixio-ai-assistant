@@ -326,6 +326,10 @@ function renderSpaceHead() {
   $('#composer').dataset.level = lvl;
   document.title = general ? (state.status?.name || 'Talixio') : `${sp.name} · ${state.status?.name || 'Talixio'}`;
   applyTint();
+  $('#archived-note').hidden = !sp?.archived;
+  $('#archived-restore').onclick = async () => {
+    try { await post(`api/spaces/${sp.id}`, { ...sp, archived: false }); await loadSpaces(); renderSpaceHead(); toast('Space restored.'); } catch (err) { toast(err.message); }
+  };
   showOtherUnread(state.spaces.filter(x => x.id !== state.space).reduce((a, x) => a + (x.unread || 0), 0));
 }
 function showOtherUnread(n) { const b = $('#space-unread'); b.hidden = !n; b.textContent = n > 99 ? '99+' : n; b.title = n ? `${n} new answer(s) in other spaces` : ''; }
@@ -363,6 +367,13 @@ $('#space-btn').onclick = async e => {
 };
 document.addEventListener('click', e => { if (!e.target.closest('.space-head')) { $('#space-menu').hidden = true; $('#space-btn').setAttribute('aria-expanded', 'false'); } });
 
+/** One line of a space's history: "archived 10/10 14:02 (app)". */
+function spaceEvent(e) {
+  const what = { created: t('space created'), renamed: t('renamed (was {name})', { name: e.detail || '' }), archived: t('archived'), restored: t('restored'),
+    privacy: t('confidentiality: {level}', { level: t(LEVELS[e.detail]?.label || e.detail || '') }), folder: t('folder: {folder}', { folder: e.detail || '/' }) }[e.what] || e.what;
+  return `${what} ${new Date(e.ts * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} (${e.by === 'assistant' ? t('by the assistant') : t('in the app')})`;
+}
+
 /** Create or edit a space. prefill: {folder} when started from a library folder. */
 async function openSpaceEditor(sp, prefill = {}) {
   const d = $('#space-dialog'), editing = !!(sp && sp.id);
@@ -385,7 +396,10 @@ async function openSpaceEditor(sp, prefill = {}) {
   };
   paintLevel();
   $('#sp-archive').hidden = $('#sp-delete').hidden = !editing;
-  $('#sp-archive').textContent = editing && sp.archived ? 'Restore' : 'Archive';
+  $('#sp-archive').textContent = editing && sp.archived ? t('Restore') : t('Archive'); $('#sp-archive').dataset.confirm = '';
+  const hist = editing ? (sp.history || []) : [];
+  $('#sp-history').hidden = !hist.length;
+  $('#sp-history').textContent = hist.length ? t('History') + ' : ' + hist.slice(0, 4).map(spaceEvent).join(' · ') : '';
   $('#sp-delete').dataset.confirm = ''; $('#sp-delete').textContent = 'Delete';
   $('#sp-cancel').onclick = () => d.close();
   $('#space-form').onsubmit = async e => {
@@ -398,7 +412,9 @@ async function openSpaceEditor(sp, prefill = {}) {
       if (!editing || location.hash.startsWith('#chat')) { if (location.hash.split('/')[0] !== '#chat') location.hash = '#chat'; await switchSpace(space.id); }
     } catch (err) { toast(err.message); }
   };
-  $('#sp-archive').onclick = async () => {
+  $('#sp-archive').onclick = async e => {
+    const b = e.currentTarget;
+    if (!sp.archived && b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Archive it? It leaves the list'); return; }
     try { await post(`api/spaces/${sp.id}`, { ...sp, archived: !sp.archived }); d.close(); await loadSpaces(); if (!sp.archived) await switchSpace(0); toast(sp.archived ? 'Space restored.' : 'Space archived: its conversation is kept.'); }
     catch (err) { toast(err.message); }
   };

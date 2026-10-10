@@ -82,6 +82,7 @@
         <div id="chat-search-results" class="sresults"></div>
       </div>
       <div id="paused" class="paused-note" role="status" hidden></div>
+      <div id="archived-note" class="paused-note" role="status" hidden><b>This space is archived</b> <span>It is no longer in the spaces list; its conversation, notes and tasks are kept.</span> <button id="archived-restore" class="btn small primary" type="button">Restore</button></div>
       <div id="setup-model" class="setup-model" role="status" hidden>
         <b>No AI model is set up yet</b>
         <p class="small">The assistant needs one to answer. The simplest: sign in with your Claude account (Pro or Max plan). Or paste an API key (Claude, Gemini or OpenAI).</p>
@@ -386,6 +387,7 @@
     <textarea id="sp-instructions" rows="4" placeholder="Context, tone, language, what to watch for…"></textarea>
     <label for="sp-notes">Notes <span class="muted small">(the assistant keeps them up to date; you can edit)</span></label>
     <textarea id="sp-notes" rows="4"></textarea>
+    <p id="sp-history" class="muted small" hidden></p>
     <div class="row wrap"><button class="btn primary" type="submit">Save</button><button id="sp-cancel" class="btn" type="button">Cancel</button>
       <span class="spacer"></span><button id="sp-archive" class="btn ghost" type="button">Archive</button><button id="sp-delete" class="btn ghost danger" type="button">Delete</button></div>
   </form>

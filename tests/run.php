@@ -523,6 +523,14 @@ $nsp = $app->spaces()->save(['name' => 'Maison']);
 $c->notify = ['signal'];
 $app->notifier()->notify('Job finished', 'Report ready', (int)$nsp['id']);
 check('notifier: says which space a message comes from', str_contains((string)@file_get_contents("$dir/sent.log"), '[Maison] Report ready'));
+$app->spaces()->save(['archived' => 1] + $nsp, (int)$nsp['id']);
+$st0 = $tools->run('spaces', ['action' => 'list']);
+check('spaces tool: lists archived spaces, with when and from where', (bool)preg_match('/Maison.*\[archived \d{4}-\d\d-\d\d \d\d:\d\d from the app\]/', $st0), $st0);
+$h0 = $tools->run('spaces', ['action' => 'history', 'space' => 'maison']);
+check('spaces tool: history', str_contains($h0, 'archived — from the app') && str_contains($h0, 'created — from the app'), $h0);
+check('spaces tool: restore', str_contains($tools->run('spaces', ['action' => 'restore', 'space' => 'Maison']), 'restored') && !$app->spaces()->get((int)$nsp['id'])['archived']
+    && $app->spaces()->history((int)$nsp['id'])[0]['what'] === 'restored' && $app->spaces()->history((int)$nsp['id'])[0]['by'] === 'assistant');
+check('spaces tool: General has no history', str_starts_with($tools->run('spaces', ['action' => 'history', 'space' => 'general']), 'error'));
 
 // ---- Gemini ----
 $picked = GeminiModels::choose(['models/gemini-2.5-flash', 'models/gemini-2.5-flash-lite', 'models/gemini-2.5-pro', 'models/gemini-3.1-pro-preview',

@@ -45,13 +45,16 @@ final class Spaces
             $last = $s['id'] === 0 ? (int)$st->get('space_read_0', '0') : (int)$s['last_read'];
             $s['unread'] = (int)$st->q("SELECT COUNT(*) FROM messages WHERE space = ? AND id > ? AND role = 'assistant'", [$s['id'], $last])->fetchColumn();
             $s['last_ts'] = (int)$st->q('SELECT COALESCE(MAX(ts),0) FROM messages WHERE space = ?', [$s['id']])->fetchColumn();
+            $s['history'] = $s['id'] ? $this->history($s['id']) : [];
             $out[] = $s;
         }
         return $out;
     }
 
-    public function save(array $d, ?int $id = null): array
+    /** $by: who made the change, kept in the space's history ('app', 'assistant'). */
+    public function save(array $d, ?int $id = null, string $by = 'app'): array
     {
+        $before = $id ? $this->get($id) : null;
         $name = trim(mb_substr((string)($d['name'] ?? ''), 0, 60));
         if ($name === '') throw new \InvalidArgumentException('Give the space a name.');
         $slug = self::slug($name);
@@ -86,7 +89,29 @@ final class Spaces
             if (!$this->get($id) || $id === 0) throw new \InvalidArgumentException('no such space');
             $st->q('UPDATE spaces SET ' . implode(',', array_map(fn($k) => "$k = ?", array_keys($fields))) . ' WHERE id = ?', [...array_values($fields), $id]);
         }
-        return $this->get($id);
+        $after = $this->get($id);
+        if (!$before) $this->note($id, 'created', $by);
+        else {
+            if ($before['name'] !== $after['name']) $this->note($id, 'renamed', $by, $before['name']);
+            if ((int)$before['archived'] !== (int)$after['archived']) $this->note($id, $after['archived'] ? 'archived' : 'restored', $by);
+            if (($before['privacy'] ?? 'internal') !== ($after['privacy'] ?? 'internal')) $this->note($id, 'privacy', $by, $after['privacy']);
+            if ($before['folder'] !== $after['folder']) $this->note($id, 'folder', $by, $after['folder']);
+        }
+        return $after;
+    }
+
+    /** What happened to a space (created, renamed, archived, restored...), newest first: [{ts, what, by, detail}]. */
+    public function history(int $id): array
+    {
+        return array_reverse(json_decode($this->app->store->get("space_log_$id", ''), true) ?: []);
+    }
+
+    private function note(int $id, string $what, string $by, string $detail = ''): void
+    {
+        $log = json_decode($this->app->store->get("space_log_$id", ''), true) ?: [];
+        $log[] = ['ts' => time(), 'what' => $what, 'by' => $by] + ($detail !== '' ? ['detail' => $detail] : []);
+        $this->app->store->set("space_log_$id", json_encode(array_slice($log, -30), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        Log::info("space #$id ($by): $what" . ($detail !== '' ? " ($detail)" : ''));
     }
 
     /** Delete a space and its conversation (its documents stay in the library). */
@@ -101,7 +126,10 @@ final class Spaces
         $st->q('UPDATE tasks SET space = 0 WHERE space = ?', [$id]);
         $this->app->board(); // its tables exist
         $st->q('UPDATE cards SET space = 0 WHERE space = ?', [$id]); // its tasks keep their codes, in General
+        $name = $this->get($id)['name'];
         $st->q('DELETE FROM spaces WHERE id = ?', [$id]);
+        $st->set("space_log_$id", '');
+        Log::info("space #$id deleted ($name)");
         $st->set(Store::summarizedKey($id), '0');
     }
 

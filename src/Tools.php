@@ -143,6 +143,10 @@ final class Tools
             ['action' => ['type' => 'string', 'enum' => ['read', 'append', 'replace']], 'text' => ['type' => 'string'], 'old_text' => ['type' => 'string'], 'new_text' => ['type' => 'string']], ['action'],
             fn(array $a) => $this->spaceNotes($a));
 
+        $this->register('spaces', "The user's spaces: list them (with archived ones and their state), see what happened to one (history: created, renamed, archived, restored, with when and whether from the app or by you), or restore an archived one. Archiving is done by the user in the app.",
+            ['action' => ['type' => 'string', 'enum' => ['list', 'history', 'restore']], 'space' => ['type' => 'string', 'description' => 'name of the space (history, restore)']], ['action'],
+            fn(array $a) => $this->spacesTool($a));
+
         $this->register('contact_find', "Find people in the user's contacts (name, email, company, notes): their details, last contact and what is known about them.",
             ['query' => ['type' => 'string']], ['query'], fn(array $a) => $this->app->contacts()->format($this->app->contacts()->search((string)$a['query'], 10)));
         $this->register('contact_save', "Create or update a contact. Give note to add one fact learned about the person (dated automatically), e.g. \"prefers calls in the morning\", \"daughter Léa, 8\".",
@@ -466,6 +470,30 @@ final class Tools
     private function spaceFolder(): string
     {
         return $this->app->space ? (string)($this->app->spaces()->get($this->app->space)['folder'] ?? '') : '';
+    }
+
+    private function spacesTool(array $a): string
+    {
+        $sp = $this->app->spaces();
+        $when = fn(int $ts) => date('Y-m-d H:i', $ts);
+        if ($a['action'] === 'list') {
+            return implode("\n", array_map(fn($s) => '- ' . ($s['id'] ? $s['name'] : 'General') . ($s['id'] === $this->app->space ? ' (current)' : '')
+                . ($s['archived'] ? ' [archived' . (($h = array_values(array_filter($s['history'], fn($e) => $e['what'] === 'archived'))[0] ?? null) ? ' ' . $when($h['ts']) . ' from the ' . $h['by'] : '') . ']' : '')
+                . ' · ' . ($s['privacy'] ?? 'internal') . ($s['folder'] ? " · folder {$s['folder']}" : '') . ($s['last_ts'] ? ' · last message ' . $when($s['last_ts']) : ''), $sp->all(true)));
+        }
+        $s = $sp->find((string)($a['space'] ?? ''));
+        if (!$s || !$s['id']) return 'error: no such space (give its name; General has no history)';
+        if ($a['action'] === 'history') {
+            $h = $sp->history((int)$s['id']);
+            if (!$h) return "No recorded change for {$s['name']} (changes are recorded since Talixio 0.16.1)." . ($s['archived'] ? ' It is archived.' : '');
+            return implode("\n", array_map(fn($e) => '- ' . $when($e['ts']) . ": {$e['what']}" . (isset($e['detail']) ? " ({$e['detail']})" : '') . " — from the {$e['by']}", $h));
+        }
+        if ($a['action'] === 'restore') {
+            if (!$s['archived']) return "{$s['name']} is not archived.";
+            $sp->save(['archived' => 0] + $s, (int)$s['id'], 'assistant');
+            return "{$s['name']} is restored: it is back in the spaces list (the user may need to reload the page).";
+        }
+        return 'error: action is list, history or restore';
     }
 
     private function spaceNotes(array $a): string

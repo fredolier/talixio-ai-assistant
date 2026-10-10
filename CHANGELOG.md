@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.16.1 (2026-10-10)
+- Archiving a space asks for a second click: it was one click, next to *Delete*, and easy to hit by mistake.
+- An archived space says so above its conversation, with *Restore*.
+- Each space keeps a history (created, renamed, archived, restored, confidentiality or folder changed: when,
+  and whether from the app or by the assistant), shown in its settings and in the log.
+- The assistant can list the spaces (archived ones included), tell what happened to one, and restore one
+  (`spaces` tool). The FAQ page on spaces explains archiving.
+
 ## 0.16.0 (2026-10-10)
 - Sign in with Claude: Settings → AI model (or the card in the conversation) runs Claude Code's own sign-in
   for a Pro/Max plan from the web app: open Claude's page, paste the code back, done. No terminal needed.
