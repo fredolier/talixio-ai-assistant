@@ -15,7 +15,10 @@ directement par son adresse.
   (voir plus bas).
 
 ## Côté Home Assistant
-1. **Paramètres → Appareils et services → Ajouter une intégration** → *Model Context Protocol Server*.
+1. **Activer le serveur MCP** (indispensable, il n'est pas actif par défaut) : **Paramètres → Appareils et
+   services → Ajouter une intégration** → *Model Context Protocol Server* (pas *Model Context Protocol*
+   tout court, qui sert à l'inverse), puis choisissez l'API *Assist*. Sans cette intégration,
+   `/api/mcp` répond 404 et le journal de Home Assistant ne dit rien.
 2. **Exposer les appareils** : Paramètres → Assistants vocaux → onglet *Exposer*. Cochez ce que
    l'assistant peut voir et commander, et rien d'autre (pas la porte du garage si vous n'y tenez pas).
 3. **Un jeton** : connecté avec le compte de l'assistant, *Profil → Sécurité → Jetons d'accès longue
@@ -26,7 +29,8 @@ directement par son adresse.
 
 ## Côté Talixio
 Réglages → **Connecteurs (MCP)** → champ *Configuration*. Ajoutez une entrée `homeassistant` à côté de
-celles qui existent déjà :
+celles qui existent déjà, **à l'intérieur** de `"mcpServers"` (une entrée placée après l'accolade qui
+ferme `mcpServers` est ignorée sans message) :
 
 ```json
 {
@@ -62,7 +66,8 @@ Enregistrez : Talixio liste les outils de Home Assistant (`mcp_homeassistant_…
 | HTTP 401 | jeton mal copié, ou `Bearer ` oublié devant |
 | HTTP 403 | compte non administrateur alors que l'option « compte administrateur exigé » est cochée |
 | HTTP 400 `Bad Request`, sans autre texte | Home Assistant refuse la requête venue par un proxy (Caddy, Nginx…) qu'il ne connaît pas ; son journal dit *« A request from a reverse proxy was received from … »*. Utilisez l'adresse locale (`http://IP:8123/api/mcp`), ou déclarez ce proxy dans Home Assistant (voir plus bas) |
-| HTTP 404 | il manque `/api/mcp` à la fin de l'adresse, ou Home Assistant est trop ancien |
+| HTTP 404, rien dans le journal de Home Assistant | l'intégration *Model Context Protocol Server* n'est pas ajoutée (étape 1) ; sinon il manque `/api/mcp` à la fin de l'adresse, ou Home Assistant est trop ancien |
+| `homeassistant` n'apparaît pas dans la liste après l'enregistrement | l'entrée est hors de `"mcpServers"` : déplacez-la dedans, à côté des autres |
 | Aucun appareil, « je ne trouve pas la lumière » | l'appareil n'est pas exposé à Assist |
 
 Pour tester depuis le serveur (sous Docker) :
@@ -70,7 +75,14 @@ Pour tester depuis le serveur (sous Docker) :
 `401` veut dire « joignable » (il manque juste le jeton), une erreur ou `000` veut dire « pas joignable ».
 
 Pour garder une adresse publique (`https://ha.example.com`) servie par un proxy, Home Assistant doit
-connaître ce proxy. Dans son `configuration.yaml`, puis redémarrez Home Assistant :
+connaître ce proxy. Dans les versions récentes, cela se règle dans l'interface : **Paramètres → Système →
+Réseau**, partie proxy inverse. Activez la prise en compte des en-têtes du proxy et ajoutez son adresse
+(celle qu'indique le journal de Home Assistant, par exemple `192.168.0.31`) aux proxys de confiance.
+Gardez un accès par l'adresse locale (`http://IP:8123`) pendant le réglage : un proxy non déclaré est
+refusé.
+
+Sur une version plus ancienne, sans ce réglage dans l'interface, c'est dans `configuration.yaml`
+(une seule section `http:`), puis redémarrez Home Assistant :
 ```yaml
 http:
   use_x_forwarded_for: true
