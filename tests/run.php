@@ -1867,6 +1867,25 @@ check('boot: a reset is applied once', str_contains($o, 'password reset') && pas
 $boot(['TALIXIO_RESET' => 'n2:totp']);
 check('boot: two-step sign-in reset', !isset(\Talixio\Settings::load($bd2)['TALIXIO_TOTP_SECRET']));
 
+// ---- the server's size against what the people on it are promised ----
+$st8 = ['instances' => ['a' => ['memory_mb' => 2048, 'cpus' => 2], 'b' => ['memory_mb' => 1024, 'cpus' => 1.5]], 'settings' => ['ollama' => true, 'memory_mb' => 1024]];
+$srv = fn(int $tot, int $avail, float $load, float $free, int $swapUsed = 0) => ['memory_mb' => ['MemTotal' => $tot, 'MemAvailable' => $avail, 'SwapTotal' => 2048, 'SwapFree' => 2048 - $swapUsed],
+    'cpu' => ['cores' => 4, 'load' => [0.5, $load, 0.4]], 'disk' => ['total_gb' => 100.0, 'free_gb' => $free, 'cache_gb' => 3.1]];
+$z = \Talixio\Fleet::sizing($srv(8192, 5000, 0.8, 60), $st8);
+$lv = fn(array $z, string $w) => array_values(array_filter($z['checks'], fn($c) => $c['what'] === $w))[0]['level'] ?? null;
+check('sizing: 8 GB for 3 GB of people + 2.2 GB of shared services + system: well sized, room counted', $z['level'] === 'ok' && $lv($z, 'memory') === 'ok'
+    && $z['promised_mb'] === 2048 + 1024 + 2176 + 1024 && $z['room_for'] === 1 && $lv($z, 'build_cache') === 'info', json_encode($z));
+$z = \Talixio\Fleet::sizing($srv(4096, 300, 3.5, 12, 1500), $st8);
+check('sizing: 4 GB, busy processors, little disk, swapping: tight or undersized, each said', $z['level'] === 'bad' && $lv($z, 'memory') === 'bad' && $lv($z, 'memory_now') === 'bad'
+    && $lv($z, 'swap') === 'warn' && $lv($z, 'cpu') === 'warn' && $lv($z, 'disk') === 'warn' && $z['room_for'] === 0, json_encode($z));
+check('sizing: a full disk and saturated processors are flagged', $lv(\Talixio\Fleet::sizing($srv(16384, 9000, 5, 4), $st8), 'disk') === 'bad' && $lv(\Talixio\Fleet::sizing($srv(16384, 9000, 5, 4), $st8), 'cpu') === 'bad');
+
+$ho = \Talixio\Fleet::healthOf(['RestartCount' => 3, 'State' => ['OOMKilled' => true, 'Health' => ['FailingStreak' => 2, 'Log' => [
+    ['Start' => '2026-10-10T08:00:00.100000000Z', 'End' => '2026-10-10T08:00:00.140000000Z', 'ExitCode' => 0, 'Output' => ''],
+    ['Start' => '2026-10-10T08:00:30.000000000Z', 'End' => '2026-10-10T08:00:35.020000000Z', 'ExitCode' => 28, 'Output' => "curl: (28) Operation timed out\n"]]]]]);
+check('health: restarts, out-of-memory stop, failed checks, average check time and the last error', $ho['restarts'] === 3 && $ho['oom'] && $ho['failing'] === 2
+    && $ho['check_ms'] === 2530 && $ho['check_error'] === 'curl: (28) Operation timed out', json_encode($ho));
+
 // ---- the FAQ: the notes about Talixio in the library, read-only, one page per version ----
 use Talixio\Faq;
 use Talixio\Library;

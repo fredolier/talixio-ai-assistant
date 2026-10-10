@@ -73,13 +73,58 @@ async function start() {
 async function load() {
   state = await api('api/state');
   const s = state.server, m = s.memory_mb || {};
-  $('#server').innerHTML = `Memory ${m.MemTotal ? `${((m.MemTotal - m.MemAvailable) / 1024).toFixed(1)} / ${(m.MemTotal / 1024).toFixed(1)} GB used` : '?'}`
-    + (s.disk ? ` · Disk ${s.disk.free_gb} GB free of ${s.disk.total_gb}` : '');
+  $('#server').textContent = m.MemTotal ? t('Memory {u} / {t} GB · {n} cores · disk {f} GB free', { u: ((m.MemTotal - m.MemAvailable) / 1024).toFixed(1), t: (m.MemTotal / 1024).toFixed(1), n: s.cpu?.cores || '?', f: s.disk?.free_gb ?? '?' }) : '';
+  renderHost(s);
   renderPeople(); renderSettings(); renderJob(state.job);
   const img = s.image || {};
   $('#version').textContent = (img.built ? t('Running {sha} (branch {branch}, built {when}).', { sha: img.built, branch: img.branch || '?', when: when(img.built_at) }) : t('Running the image built at installation.')) + ' ' + t('Version {v}.', { v: state.version?.number || '?' });
   $('#rollback-btn').disabled = !img.previous;
   $('#ips-list').value = (state.allow_ips || []).join('\n'); $('#my-ip').textContent = state.my_ip || '';
+}
+
+/** The machine: memory, processors, disk, and whether it is big enough for the people on it. */
+function renderHost(s) {
+  const box = $('#host'), m = s.memory_mb || {}, c = s.cpu || {}, d = s.disk, z = s.sizing || {}, h = s.host || {};
+  if (!m.MemTotal) { box.hidden = true; return; }
+  box.hidden = false;
+  const gb = mb => (mb / 1024).toFixed(1);
+  const lvl = p => p >= 90 ? 'bad' : p >= 75 ? 'warn' : 'ok';
+  const meter = (title, pct, main, sub) => `<div class="meter ${lvl(pct)}"><div class="row"><b>${esc(t(title))}</b><span class="spacer"></span><span>${esc(main)}</span></div>
+    <div class="bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="${esc(t(title))}"><i style="width:${Math.min(100, pct)}%"></i></div><div class="muted small">${sub}</div></div>`;
+  const used = m.MemTotal - m.MemAvailable, memPct = Math.round(100 * used / m.MemTotal);
+  const swap = m.SwapTotal ? ' · ' + esc(t('swap {u} of {t} GB', { u: gb(m.SwapTotal - m.SwapFree), t: gb(m.SwapTotal) })) : '';
+  const load5 = c.load?.[1] ?? 0, cpuPct = c.cores ? Math.round(100 * load5 / c.cores) : 0;
+  const diskPct = d ? Math.round(100 * (d.total_gb - d.free_gb) / d.total_gb) : 0;
+  const icon = { ok: '✓', warn: '!', bad: '✕', info: 'i' };
+  box.innerHTML = `<div class="row"><h2>${esc(t('Server'))}</h2><span class="pill ${{ ok: 'on', warn: 'warn', bad: 'off' }[z.level] || ''}">${esc(t({ ok: 'Well sized', warn: 'Tight', bad: 'Undersized' }[z.level] || '?'))}</span><span class="spacer"></span>
+      <span class="muted small">${esc([h.os, h.docker && 'Docker ' + h.docker, h.uptime_s && t('up {d} days', { d: Math.floor(h.uptime_s / 86400) })].filter(Boolean).join(' · '))}</span></div>
+    <div class="meters">
+      ${meter('Memory', memPct, t('{u} of {t} GB used', { u: gb(used), t: gb(m.MemTotal) }), esc(t('{a} GB free now', { a: gb(m.MemAvailable) })) + swap + '<br>' + esc(t('Limits promised: {p} GB (people, shared services and system)', { p: gb(z.promised_mb || 0) })))}
+      ${meter('Processors', cpuPct, t('{n} cores', { n: c.cores || '?' }), esc(t('Load {a} · {b} · {c} (1, 5, 15 min)', { a: (c.load?.[0] ?? 0).toFixed(2), b: load5.toFixed(2), c: (c.load?.[2] ?? 0).toFixed(2) })) + (c.busy_pct != null ? ' · ' + esc(t('{p}% busy now', { p: c.busy_pct })) : '') + (c.model ? '<br>' + esc(c.model) : '') + '<br>' + esc(t('Limits promised: {n} CPUs', { n: +(z.cpus_promised || 0).toFixed(2) })))}
+      ${d ? meter('Disk', diskPct, t('{f} GB free of {t}', { f: d.free_gb, t: d.total_gb }), esc(t('Images {i} GB · data {v} GB · build cache {c} GB', { i: d.images_gb ?? '?', v: d.volumes_gb ?? '?', c: d.cache_gb ?? '?' }))) : ''}
+    </div>
+    <h3>${esc(t('Services'))}</h3>
+    <div class="services">${(s.services || []).map(serviceRow).join('')}</div>
+    <h3>${esc(t('Sizing'))}</h3>
+    <ul class="checks">${(z.checks || []).map(k => `<li class="${k.level}"><span aria-hidden="true">${icon[k.level] || ''}</span> ${esc(t(k.text, k.vars || {}))}</li>`).join('')}
+      ${z.room_for != null ? `<li class="info"><span aria-hidden="true">i</span> ${esc(t(z.room_for === 1 ? 'Room for about 1 more person at {mb} MB.' : 'Room for about {n} more people at {mb} MB each.', { n: z.room_for, mb: z.per_person_mb }))}</li>` : ''}</ul>`;
+}
+
+/** One container's health in a few words: [level, text]. */
+function healthWords(x) {
+  if (x.state !== 'running') return ['off', t(x.state === 'missing' ? 'missing' : 'stopped')];
+  if (x.health === 'unhealthy' || x.answers === false) return ['off', t('not answering')];
+  if (x.health === 'starting') return ['warn', t('starting')];
+  if (x.oom) return ['warn', t('stopped once for lack of memory')];
+  if (x.failing) return ['warn', t('{n} failed checks', { n: x.failing })];
+  return ['on', t('answering')];
+}
+function serviceRow(x) {
+  const [lv, words] = healthWords(x);
+  const ms = x.ms ?? x.check_ms;
+  const bits = [ms != null && x.state === 'running' && x.name !== 'agent' ? t('{ms} ms', { ms }) : '', x.restarts ? t('{n} restarts', { n: x.restarts }) : '',
+    x.mem_used_mb != null ? `${x.mem_used_mb} / ${x.mem_limit_mb || '?'} MB` : ''].filter(Boolean).join(' · ');
+  return `<div class="svc"><b>${esc(x.name)}</b><span class="muted small">${esc(t(x.role))}</span><span class="pill ${lv}" title="${esc(x.check_error || x.error || '')}">${esc(words)}</span><span class="small">${esc(bits)}</span></div>`;
 }
 
 function renderPeople() {
@@ -88,10 +133,11 @@ function renderPeople() {
   box.innerHTML = '';
   for (const p of list) {
     const el = document.createElement('div'); el.className = 'person';
-    const ok = p.state === 'running' && p.health !== 'unhealthy';
     el.innerHTML = `<div class="who"><b>${esc(p.name || p.id)}</b> <span class="muted">${esc(p.id)}${p.email ? ' · ' + esc(p.email) : ''}</span><br>
         <a href="${esc(p.url)}" target="_blank" rel="noopener" class="small">${esc(p.url)}</a></div>
-      <div class="st"><span class="pill ${ok ? 'on' : p.state === 'exited' ? 'off' : 'warn'}">${esc(p.state === 'running' ? (p.health || 'running') : p.state)}</span></div>
+      <div class="st"><span class="pill ${healthWords(p)[0]}" title="${esc(p.check_error || '')}">${esc(healthWords(p)[1])}</span>
+        <div class="muted small">${esc([p.state === 'running' && p.check_ms != null ? t('checked in {ms} ms', { ms: p.check_ms }) : '', p.restarts ? t('{n} restarts', { n: p.restarts }) : '',
+          p.oom && healthWords(p)[0] === 'off' ? t('stopped once for lack of memory') : ''].filter(Boolean).join(' · '))}</div></div>
       <div class="small"><div>${p.mem_used_mb != null ? p.mem_used_mb + ' MB' : '—'} <span class="muted">/ ${p.memory_mb} MB · ${p.cpus} CPU</span></div><div class="muted">${p.last_activity ? 'active ' + ago(p.last_activity) : (p.state === 'running' ? 'not used for hours' : '')}</div></div>
       <div class="acts"><select aria-label="Action"><option value="">Actions…</option>
         ${p.state === 'running' ? '<option value="restart">Restart</option><option value="stop">Stop</option>' : '<option value="start">Start</option>'}

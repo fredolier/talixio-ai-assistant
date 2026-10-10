@@ -360,6 +360,7 @@ final class Fleet
                 $row['health'] = $c['State']['Health']['Status'] ?? '';
                 $row['image'] = $c['Config']['Image'] ?? '';
                 $row['started'] = $c['State']['StartedAt'] ?? null;
+                $row += self::healthOf($c);
                 if ($row['state'] === 'running') {
                     [, $st] = $this->docker('GET', '/containers/' . $this->containerName($id) . '/stats', null, ['stream' => 'false', 'one-shot' => 'true'], 10);
                     if (is_array($st) && isset($st['memory_stats']['usage'])) $row['mem_used_mb'] = (int)round(($st['memory_stats']['usage'] - ($st['memory_stats']['stats']['inactive_file'] ?? 0)) / 1048576);
@@ -387,12 +388,121 @@ final class Fleet
     public function server(): array
     {
         $mem = [];
-        foreach (@file('/proc/meminfo') ?: [] as $l) if (preg_match('/^(MemTotal|MemAvailable):\s+(\d+)/', $l, $m)) $mem[$m[1]] = (int)round($m[2] / 1024);
-        [, $df] = $this->docker('GET', '/system/df', null, ['type' => 'volume'], 60);
-        $vol = [];
-        foreach ((is_array($df) ? ($df['Volumes'] ?? []) : []) as $v) if (str_starts_with($v['Name'], self::PREFIX)) $vol[substr($v['Name'], strlen(self::PREFIX))] = (int)round(($v['UsageData']['Size'] ?? 0) / 1048576);
-        $disk = @disk_total_space('/') ? ['total_gb' => round(disk_total_space('/') / 1e9, 1), 'free_gb' => round(disk_free_space('/') / 1e9, 1)] : null;
-        return ['memory_mb' => $mem, 'volumes_mb' => $vol, 'disk' => $disk, 'image' => $this->state()['image']];
+        foreach (@file('/proc/meminfo') ?: [] as $l) if (preg_match('/^(MemTotal|MemAvailable|SwapTotal|SwapFree):\s+(\d+)/', $l, $m)) $mem[$m[1]] = (int)round($m[2] / 1024);
+        [, $df] = $this->docker('GET', '/system/df', null, [], 60);
+        $vol = []; $volTotal = 0;
+        foreach ((is_array($df) ? ($df['Volumes'] ?? []) : []) as $v) {
+            $mb = (int)round(max(0, $v['UsageData']['Size'] ?? 0) / 1048576);
+            $volTotal += $mb;
+            if (str_starts_with($v['Name'], self::PREFIX)) $vol[substr($v['Name'], strlen(self::PREFIX))] = $mb;
+        }
+        $cache = 0; foreach ((is_array($df) ? ($df['BuildCache'] ?? []) : []) as $b) $cache += (int)($b['Size'] ?? 0);
+        $disk = @disk_total_space('/') ? ['total_gb' => round(disk_total_space('/') / 1e9, 1), 'free_gb' => round(disk_free_space('/') / 1e9, 1),
+            'images_gb' => round((int)(is_array($df) ? ($df['LayersSize'] ?? 0) : 0) / 1e9, 1), 'volumes_gb' => round($volTotal / 1000, 1), 'cache_gb' => round($cache / 1e9, 1)] : null;
+        [, $info] = $this->docker('GET', '/info');
+        $model = ''; foreach (@file('/proc/cpuinfo') ?: [] as $l) if (preg_match('/^model name\s*:\s*(.+)$/', $l, $m)) { $model = trim($m[1]); break; }
+        $load = array_map('floatval', array_slice(explode(' ', (string)@file_get_contents('/proc/loadavg')), 0, 3));
+        $cpu = ['cores' => (int)(is_array($info) ? ($info['NCPU'] ?? 0) : 0) ?: (int)trim((string)shell_exec('nproc')), 'model' => $model, 'load' => $load, 'busy_pct' => self::cpuBusy()];
+        $host = ['os' => is_array($info) ? (string)($info['OperatingSystem'] ?? '') : '', 'kernel' => is_array($info) ? (string)($info['KernelVersion'] ?? '') : '',
+            'docker' => is_array($info) ? (string)($info['ServerVersion'] ?? '') : '', 'uptime_s' => (int)(float)@file_get_contents('/proc/uptime')];
+        $out = ['memory_mb' => $mem, 'volumes_mb' => $vol, 'disk' => $disk, 'cpu' => $cpu, 'host' => $host, 'image' => $this->state()['image'], 'services' => $this->services()];
+        $out['sizing'] = self::sizing($out, $this->state());
+        return $out;
+    }
+
+    /** Restarts, out-of-memory stops and the last health checks of a container (from its inspect data). */
+    public static function healthOf(array $c): array
+    {
+        $log = $c['State']['Health']['Log'] ?? [];
+        $last = $log ? end($log) : null;
+        $at = fn(string $ts) => preg_match('/^(.+?)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)$/', $ts, $m) ? strtotime($m[1] . $m[3]) + (float)('0.' . ($m[2] ?: '0')) : null; // Docker: nanoseconds
+        $ms = fn(?array $l) => $l && !empty($l['Start']) && !empty($l['End']) && ($a = $at($l['Start'])) !== null && ($b = $at($l['End'])) !== null ? (int)round(($b - $a) * 1000) : null;
+        $times = array_values(array_filter(array_map($ms, $log), fn($v) => $v !== null));
+        return ['restarts' => (int)($c['RestartCount'] ?? 0), 'oom' => !empty($c['State']['OOMKilled']), 'failing' => (int)($c['State']['Health']['FailingStreak'] ?? 0),
+            'check_ms' => $times ? (int)round(array_sum($times) / count($times)) : null,
+            'check_error' => $last && (int)($last['ExitCode'] ?? 0) !== 0 ? mb_substr(trim((string)($last['Output'] ?? '')), 0, 200) : ''];
+    }
+
+    /** The shared containers: running, healthy, answering (and in how long), restarts, memory. */
+    public function services(): array
+    {
+        $probe = function (string $url): array {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_NOBODY => false]);
+            $t = microtime(true); curl_exec($ch); $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE); $err = curl_error($ch); curl_close($ch);
+            return ['answers' => $code > 0 && $code < 500, 'http' => $code, 'ms' => (int)round((microtime(true) - $t) * 1000), 'error' => $code ? '' : $err];
+        };
+        $list = [
+            'caddy' => ['role' => 'HTTPS and addresses', 'probe' => 'http://' . self::CADDY . ':80/'],
+            'ollama' => ['role' => 'Search by meaning (shared)', 'probe' => 'http://' . self::CADDY . ':11434/api/version'],
+            'agent' => ['role' => 'Runs the admin page\'s actions', 'probe' => null],
+            'admin' => ['role' => 'This admin page', 'probe' => 'http://talixio-admin:8080/icon.svg'],
+        ];
+        $out = [];
+        foreach ($list as $name => $d) {
+            [$code, $c] = $this->docker('GET', "/containers/talixio-$name/json", null, [], 10);
+            $row = ['name' => $name, 'role' => $d['role'], 'state' => $code === 200 ? ($c['State']['Status'] ?? '?') : 'missing', 'health' => $code === 200 ? ($c['State']['Health']['Status'] ?? '') : '',
+                'mem_used_mb' => null, 'mem_limit_mb' => $code === 200 ? (int)round(($c['HostConfig']['Memory'] ?? 0) / 1048576) : 0];
+            if ($code === 200) {
+                $row += self::healthOf($c);
+                if ($row['state'] === 'running') {
+                    [, $st] = $this->docker('GET', "/containers/talixio-$name/stats", null, ['stream' => 'false', 'one-shot' => 'true'], 10);
+                    if (is_array($st) && isset($st['memory_stats']['usage'])) $row['mem_used_mb'] = (int)round(($st['memory_stats']['usage'] - ($st['memory_stats']['stats']['inactive_file'] ?? 0)) / 1048576);
+                }
+            }
+            if ($name === 'agent') $row += ['answers' => true, 'ms' => 0, 'http' => 200]; // it is answering this very request
+            elseif ($d['probe'] && $row['state'] === 'running') $row += $probe($d['probe']);
+            $out[] = $row;
+        }
+        return $out;
+    }
+
+    /** Share of the processors in use over a short moment (whole machine), 0-100. */
+    private static function cpuBusy(): ?int
+    {
+        $read = function () { $f = explode(' ', preg_replace('/\s+/', ' ', trim(strtok((string)@file_get_contents('/proc/stat'), "\n")))); array_shift($f); $f = array_map('intval', $f); return [array_sum($f), ($f[3] ?? 0) + ($f[4] ?? 0)]; };
+        [$t1, $i1] = $read(); usleep(300_000); [$t2, $i2] = $read();
+        return $t2 > $t1 ? (int)round(100 * (1 - ($i2 - $i1) / ($t2 - $t1))) : null;
+    }
+
+    /** Is the server big enough? What the limits promise against what the machine has, and what it shows now. */
+    public static function sizing(array $srv, array $state): array
+    {
+        $people = $state['instances'] ?? []; $set = $state['settings'] ?? [];
+        $stack = 256 + 128 + 256 + (!empty($set['ollama']) ? 1536 : 0); // agent, admin, Caddy, Ollama (their limits in compose.yml)
+        $os = 1024;                                                        // the system and Docker itself
+        $promised = array_sum(array_map(fn($i) => (int)$i['memory_mb'], $people)) + $stack;
+        $total = (int)($srv['memory_mb']['MemTotal'] ?? 0); $avail = (int)($srv['memory_mb']['MemAvailable'] ?? 0);
+        $cores = (int)($srv['cpu']['cores'] ?? 0); $load = (float)($srv['cpu']['load'][1] ?? 0);
+        $cpus = array_sum(array_map(fn($i) => (float)$i['cpus'], $people));
+        $checks = [];
+        if ($total > 0) {
+            $r = ($promised + $os) / $total;
+            $checks[] = ['what' => 'memory', 'level' => $r <= 1 ? 'ok' : ($r <= 1.5 ? 'warn' : 'bad'), 'promised_mb' => $promised + $os, 'total_mb' => $total,
+                'text' => $r <= 1 ? 'Every assistant can use its full memory limit at the same time.'
+                    : ($r <= 1.5 ? 'The limits add up to more than the memory: fine while not everyone is busy at once (transcriptions, big documents).'
+                    : 'The limits add up to far more than the memory: assistants may be stopped for lack of memory. Add memory or lower the limits.')];
+            if ($avail > 0 && $avail < $total * 0.1) $checks[] = ['what' => 'memory_now', 'level' => 'bad', 'text' => 'Less than 10% of the memory is free right now.'];
+        }
+        $swapT = (int)($srv['memory_mb']['SwapTotal'] ?? 0); $swapF = (int)($srv['memory_mb']['SwapFree'] ?? 0);
+        if ($swapT > 0 && $swapT - $swapF > $swapT * 0.25) $checks[] = ['what' => 'swap', 'level' => 'warn', 'text' => 'The machine uses its swap: it lacks memory at times, and everything slows down.'];
+        if ($cores > 0) {
+            $checks[] = ['what' => 'cpu', 'level' => $load > $cores ? 'bad' : ($load > $cores * 0.7 ? 'warn' : 'ok'),
+                'text' => $load > $cores ? 'The processors were saturated over the last 5 minutes.' : ($load > $cores * 0.7 ? 'The processors are busy (over 70% over 5 minutes).' : 'The processors have room.')];
+            if ($cpus > $cores * 2) $checks[] = ['what' => 'cpu_limits', 'level' => 'warn', 'text' => 'The CPU limits add up to more than twice the processors: transcriptions will be slow when several run at once.'];
+        }
+        if (!empty($srv['disk'])) {
+            $free = (float)$srv['disk']['free_gb']; $tot = max(0.1, (float)$srv['disk']['total_gb']);
+            $checks[] = ['what' => 'disk', 'level' => $free < 5 || $free < $tot * 0.1 ? 'bad' : ($free < 15 || $free < $tot * 0.2 ? 'warn' : 'ok'),
+                'text' => $free < 5 || $free < $tot * 0.1 ? 'The disk is nearly full: updates (a new image is about 2.5 GB) and backups will fail.'
+                    : ($free < 15 || $free < $tot * 0.2 ? 'Little free disk left: an update needs about 5 GB, and a transfer copies an assistant\'s data twice.' : 'Enough free disk.')];
+            if (($srv['disk']['cache_gb'] ?? 0) >= 2) $checks[] = ['what' => 'build_cache', 'level' => 'info', 'text' => 'Build cache: {gb} GB (docker builder prune frees it).', 'vars' => ['gb' => $srv['disk']['cache_gb']]];
+        }
+        $each = (int)($set['memory_mb'] ?? 1024);
+        $room = $total > 0 ? max(0, intdiv($total - $os - $promised, max(256, $each))) : null;
+        $levels = array_column($checks, 'level');
+        return ['level' => in_array('bad', $levels, true) ? 'bad' : (in_array('warn', $levels, true) ? 'warn' : 'ok'), 'checks' => $checks,
+            'promised_mb' => $promised + $os, 'cpus_promised' => $cpus, 'room_for' => $room, 'per_person_mb' => $each];
     }
 
     // ---------- Caddy ----------

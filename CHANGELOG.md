@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.15.1 (2026-10-10)
+- Admin page: a Server panel with memory, processors (load, model) and disk (images, data, build cache), whether
+  the server is well sized for the people on it (limits promised against the machine, load, swap, free disk) and
+  how many more people fit; the shared services (Caddy, Ollama, agent, admin page): answering or not, in how long,
+  restarts, memory. Each person shows whether their assistant answers, its last check time, restarts and
+  out-of-memory stops.
+
 ## 0.15.0 (2026-10-10)
 - FAQ in the library (/FAQ, read-only, in French): using the assistant, privacy, installing and updating,
   administration, and one page per version (release notes). Kept up to date with each version and indexed:

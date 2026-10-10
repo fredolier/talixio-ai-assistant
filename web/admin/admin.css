@@ -41,3 +41,24 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0} pre.out{background
 .dialog::backdrop{background:rgba(0,0,0,.4)}
 .secret code{font-size:1.1rem;user-select:all}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.9rem;z-index:10}
+
+/* the server: memory, processors, disk, sizing */
+.host{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:0 0 16px}
+.host h2{margin:0}
+.meters{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0}
+.meter{display:flex;flex-direction:column;gap:6px;min-width:0}
+.meter .bar{height:8px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.meter .bar i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+.meter.warn .bar i{background:var(--warn)} .meter.bad .bar i{background:var(--danger)}
+.meter .small{overflow-wrap:anywhere}
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:.88rem}
+.checks li{display:flex;gap:8px} .checks li span{font-weight:700;width:1em;text-align:center;flex:none}
+.checks .ok span{color:var(--accent)} .checks .warn span{color:var(--warn)} .checks .bad span{color:var(--danger)} .checks .info span{color:var(--muted)}
+.host h3{font-size:.95rem;margin:14px 0 6px}
+.services{display:flex;flex-direction:column;gap:6px}
+.svc{display:grid;grid-template-columns:80px 1fr auto minmax(120px,auto);gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.svc:last-child{border-bottom:0}
+.svc .small:last-child{text-align:right}
+@media (max-width:600px){.svc{grid-template-columns:1fr auto}.svc .muted{grid-column:1/-1;order:3}.svc .small:last-child{grid-column:1/-1;text-align:left;order:4}}
+.person .st{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+@media (max-width:600px){.person{grid-template-columns:1fr}.person .st{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px}}

@@ -19,6 +19,18 @@ Ollama, l'agent et la page d'administration, puis affiche un **code de mise en r
 - **Mises à jour**, **Réglages** (domaine, adresses en /personne ou en sous-domaines, limites par
   défaut, Ollama, client Google), **Sécurité** (adresses autorisées, mot de passe), **Activité** (journal).
 
+## Le serveur est-il bien dimensionné ?
+En haut de l'onglet Personnes, le panneau **Serveur** montre :
+- la mémoire, les processeurs (charge sur 1, 5 et 15 minutes) et le disque (images, données, cache de construction) ;
+- les **services communs** (Caddy, Ollama, agent, administration) : s'ils répondent, en combien de temps,
+  leurs redémarrages et leur mémoire ;
+- un **diagnostic** (Bien dimensionné, Juste, Sous-dimensionné). Il compare les limites promises
+  (personnes, services communs et système) à la mémoire réelle, et vérifie la charge des processeurs,
+  le swap et le disque libre. Il indique aussi combien de personnes on peut encore ajouter.
+
+Pour chaque personne : si son assistant répond, le temps de son dernier contrôle, ses redémarrages et
+s'il a été arrêté par manque de mémoire. Dans ce cas, augmentez sa limite (Actions → Mémoire et processeurs).
+
 ## Adresses
 `https://<domaine>/<personne>/` par défaut, ou `https://<personne>.<domaine>/` (il faut alors un DNS en joker).
 
