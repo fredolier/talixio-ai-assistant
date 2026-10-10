@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.19.0 (2026-10-10)
+- A trash for the library: deleting a file or a folder moves it to the trash (bottom of the folder tree;
+  a *Trash* button on phones) for 30 days. It leaves searches, the assistant and shared links meanwhile.
+  *Restore* puts it back where it was (a folder comes back whole); *Empty the trash* deletes for good.
+  The assistant can list and restore it too (`kb_trash`).
+
 ## 0.18.0 (2026-10-10)
 - Install your own connector without an administrator: put the MCP server's folder as a .zip in the library
   (e.g. /Connecteurs), then *Install as a connector* on the file (or Settings → Connectors → *Install from

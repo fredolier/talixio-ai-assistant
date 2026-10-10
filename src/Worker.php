@@ -30,7 +30,7 @@ final class Worker
             $this->app->store->set('briefing_tasks', '1');
         }
         if ($this->app->store->get('pages_indexed') === '') { // once: PDFs indexed by page, so answers can cite pages
-            foreach ($this->app->store->q("SELECT id FROM files WHERE status = 'ready' AND (kind = 'pdf' OR (kind = 'office' AND name LIKE '%.pptx'))")->fetchAll() as $r) {
+            foreach ($this->app->store->q("SELECT id FROM files WHERE status = 'ready' AND deleted_at IS NULL AND (kind = 'pdf' OR (kind = 'office' AND name LIKE '%.pptx'))")->fetchAll() as $r) {
                 try { $this->app->files()->index((int)$r['id']); } catch (\Throwable $e) { Log::warn("reindex {$r['id']}: {$e->getMessage()}"); }
             }
             $this->app->store->set('pages_indexed', '1');
@@ -105,6 +105,7 @@ final class Worker
         if ($now % 600 < 15) $this->guard('update', fn() => $app->updater()->notifyIfNew());
         if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));
         if ($now % 3600 < 15) $this->guard('tasks trash', fn() => $app->board()->purge());
+        if ($now % 3600 < 15) $this->guard('library trash', fn() => $app->library()->purgeTrash());
         if ($now % 86400 < 15) $this->guard('old shares', fn() => $app->shares()->purge());
         if ($now % 86400 < 15) $this->guard('privacy journal', fn() => $app->privacy()->purge());
         if ($paused) return;

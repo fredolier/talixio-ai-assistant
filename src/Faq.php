@@ -69,7 +69,7 @@ final class Faq
                 try { $files->text((int)$id); } catch (\Throwable $e) { Log::warn("faq $key: {$e->getMessage()}"); } // Markdown: read and indexed right away
                 $keep[$key] = [(int)$id, $sha]; $n++;
             }
-            foreach (array_diff_key($known, $keep) as [$id]) { if ($files->get((int)$id)) { $lib->deleteFile((int)$id); $n++; } }
+            foreach (array_diff_key($known, $keep) as [$id]) { if ($files->get((int)$id)) { $lib->purgeFile((int)$id); $n++; } }
             [$w, $a] = Library::within(Library::FAQ, 'path'); // folders left empty by an older version
             foreach ($st->q("SELECT path FROM folders WHERE $w", $a)->fetchAll() as $r) {
                 [$fw, $fa] = Library::within($r['path']);

@@ -44,7 +44,7 @@ final class Filing
         return $this->app->store->q("SELECT f.folder, e.vec FROM files f
             JOIN docs d ON d.id = (SELECT MIN(id) FROM docs WHERE kind IN ('file','transcript') AND ref = f.id)
             JOIN embeddings e ON e.doc_id = d.id AND e.model = ?
-            WHERE f.id != ? AND f.folder NOT IN ($in) AND f.folder != '/FAQ' AND f.folder NOT LIKE '/FAQ/%' ORDER BY f.id DESC LIMIT 5000", [$this->app->embeddings->model(), $except, ...self::SKIP])->fetchAll(\PDO::FETCH_NUM);
+            WHERE f.id != ? AND f.deleted_at IS NULL AND f.folder NOT IN ($in) AND f.folder != '/FAQ' AND f.folder NOT LIKE '/FAQ/%' ORDER BY f.id DESC LIMIT 5000", [$this->app->embeddings->model(), $except, ...self::SKIP])->fetchAll(\PDO::FETCH_NUM);
     }
 
     /**
@@ -134,6 +134,6 @@ final class Filing
     /** Inbox files ready and not yet looked at (background indexer). */
     public function pending(): array
     {
-        return array_map('intval', array_column($this->app->store->q("SELECT id FROM files WHERE folder = ? AND status = 'ready' AND suggestion IS NULL ORDER BY id LIMIT 10", [Library::INBOX])->fetchAll(), 'id'));
+        return array_map('intval', array_column($this->app->store->q("SELECT id FROM files WHERE folder = ? AND status = 'ready' AND suggestion IS NULL AND deleted_at IS NULL ORDER BY id LIMIT 10", [Library::INBOX])->fetchAll(), 'id'));
     }
 }

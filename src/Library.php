@@ -14,6 +14,7 @@ final class Library
     public const SCREENSHOTS = '/Screenshots';
     public const NOTES = '/Notes';
     public const FAQ = '/FAQ'; // the notes about Talixio itself, kept up to date by Faq::sync(): read-only
+    public const TRASH_DAYS = 30; // deleted files can be restored this long
 
     /** Set while Faq::sync() writes the FAQ. */
     public static bool $system = false;
@@ -75,7 +76,7 @@ final class Library
         if ($path === '/') return true;
         [$w, $a] = self::within($path);
         return (bool)$this->app->store->q('SELECT 1 FROM folders WHERE path = ?', [$path])->fetchColumn()
-            || (bool)$this->app->store->q("SELECT 1 FROM files WHERE $w LIMIT 1", $a)->fetchColumn();
+            || (bool)$this->app->store->q("SELECT 1 FROM files WHERE $w AND deleted_at IS NULL LIMIT 1", $a)->fetchColumn();
     }
 
     /** All folders with their file counts (direct, and including subfolders). */
@@ -84,7 +85,7 @@ final class Library
         $st = $this->app->store;
         $paths = array_column($st->q('SELECT path FROM folders')->fetchAll(), 'path');
         $direct = [];
-        foreach ($st->q('SELECT folder, COUNT(*) n FROM files GROUP BY folder')->fetchAll() as $r) {
+        foreach ($st->q('SELECT folder, COUNT(*) n FROM files WHERE deleted_at IS NULL GROUP BY folder')->fetchAll() as $r) {
             $direct[$r['folder']] = (int)$r['n'];
             $paths[] = $r['folder'];
         }
@@ -106,7 +107,7 @@ final class Library
         $folder = self::normalize($folder);
         $subs = [];
         foreach ($this->tree() as $t) if ($t['path'] !== '/' && self::parent($t['path']) === $folder) $subs[] = $t;
-        $files = $this->app->store->q('SELECT id, name, mime, kind, size, duration, created, folder, status, note, suggestion, LENGTH(text) chars FROM files WHERE folder = ? ORDER BY name COLLATE NOCASE', [$folder])->fetchAll();
+        $files = $this->app->store->q('SELECT id, name, mime, kind, size, duration, created, folder, status, note, suggestion, LENGTH(text) chars FROM files WHERE folder = ? AND deleted_at IS NULL ORDER BY name COLLATE NOCASE', [$folder])->fetchAll();
         $sugg = fn(?string $j) => ($d = json_decode((string)$j, true)) && !empty($d['folder']) ? $d : null; // only real suggestions, not done/dismissed
         return ['folder' => $folder, 'readonly' => self::readonly($folder), 'folders' => $subs, 'files' => array_map(fn($f) => ['id' => (int)$f['id'], 'size' => (int)$f['size'], 'note' => (bool)$f['note'], 'chars' => (int)$f['chars'],
             'created' => (int)$f['created'], 'suggestion' => $sugg($f['suggestion'])] + $f, $files)];
@@ -150,16 +151,17 @@ final class Library
         return $to;
     }
 
-    /** Delete a folder; refuses when it still has files unless $recursive. Returns the number of files deleted. */
+    /** Delete a folder; refuses when it still has files unless $recursive. Its files go to the trash. Returns their number. */
     public function deleteFolder(string $path, bool $recursive = false): int
     {
         $path = self::normalize($path);
         if ($path === '/') throw new \InvalidArgumentException('the root folder cannot be deleted');
         self::guard($path);
         [$w, $a] = self::within($path);
-        $ids = array_column($this->app->store->q("SELECT id FROM files WHERE $w", $a)->fetchAll(), 'id');
+        $ids = array_column($this->app->store->q("SELECT id FROM files WHERE $w AND deleted_at IS NULL", $a)->fetchAll(), 'id');
         if ($ids && !$recursive) throw new \InvalidArgumentException("$path is not empty (" . count($ids) . ' files)');
-        foreach ($ids as $id) $this->deleteFile((int)$id);
+        $now = time();
+        foreach ($ids as $id) $this->trashFile((int)$id, $path, $now);
         [$w, $a] = self::within($path, 'path');
         $this->app->store->q("DELETE FROM folders WHERE $w", $a);
         return count($ids);
@@ -187,14 +189,78 @@ final class Library
         return $this->app->files()->get($id);
     }
 
-    public function deleteFile(int $id): void
+    /** Delete a file: to the trash, restorable for TRASH_DAYS days. */
+    public function deleteFile(int $id): void { $this->trashFile($id); }
+
+    private function trashFile(int $id, string $with = '', ?int $at = null): void
     {
         $f = $this->app->files()->get($id) ?? throw new \InvalidArgumentException("no file $id");
+        self::guard((string)$f['folder']);
+        $this->app->store->q('UPDATE files SET deleted_at = ?, deleted_with = ? WHERE id = ?', [$at ?? time(), $with, $id]);
+        $this->app->store->deleteDocs(['file', 'transcript'], $id); // out of searches; its text stays, for a restore
+    }
+
+    /** Delete for good: the file on disk, its index and previews. */
+    public function purgeFile(int $id): void
+    {
+        $f = $this->app->files()->get($id, true) ?? throw new \InvalidArgumentException("no file $id");
         self::guard((string)$f['folder']);
         $this->app->store->deleteDocs(['file', 'transcript'], $id);
         $this->app->store->q('DELETE FROM files WHERE id = ?', [$id]);
         if ($f['path'] !== '' && is_file($f['path'])) @unlink($f['path']);
         $this->app->files()->dropPreviews($id);
+    }
+
+    /**
+     * What is in the trash, newest first: files deleted on their own, and folders deleted with their files
+     * (one entry per folder deletion, restored together).
+     */
+    public function trash(): array
+    {
+        $rows = $this->app->store->q('SELECT id, name, folder, kind, size, deleted_at, deleted_with FROM files WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC, folder, name COLLATE NOCASE')->fetchAll();
+        $out = []; $groups = [];
+        foreach ($rows as $r) {
+            $at = (int)$r['deleted_at']; $until = $at + self::TRASH_DAYS * 86400;
+            if ((string)$r['deleted_with'] === '') {
+                $out[] = ['type' => 'file', 'id' => (int)$r['id'], 'name' => $r['name'], 'folder' => $r['folder'], 'kind' => $r['kind'], 'size' => (int)$r['size'], 'deleted_at' => $at, 'until' => $until];
+                continue;
+            }
+            $key = $r['deleted_with'] . "\0$at";
+            if (!isset($groups[$key])) { $groups[$key] = count($out); $out[] = ['type' => 'folder', 'path' => $r['deleted_with'], 'files' => 0, 'size' => 0, 'deleted_at' => $at, 'until' => $until, 'names' => []]; }
+            $g = &$out[$groups[$key]];
+            $g['files']++; $g['size'] += (int)$r['size'];
+            if (count($g['names']) < 5) $g['names'][] = $r['name'];
+            unset($g);
+        }
+        return $out;
+    }
+
+    /** Back from the trash, to its folder (created again if needed). A file id, or a folder deletion (its path and time). */
+    public function restore(?int $id = null, string $folder = '', int $at = 0): array
+    {
+        if ($id) $ids = [$id];
+        else $ids = array_map('intval', array_column($this->app->store->q('SELECT id FROM files WHERE deleted_with = ? AND deleted_at = ?', [self::normalize($folder), $at])->fetchAll(), 'id'));
+        $done = [];
+        foreach ($ids as $i) {
+            $f = $this->app->files()->get($i, true);
+            if (!$f || $f['deleted_at'] === null) continue;
+            self::guard((string)$f['folder']);
+            $this->ensureFolder((string)$f['folder']);
+            $this->app->store->q('UPDATE files SET deleted_at = NULL, deleted_with = NULL WHERE id = ?', [$i]);
+            if ($f['status'] === 'ready') $this->app->files()->index($i); // searchable again, from the text kept (nothing read again)
+            $done[] = $i;
+        }
+        if (!$done) throw new \InvalidArgumentException('Nothing to restore: it is no longer in the trash.');
+        return ['restored' => count($done), 'folder' => $this->app->files()->get($done[0])['folder'] ?? '/'];
+    }
+
+    /** Empty the trash (or only what has been there for $days days). Returns the number of files deleted for good. */
+    public function purgeTrash(?int $days = self::TRASH_DAYS): int
+    {
+        $ids = $this->app->store->q('SELECT id FROM files WHERE deleted_at IS NOT NULL AND deleted_at <= ?', [$days === null ? PHP_INT_MAX : time() - $days * 86400])->fetchAll();
+        foreach ($ids as $r) $this->purgeFile((int)$r['id']);
+        if ($ids) Log::info('library trash: ' . count($ids) . ' files deleted for good');
+        return count($ids);
     }
 
     /** Create or update a Markdown note. */
@@ -256,13 +322,15 @@ final class Library
     public function fileIds(string $folder): array
     {
         [$w, $a] = self::within(self::normalize($folder));
-        return array_map('intval', array_column($this->app->store->q("SELECT id FROM files WHERE $w", $a)->fetchAll(), 'id'));
+        return array_map('intval', array_column($this->app->store->q("SELECT id FROM files WHERE $w AND deleted_at IS NULL", $a)->fetchAll(), 'id'));
     }
 
     public function stats(): array
     {
-        $r = $this->app->store->q("SELECT COUNT(*) n, COALESCE(SUM(size),0) bytes, SUM(status='pending') pending, SUM(status='failed') failed FROM files")->fetch();
-        return ['files' => (int)$r['n'], 'bytes' => (int)$r['bytes'], 'pending' => (int)$r['pending'], 'failed' => (int)$r['failed']];
+        $r = $this->app->store->q("SELECT COUNT(*) n, COALESCE(SUM(size),0) bytes, SUM(status='pending') pending, SUM(status='failed') failed FROM files WHERE deleted_at IS NULL")->fetch();
+        $t = $this->app->store->q('SELECT COUNT(*) n, COALESCE(SUM(size),0) bytes FROM files WHERE deleted_at IS NOT NULL')->fetch();
+        return ['files' => (int)$r['n'], 'bytes' => (int)$r['bytes'], 'pending' => (int)$r['pending'], 'failed' => (int)$r['failed'],
+            'trash' => (int)$t['n'], 'trash_bytes' => (int)$t['bytes']];
     }
 
     private function relabel(array $f): void

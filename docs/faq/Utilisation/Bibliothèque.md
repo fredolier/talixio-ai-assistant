@@ -11,7 +11,7 @@
   (« scan_0012.pdf → /Admin/Factures/Facture EDF 2026-10.pdf ») : *Ranger*, *Modifier…* ou *Tout ranger*.
   Elle apprend de vos rangements. Réglages → *Rangement des nouveaux documents* : proposer, ranger
   les évidents, ou désactivé.
-- Dossiers : créer, renommer, déplacer, supprimer ; un dossier se télécharge en ZIP.
+- Dossiers : créer, renommer, déplacer, supprimer (à la corbeille) ; un dossier se télécharge en ZIP.
 - L'arborescence se **plie et se déplie** (la flèche devant chaque dossier ; le bouton en haut replie tout).
   Le chemin du dossier ouvert reste déplié, et l'état est retenu sur cet appareil. En glissant un fichier,
   un dossier replié s'ouvre si l'on reste dessus un instant.
@@ -26,6 +26,18 @@
   une autre recherche arrête la précédente ; *Fermer la recherche* revient au dossier.
   Il cite le document et la page ; un clic l'ouvre à cette page.
 - *Demander à propos de ce dossier* lance une question sur ses documents.
+
+## Supprimer, la corbeille
+- *Supprimer* (sur un fichier ouvert, ou sur un dossier avec ses fichiers) met à la **corbeille**, pas
+  à la poubelle définitive. Ce qui y est sort des recherches, de l'assistant et des liens de partage.
+- La **Corbeille** est en bas de l'arborescence (sur téléphone : le bouton *Corbeille* en haut de la page).
+  Elle montre d'où vient chaque fichier, quand il a été supprimé et combien de jours il reste.
+- *Restaurer* le remet à sa place (le dossier est recréé s'il le faut). Un dossier supprimé revient
+  d'un bloc, avec ses fichiers rangés dans leurs sous-dossiers. Rien n'est relu ni retranscrit : il redevient cherchable aussitôt.
+- Au bout de **30 jours**, un fichier est effacé pour de bon. *Vider la corbeille* le fait tout de suite
+  (deux clics). Un fichier effacé ne se retrouve plus que dans une sauvegarde de la nuit (7 gardées).
+- L'assistant voit la corbeille et peut restaurer : « retrouve le devis que j'ai supprimé hier ».
+- Les fichiers supprimés avant la version 0.19.0 n'y sont pas : ils étaient effacés tout de suite.
 
 ## Notes
 *Nouvelle note* crée une note Markdown modifiable. L'assistant peut aussi en enregistrer (`kb_save_note`).

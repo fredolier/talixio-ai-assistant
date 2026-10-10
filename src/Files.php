@@ -51,7 +51,11 @@ final class Files
         return $id;
     }
 
-    public function get(int $id): ?array { return $this->app->store->q('SELECT * FROM files WHERE id=?', [$id])->fetch() ?: null; }
+    /** A file; one in the trash only with $trashed (otherwise it is as if it were gone). */
+    public function get(int $id, bool $trashed = false): ?array
+    {
+        return $this->app->store->q('SELECT * FROM files WHERE id=?' . ($trashed ? '' : ' AND deleted_at IS NULL'), [$id])->fetch() ?: null;
+    }
 
     public static function duration(string $path): ?float
     {
@@ -289,7 +293,7 @@ final class Files
             proc_close(self::$indexer);
             self::$indexer = null;
         }
-        $work = $this->app->store->q("SELECT 1 FROM files WHERE status = 'pending' LIMIT 1")->fetchColumn()
+        $work = $this->app->store->q("SELECT 1 FROM files WHERE status = 'pending' AND deleted_at IS NULL LIMIT 1")->fetchColumn()
             || ($this->app->cfg->autoFile !== 'off' && (new Filing($this->app))->pending());
         if (!$work) return;
         $p = proc_open([PHP_BINARY, dirname(__DIR__) . '/bin/talixio', 'index'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', 'php://stderr', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes);
@@ -303,7 +307,7 @@ final class Files
     public function processPending(float $seconds = 20): int
     {
         $n = 0; $until = microtime(true) + $seconds;
-        foreach ($this->app->store->q("SELECT id FROM files WHERE status='pending' ORDER BY id LIMIT 20")->fetchAll() as $r) {
+        foreach ($this->app->store->q("SELECT id FROM files WHERE status='pending' AND deleted_at IS NULL ORDER BY id LIMIT 20")->fetchAll() as $r) {
             if (microtime(true) > $until) break;
             try { $this->text((int)$r['id']); } catch (\Throwable $e) { Log::warn("indexing file {$r['id']}: {$e->getMessage()}"); }
             $n++;
@@ -402,7 +406,7 @@ final class Files
         if (!class_exists(\ZipArchive::class)) throw new \RuntimeException('Downloading folders needs php-zip: run sudo ./install.sh again');
         $folder = Library::normalize($folder);
         [$w, $a] = Library::within($folder);
-        $rows = $this->app->store->q("SELECT id, name, folder, path, size FROM files WHERE $w ORDER BY folder, name", $a)->fetchAll();
+        $rows = $this->app->store->q("SELECT id, name, folder, path, size FROM files WHERE $w AND deleted_at IS NULL ORDER BY folder, name", $a)->fetchAll();
         if (array_sum(array_column($rows, 'size')) > 4_000_000_000) throw new \InvalidArgumentException('This folder is too large to download at once (over 4 GB): download its subfolders.');
         $tmp = tempnam(sys_get_temp_dir(), 'talixio-zip');
         $zip = new \ZipArchive();

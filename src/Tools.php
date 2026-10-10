@@ -87,6 +87,22 @@ final class Tools
                 if (!empty($a['name'])) $f = $lib->renameFile((int)$a['id'], $a['name']);
                 return 'moved to ' . Library::join($f['folder'], $f['name']);
             });
+        $this->register('kb_trash', "The library's trash: files and folders the user deleted, kept " . Library::TRASH_DAYS . " days. action 'list' shows them; 'restore' puts one back where it was: "
+            . "a file by id, or a deleted folder by folder (its path) and deleted_at (from the list). Use when the user looks for a document they deleted.",
+            ['action' => ['type' => 'string', 'enum' => ['list', 'restore']], 'id' => ['type' => 'integer'], 'folder' => ['type' => 'string'], 'deleted_at' => ['type' => 'integer']], ['action'],
+            function (array $a) {
+                $lib = $this->app->library();
+                if (($a['action'] ?? 'list') === 'restore') {
+                    $r = $lib->restore(!empty($a['id']) ? (int)$a['id'] : null, (string)($a['folder'] ?? ''), (int)($a['deleted_at'] ?? 0));
+                    return "restored {$r['restored']} file" . ($r['restored'] > 1 ? 's' : '') . " to {$r['folder']}";
+                }
+                $items = $lib->trash();
+                if (!$items) return 'the trash is empty';
+                return implode("\n", array_map(fn($i) => $i['type'] === 'file'
+                    ? "- file #{$i['id']} " . Library::join($i['folder'], $i['name']) . ', deleted ' . date('Y-m-d H:i', $i['deleted_at']) . ', kept until ' . date('Y-m-d', $i['until'])
+                    : "- folder {$i['path']} with {$i['files']} files (" . implode(', ', $i['names']) . ($i['files'] > count($i['names']) ? ', …' : '') . "), deleted_at {$i['deleted_at']} ("
+                        . date('Y-m-d H:i', $i['deleted_at']) . '), kept until ' . date('Y-m-d', $i['until']), $items));
+            });
 
         $this->register('share_create', "Make a link so someone outside can open a document of the library (file id) or a folder with its subfolders (folder path). Asks the user to approve first. "
             . 'for: who it is for (shown in the list of shares); message: shown to them; days: until it ends (1, 7, 30, 90; 0 = no end; default 30); password: optional; download: false = view only. '

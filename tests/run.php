@@ -1051,9 +1051,31 @@ check('library: moving a folder moves subfolders, files and search labels', $lf-
     && !$lib->exists('/Admin') && $lib->exists('/Perso/Admin/Budget'));
 try { $lib->moveFolder('/Perso', '/Perso/Admin/x'); check('library: a folder cannot go inside itself', false); } catch (\InvalidArgumentException) { check('library: a folder cannot go inside itself', true); }
 try { $lib->deleteFolder('/Perso'); check('library: deleting a non-empty folder needs confirmation', false); } catch (\InvalidArgumentException) { check('library: deleting a non-empty folder needs confirmation', true); }
-$p = $lf->get($idOdt)['path'];
+$p = $lf->get($idOdt)['path']; $odtFolder = $lf->get($idOdt)['folder'];
 $lib->deleteFile($idOdt);
-check('library: deleting a file removes it from disk and from search', !is_file($p) && !$lf->get($idOdt) && !$la->store->q("SELECT 1 FROM docs WHERE kind = 'file' AND ref = ?", [$idOdt])->fetchColumn());
+$inSearch = fn(int $id) => (bool)$la->store->q("SELECT 1 FROM docs WHERE kind = 'file' AND ref = ?", [$id])->fetchColumn();
+check('library trash: a deleted file leaves the folder and the searches, but stays on disk', is_file($p) && !$lf->get($idOdt) && $lf->get($idOdt, true) && !$inSearch($idOdt)
+    && !in_array($idOdt, array_column($lib->list($odtFolder)['files'], 'id')) && $lib->stats()['trash'] === 1);
+$tr = $lib->trash();
+check('library trash: listed with where it was', count($tr) === 1 && $tr[0]['type'] === 'file' && $tr[0]['id'] === $idOdt && $tr[0]['folder'] === $odtFolder && $tr[0]['until'] - $tr[0]['deleted_at'] === 30 * 86400, json_encode($tr));
+check('library trash: the assistant sees it', str_contains($la->tools->run('kb_trash', ['action' => 'list']), "file #$idOdt"));
+$r = $la->tools->run('kb_trash', ['action' => 'restore', 'id' => $idOdt]);
+check('library trash: restored to its folder, searchable again without reading it again', $r === "restored 1 file to $odtFolder" && $lf->get($idOdt)['folder'] === $odtFolder && $inSearch($idOdt)
+    && $lf->get($idOdt)['status'] === 'ready' && $lib->trash() === [], $r);
+$lib->createFolder('/Corb/Sous');
+$c1 = $lib->saveNote('/Corb', 'un.md', "corbeille alpha\n"); $c2 = $lib->saveNote('/Corb/Sous', 'deux.md', "corbeille beta\n");
+check('library trash: deleting a folder puts its files in the trash', $lib->deleteFolder('/Corb', true) === 2 && !$lib->exists('/Corb') && $lib->search('corbeille') === []);
+$tr = $lib->trash();
+check('library trash: a deleted folder is one entry', count($tr) === 1 && $tr[0]['type'] === 'folder' && $tr[0]['path'] === '/Corb' && $tr[0]['files'] === 2, json_encode($tr));
+$lib->restore(null, '/Corb', $tr[0]['deleted_at']);
+check('library trash: restoring a folder brings back its tree', $lib->exists('/Corb/Sous') && $lf->get((int)$c2['id'])['folder'] === '/Corb/Sous' && count($lib->search('corbeille')) === 2);
+$lib->deleteFile((int)$c1['id']);
+$cp = $lf->get((int)$c1['id'], true)['path'];
+$la->store->q('UPDATE files SET deleted_at = ? WHERE id = ?', [time() - 31 * 86400, (int)$c1['id']]);
+$lib->deleteFile((int)$c2['id']);
+check('library trash: after 30 days, deleted for good (not what is more recent)', $lib->purgeTrash() === 1 && !$lf->get((int)$c1['id'], true) && !is_file($cp) && $lf->get((int)$c2['id'], true));
+check('library trash: emptying it deletes the rest', $lib->purgeTrash(null) === 1 && $lib->trash() === []);
+try { $lib->restore((int)$c2['id']); check('library trash: nothing to restore once emptied', false); } catch (\InvalidArgumentException) { check('library trash: nothing to restore once emptied', true); }
 $note = $lib->saveNote('/Notes', 'Idées cadeaux', "- Livre de cuisine pour Marie\n");
 check('library: notes are Markdown files, searchable right away', $note['note'] == 1 && $note['name'] === 'Idées cadeaux.md' && array_column($lib->search('cuisine Marie'), 'id') === [(int)$note['id']]);
 $lib->saveNote('/Notes', 'Idées cadeaux.md', "- Vélo pour Paul\n", (int)$note['id']);
@@ -1206,6 +1228,11 @@ check('library web: folder listing with stats', array_column($lst['folders'], 'p
 $sr = $wj('/api/library/search?q=chaudiere&folder=' . urlencode('/Perso'));
 check('library web: search without accents finds accented text', ($sr['results'][0]['id'] ?? 0) === $up['file']['id'], json_encode($sr));
 check('library web: file text for the viewer', ($wj("/api/files/{$up['file']['id']}/text")['text'] ?? '') === 'Contrat de maintenance chaudière');
+$uid = $up['file']['id'];
+$wj("/api/files/$uid/delete", []);
+$tw = $wj('/api/library/trash');
+check('library web: delete goes to the trash, restore brings it back', ($tw['items'][0]['id'] ?? 0) === $uid && $tw['days'] === 30 && ($wj("/api/files/$uid/text")['error'] ?? '') !== ''
+    && ($wj('/api/library/trash/restore', ['id' => $uid])['folder'] ?? '') === '/Perso/Maison' && ($wj("/api/files/$uid/text")['text'] ?? '') === 'Contrat de maintenance chaudière', json_encode($tw));
 check('library web: create, rename and delete folders', ($wj('/api/library/folder', ['path' => '/Vide'])['folder'] ?? '') === '/Vide'
     && ($wj('/api/library/folder/move', ['from' => '/Vide', 'to' => '/Vide2'])['folder'] ?? '') === '/Vide2'
     && ($wj('/api/library/folder/delete', ['path' => '/Vide2'])['deleted_files'] ?? -1) === 0);
@@ -1361,7 +1388,7 @@ check('library web: no page preview for photos/PDFs (shown natively)', str_conta
 [$code, $h, $body] = $raw("/preview/$noteId/Plan.md");
 check('library web: /preview/... opens the app (full-screen document page)', $code === 200 && str_contains($body, 'id="preview-page"') && str_contains($h, "img-src 'self' data: https:") && !str_contains($h, "script-src 'unsafe-inline'"));
 check('library web: photos and PDFs open natively from "view"', str_contains($raw("/api/files/$pid/view/commande.pdf")[1], 'content-type: application/pdf'));
-$lib->deleteFile($pid);
+$lib->deleteFile($pid); $lib->purgeFile($pid);
 check('library: previews removed with the file', glob("$ld/previews/$pid-*") === []);
 
 proc_terminate($ws); proc_close($ws);

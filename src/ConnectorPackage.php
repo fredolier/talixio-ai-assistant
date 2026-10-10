@@ -21,7 +21,7 @@ final class ConnectorPackage
     /** The .zip files of the library (candidates). */
     public function packages(): array
     {
-        $rows = $this->app->store->q("SELECT id, name, folder, size, created FROM files WHERE lower(name) LIKE '%.zip' ORDER BY (folder LIKE '/Connect%') DESC, created DESC LIMIT 200")->fetchAll();
+        $rows = $this->app->store->q("SELECT id, name, folder, size, created FROM files WHERE lower(name) LIKE '%.zip' AND deleted_at IS NULL ORDER BY (folder LIKE '/Connect%') DESC, created DESC LIMIT 200")->fetchAll();
         return array_map(fn($r) => ['id' => (int)$r['id'], 'name' => $r['name'], 'folder' => $r['folder'], 'size' => (int)$r['size']], $rows);
     }
 

@@ -54,6 +54,8 @@ final class Store
         $this->addColumn('files', 'suggestion', 'TEXT'); // where to file it (Filing): JSON, or {"done":true} / {"dismissed":true}           // 1 = Markdown note editable in the app
         $this->db->exec("CREATE TABLE IF NOT EXISTS folders(path TEXT PRIMARY KEY, created INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS files_folder ON files(folder);");
+        $this->addColumn('files', 'deleted_at', 'INTEGER');   // in the trash since (Library::trash)
+        $this->addColumn('files', 'deleted_with', 'TEXT');    // the folder deleted with it ('' = deleted on its own)
         // spaces: separate threads (0 = General), each with a library folder, instructions and notes
         $this->db->exec("CREATE TABLE IF NOT EXISTS spaces(id INTEGER PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, folder TEXT NOT NULL DEFAULT '',
             instructions TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', tier TEXT NOT NULL DEFAULT 'standard', color TEXT NOT NULL DEFAULT '',
@@ -168,7 +170,7 @@ final class Store
         $info = [];
         if ($files) {
             $in = implode(',', array_map('intval', array_keys($files)));
-            foreach ($this->db->query("SELECT id, name, mime, kind, size, duration FROM files WHERE id IN ($in)") as $f) $info[$f['id']] = $f;
+            foreach ($this->db->query("SELECT id, name, mime, kind, size, duration FROM files WHERE id IN ($in) AND deleted_at IS NULL") as $f) $info[$f['id']] = $f;
         }
         return array_map(fn($r) => ['meta' => $r['meta'] ? json_decode($r['meta'], true) : null,
             'files' => array_values(array_filter(array_map(fn($i) => $info[$i] ?? null, json_decode((string)$r['files'], true) ?: [])))] + $r, $rows);

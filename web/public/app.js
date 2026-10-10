@@ -1994,7 +1994,8 @@ async function loadLibrary() {
   lib.folder = libFolderFromHash() || '/';
   if (was !== undefined && was !== lib.folder && libSearch.phase) libSearchClose(); // another folder: its content, not old results
   const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
-  lib.tree = tree.tree; lib.shared = list.shared; lib.level = list.level || 'internal';
+  lib.tree = tree.tree; lib.trash = tree.stats.trash || 0; lib.shared = list.shared;
+  $('#lib-trash').textContent = lib.trash ? `${t('Trash')} (${lib.trash})` : t('Trash'); lib.level = list.level || 'internal';
   lib.folder = list.folder; lib.readonly = !!list.readonly;
   for (const b of ['#lib-upload', '#lib-newnote', '#lib-newfolder']) $(b).hidden = lib.readonly;
   const st = list.stats;
@@ -2028,8 +2029,10 @@ function renderTree() {
   const anyOpen = lib.tree.some(t => treeOpen.has(t.path) && hasKids.has(t.path));
   nav.innerHTML = `<div class="tree-head"><a href="#" data-path="/" class="${lib.folder === '/' ? 'active' : ''}">${FOLDER_SVG}<span>${esc(t('All files'))}</span>${total ? `<small>${total}</small>` : ''}</a>`
     + (anyOpen ? `<button class="tw fold-all" type="button" data-fold-all title="${esc(t('Fold every folder'))}" aria-label="${esc(t('Fold every folder'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11l5-5 5 5M7 18l5-5 5 5"/></svg></button>` : '') + '</div>'
-    + lib.tree.filter(shown).map(x => row(x.path, x.name, x.depth, x.total, hasKids.has(x.path))).join('');
-  nav.querySelectorAll('a').forEach(a => {
+    + lib.tree.filter(shown).map(x => row(x.path, x.name, x.depth, x.total, hasKids.has(x.path))).join('')
+    + `<a href="#" class="tree-trash" data-trash title="${esc(t('Deleted files, kept {n} days', { n: 30 }))}">${TRASH_SVG}<span>${esc(t('Trash'))}</span>${lib.trash ? `<small>${lib.trash}</small>` : ''}</a>`;
+  nav.querySelector('[data-trash]').onclick = e => { e.preventDefault(); showLibTrash(); };
+  nav.querySelectorAll('a[data-path]').forEach(a => {
     a.onclick = e => { e.preventDefault(); libGo(a.dataset.path); };
     dropTarget(a, a.dataset.path);
   });
@@ -2071,8 +2074,41 @@ function renderCrumbs() {
   fa.querySelector('[data-a=delete]')?.addEventListener('click', async e => {
     const b = e.currentTarget, node = lib.tree.find(t => t.path === lib.folder), n = node ? node.total : 0;
     if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = n ? `Delete with its ${n} file${n > 1 ? 's' : ''}?` : 'Confirm delete'; return; }
-    try { await post('api/library/folder/delete', { path: lib.folder, recursive: true }); toast('Folder deleted'); libGo(lib.folder.split('/').slice(0, -1).join('/') || '/'); } catch (err) { toast(err.message); }
+    try { const r = await post('api/library/folder/delete', { path: lib.folder, recursive: true }); toast(r.deleted_files ? t('Folder moved to the trash: restorable for {n} days', { n: 30 }) : 'Folder deleted'); libGo(lib.folder.split('/').slice(0, -1).join('/') || '/'); } catch (err) { toast(err.message); }
   });
+}
+
+const TRASH_SVG = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+
+/** The library's trash: files and folders deleted in the last 30 days, restorable where they were. */
+async function showLibTrash() {
+  const d = $('#trash-dialog');
+  const { items, days } = await api('api/library/trash');
+  const left = until => Math.max(0, Math.ceil((until - Date.now() / 1000) / 86400));
+  $('#trash-note').textContent = items.length ? t('Deleted files stay here {n} days, then are deleted for good. They are not searched meanwhile.', { n: days }) : '';
+  $('#trash-list').innerHTML = items.length ? items.map((x, i) => {
+    const when = t('deleted {date}, {n} days left', { date: fmtDate(x.deleted_at), n: left(x.until) });
+    return x.type === 'file'
+      ? `<div class="trash-item">${CITE_SVG}<b>${esc(x.name)}</b><button class="btn small" type="button" data-i="${i}">${esc(t('Restore'))}</button>
+          <span class="muted small">${esc(t('from {folder}', { folder: x.folder }))} · ${esc(fmtSize(x.size))} · ${esc(when)}</span></div>`
+      : `<div class="trash-item">${FOLDER_SVG}<b>${esc(x.path)}</b><button class="btn small" type="button" data-i="${i}">${esc(t('Restore'))}</button>
+          <span class="muted small">${esc(t(x.files === 1 ? 'folder with 1 file' : 'folder with {n} files', { n: x.files }))} (${esc(x.names.join(', '))}${x.files > x.names.length ? ', …' : ''}) · ${esc(fmtSize(x.size))} · ${esc(when)}</span></div>`;
+  }).join('') : `<p class="muted">${esc(t('The trash is empty.'))}</p>`;
+  $('#trash-list').querySelectorAll('[data-i]').forEach(b => b.onclick = async () => {
+    const x = items[+b.dataset.i];
+    try {
+      const r = await post('api/library/trash/restore', x.type === 'file' ? { id: x.id } : { folder: x.path, at: x.deleted_at });
+      toast(t('Restored to {folder}', { folder: r.folder })); showLibTrash(); loadLibrary();
+    } catch (e) { toast(e.message); }
+  });
+  const empty = $('#trash-empty');
+  empty.hidden = !items.length; empty.dataset.confirm = ''; empty.textContent = t('Empty the trash');
+  empty.onclick = async () => {
+    if (empty.dataset.confirm !== '1') { empty.dataset.confirm = '1'; empty.textContent = t('Delete them for good?'); return; }
+    try { const r = await post('api/library/trash/empty'); toast(t('{n} files deleted for good', { n: r.deleted })); showLibTrash(); loadLibrary(); } catch (e) { toast(e.message); }
+  };
+  $('#trash-close').onclick = () => d.close();
+  if (!d.open) d.showModal();
 }
 
 const DL_SVG = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
@@ -2169,6 +2205,7 @@ async function openSharesManager() {
   dlg.showModal();
 }
 $('#lib-shares').onclick = () => openSharesManager();
+$('#lib-trash').onclick = () => showLibTrash();
 $('#viewer-share').onclick = () => lib.file && openShare({ file: lib.file.id }, lib.file.name);
 const isVideo = f => (f.mime || '').startsWith('video/');
 const Library_join = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
@@ -2759,7 +2796,7 @@ $('#viewer-reindex').onclick = async () => { try { await post(`api/files/${lib.f
 $('#viewer-delete').onclick = async () => {
   const b = $('#viewer-delete');
   if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Confirm delete'; return; }
-  try { await post(`api/files/${lib.file.id}/delete`); toast('Deleted'); closeViewer(); loadLibrary(); } catch (e) { toast(e.message); }
+  try { await post(`api/files/${lib.file.id}/delete`); toast(t('Moved to the trash: restorable for {n} days', { n: 30 })); closeViewer(); loadLibrary(); } catch (e) { toast(e.message); }
 };
 $('#viewer-ask').onclick = () => {
   const f = lib.file;

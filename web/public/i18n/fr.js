@@ -1864,5 +1864,18 @@ window.I18N.fr = {
 "Starting it and listing its tools…": "Démarrage et liste de ses outils…",
 "Installing…": "Installation…",
 "Ready: {n} tool(s) from “{name}”. The assistant can use them from the next message.": "Prêt : {n} outil(s) de « {name} ». L'assistant peut les utiliser dès le prochain message.",
-"It did not work.": "Ça n'a pas marché."
+"It did not work.": "Ça n'a pas marché.",
+"Deleted files, kept {n} days": "Fichiers supprimés, gardés {n} jours",
+"Deleted files stay here {n} days, then are deleted for good. They are not searched meanwhile.": "Les fichiers supprimés restent ici {n} jours, puis sont effacés pour de bon. En attendant, ils sortent des recherches.",
+"deleted {date}, {n} days left": "supprimé le {date}, encore {n} jours",
+"from {folder}": "de {folder}",
+"folder with 1 file": "dossier avec 1 fichier",
+"folder with {n} files": "dossier avec {n} fichiers",
+"Restored to {folder}": "Restauré dans {folder}",
+"Empty the trash": "Vider la corbeille",
+"Delete them for good?": "Les effacer pour de bon ?",
+"{n} files deleted for good": "{n} fichiers effacés pour de bon",
+"Folder moved to the trash: restorable for {n} days": "Dossier mis à la corbeille : restaurable pendant {n} jours",
+"Moved to the trash: restorable for {n} days": "Mis à la corbeille : restaurable pendant {n} jours",
+"Deleted files, restorable for 30 days": "Fichiers supprimés, restaurables pendant 30 jours"
 };

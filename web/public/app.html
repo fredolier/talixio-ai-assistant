@@ -119,6 +119,7 @@
           <button id="lib-newnote" class="btn" type="button">New note</button>
           <button id="lib-newfolder" class="btn" type="button">New folder</button>
           <button id="lib-shares" class="btn" type="button" title="Links to your documents for people outside">Shares</button>
+          <button id="lib-trash" class="btn lib-trash-btn" type="button" title="Deleted files, restorable for 30 days">Trash</button>
         </div>
       </header>
       <form id="lib-search" class="search" role="search">
@@ -373,6 +374,12 @@
     </section>
   </main>
 </div>
+<dialog id="trash-dialog" class="dialog trash-dialog" aria-labelledby="trash-title">
+  <h3 id="trash-title">Trash</h3>
+  <p id="trash-note" class="muted small"></p>
+  <div id="trash-list" class="trash-list"></div>
+  <div class="row wrap"><button id="trash-empty" class="btn ghost danger" type="button">Empty the trash</button><span class="spacer"></span><button id="trash-close" class="btn" type="button">Close</button></div>
+</dialog>
 <dialog id="conn-dialog" class="dialog" aria-labelledby="conn-title">
   <form id="conn-form" method="dialog" class="fields">
     <h3 id="conn-title">Install a connector</h3>
