@@ -749,3 +749,8 @@ span.privacy-badge{cursor:default;min-height:26px;padding:0 9px}
 .pv-bars i{display:block;height:10px;border-radius:5px;width:var(--w);background:var(--lvl-out)} .pv-bars i.blocked{background:var(--lvl-conf-line)}
 .pv-perspace{margin:0;padding-left:18px;font-size:.88rem}
 @media (max-width:560px){.pv-bars{grid-template-columns:minmax(0,1fr) 70px auto}}
+
+/* paused by a transfer (a copy on its way here, or the old server after a move) */
+.paused-note{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:8px 12px 0;padding:10px 12px;border-radius:var(--r);background:var(--sunk);border:1px solid var(--line);font-size:.9rem}
+.paused-note .btn{margin-left:auto}
+#transfer-state code{word-break:break-all;user-select:all}

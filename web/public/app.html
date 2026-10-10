@@ -81,6 +81,7 @@
         <div class="row"><input id="chat-search-q" type="search" placeholder="Find in the conversation…" aria-label="Find in the conversation"><button id="chat-search-close" class="btn ghost small" type="button">Close</button></div>
         <div id="chat-search-results" class="sresults"></div>
       </div>
+      <div id="paused" class="paused-note" role="status" hidden></div>
       <div id="thread" class="thread" aria-live="polite"></div>
       <div id="approvals" class="approvals" hidden></div>
       <div id="recorder" class="recorder" hidden>
@@ -232,6 +233,14 @@
         <div class="row between"><h3>Check configuration</h3><button id="doctor-run" class="btn" type="button">Run checks</button></div>
         <p class="muted small">Tests logins (email, calendar…) and makes one short call per model tier.</p>
         <ul id="doctor" class="doctor" hidden></ul>
+      </div>
+
+      <div class="card" id="transfer-card">
+        <div class="row between"><h3>Move to another server</h3><button id="transfer-code" class="btn" type="button">Create a transfer code</button></div>
+        <p class="muted small">Everything goes: conversations, memory, skills, library, tasks, settings and keys, password. On the new server, the administrator
+          chooses <b>From another server</b> on the admin page (or runs <code>sudo talixio transfer-pull</code>) with this assistant's address and the code.
+          Test copies stay paused there; the final one pauses this assistant. The code works for a day.</p>
+        <div id="transfer-state" class="small"></div>
       </div>
 
       <h3>Channels</h3>

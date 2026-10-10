@@ -44,7 +44,7 @@ final class Filing
         return $this->app->store->q("SELECT f.folder, e.vec FROM files f
             JOIN docs d ON d.id = (SELECT MIN(id) FROM docs WHERE kind IN ('file','transcript') AND ref = f.id)
             JOIN embeddings e ON e.doc_id = d.id AND e.model = ?
-            WHERE f.id != ? AND f.folder NOT IN ($in) ORDER BY f.id DESC LIMIT 5000", [$this->app->embeddings->model(), $except, ...self::SKIP])->fetchAll(\PDO::FETCH_NUM);
+            WHERE f.id != ? AND f.folder NOT IN ($in) AND f.folder != '/FAQ' AND f.folder NOT LIKE '/FAQ/%' ORDER BY f.id DESC LIMIT 5000", [$this->app->embeddings->model(), $except, ...self::SKIP])->fetchAll(\PDO::FETCH_NUM);
     }
 
     /**
@@ -91,7 +91,7 @@ final class Filing
     /** The fast model reads the beginning of the document and the folder tree. */
     private function askModel(array $f, string $knownFolder, array $ranking): ?array
     {
-        $tree = array_values(array_filter(array_column($this->app->library()->tree(), 'path'), fn($p) => !in_array($p, self::SKIP, true)));
+        $tree = array_values(array_filter(array_column($this->app->library()->tree(), 'path'), fn($p) => !in_array($p, self::SKIP, true) && !Library::readonly($p)));
         $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
         $ask = "A document arrived in the user's library inbox. "
             . ($knownFolder !== '' ? "Its folder is already decided: $knownFolder. Only propose a clear file name.\n" : "Choose the best folder among the existing ones; propose a new subfolder of an existing folder only if nothing fits.\n")
@@ -109,7 +109,7 @@ final class Filing
         }
         if (!preg_match('/\{.*\}/s', $text, $m) || !is_array($d = json_decode($m[0], true))) return null;
         $folder = isset($d['folder']) && trim((string)$d['folder']) !== '' ? Library::normalize((string)$d['folder']) : '';
-        if ($folder === '/' || in_array($folder, self::SKIP, true)) $folder = '';
+        if ($folder === '/' || in_array($folder, self::SKIP, true) || Library::readonly($folder)) $folder = '';
         $name = trim(basename(str_replace('\\', '/', (string)($d['name'] ?? ''))));
         if ($name !== '' && $ext && !str_ends_with(strtolower($name), ".$ext")) $name .= ".$ext";
         return ['folder' => $knownFolder !== '' ? '' : $folder, 'name' => mb_substr($name, 0, 120), 'confidence' => ($d['confidence'] ?? '') === 'high' && $this->app->library()->exists($folder) ? 'high' : 'low',

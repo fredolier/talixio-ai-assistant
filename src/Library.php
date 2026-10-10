@@ -13,6 +13,10 @@ final class Library
     public const MEETINGS = '/Meetings';
     public const SCREENSHOTS = '/Screenshots';
     public const NOTES = '/Notes';
+    public const FAQ = '/FAQ'; // the notes about Talixio itself, kept up to date by Faq::sync(): read-only
+
+    /** Set while Faq::sync() writes the FAQ. */
+    public static bool $system = false;
 
     public function __construct(private App $app) {}
 
@@ -36,6 +40,20 @@ final class Library
     public static function label(array $f): string { return self::join((string)($f['folder'] ?? self::INBOX), (string)$f['name']) . " #{$f['id']}"; }
 
     /** SQL condition (and args) for "this folder and its subfolders" on files.folder. */
+    /** Whether a folder is read-only (the FAQ and below). */
+    public static function readonly(string $path): bool
+    {
+        $path = self::normalize($path);
+        return $path === self::FAQ || str_starts_with($path, self::FAQ . '/');
+    }
+
+    /** Refuse changes in a read-only folder. */
+    public static function guard(string ...$paths): void
+    {
+        if (self::$system) return;
+        foreach ($paths as $p) if (self::readonly($p)) throw new \InvalidArgumentException('The FAQ is read-only: it is kept up to date with each version of Talixio. Copy a page into another folder to change it.');
+    }
+
     public static function within(string $folder, string $col = 'folder'): array
     {
         if ($folder === '/') return ['1=1', []];
@@ -78,7 +96,7 @@ final class Library
         return array_map(function (string $p) use ($direct) {
             $total = 0;
             foreach ($direct as $f => $n) if ($f === $p || str_starts_with($f, "$p/")) $total += $n;
-            return ['path' => $p, 'name' => basename($p), 'depth' => substr_count($p, '/'), 'files' => $direct[$p] ?? 0, 'total' => $total];
+            return ['path' => $p, 'name' => basename($p), 'depth' => substr_count($p, '/'), 'files' => $direct[$p] ?? 0, 'total' => $total, 'readonly' => self::readonly($p)];
         }, $all);
     }
 
@@ -90,7 +108,7 @@ final class Library
         foreach ($this->tree() as $t) if ($t['path'] !== '/' && self::parent($t['path']) === $folder) $subs[] = $t;
         $files = $this->app->store->q('SELECT id, name, mime, kind, size, duration, created, folder, status, note, suggestion, LENGTH(text) chars FROM files WHERE folder = ? ORDER BY name COLLATE NOCASE', [$folder])->fetchAll();
         $sugg = fn(?string $j) => ($d = json_decode((string)$j, true)) && !empty($d['folder']) ? $d : null; // only real suggestions, not done/dismissed
-        return ['folder' => $folder, 'folders' => $subs, 'files' => array_map(fn($f) => ['id' => (int)$f['id'], 'size' => (int)$f['size'], 'note' => (bool)$f['note'], 'chars' => (int)$f['chars'],
+        return ['folder' => $folder, 'readonly' => self::readonly($folder), 'folders' => $subs, 'files' => array_map(fn($f) => ['id' => (int)$f['id'], 'size' => (int)$f['size'], 'note' => (bool)$f['note'], 'chars' => (int)$f['chars'],
             'created' => (int)$f['created'], 'suggestion' => $sugg($f['suggestion'])] + $f, $files)];
     }
 
@@ -98,6 +116,7 @@ final class Library
     {
         $path = self::normalize($path);
         if ($path === '/') throw new \InvalidArgumentException('folder name required');
+        self::guard($path);
         $this->ensureFolder($path);
         return $path;
     }
@@ -107,6 +126,7 @@ final class Library
     {
         $from = self::normalize($from); $to = self::normalize($to);
         if ($from === '/' || $to === '/') throw new \InvalidArgumentException('the root folder cannot be moved');
+        self::guard($from, $to);
         if ($to === $from) return $to;
         if (str_starts_with("$to/", "$from/")) throw new \InvalidArgumentException('a folder cannot be moved into itself');
         if (!$this->exists($from)) throw new \InvalidArgumentException("no folder $from");
@@ -135,6 +155,7 @@ final class Library
     {
         $path = self::normalize($path);
         if ($path === '/') throw new \InvalidArgumentException('the root folder cannot be deleted');
+        self::guard($path);
         [$w, $a] = self::within($path);
         $ids = array_column($this->app->store->q("SELECT id FROM files WHERE $w", $a)->fetchAll(), 'id');
         if ($ids && !$recursive) throw new \InvalidArgumentException("$path is not empty (" . count($ids) . ' files)');
@@ -148,6 +169,7 @@ final class Library
     {
         $f = $this->app->files()->get($id) ?? throw new \InvalidArgumentException("no file $id");
         $folder = self::normalize($folder);
+        self::guard((string)$f['folder'], $folder);
         $this->ensureFolder($folder);
         $this->app->store->q('UPDATE files SET folder = ? WHERE id = ?', [$folder, $id]);
         $this->relabel(['folder' => $folder] + $f);
@@ -157,6 +179,7 @@ final class Library
     public function renameFile(int $id, string $name): array
     {
         $f = $this->app->files()->get($id) ?? throw new \InvalidArgumentException("no file $id");
+        self::guard((string)$f['folder']);
         $name = mb_substr(preg_replace('/[^\p{L}\p{N}._ ()&,+\'-]+/u', '_', trim(basename($name))), 0, 120);
         if ($name === '' || $name === '.' || $name === '..') throw new \InvalidArgumentException('invalid name');
         $this->app->store->q('UPDATE files SET name = ? WHERE id = ?', [$name, $id]);
@@ -167,6 +190,7 @@ final class Library
     public function deleteFile(int $id): void
     {
         $f = $this->app->files()->get($id) ?? throw new \InvalidArgumentException("no file $id");
+        self::guard((string)$f['folder']);
         $this->app->store->deleteDocs(['file', 'transcript'], $id);
         $this->app->store->q('DELETE FROM files WHERE id = ?', [$id]);
         if ($f['path'] !== '' && is_file($f['path'])) @unlink($f['path']);
@@ -179,6 +203,7 @@ final class Library
         $files = $this->app->files();
         if ($id !== null) {
             $f = $files->get($id) ?? throw new \InvalidArgumentException("no file $id");
+            self::guard((string)$f['folder']);
             if (!$f['note'] && $f['kind'] !== 'text') throw new \InvalidArgumentException('only notes and text files can be edited');
             file_put_contents($f['path'], $content);
             $this->app->store->q("UPDATE files SET size = ?, text = NULL, status = 'pending' WHERE id = ?", [strlen($content), $id]);

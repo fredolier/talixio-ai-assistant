@@ -66,6 +66,11 @@ final class I18n
             'Cet espace est Secret : rien ne doit quitter le serveur, et l\'assistant fonctionne avec un service extérieur. La bibliothèque et les tâches de cet espace fonctionnent toujours ; pour discuter ici, utilisez un modèle installé sur ce serveur (Réglages → Modèle d\'IA).',
         'This is a Confidential space: only a model under business terms (Claude API, OpenAI API, paid Gemini) may read its content, and the current one is not. Change the model in Settings → AI model, or the level of the space.' =>
             'Cet espace est Confidentiel : seul un modèle sous contrat professionnel (API Claude, API OpenAI, Gemini payant) peut en lire le contenu, ce qui n\'est pas le cas du modèle actuel. Changez de modèle dans Réglages → Modèle d\'IA, ou le niveau de l\'espace.',
+        // moving to another server
+        'Transfer' => 'Transfert',
+        'Your assistant was moved to another server ({to}). This one is paused: it no longer answers or runs routines.' =>
+            'Votre assistant a déménagé sur un autre serveur ({to}). Celui-ci est en pause : il ne répond plus et ne lance plus de routines.',
+        'A copy of your assistant was taken for another server, from {ip}.' => 'Une copie de votre assistant a été prise pour un autre serveur, depuis {ip}.',
     ];
 
     /** The language of someone outside (a shared link), from their browser. */

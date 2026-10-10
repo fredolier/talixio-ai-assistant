@@ -84,6 +84,13 @@ docker exec -it talixio-fred talixio signal updateProfile --given-name Talixio
 docker restart talixio-fred
 ```
 
+### From another server
+
+Admin page → People → **From another server**: the old assistant's address, its transfer code (made in
+that assistant: Settings → Move to another server), the identifier here. Test copies arrive paused and
+can be repeated (an existing identifier gets the fresh copy); tick *Final move* for the last one, which
+pauses the old assistant. Progress shows in the Updates tab.
+
 ## Updates
 
 Admin page → **Updates**: the image is built from the git repository (`GIT_URL` in `.env`; for a

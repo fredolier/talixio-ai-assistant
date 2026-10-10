@@ -1,0 +1,29 @@
+# Canaux et notifications
+
+## Notifications de l'app
+Page **Canaux** → *Activer pour cet appareil* (sur iPhone : d'abord l'ajouter à l'écran d'accueil et
+l'ouvrir depuis là). Un appareil à la fois ; aucun service supplémentaire. *Envoyer une notification de test* pour vérifier.
+
+## Telegram
+Créez un bot avec @BotFather, mettez son jeton dans Réglages → Telegram, écrivez au bot : il répond
+avec votre identifiant, à mettre dans la liste des identifiants autorisés.
+
+## Signal
+Il faut un numéro dédié à l'assistant (une carte prépayée ou une eSIM qui reçoit un SMS).
+Réglages → Signal : le numéro de l'assistant et le vôtre, puis l'enregistrement :
+- installation simple : `sudo talixio signal register`, puis `sudo talixio signal verify 123456` ;
+- sous Docker : `docker exec -it talixio-<vous> talixio signal register`, puis `… verify 123456`, puis `docker restart talixio-<vous>`.
+Si un captcha est demandé : https://signalcaptchas.org/registration/generate.html, puis
+`register --captcha 'signalcaptcha://…'`.
+
+## E-mail
+Écrire à l'assistant par e-mail, et recevoir ses messages : Réglages → E-mail (SMTP, IMAP, expéditeurs autorisés).
+
+## ntfy
+Une autre façon de recevoir les notifications : Réglages → *ntfy*, avec un sujet long et aléatoire.
+
+## Notifications sans contenu
+Réglages → *Notifications sans contenu* : « Nouveau message dans … » au lieu du début de la réponse.
+C'est automatique dans les espaces Confidentiels et Secrets.
+
+Seuls les expéditeurs autorisés reçoivent une réponse, sur tous les canaux.

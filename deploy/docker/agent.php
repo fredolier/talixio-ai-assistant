@@ -74,6 +74,11 @@ try {
         $path === '/update' && $method === 'POST' => $background('update', (string)($b['branch'] ?? (getenv('TALIXIO_GIT_BRANCH') ?: 'main'))),
         $path === '/rollback' && $method === 'POST' => $background('rollback'),
         $path === '/pull-model' && $method === 'POST' => $background('pull-model'),
+        $path === '/transfer' && $method === 'POST' => (function () use ($background, $b) {
+            if (!Fleet::validId((string)($b['id'] ?? ''))) throw new \InvalidArgumentException('The identifier is 2 to 30 lower-case letters, digits or dashes, starting with a letter.');
+            if (!preg_match('#^https?://\S+$#', (string)($b['source'] ?? '')) || !preg_match('/^tx-[0-9a-f]{40}$/', (string)($b['code'] ?? ''))) throw new \InvalidArgumentException('The old assistant\'s address and its transfer code (tx-…) are needed.');
+            $background('transfer', json_encode(array_intersect_key($b, array_flip(['id', 'name', 'source', 'code', 'final']))));
+        })(),
         default => $json(['error' => 'not found'], 404),
     };
 } catch (\InvalidArgumentException $e) {

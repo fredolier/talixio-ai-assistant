@@ -248,6 +248,13 @@ final class AdminWeb
             $this->json(['ok' => true]);
             return;
         }
+        if ($path === '/api/transfer' && $m === 'POST') { // an assistant from another server (Transfer), new or over an existing one
+            $this->agent('POST', '/transfer', ['id' => (string)($b['id'] ?? ''), 'name' => (string)($b['name'] ?? ''), 'source' => trim((string)($b['source'] ?? '')),
+                'code' => trim((string)($b['code'] ?? '')), 'final' => !empty($b['final'])]);
+            $this->audit('transfer in', ['id' => (string)($b['id'] ?? ''), 'source' => (string)($b['source'] ?? ''), 'final' => !empty($b['final'])]);
+            $this->json(['ok' => true]);
+            return;
+        }
         foreach (['update', 'rollback', 'pull-model'] as $long) {
             if ($path === "/api/$long" && $m === 'POST') {
                 $this->agent('POST', "/$long", $long === 'update' ? ['branch' => (string)($b['branch'] ?? 'main')] : []);

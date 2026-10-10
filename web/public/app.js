@@ -1578,6 +1578,7 @@ async function loadSettings() {
   loadConnectors();
   loadGoogle();
   loadSpotify();
+  loadTransfer().catch(() => {});
   renderGroups((await api('api/settings')).groups);
 }
 $('#doctor-run').onclick = async () => {
@@ -1592,6 +1593,38 @@ $('#pw-form').onsubmit = async e => {
   try { await post('api/settings/password', { current: $('#pw-current').value, new: $('#pw-new').value }); $('#pw-state').textContent = 'Password changed. Your other devices will ask for it again.'; $('#pw-current').value = $('#pw-new').value = ''; }
   catch (err) { $('#pw-state').textContent = err.message; }
 };
+
+// ---- moving to another server ----
+async function loadTransfer() {
+  const t = await api('api/transfer'), box = $('#transfer-state');
+  const last = t.last_export ? `<p class="muted">${esc(window.t(t.last_export.final ? 'Last copy (final) on {date}' : 'Last copy on {date}', { date: fmtTime(t.last_export.ts) }))}${t.last_export.ok ? '' : ' · ' + esc(window.t('interrupted'))}</p>` : '';
+  box.innerHTML = (t.code_active ? `<p>${esc(window.t('A transfer code is active until {date}.', { date: fmtTime(t.code_expires) }))} <button class="btn small ghost danger" data-a="cancel" type="button">Cancel it</button></p>` : '') + last;
+  box.querySelector('[data-a=cancel]')?.addEventListener('click', async () => { await post('api/transfer/cancel'); loadTransfer(); });
+}
+$('#transfer-code').onclick = async () => {
+  try {
+    const r = await post('api/transfer/code');
+    $('#transfer-state').innerHTML = `<p>${esc(t('Give these two to the new server (the code is shown only now):'))}</p>
+      <p>${esc(t('Address'))}: <code>${esc(r.url || location.origin + location.pathname.replace(/\/$/, ''))}</code></p>
+      <p>${esc(t('Code'))}: <code>${esc(r.code)}</code> <button class="btn small" data-a="copy" type="button">Copy</button></p>`;
+    $('#transfer-state [data-a=copy]').onclick = () => copyText(r.code);
+  } catch (e) { toast(e.message); }
+};
+/** A copy on its way here, or the old server after a move: say so above the conversation. */
+function renderPaused(p) {
+  const el = $('#paused');
+  el.hidden = !p;
+  if (!p) return;
+  el.innerHTML = p.reason === 'moved'
+    ? `<b>${esc(t('This assistant has moved'))}</b> <span>${esc(t('to {url}. Here it no longer answers channels or runs routines.', { url: p.url || '?' }))}</span>`
+      + (p.url ? ` <a class="btn small primary" href="${esc(p.url)}">${esc(t('Open the new one'))}</a>` : '')
+    : `<b>${esc(t('Copy from {url}', { url: p.url || '?' }))}</b> <span>${esc(t('Paused: no channels, no routines, so the two never answer the same messages.'))}</span> <button class="btn small" data-a="resume" type="button">Use this one</button>`;
+  el.querySelector('[data-a=resume]')?.addEventListener('click', async e => {
+    const b = e.currentTarget;
+    if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Sure? Pause the old one first'); return; }
+    try { await post('api/transfer/resume'); toast('This assistant is active.'); refreshStatus(); } catch (err) { toast(err.message); }
+  });
+}
 
 // ---- Spotify ----
 function showSpotify(g) {
@@ -1821,13 +1854,16 @@ function libFolderFromHash() {
   const m = location.hash.match(/^#library(\/.*)?$/);
   return m ? (m[1] ? decodeURIComponent(m[1]) : '/') : null; // '#library' alone is the top of the library
 }
+/** /FAQ and below: the notes about Talixio, kept up to date by each version. */
+const isReadonly = p => p === '/FAQ' || (p || '').startsWith('/FAQ/');
 function libGo(folder) { location.hash = '#library' + (folder === '/' ? '' : folder.split('/').map(encodeURIComponent).join('/')); }
 
 async function loadLibrary() {
   lib.folder = libFolderFromHash() || '/';
   const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
   lib.tree = tree.tree; lib.shared = list.shared; lib.level = list.level || 'internal';
-  lib.folder = list.folder;
+  lib.folder = list.folder; lib.readonly = !!list.readonly;
+  for (const b of ['#lib-upload', '#lib-newnote', '#lib-newfolder']) $(b).hidden = lib.readonly;
   const st = list.stats;
   $('#lib-stats').textContent = st.files ? `${nf.format(st.files)} files · ${fmtSize(st.bytes)}${st.failed ? ` · ${st.failed} unreadable` : ''}. ${st.pending ? `Reading ${st.pending} new file${st.pending > 1 ? 's' : ''} to make ${st.pending > 1 ? 'them' : 'it'} searchable…` : 'Everything is searchable, by you and by the assistant.'}`
     : 'Your documents, notes and recordings. Everything is searchable, by you and by the assistant.';
@@ -1865,6 +1901,11 @@ function renderCrumbs() {
   const owner = lib.folder !== '/' && state.spaces.find(x => x.id && x.folder === lib.folder);
   const spaceBtn = lib.folder === '/' ? '' : owner ? `<a class="btn small" href="#chat/${esc(owner.slug)}" title="Open the conversation of this folder's space"><i class="space-dot" style="background:${esc(owner.color)};width:9px;height:9px;display:inline-block;margin-right:6px"></i>Open space</a>`
     : '<button class="btn small" data-a="space" type="button" title="A separate conversation about this folder">New space here</button>';
+  if (lib.readonly) { // read-only: ask and download, nothing that changes it
+    fa.innerHTML = `<span class="pill" title="${esc(t('Kept up to date with each version of Talixio.'))}">${esc(t('Read-only'))}</span>` + ask + zip;
+    fa.querySelector('[data-a=ask]').addEventListener('click', () => { location.hash = '#chat'; const i = $('#input'); i.value = `From my documents in ${lib.folder}: `; autosize(); i.focus(); saveDraft(); });
+    return;
+  }
   fa.innerHTML = ask + spaceBtn + zip + (lib.folder === '/' ? '' : '<button class="btn small" data-a="share" type="button" title="A link to this folder for people outside">Share</button><button class="btn small" data-a="rename" type="button" title="Rename or move this folder">Rename</button><button class="btn small ghost danger" data-a="delete" type="button" title="Delete this folder">Delete</button>');
   fa.querySelector('[data-a=share]')?.addEventListener('click', () => openShare({ folder: lib.folder }, lib.folder.split('/').pop()));
   fa.querySelector('[data-a=space]')?.addEventListener('click', () => openSpaceEditor(null, { folder: lib.folder, name: lib.folder.split('/').pop() }));
@@ -2096,7 +2137,9 @@ async function openFile(id, opts = {}) {
   $('#viewer-open').hidden = !opens;
   $('#viewer-download').href = fileUrl(f) + '?download=1'; $('#viewer-download').setAttribute('download', f.name);
   const del = $('#viewer-delete'); del.dataset.confirm = ''; del.textContent = 'Delete';
-  const editable = f.note || (f.kind === 'text' && f.size < 2_000_000 && !/\.(html?|eml)$/i.test(f.name));
+  const ro = isReadonly(f.folder);
+  for (const b of ['#viewer-rename', '#viewer-move', '#viewer-reindex', '#viewer-delete']) $(b).hidden = ro;
+  const editable = !ro && f.note || !ro && (f.kind === 'text' && f.size < 2_000_000 && !/\.(html?|eml)$/i.test(f.name));
   const hasText = !editable && (f.kind === 'office' || f.kind === 'pdf' || /\.(html?|eml)$/i.test(f.name)) && d.text && !/^\(No text found/.test(d.text);
   const paged = officePages || (f.kind === 'pdf' && d.pages);
   const tabs = [rendered && ['view', 'View'], paged && ['pages', 'Pages'], editable && ['edit', 'Edit'], hasText && ['text', 'Text only']].filter(Boolean);
@@ -2368,6 +2411,7 @@ async function refreshStatus() {
     st.querySelector('span').textContent = s.worker_online ? 'Running' : 'Worker offline';
     st.title = s.worker_online ? 'Background worker is running: schedules and chat apps work.' : 'Background worker is not running: schedules and Telegram are paused. Check: systemctl status talixio-worker';
     for (const el of [$('#app-version'), $('#more-version')]) { el.textContent = 'Talixio ' + s.version; el.title = s.version_label; }
+    if (JSON.stringify(s.paused || null) !== $('#paused').dataset.p) { $('#paused').dataset.p = JSON.stringify(s.paused || null); renderPaused(s.paused); }
   } catch {}
 }
 

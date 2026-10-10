@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-// A long action of the agent, run on its own: update | rollback | pull-model. Progress in <state>/job.json.
+// A long action of the agent, run on its own: update | rollback | pull-model | transfer. Progress in <state>/job.json.
 require __DIR__ . '/../../src/autoload.php';
 
 $state = getenv('TALIXIO_STATE_DIR') ?: '/state';
@@ -19,6 +19,10 @@ try {
         'update' => $fleet->update($arg !== '' ? $arg : 'main', $progress),
         'rollback' => $fleet->rollback($progress),
         'pull-model' => $progress('done', $fleet->pullModel()),
+        'transfer' => (function () use ($fleet, $arg, $progress) { // arg: JSON {id, name, source, code, final}
+            $a = json_decode($arg, true) ?: [];
+            $fleet->transferIn((string)($a['id'] ?? ''), (string)($a['name'] ?? ''), (string)($a['source'] ?? ''), (string)($a['code'] ?? ''), !empty($a['final']), $progress);
+        })(),
     };
 } catch (Throwable $e) {
     $progress('failed', $e->getMessage());

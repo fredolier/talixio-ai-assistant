@@ -149,13 +149,27 @@ $('#new-btn').onclick = async () => {
   } catch (e) { toast(e.message); }
 };
 
+$('#transfer-btn').onclick = async () => {
+  const v = await ask('Bring an assistant from another server', { ok: 'Copy', html: `<p>On the old server, in that assistant: <b>Settings → Move to another server → Create a transfer code</b>.
+    Everything comes: conversations, memory, skills, library, tasks, settings and keys, password.</p>
+    <p class="muted small">A test copy stays paused (no channels, no routines) so that the two never answer the same messages; copy again as often as you like,
+    an existing identifier gets the fresh copy. The final copy pauses the old one instead.</p>`, fields: [
+    { id: 'source', label: 'Address of the old assistant', placeholder: 'https://old.example.com/fred', attrs: ' type="url" required' },
+    { id: 'code', label: 'Transfer code', placeholder: 'tx-…', attrs: ' required pattern="tx-[0-9a-f]{40}"' },
+    { id: 'id', label: 'Identifier here (lower case, e.g. fred)', placeholder: 'fred', attrs: ' pattern="[a-z][a-z0-9-]{1,29}" required' },
+    { id: 'name', label: 'Name', placeholder: 'Frédéric' },
+    { id: 'final', label: '<b>Final move</b>: this becomes the assistant, the old one is paused and points here', type: 'checkbox' }] });
+  if (!v) return;
+  try { await api('api/transfer', v); document.querySelector('[data-tab=update]').click(); renderJob(await api('api/job')); } catch (e) { toast(e.message); }
+};
+
 // ---- updates ----
 function renderJob(j) {
   const box = $('#job');
   if (!j || j.state === 'none') { box.hidden = true; return; }
   box.hidden = false;
   box.className = 'job ' + j.state;
-  box.innerHTML = `<b>${esc({ update: 'Update', rollback: 'Back to the previous version', 'pull-model': 'Model download' }[j.kind] || j.kind)}: ${esc(j.state === 'running' ? 'in progress' : j.state)}</b><p>${esc(j.message || '')}</p>`
+  box.innerHTML = `<b>${esc({ update: 'Update', rollback: 'Back to the previous version', 'pull-model': 'Model download', transfer: 'Copy from another server' }[j.kind] || j.kind)}: ${esc(j.state === 'running' ? 'in progress' : j.state)}</b><p>${esc(j.message || '')}</p>`
     + (j.log?.length ? `<pre class="out">${esc(j.log.join('\n'))}</pre>` : '');
   $('#update-btn').disabled = $('#rollback-btn').disabled = j.state === 'running';
   clearTimeout(renderJob.t);

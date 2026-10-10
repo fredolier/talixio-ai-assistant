@@ -1,6 +1,7 @@
 #!/bin/sh
 # `talixio doctor|chat` with the system config, run as the talixio user.
 # `talixio signal <args>` runs signal-cli for the assistant's number (register, verify, link...).
+# `talixio transfer-pull <old address> <code> [--final]` brings an assistant from another server (app stopped meanwhile).
 set -e
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 set -a; . /etc/talixio/talixio.env; set +a
@@ -11,5 +12,11 @@ if [ "$1" = signal ]; then
   [ -n "$TALIXIO_SIGNAL_NUMBER" ] || { echo "Set TALIXIO_SIGNAL_NUMBER (e.g. +33612345678) in /etc/talixio/talixio.env first." >&2; exit 1; }
   install -d -o talixio -g talixio -m 700 /var/lib/talixio/signal
   exec runuser -u talixio -- "${TALIXIO_SIGNAL_CLI:-signal-cli}" --config /var/lib/talixio/signal -a "$TALIXIO_SIGNAL_NUMBER" "$@"
+fi
+if [ "$1" = transfer-pull ]; then # the copy replaces the data: the app is stopped meanwhile
+  systemctl stop talixio-web talixio-worker
+  code=0; runuser -u talixio -- /usr/bin/php /opt/talixio/bin/talixio "$@" || code=$?
+  systemctl start talixio-web talixio-worker
+  exit $code
 fi
 exec runuser -u talixio -- /usr/bin/php /opt/talixio/bin/talixio "$@"

@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.15.0 (2026-10-10)
+- FAQ in the library (/FAQ, read-only, in French): using the assistant, privacy, installing and updating,
+  administration, and one page per version (release notes). Kept up to date with each version and indexed:
+  ask the assistant about itself and it answers from these pages, citing them.
+- Moving an assistant to another server, whole (conversations, memory, skills, library, tasks, settings and
+  keys, password): Settings → Move to another server makes a transfer code; on the new server, admin page →
+  From another server (or `talixio transfer-pull`). Test copies stay paused (no channels, no routines) and
+  can be repeated; the final one pauses the old server and points it to the new address.
+
 ## 0.14.1 (2026-10-10)
 - Moving an installation into the Docker stack: the settings of `/etc/talixio/talixio.env` were not imported
   (the file is readable by root only).

@@ -167,6 +167,22 @@ installation can be moved into it. See [deploy/docker/README.md](deploy/docker/R
 sudo deploy/docker/install-stack.sh --domain assistant.example.com --email you@example.com [--migrate fred]
 ```
 
+## Moving an assistant to another server
+
+Settings → **Move to another server** → *Create a transfer code* (valid a day). On the new server: admin
+page → People → **From another server** (Docker), or `sudo talixio transfer-pull <old address> <code> [--final] --url <new address>`.
+Everything comes: conversations, memory, skills, library, tasks, settings and keys, password, two-step
+sign-in, Signal registration. A test copy arrives paused (no channels, no routines, so the two never
+answer the same messages) and can be repeated; the final one (`--final`) is active and pauses the old
+server, which then shows the new address. What the destination held before is kept in `.previous-<date>`.
+
+## FAQ in the library
+
+`/FAQ` (read-only, in French) holds the notes about Talixio: using it, privacy, installing and updating,
+administration, and one page per version from this changelog (`/FAQ/Nouveautés`). Pages come from
+`docs/faq/` and are brought up to date when a new version starts; they are indexed, so the assistant
+answers questions about itself from them.
+
 ## Privacy (what leaves the server)
 
 The **Privacy** page (menu) is worked out from your settings: each service your data can go to, what it

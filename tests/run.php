@@ -1867,6 +1867,79 @@ check('boot: a reset is applied once', str_contains($o, 'password reset') && pas
 $boot(['TALIXIO_RESET' => 'n2:totp']);
 check('boot: two-step sign-in reset', !isset(\Talixio\Settings::load($bd2)['TALIXIO_TOTP_SECRET']));
 
+// ---- the FAQ: the notes about Talixio in the library, read-only, one page per version ----
+use Talixio\Faq;
+use Talixio\Library;
+use Talixio\Transfer;
+$faq = new Faq($app);
+$pages = Faq::pages();
+$n = $faq->sync();
+$inFaq = (int)$s->q("SELECT COUNT(*) FROM files WHERE folder = '/FAQ' OR folder LIKE '/FAQ/%'")->fetchColumn();
+check('faq: every page in /FAQ, in its subfolder', $n === count($pages) && $inFaq === count($pages)
+    && $s->q("SELECT 1 FROM files WHERE folder = '/FAQ/Administration' AND name = 'Transférer un assistant vers un autre serveur.md'")->fetchColumn(), "$n $inFaq " . count($pages));
+$ver = trim((string)file_get_contents(dirname(__DIR__) . '/VERSION'));
+check('faq: release notes, one page per version', (bool)$s->q("SELECT 1 FROM files WHERE folder = '/FAQ/Nouveautés' AND name = ?", ["Talixio $ver.md"])->fetchColumn()
+    && count(Faq::releases((string)file_get_contents(dirname(__DIR__) . '/CHANGELOG.md'))) >= 5);
+check('faq: nothing to do when the version did not change', $faq->sync() === 0);
+$hits = $app->library()->search('code de transfert', '/FAQ');
+check('faq: indexed, found by search', $hits && str_contains(json_encode($hits, JSON_UNESCAPED_UNICODE), 'Transférer'), json_encode($hits, JSON_UNESCAPED_UNICODE));
+$fid = (int)$s->q("SELECT id FROM files WHERE folder = '/FAQ/Utilisation' LIMIT 1")->fetchColumn();
+$ro = function (callable $fn) { try { $fn(); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), 'read-only'); } };
+$tmpf = "$dir/x.txt"; file_put_contents($tmpf, 'hello');
+check('faq: read-only (no delete, rename, edit, move in or out, upload, new folder, folder move or delete)',
+    $ro(fn() => $app->library()->deleteFile($fid)) && $ro(fn() => $app->library()->renameFile($fid, 'x.md')) && $ro(fn() => $app->library()->saveNote('/FAQ', '', 'x', $fid))
+    && $ro(fn() => $app->library()->moveFile($fid, '/Inbox')) && $ro(fn() => $app->files()->save($tmpf, 'x.txt', 'text/plain', '/FAQ/Utilisation'))
+    && $ro(fn() => $app->library()->createFolder('/FAQ/Mine')) && $ro(fn() => $app->library()->moveFolder('/FAQ', '/Docs')) && $ro(fn() => $app->library()->deleteFolder('/FAQ', true))
+    && $ro(fn() => $app->library()->moveFile($app->files()->save($tmpf, 'x.txt', 'text/plain', '/Inbox'), '/FAQ')));
+check('faq: the library says which folders are read-only', $app->library()->list('/FAQ')['readonly'] === true && $app->library()->list('/Inbox')['readonly'] === false
+    && array_values(array_filter($app->library()->tree(), fn($t) => $t['path'] === '/FAQ/Utilisation'))[0]['readonly'] === true);
+Library::$system = true; file_put_contents($tmpf, 'old page'); $oldId = $app->files()->save($tmpf, 'Ancienne.md', 'text/markdown', '/FAQ/Ancien'); Library::$system = false;
+$map = json_decode($s->get('faq_files'), true); $map['/FAQ/Ancien/Ancienne.md'] = [$oldId, 'x']; $s->set('faq_files', json_encode($map)); $s->set('faq_rev', '');
+$faq->sync();
+check('faq: a page gone from the new version is removed, with its empty folder', !$app->files()->get($oldId) && !$app->library()->exists('/FAQ/Ancien') && $app->library()->exists('/FAQ/Utilisation'));
+
+// ---- moving an assistant to another server ----
+$td = "$dir/transfer"; mkdir("$td/src", 0777, true); mkdir("$td/dst", 0777, true);
+file_put_contents("$td/dst/old-data.txt", 'what was here');
+putenv("TALIXIO_DATA_DIR=$td/src");
+$sa = App::fromEnv();
+$sa->store->addMessage('user', 'web', 'Bonjour depuis l\'ancien serveur');
+$sa->ws->write('USER.md', '- Name: Fred (transfer test)');
+\Talixio\Settings::setPassword("$td/src", 'the-same-password');
+$code = (new Transfer($sa))->create()['code'];
+putenv("TALIXIO_DATA_DIR=$dir");
+$tPort = $freePort();
+$tws = proc_open([PHP_BINARY, '-S', "127.0.0.1:$tPort", '-t', dirname(__DIR__) . '/web/public', dirname(__DIR__) . '/web/router.php'],
+    [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$td/web.log", 'w'], 2 => ['file', "$td/web.log", 'a']], $pp, null,
+    ['TALIXIO_DATA_DIR' => "$td/src", 'TALIXIO_PROVIDER' => 'echo', 'TALIXIO_EMBEDDINGS' => 'off', 'PATH' => getenv('PATH'), 'TALIXIO_NOTIFY' => 'none']);
+$waitPort($tPort);
+$quiet = fn() => null;
+try { Transfer::pull("$td/dst", "http://127.0.0.1:$tPort", 'tx-' . str_repeat('0', 40), false, '', $quiet); $err = ''; } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+check('transfer: a wrong code is refused, nothing changed here', str_contains($err, 'refused') && is_file("$td/dst/old-data.txt"), $err);
+$sum = Transfer::pull("$td/dst", "http://127.0.0.1:$tPort", $code, false, 'https://new.example.com/fred', $quiet);
+$dpdo = new PDO("sqlite:$td/dst/talixio.db");
+$kv = fn(PDO $p, string $k) => (string)$p->query("SELECT v FROM kv WHERE k = " . $p->quote($k))->fetchColumn();
+check('transfer: everything copied (conversation, memory, password), the new address set', str_contains($sum, 'Copied')
+    && $dpdo->query("SELECT COUNT(*) FROM messages WHERE content LIKE '%ancien serveur%'")->fetchColumn() == 1
+    && str_contains((string)@file_get_contents("$td/dst/workspace/USER.md"), 'transfer test')
+    && password_verify('the-same-password', \Talixio\Settings::load("$td/dst")['TALIXIO_WEB_PASSWORD_HASH'] ?? '')
+    && (\Talixio\Settings::load("$td/dst")['TALIXIO_PUBLIC_URL'] ?? '') === 'https://new.example.com/fred', $sum);
+check('transfer: a test copy is paused, cannot be copied on with the same code, and what was here is kept aside',
+    (json_decode($kv($dpdo, 'paused'), true)['reason'] ?? '') === 'copy' && $kv($dpdo, 'transfer_code') === ''
+    && !is_file("$td/dst/old-data.txt") && glob("$td/dst/.previous-*/old-data.txt") && !is_dir("$td/dst/.incoming"));
+$spdo = new PDO("sqlite:$td/src/talixio.db");
+check('transfer: the old server keeps running after a test copy, and knows it was copied', $kv($spdo, 'paused') === '' && (json_decode($kv($spdo, 'transfer_last'), true)['ok'] ?? false) === true);
+$dpdo = null;
+Transfer::pull("$td/dst", "http://127.0.0.1:$tPort", $code, true, 'https://new.example.com/fred', $quiet);
+$dpdo = new PDO("sqlite:$td/dst/talixio.db");
+$sp = json_decode($kv($spdo, 'paused'), true);
+check('transfer: the final copy is active here, and pauses the old server with the new address', $kv($dpdo, 'paused') === '' && ($sp['reason'] ?? '') === 'moved'
+    && ($sp['url'] ?? '') === 'https://new.example.com/fred' && $kv($spdo, 'transfer_code') === '' && count(glob("$td/dst/.previous-*")) === 1, json_encode($sp));
+try { Transfer::pull("$td/dst", "http://127.0.0.1:$tPort", $code, true, '', $quiet); $err = ''; } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+check('transfer: the code ends with the final copy', str_contains($err, 'refused'), $err);
+proc_terminate($tws); proc_close($tws);
+$dpdo = $spdo = null;
+
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
 exit($fails ? 1 : 0);

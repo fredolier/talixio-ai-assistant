@@ -231,6 +231,65 @@ final class Fleet
         return ['id' => $id, 'url' => $this->url($id)];
     }
 
+    /**
+     * Bring an assistant from another server (Transfer): a new person, or a fresh copy over an existing one.
+     * Its container is stopped, a one-off container of the same image pulls the copy into its volume, then it
+     * starts again. The data brings its own password and settings.
+     */
+    public function transferIn(string $id, string $name, string $source, string $code, bool $final, callable $progress): void
+    {
+        if (!self::validId($id)) throw new \InvalidArgumentException('The identifier is 2 to 30 lower-case letters, digits or dashes, starting with a letter.');
+        $s = $this->state();
+        $s['instances'][$id] = ($s['instances'][$id] ?? []) + ['name' => mb_substr(trim($name), 0, 80), 'email' => '', 'memory_mb' => $s['settings']['memory_mb'], 'cpus' => $s['settings']['cpus'],
+            'created' => time(), 'password_hash' => '', 'reset' => '', 'timezone' => 'Europe/Paris'];
+        $this->save($s);
+        $progress('stopping', "Stopping $id…");
+        $this->removeContainer($id);
+        $this->ensureNetwork(self::PREFIX . 'i-' . $id);
+        [$code0] = $this->docker('GET', '/volumes/' . self::PREFIX . $id);
+        if ($code0 === 404) $this->ok($this->docker('POST', '/volumes/create', ['Name' => self::PREFIX . $id, 'Labels' => ['talixio.instance' => $id]]), 'volume');
+        $job = self::PREFIX . 'transfer-' . $id;
+        $this->docker('DELETE', "/containers/$job", null, ['force' => 'true']);
+        $cmd = ['transfer-pull', $source, $code, '--url', rtrim($this->url($id), '/')];
+        if ($final) $cmd[] = '--final';
+        $this->ok($this->docker('POST', '/containers/create', ['Image' => $s['image']['current'], 'Cmd' => $cmd, 'Labels' => ['talixio.managed' => '1'],
+            'HostConfig' => ['Mounts' => [['Type' => 'volume', 'Source' => self::PREFIX . $id, 'Target' => '/data']], 'NetworkMode' => self::PREFIX . 'i-' . $id,
+                'ReadonlyRootfs' => true, 'Tmpfs' => ['/tmp' => 'rw,nosuid,nodev,size=256m'], 'CapDrop' => ['ALL'], 'SecurityOpt' => ['no-new-privileges'],
+                'Memory' => 512 * 1048576, 'PidsLimit' => 64]], ['name' => $job]), 'create the transfer');
+        $this->ok($this->docker('POST', "/containers/$job/start"), 'start the transfer');
+        $progress('copying', "Copying from $source…");
+        $log = ''; $exit = null; $shown = '';
+        for ($t = 0; $t < 6 * 3600; $t += 5) {
+            [, $c] = $this->docker('GET', "/containers/$job/json");
+            [, $raw] = $this->docker('GET', "/containers/$job/logs", null, ['stdout' => 1, 'stderr' => 1]);
+            $log = self::demux(is_string($raw) ? $raw : '');
+            $lines = array_values(array_filter(array_map('trim', explode("\n", $log))));
+            if ($lines && end($lines) !== $shown) $progress('copying', $shown = end($lines));
+            if (($c['State']['Status'] ?? '') === 'exited') { $exit = (int)$c['State']['ExitCode']; break; }
+            sleep(5);
+        }
+        $this->docker('DELETE', "/containers/$job", null, ['force' => 'true']);
+        $lines = array_values(array_filter(array_map('trim', explode("\n", $log))));
+        $last = $lines ? end($lines) : '';
+        if ($exit !== 0) {
+            $this->createAndStart($id, $this->state()); // what was there before starts again (unchanged when the copy failed)
+            throw new \RuntimeException($exit === null ? 'The copy took more than 6 hours: stopped.' : 'The copy failed: ' . $last);
+        }
+        $progress('starting', "Starting $id…");
+        $this->createAndStart($id, $this->state());
+        $this->reloadCaddy();
+        if (!$this->waitHealthy($id, 120)) throw new \RuntimeException("$id does not start after the copy: see its logs (docker logs talixio-$id). The data before the copy is in its volume, in .previous-*.");
+        $progress('done', $last . ' Address: ' . $this->url($id));
+    }
+
+    /** Docker's multiplexed log stream (8-byte headers) as text. */
+    private static function demux(string $raw): string
+    {
+        $out = '';
+        for ($p = 0; $p + 8 <= strlen($raw);) { $len = unpack('N', substr($raw, $p + 4, 4))[1]; $out .= substr($raw, $p + 8, $len); $p += 8 + $len; }
+        return $out;
+    }
+
     public function start(string $id): void { $this->need($id); $this->ok($this->docker('POST', '/containers/' . $this->containerName($id) . '/start'), 'start'); }
     public function stop(string $id): void { $this->need($id); $this->ok($this->docker('POST', '/containers/' . $this->containerName($id) . '/stop', null, ['t' => 15], 30), 'stop'); }
     public function restart(string $id): void { $this->need($id); $this->ok($this->docker('POST', '/containers/' . $this->containerName($id) . '/restart', null, ['t' => 15], 40), 'restart'); }

@@ -9,6 +9,16 @@ final class Cli
         $cmd = $argv[1] ?? 'help';
         if (in_array($cmd, ['version', '--version', '-v'], true)) { echo 'Talixio ' . Version::get()['label'] . "\n"; return 0; }
         try {
+            if ($cmd === 'transfer-pull') { // talixio transfer-pull <old address> <code> [--final] [--url <new address>]; services stopped
+                $args = array_slice($argv, 2);
+                $final = in_array('--final', $args, true);
+                $i = array_search('--url', $args, true);
+                $url = $i !== false ? (string)($args[$i + 1] ?? '') : '';
+                $pos = array_values(array_filter($args, fn($a, $k) => $a[0] !== '-' && ($i === false || $k !== $i + 1), ARRAY_FILTER_USE_BOTH));
+                if (count($pos) < 2) { fwrite(STDERR, "usage: talixio transfer-pull <old address> <transfer code> [--final] [--url <this assistant's new address>]\n"); return 2; }
+                echo Transfer::pull(Config::fromEnv()->dataDir, $pos[0], $pos[1], $final, $url, fn($m) => print("$m\n")), "\n";
+                return 0;
+            }
             $app = App::fromEnv();
             switch ($cmd) {
                 case 'worker':
@@ -72,7 +82,7 @@ final class Cli
                     $p = proc_open(array_merge([$c->signalCli, '--config', $c->dataDir . '/signal', '-a', $c->signalNumber], array_slice($argv, 2)), [STDIN, STDOUT, STDERR], $pipes);
                     return is_resource($p) ? proc_close($p) : 1;
                 default:
-                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|backup|password|totp [off]|signal ARGS|mcp|index|job ID\n");
+                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|backup|password|totp [off]|signal ARGS|transfer-pull URL CODE [--final] [--url URL]|mcp|index|job ID\n");
                     return 2;
             }
         } catch (\Throwable $e) {

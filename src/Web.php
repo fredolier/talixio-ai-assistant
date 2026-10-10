@@ -28,6 +28,10 @@ final class Web
             echo preg_replace('/<head>/', '<head><base href="' . htmlspecialchars(Config::basePath() . '/') . '">', $html, 1); // every address in the app is relative to it
             return;
         }
+        if ($path === '/api/transfer/export' && $method === 'GET') { // the new server pulls a copy: no session, the transfer code instead
+            (new Transfer($this->app))->export((string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? '')), !empty($_GET['final']), (string)($_GET['to'] ?? ''));
+            return;
+        }
         if ($path === '/api/google/callback' && $method === 'GET') { $this->googleCallback(); return; } // Google's redirect carries no session cookie (SameSite)
         if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
@@ -71,6 +75,10 @@ final class Web
         return match (true) {
             $path === '/api/logout' => $this->logout(),
             $path === '/api/status' => $this->status(),
+            $path === '/api/transfer' => (new Transfer($this->app))->status(),
+            $path === '/api/transfer/code' && $m === 'POST' => (new Transfer($this->app))->create(),
+            $path === '/api/transfer/cancel' && $m === 'POST' => (function () { (new Transfer($this->app))->cancel(); return ['ok' => true]; })(),
+            $path === '/api/transfer/resume' && $m === 'POST' => (function () { (new Transfer($this->app))->resume(); return ['ok' => true]; })(),
             $path === '/api/messages' => (function () use ($s) {
                 $space = (int)($_GET['space'] ?? 0);
                 $list = isset($_GET['before']) ? $s->messagesBefore((int)$_GET['before'], 100, $space) : $s->messagesAfter((int)($_GET['after'] ?? 0), 200, $space);
@@ -413,7 +421,7 @@ final class Web
             'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()),
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
-            'heartbeat_minutes' => $c->heartbeatMinutes];
+            'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store)];
     }
 
     private function channels(): array

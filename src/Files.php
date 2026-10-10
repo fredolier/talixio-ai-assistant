@@ -29,6 +29,7 @@ final class Files
     public function save(string $tmp, string $name, string $mime = '', string $folder = '/Inbox'): int
     {
         $folder = Library::normalize($folder);
+        Library::guard($folder);
         $c = $this->app->cfg;
         if ($mime === '' || $mime === 'application/octet-stream') {
             $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($tmp) ?: 'application/octet-stream';
