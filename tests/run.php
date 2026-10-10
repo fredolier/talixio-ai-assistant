@@ -243,6 +243,14 @@ check('job uses the sub-agent prompt', str_contains($fake->calls[count($fake->ca
 $msgs = $s->messagesAfter(0);
 check('job report relayed in the thread', end($msgs)['content'] === 'Here are three hotels: A, B and C.' && end($msgs)['channel'] === 'job');
 check('job cost recorded', (float)$job['cost_usd'] > 0 && (int)$s->q("SELECT COUNT(*) FROM usage WHERE job_id=?", [$job['id']])->fetchColumn() === 1);
+$rf = $app->files()->get((int)$job['report_file']);
+check('job report saved in full in the Inbox', $rf && $rf['folder'] === '/Inbox' && str_starts_with($rf['name'], 'Job - Hotels in Lyon - ') && str_contains(file_get_contents($rf['path']), 'Report: hotels A, B, C'), json_encode($rf));
+check('job relay links the saved report', (bool)array_filter($fake->calls, fn($c) => str_contains(json_encode($c, JSON_UNESCAPED_SLASHES), "/files/{$rf['id']})")));
+$fid = $s->addJob('Filed', 'x', 'fast', 1.0, 'agent', null, 0, [], '', null, '/Projects/Hotels');
+$app->jobs()->runJob($fid);
+$rf2 = $app->files()->get((int)$s->job($fid)['report_file']);
+check('job report saved in the folder asked for', $rf2 && $rf2['folder'] === '/Projects/Hotels', json_encode($rf2));
+check('rerun keeps the report folder', $s->job($app->jobs()->rerun($fid))['folder'] === '/Projects/Hotels');
 
 // job cost cap and cancellation
 $fake->script = function ($last, $tools, $on) use ($usage) { for ($i = 0; $i < 10; $i++) $usage($on, 'claude-opus-x', 100000, 10000); return 'never'; };

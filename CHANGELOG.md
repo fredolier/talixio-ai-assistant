@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.19.7 (2026-10-10)
+- Jobs: the full report is saved as a note in the library when the job finishes, so nothing is lost when the
+  chat relays it in short: in the Inbox ("Job - title - date"), in the folder the user named when asking
+  (new `folder` option of `delegate`, kept by "run again" and "continue"), or next to the recording for a
+  meeting summary. The assistant gives the link and can file it elsewhere.
+
 ## 0.19.6 (2026-10-10)
 - Docker: updating from the admin page now also moves the admin page and its agent to the new version (they
   stayed on the image of the installation, so new admin features never showed). The agent replaces itself

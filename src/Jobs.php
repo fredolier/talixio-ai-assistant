@@ -13,14 +13,15 @@ final class Jobs
     /** Tool steps a job may take at each effort level. */
     public const STEPS = ['low' => 15, 'medium' => 30, 'high' => 60, 'xhigh' => 100, 'max' => 200];
 
-    /** $maxUsd: null = the default cap (TALIXIO_JOB_MAX_USD); capped at TALIXIO_JOB_MAX_USD_LIMIT. $effort: '' = TALIXIO_JOB_EFFORT. */
-    public function create(string $title, string $instructions, string $tier, array $tags = [], ?float $maxUsd = null, string $effort = ''): int
+    /** $maxUsd: null = the default cap (TALIXIO_JOB_MAX_USD); capped at TALIXIO_JOB_MAX_USD_LIMIT. $effort: '' = TALIXIO_JOB_EFFORT. $folder: where the report is saved ('' = the Inbox). */
+    public function create(string $title, string $instructions, string $tier, array $tags = [], ?float $maxUsd = null, string $effort = '', string $folder = ''): int
     {
+        if (trim($folder) !== '') { $folder = Library::normalize($folder); Library::guard($folder); } else $folder = '';
         $state = $this->app->budget()->status()['state'];
         if ($state !== 'ok') throw new \RuntimeException("budget is $state: not starting background jobs. Do it yourself briefly or tell the user.");
         $active = count($this->app->store->jobsWithStatus('queued')) + count($this->app->store->jobsWithStatus('running'));
         if ($active >= $this->app->cfg->maxParallelJobs * 3) throw new \RuntimeException("$active jobs already queued or running; wait for some to finish");
-        return $this->app->store->addJob($title, $instructions, $tier, $this->cap($maxUsd), 'agent', null, $this->app->space, $tags, $this->effort($effort)); // the report comes back in this space
+        return $this->app->store->addJob($title, $instructions, $tier, $this->cap($maxUsd), 'agent', null, $this->app->space, $tags, $this->effort($effort), null, $folder); // the report comes back in this space
     }
 
     /** A job's cost cap: the default, or the one asked for within TALIXIO_JOB_MAX_USD_LIMIT (0 = no cap, only when the limit is 0 too). */
@@ -60,7 +61,7 @@ final class Jobs
         if ($tier !== '' && !in_array($tier, Tier::NAMES, true)) throw new \InvalidArgumentException('unknown tier');
         if ($this->app->budget()->status()['state'] === 'blocked') throw new \InvalidArgumentException('The budget is used up.');
         return $this->app->store->addJob($j['title'], $j['instructions'], $tier ?: $j['tier'], $maxUsd !== null ? $this->cap($maxUsd) : (float)$j['max_cost_usd'], $j['kind'],
-            $j['file_id'] !== null ? (int)$j['file_id'] : null, (int)$j['space'], Store::tagList($j['tags']), $this->effort($effort) ?: (string)($j['effort'] ?? ''));
+            $j['file_id'] !== null ? (int)$j['file_id'] : null, (int)$j['space'], Store::tagList($j['tags']), $this->effort($effort) ?: (string)($j['effort'] ?? ''), null, (string)($j['folder'] ?? ''));
     }
 
     /**
@@ -76,7 +77,7 @@ final class Jobs
         $note = trim($note) !== '' ? "\n\n# The user adds\n" . trim($note) : '';
         return $this->app->store->addJob(preg_replace('/ \(continued( \d+)?\)$/', '', $j['title']) . ' (continued)', $j['instructions'] . $note, $j['tier'],
             $maxUsd !== null ? $this->cap($maxUsd) : (float)$j['max_cost_usd'], 'agent', null, (int)$j['space'], Store::tagList($j['tags']),
-            $this->effort($effort) ?: (string)$j['effort'], $id);
+            $this->effort($effort) ?: (string)$j['effort'], $id, (string)($j['folder'] ?? ''));
     }
 
     /** What the earlier runs of a continued job did: their tool steps and reports, oldest first, within a size limit. */
@@ -191,6 +192,7 @@ final class Jobs
             [$text, $meta] = $this->app->agent()->run('job', $j['tier'], 'job', [['role' => 'user', 'content' => $task]], $brief, 'job', $id, $guard);
             if ($j['kind'] === 'meeting') $store->addDoc('summary', $id, 'meeting summary: ' . $j['title'], $text);
             $store->updateJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);
+            if (trim((string)$text) !== '') $this->saveReport($store->job($id), $text);
         } catch (Abort $e) {
             if ($e->getMessage() === 'cancelled') return; // the user or assistant cancelled it: nothing to report
             $store->updateJob($id, ['status' => 'failed', 'result' => 'Stopped: ' . $e->getMessage(), 'finished' => time()]);
@@ -229,6 +231,26 @@ final class Jobs
         }
     }
 
+    /**
+     * Keep the full report in the library, so nothing is lost when the chat relays it in short: in the folder asked for,
+     * next to the recording for a meeting, else in the Inbox. A failure here doesn't fail the job.
+     */
+    private function saveReport(array $j, string $text): void
+    {
+        try {
+            $folder = (string)($j['folder'] ?? '');
+            if ($folder === '' && $j['kind'] === 'meeting' && $j['file_id'] !== null) $folder = (string)($this->app->files()->get((int)$j['file_id'])['folder'] ?? '');
+            if ($folder === '') $folder = Library::INBOX;
+            $this->app->library()->ensureFolder($folder);
+            $title = trim(preg_replace('#[/\\\\:*?"<>|\x00-\x1f]+#', ' ', (string)$j['title']));
+            $name = ($j['kind'] === 'meeting' ? '' : 'Job - ') . mb_substr($title, 0, 60) . ' - ' . date('Y-m-d H.i');
+            $f = $this->app->library()->saveNote($folder, $name, "# {$j['title']}\n\n_" . date('Y-m-d H:i') . " · job #{$j['id']}_\n\n" . $text);
+            $this->app->store->updateJob((int)$j['id'], ['report_file' => (int)$f['id']]);
+        } catch (\Throwable $e) {
+            Log::warn("job {$j['id']}: report not saved: " . $e->getMessage());
+        }
+    }
+
     /** Post the outcome in the main thread; the main assistant relays it to the user. */
     private function report(int $id): void
     {
@@ -241,6 +263,10 @@ final class Jobs
         if ($j['status'] === 'failed' && str_contains((string)$j['result'], 'cost cap')) {
             $how = "It reached its cost cap before finishing. Tell the user, with whatever it found, and that it can carry on from where it stopped: "
                 . "they say e.g. \"continue job #{$j['id']}\" (optionally with a budget) or press Continue in Jobs. Don't continue it yourself unless they ask.";
+        }
+        if (!empty($j['report_file']) && ($f = $this->app->files()->get((int)$j['report_file']))) {
+            $how .= sprintf(' The full report is saved in the library as [%s](/files/%d) in %s: give the user this link, and offer to file it elsewhere (move it) if they want.',
+                str_replace(['[', ']'], '', $f['name']), $f['id'], $f['folder']);
         }
         $reply = $this->app->agent()->chat('job', "[Background job #{$j['id']} \"{$j['title']}\" $head. Its report follows. $how]\n\n{$j['result']}", 'standard', [], null, (int)$j['space']);
         $this->app->notifier()->notify($j['title'], $reply, (int)$j['space']);

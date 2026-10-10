@@ -73,6 +73,8 @@ final class Store
         $this->addColumn('jobs', 'tags', "TEXT NOT NULL DEFAULT ''"); // ',research,bikes,'
         $this->addColumn('jobs', 'effort', "TEXT NOT NULL DEFAULT ''"); // '' = TALIXIO_JOB_EFFORT
         $this->addColumn('jobs', 'parent', 'INTEGER'); // the job this one continues
+        $this->addColumn('jobs', 'folder', "TEXT NOT NULL DEFAULT ''"); // where its report is saved ('' = the Inbox)
+        $this->addColumn('jobs', 'report_file', 'INTEGER'); // the library note holding its full report
         // the assistant's mind (Mind): observations from the history, beliefs built from them, a journal of how it changes
         $this->db->exec("CREATE TABLE IF NOT EXISTS mind_obs(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, strength INTEGER NOT NULL DEFAULT 1,
                 space INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'chat', messages TEXT NOT NULL DEFAULT '[]', processed INTEGER NOT NULL DEFAULT 0);
@@ -243,9 +245,9 @@ final class Store
     }
 
     // --- background jobs (sub-agents) ---
-    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null, int $space = 0, array|string $tags = [], string $effort = '', ?int $parent = null): int
+    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null, int $space = 0, array|string $tags = [], string $effort = '', ?int $parent = null, string $folder = ''): int
     {
-        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id,space,tags,effort,parent) VALUES(?,?,?,?,?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId, $space, self::tagString($tags), $effort, $parent]);
+        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id,space,tags,effort,parent,folder) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId, $space, self::tagString($tags), $effort, $parent, $folder]);
         return (int)$this->db->lastInsertId();
     }
 

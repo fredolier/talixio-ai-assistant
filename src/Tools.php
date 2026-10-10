@@ -190,7 +190,8 @@ final class Tools
             "Start a background sub-agent for work that takes several searches or steps (research, comparisons, planning, summarising long pages). You get control back immediately; when it finishes, its report is posted in the chat and you will relay it. Split independent parts into separate jobs to run them in parallel (max {$cfg->maxParallelJobs} at a time). The sub-agent can search the web, read pages and read memory, but cannot message the user or change memory or schedules. Write self-contained instructions: it does not see this conversation. tier: fast (simple lookups), standard (default), deep (hard reasoning; most expensive). effort: how thorough (deeper thinking, more steps: low 15, medium 30, high 60, xhigh 100, max 200; default {$cfg->jobEffort}); use high or more for long, complex work. Each job is capped at \${$cfg->jobMaxUsd} unless you set max_usd (up to \${$cfg->jobMaxUsdLimit}): raise it when the user gives a budget or the work is clearly big.",
             ['title' => ['type' => 'string'], 'instructions' => ['type' => 'string'], 'tier' => ['type' => 'string', 'enum' => Tier::NAMES],
              'effort' => ['type' => 'string', 'enum' => Tier::EFFORTS], 'max_usd' => ['type' => 'number', 'description' => 'cost cap in dollars for this job'],
-             'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => '1-3 short topic tags so the user can find it later, e.g. ["bikes", "comparison"]; reuse existing tags (list_jobs shows them)']],
+             'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => '1-3 short topic tags so the user can find it later, e.g. ["bikes", "comparison"]; reuse existing tags (list_jobs shows them)'],
+             'folder' => ['type' => 'string', 'description' => 'library folder where its full report is saved as a note, when the user names one; default: the Inbox']],
             ['title', 'instructions'], fn(array $a) => $this->delegate($a));
         $this->register('list_jobs', 'List recent background jobs (space, tags, status). tag: only jobs with this tag; all_spaces: not only this space.',
             ['tag' => ['type' => 'string'], 'all_spaces' => ['type' => 'boolean']], [], fn(array $a) => $this->listJobs((string)($a['tag'] ?? ''), !empty($a['all_spaces'])));
@@ -574,10 +575,10 @@ final class Tools
         $tier = in_array($a['tier'] ?? '', Tier::NAMES, true) ? $a['tier'] : 'standard';
         $effort = in_array($a['effort'] ?? '', Tier::EFFORTS, true) ? $a['effort'] : '';
         $id = $this->app->jobs()->create((string)$a['title'], (string)$a['instructions'], $tier, is_array($a['tags'] ?? null) ? $a['tags'] : (is_string($a['tags'] ?? null) ? [$a['tags']] : []),
-            is_numeric($a['max_usd'] ?? null) ? (float)$a['max_usd'] : null, $effort);
+            is_numeric($a['max_usd'] ?? null) ? (float)$a['max_usd'] : null, $effort, is_string($a['folder'] ?? null) ? $a['folder'] : '');
         $j = $this->app->store->job($id);
-        return sprintf("job #%d queued (%s tier, effort %s, cap %s). Tell the user it's running; the report will be posted in the chat when done.",
-            $id, $tier, $j['effort'] ?: $this->app->cfg->jobEffort, (float)$j['max_cost_usd'] > 0 ? sprintf('$%.2f', $j['max_cost_usd']) : 'none');
+        return sprintf("job #%d queued (%s tier, effort %s, cap %s). Tell the user it's running; the report will be posted in the chat and saved in %s when done.",
+            $id, $tier, $j['effort'] ?: $this->app->cfg->jobEffort, (float)$j['max_cost_usd'] > 0 ? sprintf('$%.2f', $j['max_cost_usd']) : 'none', $j['folder'] ?: Library::INBOX);
     }
 
     private function listJobs(string $tag = '', bool $all = false): string

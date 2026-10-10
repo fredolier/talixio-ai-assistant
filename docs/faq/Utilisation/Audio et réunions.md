@@ -5,7 +5,7 @@
   téléversez un enregistrement (tout audio de plus de 3 minutes compte comme une réunion).
   Vous recevez un résumé, les décisions, les actions (qui/quoi/quand) et les questions ouvertes,
   avec la proposition de créer les rappels et les tâches.
-- Les transcriptions et résumés sont cherchables ensuite.
+- Les transcriptions et résumés sont cherchables ensuite. Le compte rendu est aussi enregistré comme note, à côté de l'enregistrement.
 - Telegram limite les fichiers à 20 Mo : téléversez les longs enregistrements dans l'app web.
 
 ## Pourquoi une transcription séparée ?

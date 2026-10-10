@@ -16,3 +16,11 @@
 ## Travaux de fond (Jobs)
 Pour les recherches longues, l'assistant lance des sous-agents (jusqu'à 3 en parallèle), chacun avec
 un plafond de coût (2 $ par défaut ; « budget 5 $ » pour plus). Le rapport arrive dans l'espace qui l'a demandé.
+
+Le rapport **complet** est aussi enregistré comme note dans la bibliothèque, dès la fin du travail :
+- dans la **Boîte de réception** par défaut, nommé « Job - titre - date » ;
+- dans un autre dossier si vous le dites en lançant la recherche (« range le rapport dans /Projets/Vélo ») ;
+- pour un compte rendu de réunion, à côté de l'enregistrement.
+
+L'assistant vous en donne le lien. Le message du chat peut être plus court ; le fichier, lui, garde tout.
+Pour le classer ailleurs, demandez-le (« range ce rapport dans /Projets »).
