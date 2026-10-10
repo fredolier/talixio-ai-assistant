@@ -54,6 +54,7 @@ final class Tools
             ['query' => ['type' => 'string'], 'limit' => ['type' => 'integer'], 'all_spaces' => ['type' => 'boolean']], ['query'],
             function (array $a) {
                 $hits = $this->app->recall()->search($a['query'], min(20, max(1, (int)($a['limit'] ?? 8))), PHP_INT_MAX, null, null, !empty($a['all_spaces']) ? null : $this->app->space);
+                Privacy::local('Memory search');
                 return $hits ? Recall::format($hits) : 'nothing found';
             });
 
@@ -63,7 +64,8 @@ final class Tools
             function (array $a) {
                 $scope = $this->spaceFolder();
                 $folder = isset($a['folder']) && $a['folder'] !== '' ? (string)$a['folder'] : ($scope !== '' ? $scope : '/'); // in a space: its folder first
-                $hits = $this->app->library()->search($a['query'], $folder, min(20, max(1, (int)($a['limit'] ?? 8))));
+                $hits = $this->app->privacy()->readable($this->app->library()->search($a['query'], $folder, min(20, max(1, (int)($a['limit'] ?? 8)))));
+                Privacy::local('Library search');
                 if (!$hits) return 'nothing found in ' . $folder . ($folder !== '/' ? " (search folder '/' to look in the whole library)" : '');
                 return implode("\n", array_map(fn($h) => '- ' . Library::join($h['folder'], $h['name']) . " (file #{$h['id']}" . ($h['page'] ? ", page {$h['page']}" : '') . ', cite as ['
                     . preg_replace('/[\[\]]/', '', $h['name']) . ($h['page'] ? " p. {$h['page']}" : '') . "](/files/{$h['id']}" . ($h['page'] ? "#p{$h['page']}" : '') . ")): {$h['snippet']}", $hits));
@@ -128,9 +130,12 @@ final class Tools
         $this->register('file_read', 'Read the text of a file by its id (#n in the conversation or from kb_search/kb_list): document, PDF, Office file, note, audio transcript or image description. Use offset to continue a long one.',
             ['id' => ['type' => 'integer'], 'offset' => ['type' => 'integer']], ['id'],
             function (array $a) {
+                $f = $this->app->files()->get((int)$a['id']) ?? throw new \RuntimeException('no such file');
+                if (!$this->app->privacy()->readable([['folder' => $f['folder']]])) return 'error: this file belongs to a Secret space: it can only be read there.';
                 $text = Files::withPageMarks($this->app->files()->text((int)$a['id']));
                 $off = max(0, (int)($a['offset'] ?? 0));
                 $chunk = mb_substr($text, $off, 30000);
+                Privacy::doc($f['name'], mb_strlen($chunk), $this->app->privacy()->folderLevel($f['folder']));
                 return $chunk . ($off + 30000 < mb_strlen($text) ? "\n[... more: call again with offset " . ($off + 30000) . ' of ' . mb_strlen($text) . ']' : '');
             });
 
@@ -415,6 +420,10 @@ final class Tools
     /** Called by the model. Sensitive tools become approval requests. */
     public function run(string $name, array $args): string
     {
+        if (isset($this->tools[$name]) && ($gate = $this->app->privacy()->toolGate($name, $args)) !== null) { // confidential / secret spaces
+            $this->app->store->logTool($name, $args, $gate, $this->app->jobId);
+            return $gate;
+        }
         if (isset($this->tools[$name]) && $this->needsApproval($name)) {
             try { $out = $this->app->approvals()->request($name, $args, ($this->approval[$name])($args)); }
             catch (\Throwable $e) { $out = 'error: ' . $e->getMessage(); }

@@ -30,6 +30,15 @@ final class Summarizer
     /** Level 1: summarise messages older than the latest KEEP_RECENT, once enough have piled up or the conversation went quiet. */
     public function compact(int $now, int $minMessages = 16, int $idleSeconds = 1800, bool $force = false, int $space = 0): bool
     {
+        $p = $this->app->privacy();
+        if ($p->modelBlocked($p->spaceLevel($space)) !== null) return false; // a secret space with a model outside: kept word for word, never summarised
+        $before = $this->app->space; $this->app->space = $space; // its level applies to the summary request
+        try { return $this->compactSpace($now, $minMessages, $idleSeconds, $force, $space); }
+        finally { $this->app->space = $before; }
+    }
+
+    private function compactSpace(int $now, int $minMessages, int $idleSeconds, bool $force, int $space): bool
+    {
         $store = $this->app->store;
         $from = (int)$store->get(Store::summarizedKey($space), '0');
         $last = $store->q('SELECT id, ts FROM messages WHERE space = ? ORDER BY id DESC LIMIT 1', [$space])->fetch();

@@ -4,10 +4,16 @@ namespace Talixio;
 
 final class Http
 {
+    /** Called before every request with its URL and size: Privacy checks it (may throw) and logs it. */
+    public static $hook = null;
+
+    public static function check(string $url, int $bytes): void { if (self::$hook) (self::$hook)($url, $bytes); }
+
     /** @return array{0:int,1:string,2:array<string,string>} status, body, lowercase headers */
     public static function request(string $method, string $url, array $headers = [], ?string $body = null,
                                    int $timeout = 60, array $curlOpts = []): array
     {
+        self::check($url, $body === null ? 0 : strlen($body));
         $resp = [];
         $ch = curl_init($url);
         curl_setopt_array($ch, $curlOpts + [
@@ -42,11 +48,13 @@ final class Http
     public static function sse(string $url, array $payload, array $headers, callable $onEvent, int $timeout = 600): void
     {
         $status = 0; $buf = ''; $errBody = ''; $thrown = null;
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        self::check($url, strlen($json));
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_POST => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_USERAGENT => 'Talixio/0.5',
             CURLOPT_HTTPHEADER => array_merge(['Content-Type: application/json', 'Accept: text/event-stream'], $headers),
-            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+            CURLOPT_POSTFIELDS => $json,
             CURLOPT_HEADERFUNCTION => function ($ch, string $line) use (&$status) {
                 if (preg_match('#^HTTP/\S+ (\d{3})#', $line, $m)) $status = (int)$m[1];
                 return strlen($line);

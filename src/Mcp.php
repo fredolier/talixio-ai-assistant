@@ -110,7 +110,7 @@ final class Mcp
     public function call(string $server, string $tool, array $args): string
     {
         $s = $this->servers()[$server] ?? throw new \RuntimeException("connector $server is not configured any more");
-        $r = $this->request($s, 'tools/call', ['name' => $tool, 'arguments' => (object)$args], 120);
+        $r = Privacy::as('connector', fn() => $this->request($s, 'tools/call', ['name' => $tool, 'arguments' => (object)$args], 120));
         $parts = [];
         foreach ((array)($r['content'] ?? []) as $c) {
             $parts[] = match ($c['type'] ?? '') {
@@ -129,6 +129,7 @@ final class Mcp
     /** One JSON-RPC request in a fresh session: initialize, notifications/initialized, then the request. */
     public function request(array $s, string $method, array|object $params, int $timeout = 60): array
     {
+        if ($method !== 'tools/call') return Privacy::approved(fn() => Privacy::as('connector', fn() => isset($s['url']) ? $this->http($s, $method, $params, $timeout) : $this->stdio($s, $method, $params, $timeout))); // listing tools carries nothing of yours
         return isset($s['url']) ? $this->http($s, $method, $params, $timeout) : $this->stdio($s, $method, $params, $timeout);
     }
 
@@ -207,6 +208,7 @@ final class Mcp
             if ($token !== null) $headers[] = "Authorization: Bearer $token";
             if ($session) $headers[] = "Mcp-Session-Id: $session";
             $respHeaders = [];
+            Http::check((string)$s['url'], 1000);
             $ch = curl_init((string)$s['url']);
             curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_HTTPHEADER => $headers,
                 CURLOPT_POSTFIELDS => json_encode(['jsonrpc' => '2.0'] + $msg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), CURLOPT_USERAGENT => 'Talixio',

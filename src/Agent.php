@@ -146,6 +146,7 @@ final class Agent
             if (trim($m[1]) === '') return I18n::t($this->app, 'Spaces: {list}. Switch with "/space name".', ['list' => implode(', ', array_map(fn($x) => $x['name'] . ($x['id'] === $space ? I18n::t($this->app, ' (current)') : ''), $spaces->all()))]);
             $to = $spaces->find($m[1]);
             if (!$to || $to['archived']) return I18n::t($this->app, 'No space called "{name}". Spaces: {list}.', ['name' => $m[1], 'list' => implode(', ', array_column($spaces->all(), 'name'))]);
+            if ($channel === 'telegram' && ($to['privacy'] ?? 'internal') !== 'internal') return I18n::t($this->app, '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).', ['name' => $to['name']]);
             $spaces->setForChannel($channel, (int)$to['id']);
             return I18n::t($this->app, 'Now in the space "{name}". "/space general" to come back.', ['name' => $to['name']]);
         }
@@ -158,6 +159,9 @@ final class Agent
                 return $this->app->approvals()->decide($id, $ans[0], $channel);
             }
         }
+        $privacy = $this->app->privacy();
+        $level = $privacy->spaceLevel($space);
+        if ($channel === 'telegram' && $level !== 'internal') return I18n::t($this->app, '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).', ['name' => $spaces->get($space)['name']]);
         $prompt = $text;
         if ($tier === 'standard' && $space) $tier = $spaces->get($space)['tier'] ?: 'standard';
         if (preg_match('#^/(fast|standard|deep)\b\s*#i', $text, $m)) { $tier = strtolower($m[1]); $prompt = substr($text, strlen($m[0])); }
@@ -185,6 +189,8 @@ final class Agent
         }
         $previousSpace = $this->app->space;
         $this->app->space = $space; // tools (library search, schedules, notes...) work within this space
+        Privacy::begin(); // what this answer sends out, shown under it
+        if ($onEvent) Privacy::$onEvent = $onEvent;
         try {
             $ref = $files ? $this->app->files()->reference($files) : '';
             $store->addMessage('user', $channel, trim($text . ($ref !== '' ? "\n$ref" : '')), null, $files, $space);
@@ -194,20 +200,28 @@ final class Agent
                 if ($files) {
                     if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Reading the attachments…']);
                     $content = $this->app->files()->parts($prompt, $files);
+                    foreach ($files as $fid) if ($f = $this->app->files()->get((int)$fid)) Privacy::doc($f['name'], (int)mb_strlen((string)$f['text']), $privacy->folderLevel($f['folder']));
                 }
                 $history[count($history) - 1]['content'] = $content; // the new message, with attachments
             }
             $recalled = '';
             if (!in_array($channel, ['schedule', 'job'], true) && $prompt !== '') {
-                try { $recalled = $this->app->recall()->autoRecall($prompt, $oldest, $this->app->cfg->recallMinSim, $space); }
+                try { $recalled = $this->app->recall()->autoRecall($prompt, $oldest, $this->app->cfg->recallMinSim, $space); Privacy::local('Memory search'); }
                 catch (\Throwable $e) { Log::warn("recall: {$e->getMessage()}"); }
             }
             $meta = null;
             $toolsBefore = (int)$store->q('SELECT COALESCE(MAX(id),0) FROM tool_log')->fetchColumn();
             try {
+                if (($why = $privacy->modelBlocked($level)) !== null) throw new PrivacyBlocked($why);
                 [$reply, $meta] = $this->run($channel, $tier, 'chat', $history,
                     $recalled !== '' ? "## Possibly relevant from past conversations\n$recalled" : '', 'main', null, null, $onEvent);
                 $reply = $reply ?: I18n::t($this->app, '(no response)');
+            } catch (PrivacyBlocked $e) {
+                $reply = in_array($e->getMessage(), ['secret', 'confidential'], true) && $privacy->modelBlocked($level) !== null
+                    ? I18n::t($this->app, $level === 'secret'
+                        ? 'This is a Secret space: nothing may leave the server, and the assistant runs on a service outside. The library and tasks of this space still work; to chat here, use a model on this server (Settings → AI model).'
+                        : 'This is a Confidential space: only a model under business terms (Claude API, OpenAI API, paid Gemini) may read its content, and the current one is not. Change the model in Settings → AI model, or the level of the space.')
+                    : I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]);
             } catch (Abort $e) {
                 if ($e->getMessage() === 'stopped by the user') $reply = (trim($partial) !== '' ? trim($partial) . "\n\n" : '') . I18n::t($this->app, '*(stopped)*');
                 else $reply = I18n::t($this->app, "I've reached my spending limit, so I'm not calling the model right now. {budget}\nRaise TALIXIO_BUDGET_DAILY_USD / TALIXIO_BUDGET_MONTHLY_USD if needed.", ['budget' => $this->app->budget()->describe()]);
@@ -215,11 +229,13 @@ final class Agent
                 Log::error("agent: {$e->getMessage()}");
                 $reply = I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]);
             }
-            $store->addMessage('assistant', $channel, $reply, $meta, [], $space);
+            $trace = Privacy::end();
+            $store->addMessage('assistant', $channel, $reply, $trace ? ($meta ?? []) + ['trace' => $trace, 'level' => $level] : $meta, [], $space);
             if ($meta !== null) $this->maybeLearn($prompt, $reply, $toolsBefore);
             return $reply;
         } finally {
             $this->app->space = $previousSpace;
+            Privacy::$trace = null; Privacy::$onEvent = null; Privacy::$taint = 0;
             flock($lock, LOCK_UN);
             fclose($lock);
         }

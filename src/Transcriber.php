@@ -16,12 +16,12 @@ final class Transcriber
     {
         $c = $this->app->cfg;
         if (!$this->enabled()) throw new \RuntimeException('transcription is off: set GEMINI_API_KEY (or TALIXIO_TRANSCRIBE=openai with an OpenAI key, or local with whisper.cpp)');
-        if ($c->transcribe === 'local') return $this->local($file['path'], $meeting);
+        if ($c->transcribe === 'local') { Privacy::local('Transcription (whisper.cpp)'); return $this->local($file['path'], $meeting); }
         $path = $this->compress($file['path']);
         try {
             return match ($c->transcribe) {
-                'gemini' => $this->gemini($path, $meeting),
-                'openai' => $this->openai($path),
+                'gemini' => Privacy::as('transcription', fn() => $this->gemini($path, $meeting)),
+                'openai' => Privacy::as('transcription', fn() => $this->openai($path)),
                 default => throw new \RuntimeException("unknown TALIXIO_TRANSCRIBE {$c->transcribe}"),
             };
         } finally {
@@ -113,6 +113,7 @@ final class Transcriber
     {
         $c = $this->app->cfg;
         if (filesize($path) > 25_000_000) throw new \RuntimeException('recording too large for OpenAI transcription (25 MB max); use Gemini');
+        Http::check('https://api.openai.com/v1/audio/transcriptions', (int)filesize($path));
         $ch = curl_init('https://api.openai.com/v1/audio/transcriptions');
         curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 900,
             CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $c->openaiKey],

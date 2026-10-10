@@ -56,7 +56,7 @@
     if (out === undefined) {
       for (const p of patterns) {
         const m = p.re.exec(key);
-        if (!m) continue;
+        if (!m || m.slice(1).some(v => v.includes('<'))) continue; // a value never spans markup ("{a} of {b}" must not swallow two links)
         out = p.out;
         p.names.forEach((n, i) => { const v = m[i + 1]; out = out.split('{' + n + '}').join(exact.get(norm(v)) ?? v); });
         break;

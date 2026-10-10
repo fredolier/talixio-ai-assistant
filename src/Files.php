@@ -76,6 +76,8 @@ final class Files
             if ($f && $f['status'] === 'failed') throw new \RuntimeException((string)$f['text']);
             $this->app->store->q("UPDATE files SET status = 'processing' WHERE id = ?", [$id]); // stale claim (crashed reader): take over
         }
+        $taint = Privacy::$taint;
+        Privacy::raise($this->app->privacy()->folderLevel((string)$f['folder'])); // transcription, image reading: by the rules of its folder
         try {
             $text = $this->extract($f);
             if (!mb_check_encoding($text, 'UTF-8')) $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8, ISO-8859-1');
@@ -85,6 +87,8 @@ final class Files
         } catch (\Throwable $e) {
             $this->app->store->q("UPDATE files SET status='failed', text=? WHERE id=?", ['(could not read this file: ' . $e->getMessage() . ')', $id]);
             throw $e;
+        } finally {
+            Privacy::$taint = $taint;
         }
     }
 

@@ -36,6 +36,12 @@ final class Shares
         if ($days < 0 || $days > 3650) throw new \InvalidArgumentException('days: 0 (no end) to 3650');
         $pw = (string)($o['password'] ?? '');
         if ($pw !== '' && mb_strlen($pw) < 4) throw new \InvalidArgumentException('The password needs at least 4 characters.');
+        $level = $this->app->privacy()->folderLevel($folder ?? (string)$f['folder']);
+        if ($level === 'secret') throw new \InvalidArgumentException('This belongs to a Secret space: it cannot be shared outside.');
+        if ($level === 'confidential') {
+            if ($pw === '') throw new \InvalidArgumentException('This belongs to a Confidential space: a password is required.');
+            if ($days === 0 || $days > 30) throw new \InvalidArgumentException('This belongs to a Confidential space: 30 days at most.');
+        }
         $token = rtrim(strtr(base64_encode(random_bytes(24)), '+/', '-_'), '=');
         $st->q('INSERT INTO shares(token, file_id, folder, label, message, created, expires, password, download, notify, created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)', [
             $token, $fileId, $folder, mb_substr(trim((string)($o['label'] ?? '')), 0, 120), mb_substr(trim((string)($o['message'] ?? '')), 0, 2000),
@@ -89,7 +95,11 @@ final class Shares
         $set = [];
         if (array_key_exists('label', $o)) $set['label'] = mb_substr(trim((string)$o['label']), 0, 120);
         if (array_key_exists('message', $o)) $set['message'] = mb_substr(trim((string)$o['message']), 0, 2000);
-        if (array_key_exists('days', $o)) { $d = (int)$o['days']; if ($d < 0 || $d > 3650) throw new \InvalidArgumentException('days: 0 to 3650'); $set['expires'] = $d ? time() + $d * 86400 : null; }
+        $level = $this->app->privacy()->folderLevel((string)($s['folder'] ?? '') !== '' ? (string)$s['folder'] : (string)($this->app->files()->get((int)$s['file_id'])['folder'] ?? '/'));
+        if (array_key_exists('days', $o)) { $d = (int)$o['days']; if ($d < 0 || $d > 3650) throw new \InvalidArgumentException('days: 0 to 3650');
+            if ($level !== 'internal' && ($d === 0 || $d > 30)) throw new \InvalidArgumentException('This belongs to a Confidential space: 30 days at most.');
+            $set['expires'] = $d ? time() + $d * 86400 : null; }
+        if ($level !== 'internal' && array_key_exists('password', $o) && $o['password'] === '') throw new \InvalidArgumentException('This belongs to a Confidential space: a password is required.');
         if (array_key_exists('password', $o) && $o['password'] !== null) {
             $pw = (string)$o['password'];
             if ($pw !== '' && mb_strlen($pw) < 4) throw new \InvalidArgumentException('The password needs at least 4 characters.');

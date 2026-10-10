@@ -16,7 +16,7 @@ final class Spaces
 
     public function general(): array
     {
-        return ['id' => 0, 'name' => 'General', 'slug' => 'general', 'code' => 'GEN', 'folder' => '', 'instructions' => '', 'notes' => '', 'tier' => 'standard', 'color' => '', 'archived' => 0];
+        return ['id' => 0, 'name' => 'General', 'slug' => 'general', 'code' => 'GEN', 'folder' => '', 'instructions' => '', 'notes' => '', 'tier' => 'standard', 'color' => '', 'archived' => 0, 'privacy' => 'internal'];
     }
 
     public function get(int $id): ?array
@@ -67,6 +67,11 @@ final class Spaces
             'tier' => $tier, 'color' => $color];
         if (array_key_exists('notes', $d)) $fields['notes'] = mb_substr((string)$d['notes'], 0, 20000);
         if (array_key_exists('archived', $d)) $fields['archived'] = $d['archived'] ? 1 : 0;
+        if (array_key_exists('privacy', $d)) {
+            if (!in_array($d['privacy'], Privacy::LEVELS, true)) throw new \InvalidArgumentException('privacy: internal, confidential or secret');
+            $fields['privacy'] = $d['privacy'];
+            $this->app->store->set('privacy_rev', (string)((int)$this->app->store->get('privacy_rev', '0') + 1));
+        }
         if (trim((string)($d['code'] ?? '')) !== '') {
             $fields['code'] = Board::cleanPrefix((string)$d['code']);
             if ($fields['code'] === 'GEN' || $this->app->store->q('SELECT 1 FROM spaces WHERE code = ? AND id != ?', [$fields['code'], $id ?? 0])->fetchColumn())

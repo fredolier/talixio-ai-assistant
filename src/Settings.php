@@ -26,6 +26,7 @@ final class Settings
                 ['ANTHROPIC_API_KEY', 'Claude API key', 'secret', 'console.anthropic.com'],
                 ['CLAUDE_CODE_OAUTH_TOKEN', 'Claude Code token', 'secret', 'From "claude setup-token" (see the README).'],
                 ['GEMINI_API_KEY', 'Gemini API key', 'secret', 'aistudio.google.com/apikey. Also used for transcription, memory search and web search.'],
+                ['TALIXIO_GEMINI_PAID', 'My Gemini key is on a paid plan', 'bool', 'With billing set up in Google AI Studio, what you send is not used to train Google\'s models. The free tier may be: the Privacy page counts it as personal use.'],
                 ['OPENAI_API_KEY', 'OpenAI API key', 'secret', ''],
                 ['OPENAI_BASE_URL', 'OpenAI-compatible server address', 'url', 'For Ollama, vLLM, OpenRouter… Empty = OpenAI.'],
                 ['TALIXIO_MODEL_FAST', 'Fast model', 'text', 'Empty = chosen automatically. Background work, summaries, simple lookups.'],
@@ -45,6 +46,7 @@ final class Settings
             ]],
             'notify' => ['Notifications', 'Where the assistant reaches you (reminders, briefings, job results, approvals).', [
                 ['TALIXIO_NOTIFY', 'Channels used', 'multi', 'Only configured channels are used.', ['webpush' => 'App notifications', 'email' => 'Email', 'signal' => 'Signal', 'telegram' => 'Telegram', 'ntfy' => 'ntfy']],
+                ['TALIXIO_NOTIFY_NEUTRAL', 'Notifications without content', 'bool', 'Only "New message in General": the content stays in the app. Always so for Confidential and Secret spaces.'],
                 ['TALIXIO_HEARTBEAT_MINUTES', 'Periodic check (minutes)', 'number', 'Reads the HEARTBEAT.md checklist and tells you if something needs attention. 0 = off. Each check is a model call.'],
                 ['TALIXIO_NTFY_URL', 'ntfy address', 'secret', 'https://ntfy.sh/<long-random-topic>'],
                 ['TALIXIO_NTFY_TOKEN', 'ntfy token', 'secret', 'Only for a protected ntfy server.'],
@@ -161,7 +163,7 @@ final class Settings
         'TALIXIO_MAILBOX_IMAP_PORT' => '993', 'TALIXIO_MAILBOX_SMTP_PORT' => '465', 'TALIXIO_SEARCH' => 'auto', 'TALIXIO_EMBEDDINGS' => 'auto',
         'TALIXIO_OLLAMA_URL' => 'http://127.0.0.1:11434', 'TALIXIO_EMBEDDINGS_DIMS' => '', 'TALIXIO_TRANSCRIBE' => 'auto', 'TALIXIO_MEETING_TIER' => 'standard', 'TALIXIO_VOICE_NOTE_MAX_SECONDS' => '180', 'TALIXIO_VISION_INDEX' => '1',
         'TALIXIO_BROWSER' => 'auto', 'TALIXIO_BROWSER_LANG' => 'en-US', 'TALIXIO_BROWSER_ALLOW_PRIVATE' => '0', 'TALIXIO_BROWSER_NO_SANDBOX' => '0',
-        'TALIXIO_APPROVAL_WAIT_SECONDS' => '600', 'TALIXIO_LEARN' => '1', 'TALIXIO_MIND' => '1', 'TALIXIO_LEARN_MIN_STEPS' => '4', 'TALIXIO_BACKUP_KEEP' => '7',
+        'TALIXIO_APPROVAL_WAIT_SECONDS' => '600', 'TALIXIO_LEARN' => '1', 'TALIXIO_MIND' => '1', 'TALIXIO_GEMINI_PAID' => '0', 'TALIXIO_NOTIFY_NEUTRAL' => '0', 'TALIXIO_LEARN_MIN_STEPS' => '4', 'TALIXIO_BACKUP_KEEP' => '7',
         'TALIXIO_BACKUP_FILES' => '1', 'TALIXIO_AUTO_UPDATE' => '0', 'TALIXIO_CLAUDE_BIN' => 'claude', 'TALIXIO_SIGNAL_CLI' => 'signal-cli',
         'TALIXIO_RECALL_MIN_SIMILARITY' => '0.5', 'TALIXIO_SHELL' => 'off', 'TALIXIO_AUTO_FILE' => 'suggest', 'TALIXIO_MAIL_TRIAGE' => '1', 'TALIXIO_SHELL_NETWORK' => '0', 'TALIXIO_SHELL_TIMEOUT' => '120', 'TALIXIO_DEEP_REASONING_EFFORT' => '',
     ];

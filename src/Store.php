@@ -87,6 +87,11 @@ final class Store
                 notify INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL DEFAULT 'you', revoked INTEGER NOT NULL DEFAULT 0, views INTEGER NOT NULL DEFAULT 0, last_access INTEGER);
             CREATE TABLE IF NOT EXISTS share_access(id INTEGER PRIMARY KEY, share_id INTEGER NOT NULL, ts INTEGER NOT NULL, ip TEXT NOT NULL, agent TEXT NOT NULL, action TEXT NOT NULL, file_id INTEGER);
             CREATE INDEX IF NOT EXISTS share_access_share ON share_access(share_id);");
+        // confidentiality: a level per space, and the journal of what went out (Privacy)
+        $this->addColumn('spaces', 'privacy', "TEXT NOT NULL DEFAULT 'internal'");
+        $this->db->exec('CREATE TABLE IF NOT EXISTS egress(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, service TEXT NOT NULL, purpose TEXT NOT NULL, bytes INTEGER NOT NULL,
+                space INTEGER NOT NULL DEFAULT 0, level TEXT NOT NULL, blocked INTEGER NOT NULL DEFAULT 0);
+            CREATE INDEX IF NOT EXISTS egress_ts ON egress(ts);');
         if ($this->addColumn('tool_log', 'job_id', 'INTEGER')) $this->db->exec('CREATE INDEX IF NOT EXISTS tool_log_job ON tool_log(job_id) WHERE job_id IS NOT NULL');
         $this->addColumn('usage', 'tier', "TEXT NOT NULL DEFAULT ''");
         $this->addColumn('usage', 'job_id', 'INTEGER');

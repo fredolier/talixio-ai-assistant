@@ -167,6 +167,29 @@ installation can be moved into it. See [deploy/docker/README.md](deploy/docker/R
 sudo deploy/docker/install-stack.sh --domain assistant.example.com --email you@example.com [--migrate fred]
 ```
 
+## Privacy (what leaves the server)
+
+The **Privacy** page (menu) is worked out from your settings: each service your data can go to, what it
+receives, whether it may train on it (business API terms, free tiers, personal subscriptions), and a fix
+when there is one. Every request to the outside is logged (service, purpose, size, space: never the
+content), exportable as CSV, and a record of processing (GDPR) can be downloaded to start from.
+
+Each space has a confidentiality level (shield next to its name):
+- **Internal**: as configured.
+- **Confidential**: only a model under business terms (Claude API, OpenAI API, Gemini with
+  `TALIXIO_GEMINI_PAID=1`) reads the content. Transcription and search by meaning must run on the
+  server (whisper.cpp, Ollama) or are skipped, web search, web pages, the browser and connectors wait for
+  your approval each time, notifications say nothing, shared links need a password and end within 30
+  days, and the space can't be used from Telegram.
+- **Secret**: nothing leaves the server; the assistant answers there only with a model on the server.
+  Its conversations and documents are not searched from other spaces, and nothing is shared.
+
+These are enforced where requests leave (every outside call goes through one check), not by the model's
+good will: a General question that reads a confidential document becomes confidential from then on.
+Under each answer, pills show where it went (and tapping them, which documents were given to the model,
+what stayed on the server and what was blocked). `TALIXIO_NOTIFY_NEUTRAL=1` makes every notification
+content-free.
+
 ## What it can do
 - **Live answers**: replies appear as they are written, with what it's doing ("Searching the web…",
   "Reading example.com…"). The send button becomes **Stop** while it writes (what was written is kept).

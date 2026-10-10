@@ -7,7 +7,7 @@ final class Recall
 {
     private const STOP = ['the','and','for','you','that','this','with','what','are','was','have','not','but','can','des','les','une','est','que','qui','pour','dans','pas','sur','vous','avec','mais','nous','mes','tes','ses'];
 
-    public function __construct(private Store $store, private Embeddings $emb) {}
+    public function __construct(private Store $store, private Embeddings $emb, private ?App $app = null) {}
 
     /** Build a safe FTS5 query: significant words OR-ed together. */
     public static function ftsQuery(string $q): string
@@ -66,6 +66,17 @@ final class Recall
             }
         }
         uasort($hits, fn($a, $b) => $b['score'] <=> $a['score']);
+        if ($this->app) { // secret spaces are only searched from inside; the rest of the work follows the level of what it found
+            $p = $this->app->privacy(); $kept = [];
+            foreach ($hits as $id => $h) {
+                $lvl = $p->docLevel($h);
+                if ($p->hidden($lvl, in_array($h['kind'], ['message', 'summary'], true) ? (int)$h['space'] : null, null)) continue;
+                $kept[$id] = $h + ['level' => $lvl];
+                if (count($kept) >= $limit) break;
+            }
+            $hits = $kept;
+            foreach ($hits as $h) Privacy::raise($h['level']);
+        }
         return array_values(array_slice($hits, 0, $limit));
     }
 
@@ -91,8 +102,11 @@ final class Recall
         if (!$this->emb->enabled()) return 0;
         $model = $this->emb->model();
         $done = 0; $until = microtime(true) + $seconds;
+        // confidential and secret content is only indexed by meaning on this server (Ollama), never by a service outside
+        $skip = $this->app && !$this->emb->local($this->app) ? $this->app->privacy()->noOutsideEmbedding() : [];
+        $not = $skip ? ' AND d.id NOT IN (' . implode(',', $skip) . ')' : '';
         do {
-            $docs = $this->store->q('SELECT d.id, d.text FROM docs d WHERE NOT EXISTS (SELECT 1 FROM embeddings e WHERE e.doc_id = d.id AND e.model = ?) ORDER BY d.id DESC LIMIT ?',
+            $docs = $this->store->q("SELECT d.id, d.text FROM docs d WHERE NOT EXISTS (SELECT 1 FROM embeddings e WHERE e.doc_id = d.id AND e.model = ?)$not ORDER BY d.id DESC LIMIT ?",
                 [$model, $batch])->fetchAll();
             if (!$docs) break;
             $vecs = $this->emb->embed(array_column($docs, 'text'), 'document');

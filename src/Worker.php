@@ -101,6 +101,7 @@ final class Worker
         if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));
         if ($now % 3600 < 15) $this->guard('tasks trash', fn() => $app->board()->purge());
         if ($now % 86400 < 15) $this->guard('old shares', fn() => $app->shares()->purge());
+        if ($now % 86400 < 15) $this->guard('privacy journal', fn() => $app->privacy()->purge());
         $this->guard('tasks calendar', fn() => $app->board()->syncGoogle());
         $this->guard('tasks reminder', fn() => $app->board()->remind($now));
     }

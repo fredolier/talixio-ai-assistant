@@ -2,7 +2,7 @@
 declare(strict_types=1);
 // Run: php tests/run.php   (no network, no API key needed)
 require __DIR__ . '/../src/autoload.php';
-use Talixio\{App, Config, Cron, Email, GeminiModels, Skills, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker};
+use Talixio\{App, Config, Cron, Email, GeminiModels, Skills, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker, Privacy};
 
 $fails = 0;
 function tap_tmp(string $content): string { $t = tempnam(sys_get_temp_dir(), 'tt'); file_put_contents($t, $content); return $t; }
@@ -1064,6 +1064,86 @@ check('shares: password tries are limited', (function () use ($shs, $prow) { try
 check('shares: too short a password is refused', (function () use ($shs, $idTxt) { try { $shs->create(['file' => $idTxt], ['password' => 'ab']); return false; } catch (\InvalidArgumentException) { return true; } })());
 check('shares: the assistant needs the user\'s approval to share', $la->tools->needsApproval('share_create') && !$la->tools->needsApproval('share_list') && !$la->tools->needsApproval('share_revoke'));
 $shs->revoke($pw['id']);
+
+// ---- confidentiality: what leaves the server, and what may ----
+$pv = $la->privacy();
+check('privacy: services are told apart', $pv->service('https://api.anthropic.com/v1/messages')['id'] === 'anthropic' && $pv->service('http://127.0.0.1:11434/api/embed')['local']
+    && $pv->service('http://ollama:11434/api/embed')['local'] && $pv->service('https://example.org/page')['id'] === 'web' && $pv->service('https://fcm.googleapis.com/x')['id'] === 'push');
+$prov = $la->cfg->provider;
+$grade = function (string $p, bool $paid = false) use ($la, $pv) { $la->cfg->provider = $p; $la->cfg->geminiPaid = $paid; return $pv->modelGrade(); };
+check('privacy: how each model treats your data', $grade('anthropic') === 'business' && $grade('claude-code') === 'consumer' && $grade('gemini') === 'free' && $grade('gemini', true) === 'business' && $grade('echo') === 'local');
+$la->cfg->provider = 'anthropic'; $la->cfg->geminiPaid = false;
+$lib->createFolder('/Clients/Secret Co');
+$conf = $la->spaces()->save(['name' => 'Client Conf', 'folder' => '/Clients/Dupont', 'privacy' => 'confidential']);
+$sec = $la->spaces()->save(['name' => 'Coffre', 'folder' => '/Clients/Secret Co', 'privacy' => 'secret']);
+check('privacy: a folder has the level of its space', $pv->folderLevel('/Clients/Dupont/2026') === 'confidential' && $pv->folderLevel('/Clients/Secret Co') === 'secret' && $pv->folderLevel('/Inbox') === 'internal');
+check('privacy: a level must be one of the three', (function () use ($la, $conf) { try { $la->spaces()->save(['name' => 'Client Conf', 'privacy' => 'top'], (int)$conf['id']); return false; } catch (\InvalidArgumentException) { return true; } })());
+$blocked = function (callable $fn) { try { $fn(); return false; } catch (\Talixio\PrivacyBlocked) { return true; } };
+$out = fn(string $url, string $purpose = 'model') => Privacy::as($purpose, fn() => $pv->outbound($url, 100));
+$la->space = (int)$conf['id'];
+check('privacy: confidential: the business model gets the content', !$blocked(fn() => $out('https://api.anthropic.com/v1/messages')));
+check('privacy: confidential: search, web pages, cloud transcription and indexing do not', $blocked(fn() => $out('https://api.search.brave.com/res/v1/web/search', 'search'))
+    && $blocked(fn() => $out('https://example.org/')) && $blocked(fn() => $out('https://generativelanguage.googleapis.com/v1beta/models/x:generateContent', 'transcription'))
+    && $blocked(fn() => $out('https://api.openai.com/v1/embeddings', 'embeddings')) && !$blocked(fn() => $out('http://127.0.0.1:11434/api/embed', 'embeddings')));
+check('privacy: confidential: an approved action goes out once', !$blocked(fn() => Privacy::approved(fn() => $out('https://example.org/'))) && $blocked(fn() => $out('https://example.org/')));
+check('privacy: notifications may go (they say nothing there)', !$blocked(fn() => $out('https://api.telegram.org/botX/sendMessage', 'notify')));
+$la->cfg->provider = 'claude-code';
+check('privacy: confidential: a personal subscription is not enough', $pv->modelBlocked('confidential') === 'confidential' && $pv->modelBlocked('internal') === null);
+$la->cfg->provider = 'anthropic';
+$la->space = (int)$sec['id'];
+check('privacy: secret: nothing leaves, not even the model', $blocked(fn() => $out('https://api.anthropic.com/v1/messages')) && $pv->modelBlocked('secret') === 'secret' && !$blocked(fn() => $out('http://127.0.0.1:8080/v1/chat')));
+$j = $la->store->q("SELECT service, purpose, blocked, level FROM egress ORDER BY id DESC LIMIT 1")->fetch();
+check('privacy: every request is journaled, blocked ones too (never the content)', $j['service'] === 'anthropic' && (int)$j['blocked'] === 1 && $j['level'] === 'secret'
+    && (int)$la->store->q('SELECT COUNT(*) FROM egress WHERE blocked = 0')->fetchColumn() >= 2);
+// the tools
+$la->space = 0;
+check('privacy: internal: the web is used as configured', $pv->toolGate('web_search', ['query' => 'x']) === null);
+$la->space = (int)$conf['id'];
+$g = $pv->toolGate('web_search', ['query' => 'prix marché IA']);
+$ap = $la->approvals()->pending(); $ap = end($ap);
+check('privacy: confidential: the web waits for an approval each time', str_contains((string)$g, 'Waiting for the user\'s approval') && $ap['tool'] === 'web_search' && str_contains($ap['summary'], 'Confidential space') && (int)$ap['space'] === (int)$conf['id']);
+$la->approvals()->decide((int)$ap['id'], false);
+$la->space = (int)$sec['id'];
+check('privacy: secret: outside tools never run', str_starts_with((string)$pv->toolGate('fetch_url', ['url' => 'https://example.org']), 'error: blocked: this is a Secret space'));
+// reading something stricter makes the rest of the work stricter
+$la->space = 0; Privacy::begin();
+Privacy::doc('Contrat.pdf', 1200, $pv->folderLevel('/Clients/Dupont'));
+check('privacy: after reading a confidential document, the web needs an approval', $pv->effective() === 'confidential');
+$tr = Privacy::end(); Privacy::$taint = 0;
+check('privacy: the answer keeps what it read', $tr['docs'][0]['name'] === 'Contrat.pdf' && $tr['docs'][0]['chars'] === 1200);
+// secret content is only read inside its space
+$la->store->addMessage('user', 'web', 'the vault code is zanzibar', null, [], (int)$sec['id']);
+$la->space = 0;
+$fromGeneral = $la->recall()->search('zanzibar', 8, PHP_INT_MAX, null, null, null);
+$la->space = (int)$sec['id'];
+$fromInside = $la->recall()->search('zanzibar', 8, PHP_INT_MAX, null, null, (int)$sec['id']);
+check('privacy: a Secret space is not searched from elsewhere', $fromGeneral === [] && count($fromInside) === 1);
+$la->space = 0; Privacy::$taint = 0;
+$secId = $la->files()->save($mk('s', 'plans du coffre'), 'plans.txt', 'text/plain', '/Clients/Secret Co');
+check('privacy: a Secret file is not read from elsewhere', str_contains($la->tools->run('file_read', ['id' => $secId]), 'Secret space'));
+check('privacy: Confidential and Secret content is never indexed by a service outside', in_array((int)$la->store->q("SELECT id FROM docs WHERE kind='message' AND text LIKE '%zanzibar%'")->fetchColumn(), $pv->noOutsideEmbedding(), true));
+// shared links
+check('privacy: confidential: a link needs a password and 30 days at most', (function () use ($shs) { try { $shs->create(['folder' => '/Clients/Dupont'], ['days' => 30]); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), 'password'); } })()
+    && (function () use ($shs) { try { $shs->create(['folder' => '/Clients/Dupont'], ['days' => 90, 'password' => 'abcd']); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), '30 days'); } })()
+    && $shs->create(['folder' => '/Clients/Dupont'], ['days' => 7, 'password' => 'abcd'])['state'] === 'active');
+check('privacy: secret: nothing is shared', (function () use ($shs) { try { $shs->create(['folder' => '/Clients/Secret Co'], ['password' => 'abcd', 'days' => 1]); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), 'Secret'); } })());
+// a confidential space with a personal subscription: no model call, a clear answer
+$la->cfg->provider = 'claude-code';
+$rep = $la->agent()->chat('web', 'hello', 'standard', [], null, (int)$conf['id']);
+check('privacy: the space says why the assistant cannot answer there', str_contains($rep, 'Confidential space') && str_contains($rep, 'business terms'), $rep);
+check('privacy: Confidential spaces are not used from Telegram', str_contains($la->agent()->chat('telegram', 'hello', 'standard', [], null, (int)$conf['id']), 'Telegram can read'));
+$la->cfg->provider = $prov;
+$la->agent()->chat('web', 'what did we decide about the vault?');
+$last = $la->store->q("SELECT meta FROM messages WHERE role = 'assistant' ORDER BY id DESC LIMIT 1")->fetchColumn();
+$lm = json_decode((string)$last, true);
+check('privacy: an answer keeps its trace (what went out, what stayed here)', in_array('Memory search', $lm['trace']['local'] ?? [], true) && ($lm['level'] ?? '') === 'internal', (string)$last);
+// the page
+$ov = $pv->overview();
+check('privacy: the page lists where data goes and the overall level', in_array($ov['level'], ['local', 'business', 'personal'], true) && $ov['flows'][0]['id'] === 'model' && count($ov['spaces']) >= 3);
+check('privacy: a record of processing to start from', str_starts_with($pv->register(), '# Record of processing') && str_contains($pv->register(), 'Coffre: Secret'));
+$la->spaces()->save(['name' => 'Client Conf', 'folder' => '/Clients/Dupont', 'privacy' => 'internal'], (int)$conf['id']);
+$la->spaces()->save(['name' => 'Coffre', 'folder' => '/Clients/Secret Co', 'privacy' => 'internal'], (int)$sec['id']);
+$la->space = 0;
 // web API
 $webPort = $freePort();
 $env = ['TALIXIO_DATA_DIR' => $ld, 'TALIXIO_PROVIDER' => 'echo', 'TALIXIO_EMBEDDINGS' => 'off', 'TALIXIO_WEB_PASSWORD' => 'pw', 'PATH' => getenv('PATH'), 'TALIXIO_NOTIFY' => 'none'];

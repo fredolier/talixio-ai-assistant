@@ -48,6 +48,7 @@
     <a href="#jobs" data-view="jobs" class="secondary"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Jobs</span></a>
     <a href="#memory" data-view="memory"><svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg><span>Memory</span></a>
     <a href="#settings" data-view="settings" class="secondary"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
+    <a href="#privacy" data-view="privacy" class="secondary"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></svg><span>Privacy</span></a>
     <a href="#activity" data-view="activity" class="secondary"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Activity</span></a>
     <button id="more-btn" class="more" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>More</span></button>
     <div class="rail-foot">
@@ -71,6 +72,7 @@
           <div id="space-menu" class="space-menu" role="menu" hidden></div>
         </div>
         <div class="topbar-actions">
+          <button id="privacy-badge" class="privacy-badge" type="button" title="Confidentiality of this space"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></svg><span></span></button>
           <a id="notify-btn" class="btn ghost small" href="#settings" hidden>Turn on notifications</a>
           <button id="chat-search-btn" class="btn ghost icon" type="button" aria-label="Find in the conversation" title="Find in the conversation"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></button>
         </div>
@@ -323,6 +325,23 @@
       </details>
     </section>
 
+    <section id="view-privacy" class="view page" hidden>
+      <header class="page-head"><h2>Privacy</h2>
+        <p class="muted">What leaves your server, to whom, and what each space allows. Worked out from your actual settings; every request to the outside is logged (never its content).</p></header>
+      <section id="pv-level" class="card pv-level"></section>
+      <h3>Spaces</h3>
+      <p class="muted small">Internal: as configured. Confidential: only a model under business terms reads the content; transcription and search by meaning stay on the server, the web needs your approval each time, notifications say nothing. Secret: nothing leaves the server.</p>
+      <div id="pv-spaces" class="pv-spaces"></div>
+      <h3>Where your data goes</h3>
+      <div class="pv-server"><b>Your server</b><span id="pv-local" class="pv-chips"></span></div>
+      <div id="pv-flows" class="pv-flows"></div>
+      <h3>Security</h3>
+      <div id="pv-security" class="pv-security"></div>
+      <h3>Journal</h3>
+      <div id="pv-journal" class="card pv-journal"></div>
+      <div class="row wrap"><a class="btn" href="api/privacy/journal.csv" download>Export the journal (CSV)</a><a class="btn" href="api/privacy/register" download>Record of processing (GDPR)</a></div>
+    </section>
+
     <section id="view-activity" class="view page" hidden>
       <header class="page-head"><h2>Activity</h2><p class="muted">Spending, model usage and every tool the assistant used. Costs are estimates from list prices.</p></header>
       <div id="budget" class="budget"></div>
@@ -346,6 +365,8 @@
     <label for="sp-folder">Library folder</label><input id="sp-folder" list="folder-list" placeholder="/Maison (optional)">
     <label>Colour</label><div id="sp-colors" class="swatches" role="radiogroup"></div>
     <label for="sp-code">Task code</label><input id="sp-code" maxlength="6" placeholder="MAI (from the name if empty)" autocomplete="off" style="text-transform:uppercase">
+    <label>Confidentiality</label>
+    <div id="sp-privacy" class="sp-privacy" role="radiogroup" aria-label="Confidentiality"></div>
     <label for="sp-tier">Model</label><select id="sp-tier"><option value="standard">standard</option><option value="fast">fast</option><option value="deep">deep</option></select>
     <label for="sp-instructions">Instructions for this space</label>
     <textarea id="sp-instructions" rows="4" placeholder="Context, tone, language, what to watch for…"></textarea>
@@ -387,6 +408,7 @@
 <dialog id="share-dialog" class="dialog share-dialog" aria-labelledby="sh-title">
   <h3 id="sh-title">Share</h3>
   <p id="sh-what" class="muted small"></p>
+  <p id="sh-level" class="sh-level" hidden></p>
   <div id="sh-existing"></div>
   <form id="sh-form" class="sh-form">
     <h4>New link</h4>
@@ -454,6 +476,7 @@
     <a href="#people" data-view="people">People</a>
     <a href="#jobs" data-view="jobs">Background jobs</a>
     <a href="#activity" data-view="activity">Activity and costs</a>
+    <a href="#privacy" data-view="privacy">Privacy</a>
     <a href="#settings" data-view="settings">Settings</a>
     <button id="more-install" class="btn primary" type="button" hidden>Install app</button>
     <button id="more-logout" class="btn" type="button">Sign out</button>

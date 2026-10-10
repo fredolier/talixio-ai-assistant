@@ -3,6 +3,17 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.13.0 (2026-10-10)
+- Privacy: a page showing where your data goes (worked out from your settings), what each service may do with
+  it and how to fix it; a journal of every request to the outside (never the content), CSV export, and a record
+  of processing (GDPR) to start from.
+- A confidentiality level per space: Internal, Confidential (only a business-terms model reads the content, the
+  web needs your approval each time, local transcription and indexing, silent notifications, protected links),
+  Secret (nothing leaves the server). Enforced on every outside request.
+- Under each answer: where it went, which documents were given to the model, what stayed here or was blocked;
+  live while it answers.
+- Settings: "My Gemini key is on a paid plan", "Notifications without content".
+
 ## 0.12.1 (2026-10-10)
 - Fix: an installed app stuck on an older version (frozen in French by the 0.11 translation loop) now picks up
   the fixed scripts as soon as the server is updated: their address changes with each version.

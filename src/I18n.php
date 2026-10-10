@@ -59,6 +59,13 @@ final class I18n
         'Shared link opened' => 'Lien partagé ouvert',
         '"{name}"{who} was opened for the first time.' => '« {name} »{who} a été ouvert pour la première fois.',
         ' (for {label})' => ' (pour {label})',
+        // confidentiality
+        'New message in {space}' => 'Nouveau message dans {space}',
+        '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).' => '« {name} » est un espace Confidentiel : Telegram peut lire les messages, utilisez-le dans l\'app (ou Signal).',
+        'This is a Secret space: nothing may leave the server, and the assistant runs on a service outside. The library and tasks of this space still work; to chat here, use a model on this server (Settings → AI model).' =>
+            'Cet espace est Secret : rien ne doit quitter le serveur, et l\'assistant fonctionne avec un service extérieur. La bibliothèque et les tâches de cet espace fonctionnent toujours ; pour discuter ici, utilisez un modèle installé sur ce serveur (Réglages → Modèle d\'IA).',
+        'This is a Confidential space: only a model under business terms (Claude API, OpenAI API, paid Gemini) may read its content, and the current one is not. Change the model in Settings → AI model, or the level of the space.' =>
+            'Cet espace est Confidentiel : seul un modèle sous contrat professionnel (API Claude, API OpenAI, Gemini payant) peut en lire le contenu, ce qui n\'est pas le cas du modèle actuel. Changez de modèle dans Réglages → Modèle d\'IA, ou le niveau de l\'espace.',
     ];
 
     /** The language of someone outside (a shared link), from their browser. */

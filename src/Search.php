@@ -7,6 +7,11 @@ final class Search
 {
     public static function run(Config $cfg, string $q): string
     {
+        return Privacy::as('search', fn() => self::runNow($cfg, $q));
+    }
+
+    private static function runNow(Config $cfg, string $q): string
+    {
         $items = match ($cfg->search) {
             'brave' => self::brave($cfg, $q),
             'tavily' => self::tavily($cfg, $q),

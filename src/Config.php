@@ -117,6 +117,8 @@ final class Config
     public bool $autoUpdate = false;
     public string $publicUrl = '';              // the app's address for links sent outside (shares); '' = as last opened
     public string $lang = 'auto';                // interface language: auto (the browser's) | en | fr
+    public bool $geminiPaid = false;             // the Gemini key is on a paid plan (data not used for training): Privacy page
+    public bool $notifyNeutral = false;          // notifications never carry the content ("New answer in X")
     public bool $mind = true;                    // learn values, ways and a character from the history (Mind)
     public bool $learn = true;                   // write skills from multi-step tasks (background, fast tier)
     public int $learnMinSteps = 4;
@@ -281,6 +283,8 @@ final class Config
         $c->autoUpdate = $e('TALIXIO_AUTO_UPDATE', '0') === '1';
         $c->learn = $e('TALIXIO_LEARN', '1') !== '0';
         $c->mind = $e('TALIXIO_MIND', '1') !== '0';
+        $c->geminiPaid = $e('TALIXIO_GEMINI_PAID', '0') === '1';
+        $c->notifyNeutral = $e('TALIXIO_NOTIFY_NEUTRAL', '0') === '1';
         $c->publicUrl = rtrim($e('TALIXIO_PUBLIC_URL'), '/');
         $c->lang = in_array($l = strtolower($e('TALIXIO_LANG', 'auto')), ['auto', ...I18n::LANGS], true) ? $l : 'auto';
         $c->learnMinSteps = (int)$e('TALIXIO_LEARN_MIN_STEPS', '4');

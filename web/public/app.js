@@ -150,8 +150,11 @@ function renderMessage(m) {
   const acts = m.id && body ? `<span class="acts"><button type="button" class="act" data-act="copy" title="Copy" aria-label="Copy">${ICON.copy}</button>`
     + (m.role === 'assistant' ? `<button type="button" class="act" data-act="retry" title="New answer" aria-label="New answer">${ICON.retry}</button>`
       : `<button type="button" class="act" data-act="edit" title="Edit the message" aria-label="Edit the message">${ICON.edit}</button>`) + '</span>' : '';
-  el.innerHTML = `${atts ? `<div class="attachments">${atts}</div>` : ''}${body ? `<div class="bubble">${m.role === 'user' ? esc(body) : md(body)}</div>` : ''}<div class="meta">${chip}<span>${fmtTime(m.ts)}</span>${usage}${acts}</div>`;
+  const tr = mt && mt.trace;
+  const trace = tr ? `<button type="button" class="trace-btn" aria-expanded="false" title="What left the server for this answer">${traceLine(tr)}</button>` : '';
+  el.innerHTML = `${atts ? `<div class="attachments">${atts}</div>` : ''}${body ? `<div class="bubble">${m.role === 'user' ? esc(body) : md(body)}</div>` : ''}<div class="meta">${chip}<span>${fmtTime(m.ts)}</span>${usage}${trace}${acts}</div>${tr ? `<div class="trace-detail" hidden>${traceDetail(tr)}</div>` : ''}`;
   el.querySelectorAll('.act').forEach(b => b.onclick = () => messageAction(b.dataset.act, m, el));
+  el.querySelector('.trace-btn')?.addEventListener('click', e => { const dt = el.querySelector('.trace-detail'); dt.hidden = !dt.hidden; e.currentTarget.setAttribute('aria-expanded', String(!dt.hidden)); });
   return el;
 }
 
@@ -314,7 +317,13 @@ async function loadSpaces() {
 function renderSpaceHead() {
   const sp = spaceOf(state.space), general = !sp.id;
   $('#chat-title').textContent = general ? (state.status?.name || 'Talixio') : sp.name;
-  $('#input').placeholder = general ? `Message ${state.status?.name || 'Talixio'}…` : `Message in ${sp.name}…`;
+  const lvl = levelOf(sp);
+  $('#input').placeholder = lvl === 'secret' ? 'Secret · nothing leaves the server' : lvl === 'confidential' ? 'Confidential · only the AI model receives your messages'
+    : general ? `Message ${state.status?.name || 'Talixio'}…` : `Message in ${sp.name}…`;
+  const pb = $('#privacy-badge'); pb.className = 'privacy-badge ' + lvl;
+  pb.querySelector('span').textContent = lvl === 'internal' ? '' : LEVELS[lvl].label;
+  pb.title = t('Confidentiality: {level}', { level: t(LEVELS[lvl].label) }); pb.setAttribute('aria-label', pb.title);
+  $('#composer').dataset.level = lvl;
   document.title = general ? (state.status?.name || 'Talixio') : `${sp.name} · ${state.status?.name || 'Talixio'}`;
   applyTint();
   showOtherUnread(state.spaces.filter(x => x.id !== state.space).reduce((a, x) => a + (x.unread || 0), 0));
@@ -369,13 +378,19 @@ async function openSpaceEditor(sp, prefill = {}) {
   const paint = () => { $('#sp-colors').innerHTML = state.spaceColors.map(c => `<button type="button" class="swatch" role="radio" aria-checked="${c === color}" aria-label="${c}" style="background:${c}" data-c="${c}"></button>`).join('');
     $('#sp-colors').querySelectorAll('.swatch').forEach(b => b.onclick = () => { color = b.dataset.c; paint(); }); };
   paint();
+  let level = editing ? levelOf(sp) : 'internal';
+  const paintLevel = () => {
+    $('#sp-privacy').innerHTML = Object.entries(LEVELS).map(([k, v]) => `<button type="button" class="lvl-card ${k}" role="radio" aria-checked="${k === level}" data-l="${k}">${SHIELD_SVG}<span class="lvl-text"><b>${v.label}</b><small>${v.text}</small></span></button>`).join('');
+    $('#sp-privacy').querySelectorAll('[data-l]').forEach(b => b.onclick = () => { level = b.dataset.l; paintLevel(); });
+  };
+  paintLevel();
   $('#sp-archive').hidden = $('#sp-delete').hidden = !editing;
   $('#sp-archive').textContent = editing && sp.archived ? 'Restore' : 'Archive';
   $('#sp-delete').dataset.confirm = ''; $('#sp-delete').textContent = 'Delete';
   $('#sp-cancel').onclick = () => d.close();
   $('#space-form').onsubmit = async e => {
     e.preventDefault();
-    const body = { name: $('#sp-name').value, folder: $('#sp-folder').value, tier: $('#sp-tier').value, color, instructions: $('#sp-instructions').value, code: $('#sp-code').value };
+    const body = { name: $('#sp-name').value, folder: $('#sp-folder').value, tier: $('#sp-tier').value, color, instructions: $('#sp-instructions').value, code: $('#sp-code').value, privacy: level };
     if (editing) body.notes = $('#sp-notes').value;
     try {
       const { space } = await post(editing ? `api/spaces/${sp.id}` : 'api/spaces', body);
@@ -394,7 +409,78 @@ async function openSpaceEditor(sp, prefill = {}) {
     catch (err) { toast(err.message); }
   };
   loadFolderList();
-  d.showModal(); $('#sp-name').focus();
+  d.showModal();
+  if (prefill.privacy) $('#sp-privacy').scrollIntoView({ block: 'center' }); else $('#sp-name').focus();
+}
+
+// ---- confidentiality: what leaves the server ----
+const SHIELD_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></svg>';
+const CLOUD_SVG = '<svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg>';
+const SERVER_SVG = '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/></svg>';
+const LOCK_SVG = '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const LEVELS = {
+  internal: { label: 'Internal', text: 'As configured: the services in your settings are used normally.' },
+  confidential: { label: 'Confidential', text: 'Only a model under business terms reads the content. Transcription and search by meaning stay on the server, the web needs your approval each time, notifications say nothing, shared links need a password and end within 30 days.' },
+  secret: { label: 'Secret', text: 'Nothing leaves the server: no model outside, no web, no shared links. The library and tasks still work.' },
+};
+const levelOf = sp => (sp && LEVELS[sp.privacy]) ? sp.privacy : 'internal';
+const PURPOSE = { model: 'answer', vision: 'reading images', transcription: 'transcription', embeddings: 'search by meaning', search: 'web search', web: 'web page',
+  notify: 'notification', connector: 'connector', calendar: 'calendar', chat: 'chat app', music: 'music', other: 'other' };
+const shortService = n => n.replace(/\s*\(.*\)$/, '');
+const kchars = n => n >= 1000 ? (n / 1000).toLocaleString(LOCALE, { maximumFractionDigits: 1 }) + 'k' : String(n);
+$('#privacy-badge').onclick = () => { if (state.space) openSpaceEditor(spaceOf(state.space), { privacy: true }); else location.hash = '#privacy'; };
+
+/** Under an answer: where it went (pills), and on tap what exactly left the server. */
+function traceLine(tr) {
+  const names = [...new Set((tr.out || []).map(o => shortService(o.service)))];
+  const docs = (tr.docs || []).length, local = (tr.local || []).length, blocked = (tr.blocked || []).length;
+  const n = (k1, kn, v) => esc(t(v === 1 ? k1 : kn, { n: v }));
+  let pills = names.length ? `<span class="tp out">${CLOUD_SVG}<span class="no-i18n">${esc(names[0])}${names.length > 1 ? ' +' + (names.length - 1) : ''}${docs ? ' · ' + n('1 document', '{n} documents', docs) : ''}</span></span>`
+    : '<span class="tp local">' + SERVER_SVG + '<span>Stayed on the server</span></span>';
+  if (local) pills += `<span class="tp local">${SERVER_SVG}<span class="no-i18n">${n('1 local', '{n} local', local)}</span></span>`;
+  if (blocked) pills += `<span class="tp blocked">${LOCK_SVG}<span class="no-i18n">${n('1 blocked', '{n} blocked', blocked)}</span></span>`;
+  return pills;
+}
+function traceDetail(tr) {
+  const sec = (title, cls, rows) => rows.length ? `<div class="td-sec ${cls}"><b>${title}</b><ul>${rows.join('')}</ul></div>` : '';
+  return sec('Sent out', 'out', (tr.out || []).map(o => `<li class="no-i18n">${esc(o.service)} <span class="muted">· ${esc(t(PURPOSE[o.purpose] || o.purpose))} · ${esc(t(o.calls === 1 ? '1 request' : '{n} requests', { n: o.calls }))} · ${kchars(o.bytes)} ${esc(t('bytes'))}</span></li>`))
+    + sec('Documents given to the model', 'docs', (tr.docs || []).map(d => `<li class="no-i18n">${esc(d.name)} <span class="muted">· ${kchars(d.chars)} ${esc(t('characters'))}</span></li>`))
+    + sec('Stayed on the server', 'local', [...new Set(tr.local || [])].map(l => `<li>${esc(l)}</li>`))
+    + sec('Blocked', 'blocked', (tr.blocked || []).map(l => `<li>${esc(l)}</li>`));
+}
+
+async function loadPrivacy() {
+  const d = await api('api/privacy');
+  const L = { local: ['Local', 'Nothing leaves your server.'], business: ['Business', 'Only services under business terms, which do not train on your data, receive anything.'],
+    personal: ['Personal', 'Some services may use your data or read it: fine for personal use, not for clients\' data.'] };
+  const idx = ['local', 'business', 'personal'].indexOf(d.level);
+  $('#pv-level').innerHTML = `<div class="pv-gauge">${['local', 'business', 'personal'].map((k, i) => `<div class="g ${k}${i === idx ? ' on' : ''}"><i></i><span>${L[k][0]}</span></div>`).join('')}</div>
+    <h3 class="pv-title">${d.level === 'local' ? 'Level: Local' : d.level === 'business' ? 'Level: Business' : 'Level: Personal'}</h3><p>${L[d.level][1]}</p>
+    ${d.issues ? `<p class="muted small">${esc(t(d.issues === 1 ? '1 point to look at below.' : '{n} points to look at below.', { n: d.issues }))}</p>` : ''}`;
+  $('#pv-spaces').innerHTML = d.spaces.map(s => `<div class="pv-space"><i class="space-dot" style="background:${esc(s.color || 'var(--muted)')}"></i><span class="no-i18n">${esc(s.id ? s.name : t('General'))}</span>
+      <span class="privacy-badge ${s.level}">${SHIELD_SVG}<span>${LEVELS[s.level].label}</span></span>${s.id ? `<button class="btn small ghost" type="button" data-sp="${s.id}">Change</button>` : ''}</div>`).join('');
+  $('#pv-spaces').querySelectorAll('[data-sp]').forEach(b => b.onclick = async () => { await loadSpaces(); openSpaceEditor(spaceOf(+b.dataset.sp), { privacy: true }); });
+  const locals = d.flows.filter(f => f.status === 'local').map(f => f.name);
+  $('#pv-local').innerHTML = ['Library', 'Memory', 'Tasks', ...locals].map(n => `<span>${esc(n)}</span>`).join('');
+  const fixBtn = f => f.fix.map((x, i) => `<button class="btn small ${f.status === 'bad' ? 'primary' : ''}" type="button" data-fix="${i}">${esc(x.label)}</button>`).join('');
+  $('#pv-flows').innerHTML = d.flows.filter(f => f.status !== 'local').map((f, n) => `<div class="pv-flow ${f.status}" data-n="${n}"><i class="dot"></i><div>
+      <b>${esc(f.name)}</b><p>${esc(f.what)}</p><p class="why">${esc(f.why)}</p>
+      <div class="row wrap">${fixBtn(f)}${f.terms ? `<a class="small" href="${esc(f.terms)}" target="_blank" rel="noopener">Terms</a>` : ''}</div></div></div>`).join('')
+    || '<p class="muted">Nothing leaves your server.</p>';
+  const outside = d.flows.filter(f => f.status !== 'local');
+  $('#pv-flows').querySelectorAll('[data-fix]').forEach(b => b.onclick = async () => {
+    const f = outside[+b.closest('[data-n]').dataset.n], x = f.fix[+b.dataset.fix];
+    if (x.href === '#library/shares') { location.hash = '#library'; setTimeout(() => openSharesManager(), 300); return; }
+    if (x.href) { location.hash = x.href.split('/')[0]; return; }
+    try { await post('api/settings', { changes: x.set }); toast('Saved.'); loadPrivacy(); } catch (e) { toast(e.message); }
+  });
+  $('#pv-security').innerHTML = d.security.map(s => `<div class="pv-sec ${s.ok ? 'ok' : 'warn'}"><i class="dot"></i><span>${esc(s.label)}</span><span class="muted small">${s.ok ? 'Active' : 'Not set up'}</span></div>`).join('');
+  const j = d.journal, max = Math.max(1, ...j.today.map(r => +r.calls));
+  const names = Object.fromEntries(d.spaces.map(s => [s.id, s.id ? s.name : t('General')]));
+  const req = v => esc(t(+v === 1 ? '1 request' : '{n} requests', { n: v })), blk = v => esc(t(+v === 1 ? '1 blocked' : '{n} blocked', { n: v }));
+  $('#pv-journal').innerHTML = `<h4>Today</h4>` + (j.today.length ? `<div class="pv-bars">${j.today.map(r => `<span class="no-i18n">${esc(shortService(r.name))} <span class="muted small">· ${esc(t(PURPOSE[r.purpose] || r.purpose))}</span></span>
+      <i style="--w:${Math.max(4, Math.round(100 * r.calls / max))}%" class="${+r.blocked ? 'blocked' : ''}"></i><span class="no-i18n">${r.calls}${+r.blocked ? ` <span class="muted small">(${blk(r.blocked)})</span>` : ''}</span>`).join('')}</div>` : '<p class="muted small">Nothing went out today.</p>')
+    + (j.spaces.length ? `<h4>Last 7 days, per space</h4><ul class="pv-perspace no-i18n">${j.spaces.map(s => `<li>${esc(names[s.space] || '#' + s.space)} <span class="muted small">· ${req(s.calls)}${+s.blocked ? ' · ' + blk(s.blocked) : ''}</span></li>`).join('')}</ul>` : '');
 }
 
 async function loadFolderList() {
@@ -474,6 +560,14 @@ async function send(opts = {}) {
   let textSoFar = '';
   const approvalsTimer = setInterval(loadApprovals, 4000);
   const activity = t => { const a = live.querySelector('.activity'); a.hidden = !t; a.innerHTML = t ? SPIN + esc(t) : ''; thread.scrollTop = thread.scrollHeight; };
+  const livePill = d => { // what is leaving the server right now (or staying here)
+    let box = live.querySelector('.live-pills');
+    if (!box) { box = document.createElement('div'); box.className = 'live-pills'; live.append(box); }
+    const key = (d.local ? 'l:' : 'o:') + d.label;
+    if (box.querySelector(`[data-k="${CSS.escape(key)}"]`)) return;
+    const s = document.createElement('span'); s.dataset.k = key; s.className = 'tp ' + (d.local ? 'local' : 'out live');
+    s.textContent = (d.local ? '● ' : '→ ') + (d.local ? d.label : shortService(d.label)); box.append(s);
+  };
   try {
     const res = await fetch('api/chat', { method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-Talixio': '1', Accept: 'text/event-stream' },
@@ -497,6 +591,7 @@ async function send(opts = {}) {
           thread.scrollTop = thread.scrollHeight;
         } else if (ev === 'tool') { activity(TOOL_LABEL(d.name, d.input)); if (textSoFar) { textSoFar += '\n\n'; } }
         else if (ev === 'status') activity(d.text);
+        else if (ev === 'privacy') livePill(d);
         else if (ev === 'done') done = d;
         else if (ev === 'fail') throw new Error(d.error);
       }
@@ -1731,7 +1826,7 @@ function libGo(folder) { location.hash = '#library' + (folder === '/' ? '' : fol
 async function loadLibrary() {
   lib.folder = libFolderFromHash() || '/';
   const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
-  lib.tree = tree.tree; lib.shared = list.shared;
+  lib.tree = tree.tree; lib.shared = list.shared; lib.level = list.level || 'internal';
   lib.folder = list.folder;
   const st = list.stats;
   $('#lib-stats').textContent = st.files ? `${nf.format(st.files)} files · ${fmtSize(st.bytes)}${st.failed ? ` · ${st.failed} unreadable` : ''}. ${st.pending ? `Reading ${st.pending} new file${st.pending > 1 ? 's' : ''} to make ${st.pending > 1 ? 'them' : 'it'} searchable…` : 'Everything is searchable, by you and by the assistant.'}`
@@ -1762,6 +1857,7 @@ function renderCrumbs() {
   const items = [['/', 'Library'], ...parts.map((p, i) => ['/' + parts.slice(0, i + 1).join('/'), p])];
   $('#lib-crumbs').innerHTML = items.map(([path, name]) => `<li><a href="#" data-path="${esc(path)}">${esc(name)}</a></li>`).join('');
   $('#lib-crumbs').querySelectorAll('a').forEach(a => { a.onclick = e => { e.preventDefault(); libGo(a.dataset.path); }; dropTarget(a, a.dataset.path); });
+  if (lib.level && lib.level !== 'internal') $('#lib-crumbs').insertAdjacentHTML('beforeend', `<li class="lvl-crumb"><span class="privacy-badge ${lib.level}">${SHIELD_SVG}<span>${LEVELS[lib.level].label}</span></span></li>`);
   const fa = $('#lib-folder-actions');
   const zipName = (lib.folder === '/' ? 'Library' : lib.folder.split('/').pop()) + '-' + new Date().toLocaleDateString('sv-SE') + '.zip';
   const zip = `<a class="btn small" href="api/library/zip?folder=${encodeURIComponent(lib.folder)}" download="${esc(zipName)}" title="Download this folder and its subfolders as a ZIP">Download zip</a>`;
@@ -1822,13 +1918,27 @@ function shareLine(s, opts = {}) {
   return el;
 }
 
+/** A Confidential space's documents: password required, 30 days at most. A Secret one's: not shared. */
+function shareLevel(level) {
+  const note = $('#sh-level'), days = $('#sh-days');
+  note.hidden = level === 'internal'; note.className = 'sh-level ' + level;
+  note.innerHTML = level === 'secret' ? SHIELD_SVG + '<span>Secret space: nothing from it can be shared outside.</span>'
+    : level === 'confidential' ? SHIELD_SVG + '<span>Confidential space: a password is required, and the link ends within 30 days.</span>' : '';
+  $('#sh-password').required = level === 'confidential';
+  $('#sh-password').placeholder = level === 'confidential' ? 'Required' : 'Optional';
+  for (const o of days.options) o.hidden = level !== 'internal' && (o.value === '0' || +o.value > 30);
+  if (level !== 'internal' && (days.value === '0' || +days.value > 30)) days.value = '7';
+  $('#sh-form').querySelector('[type=submit]').disabled = level === 'secret';
+}
+
 /** Share one file ({file: id}) or a folder ({folder: path}): its links, and a form for a new one. */
 async function openShare(what, name) {
   const dlg = $('#share-dialog');
   $('#sh-title').textContent = t('Share "{name}"', { name });
   $('#sh-what').textContent = what.folder ? t('The folder {path} and its subfolders, as they are when the link is opened.', { path: what.folder }) : t('This document only.');
   const refresh = async () => {
-    const { shares, base } = await api('api/shares?scope=active&' + (what.file ? 'file=' + what.file : 'folder=' + encodeURIComponent(what.folder)));
+    const { shares, base, level } = await api('api/shares?scope=active&' + (what.file ? 'file=' + what.file : 'folder=' + encodeURIComponent(what.folder)));
+    shareLevel(level || 'internal');
     const box = $('#sh-existing'); box.innerHTML = '';
     if (!base) box.innerHTML = `<p class="small error">${esc(t('The app does not know its public address yet: set it in Settings → Assistant → Public address.'))}</p>`;
     if (shares.length) { const h = document.createElement('h4'); h.textContent = t('Active links'); box.append(h); }
@@ -2228,13 +2338,13 @@ async function loadActivity() {
 }
 
 // ---- shell ----
-const VIEWS = { chat: null, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity };
+const VIEWS = { chat: null, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity, privacy: loadPrivacy };
 function route() {
   const h = location.hash.slice(1) === 'channels' ? 'settings' : location.hash.slice(1).split('/')[0];
   const v = (h in VIEWS) ? h : 'chat';
   for (const k of Object.keys(VIEWS)) $('#view-' + k).hidden = k !== v;
   document.querySelectorAll('.rail a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
-  $('#more-btn').classList.toggle('active', ['jobs', 'activity', 'settings', 'mail', 'people', 'tasks'].includes(v));
+  $('#more-btn').classList.toggle('active', ['jobs', 'activity', 'settings', 'mail', 'people', 'tasks', 'privacy'].includes(v));
   $('#more-sheet').hidden = true;
   if (v !== 'library') closeViewer();
   if (v !== 'board') { clearTimeout(loadBoard.t); }

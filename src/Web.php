@@ -47,6 +47,12 @@ final class Web
             if (preg_match('#^/api/files/(\d+)/pdf(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveOfficePdf((int)$fm[1]); return; }
             if (preg_match('#^/api/files/(\d+)/(thumb|page/(\d+))$#', $path, $fm) && $method === 'GET') { $this->servePreview((int)$fm[1], (int)($fm[3] ?? 0)); return; }
             if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/')); return; }
+            if ($path === '/api/privacy/journal.csv' && $method === 'GET') { $this->privacyCsv(); return; }
+            if ($path === '/api/privacy/register' && $method === 'GET') {
+                header('Content-Type: text/markdown; charset=utf-8'); header('Cache-Control: no-store');
+                header('Content-Disposition: attachment; filename="record-of-processing-' . date('Y-m-d') . '.md"');
+                echo $this->app->privacy()->register(); return;
+            }
             if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
             $this->json($this->route($method, $path, $body));
         } catch (Conflict $e) {
@@ -184,9 +190,12 @@ final class Web
             (bool)preg_match('#^/api/jobs/(\d+)/cancel$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->jobs()->cancel((int)$mm[1])],
             (bool)preg_match('#^/api/jobs/(\d+)/continue$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->continue((int)$mm[1], is_numeric($b['max_usd'] ?? null) ? (float)$b['max_usd'] : null, (string)($b['effort'] ?? ''), (string)($b['note'] ?? ''))],
             (bool)preg_match('#^/api/jobs/(\d+)/rerun$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->rerun((int)$mm[1], (string)($b['tier'] ?? ''), is_numeric($b['max_usd'] ?? null) ? (float)$b['max_usd'] : null, (string)($b['effort'] ?? ''))],
-            $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/')) + ['stats' => $this->app->library()->stats(), 'shared' => $this->app->shares()->sharedIndex()],
+            $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/')) + ['stats' => $this->app->library()->stats(), 'shared' => $this->app->shares()->sharedIndex(),
+                'level' => $this->app->privacy()->folderLevel(Library::normalize((string)($_GET['folder'] ?? '/')))],
+            $path === '/api/privacy' => $this->app->privacy()->overview() + ['journal' => $this->app->privacy()->journal()],
             $path === '/api/shares' && $m === 'GET' => ['shares' => $this->app->shares()->list((string)($_GET['scope'] ?? 'active'), isset($_GET['file']) ? (int)$_GET['file'] : null, isset($_GET['folder']) ? (string)$_GET['folder'] : null),
-                'base' => $this->app->shares()->baseUrl()],
+                'base' => $this->app->shares()->baseUrl(),
+                'level' => $this->app->privacy()->folderLevel(isset($_GET['file']) ? (string)($this->app->files()->get((int)$_GET['file'])['folder'] ?? '/') : Library::normalize((string)($_GET['folder'] ?? '/')))],
             $path === '/api/shares' && $m === 'POST' => ['share' => $this->app->shares()->create(isset($b['file']) ? ['file' => (int)$b['file']] : ['folder' => (string)($b['folder'] ?? '')], $b)],
             (bool)preg_match('#^/api/shares/(\d+)$#', $path, $mm) && $m === 'POST' => ['share' => $this->app->shares()->update((int)$mm[1], $b)],
             (bool)preg_match('#^/api/shares/(\d+)/revoke$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->shares()->revoke((int)$mm[1])],
@@ -904,6 +913,20 @@ final class Web
             . 'button{font:inherit;padding:8px 12px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);cursor:pointer}.err{color:#b42318}footer{margin-top:32px;color:var(--muted);font-size:.8rem}'
             . "@media (max-width:520px){.files li{flex-wrap:wrap}.acts{width:100%;justify-content:flex-start}}</style></head><body><main><h1>$t</h1>$body<footer>"
             . htmlspecialchars(I18n::tl($lang, 'Shared with Talixio.')) . '</footer></main></body></html>';
+    }
+
+    /** The journal of requests to the outside (90 days), as CSV: never the content, only who, what for and how much. */
+    private function privacyCsv(): void
+    {
+        header('Content-Type: text/csv; charset=utf-8'); header('Cache-Control: no-store');
+        header('Content-Disposition: attachment; filename="talixio-outside-requests-' . date('Y-m-d') . '.csv"');
+        $names = array_column($this->app->spaces()->all(true), 'name', 'id');
+        $out = fopen('php://output', 'w');
+        fputcsv($out, ['time', 'service', 'purpose', 'bytes', 'space', 'level', 'blocked']);
+        foreach ($this->app->privacy()->journalRows() as $r) {
+            fputcsv($out, [date('Y-m-d H:i:s', (int)$r['ts']), $r['service'], $r['purpose'], $r['bytes'], (int)$r['space'] ? ($names[(int)$r['space']] ?? $r['space']) : 'General', $r['level'], $r['blocked'] ? 'yes' : 'no']);
+        }
+        fclose($out);
     }
 
     /** Content-Disposition with an ASCII fallback name and the exact UTF-8 one. */

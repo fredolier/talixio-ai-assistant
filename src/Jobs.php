@@ -161,7 +161,8 @@ final class Jobs
         $store = $this->app->store;
         $j = $store->job($id) ?? throw new \RuntimeException("no job $id");
         if ($j['status'] === 'queued') $store->claimJob($id);
-        $this->app->space = (int)$j['space']; // library searches start in the space's folder
+        $this->app->space = (int)$j['space']; // library searches start in the space's folder; its confidentiality level applies
+        Privacy::$taint = 0;
         $max = (float)$j['max_cost_usd'];
         $effort = $this->tune((string)($j['effort'] ?? ''));
         $warned = false;

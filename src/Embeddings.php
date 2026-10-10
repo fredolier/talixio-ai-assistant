@@ -10,6 +10,9 @@ final class Embeddings
 
     public function __construct(private Config $cfg) {}
 
+    /** Computed on this server (Ollama here), so any text may be indexed. */
+    public function local(App $app): bool { return $this->fake !== null || ($this->cfg->embeddings === 'ollama' && Privacy::isLocalHost((string)parse_url($this->cfg->ollamaUrl, PHP_URL_HOST))); }
+
     public function enabled(): bool { return $this->fake !== null || $this->cfg->embeddings !== 'off'; }
     /** Identifies the vectors: changing backend, model or size re-indexes memory in the background. */
     public function model(): string
@@ -46,6 +49,11 @@ final class Embeddings
      * @return array<int,string> packed, L2-normalised float32 vectors
      */
     public function embed(array $texts, string $type): array
+    {
+        return Privacy::as('embeddings', fn() => $this->embedNow($texts, $type));
+    }
+
+    private function embedNow(array $texts, string $type): array
     {
         $texts = array_map(fn($t) => mb_substr($t, 0, 6000), $texts);
         $vecs = $this->fake ? ($this->fake)($texts, $type) : match ($this->cfg->embeddings) {

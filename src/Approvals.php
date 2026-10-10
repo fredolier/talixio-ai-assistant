@@ -73,7 +73,9 @@ final class Approvals
             return $msg;
         }
         if ($a['mode'] === 'inline') return I18n::t($this->app, 'Approved: {what}. Continuing.', ['what' => $a['summary']]); // the waiting session carries on
-        $result = $this->app->tools->execute($a['tool'], json_decode($a['args'], true) ?: []);
+        $before = $this->app->space; $this->app->space = (int)$a['space'];
+        try { $result = Privacy::approved(fn() => $this->app->tools->execute($a['tool'], json_decode($a['args'], true) ?: [])); } // you approved this one action
+        finally { $this->app->space = $before; }
         $ok = !str_starts_with($result, 'error');
         $st->q('UPDATE approvals SET result=?, status=? WHERE id=?', [mb_substr($result, 0, 4000), $ok ? 'done' : 'failed', $id]);
         $msg = I18n::t($this->app, $ok ? 'Done: {what}' : 'Failed: {what}', ['what' => $a['summary']]) . "\n\n" . mb_substr($result, 0, 600);
