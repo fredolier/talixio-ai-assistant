@@ -95,7 +95,9 @@ if [ -n "$MIGRATE" ]; then
     cp -a /old/. /data/ && mkdir -p /data/home
     for f in .claude .claude.json .config .cache; do [ -e "/data/$f" ] && mv "/data/$f" /data/home/; done
     rm -rf /data/.local /data/signal/.cache 2>/dev/null; chown -R 1000:1000 /data'
-  [ -f /etc/talixio/talixio.env ] && docker run --rm --entrypoint php -v /etc/talixio/talixio.env:/old.env:ro -v "talixio-$MIGRATE:/data" talixio:current /opt/talixio/deploy/docker/import-env.php /old.env
+  # as root: talixio.env is readable by root only; the settings file then goes back to the assistant's user
+  [ -f /etc/talixio/talixio.env ] && docker run --rm --user 0 --entrypoint sh -v /etc/talixio/talixio.env:/old.env:ro -v "talixio-$MIGRATE:/data" talixio:current \
+    -c 'php /opt/talixio/deploy/docker/import-env.php /old.env; chown -R 1000:1000 /data'
   echo "    data copied (the original stays in /var/lib/talixio)"
 fi
 

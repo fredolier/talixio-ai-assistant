@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.14.1 (2026-10-10)
+- Moving an installation into the Docker stack: the settings of `/etc/talixio/talixio.env` were not imported
+  (the file is readable by root only).
+
 ## 0.14.0 (2026-10-10)
 - The Docker image includes whisper.cpp (transcription on the server, the model shared by every assistant
   in one volume) and signal-cli (Signal channel). Moving an install made with `--with-whisper` reuses its model.
