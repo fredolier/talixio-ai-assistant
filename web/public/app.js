@@ -536,24 +536,46 @@ $('#chat-search-btn').onclick = () => {
   const p = $('#chat-search'); p.hidden = !p.hidden;
   if (!p.hidden) { $('#chat-search-q').focus(); $('#chat-search-q').select(); }
 };
-$('#chat-search-close').onclick = () => { $('#chat-search').hidden = true; };
-$('#chat-search-q').addEventListener('keydown', e => { if (e.key === 'Escape') $('#chat-search').hidden = true; });
+$('#chat-search-close').onclick = () => { $('#chat-search').hidden = true; twoPassStop('chat'); };
+$('#chat-search-q').addEventListener('keydown', e => { if (e.key === 'Escape') { $('#chat-search').hidden = true; twoPassStop('chat'); } });
 $('#chat-search-q').addEventListener('input', () => { clearTimeout(chatSearch.t); chatSearch.t = setTimeout(chatSearch, 300); });
-async function chatSearch() {
-  const q = $('#chat-search-q').value.trim(); const box = $('#chat-search-results');
-  if (q.length < 2) { box.innerHTML = ''; return; }
+
+/**
+ * A search in two passes: the words at once, then by meaning (a few seconds), which completes the list.
+ * render(results, phase): phase 'wait' (nothing yet), 'meaning' (first results, more coming), 'done', 'error'.
+ * A newer search with the same key cancels the running one: late answers are dropped.
+ */
+const twoPassCtl = {};
+function twoPassStop(key) { twoPassCtl[key]?.abort(); delete twoPassCtl[key]; }
+async function twoPass(key, url, render) {
+  twoPassStop(key);
+  const ctl = twoPassCtl[key] = new AbortController();
+  render(null, 'wait');
   try {
-    const { results } = await api(`api/messages/search?space=${state.space}&q=` + encodeURIComponent(q));
-    if (q !== $('#chat-search-q').value.trim()) return;
-    const mark = t => esc(t).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi'), x => `<mark>${x}</mark>`);
-    box.innerHTML = results.length ? '' : '<p class="muted small">Nothing found.</p>';
+    const quick = await api(url + '&mode=quick', { signal: ctl.signal });
+    render(quick.results, quick.more ? 'meaning' : 'done');
+    if (quick.more) render((await api(url, { signal: ctl.signal })).results, 'done');
+  } catch (e) { if (!ctl.signal.aborted) render(null, 'error', e); }
+  finally { if (twoPassCtl[key] === ctl) delete twoPassCtl[key]; }
+}
+const searchWait = text => `<div class="search-wait" role="status">${SPIN_SVG}<span>${esc(t(text))}</span></div>`;
+
+function chatSearch() {
+  const q = $('#chat-search-q').value.trim(); const box = $('#chat-search-results');
+  if (q.length < 2) { twoPassStop('chat'); box.innerHTML = ''; return; }
+  const mark = x => esc(x).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi'), m => `<mark>${m}</mark>`);
+  twoPass('chat', `api/messages/search?space=${state.space}&q=` + encodeURIComponent(q), (results, phase, err) => {
+    if (phase === 'error') { box.innerHTML = `<p class="error small">${esc(err.message)}</p>`; return; }
+    if (!results) { box.innerHTML = searchWait('Searching…'); return; }
+    box.innerHTML = results.length || phase !== 'done' ? '' : '<p class="muted small">Nothing found.</p>';
     for (const r of results) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'sres';
       b.innerHTML = `<span class="muted small">${r.role === 'user' ? 'You' : esc(state.status?.name || 'Assistant')} · ${new Date(r.ts * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${r.exact ? '' : ' · similar'}</span><span>${mark(r.snippet)}</span>`;
       b.onclick = () => { jumpTo(r.id); if (matchMedia('(max-width: 760px)').matches) $('#chat-search').hidden = true; };
       box.append(b);
     }
-  } catch (e) { box.innerHTML = `<p class="error small">${esc(e.message)}</p>`; }
+    if (phase === 'meaning') box.insertAdjacentHTML('afterbegin', searchWait('Looking for similar messages…'));
+  });
 }
 
 const SPIN = '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
@@ -2680,16 +2702,17 @@ $('#test-notify').onclick = async () => {
     loadChannels();
   } catch (e) { $('#test-result').textContent = e.message; }
 };
-$('#search-form').onsubmit = async e => {
+$('#search-form').onsubmit = e => {
   e.preventDefault();
   const q = $('#search-q').value.trim(); const box = $('#search-results');
-  if (!q) { box.hidden = true; return; }
-  try {
-    const { results } = await api('api/search?q=' + encodeURIComponent(q));
-    box.hidden = false;
-    box.innerHTML = results.length ? results.map(r => `<div class="hit"><div class="meta"><span class="chip">${esc(r.label)}</span><span>${new Date(r.ts * 1000).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' })}</span>${r.sim != null ? `<span>${Math.round(r.sim * 100)}% similar</span>` : ''}</div>${esc(r.text.slice(0, 600))}</div>`).join('')
-      : '<div class="placeholder">Nothing found.</div>';
-  } catch (err) { toast(err.message); }
+  if (!q) { twoPassStop('memory'); box.hidden = true; return; }
+  box.hidden = false;
+  const hit = r => `<div class="hit"><div class="meta"><span class="chip">${esc(r.label)}</span><span>${new Date(r.ts * 1000).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' })}</span>${r.sim != null ? `<span>${Math.round(r.sim * 100)}% similar</span>` : ''}</div>${esc(r.text.slice(0, 600))}</div>`;
+  twoPass('memory', 'api/search?q=' + encodeURIComponent(q), (results, phase, err) => {
+    if (phase === 'error') { box.innerHTML = `<div class="placeholder">${esc(err.message)}</div>`; return; }
+    if (!results) { box.innerHTML = searchWait('Searching…'); return; }
+    box.innerHTML = (phase === 'meaning' ? searchWait('Searching by meaning…') : '') + results.map(hit).join('') + (phase === 'done' && !results.length ? '<div class="placeholder">Nothing found.</div>' : '');
+  });
 };
 $('#skill-save').onclick = async () => {
   try { await post('api/skills/' + encodeURIComponent(state.skill), { content: $('#skill-editor').value }); $('#skill-state').textContent = 'Saved'; loadSkills(); }

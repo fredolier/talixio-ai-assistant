@@ -756,6 +756,13 @@ $app->tools->run('calendar_add', ['title' => 'Spam', 'start' => '2026-10-21']);
 $id = (int)$app->approvals()->pending()[0]['id'];
 check('approval: reject by number', str_starts_with($app->agent()->chat('telegram', "no $id"), 'Cancelled') && count(glob("$cdir/*.ics")) === 1);
 check('approval: cannot run twice', str_contains($app->approvals()->decide($id, true), 'already'));
+$ro = fn(array $t) => \Talixio\Mcp::readOnly($t);
+check('connectors: tools named like reads run without approval, unless the server says otherwise', $ro(['name' => 'list_tasks']) && $ro(['name' => 'getNotes']) && $ro(['name' => 'search'])
+    && !$ro(['name' => 'create_task']) && !$ro(['name' => 'listing_delete']) && !$ro(['name' => 'get_and_delete', 'annotations' => ['destructiveHint' => true]])
+    && !$ro(['name' => 'list_x', 'annotations' => ['readOnlyHint' => false]]) && $ro(['name' => 'complete', 'annotations' => ['readOnlyHint' => true]]));
+$bl = \Talixio\Approvals::block(json_encode([['id' => 1, 'description' => str_repeat('é', 50)]]), 20000);
+check('approval: a JSON result is kept whole, indented in a code block', str_starts_with($bl, "```json\n[\n    {") && str_contains($bl, str_repeat('é', 50)) && str_ends_with($bl, '```')
+    && str_ends_with(\Talixio\Approvals::block(str_repeat('a', 30), 10), '[… cut at 10 characters]'), $bl);
 check('approval: "ok" alone is not an answer', \Talixio\Approvals::parseReply('ok') === null && \Talixio\Approvals::parseReply('ok 4') === [true, 4] && \Talixio\Approvals::parseReply('Non !') === [false, null]);
 $c->autoApprove = ['calendar_add'];
 check('approval: auto-approve list skips the question', str_starts_with($app->tools->run('calendar_add', ['title' => 'Gym', 'start' => '2026-10-22 07:00']), 'added to the calendar'));

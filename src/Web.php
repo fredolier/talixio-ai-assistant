@@ -88,7 +88,8 @@ final class Web
                 return ['messages' => $list, 'first_id' => (int)$s->q('SELECT COALESCE(MIN(id),0) FROM messages WHERE space = ?', [$space])->fetchColumn(),
                     'unread' => array_sum(array_map(fn($x) => $x['id'] !== $space ? $x['unread'] : 0, $this->app->spaces()->all()))];
             })(),
-            $path === '/api/messages/search' => ['results' => $this->searchMessages((string)($_GET['q'] ?? ''), (int)($_GET['space'] ?? 0))],
+            $path === '/api/messages/search' => ['results' => $this->searchMessages((string)($_GET['q'] ?? ''), (int)($_GET['space'] ?? 0), ($_GET['mode'] ?? '') !== 'quick'),
+                'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
             $path === '/api/spaces' && $m === 'GET' => ['spaces' => $this->app->spaces()->all(true), 'colors' => Spaces::COLORS],
             $path === '/api/spaces' && $m === 'POST' => ['space' => $this->app->spaces()->save($b)],
             (bool)preg_match('#^/api/spaces/(\d+)$#', $path, $mm) && $m === 'POST' => ['space' => $this->app->spaces()->save($b, (int)$mm[1])],
@@ -243,7 +244,8 @@ final class Web
                 return ['filed' => $n];
             })(),
             $path === '/api/search' => ['results' => array_map(fn($h) => array_intersect_key($h, array_flip(['kind', 'ref', 'ts', 'label', 'text', 'keyword', 'sim'])),
-                $this->app->recall()->search((string)($_GET['q'] ?? ''), 20))],
+                $this->app->recall()->search((string)($_GET['q'] ?? ''), 20, PHP_INT_MAX, null, null, null, ($_GET['mode'] ?? '') !== 'quick')),
+                'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
             default => $this->fail(404, 'not found'),
         };
     }
@@ -258,7 +260,7 @@ final class Web
                 'auth' => $signed ? 'signed_in' : (!empty($c['auth']) || !empty($srv['oauth']) ? 'needed' : null), 'signed_in_at' => $signed ? $this->app->mcpOAuth()->account($name) : null,
                 'error' => $c['error'] ?? ($c ? null : 'not checked yet'), 'at' => $c['at'] ?? null,
                 'tools' => array_map(fn($t) => ['name' => Mcp::toolName($name, (string)$t['name']), 'title' => (string)($t['title'] ?? $t['name']),
-                    'read_only' => !empty($t['annotations']['readOnlyHint'])], $c['tools'] ?? [])];
+                    'read_only' => Mcp::readOnly($t)], $c['tools'] ?? [])];
         }
         return ['raw' => $mcp->raw(), 'servers' => $out, 'shell' => ['mode' => $this->app->cfg->shell, 'installed' => Shell::binary() !== null]];
     }
@@ -604,7 +606,8 @@ final class Web
     private static function minutes(int $s): string { $m = (int)ceil($s / 60); return $m <= 1 ? 'a minute' : ($m < 120 ? "$m minutes" : (int)ceil($m / 60) . ' hours'); }
 
     /** Find in the conversation: exact words first (newest first), then matches by meaning. */
-    private function searchMessages(string $q, int $space = 0): array
+    /** Messages of a space with these words; $meaning: also similar ones (slower: the question is turned into a vector). */
+    private function searchMessages(string $q, int $space = 0, bool $meaning = true): array
     {
         $q = trim($q);
         if (mb_strlen($q) < 2) return [];
@@ -615,7 +618,7 @@ final class Web
         }
         if (count($out) < 40) {
             try {
-                foreach ($this->app->recall()->search($q, 20, PHP_INT_MAX, ['message'], null, $space) as $h) {
+                foreach ($this->app->recall()->search($q, 20, PHP_INT_MAX, ['message'], null, $space, $meaning) as $h) {
                     $id = (int)$h['ref'];
                     if (isset($out[$id]) || !($r = $s->q('SELECT id, role, channel, content, ts FROM messages WHERE id = ?', [$id])->fetch())) continue;
                     $out[$id] = ['id' => $id, 'role' => $r['role'], 'channel' => $r['channel'], 'ts' => (int)$r['ts'], 'snippet' => self::snippet($r['content'], $q), 'exact' => false];

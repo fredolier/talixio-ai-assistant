@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.19.2 (2026-10-10)
+- Searching the conversation (the magnifier in the chat) and the Memory page: the messages with the words
+  show at once, with a spinner while search by meaning completes the list; a new search cancels the
+  previous one (late answers are dropped). Before, nothing showed until the slow part was done.
+- Connectors: tools named like reads (`list_…`, `get_…`, `search_…`) run without asking for approval when the
+  server does not say otherwise; the assistant then answers from the result directly.
+- An approved action's result is kept whole in the conversation (up to 20 000 characters, JSON indented in a
+  scrolling block), so the assistant can read all of it; before, it was cut at 600 characters.
+
 ## 0.19.1 (2026-10-10)
 - Docker: faster updates. The dependencies (system packages, Chromium, LibreOffice, whisper.cpp,
   signal-cli…) are an image of their own, `talixio-base:<hash of deploy/docker/base.Dockerfile>`, built only

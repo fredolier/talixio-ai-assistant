@@ -77,10 +77,21 @@ final class Approvals
         try { $result = Privacy::approved(fn() => $this->app->tools->execute($a['tool'], json_decode($a['args'], true) ?: [])); } // you approved this one action
         finally { $this->app->space = $before; }
         $ok = !str_starts_with($result, 'error');
-        $st->q('UPDATE approvals SET result=?, status=? WHERE id=?', [mb_substr($result, 0, 4000), $ok ? 'done' : 'failed', $id]);
-        $msg = I18n::t($this->app, $ok ? 'Done: {what}' : 'Failed: {what}', ['what' => $a['summary']]) . "\n\n" . mb_substr($result, 0, 600);
-        $st->addMessage('assistant', 'approval', $msg, null, [], (int)$a['space']);
-        return $msg;
+        $st->q('UPDATE approvals SET result=?, status=? WHERE id=?', [mb_substr($result, 0, 20000), $ok ? 'done' : 'failed', $id]);
+        $head = I18n::t($this->app, $ok ? 'Done: {what}' : 'Failed: {what}', ['what' => $a['summary']]);
+        // kept whole in the conversation (the assistant reads it when asked about it); data shown as a block
+        $st->addMessage('assistant', 'approval', $head . "\n\n" . self::block($result, 20000), null, [], (int)$a['space']);
+        return $head . "\n\n" . mb_substr($result, 0, 600) . (mb_strlen($result) > 600 ? ' […]' : ''); // a chat app gets the start
+    }
+
+    /** A tool's result for the conversation: JSON indented in a code block, other text as is; very long ones cut. */
+    public static function block(string $result, int $max): string
+    {
+        $data = json_decode($result, true);
+        if (is_array($data)) $result = (string)json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $cut = mb_strlen($result) > $max;
+        $result = $cut ? mb_substr($result, 0, $max) : $result;
+        return (is_array($data) ? "```json\n" . str_replace('```', "``\u{200B}`", $result) . "\n```" : $result) . ($cut ? "\n[… cut at $max characters]" : '');
     }
 
     /** "yes", "oui 12", "no #3"... Returns [approve, id|null] or null if the text isn't an answer. */

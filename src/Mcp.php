@@ -90,7 +90,7 @@ final class Mcp
             foreach ($info['tools'] ?? [] as $t) {
                 $name = self::toolName($server, (string)$t['name']);
                 $schema = is_array($t['inputSchema'] ?? null) ? $t['inputSchema'] : ['type' => 'object'];
-                $readOnly = !empty($t['annotations']['readOnlyHint']);
+                $readOnly = self::readOnly($t);
                 $remote = (string)$t['name'];
                 $tools->register($name, "[$server] " . mb_substr(trim((string)($t['description'] ?? $t['title'] ?? $remote)), 0, 1500),
                     (array)($schema['properties'] ?? []), array_values((array)($schema['required'] ?? [])),
@@ -99,6 +99,18 @@ final class Mcp
                 if ($readOnly) $tools->readOnly[] = $name;
             }
         }
+    }
+
+    /**
+     * A tool that only reads: says so (readOnlyHint), or, when the server says nothing, is named like it
+     * (list_tasks, getNotes, search…). Those run without asking; the others wait for the user's approval.
+     */
+    public static function readOnly(array $t): bool
+    {
+        $a = is_array($t['annotations'] ?? null) ? $t['annotations'] : [];
+        if (array_key_exists('readOnlyHint', $a)) return (bool)$a['readOnlyHint'];
+        if (!empty($a['destructiveHint'])) return false;
+        return (bool)preg_match('/^(list|get|search|find|read|show|view|count|describe|query|lookup|fetch)(_|-|[A-Z]|$)/', (string)($t['name'] ?? ''));
     }
 
     public static function toolName(string $server, string $tool): string

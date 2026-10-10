@@ -1877,5 +1877,8 @@ window.I18N.fr = {
 "{n} files deleted for good": "{n} fichiers effacés pour de bon",
 "Folder moved to the trash: restorable for {n} days": "Dossier mis à la corbeille : restaurable pendant {n} jours",
 "Moved to the trash: restorable for {n} days": "Mis à la corbeille : restaurable pendant {n} jours",
-"Deleted files, restorable for 30 days": "Fichiers supprimés, restaurables pendant 30 jours"
+"Deleted files, restorable for 30 days": "Fichiers supprimés, restaurables pendant 30 jours",
+"Searching…": "Recherche…",
+"Looking for similar messages…": "Recherche de messages proches…",
+"Searching by meaning…": "Recherche par le sens…"
 };
