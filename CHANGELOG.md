@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.11.1 (2026-10-10)
+- Fix: after an update, the installed app could show the new page with the previous version's scripts until
+  "Reload" was pressed, so new buttons (Share) did nothing. A page now always gets the scripts of its own version.
+
 ## 0.11.0 (2026-10-10)
 - Share library documents with people outside: a link to a file or a folder (with its subfolders), for a
   set time or without end, optional password, view only or download, a message for them. Library →

@@ -5,7 +5,8 @@
 const VERSION = '__VERSION__';
 const CACHE = 'talixio-' + VERSION + new URL(self.registration.scope).pathname;
 const ROOT = new URL(self.registration.scope).pathname; // '/' or '/fred/'
-const SHELL = ['', 'app.css', 'app.js', 'i18n.js', 'i18n/fr.js', 'manifest.json', 'icon.svg', 'icons/icon-192.png', 'icons/badge-96.png'].map(u => ROOT + u);
+// the scripts are cached under the version the page asks for (app.js?v=…): a newer page never runs older scripts
+const SHELL = ['', ...['app.css', 'app.js', 'i18n.js', 'i18n/fr.js'].map(u => u + '?v=' + VERSION), 'manifest.json', 'icon.svg', 'icons/icon-192.png', 'icons/badge-96.png'].map(u => ROOT + u);
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))));
@@ -26,7 +27,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(fetch(req).catch(() => caches.match(ROOT, { ignoreSearch: true })));
     return;
   }
-  e.respondWith(caches.match(req, { ignoreSearch: true }).then(hit => hit || fetch(req).then(res => {
+  e.respondWith(caches.match(req, { ignoreSearch: !url.searchParams.has('v') }).then(hit => hit || fetch(req).then(res => {
     if (res.ok && url.pathname.startsWith(ROOT + 'icons/')) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
     return res;
   })));

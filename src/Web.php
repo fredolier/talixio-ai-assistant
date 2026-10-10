@@ -22,6 +22,8 @@ final class Web
             $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '">', $html, 1); // the interface language (i18n.js)
             if ($this->app->cfg->lang === 'auto') I18n::remember($this->app, (string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
             Shares::remember($this->app); // the address for links sent outside
+            // the scripts carry the version: a page always gets the scripts of its own version, never older ones from an installed app's cache
+            $html = preg_replace('/(<script src="|<link rel="stylesheet" href=")((?:i18n\/)?[a-z0-9]+\.(?:js|css))"/', '$1$2?v=' . self::assetVersion() . '"', $html);
             echo preg_replace('/<head>/', '<head><base href="' . htmlspecialchars(Config::basePath() . '/') . '">', $html, 1); // every address in the app is relative to it
             return;
         }
@@ -432,13 +434,21 @@ final class Web
     /** The service worker, versioned by the app's files so every update refreshes installed apps. */
     private function serviceWorker(): void
     {
-        $root = dirname(__DIR__);
-        $sig = '';
-        foreach (array_merge(glob("$root/web/public/*") ?: [], glob("$root/web/public/i18n/*") ?: [], ["$root/web/sw.template.js", "$root/VERSION.json"]) as $f) $sig .= $f . @filemtime($f) . @filesize($f);
         header('Content-Type: text/javascript; charset=utf-8');
         header('Cache-Control: no-cache');
         header('Service-Worker-Allowed: /');
-        echo str_replace('__VERSION__', substr(sha1($sig), 0, 12), (string)file_get_contents("$root/web/sw.template.js"));
+        echo str_replace('__VERSION__', self::assetVersion(), (string)file_get_contents(dirname(__DIR__) . '/web/sw.template.js'));
+    }
+
+    /** A fingerprint of the app's files: the page asks for its scripts with it, and the service worker caches them under it. */
+    public static function assetVersion(): string
+    {
+        static $v = null;
+        if ($v !== null) return $v;
+        $root = dirname(__DIR__);
+        $sig = '';
+        foreach (array_merge(glob("$root/web/public/*") ?: [], glob("$root/web/public/i18n/*") ?: [], ["$root/web/sw.template.js", "$root/VERSION.json"]) as $f) $sig .= $f . @filemtime($f) . @filesize($f);
+        return $v = substr(sha1($sig), 0, 12);
     }
 
     /**
