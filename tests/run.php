@@ -1108,11 +1108,14 @@ $raw = function (string $path, array $headers = []) use ($webPort, $ck) {
 };
 [$code, $h, $body] = $raw('/', ['Accept-Language: fr-FR,fr;q=0.9,en;q=0.8']);
 check('i18n: the page loads the translations and says the chosen language', $code === 200 && str_contains($body, '<html lang="en" data-lang="auto">')
-    && str_contains($body, '<script src="i18n/fr.js?v=') && strpos($body, 'i18n.js') < strpos($body, 'app.js'));
+    && str_contains($body, '<script src="v/' . \Talixio\Web::assetVersion() . '/i18n/fr.js"') && strpos($body, 'i18n.js') < strpos($body, 'app.js'));
 // an installed app keeps the scripts in its cache: the page asks for those of its own version, so a newer page never runs older scripts
 $v = \Talixio\Web::assetVersion();
-check('the page asks for the scripts and styles of its own version', str_contains($body, "<script src=\"app.js?v=$v\"></script>") && str_contains($body, "href=\"app.css?v=$v\"")
-    && str_contains($body, "<script src=\"i18n.js?v=$v\"></script>") && !str_contains($body, 'manifest.json?v='));
+check('the page asks for the scripts and styles of its own version', str_contains($body, "<script src=\"v/$v/app.js\"></script>") && str_contains($body, "href=\"v/$v/app.css\"")
+    && str_contains($body, "<script src=\"v/$v/i18n.js\"></script>") && !str_contains($body, "v/$v/manifest"));
+[$code, $h, $js] = $raw("/v/$v/i18n/fr.js");
+[$code2, $h2] = $raw('/v/0123456789ab/../app.html');
+check('the versioned scripts are served, nothing else is', $code === 200 && str_contains($h, 'text/javascript') && $js === file_get_contents(dirname(__DIR__) . '/web/public/i18n/fr.js') && !str_contains((string)$h2, 'javascript'));
 $cid = $up['file']['id'];
 // links for people outside
 $anon = function (string $path, array $headers = [], ?array $post = null, ?string $jar = null) use ($webPort) {

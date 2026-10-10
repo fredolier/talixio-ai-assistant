@@ -22,8 +22,9 @@ final class Web
             $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '">', $html, 1); // the interface language (i18n.js)
             if ($this->app->cfg->lang === 'auto') I18n::remember($this->app, (string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
             Shares::remember($this->app); // the address for links sent outside
-            // the scripts carry the version: a page always gets the scripts of its own version, never older ones from an installed app's cache
-            $html = preg_replace('/(<script src="|<link rel="stylesheet" href=")((?:i18n\/)?[a-z0-9]+\.(?:js|css))"/', '$1$2?v=' . self::assetVersion() . '"', $html);
+            // the scripts' address carries the version (v/<version>/app.js, served by router.php): a page always gets the
+            // scripts of its own version, never older ones from an installed app's cache, even an older service worker's
+            $html = preg_replace('/(<script src="|<link rel="stylesheet" href=")((?:i18n\/)?[a-z0-9]+\.(?:js|css))"/', '$1v/' . self::assetVersion() . '/$2"', $html);
             echo preg_replace('/<head>/', '<head><base href="' . htmlspecialchars(Config::basePath() . '/') . '">', $html, 1); // every address in the app is relative to it
             return;
         }

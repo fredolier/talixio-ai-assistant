@@ -2,6 +2,13 @@
 declare(strict_types=1);
 // Front controller for `php -S ... -t web/public web/router.php`.
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+// the app's scripts and styles under their version (v/<version>/app.js): a new address for every version
+if (preg_match('#^/v/[0-9a-f]{12}/((?:i18n/)?[a-z0-9]+\.(js|css))$#', $path, $m) && is_file(__DIR__ . '/public/' . $m[1])) {
+    header('Content-Type: ' . ($m[2] === 'css' ? 'text/css' : 'text/javascript') . '; charset=utf-8');
+    header('Cache-Control: no-cache');
+    readfile(__DIR__ . '/public/' . $m[1]);
+    return true;
+}
 if ($path !== '/' && is_file(__DIR__ . '/public' . $path) && !str_contains($path, '..')) {
     return false; // static asset, served by the built-in server
 }
