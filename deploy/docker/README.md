@@ -124,6 +124,7 @@ a certificate for each person at their first visit, and only for people that exi
 ## One assistant without the stack
 
 ```bash
+docker build -t talixio-base:current - < deploy/docker/base.Dockerfile   # the dependencies (long, once)
 docker build -t talixio .
 docker run -d --name talixio-fred --restart unless-stopped -v talixio-fred:/data \
   -e TALIXIO_WEB_PASSWORD='first password' -e TALIXIO_BASE_PATH=fred \

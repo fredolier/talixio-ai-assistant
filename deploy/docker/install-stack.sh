@@ -14,11 +14,14 @@
 #   --whisper-model NAME
 #                 the model for transcription on the server (whisper.cpp, shared by everyone): large-v3-turbo-q5_0
 #                 by default (about 1 GB of memory while it runs), small (lighter), medium; none = no model
+#   --rebuild-base
+#                 build the dependencies image again even if base.Dockerfile did not change (e.g. after a
+#                 download failed during its build, or for the latest security updates of its packages)
 # Run it again to rebuild the image from this clone and restart the stack (the data stays).
 set -euo pipefail
 cd "$(dirname "$0")"
 STACK="$PWD"; REPO="$(cd ../.. && pwd)"
-DOMAIN=""; EMAIL=""; MIGRATE=""; NAME=""; PROXY=""; WMODEL="large-v3-turbo-q5_0"
+DOMAIN=""; EMAIL=""; MIGRATE=""; NAME=""; PROXY=""; WMODEL="large-v3-turbo-q5_0"; REBUILD_BASE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="$2"; shift 2 ;;
@@ -27,6 +30,7 @@ while [ $# -gt 0 ]; do
     --name) NAME="$2"; shift 2 ;;
     --behind-proxy) PROXY="$2"; shift 2 ;;
     --whisper-model) WMODEL="$2"; shift 2 ;;
+    --rebuild-base) REBUILD_BASE=1; shift ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -72,8 +76,16 @@ if [ -n "$PROXY" ]; then # HTTPS is done by another proxy: plain HTTP on this po
 fi
 set -a; . "$ENV"; set +a
 
-say "Building the Talixio image (a few minutes the first time)"
-docker build -t talixio:current \
+# the dependencies (long) are an image of their own, rebuilt only when base.Dockerfile changes; the
+# application on top of it takes seconds
+BASE_TAG="talixio-base:$(sha1sum "$REPO/deploy/docker/base.Dockerfile" | cut -c1-12)"
+if [ -n "$REBUILD_BASE" ] || ! docker image inspect "$BASE_TAG" >/dev/null 2>&1; then
+  say "Building the dependencies image $BASE_TAG (several minutes, only when they change)"
+  docker build --pull ${REBUILD_BASE:+--no-cache} -t "$BASE_TAG" - < "$REPO/deploy/docker/base.Dockerfile"
+fi
+docker tag "$BASE_TAG" talixio-base:current
+say "Building the Talixio image"
+docker build -t talixio:current --build-arg BASE_IMAGE="$BASE_TAG" \
   --build-arg VERSION_SHA="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)" \
   --build-arg VERSION_DATE="$(git -C "$REPO" log -1 --format=%cI 2>/dev/null || true)" \
   --build-arg VERSION_SUBJECT="$(git -C "$REPO" log -1 --format=%s 2>/dev/null || true)" "$REPO"

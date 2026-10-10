@@ -12,6 +12,12 @@
 - Page d'administration → **Mises à jour** : l'image est reconstruite depuis le dépôt, puis chaque
   assistant passe dessus l'un après l'autre. Si l'un ne démarre pas, il revient à la version précédente
   et la mise à jour s'arrête. *Revenir à la version précédente* annule la dernière.
+- L'image est faite en deux étages. Les **dépendances** (paquets système, Chromium, LibreOffice,
+  whisper.cpp, signal-cli…) sont une image à part, `talixio-base`, reconstruite seulement quand
+  `deploy/docker/base.Dockerfile` change (plusieurs minutes). L'**application** se pose dessus : une mise
+  à jour ordinaire ne recopie que le code et prend quelques secondes, plus le redémarrage des assistants.
+- Pour reconstruire aussi les dépendances (dernières mises à jour de sécurité des paquets, ou un
+  téléchargement raté) : `sudo deploy/docker/install-stack.sh --rebuild-base`.
 - En ligne de commande : `git pull`, puis `sudo deploy/docker/install-stack.sh` (sans autre option :
   les réglages de la pile sont gardés dans `deploy/docker/.env`).
 - Dépôt GitHub privé : `GIT_URL` dans `.env` doit contenir un jeton en lecture seule.

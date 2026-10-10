@@ -19,4 +19,4 @@ docker restart talixio-fred
 
 ## Si l'image a été construite sans eux
 Si un téléchargement a échoué pendant la construction, l'image est faite sans cette partie et le journal
-de construction le dit : relancez `sudo deploy/docker/install-stack.sh`.
+de construction le dit : relancez `sudo deploy/docker/install-stack.sh --rebuild-base`.

@@ -15,6 +15,7 @@ namespace Talixio;
 final class Fleet
 {
     public const IMAGE = 'talixio';
+    public const BASE_IMAGE = 'talixio-base'; // the dependencies (deploy/docker/base.Dockerfile), tagged with that file's SHA-1
     public const WHISPER = 'talixio-whisper';  // whisper.cpp models, shared read-only by everyone (install-stack.sh fills it)
     public const PREFIX = 'talixio-';          // containers, volumes and networks of instances: talixio-<id>
     public const CADDY = 'talixio-caddy';
@@ -568,8 +569,26 @@ final class Fleet
         if ($url === '') throw new \RuntimeException('TALIXIO_GIT_URL is not set (in the stack\'s .env).');
         if (!preg_match('/^[A-Za-z0-9._\/-]{1,100}$/', $branch)) throw new \InvalidArgumentException('bad branch name');
         $tag = self::IMAGE . ':' . date('Ymd-His');
-        $progress('building', "Building $tag from $branch…");
-        $this->build("$url#$branch", $tag, $progress);
+        $progress('building', "Fetching {$branch}…");
+        $src = $this->checkout($url, $branch);
+        try {
+            $ctx = "$src.tar";
+            [$code, $out] = self::run(['tar', '-C', $src, '--exclude=./.git', '--exclude=./data', '--exclude=./research', '-cf', $ctx, '.']);
+            if ($code !== 0) throw new \RuntimeException("tar: $out");
+            // the dependencies: an image named after base.Dockerfile, built only when that file changed
+            $base = self::BASE_IMAGE . ':' . substr(sha1((string)file_get_contents("$src/deploy/docker/base.Dockerfile")), 0, 12);
+            if ($this->docker('GET', '/images/' . rawurlencode($base) . '/json')[0] !== 200) {
+                $progress('building', "The dependencies changed: building $base (several minutes)…");
+                $this->build($ctx, ['t' => $base, 'dockerfile' => 'deploy/docker/base.Dockerfile'], $progress);
+            }
+            $this->tag($base, self::BASE_IMAGE, 'current');
+            $git = fn(string ...$a) => trim(self::run(['git', '-C', $src, ...$a])[1]);
+            $progress('building', "Building {$tag} from {$branch}…");
+            $this->build($ctx, ['t' => $tag, 'buildargs' => json_encode(['BASE_IMAGE' => $base, 'VERSION_SHA' => $git('rev-parse', 'HEAD'),
+                'VERSION_DATE' => $git('log', '-1', '--format=%cI'), 'VERSION_SUBJECT' => $git('log', '-1', '--format=%s')])], $progress);
+        } finally {
+            self::run(['rm', '-rf', $src, "$src.tar"]);
+        }
         $s = $this->state();
         $old = $s['image']['current'];
         [, $oldImg] = $this->docker('GET', '/images/' . rawurlencode($old) . '/json');
@@ -606,12 +625,33 @@ final class Fleet
         $this->ok($this->docker('POST', '/images/' . rawurlencode($image) . '/tag', null, ['repo' => $repo, 'tag' => $tag]), 'tag', [200, 201]);
     }
 
-    private function build(string $remote, string $tag, callable $progress): void
+    /** The branch, without its history, in a temporary folder. */
+    private function checkout(string $url, string $branch): string
     {
-        $ch = curl_init('http://docker/v1.44/build?' . http_build_query(['remote' => $remote, 't' => $tag, 'rm' => '1', 'forcerm' => '1', 'pull' => '1']));
+        $dir = sys_get_temp_dir() . '/talixio-src-' . bin2hex(random_bytes(4));
+        [$code, $out] = self::run(['git', 'clone', '-q', '--depth', '1', '--branch', $branch, '--', $url, $dir], ['GIT_TERMINAL_PROMPT' => '0']);
+        if ($code !== 0) { self::run(['rm', '-rf', $dir]); throw new \RuntimeException('Could not fetch the code: ' . mb_substr(str_replace($url, '<repository>', $out), 0, 300)); }
+        return $dir;
+    }
+
+    /** [exit code, output] of a fixed command. */
+    private static function run(array $cmd, array $env = []): array
+    {
+        $p = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, $env ? $env + getenv() : null);
+        if (!is_resource($p)) return [127, 'cannot start ' . $cmd[0]];
+        $out = stream_get_contents($pipes[1]); fclose($pipes[1]);
+        return [proc_close($p), (string)$out];
+    }
+
+    /** Build an image from a tar of the sources (the classic builder of the Docker API: its cache is kept between updates). */
+    private function build(string $context, array $query, callable $progress): void
+    {
+        $ch = curl_init('http://docker/v1.44/build?' . http_build_query($query + ['rm' => '1', 'forcerm' => '1']));
         $buf = ''; $err = null;
-        curl_setopt_array($ch, [CURLOPT_UNIX_SOCKET_PATH => $this->socket, CURLOPT_POST => true, CURLOPT_POSTFIELDS => '', CURLOPT_TIMEOUT => 3600,
-            CURLOPT_HTTPHEADER => ['Content-Type: application/x-tar'],
+        $fh = fopen($context, 'rb');
+        curl_setopt_array($ch, [CURLOPT_UNIX_SOCKET_PATH => $this->socket, CURLOPT_POST => true, CURLOPT_TIMEOUT => 3600,
+            CURLOPT_UPLOAD => true, CURLOPT_CUSTOMREQUEST => 'POST', CURLOPT_INFILE => $fh, CURLOPT_INFILESIZE => filesize($context),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/x-tar', 'Expect:'],
             CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$buf, &$err, $progress) {
                 $buf .= $chunk;
                 while (($p = strpos($buf, "\n")) !== false) {
@@ -624,7 +664,7 @@ final class Fleet
             }]);
         curl_exec($ch);
         $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        curl_close($ch);
+        curl_close($ch); fclose($fh);
         if ($err || $code >= 400) throw new \RuntimeException('The build failed: ' . ($err ?? "HTTP $code"));
     }
 

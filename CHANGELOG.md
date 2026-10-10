@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.19.1 (2026-10-10)
+- Docker: faster updates. The dependencies (system packages, Chromium, LibreOffice, whisper.cpp,
+  signal-cli…) are an image of their own, `talixio-base:<hash of deploy/docker/base.Dockerfile>`, built only
+  when that file changes; the application image starts from it and only copies the code. Before, an update
+  from the admin page used another builder than `install-stack.sh` (no shared cache) and pulled Debian
+  again, so everything was often rebuilt. The admin page now builds from a copy of the branch, with the
+  right version shown. `install-stack.sh --rebuild-base` rebuilds the dependencies on purpose.
+
 ## 0.19.0 (2026-10-10)
 - A trash for the library: deleting a file or a folder moves it to the trash (bottom of the folder tree;
   a *Trash* button on phones) for 30 days. It leaves searches, the assistant and shared links meanwhile.
