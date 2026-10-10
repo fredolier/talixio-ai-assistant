@@ -20,7 +20,9 @@
   téléchargement raté) : `sudo deploy/docker/install-stack.sh --rebuild-base`.
 - En ligne de commande : `git pull`, puis `sudo deploy/docker/install-stack.sh` (sans autre option :
   les réglages de la pile sont gardés dans `deploy/docker/.env`).
-- Dépôt GitHub privé : `GIT_URL` dans `.env` doit contenir un jeton en lecture seule.
+- Dépôt GitHub privé : créez sur GitHub un jeton à lecture seule limité au dépôt (*fine-grained token*,
+  droit *Contents : Read*), ajoutez la ligne `GIT_TOKEN=le_jeton` dans `deploy/docker/.env`, puis relancez
+  `sudo deploy/docker/install-stack.sh`. Pour couper l'accès, révoquez le jeton sur GitHub.
 
 ## Ce qui a changé
 Le dossier **/FAQ/Nouveautés** contient une page par version. La version installée est en bas du menu

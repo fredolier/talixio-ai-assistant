@@ -56,8 +56,8 @@ DOMAIN=$DOMAIN
 ACME_EMAIL=${EMAIL:-admin@$DOMAIN}
 AGENT_TOKEN=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
 DOCKER_GID=$(getent group docker | cut -d: -f3)
-# Updates from the admin page build this repository. A private GitHub repository needs a token with
-# read access: https://<token>@github.com/owner/repo.git
+# Updates from the admin page build this repository. A private one needs a read-only token: GIT_TOKEN=
+# (GitHub: a fine-grained token on this repository, Contents: Read)
 GIT_URL=$GIT_URL
 GIT_BRANCH=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)
 EOF

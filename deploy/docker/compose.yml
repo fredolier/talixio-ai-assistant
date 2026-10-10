@@ -51,6 +51,8 @@ services:
       TALIXIO_BEHIND_PROXY: ${BEHIND_PROXY:-0}
       TALIXIO_GIT_URL: ${GIT_URL}
       TALIXIO_GIT_BRANCH: ${GIT_BRANCH:-main}
+      TALIXIO_GIT_USER: ${GIT_USER:-x-access-token}
+      TALIXIO_GIT_TOKEN: ${GIT_TOKEN:-}
       TALIXIO_STATE_DIR: /state
       CADDY_CONFIG_DIR: /caddy-config
       PHP_CLI_SERVER_WORKERS: "4"

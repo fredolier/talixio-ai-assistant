@@ -629,8 +629,20 @@ final class Fleet
     private function checkout(string $url, string $branch): string
     {
         $dir = sys_get_temp_dir() . '/talixio-src-' . bin2hex(random_bytes(4));
-        [$code, $out] = self::run(['git', 'clone', '-q', '--depth', '1', '--branch', $branch, '--', $url, $dir], ['GIT_TERMINAL_PROMPT' => '0']);
-        if ($code !== 0) { self::run(['rm', '-rf', $dir]); throw new \RuntimeException('Could not fetch the code: ' . mb_substr(str_replace($url, '<repository>', $out), 0, 300)); }
+        $env = ['GIT_TERMINAL_PROMPT' => '0'];
+        $token = getenv('TALIXIO_GIT_TOKEN') ?: '';
+        if ($token !== '') // a private repository: the credentials as a header, out of the address and the command line
+            $env += ['GIT_CONFIG_COUNT' => '1', 'GIT_CONFIG_KEY_0' => 'http.extraHeader',
+                'GIT_CONFIG_VALUE_0' => 'Authorization: Basic ' . base64_encode((getenv('TALIXIO_GIT_USER') ?: 'x-access-token') . ":$token")];
+        [$code, $out] = self::run(['git', 'clone', '-q', '--depth', '1', '--branch', $branch, '--', $url, $dir], $env);
+        if ($code !== 0) {
+            self::run(['rm', '-rf', $dir]);
+            $out = mb_substr(str_replace(array_filter([$url, $token]), ['<repository>', '<token>'], $out), 0, 300);
+            if ($token === '' && preg_match('/could not read Username|Authentication failed|terminal prompts disabled/i', $out))
+                $out = 'the repository is private and the stack has no credentials for it. Put a read-only token in '
+                    . 'GIT_TOKEN in deploy/docker/.env on the server, then run sudo deploy/docker/install-stack.sh once. (' . trim($out) . ')';
+            throw new \RuntimeException('Could not fetch the code: ' . $out);
+        }
         return $dir;
     }
 

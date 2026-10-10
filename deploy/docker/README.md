@@ -94,7 +94,7 @@ pauses the old assistant. Progress shows in the Updates tab.
 ## Updates
 
 Admin page → **Updates**: the image is built from the git repository (`GIT_URL` in `.env`; for a
-private GitHub repository put a read-only token in it: `https://<token>@github.com/owner/repo.git`),
+private repository, set a read-only token in `GIT_TOKEN` there and run `install-stack.sh` again),
 then each assistant is moved to it one by one. If one doesn't start, it goes back to the previous
 version and the update stops. **Back to the previous version** undoes the last update.
 Running `install-stack.sh` again from an up-to-date clone does the same from the command line.

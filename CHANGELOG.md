@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.19.3 (2026-10-10)
+- Docker: updating from the admin page works with a private repository: put a read-only token in
+  `GIT_TOKEN` in `deploy/docker/.env` and run `install-stack.sh` once; the agent sends it as a header when it
+  clones (not in the address or the command line). Without it, the error now says what to do instead of
+  "could not read Username".
+
 ## 0.19.2 (2026-10-10)
 - Searching the conversation (the magnifier in the chat) and the Memory page: the messages with the words
   show at once, with a spinner while search by meaning completes the list; a new search cancels the
