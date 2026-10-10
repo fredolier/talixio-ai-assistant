@@ -8,5 +8,6 @@ chaque version.
   une page modifiée, téléchargez-la et ajoutez-la dans un autre dossier.
 - Il est **indexé** comme le reste de la bibliothèque : posez simplement votre question à l'assistant
   (« comment je mets à jour ? », « qu'apporte la version 0.15 ? »). Il cherche ici et cite la page.
+- **Connecteurs** : installer vous-même le connecteur d'un autre service (par exemple anki.talixio.com).
 - **Nouveautés** : une page par version, tirée du journal des modifications.
 - **Référence** : la documentation technique complète, en anglais.
