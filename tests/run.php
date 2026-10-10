@@ -644,6 +644,23 @@ check('meeting: transcript summarised with action items', $job['status'] === 'do
 check('meeting: transcript and summary searchable', str_contains($app->tools->run('search_memory', ['query' => 'launch Monday']), 'transcript: Weekly sync') || str_contains($app->tools->run('search_memory', ['query' => 'launch Monday']), 'meeting summary'));
 $last = $s->messagesAfter(0); $last = end($last);
 check('meeting: summary relayed in the chat', str_starts_with($last['content'], 'Relayed: [Background job') && str_contains($last['content'], 'as tasks on the board'));
+
+// local transcription with whisper.cpp (a stand-in here): nothing leaves the server; meetings keep the times, sound tags are dropped
+@mkdir("$dir/wbin");
+file_put_contents("$dir/wbin/whisper-cli", "#!/bin/sh\nwhile [ \$# -gt 0 ]; do [ \"\$1\" = -of ] && of=\"\$2\"; [ \"\$1\" = -m ] && echo \"\$2\" > $dir/wargs; shift; done\n"
+    . "printf '%s' '{\"transcription\":[{\"offsets\":{\"from\":0},\"text\":\" Bonjour à tous.\"},{\"offsets\":{\"from\":2000},\"text\":\" [Musique]\"},{\"offsets\":{\"from\":65000},\"text\":\" On lance lundi.\"}]}' > \"\$of.json\"\n");
+chmod("$dir/wbin/whisper-cli", 0755); file_put_contents("$dir/model.bin", 'x');
+$oldPath = getenv('PATH'); putenv("PATH=$dir/wbin:$oldPath");
+$app->cfg->transcribe = 'local'; $app->cfg->transcribeModel = "$dir/model.bin";
+$note = $app->transcriber()->transcribe($app->files()->get($noteId), false);
+$meet = $app->transcriber()->transcribe($app->files()->get($noteId), true);
+check('local transcription: whisper.cpp with the chosen model, text joined', $note === 'Bonjour à tous. On lance lundi.' && trim((string)file_get_contents("$dir/wargs")) === "$dir/model.bin", $note);
+check('local transcription: meetings keep the times', $meet === "[00:00] Bonjour à tous.\n[01:05] On lance lundi.", $meet);
+$app->cfg->transcribeModel = 'small';
+check('local transcription: a model name is looked up where install.sh puts it', \Talixio\Transcriber::whisper($app->cfg)[1] === '/opt/whisper.cpp/models/ggml-small.bin');
+try { $app->transcriber()->transcribe($app->files()->get($noteId), false); $err = ''; } catch (\Throwable $e) { $err = $e->getMessage(); }
+check('local transcription: a missing model says how to install it', str_contains($err, '--with-whisper'), $err);
+putenv("PATH=$oldPath"); $app->cfg->transcribe = 'gemini'; $app->cfg->transcribeModel = '';
 proc_terminate($llm); proc_close($llm);
 
 // claude-code: stream-json events, images written next to it, Read allowed only then

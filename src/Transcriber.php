@@ -2,7 +2,10 @@
 declare(strict_types=1);
 namespace Talixio;
 
-/** Speech to text: Gemini (long recordings, speaker labels) or OpenAI. Audio is compressed with ffmpeg first. */
+/**
+ * Speech to text: Gemini (long recordings, speaker labels), OpenAI, or local with whisper.cpp (nothing leaves the server;
+ * slower, no speaker labels). Audio is compressed with ffmpeg first.
+ */
 final class Transcriber
 {
     public function __construct(private App $app) {}
@@ -12,7 +15,8 @@ final class Transcriber
     public function transcribe(array $file, bool $meeting): string
     {
         $c = $this->app->cfg;
-        if (!$this->enabled()) throw new \RuntimeException('transcription is off: set GEMINI_API_KEY (or TALIXIO_TRANSCRIBE=openai with an OpenAI key)');
+        if (!$this->enabled()) throw new \RuntimeException('transcription is off: set GEMINI_API_KEY (or TALIXIO_TRANSCRIBE=openai with an OpenAI key, or local with whisper.cpp)');
+        if ($c->transcribe === 'local') return $this->local($file['path'], $meeting);
         $path = $this->compress($file['path']);
         try {
             return match ($c->transcribe) {
@@ -63,9 +67,13 @@ final class Transcriber
         }
         try {
             $model = $this->model();
+            $gen = ['maxOutputTokens' => 65536];
+            // writing down what is said needs no thinking, and thinking tokens are billed as output
+            if (preg_match('/^gemini-2\.5-flash/', $model)) $gen['thinkingConfig'] = ['thinkingBudget' => 0];
+            elseif (preg_match('/^gemini-[3-9]/', $model)) $gen['thinkingConfig'] = ['thinkingLevel' => 'low'];
             $r = Http::json("{$c->geminiBaseUrl}/models/$model:generateContent", [
                 'contents' => [['parts' => [$audio, ['text' => $this->prompt($meeting)]]]],
-                'generationConfig' => ['maxOutputTokens' => 65536],
+                'generationConfig' => $gen,
             ], $key, 900);
             $u = $r['usageMetadata'] ?? [];
             $usage = ['model' => $model, 'in' => (int)($u['promptTokenCount'] ?? 0), 'out' => (int)($u['candidatesTokenCount'] ?? 0) + (int)($u['thoughtsTokenCount'] ?? 0), 'cache_read' => 0, 'cache_write' => 0, 'cost' => null];
@@ -113,5 +121,49 @@ final class Transcriber
         $text = json_decode($out, true)['text'] ?? null;
         if ($code >= 400 || $text === null) throw new \RuntimeException("OpenAI transcription failed ($code): " . mb_substr($out, 0, 200));
         return trim($text);
+    }
+
+    /** whisper.cpp's command and model file: TALIXIO_TRANSCRIBE_MODEL is a model name (installed by install.sh --with-whisper) or a path. */
+    public static function whisper(Config $c): array
+    {
+        $bin = trim((string)shell_exec('command -v whisper-cli 2>/dev/null')) ?: (is_file(self::WHISPER_DIR . '/build/bin/whisper-cli') ? self::WHISPER_DIR . '/build/bin/whisper-cli' : '');
+        $m = $c->transcribeModel !== '' ? $c->transcribeModel : self::WHISPER_MODEL;
+        $model = str_contains($m, '/') ? $m : self::WHISPER_DIR . "/models/ggml-$m.bin";
+        return [$bin, $model];
+    }
+
+    public const WHISPER_DIR = '/opt/whisper.cpp';
+    public const WHISPER_MODEL = 'large-v3-turbo-q5_0'; // multilingual, good French, about 1 GB of memory; "small" is faster, "medium" in between
+
+    /** On this server with whisper.cpp: 16 kHz mono WAV in, JSON segments out. Long: about a third to two thirds of the recording's length on 4 cores. */
+    private function local(string $path, bool $meeting): string
+    {
+        [$bin, $model] = self::whisper($this->app->cfg);
+        if ($bin === '') throw new \RuntimeException('local transcription: whisper.cpp is not installed (sudo ./install.sh --with-whisper)');
+        if (!is_file($model)) throw new \RuntimeException("local transcription: model file not found: $model (sudo ./install.sh --with-whisper)");
+        $tmp = tempnam(sys_get_temp_dir(), 'talixio-whisper');
+        $wav = "$tmp.wav";
+        try {
+            exec('ffmpeg -nostdin -loglevel error -y -i ' . escapeshellarg($path) . ' -vn -ac 1 -ar 16000 -c:a pcm_s16le ' . escapeshellarg($wav) . ' 2>&1', $o, $code);
+            if ($code !== 0 || !is_file($wav)) throw new \RuntimeException('local transcription: ffmpeg could not read the audio: ' . mb_substr(implode(' ', $o), 0, 200));
+            $threads = max(1, min(8, (int)trim((string)shell_exec('nproc 2>/dev/null')) ?: 2));
+            $cmd = 'nice -n 10 ' . escapeshellarg($bin) . ' -m ' . escapeshellarg($model) . ' -f ' . escapeshellarg($wav) . " -l auto -t $threads -np -oj -of " . escapeshellarg($tmp) . ' 2>&1';
+            $o = []; exec($cmd, $o, $code);
+            $json = json_decode((string)@file_get_contents("$tmp.json"), true);
+            if ($code !== 0 || !is_array($json)) throw new \RuntimeException("local transcription failed ($code): " . mb_substr(implode(' ', array_slice($o, -5)), 0, 300));
+            $lines = [];
+            foreach ($json['transcription'] ?? [] as $seg) {
+                $text = trim((string)($seg['text'] ?? ''));
+                if ($text === '' || preg_match('/^[\[(].*[\])]$/u', $text)) continue; // [Music], (silence)
+                $ms = (int)($seg['offsets']['from'] ?? 0);
+                $lines[] = $meeting ? sprintf('[%02d:%02d] %s', intdiv($ms, 60000), intdiv($ms, 1000) % 60, $text) : $text;
+            }
+            $out = trim(implode($meeting ? "\n" : ' ', $lines));
+            if ($out === '') throw new \RuntimeException('local transcription: nothing was heard in the recording');
+            $this->app->store->addUsage(['model' => 'whisper.cpp ' . basename($model), 'in' => 0, 'out' => 0, 'cache_read' => 0, 'cache_write' => 0, 'cost' => 0.0], 0.0, 'transcription', 'fast', null);
+            return $out;
+        } finally {
+            foreach ([$tmp, $wav, "$tmp.json"] as $f) @unlink($f);
+        }
     }
 }

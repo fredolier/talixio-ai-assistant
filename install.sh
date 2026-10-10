@@ -11,11 +11,13 @@
 #   sudo ./install.sh --with-shell            also install the sandbox (bubblewrap, Python with numpy/pandas/matplotlib) for shell commands
 #   sudo ./install.sh --with-node             also install Node.js (for MCP connectors started with npx)
 #   sudo ./install.sh --with-office           also install LibreOffice (faithful pages for Word/Excel/PowerPoint, older .doc/.xls/.ppt)
+#   sudo ./install.sh --with-whisper          also install whisper.cpp: transcription on this server, audio never sent out
+#                                             (WHISPER_MODEL to pick the model: large-v3-turbo-q5_0 by default, medium, small)
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 ORIG_ARGS="$(printf '%q ' "$@")"   # remembered for updates from the web app
 
-DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; WITH_BROWSER=0 ; WITH_OLLAMA="" ; BIND_ARG="" ; WITH_SHELL=0 ; WITH_NODE=0 ; WITH_OFFICE=0
+DOMAIN="" ; WITH_CLAUDE=0 ; WITH_SIGNAL=0 ; WITH_BROWSER=0 ; WITH_OLLAMA="" ; BIND_ARG="" ; WITH_SHELL=0 ; WITH_NODE=0 ; WITH_OFFICE=0 ; WITH_WHISPER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="${2:?--domain needs a value}"; shift 2 ;;
@@ -26,9 +28,10 @@ while [ $# -gt 0 ]; do
     --with-shell) WITH_SHELL=1; shift ;;
     --with-node) WITH_NODE=1; shift ;;
     --with-office) WITH_OFFICE=1; shift ;;
+    --with-whisper) WITH_WHISPER=1; shift ;;
     --with-ollama) WITH_OLLAMA=native; shift ;;
     --with-ollama=*) WITH_OLLAMA="${1#*=}"; shift ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -160,6 +163,28 @@ if [ "$WITH_OFFICE" = 1 ]; then
     || apt-get install -y -qq --no-install-recommends libreoffice-writer libreoffice-calc libreoffice-impress fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation >/dev/null
   echo "    $(soffice --version 2>/dev/null | head -1)"
   rm -f "$DATA"/previews/*-pdf-*.pdf 2>/dev/null || true
+fi
+
+if [ "$WITH_WHISPER" = 1 ]; then
+  W=/opt/whisper.cpp WMODEL="${WHISPER_MODEL:-large-v3-turbo-q5_0}"
+  if [ ! -x "$W/build/bin/whisper-cli" ]; then
+    say "Building whisper.cpp (local transcription, a few minutes once)"
+    apt-get install -y -qq build-essential cmake git >/dev/null
+    [ -d "$W/.git" ] || git clone -q --depth 1 https://github.com/ggml-org/whisper.cpp "$W"
+    cmake -S "$W" -B "$W/build" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON >/dev/null
+    cmake --build "$W/build" -j"$(nproc)" --target whisper-cli >/dev/null
+  fi
+  install -d -m 755 "$W/models"
+  if [ ! -s "$W/models/ggml-$WMODEL.bin" ]; then
+    say "Downloading the speech model $WMODEL (0.2 to 1.5 GB, once)"
+    curl -fL --retry 3 -o "$W/models/ggml-$WMODEL.bin.part" "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$WMODEL.bin" \
+      && mv "$W/models/ggml-$WMODEL.bin.part" "$W/models/ggml-$WMODEL.bin"
+  fi
+  chmod -R a+rX "$W"
+  echo "    whisper.cpp ready with $WMODEL: choose Settings → Audio → Transcription → Local (automatic when no Gemini key is set)"
+  if [ "$WMODEL" != "large-v3-turbo-q5_0" ] && grep -qE '^TALIXIO_TRANSCRIBE_MODEL=$' "$ENV"; then
+    echo "    (set Transcription model to $WMODEL in Settings to use it)"
+  fi
 fi
 
 if [ "$WITH_NODE" = 1 ]; then

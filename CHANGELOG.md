@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.12.0 (2026-10-10)
+- Local transcription with whisper.cpp (`sudo ./install.sh --with-whisper`, then Settings → Audio → Transcription →
+  Local): voice notes and meetings are transcribed on your server, nothing is sent out. Slower, no speaker names.
+- Gemini transcription no longer pays for thinking tokens.
+
 ## 0.11.2 (2026-10-10)
 - Fix: in French, the page could freeze when switching spaces (the message field's hint was translated again and
   again). The interface never translates its own translations any more.

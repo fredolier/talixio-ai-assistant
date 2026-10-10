@@ -45,7 +45,10 @@ final class Doctor
                 return sprintf('%d dimensions, %.0f ms; %d of %d memory items indexed', strlen($v) / 4, (microtime(true) - $t) * 1000, $done, $total);
             });
         }
-        if ($c->transcribe !== 'off') $this->info("transcription: {$c->transcribe}");
+        if ($c->transcribe === 'local') {
+            [$bin, $model] = Transcriber::whisper($c);
+            $this->line($bin !== '' && is_file($model), 'transcription: local, ' . ($bin === '' ? 'whisper.cpp not installed (sudo ./install.sh --with-whisper)' : (is_file($model) ? basename($model) : "model missing: $model")));
+        } elseif ($c->transcribe !== 'off') $this->info("transcription: {$c->transcribe}");
         if ($app->email()->canSend()) $this->attempt("SMTP {$c->smtpHost}:{$c->smtpPort}", fn() => (new Smtp($c->smtpHost, $c->smtpPort, $c->smtpSecurity, $c->smtpUser, $c->smtpPassword))->check() ?? 'login OK');
         if ($c->imapHost !== '') {
             $this->attempt("IMAP {$c->imapHost}:{$c->imapPort}", fn() => (new Imap($c->imapHost, $c->imapPort, $c->imapUser, $c->imapPassword, $c->imapFolder, $c->imapSecurity))->fetchUnseen(0) === [] ? 'login OK' : '');

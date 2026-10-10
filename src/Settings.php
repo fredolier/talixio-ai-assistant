@@ -112,8 +112,8 @@ final class Settings
                 ['TALIXIO_TASKS_GOOGLE', 'Tasks marked "show in my calendar" go to Google Calendar', 'select', 'When Google Calendar is connected: added as all-day events (start to due date) and kept up to date. Otherwise use the private calendar link (Tasks → Calendar).', ['1' => 'on', '0' => 'off']],
             ]],
             'audio' => ['Audio, meetings and library', '', [
-                ['TALIXIO_TRANSCRIBE', 'Transcription', 'select', 'auto: Gemini when its key is set.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'off' => 'off']],
-                ['TALIXIO_TRANSCRIBE_MODEL', 'Transcription model', 'text', 'Empty = automatic.'],
+                ['TALIXIO_TRANSCRIBE', 'Transcription', 'select', 'auto: Gemini when its key is set, else local when whisper.cpp is installed. Local: the audio never leaves this server, but it is slower (about half the recording\'s length) and has no speaker names (install with sudo ./install.sh --with-whisper).', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'local' => 'Local (whisper.cpp, on this server)', 'off' => 'off']],
+                ['TALIXIO_TRANSCRIBE_MODEL', 'Transcription model', 'text', 'Empty = automatic. Local: large-v3-turbo-q5_0 (default), medium, small, or the path of a model file.'],
                 ['TALIXIO_MEETING_TIER', 'Tier for meeting summaries', 'select', '', ['standard' => 'standard', 'deep' => 'deep', 'fast' => 'fast']],
                 ['TALIXIO_VOICE_NOTE_MAX_SECONDS', 'Longer than this (seconds) = a meeting', 'number', ''],
                 ['TALIXIO_AUTO_FILE', 'Filing new documents (Inbox)', 'select', 'The folder is guessed from your documents already filed (free), the fast model helps when unsure or to give a clear name.', ['suggest' => 'suggest, I confirm', 'auto' => 'file the obvious ones myself', 'off' => 'off']],

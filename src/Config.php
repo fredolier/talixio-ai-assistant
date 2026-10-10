@@ -19,7 +19,7 @@ final class Config
     public string $openaiKey = '';
     public string $geminiKey = '';               // usable for transcription, embeddings and search whatever the provider
     public string $geminiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta';
-    public string $transcribe = 'auto';          // resolved to gemini | openai | off
+    public string $transcribe = 'auto';          // resolved to gemini | openai | local | off
     public string $transcribeModel = '';
     public string $meetingTier = 'standard';
     public int $voiceNoteMaxSeconds = 180;       // longer audio is treated as a meeting recording
@@ -162,6 +162,7 @@ final class Config
             $c->transcribe = match (true) {
                 $c->geminiKey !== '' => 'gemini',
                 $c->provider === 'openai' && $c->openaiKey !== '' && str_contains($c->openaiBaseUrl, 'api.openai.com') => 'openai',
+                is_file(Transcriber::WHISPER_DIR . '/build/bin/whisper-cli') => 'local', // install.sh --with-whisper
                 default => 'off',
             };
         }

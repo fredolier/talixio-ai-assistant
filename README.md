@@ -233,7 +233,11 @@ sudo deploy/docker/install-stack.sh --domain assistant.example.com --email you@e
   meeting). It's transcribed with speaker labels in the background, then you get a summary,
   decisions, action items (who/what/when) and open questions, and it offers reminders for your
   action items. Transcripts and summaries are searchable later. Transcription uses Gemini
-  (`GEMINI_API_KEY`, also works when Claude is the brain) or OpenAI. Telegram bots can only
+  (`GEMINI_API_KEY`, also works when Claude is the brain; about $0.15 per hour of recording with
+  Flash), OpenAI, or runs on your server with whisper.cpp (`sudo ./install.sh --with-whisper`, then
+  Settings → Audio → Transcription → Local): the audio never leaves the server, it's free, but
+  slower (roughly half the recording's length on 4 cores) and without speaker names. Claude itself
+  does not take audio input, hence the separate step. Telegram bots can only
   receive files up to 20 MB, so upload long recordings in the web app.
 - **Learning (skills)**: procedures it has learned for you, as Markdown files (`workspace/skills/`),
   listed in its instructions and read when a task matches. After a multi-step task, a small

@@ -1544,5 +1544,8 @@ window.I18N.fr = {
 "· {c} · show the full report": "· {c} · afficher le rapport complet",
 "→ Task": "→ Tâche",
 "✋ asks for your approval before running.": "✋ demande votre validation avant de s'exécuter.",
-"＋ tag": "＋ étiquette"
+"＋ tag": "＋ étiquette",
+"auto: Gemini when its key is set, else local when whisper.cpp is installed. Local: the audio never leaves this server, but it is slower (about half the recording's length) and has no speaker names (install with sudo ./install.sh --with-whisper).": "auto : Gemini si sa clé est renseignée, sinon local si whisper.cpp est installé. Local : l'audio ne quitte jamais ce serveur, mais c'est plus lent (environ la moitié de la durée de l'enregistrement) et sans noms des intervenants (installation : sudo ./install.sh --with-whisper).",
+"Local (whisper.cpp, on this server)": "Local (whisper.cpp, sur ce serveur)",
+"Empty = automatic. Local: large-v3-turbo-q5_0 (default), medium, small, or the path of a model file.": "Vide = automatique. Local : large-v3-turbo-q5_0 (par défaut), medium, small, ou le chemin d'un fichier de modèle."
 };
