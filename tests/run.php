@@ -2338,7 +2338,9 @@ rl.on('line', l => { const m = JSON.parse(l); if (m.id === undefined) return;
   else if (m.method === 'tools/call') send(m.id, { content: [{ type: 'text', text: `3 open tasks at ${url} for ${who} (${pw ? 'signed in' : 'no password'}), browsers in ${process.env.PLAYWRIGHT_BROWSERS_PATH}` }] });
   else send(m.id, {}); });
 JS);
-$zz->addFromString('mcp/node_modules/playwright-core/cli.js', "require('fs').mkdirSync(process.env.PLAYWRIGHT_BROWSERS_PATH, { recursive: true }); require('fs').writeFileSync(process.env.PLAYWRIGHT_BROWSERS_PATH + '/asked.txt', process.argv.slice(2).join(' '));");
+$zz->addFromString('mcp/node_modules/playwright-core/browsers.json', json_encode(['browsers' => [['name' => 'chromium', 'revision' => '9'], ['name' => 'chromium-headless-shell', 'revision' => '9']]]));
+$zz->addFromString('mcp/node_modules/playwright-core/cli.js', "const fs = require('fs'), b = process.env.PLAYWRIGHT_BROWSERS_PATH; fs.mkdirSync(b + '/chromium_headless_shell-9', { recursive: true });"
+    . " fs.writeFileSync(b + '/asked.txt', process.argv.slice(2).join(' ')); fs.writeFileSync(b + '/chromium_headless_shell-9/INSTALLATION_COMPLETE', '');");
 $zz->addFromString('../evil.txt', 'outside');
 $zz->close();
 Library::$system = true; $zid = $app->files()->save($zp, 'anki-mcp.zip', 'application/zip', '/Connecteurs'); Library::$system = false;
@@ -2356,6 +2358,10 @@ if (trim((string)shell_exec('command -v node')) !== '') {
     check('connector: nothing written outside its folder', !file_exists("$dir/connectors/evil.txt") && !file_exists("$dir/evil.txt") && !file_exists("$dir/connectors/anki/../evil.txt"));
     $out = $app->mcp()->call('anki', 'open_tasks', []);
     check('connector: its tool works with the settings given', str_contains(is_string($out) ? $out : json_encode($out), "3 open tasks at https://anki.example.com for me@example.com (signed in), browsers in $dir/ms-playwright"), is_string($out) ? $out : json_encode($out));
+    @unlink("$dir/ms-playwright/asked.txt"); $app->mcp()->call('anki', 'open_tasks', []);
+    $again = is_file("$dir/ms-playwright/asked.txt");
+    @unlink("$dir/ms-playwright/asked.txt"); unlink("$dir/ms-playwright/chromium_headless_shell-9/INSTALLATION_COMPLETE"); $app->mcp()->call('anki', 'open_tasks', []);
+    check('connector: its browser missing (installed before it was downloaded), it is downloaded when a tool is used, once', !$again && @file_get_contents("$dir/ms-playwright/asked.txt") === 'install --only-shell chromium');
     $cp->install($zid, 'anki', ['TALIXIO_URL' => 'https://anki2.example.com', 'TALIXIO_PASSWORD' => ''], false); $cp->finish();
     $srv = $app->mcp()->servers()['anki'];
     check('connector: reinstalling keeps a secret left empty', $srv['env']['TALIXIO_PASSWORD'] === 's3cret' && $srv['env']['TALIXIO_URL'] === 'https://anki2.example.com' && $cp->status()['state'] === 'done');

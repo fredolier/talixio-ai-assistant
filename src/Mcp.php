@@ -150,6 +150,26 @@ final class Mcp
         return ['protocolVersion' => self::PROTOCOL, 'capabilities' => new \stdClass(), 'clientInfo' => ['name' => 'talixio', 'version' => '1.0']];
     }
 
+    /** A connector installed before its browser was (Playwright, Patchright): downloaded now, tried again at most hourly. */
+    private function browserFor(string $cwd): void
+    {
+        $cmds = ConnectorPackage::browserInstalls($cwd, $this->app->cfg->dataDir);
+        if (!$cmds) return;
+        $failed = ConnectorPackage::browsers($this->app->cfg->dataDir) . '/.failed-' . md5($cwd);
+        if (is_file($failed) && filemtime($failed) > time() - 3600) throw new \RuntimeException('The web browser this connector drives could not be downloaded: ' . file_get_contents($failed));
+        Log::info("connector in $cwd: downloading the web browser it drives");
+        foreach ($cmds as $c) {
+            $out = [];
+            exec('cd ' . escapeshellarg($cwd) . " && $c 2>&1", $out, $code);
+            if ($code !== 0) {
+                $why = mb_substr(trim(implode("\n", array_slice($out, -6))), -600);
+                @mkdir(dirname($failed), 0700, true); file_put_contents($failed, $why);
+                throw new \RuntimeException("The web browser this connector drives could not be downloaded (tried again in an hour): $why");
+            }
+        }
+        @unlink($failed);
+    }
+
     private function stdio(array $s, string $method, array|object $params, int $timeout): array
     {
         $env = ['PATH' => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin', 'HOME' => getenv('HOME') ?: $this->app->cfg->dataDir, 'LANG' => 'C.UTF-8'];
@@ -159,6 +179,7 @@ final class Mcp
         $err = tempnam(sys_get_temp_dir(), 'mcp');
         $cwd = (string)($s['cwd'] ?? ''); // relative: inside the data folder (connectors installed from the library)
         $cwd = $cwd === '' ? $this->app->cfg->dataDir : ($cwd[0] === '/' ? $cwd : $this->app->cfg->dataDir . '/' . $cwd);
+        if (isset($s['source']['library_file']) && $method === 'tools/call') $this->browserFor($cwd);
         $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $err, 'w']], $pipes, $cwd, $env);
         if (!is_resource($proc)) throw new \RuntimeException("could not start {$s['command']}");
         try {

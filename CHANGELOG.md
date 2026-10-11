@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.11 (2026-10-11)
+
+- A connector driving a web browser that was installed before its browser was (Uber Eats before 0.28.9) no longer fails
+  with "Executable doesn't exist": the first time one of its tools is used, Talixio downloads the browser (about
+  100 MB, once), then runs the tool. If the download fails, the reason is shown, and it is tried again an hour later.
+
 ## 0.28.10 (2026-10-11)
 
 - Connector list: a "Hosting and cloud" section (OVHcloud, Hostinger; what exists for Scaleway, Infomaniak, o2switch).
