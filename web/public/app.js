@@ -2765,12 +2765,16 @@ document.addEventListener('click', async e => {
   if (!a || a.closest('[contenteditable=true]') || !a.dataset.file) return; // a folder link is a plain #library link
   e.preventDefault();
   a.closest('dialog[open]')?.close();
-  try {
-    const { file } = await api(`api/files/${a.dataset.file}/text`);
-    lib.folder = file.folder; location.hash = '#library' + (file.folder === '/' ? '' : file.folder);
-    setTimeout(() => openFile(+a.dataset.file, { page: +a.dataset.page || 0 }), 150);
-  } catch (err) { toast(err.message.includes('not found') ? 'That document is no longer in the library.' : err.message); }
+  openCited(+a.dataset.file, +a.dataset.page || 0);
 });
+/** Open a document of the library, at a page (a citation, or #file/12/p3 from a mail). */
+async function openCited(id, page) {
+  try {
+    const { file } = await api(`api/files/${id}/text`);
+    lib.folder = file.folder; location.hash = '#library' + (file.folder === '/' ? '' : file.folder);
+    setTimeout(() => openFile(id, { page }), 150);
+  } catch (err) { toast(err.message.includes('not found') ? t('That document is no longer in the library.') : err.message); }
+}
 
 async function openFile(id, opts = {}) {
   const v = $('#viewer'), body = $('#viewer-body');
@@ -3035,6 +3039,8 @@ async function loadActivity() {
 // ---- shell ----
 const VIEWS = { chat: null, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity, privacy: loadPrivacy };
 function route() {
+  const fm = location.hash.match(/^#file\/(\d+)(?:\/p(\d+))?$/); // a document link from a mail
+  if (fm) { openCited(+fm[1], +fm[2] || 0); return; }
   const h = location.hash.slice(1) === 'channels' ? 'settings' : location.hash.slice(1).split('/')[0];
   const v = (h in VIEWS) ? h : 'chat';
   for (const k of Object.keys(VIEWS)) $('#view-' + k).hidden = k !== v;

@@ -529,6 +529,10 @@ check('mail template: escaped, relative links made absolute, unsafe ones dropped
 check('mail template: relative links without a known address are not links', !str_contains(\Talixio\MailTemplate::plain('[n](#library/4)'), 'href') && str_contains(\Talixio\MailTemplate::plain('[n](#library/4)'), '>n</a>'));
 check('mail template: a link with no address to resolve it is emptied', \Talixio\MailTemplate::link('#library/4', '') === '' && \Talixio\MailTemplate::link('/fred/x', 'https://a.example/fred') === 'https://a.example/fred/x'
     && \Talixio\MailTemplate::link('https://x.io', '') === 'https://x.io');
+check('mail template: a document link opens in the app, on its own address, even when the model made one up',
+    \Talixio\MailTemplate::link('https://assistant.example.com/files/12#p3', 'https://ai.talixio.fr/fred') === 'https://ai.talixio.fr/fred/#file/12/p3'
+    && \Talixio\MailTemplate::link('/files/7', 'https://ai.talixio.fr/fred') === 'https://ai.talixio.fr/fred/#file/7'
+    && \Talixio\MailTemplate::link('https://www.talixio.com/x', 'https://ai.talixio.fr/fred') === 'https://www.talixio.com/x');
 $mime = Smtp::build('Talixio <bot@example.com>', 'fred@example.com', 'Hi', "# T", '<id2@example.com>', [], '<p>custom</p>');
 check('email: the HTML part can be given', str_contains($mime, base64_encode('<p>custom</p>')));
 

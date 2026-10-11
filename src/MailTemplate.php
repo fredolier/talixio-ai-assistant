@@ -104,7 +104,10 @@ final class MailTemplate
     /** A link that works from a mail app: #chat/x and /fred/… are made absolute with the app's address, or dropped. */
     public static function link(string $href, string $base): string
     {
+        // a model sometimes writes an address it made up (assistant.example.com…): keep only the path, on this app
+        if (preg_match('#^https?://([^/]*\.)?example(\.(com|org|net))?(:\d+)?(/.*)?$#i', $href, $m)) $href = ($m[5] ?? '') !== '' ? $m[5] : '/';
         if ($href === '' || preg_match('#^(https?:|mailto:|tel:)#i', $href)) return $href;
+        if (preg_match('#^(?:/[\w-]+)?/files/(\d+)(?:\#p(\d+))?#', $href, $m)) $href = "#file/{$m[1]}" . (isset($m[2]) ? "/p{$m[2]}" : ''); // a document of the library: opened in the app
         if ($base === '' || !preg_match('#^https?://#i', $base)) return '';
         $base = rtrim($base, '/');
         if (str_starts_with($href, '#')) return "$base/$href";
