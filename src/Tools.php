@@ -21,6 +21,8 @@ final class Tools
     private array $approval = [];
     /** @var string[] connector (MCP) tools marked read-only: also given to background jobs and the heartbeat */
     public array $readOnly = [];
+    /** Calls made in the current answer (name + arguments => count): a model calling the same thing again and again is stopped. */
+    private array $seen = [];
 
     public function __construct(private App $app)
     {
@@ -256,7 +258,7 @@ final class Tools
         }
         if ($app->calendar()->canWrite()) {
             $this->register('calendar_add', "Add an event or meeting to the user's calendar (asks the user to approve first: call it as soon as you know what to add, the approval is the confirmation). start/end in local time 'YYYY-MM-DD HH:MM', or 'YYYY-MM-DD' for all-day. Default length 1 hour. "
-                . "attendees: guests' email addresses (find them with contact_find; ask the user for any you lack): the calendar sends them the invitation. "
+                . "attendees: guests' email addresses (find them with contact_find), optional: the calendar sends them the invitation. An address you can't find never holds the event back: add it without that guest and tell the user who still needs inviting. "
                 . "repeat (daily, weekdays, weekly, monthly) makes a recurring event from start, until: its last day (YYYY-MM-DD); skip: dates (YYYY-MM-DD) left out; skip_holidays: true leaves out French public holidays. One call makes the whole series.",
                 ['title' => ['type' => 'string'], 'start' => ['type' => 'string'], 'end' => ['type' => 'string'], 'location' => ['type' => 'string'], 'description' => ['type' => 'string'],
                     'attendees' => ['type' => 'array', 'items' => ['type' => 'string']], 'repeat' => ['type' => 'string', 'enum' => Calendar::REPEATS], 'until' => ['type' => 'string'],
@@ -478,6 +480,14 @@ final class Tools
     public function env(): array { return ['TALIXIO_SPACE' => (string)$this->app->space, 'TALIXIO_IN_WORKER' => App::$inWorker ? '1' : '0', 'TALIXIO_JOB' => (string)($this->app->jobId ?? '')]; }
 
     /** A copy limited to one of the SETS. */
+    /** A copy for one answer: repeated calls are counted from zero. */
+    public function forAnswer(): self
+    {
+        $copy = clone $this;
+        $copy->seen = [];
+        return $copy;
+    }
+
     public function only(string $set): self
     {
         if (!array_key_exists($set, self::SETS)) throw new \InvalidArgumentException("unknown toolset $set");
@@ -514,6 +524,10 @@ final class Tools
     /** Called by the model. Sensitive tools become approval requests. */
     public function run(string $name, array $args): string
     {
+        $key = $name . json_encode($args);
+        if ($args && !str_starts_with($name, 'browser_') && ($this->seen[$key] = ($this->seen[$key] ?? 0) + 1) > 2) { // a page or a list read again can change
+            return "error: you already made this exact call twice in this answer (see the results above). Don't call it again: use what you have, or tell the user what is missing.";
+        }
         if (isset($this->tools[$name]) && ($gate = $this->app->privacy()->toolGate($name, $args)) !== null) { // confidential / secret spaces
             $this->app->store->logTool($name, $args, $gate, $this->app->jobId);
             return $gate;

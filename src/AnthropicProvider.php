@@ -54,7 +54,18 @@ final class AnthropicProvider implements Provider
             }
             $messages[] = ['role' => 'user', 'content' => $results];
         }
-        return '(stopped after too many tool steps)';
+        // out of steps: one last answer without tools says where things stand (instead of a bare "stopped")
+        $note = 'Tool step limit reached: no more tools. Answer the user now, in their language: what is done, what is not, and what you need from them to finish.';
+        $end = end($messages);
+        if ($end['role'] === 'user' && is_array($end['content'])) $messages[count($messages) - 1]['content'][] = ['type' => 'text', 'text' => $note];
+        else $messages[] = ['role' => 'user', 'content' => $note];
+        $last = $payload + ['messages' => $messages];
+        if ($specs) $last['tool_choice'] = ['type' => 'none'];
+        $r = $onEvent ? $this->stream($last, $onEvent) : Http::json("{$this->baseUrl}/v1/messages", $last, $this->headers(), 600);
+        $u = $r['usage'] ?? [];
+        $onUsage(['model' => $this->tier->model, 'in' => (int)($u['input_tokens'] ?? 0), 'out' => (int)($u['output_tokens'] ?? 0),
+            'cache_read' => (int)($u['cache_read_input_tokens'] ?? 0), 'cache_write' => (int)($u['cache_creation_input_tokens'] ?? 0), 'cost' => null]);
+        return implode('', array_map(fn($b) => ($b['type'] ?? '') === 'text' ? $b['text'] : '', $r['content'] ?? [])) ?: '(stopped after too many tool steps)';
     }
 
     /** Claude 3.x and 4.0-4.5 take a thinking budget in tokens; later models think adaptively, steered by the effort level. */

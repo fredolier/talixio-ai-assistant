@@ -3,6 +3,16 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.3 (2026-10-11)
+
+- A meeting is no longer held back for a missing email address: the assistant creates it without that guest
+  and tells you who still needs inviting ("fais sans" and "tant pis" now count as a go-ahead too).
+- An answer that reworded the previous one without doing anything is now caught too, and handed to a
+  stronger model.
+- The assistant can no longer call the same tool with the same details again and again in one answer, and
+  when it runs out of steps it now says what is done and what is missing instead of "(stopped after too
+  many tool steps)".
+
 ## 0.28.2 (2026-10-11)
 
 - The quick model could repeat the same plan after "yes" instead of doing it. A short "yes" / "go ahead"

@@ -16,6 +16,15 @@ header('Content-Type: text/event-stream');
 if ($path === '/v1/messages') {
     $last = end($req['messages']);
     $toolResult = is_array($last['content']) && ($last['content'][0]['type'] ?? '') === 'tool_result';
+    if (($req['tool_choice']['type'] ?? '') === 'none') { // out of tool steps: the last answer
+        $ev('message_start', ['type' => 'message_start', 'message' => ['usage' => ['input_tokens' => 100, 'output_tokens' => 1]]]);
+        $ev('content_block_start', ['type' => 'content_block_start', 'index' => 0, 'content_block' => ['type' => 'text', 'text' => '']]);
+        $ev('content_block_delta', ['type' => 'content_block_delta', 'index' => 0, 'delta' => ['type' => 'text_delta', 'text' => 'Where things stand: ' . end($last['content'])['text']]]);
+        $ev('content_block_stop', ['type' => 'content_block_stop', 'index' => 0]);
+        $ev('message_delta', ['type' => 'message_delta', 'delta' => ['stop_reason' => 'end_turn'], 'usage' => ['output_tokens' => 9]]);
+        $ev('message_stop', ['type' => 'message_stop']);
+        return;
+    }
     $ev('message_start', ['type' => 'message_start', 'message' => ['usage' => ['input_tokens' => 100, 'output_tokens' => 1]]]);
     if ($toolResult) {
         $ev('content_block_start', ['type' => 'content_block_start', 'index' => 0, 'content_block' => ['type' => 'text', 'text' => '']]);
@@ -37,7 +46,10 @@ if ($path === '/v1/messages') {
 }
 // OpenAI-compatible
 $last = end($req['messages']);
-if ($last['role'] === 'tool') {
+if (($req['tool_choice'] ?? '') === 'none') { // out of tool steps: the last answer
+    $ev('', ['choices' => [['delta' => ['content' => 'Where things stand: ' . $last['content']]]]]);
+    $ev('', ['choices' => [], 'usage' => ['prompt_tokens' => 50, 'completion_tokens' => 5]]);
+} elseif ($last['role'] === 'tool') {
     foreach (['Done', ': ', $last['content']] as $t) $ev('', ['choices' => [['delta' => ['content' => $t]]]]);
     $ev('', ['choices' => [], 'usage' => ['prompt_tokens' => 50, 'completion_tokens' => 5]]);
 } else {

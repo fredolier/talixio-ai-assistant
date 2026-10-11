@@ -38,7 +38,13 @@ final class OpenAIProvider implements Provider
             // tool messages are text-only: images (screenshots) follow as a user message
             if ($images) $msgs[] = ['role' => 'user', 'content' => Content::openai(array_merge([['type' => 'text', 'text' => 'Screenshot(s) from the tool call above:']], $images))];
         }
-        return '(stopped after too many tool steps)';
+        // out of steps: one last answer without tools says where things stand (instead of a bare "stopped")
+        $msgs[] = ['role' => 'user', 'content' => 'Tool step limit reached: no more tools. Answer the user now, in their language: what is done, what is not, and what you need from them to finish.'];
+        $last = $payload + ['messages' => $msgs, 'tool_choice' => 'none'];
+        $r = $onEvent ? $this->stream($last, $onEvent) : Http::json("{$this->baseUrl}/chat/completions", $last, ['Authorization: Bearer ' . ($this->key ?: 'none')], 300);
+        $u = $r['usage'] ?? ['prompt_tokens' => (int)(strlen(json_encode($msgs)) / 4), 'completion_tokens' => 0];
+        $onUsage(['model' => $this->tier->model, 'in' => (int)($u['prompt_tokens'] ?? 0), 'out' => (int)($u['completion_tokens'] ?? 0), 'cache_read' => 0, 'cache_write' => 0, 'cost' => null]);
+        return (string)($r['choices'][0]['message']['content'] ?? '') ?: '(stopped after too many tool steps)';
     }
 
     /** Streamed chat completion reassembled into a normal response (tool call fragments merged, extra fields kept). */

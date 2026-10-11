@@ -693,6 +693,13 @@ $text = (new \Talixio\OpenAIProvider('k', new \Talixio\Tier('standard', 'gemini-
 $sent = array_map(fn($l) => json_decode($l, true), array_filter(explode("\n", (string)@file_get_contents("$dir/fake-llm.log"))));
 check('openai stream: tool call fragments merged, extra fields kept', str_starts_with($text, 'Done: ') && (end($sent)['messages'][2]['tool_calls'][0]['extra_content']['google']['thought_signature'] ?? '') === 'S1', $text);
 check('openai stream: deltas emitted', implode('', array_column(array_filter($events, fn($e) => $e['type'] === 'text'), 'text')) === $text);
+$capped = [];
+foreach (['anthropic' => new \Talixio\AnthropicProvider('k', new \Talixio\Tier('standard', 'claude-sonnet-x', 1), false, "http://127.0.0.1:$llmPort"),
+    'openai' => new \Talixio\OpenAIProvider('k', new \Talixio\Tier('standard', 'gemini-x', 1), "http://127.0.0.1:$llmPort")] as $pn => $pv) {
+    $capped[$pn] = $pv->complete('sys', '', [['role' => 'user', 'content' => 'tasks?']], $app->tools->only('chat'), fn($u) => null, fn($e) => null);
+}
+check('step limit: the model is asked for a last answer without tools (what is done, what is missing), not a bare "stopped"',
+    !array_filter($capped, fn($t) => !str_starts_with($t, 'Where things stand: Tool step limit reached') || !str_contains($t, 'what you need from them')), json_encode($capped));
 @unlink("$dir/fake-llm.log");
 
 // content conversion
@@ -2465,6 +2472,12 @@ check('europe: the fast model is Mistral when the provider has one (it writes Fr
     $tiersEu === ['fast' => 'Mistral-Small-3.2-24B-Instruct-2506', 'standard' => 'gpt-oss-120b', 'deep' => 'qwen-3-5-397b']
     && str_contains((new \Talixio\Agent($app))->systemPrompt(), "answer in the language of the user's last message"), json_encode($tiersEu));
 
+$rt = $app->tools->only('chat')->forAnswer();
+$rr = [$rt->run('contact_find', ['query' => 'Cédric']), $rt->run('contact_find', ['query' => 'Cédric']), $rt->run('contact_find', ['query' => 'Cédric']), $rt->run('contact_find', ['query' => 'Paul'])];
+check('loop guard: the same call a third time in one answer is refused, other calls go on; a new answer starts from zero',
+    !str_starts_with($rr[1], 'error:') && str_contains($rr[2], 'already made this exact call twice') && !str_starts_with($rr[3], 'error:')
+    && !str_starts_with($app->tools->only('chat')->forAnswer()->run('contact_find', ['query' => 'Cédric']), 'error: you already'), json_encode($rr));
+
 // a fast model restating its plan instead of acting: "oui" goes to a stronger tier, and a repeated answer is handed over once
 $plan = "Je vais créer une réunion récurrente avec Cédric et Paul tous les lundis de 11h à 11h30 jusqu'à Noël. Est-ce que cela vous convient ?";
 $stall = []; $fake->script = function ($last, $tools, $on, $ctx) use ($usage, $plan, &$stall) {
@@ -2478,7 +2491,9 @@ $r = $gag->chat('web', "Qu'est-ce que tu attends pour le faire", 'fast');
 check('stuck model: the same answer again, without a tool, is handed to a stronger tier once', $r === 'Series created.' && $stall === ['fast', 'fast', 'standard'], json_encode([$stall, $r]));
 $stall = []; $r = $gag->chat('web', 'Oui', 'fast');
 check('stuck model: "oui" to a plan is answered by at least the standard tier', $r === 'Done.' && $stall === ['standard'] && \Talixio\Agent::isGoAhead('oui je veux') && \Talixio\Agent::isGoAhead('Vas-y !')
-    && !\Talixio\Agent::isGoAhead('ouistiti') && !\Talixio\Agent::isGoAhead("Oui mais d'abord dis-moi qui est invité à la réunion de lundi prochain"), json_encode($stall));
+    && !\Talixio\Agent::isGoAhead('ouistiti') && \Talixio\Agent::isGoAhead('fais sans') && \Talixio\Agent::isGoAhead('Tant pis !')
+    && \Talixio\Agent::sameAnswer("Pour créer la réunion récurrente, il me faut les adresses e-mail valides de Cédric et de Paul (elles sont indispensables pour envoyer les invitations). Pouvez-vous me les fournir ?", "Pour créer la réunion récurrente avec Cédric et Paul, j'ai besoin des adresses e-mail valides de Cédric et de Paul afin de pouvoir envoyer les invitations. Pourriez-vous me les fournir ?")
+    && !\Talixio\Agent::sameAnswer('Voici vos tâches de la semaine : MAI-2 et MAI-3, rien de bloquant.', 'La réunion est créée tous les lundis de 11h à 11h30, invitations envoyées.') && !\Talixio\Agent::isGoAhead("Oui mais d'abord dis-moi qui est invité à la réunion de lundi prochain"), json_encode($stall));
 
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
