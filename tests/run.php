@@ -2198,6 +2198,12 @@ Library::$system = true; file_put_contents($tmpf, 'old page'); $oldId = $app->fi
 $map = json_decode($s->get('faq_files'), true); $map['/FAQ/Ancien/Ancienne.md'] = [$oldId, 'x']; $s->set('faq_files', json_encode($map)); $s->set('faq_rev', '');
 $faq->sync();
 check('faq: a page gone from the new version is removed, with its empty folder', !$app->files()->get($oldId) && !$app->library()->exists('/FAQ/Ancien') && $app->library()->exists('/FAQ/Utilisation'));
+Library::$system = true; file_put_contents($tmpf, 'copy'); $app->files()->save($tmpf, 'Lecteur réseau (WebDAV).md', 'text/markdown', '/FAQ/Utilisation'); Library::$system = false;
+$s->set('faq_files', ''); $s->set('faq_rev', ''); // a sync cut short: its list of pages lost, a copy left behind
+$faq->sync();
+[$fw, $fa] = Library::within(Library::FAQ);
+$dupes = $s->q("SELECT folder, name, COUNT(*) n FROM files WHERE $fw GROUP BY folder, name HAVING n > 1", $fa)->fetchAll();
+check('faq: found again by folder and name, copies removed', !$dupes && (int)$s->q("SELECT COUNT(*) FROM files WHERE $fw", $fa)->fetchColumn() === count(Faq::pages()), json_encode($dupes, JSON_UNESCAPED_UNICODE));
 
 // ---- moving an assistant to another server ----
 $td = "$dir/transfer"; mkdir("$td/src", 0777, true); mkdir("$td/dst", 0777, true);

@@ -34,7 +34,7 @@ final class Files
         if ($mime === '' || $mime === 'application/octet-stream') {
             $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($tmp) ?: 'application/octet-stream';
         }
-        $name = mb_substr(preg_replace('/[^\p{L}\p{N}._ -]+/u', '_', basename($name)) ?: 'file', 0, 120);
+        $name = self::cleanName($name);
         $dir = $c->filesDir() . '/' . date('Y/m');
         if (!is_dir($dir)) mkdir($dir, 0750, true);
         $kind = self::kind($mime, $name);
@@ -49,6 +49,12 @@ final class Files
         $duration = $kind === 'audio' ? self::duration($path) : null;
         $st->q('UPDATE files SET path=?, duration=? WHERE id=?', [$path, $duration, $id]);
         return $id;
+    }
+
+    /** The name a file is stored under. */
+    public static function cleanName(string $name): string
+    {
+        return mb_substr(preg_replace('/[^\p{L}\p{N}._ -]+/u', '_', basename($name)) ?: 'file', 0, 120);
     }
 
     /** New content for a file (moved from $tmp): read and indexed again in the background, same id, folder and name. */

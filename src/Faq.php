@@ -10,6 +10,9 @@ namespace Talixio;
  */
 final class Faq
 {
+    /** Raised when the way pages are kept changes, so every server runs the sync once more. */
+    private const FORMAT = '2';
+
     public function __construct(private App $app) {}
 
     /** [library folder, file name, content] of every page, from the files shipped with this version. */
@@ -41,13 +44,19 @@ final class Faq
         return $out;
     }
 
-    /** Bring /FAQ in line with this version (once per change): new pages added, changed ones replaced, old ones removed. */
+    /**
+     * Bring /FAQ in line with this version (once per change): new pages added, changed ones replaced, old ones
+     * removed. Pages are found again by folder and name, and anything else in /FAQ is removed, so a sync that was
+     * cut short or ran twice at once leaves no copies behind.
+     */
     public function sync(): int
     {
         $pages = self::pages();
-        $rev = sha1(json_encode($pages));
+        $rev = sha1(self::FORMAT . json_encode($pages));
         $st = $this->app->store;
         if ($st->get('faq_rev', '') === $rev) return 0;
+        $lock = @fopen($this->app->cfg->dataDir . '/faq.lock', 'c');
+        if ($lock && !flock($lock, LOCK_EX | LOCK_NB)) return 0; // another process is on it
         $known = json_decode($st->get('faq_files', ''), true) ?: []; // "folder/name" => [id, sha1]
         $files = $this->app->files(); $lib = $this->app->library();
         $keep = []; $n = 0;
@@ -56,6 +65,9 @@ final class Faq
             foreach ($pages as [$folder, $name, $text]) {
                 $key = "$folder/$name"; $sha = sha1($text);
                 [$id, $was] = $known[$key] ?? [0, ''];
+                $same = array_map('intval', $st->q('SELECT id FROM files WHERE folder = ? AND name = ? ORDER BY id', [$folder, Files::cleanName($name)])->fetchAll(\PDO::FETCH_COLUMN));
+                if (!in_array((int)$id, $same, true)) [$id, $was] = [$same ? max($same) : 0, ''];
+                foreach ($same as $other) if ($other !== (int)$id) { $lib->purgeFile($other); $n++; } // copies left by an older version
                 $f = $id ? $files->get((int)$id) : null;
                 if ($f && $was === $sha) { $keep[$key] = [$id, $sha]; continue; }
                 if ($f) {
@@ -69,7 +81,11 @@ final class Faq
                 try { $files->text((int)$id); } catch (\Throwable $e) { Log::warn("faq $key: {$e->getMessage()}"); } // Markdown: read and indexed right away
                 $keep[$key] = [(int)$id, $sha]; $n++;
             }
-            foreach (array_diff_key($known, $keep) as [$id]) { if ($files->get((int)$id)) { $lib->purgeFile((int)$id); $n++; } }
+            $kept = array_flip(array_column($keep, 0));
+            [$w, $a] = Library::within(Library::FAQ);
+            foreach ($st->q("SELECT id FROM files WHERE $w", $a)->fetchAll(\PDO::FETCH_COLUMN) as $id) { // pages of older versions, and copies
+                if (!isset($kept[(int)$id])) { $lib->purgeFile((int)$id); $n++; }
+            }
             [$w, $a] = Library::within(Library::FAQ, 'path'); // folders left empty by an older version
             foreach ($st->q("SELECT path FROM folders WHERE $w", $a)->fetchAll() as $r) {
                 [$fw, $fa] = Library::within($r['path']);

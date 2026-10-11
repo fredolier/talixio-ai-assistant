@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.23.1 (2026-10-11)
+- FAQ: no more copies of the same page ("Page (#12).md" over WebDAV). A sync cut short (or run twice at once) lost
+  track of the pages it had made and made them all again; pages are now found again by folder and name, only one
+  sync runs at a time, and the copies already there are removed at the next start.
+
 ## 0.23.0 (2026-10-11)
 - Europe only: a card in Settings → Model and budget switches the conversation model, transcription and memory
   search to one European provider (OVHcloud AI Endpoints by default, Mistral AI, Scaleway, Infomaniak), with a
