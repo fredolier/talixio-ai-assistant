@@ -36,6 +36,7 @@ final class Settings
                 ['TALIXIO_MODEL_FAST', 'Fast model', 'text', 'Empty = chosen automatically. Background work, summaries, simple lookups.'],
                 ['TALIXIO_MODEL', 'Standard model', 'text', 'Empty = chosen automatically. Conversation.'],
                 ['TALIXIO_MODEL_DEEP', 'Deep model', 'text', 'Empty = chosen automatically. Messages starting with /deep and hard reasoning.'],
+                ['TALIXIO_TOOLS', 'Tools sent to the model', 'select', 'Each tool description costs tokens at every step. Focused: only the tools a message seems to need (the model can ask for more). Automatic: focused with the European and OpenAI-compatible providers, all with Claude and Gemini (their prompt cache makes them cheap).', ['auto' => 'Automatic', 'focused' => 'Focused', 'all' => 'All']],
                 ['TALIXIO_DEEP_THINKING_TOKENS', 'Claude extended thinking (tokens)', 'number', 'Deep tier only. 0 = off.'],
                 ['TALIXIO_DEEP_REASONING_EFFORT', 'Reasoning effort (deep tier)', 'select', 'How hard the deep model thinks. Claude: adaptive thinking at this level (the thinking tokens above apply to Claude 4.5 and older only). OpenAI/Gemini get low/medium/high.', self::EFFORT_CHOICES],
             ]],
@@ -175,7 +176,7 @@ final class Settings
     /** Rarely changed: folded under "Advanced settings" in their group. */
     public const ADVANCED = [
         'TALIXIO_HISTORY_MESSAGES', 'TALIXIO_HISTORY_TOKENS',
-        'TALIXIO_SOVEREIGN_URL', 'TALIXIO_MODEL_FAST', 'TALIXIO_MODEL', 'TALIXIO_MODEL_DEEP', 'TALIXIO_DEEP_THINKING_TOKENS', 'TALIXIO_DEEP_REASONING_EFFORT',
+        'TALIXIO_SOVEREIGN_URL', 'TALIXIO_MODEL_FAST', 'TALIXIO_MODEL', 'TALIXIO_MODEL_DEEP', 'TALIXIO_DEEP_THINKING_TOKENS', 'TALIXIO_DEEP_REASONING_EFFORT', 'TALIXIO_TOOLS',
         'TALIXIO_MAX_PARALLEL_JOBS', 'TALIXIO_JOB_MAX_USD_LIMIT', 'TALIXIO_JOB_EFFORT', 'TALIXIO_PRICES',
         'TALIXIO_NTFY_TOKEN', 'TALIXIO_VAPID_SUBJECT', 'TALIXIO_HEARTBEAT_MINUTES',
         'TALIXIO_SMTP_SECURITY', 'TALIXIO_IMAP_PORT', 'TALIXIO_IMAP_USER', 'TALIXIO_IMAP_PASSWORD', 'TALIXIO_EMAIL_REQUIRE_AUTH',
@@ -203,7 +204,7 @@ final class Settings
         'TALIXIO_APPROVAL_WAIT_SECONDS' => '600', 'TALIXIO_LEARN' => '1', 'TALIXIO_MIND' => '1', 'TALIXIO_GEMINI_PAID' => '0', 'TALIXIO_NOTIFY_NEUTRAL' => '0', 'TALIXIO_LEARN_MIN_STEPS' => '4', 'TALIXIO_BACKUP_KEEP' => '7',
         'TALIXIO_BACKUP_FILES' => '1', 'TALIXIO_AUTO_UPDATE' => '0', 'TALIXIO_CLAUDE_BIN' => 'claude', 'TALIXIO_SIGNAL_CLI' => 'signal-cli',
         'TALIXIO_RECALL_MIN_SIMILARITY' => '0.5', 'TALIXIO_SHELL' => 'off', 'TALIXIO_AUTO_FILE' => 'suggest', 'TALIXIO_MAIL_TRIAGE' => '1', 'TALIXIO_SHELL_NETWORK' => '0', 'TALIXIO_SHELL_TIMEOUT' => '120', 'TALIXIO_DEEP_REASONING_EFFORT' => '',
-        'TALIXIO_SOVEREIGN' => 'ovhcloud', 'TALIXIO_SOVEREIGN_ONLY' => '0',
+        'TALIXIO_SOVEREIGN' => 'ovhcloud', 'TALIXIO_SOVEREIGN_ONLY' => '0', 'TALIXIO_TOOLS' => 'auto',
     ];
 
     /** @return array<string,array> key => field */

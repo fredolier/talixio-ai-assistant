@@ -12,9 +12,10 @@ final class OpenAIProvider implements Provider
     {
         $msgs = array_merge([['role' => 'system', 'content' => trim("$system\n\n$context")]], Content::messages($messages, [Content::class, 'openai']));
         $payload = ['model' => $this->tier->model];
-        if ($specs = array_map(fn($t) => ['type' => 'function', 'function' => $t], $tools->schemas())) $payload['tools'] = $specs;
         if ($this->tier->reasoningEffort !== '') $payload['reasoning_effort'] = in_array($this->tier->reasoningEffort, ['xhigh', 'max'], true) ? 'high' : $this->tier->reasoningEffort;
         for ($i = 0; $i < $this->tier->maxSteps; $i++) {
+            // read each step: tools_more can add some
+            if ($specs = array_map(fn($t) => ['type' => 'function', 'function' => $t], $tools->schemas())) $payload['tools'] = $specs;
             $r = $onEvent ? $this->stream($payload + ['messages' => $msgs], $onEvent)
                 : Http::json("{$this->baseUrl}/chat/completions", $payload + ['messages' => $msgs], ['Authorization: Bearer ' . ($this->key ?: 'none')], 300);
             $m = $r['choices'][0]['message'] ?? [];
@@ -40,7 +41,7 @@ final class OpenAIProvider implements Provider
         }
         // out of steps: one last answer without tools says where things stand (instead of a bare "stopped")
         $msgs[] = ['role' => 'user', 'content' => 'Tool step limit reached: no more tools. Answer the user now, in their language: what is done, what is not, and what you need from them to finish.'];
-        $last = $payload + ['messages' => $msgs, 'tool_choice' => 'none'];
+        $last = $payload + ['messages' => $msgs] + (isset($payload['tools']) ? ['tool_choice' => 'none'] : []);
         $r = $onEvent ? $this->stream($last, $onEvent) : Http::json("{$this->baseUrl}/chat/completions", $last, ['Authorization: Bearer ' . ($this->key ?: 'none')], 300);
         $u = $r['usage'] ?? ['prompt_tokens' => (int)(strlen(json_encode($msgs)) / 4), 'completion_tokens' => 0];
         $onUsage(['model' => $this->tier->model, 'in' => (int)($u['prompt_tokens'] ?? 0), 'out' => (int)($u['completion_tokens'] ?? 0), 'cache_read' => 0, 'cache_write' => 0, 'cost' => null]);

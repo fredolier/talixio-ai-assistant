@@ -500,6 +500,21 @@ check('usage_report works', str_contains($app->tools->run('usage_report', []), '
 
 // toolsets
 check('chat toolset has delegate', in_array('delegate', $app->tools->only('chat')->names(), true));
+$app->spaces()->setGeneralTier('fast');
+check('General: its own model tier, kept', $app->spaces()->get(0)['tier'] === 'fast' && $app->spaces()->all()[0]['tier'] === 'fast');
+$app->spaces()->setGeneralTier('standard');
+$all = $app->tools->only('chat')->forAnswer();
+$foc = $all->focus('Quoi de neuf ?');
+$names = fn($t) => array_column($t->schemas(), 'name');
+check('tools focus: core kept, fewer tools, tools_more offered', in_array('memory_read', $names($foc), true) && in_array('tools_more', $names($foc), true)
+    && count($foc->schemas()) < count($all->schemas()) && !in_array('board_list', $names($foc), true));
+$cal = $all->focus('Ajoute une tâche pour la facture');
+check('tools focus: a task brings the board tools', in_array('board_list', $names($cal), true));
+$foc->run('tools_more', ['groups' => ['tasks']]);
+check('tools focus: tools_more adds a group', in_array('board_list', $names($foc), true));
+$foc2 = $all->focus('Bonjour');
+$foc2->run('usage_report', []);
+check('tools focus: a hidden tool called by name runs and is then shown', in_array('usage_report', $names($foc2), true));
 check('job toolset cannot write memory', !in_array('memory_append', $app->tools->only('job')->names(), true));
 
 // ---- channels ----
@@ -2452,7 +2467,7 @@ $errs = [];
 foreach ([['nope', 'k', ''], ['mistral', '', ''], ['infomaniak', 'k', 'http://x']] as [$sv, $k, $u]) { try { \Talixio\Sovereign::test($sv, $k, $u); $errs[] = 'none'; } catch (\InvalidArgumentException $e) { $errs[] = $e->getMessage(); } }
 check('europe: a test refuses an unknown provider, a missing key, an address not in https', $errs === ['Unknown provider.', 'Paste your API key.', 'Give the provider\'s address (https://…).'], json_encode($errs));
 $cat = \Talixio\Sovereign::catalog();
-check('europe: OVHcloud first, every provider says where to get a key', $cat[0]['id'] === 'ovhcloud' && count(array_filter($cat, fn($x) => str_starts_with($x['keys'], 'https://'))) === 4 && !isset($cat[0]['fallback']));
+check('europe: OVHcloud first, every provider says where to get a key', $cat[0]['id'] === 'ovhcloud' && count(array_filter($cat, fn($x) => str_starts_with($x['keys'], 'https://'))) === 4 && isset($cat[0]['fallback']['standard']));
 $out = \Talixio\Sovereign::outside($app);
 check('europe: what still leaves Europe is listed, with where to change it', $out && !array_filter($out, fn($o) => !str_starts_with($o['href'], '#settings/') || $o['why'] === ''), json_encode($out));
 $fl = new \Talixio\Fleet($dir . '/fleet');

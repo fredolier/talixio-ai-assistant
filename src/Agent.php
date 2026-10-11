@@ -128,11 +128,29 @@ final class Agent
         };
         try {
             $text = $this->app->provider($tier)->complete($this->systemPrompt($role), in_array($role, ['summary', 'classify', 'mind'], true) ? '' : $this->context($tier, $extra),
-                $history, $this->app->tools->only($toolset)->forAnswer(), $onUsage, $onEvent);
+                $history, $this->toolsFor($toolset, $history), $onUsage, $onEvent);
         } finally {
             if (Browser::running()) Browser::shutdown(); // each run starts with a fresh page
         }
         return [trim($text), $meta];
+    }
+
+    /** The tools of one answer: in a chat, only those the last messages call for when TALIXIO_TOOLS says so. */
+    private function toolsFor(string $toolset, array $history): Tools
+    {
+        $tools = $this->app->tools->only($toolset)->forAnswer();
+        $mode = $this->app->cfg->tools;
+        if ($mode === 'auto') $mode = in_array($this->app->cfg->provider, ['sovereign', 'openai'], true) ? 'focused' : 'all';
+        if ($toolset !== 'chat' || $mode !== 'focused') return $tools;
+        $text = '';
+        foreach (array_slice($history, -3) as $m) {
+            $c = $m['content'] ?? '';
+            $text .= "\n" . (is_string($c) ? $c : implode("\n", array_map(fn($p) => is_array($p) && is_string($p['text'] ?? null) ? $p['text'] : '', $c)));
+        }
+        $last = end($history) ?: [];
+        $files = is_array($last['content'] ?? null) && array_filter($last['content'], fn($p) => is_array($p) && ($p['type'] ?? 'text') !== 'text');
+        $files = $files || preg_match('/^\[[^\]\n]+ #\d+: /m', $text); // an attached document
+        return $tools->focus($text, (bool)$files); // last: tools_more works on this copy
     }
 
     /** A short "yes, do it" (oui, vas-y, ok, go ahead, fais-le…). */
@@ -194,7 +212,7 @@ final class Agent
         $level = $privacy->spaceLevel($space);
         if ($channel === 'telegram' && $level !== 'internal') return I18n::t($this->app, '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).', ['name' => $spaces->get($space)['name']]);
         $prompt = $text;
-        if ($tier === 'standard' && $space) $tier = $spaces->get($space)['tier'] ?: 'standard';
+        if ($tier === 'standard') $tier = $spaces->get($space)['tier'] ?: 'standard'; // the space's model, General's included
         // "oui" / "vas-y" to a plan means: act now with the tools; the fast model tends to restate the plan instead
         if ($tier === 'fast' && self::isGoAhead($text)) $tier = 'standard';
         if (preg_match('#^/(fast|standard|deep)\b\s*#i', $text, $m)) { $tier = strtolower($m[1]); $prompt = substr($text, strlen($m[0])); }

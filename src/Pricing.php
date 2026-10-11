@@ -17,8 +17,9 @@ final class Pricing
         'gpt-4.1-nano' => [0.1, 0.4], 'gpt-4.1-mini' => [0.4, 1.6], 'gpt-4.1' => [2.0, 8.0],
         'gpt-4o-mini' => [0.15, 0.6], 'gpt-4o' => [2.5, 10.0],
         // European providers (Mistral, OVHcloud, Scaleway, Infomaniak): approximate list prices (Oct 2026), check them
-        'mistral-small' => [0.1, 0.3], 'mistral-medium' => [0.4, 2.0], 'mistral-large' => [2.0, 6.0], 'ministral' => [0.1, 0.1], 'magistral' => [2.0, 5.0],
-        'gpt-oss-120b' => [0.09, 0.47], 'gpt-oss-20b' => [0.05, 0.2], 'qwen3-235b' => [0.75, 2.25], 'qwen3-32b' => [0.09, 0.25], 'qwen3' => [0.1, 0.3], 'llama-3.3-70b' => [0.79, 0.79],
+        // Mistral's -latest aliases: Small 4, Medium 3.5, Large 3 (Large costs less than Medium); Small 3.x is the older open model
+        'mistral-small-3' => [0.1, 0.3], 'mistral-small' => [0.15, 0.6], 'mistral-medium' => [1.5, 7.5], 'mistral-large' => [0.5, 1.5], 'ministral' => [0.1, 0.1], 'magistral' => [2.0, 5.0],
+        'gpt-oss-120b' => [0.09, 0.47], 'gpt-oss-20b' => [0.05, 0.2], 'qwen3.5-397b' => [0.71, 4.25], 'deepseek' => [0.45, 0.9], 'glm' => [2.0, 6.0], 'qwen3-235b' => [0.75, 2.25], 'qwen3-32b' => [0.09, 0.25], 'qwen3' => [0.1, 0.3], 'llama-3.3-70b' => [0.79, 0.79],
     ];
 
     /** @var array<string,array{0:float,1:float}> */

@@ -17,6 +17,7 @@ final class Config
     public string $sovereignKey = '';
     public string $sovereignUrl = '';
     public bool $sovereignOnly = false;          // never send anything to an AI or search service outside Europe
+    public string $tools = 'auto';               // auto | all | focused: send only the tools a message seems to need
     /** @var array<string,Tier> */ public array $tiers = [];
     public string $anthropicKey = '';
     public string $anthropicBaseUrl = 'https://api.anthropic.com';
@@ -173,6 +174,7 @@ final class Config
         $c->sovereignKey = $e('TALIXIO_SOVEREIGN_KEY');
         $c->sovereignUrl = rtrim($e('TALIXIO_SOVEREIGN_URL', Sovereign::SERVICES[$c->sovereign]['url']), '/');
         $c->sovereignOnly = $e('TALIXIO_SOVEREIGN_ONLY', '0') === '1';
+        $c->tools = in_array($t = $e('TALIXIO_TOOLS', 'auto'), ['auto', 'all', 'focused'], true) ? $t : 'auto';
         if ($c->provider === 'sovereign') { // a European provider through its OpenAI-compatible endpoint
             $c->openaiKey = $c->sovereignKey;
             $c->openaiBaseUrl = $c->sovereignUrl;

@@ -15,8 +15,35 @@ final class Tools
         'none' => [],
     ];
 
+    /** Always sent when tools are focused: memory, search, reading. */
+    private const CORE = ['memory_read', 'memory_append', 'memory_replace', 'skill_read', 'search_memory', 'web_search', 'fetch_url',
+        'file_read', 'kb_search', 'kb_find', 'kb_list', 'mind_observe', 'space_notes', 'list_tasks'];
+
+    /**
+     * The other tools by group: [name prefixes, words in the conversation that call for them, what the group does].
+     * A focused answer gets the core, the groups its last messages mention, and tools_more for the rest.
+     */
+    public const GROUPS = [
+        'mail' => [['mail_', 'contact_'], '/mail|courriel|inbox|boîte|newsletter|spam|répon|reply|brouillon|draft|écri[ste]* (à|au)|envo[iy]|send|expéditeur|sender|pièce jointe|attach|message/iu', 'read, sort, draft and send e-mail'],
+        'calendar' => [['calendar_', 'contact_find'], '/agenda|calend|rdv|rendez|réunion|meeting|invit|visio|dispo|créneau|slot|planning|demain|tomorrow|aujourd|today|ce soir|tonight|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|semaine|week|\b\d{1,2} ?h\d*\b|\b\d{1,2}:\d\d|événement|event|déjeuner|lunch|dîner|dinner|anniversaire|birthday|vacances|holiday|congé/iu', 'see and create calendar events, invite people'],
+        'contacts' => [['contact_'], '/contact|téléphone|phone|numéro|number|adresse|address|qui est|who is/iu', 'find and save contacts'],
+        'tasks' => [['board_'], '/tâche|task|todo|to-do|à faire|kanban|tableau|board|carte|card|ticket|projet|project|priorit|backlog|deadline|échéance|estim|temps passé|time spent|\b[A-Z]{2,6}-\d+\b/u', 'the task board: list, create, update, prioritize, log time'],
+        'library' => [['kb_', 'share_', 'file_'], '/document|\bdoc|fichier|file|dossier|folder|biblioth|library|note|rapport|report|pdf|partag|share|lien|link|class|range|déplace|move|corbeille|trash|inbox|enregistr|save|sauvegard|word|excel|tableur|slides?\b/iu', 'file, move, save and share documents in the library'],
+        'browser' => [['browser_'], '/site|page|navig|browser|clique|click|formulaire|form\b|connecte|log ?in|réserv|book|https?:\/\/|www\.|command|order|achète|buy/iu', 'a web browser that clicks and types on pages'],
+        'schedule' => [['schedule_task', 'cancel_task', 'routine_'], '/rappel|remind|chaque|tous les|toutes les|every|daily|quotidien|hebdo|weekly|mensuel|monthly|routine|programm|planifi|schedul|automati|plus tard|later|\bdans \d|\bin \d/iu', 'reminders and recurring routines'],
+        'jobs' => [['delegate', 'list_jobs', 'continue_job', 'cancel_job', 'archive_job', 'schedule_job'], '/job|recherch|research|cherche|enquête|compar|analys|étude|study|arrière-plan|background|rapport|report|veille|approfondi|trouve|find|liste d|list of/iu', 'background jobs: long research and reports'],
+        'shell' => [['shell_'], '/script|commande|command|shell|code|python|calcul|comput|csv|excel|xlsx|json|convert|graph|chart|zip|statisti/iu', 'run code in a sandbox (calculations, files, conversions)'],
+        'phone' => [['phone_'], '/appel|call|sms|texto|téléphon|phone|whatsapp|signal/iu', 'calls and texts from the phone'],
+        'music' => [['spotify_'], '/musique|music|joue|play|chanson|song|spotify|playlist|album|artist|volume|écoute|listen/iu', 'Spotify'],
+        'skills' => [['skill_'], '/compétence|skill|méthode|procédure|apprend|learn|retiens|à l\'avenir|next time|prochaine fois|toujours|always|jamais|never/iu', 'save or delete a skill (a method to reuse)'],
+        'spaces' => [['spaces'], '/espace|space/iu', 'the user\'s spaces'],
+        'usage' => [['usage_'], '/coût|cost|budget|dépens|spent|spend|token|usage|consomm|factur|bill|prix|price|combien|how much/iu', 'what the assistant has spent'],
+    ];
+
     /** @var array<string,array{0:array,1:callable}> */
     private array $tools = [];
+    /** @var array<string,true>|null the tools sent to the model (null: all); the others still run when called by name */
+    private ?array $shown = null;
     /** @var array<string,callable> tool => fn(args): string summary; these tools wait for the user's approval */
     private array $approval = [];
     /** @var string[] connector (MCP) tools marked read-only: also given to background jobs and the heartbeat */
@@ -479,13 +506,58 @@ final class Tools
     /** What tools run in a separate process (Claude Code's MCP server) must know: the space of this turn, and whether we are in the worker. */
     public function env(): array { return ['TALIXIO_SPACE' => (string)$this->app->space, 'TALIXIO_IN_WORKER' => App::$inWorker ? '1' : '0', 'TALIXIO_JOB' => (string)($this->app->jobId ?? '')]; }
 
-    /** A copy limited to one of the SETS. */
     /** A copy for one answer: repeated calls are counted from zero. */
     public function forAnswer(): self
     {
         $copy = clone $this;
         $copy->seen = [];
         return $copy;
+    }
+
+    /**
+     * A copy that sends the model only the tools the conversation calls for (fewer tokens on every step), plus
+     * tools_more to get the others. Connector tools come with their server's name.
+     * @param string $text the last messages; $files: the user sent a file
+     */
+    public function focus(string $text, bool $files = false): self
+    {
+        $copy = clone $this;
+        $groups = array_keys(array_filter(self::GROUPS, fn($g) => preg_match($g[1], $text)));
+        if ($files) $groups[] = 'library';
+        $copy->shown = array_fill_keys(array_intersect(self::CORE, array_keys($this->tools)), true);
+        $copy->show($groups);
+        foreach (array_keys($this->tools) as $n) { // connectors: by the name of their server
+            if (str_starts_with($n, 'mcp_') && preg_match('/^\[([^\]]+)\]/', $this->tools[$n][0]['description'], $m) && mb_stripos($text, $m[1]) !== false) $copy->shown[$n] = true;
+        }
+        $rest = array_diff(array_keys(self::GROUPS), $groups);
+        $servers = array_unique(array_filter(array_map(fn($n) => str_starts_with($n, 'mcp_') && !isset($copy->shown[$n]) && preg_match('/^\[([^\]]+)\]/', $this->tools[$n][0]['description'], $m) ? $m[1] : null, array_keys($this->tools))));
+        $offer = array_filter(array_map(fn($g) => $copy->groupTools($g) ? "$g: " . self::GROUPS[$g][2] : null, $rest));
+        foreach ($servers as $sv) $offer[] = "$sv: the $sv connector";
+        if (!$offer) return $copy;
+        $copy->register('tools_more', 'Get more tools, from your next step on. Available: ' . implode('; ', $offer) . '. Ask for the groups this request needs, all at once.',
+            ['groups' => ['type' => 'array', 'items' => ['type' => 'string']]], ['groups'], function (array $a) use ($copy) {
+                $added = $copy->show(array_map('strval', (array)$a['groups']));
+                return $added ? 'now available: ' . implode(', ', $added) : 'no such group (see the list in this tool\'s description)';
+            });
+        $copy->shown['tools_more'] = true;
+        return $copy;
+    }
+
+    /** @return string[] the tools of a group (a GROUPS key or a connector's server name) */
+    private function groupTools(string $group): array
+    {
+        if (isset(self::GROUPS[$group])) return array_values(array_filter(array_keys($this->tools),
+            fn($n) => (bool)array_filter(self::GROUPS[$group][0], fn($p) => str_ends_with($p, '_') ? str_starts_with($n, $p) : $n === $p)));
+        return array_values(array_filter(array_keys($this->tools), fn($n) => str_starts_with($n, 'mcp_') && str_starts_with($this->tools[$n][0]['description'], "[$group]")));
+    }
+
+    /** Adds groups to the tools sent. @return string[] the tools added */
+    private function show(array $groups): array
+    {
+        if ($this->shown === null) return [];
+        $added = [];
+        foreach ($groups as $g) foreach ($this->groupTools(trim($g)) as $n) if (!isset($this->shown[$n])) { $this->shown[$n] = true; $added[] = $n; }
+        return $added;
     }
 
     public function only(string $set): self
@@ -514,7 +586,7 @@ final class Tools
 
     public function names(): array { return array_keys($this->tools); }
     public function allowsWeb(): bool { return isset($this->tools['fetch_url']); }
-    public function schemas(): array { return array_map(fn($t) => $t[0], array_values($this->tools)); }
+    public function schemas(): array { return array_map(fn($t) => $t[0], array_values($this->shown === null ? $this->tools : array_intersect_key($this->tools, $this->shown))); }
 
     public function needsApproval(string $name): bool
     {
@@ -528,6 +600,7 @@ final class Tools
         if ($args && !str_starts_with($name, 'browser_') && ($this->seen[$key] = ($this->seen[$key] ?? 0) + 1) > 2) { // a page or a list read again can change
             return "error: you already made this exact call twice in this answer (see the results above). Don't call it again: use what you have, or tell the user what is missing.";
         }
+        if ($this->shown !== null && isset($this->tools[$name])) $this->shown[$name] = true; // called without being sent: keep it for the next steps
         if (isset($this->tools[$name]) && ($gate = $this->app->privacy()->toolGate($name, $args)) !== null) { // confidential / secret spaces
             $this->app->store->logTool($name, $args, $gate, $this->app->jobId);
             return $gate;

@@ -16,7 +16,21 @@ final class Spaces
 
     public function general(): array
     {
-        return ['id' => 0, 'name' => 'General', 'slug' => 'general', 'code' => 'GEN', 'folder' => '', 'instructions' => '', 'notes' => '', 'tier' => 'standard', 'color' => '', 'archived' => 0, 'privacy' => 'internal'];
+        return ['id' => 0, 'name' => 'General', 'slug' => 'general', 'code' => 'GEN', 'folder' => '', 'instructions' => '', 'notes' => '', 'tier' => $this->generalTier(), 'color' => '', 'archived' => 0, 'privacy' => 'internal'];
+    }
+
+    /** General has no row: its model tier is kept apart (standard unless changed). */
+    public function generalTier(): string
+    {
+        $t = $this->app->store->get('general_tier', 'standard');
+        return in_array($t, Tier::NAMES, true) ? $t : 'standard';
+    }
+
+    public function setGeneralTier(string $tier): array
+    {
+        if (!in_array($tier, Tier::NAMES, true)) throw new \InvalidArgumentException('tier: fast, standard or deep');
+        $this->app->store->set('general_tier', $tier);
+        return $this->general();
     }
 
     public function get(int $id): ?array

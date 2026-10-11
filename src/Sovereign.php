@@ -98,7 +98,7 @@ final class Sovereign
     /** What the Settings page offers. */
     public static function catalog(): array
     {
-        return array_map(fn($id) => ['id' => $id] + array_intersect_key(self::SERVICES[$id], array_flip(['name', 'country', 'url', 'terms', 'keys', 'about', 'note', 'key'])), self::ORDER);
+        return array_map(fn($id) => ['id' => $id] + array_intersect_key(self::SERVICES[$id], array_flip(['name', 'country', 'url', 'terms', 'keys', 'about', 'note', 'key', 'fallback'])), self::ORDER);
     }
 
     /**

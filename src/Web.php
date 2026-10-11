@@ -97,6 +97,7 @@ final class Web
             $path === '/api/spaces' && $m === 'GET' => ['spaces' => $this->app->spaces()->all(true), 'colors' => Spaces::COLORS],
             $path === '/api/spaces' && $m === 'POST' => ['space' => $this->app->spaces()->save($b)],
             (bool)preg_match('#^/api/spaces/(\d+)$#', $path, $mm) && $m === 'POST' => ['space' => $this->app->spaces()->save($b, (int)$mm[1])],
+            $path === '/api/spaces/0/tier' && $m === 'POST' => ['space' => $this->app->spaces()->setGeneralTier((string)($b['tier'] ?? ''))],
             (bool)preg_match('#^/api/spaces/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->spaces()->delete((int)$mm[1]); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/spaces/(\d+)/read$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->spaces()->markRead((int)$mm[1]); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/messages/(\d+)/undo$#', $path, $mm) && $m === 'POST' => $this->undoTurn((int)$mm[1]),
@@ -198,7 +199,7 @@ final class Web
             $path === '/api/settings' && $m === 'GET' => ['groups' => Settings::describe($this->app->cfg->dataDir)],
             $path === '/api/settings' && $m === 'POST' => $this->saveSettings($b),
             $path === '/api/sovereign' && $m === 'GET' => $this->sovereign($this->app),
-            $path === '/api/sovereign/test' && $m === 'POST' => Sovereign::test((string)($b['service'] ?? ''), $this->sovereignKey($b), (string)($b['url'] ?? '')),
+            $path === '/api/sovereign/test' && $m === 'POST' => $this->withPrices(Sovereign::test((string)($b['service'] ?? ''), $this->sovereignKey($b), (string)($b['url'] ?? ''))),
             $path === '/api/sovereign/apply' && $m === 'POST' => $this->sovereignApply($b),
             $path === '/api/settings/password' && $m === 'POST' => $this->changePassword($b),
             $path === '/api/security' => ['totp' => $this->auth()->totpEnabled()],
@@ -591,10 +592,19 @@ final class Web
     private function sovereign(App $app): array
     {
         $c = $app->cfg;
-        return ['services' => Sovereign::catalog(), 'service' => $c->sovereign, 'has_key' => $c->sovereignKey !== '',
+        return $this->withPrices(['services' => Sovereign::catalog(), 'service' => $c->sovereign, 'has_key' => $c->sovereignKey !== '',
             'url' => getenv('TALIXIO_SOVEREIGN_URL') ?: '', 'active' => $c->provider === 'sovereign', 'only' => $c->sovereignOnly,
             'tiers' => $c->provider === 'sovereign' ? array_map(fn(Tier $t) => $t->model, $c->tiers) : [], 'outside' => Sovereign::outside($app),
-            'on_server' => array_keys(array_filter(['embeddings' => $c->embeddings === 'ollama', 'transcribe' => $c->transcribe === 'local']))];
+            'on_server' => array_keys(array_filter(['embeddings' => $c->embeddings === 'ollama', 'transcribe' => $c->transcribe === 'local']))]);
+    }
+
+    /** Adds the price per million tokens (in, out; null when unknown) of every model shown, for the cost estimate. */
+    private function withPrices(array $d): array
+    {
+        $models = array_merge(array_values($d['tiers'] ?? []), ...array_map(fn($s) => array_values($s['fallback'] ?? []), $d['services'] ?? []));
+        $pricing = $this->app->pricing();
+        foreach (array_unique($models) as $m) $d['prices'][$m] = $pricing->priceFor($m);
+        return $d;
     }
 
     /** The key typed in, or the saved one when the provider has not changed. */

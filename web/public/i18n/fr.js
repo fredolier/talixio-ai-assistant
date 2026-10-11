@@ -2213,5 +2213,17 @@ window.I18N.fr = {
 "Asking a stronger model…": "Je passe à un modèle plus solide…",
 "Finishing another task first (a scheduled task or a job report)… your message is queued.": "Je termine d'abord une autre tâche (une routine ou un rapport)… votre message est en attente.",
 "Reading the attachments…": "Lecture des pièces jointes…",
-"Transcribing your voice note…": "Transcription de votre message vocal…"
+"Transcribing your voice note…": "Transcription de votre message vocal…",
+"Level": "Niveau",
+"Output": "Sortie",
+"A message": "Un message",
+"A month": "Un mois",
+"Price per million tokens. A message here: about 20,000 tokens read (instructions, history, tools) and 1,000 written; a month: 30 messages a day. Approximate list prices: check the provider's page.": "Prix par million de tokens. Un message ici : environ 20 000 tokens lus (consignes, historique, outils) et 1 000 écrits ; un mois : 30 messages par jour. Prix publics approximatifs : vérifiez la page du fournisseur.",
+"The usual models: \"Test\" shows the ones your key gets.": "Modèles habituels : « Tester » montre ceux de votre clé.",
+"Model for General": "Modèle de l'espace Général",
+"General now answers with the {tier} model.": "Général répond maintenant avec le modèle {tier}.",
+"Tools sent to the model": "Outils envoyés au modèle",
+"Each tool description costs tokens at every step. Focused: only the tools a message seems to need (the model can ask for more). Automatic: focused with the European and OpenAI-compatible providers, all with Claude and Gemini (their prompt cache makes them cheap).": "Chaque description d'outil coûte des tokens à chaque étape. Ciblés : seulement les outils dont un message semble avoir besoin (le modèle peut en demander d'autres). Automatique : ciblés avec les fournisseurs européens et compatibles OpenAI, tous avec Claude et Gemini (leur cache de prompt les rend peu coûteux).",
+"Focused": "Ciblés",
+"All": "Tous"
 };

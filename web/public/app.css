@@ -948,3 +948,10 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .settings-page.searching .set-nav a.on{background:none;font-weight:400}
   .set-save{bottom:8px}
 }
+.eu-prices{border-collapse:collapse;margin:4px 0 6px;font-size:.85rem;width:100%}
+.eu-prices th,.eu-prices td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.eu-prices th{font-weight:600;color:var(--muted)}
+.eu-prices td:nth-child(n+3),.eu-prices th:nth-child(n+3){text-align:right}
+#eu-tiers{overflow-x:auto}
+.space-item.gen-tier{justify-content:space-between;cursor:default}
+.space-item.gen-tier:hover{background:transparent}

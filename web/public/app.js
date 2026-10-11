@@ -391,12 +391,18 @@ $('#space-btn').onclick = async e => {
   const item = x => `<button class="space-item${x.id === state.space ? ' current' : ''}" role="menuitem" type="button" data-id="${x.id}">
       <i style="background:${x.color || 'var(--muted)'}"></i><span class="name">${esc(x.id ? x.name : 'General')}${x.folder ? ` <span class="folder">${esc(x.folder)}</span>` : ''}</span>${x.unread ? `<span class="badge">${x.unread}</span>` : ''}</button>`;
   menu.innerHTML = active.map(item).join('')
-    + '<hr>' + (state.space ? '<button class="space-item" type="button" data-act="edit">Edit this space…</button>' : '')
+    + '<hr>' + (state.space ? '<button class="space-item" type="button" data-act="edit">Edit this space…</button>'
+      : `<label class="space-item gen-tier">${esc(t('Model for General'))} ${tierSelect(spaceOf(0)?.tier || 'standard', t('Model for General'))}</label>`)
     + '<button class="space-item" type="button" data-act="new">+ New space</button>'
     + (archived.length ? `<details><summary class="muted small" style="padding:6px 10px">Archived (${archived.length})</summary>${archived.map(item).join('')}</details>` : '');
   menu.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { menu.hidden = true; switchSpace(+b.dataset.id); });
   menu.querySelector('[data-act=new]').onclick = () => { menu.hidden = true; openSpaceEditor(null); };
   menu.querySelector('[data-act=edit]')?.addEventListener('click', () => { menu.hidden = true; openSpaceEditor(spaceOf(state.space)); });
+  menu.querySelector('.gen-tier')?.addEventListener('click', e => e.stopPropagation());
+  menu.querySelector('.gen-tier select')?.addEventListener('change', async e => {
+    try { await post('api/spaces/0/tier', { tier: e.target.value }); await loadSpaces(); toast(t('General now answers with the {tier} model.', { tier: t(e.target.value) })); }
+    catch (err) { toast(err.message); }
+  });
   menu.hidden = false; $('#space-btn').setAttribute('aria-expanded', 'true');
 };
 document.addEventListener('click', e => { if (!e.target.closest('.space-head')) { $('#space-menu').hidden = true; $('#space-btn').setAttribute('aria-expanded', 'false'); } });
@@ -2343,7 +2349,6 @@ function showEu(d) {
   $('#eu-only').checked = d.active ? d.only : true;
   $('#eu-badge').textContent = d.active ? '· ' + window.t(d.only ? 'on, locked' : 'on') : '';
   $('#eu-badge').className = d.active ? 'ok small' : 'muted small';
-  $('#eu-tiers').innerHTML = d.active && Object.keys(d.tiers).length ? window.t('Models') + ': ' + Object.entries(d.tiers).map(([k, m]) => `${esc(window.t(k))} <code>${esc(m)}</code>`).join(', ') : '';
   const out = $('#eu-outside');
   out.innerHTML = d.outside.length
     ? `<p class="small"><b>${esc(window.t('Still outside Europe'))}</b></p><ul class="small">` + d.outside.map(o => `<li><a href="${esc(o.href)}">${esc(o.name.startsWith('Connector ') ? window.t('Connector') + ' ' + o.name.slice(10) : window.t(o.name))}</a> — <span class="muted">${esc(window.t(o.why))}</span></li>`).join('') + '</ul>'
@@ -2368,6 +2373,23 @@ function euService() {
   $('#eu-url-row').hidden = s.id !== 'infomaniak' && !$('#eu-url').value;
   const saved = state.eu.has_key && s.id === state.eu.service;
   $('#eu-key').placeholder = window.t(saved ? 'saved (leave empty to keep it)' : s.key ? 'API key' : 'API key (optional to try it)');
+  euTiers();
+}
+// the model behind each tier with its price, and what a message costs: from the last test, the live settings, or the usual picks
+const EU_MSG = { in: 20000, out: 1000, perMonth: 900 }; // a message with its context and tools; 30 a day
+function euTiers() {
+  const d = state.eu, id = $('#eu-service').value, s = (d?.services || []).find(x => x.id === id); if (!s) return;
+  const tested = state.euTest?.service === id ? state.euTest : null;
+  const tiers = tested?.tiers || (d.active && id === d.service && Object.keys(d.tiers).length ? d.tiers : s.fallback || {});
+  const prices = { ...(d.prices || {}), ...(tested?.prices || {}) };
+  const usd = v => v == null ? '?' : '$' + (v < 0.01 ? v.toFixed(4) : v < 1 ? v.toFixed(3) : v.toFixed(2));
+  const rows = ['fast', 'standard', 'deep'].filter(k => tiers[k]).map(k => {
+    const p = prices[tiers[k]], msg = p ? (EU_MSG.in * p[0] + EU_MSG.out * p[1]) / 1e6 : null;
+    return `<tr><td>${esc(window.t(k))}</td><td><code>${esc(tiers[k])}</code></td><td>${p ? usd(p[0]) : '?'}</td><td>${p ? usd(p[1]) : '?'}</td><td>${usd(msg)}</td><td>${msg == null ? '?' : usd(msg * EU_MSG.perMonth)}</td></tr>`;
+  });
+  $('#eu-tiers').innerHTML = rows.length ? `<table class="eu-prices"><thead><tr><th>${esc(t('Level'))}</th><th>${esc(t('Model'))}</th><th>${esc(t('Input'))}</th><th>${esc(t('Output'))}</th><th>${esc(t('A message'))}</th><th>${esc(t('A month'))}</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
+    + `<span class="muted">${esc(t('Price per million tokens. A message here: about 20,000 tokens read (instructions, history, tools) and 1,000 written; a month: 30 messages a day. Approximate list prices: check the provider\'s page.'))}`
+    + (tested || (d.active && id === d.service) ? '' : ' ' + esc(t('The usual models: "Test" shows the ones your key gets.'))) + '</span>' : '';
 }
 $('#eu-service').onchange = euService;
 const euBody = () => ({ service: $('#eu-service').value, key: $('#eu-key').value.trim(), url: $('#eu-url').value.trim(), only: $('#eu-only').checked, light: !$('#eu-light-row').hidden && $('#eu-light').checked });
@@ -2375,8 +2397,9 @@ $('#eu-test').onclick = async () => {
   const st = $('#eu-state'); st.className = 'muted small'; st.textContent = window.t('Checking…');
   try {
     const r = await post('api/sovereign/test', euBody());
+    state.euTest = { ...r, service: $('#eu-service').value }; euTiers();
     st.className = 'ok small';
-    st.textContent = window.t('It works: {n} models.').replace('{n}', r.models) + ' ' + Object.entries(r.tiers).map(([k, m]) => window.t(k) + ' ' + m).join(', ');
+    st.textContent = window.t('It works: {n} models.').replace('{n}', r.models);
   } catch (e) { st.className = 'bad small'; st.textContent = e.message; }
 };
 $('#eu-form').onsubmit = async e => {

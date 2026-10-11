@@ -9,8 +9,12 @@ final class AnthropicProvider implements Provider
     public function complete(string $system, string $context, array $messages, Tools $tools, callable $onUsage, ?callable $onEvent = null): string
     {
         $messages = Content::messages($messages, [Content::class, 'anthropic']);
-        $specs = array_map(fn($t) => ['name' => $t['name'], 'description' => $t['description'], 'input_schema' => $t['parameters']], $tools->schemas());
-        if ($this->webSearch && $tools->allowsWeb()) $specs[] = ['type' => 'web_search_20250305', 'name' => 'web_search', 'max_uses' => 5];
+        $specsOf = function () use ($tools) { // read each step: tools_more can add some
+            $specs = array_map(fn($t) => ['name' => $t['name'], 'description' => $t['description'], 'input_schema' => $t['parameters']], $tools->schemas());
+            if ($this->webSearch && $tools->allowsWeb()) $specs[] = ['type' => 'web_search_20250305', 'name' => 'web_search', 'max_uses' => 5];
+            return $specs;
+        };
+        $specs = $specsOf();
         $legacy = self::legacyThinking($this->tier->model);
         $think = $this->tier->thinkingTokens >= 1024 || (!$legacy && $this->tier->reasoningEffort !== '');
         $payload = [
@@ -26,6 +30,7 @@ final class AnthropicProvider implements Provider
         if ($think) $payload['thinking'] = $legacy ? ['type' => 'enabled', 'budget_tokens' => $this->tier->thinkingTokens] : ['type' => 'adaptive'];
         if (!$legacy && $this->tier->reasoningEffort !== '') $payload['output_config'] = ['effort' => $this->tier->reasoningEffort];
         for ($i = 0; $i < $this->tier->maxSteps; $i++) {
+            if ($i > 0 && ($specs = $specsOf())) $payload['tools'] = $specs;
             $r = $onEvent ? $this->stream($payload + ['messages' => $messages], $onEvent)
                 : Http::json("{$this->baseUrl}/v1/messages", $payload + ['messages' => $messages], $this->headers(), 600);
             $u = $r['usage'] ?? [];

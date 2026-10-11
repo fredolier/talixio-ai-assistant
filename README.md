@@ -140,7 +140,8 @@ has changed several times in 2026; see
 (conversation, transcription, memory search) to one provider hosted in Europe, under the GDPR, paid by use with
 nothing to host: OVHcloud AI Endpoints (France; open models including Mistral's, works without a key with low
 limits to try it), Mistral AI (France; on the free Experiment plan Mistral may train on your data), Scaleway
-(Paris) or Infomaniak (Switzerland). *Test* checks the key and shows the models picked for each tier. The lock
+(Paris) or Infomaniak (Switzerland). *Test* checks the key and shows the models picked for each tier, with their price per million tokens and
+what a typical message and a month of use cost. The lock
 (`TALIXIO_SOVEREIGN_ONLY=1`) turns off what has no European option (web search other than your own SearXNG,
 online embeddings or transcription elsewhere), and the card lists what still leaves Europe (Telegram, Google
 Calendar, Spotify, remote connectors) with where to change it. On a multi-user server, the admin page can give
@@ -439,8 +440,12 @@ content-free.
   emerging ones, the journal. Never about health, religion, politics, sexuality or origin. Cost: a
   fast-model call per compacted stretch, a standard one per day and per week.
 - **Model tiers**: fast (heartbeat, summaries, simple lookups), standard (chat), deep (hard reasoning,
-  with extended thinking on Claude). Start a message with `/deep` or `/fast` to choose. Each reply
+  with extended thinking on Claude). Each space has its own default tier, General included (from the
+  space menu); start a message with `/deep` or `/fast` to choose for one message. Each reply
   shows the model, tokens and estimated cost.
+- **Fewer tool tokens**: with the European and OpenAI-compatible providers, a message gets only the tools it
+  seems to need (memory, files and web always; mail, calendar, tasks… when the conversation mentions them),
+  and the model can ask for the others. `TALIXIO_TOOLS=all` sends them all, `focused` always focuses.
 - **Budget**: daily and monthly limits in USD. Over 80% it switches to the fast tier and stops
   starting sub-agents; at 100% it stops calling models. The assistant sees its spending and has a
   `usage_report` tool.
