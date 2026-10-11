@@ -2393,6 +2393,23 @@ $ag = new \Talixio\Agent($app);
 $fq = $ag->faqFor('Comment je peux installer ce serveur MCP ?');
 check('agent: a connector question brings the FAQ page, in the user\'s language', str_contains($fq, 'Installer un connecteur.md') && str_contains($fq, 'npm start') && str_contains($fq, 'GitHub')
     && str_contains($ag->faqFor('How do I add a connector?'), 'Installing a connector') && $ag->faqFor('Quoi de neuf ?') === '' && $ag->faqFor('connected to wifi') === '');
+$fl = $ag->faqFor('Quels connecteurs MCP existent pour les données publiques ?');
+check('agent: "which connectors exist" also brings the connector list, with its install links', str_contains($fl, 'Liste des connecteurs.md') && str_contains($fl, '?connector=https://mcp.data.gouv.fr/mcp')
+    && !str_contains($ag->faqFor('Installe le connecteur https://github.com/acme/tools'), 'Liste des connecteurs.md'), $fl === '' ? 'empty' : '');
+// the "▶ Install" links of the list: the same in both languages, each a GitHub address Talixio fetches or an online https server, kept by the FAQ renderer
+$links = [];
+foreach (['Français/Connecteurs/Liste des connecteurs.md', 'English/Connectors/Connector list.md'] as $rel) {
+    preg_match_all('/\]\((\?connector=[^)\s]+)\)/', (string)file_get_contents(__DIR__ . '/../docs/faq/' . $rel), $mm);
+    $links[$rel] = $mm[1];
+}
+$bad = [];
+foreach (reset($links) as $l) {
+    parse_str(substr($l, 1), $q);
+    try { if (preg_match('#^https://github\.com/#', $q['connector'])) \Talixio\ConnectorPackage::parseGithub($q['connector']); elseif (!preg_match('#^https://[^/\s]+\.[a-z]+/#', $q['connector'])) $bad[] = $l; }
+    catch (\InvalidArgumentException $e) { $bad[] = $l; }
+    if (!str_contains(\Talixio\Markdown::inline("[▶ Installer]($l)"), 'href="' . htmlspecialchars($l, ENT_QUOTES) . '"')) $bad[] = "dropped: $l";
+}
+check('faq: the connector list links install something, the same in French and English', count(reset($links)) >= 20 && reset($links) === end($links) && !$bad, json_encode($bad));
 try { $app->mcp()->saveRaw("{\"mcpServers\": {\n  // my server\n  \"x\": {\"url\": \"https://mcp.example.com\"}}}"); $err = ''; } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
 check('mcp: a configuration with comments is refused', $err !== '', $err);
 

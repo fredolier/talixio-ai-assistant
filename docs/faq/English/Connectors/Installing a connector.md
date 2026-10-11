@@ -3,6 +3,8 @@
 A connector gives the assistant the tools of another service: GitHub, Notion, your smart home, another
 application (for example a task manager)… Settings → **Connectors (MCP)**.
 
+Connectors ready to install in one click: *Connectors / Connector list*.
+
 ## An online service
 Paste its configuration in the *Configuration* field (the usual `mcpServers` format):
 a `url`, with a token in `headers`, or the **Sign in** button for services that use OAuth

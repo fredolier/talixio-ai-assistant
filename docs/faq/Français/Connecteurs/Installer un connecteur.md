@@ -3,6 +3,8 @@
 Un connecteur donne à l'assistant les outils d'un autre service : GitHub, Notion, votre domotique, une
 autre application (par exemple un gestionnaire de tâches)… Réglages → **Connecteurs (MCP)**.
 
+Des connecteurs prêts à installer en un clic : *Connecteurs / Liste des connecteurs*.
+
 ## Un service en ligne
 Collez sa configuration dans le champ *Configuration* (format `mcpServers` habituel) :
 une `url`, avec un jeton dans `headers`, ou le bouton **Se connecter** pour les services qui utilisent OAuth

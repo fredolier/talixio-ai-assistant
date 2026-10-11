@@ -161,11 +161,21 @@ final class Agent
     {
         if (!preg_match('/\bmcp\b|\bconnect(eu|o)rs?\b/iu', $text)) return '';
         $fr = I18n::lang($this->app) === 'fr' || preg_match('/\bconnecteurs?\b|\b(comment|installer|est-ce|je|tu|le|la|les|un|une)\b/iu', $text);
-        $page = dirname(__DIR__) . '/docs/faq/' . ($fr ? 'Français/Connecteurs/Installer un connecteur.md' : 'English/Connectors/Installing a connector.md');
-        $body = (string)@file_get_contents($page);
-        if ($body === '') return '';
-        return '## From the FAQ (' . Library::FAQ . '/' . ($fr ? 'Français/Connecteurs/Installer un connecteur.md' : 'English/Connectors/Installing a connector.md')
-            . "): how connectors work in Talixio. Answer from this, not from general knowledge.\n" . trim($body);
+        $pages = [$fr ? 'Français/Connecteurs/Installer un connecteur.md' : 'English/Connectors/Installing a connector.md'];
+        // which ones exist, or one to install by its name: the list too (with its "▶ Install" links)
+        if (preg_match('/\b(listes?|lesquels|quels?|quelles?|existe|existent|disponibles?|trouver|install\w*|lists?|which|available|exists?|find)\b/iu', $text) && !preg_match('#github\.com/#i', $text)) {
+            $pages[] = $fr ? 'Français/Connecteurs/Liste des connecteurs.md' : 'English/Connectors/Connector list.md';
+        }
+        $out = [];
+        foreach ($pages as $i => $rel) {
+            $body = (string)@file_get_contents(dirname(__DIR__) . '/docs/faq/' . $rel);
+            if ($body === '') continue;
+            $out[] = '## From the FAQ (' . Library::FAQ . '/' . $rel . '): '
+                . ($i === 0 ? 'how connectors work in Talixio. Answer from this, not from general knowledge.'
+                    : 'connectors known to work. To offer one, copy its "▶ Install" link exactly as written: the user clicks it to install.')
+                . "\n" . trim($body);
+        }
+        return implode("\n\n", $out);
     }
 
     /** A short "yes, do it" (oui, vas-y, ok, go ahead, fais-le…). */

@@ -2233,5 +2233,10 @@ window.I18N.fr = {
 "Or a .zip from the library": "Ou un .zip de la bibliothèque",
 "None yet: give a GitHub address above, or put a .zip in /Connecteurs.": "Aucun pour l'instant : donnez une adresse GitHub ci-dessus, ou mettez un .zip dans /Connecteurs.",
 "Fetching it from GitHub…": "Récupération depuis GitHub…",
-"Saved in the library as {path}.": "Enregistré dans la bibliothèque : {path}."
+"Saved in the library as {path}.": "Enregistré dans la bibliothèque : {path}.",
+"Not a connector address: {src}": "Ce n'est pas l'adresse d'un connecteur : {src}",
+"This connector is already there.": "Ce connecteur est déjà là.",
+"Add the online connector “{name}” ({url})? Talixio will connect to it and list its tools.": "Ajouter le connecteur en ligne « {name} » ({url}) ? Talixio va s'y connecter et lister ses outils.",
+"Connecting to {name}…": "Connexion à {name}…",
+"“{name}” is added: sign in to it in Settings → Connectors.": "« {name} » est ajouté : connectez-vous à lui dans Réglages → Connecteurs."
 };

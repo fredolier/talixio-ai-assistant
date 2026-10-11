@@ -49,6 +49,7 @@ function md(src) {
     .replace(/\[([^\]]+)\]\((#library(?:\/[^\s)]*)?)\)/g, (_, t, h) => `<a href="${h}" class="cite folder">${FOLDER_SVG}${t}</a>`) // a library folder ("where is…?")
     // buttons that open an app on the phone (phone_action, Spotify): custom schemes only from this list
     .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|intent|deezer|tg|sgnl|uber|homeassistant):[^\s)]+)\)/g, (_, t, h) => `<a href="${h}" class="action">${t.replace(/^▶\s*/, '')}</a>`)
+    .replace(/\[([^\]]+)\]\((\?connector=[^\s)]+)\)/g, (_, t, h) => `<a href="${h}" class="action connector">${t.replace(/^▶\s*/, '')}</a>`) // "▶ Install" from the connector list
     .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" class="action" target="_blank" rel="noopener">$1</a>')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
@@ -2281,6 +2282,39 @@ async function connectorDialog(fileId) {
   if (any) await inspect(); else { $('#conn-info').textContent = ''; $('#conn-env').innerHTML = ''; $('#conn-go').disabled = true; $('#conn-gh').focus(); }
 }
 $('#conn-install').onclick = () => connectorDialog().catch(e => toast(e.message));
+/**
+ * "▶ Install" in the connector list (FAQ, or an answer): ?connector=<address>&name=<name>. A GitHub address
+ * opens the install dialog and fetches it (the user then clicks Install); an online server is added after a confirmation.
+ */
+async function installFromLink(src, name) {
+  if (!/^https:\/\/[^\s/]+\.[^\s/]+/i.test(src || '')) { toast(t('Not a connector address: {src}', { src: src || '' })); return; }
+  if (/^https:\/\/(www\.)?github\.com\//i.test(src)) {
+    await connectorDialog();
+    $('#conn-gh').value = src; $('#conn-gh-go').click();
+    return;
+  }
+  name = (name || new URL(src).hostname.replace(/^(www|mcp|api)\./, '').split('.')[0]).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'connector';
+  const d = JSON.parse((await api('api/mcp')).raw); d.mcpServers ||= {};
+  if (Object.values(d.mcpServers).some(x => x && x.url === src)) { toast(t('This connector is already there.')); showMcpCard(); return; }
+  if (!confirm(t('Add the online connector “{name}” ({url})? Talixio will connect to it and list its tools.', { name, url: src }))) return;
+  for (let i = 2, base = name; d.mcpServers[name]; i++) name = base + '-' + i;
+  d.mcpServers[name] = { url: src };
+  toast(t('Connecting to {name}…', { name }));
+  const r = await post('api/mcp', { raw: JSON.stringify(d, null, 2) });
+  showConnectors(r);
+  const srv = r.servers.find(x => x.name === name);
+  toast(srv?.auth === 'needed' ? t('“{name}” is added: sign in to it in Settings → Connectors.', { name })
+    : srv?.error ? srv.error : t('Ready: {n} tool(s) from “{name}”. The assistant can use them from the next message.', { n: srv?.tools.length || 0, name }));
+  showMcpCard();
+}
+function showMcpCard() { location.hash = '#settings'; setTimeout(() => { showSection('accounts'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600); }
+document.addEventListener('click', e => {
+  const a = e.target.closest('a.connector');
+  if (!a || a.closest('[contenteditable=true]')) return;
+  e.preventDefault();
+  const q = new URL(a.getAttribute('href'), location.href).searchParams;
+  installFromLink(q.get('connector'), q.get('name')).catch(err => toast(err.message));
+});
 $('#viewer-connector').onclick = () => connectorDialog(lib.file.id).catch(e => toast(e.message));
 $('#mcp-refresh').onclick = () => mcpAction('api/mcp/refresh');
 $('#shell-test').onclick = async () => {
@@ -3513,6 +3547,10 @@ async function handleLaunch() {
     history.replaceState(null, '', './#settings');
     toast(g === 'connected' ? 'Spotify connected.' : g);
     setTimeout(() => { showSection('accounts'); $('#spotify-card').scrollIntoView({ block: 'center' }); }, 600);
+  }
+  if (params.has('connector')) { // "▶ Install" in the FAQ connector list (opens here in a new tab)
+    history.replaceState(null, '', location.pathname + location.hash);
+    installFromLink(params.get('connector'), params.get('name')).catch(e => toast(e.message));
   }
   if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', '/' + location.hash);
   if (token) {
