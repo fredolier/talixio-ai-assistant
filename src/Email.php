@@ -20,15 +20,30 @@ final class Email
         return new Smtp($c->smtpHost, $c->smtpPort, $c->smtpSecurity, $c->smtpUser, $c->smtpPassword);
     }
 
-    public function send(string $to, string $subject, string $markdown, array $headers = []): string
+    /** $page: MailTemplate::page options (title, space, color, url); the mail is framed as the assistant's. */
+    public function send(string $to, string $subject, string $markdown, array $headers = [], array $page = []): string
     {
-        return $this->smtp()->send($this->app->cfg->emailFrom, $to, $subject, $markdown, $headers);
+        return $this->smtp()->send($this->app->cfg->emailFrom, $to, $subject, $markdown, $headers, [], $this->html($markdown, $page));
     }
 
-    public function notify(string $title, string $text): void
+    /** $space: the space's row (name, color), when the message belongs to one; $url: the page to open, relative to the app. */
+    public function notify(string $title, string $text, ?array $space = null, string $url = ''): void
     {
         $to = $this->app->cfg->emailTo;
-        if ($this->canSend() && $to !== '') $this->send($to, "[{$this->app->cfg->name}] $title", $text);
+        if ($this->canSend() && $to !== '') $this->send($to, "[{$this->app->cfg->name}] $title", $text, [],
+            ['title' => $title, 'space' => $space['name'] ?? '', 'color' => $space['color'] ?? '', 'url' => $url]);
+    }
+
+    /** The HTML of a mail from the assistant. */
+    public function html(string $markdown, array $page = []): string
+    {
+        $app = $this->app;
+        $base = $app->shares()->baseUrl();
+        return MailTemplate::page($markdown, $page + [
+            'app' => $app->cfg->name, 'base' => $base, 'url' => '',
+            'button' => I18n::t($app, 'Open {name}', ['name' => $app->cfg->name]),
+            'footer' => I18n::t($app, 'Sent by {name}, your assistant.', ['name' => $app->cfg->name]),
+        ]);
     }
 
     /** Worker tick: answer new emails. Returns how many were answered. */
@@ -71,7 +86,7 @@ final class Email
         $reply = $this->app->agent()->chat('email', mb_substr($text, 0, 20000));
         $refs = trim(($h['references'] ?? '') . ' ' . ($h['message-id'] ?? ''));
         $this->send($from, $isReply ? $subject : 'Re: ' . ($subject ?: $c->name), $reply,
-            array_filter(['In-Reply-To' => $h['message-id'] ?? '', 'References' => $refs]));
+            array_filter(['In-Reply-To' => $h['message-id'] ?? '', 'References' => $refs]), ['url' => '#chat']);
         return true;
     }
 

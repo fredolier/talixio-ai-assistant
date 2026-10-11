@@ -14,7 +14,7 @@ final class Smtp
      * @param array<string,string> $headers extra headers (In-Reply-To, References...)
      * @return string the Message-ID used
      */
-    public function send(string $from, string $to, string $subject, string $markdown, array $headers = [], array $cc = []): string
+    public function send(string $from, string $to, string $subject, string $markdown, array $headers = [], array $cc = [], ?string $html = null): string
     {
         $domain = substr(strrchr(self::address($from), '@') ?: '@localhost', 1);
         $msgId = '<' . bin2hex(random_bytes(12)) . '@' . $domain . '>';
@@ -23,7 +23,7 @@ final class Smtp
             $this->cmd('MAIL FROM:<' . self::address($from) . '>', 250);
             foreach (array_merge([$to], $cc) as $rcpt) $this->cmd('RCPT TO:<' . self::address($rcpt) . '>', [250, 251]);
             $this->cmd('DATA', 354);
-            $data = self::build($from, $to, $subject, $markdown, $msgId, $headers);
+            $data = self::build($from, $to, $subject, $markdown, $msgId, $headers, $html);
             $data = preg_replace('/^\./m', '..', $data); // dot-stuffing
             $this->write($data . "\r\n.");
             $this->expect(250);
@@ -46,11 +46,11 @@ final class Smtp
         return preg_match('/<([^>]+)>/', $mailbox, $m) ? trim($m[1]) : trim($mailbox);
     }
 
-    public static function build(string $from, string $to, string $subject, string $markdown, string $msgId, array $headers = []): string
+    /** $html: the HTML part (MailTemplate::page for the assistant's own mail); by default the Markdown, formatted. */
+    public static function build(string $from, string $to, string $subject, string $markdown, string $msgId, array $headers = [], ?string $html = null): string
     {
         $b = 'b' . bin2hex(random_bytes(8));
-        $html = '<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:15px;line-height:1.55;color:#14201d;max-width:640px">'
-            . Markdown::toHtml($markdown) . '</body></html>';
+        $html ??= MailTemplate::plain($markdown);
         $h = array_merge([
             'From' => self::encodeMailbox($from), 'To' => self::encodeMailbox($to),
             'Subject' => mb_encode_mimeheader($subject, 'UTF-8', 'Q', "\r\n"),

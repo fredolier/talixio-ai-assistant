@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.21.3 (2026-10-11)
+- Emails look better. The messages the assistant sends by email (scheduled jobs, morning briefing, reports,
+  notifications, answers to emails) now come in a proper HTML layout: a card with the title, the space and
+  its color, a button that opens the app, and the message's full Markdown (headings, nested lists, tables,
+  quotes, code, task lists, italics), all styled inline so Gmail and Outlook show it as intended. Links to
+  pages of the app are made absolute so they work from a mail app. Mail sent on your behalf from your
+  mailbox gets the same formatting without the Talixio frame.
+
 ## 0.21.2 (2026-10-11)
 - Network drive (WebDAV) on Windows: Windows could not map `https://…/<id>/dav/` on a multi-user server
   because it first probes the folders above (`/` and `/<id>`), which answered "not found" or redirected.

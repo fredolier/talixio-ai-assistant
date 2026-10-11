@@ -18,6 +18,10 @@ Si un captcha est demandé : https://signalcaptchas.org/registration/generate.ht
 
 ## E-mail
 Écrire à l'assistant par e-mail, et recevoir ses messages : Réglages → E-mail (SMTP, IMAP, expéditeurs autorisés).
+Les messages de l'assistant (tâches planifiées, briefing, rapports, réponses) arrivent mis en page : une carte avec le titre,
+l'espace et sa couleur, les titres, listes, tableaux et liens du message, et un bouton qui ouvre l'app.
+Pour que les liens et le bouton fonctionnent, l'app doit connaître son adresse : l'ouvrir une fois dans le navigateur suffit
+(ou Réglages → adresse publique). Les e-mails envoyés en votre nom depuis votre boîte restent sobres, sans ce cadre.
 
 ## ntfy
 Une autre façon de recevoir les notifications : Réglages → *ntfy*, avec un sujet long et aléatoire.

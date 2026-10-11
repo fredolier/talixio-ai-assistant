@@ -519,6 +519,19 @@ check('markdown to html escapes and formats', Markdown::toHtml("Hi <b>\n\n- **A*
 $mime = Smtp::build('Talixio <bot@example.com>', 'fred@example.com', 'Réunion demain', "**Bonjour**", '<id@example.com>');
 check('email: encoded subject, both parts', str_contains($mime, 'Subject: =?UTF-8?Q?') && str_contains($mime, 'text/plain') && str_contains($mime, 'text/html') && str_contains($mime, 'From: "Talixio" <bot@example.com>'));
 
+$page = \Talixio\MailTemplate::page("## Daily news\n\nHi <b>\n\n### World\n- **A** *b*\n  - c\n\n| X | Y |\n|---|--:|\n| 1 | 2 |\n\n- [x] done\n\nSee [note](#library/4) and [js](javascript:alert(1))",
+    ['title' => 'Daily news', 'app' => 'Talixio', 'space' => 'Watch', 'color' => '#7c3aed', 'url' => '#chat/watch', 'base' => 'https://a.example/fred', 'button' => 'Open', 'footer' => 'Sent by Talixio.']);
+check('mail template: a card with the title once, the space, a button to the app', substr_count($page, 'Daily news') === 2 // <title> and the card's heading, not the message's own
+    && !str_contains($page, '<h2') && str_contains($page, 'Talixio · Watch') && str_contains($page, 'href="https://a.example/fred/#chat/watch"') && str_contains($page, '>Open</a>') && str_contains($page, 'Sent by Talixio.') && str_contains($page, 'opacity:0;color:transparent">Hi &lt;b&gt; World A b c done See note and js'), $page);
+check('mail template: headings, nested lists, tables and tasks get inline styles', str_contains($page, '<h3 style="') && preg_match('#<li style="[^"]*">.*<ul style="#s', $page) && str_contains($page, '<table style="')
+    && str_contains($page, '<th style="') && str_contains($page, 'text-align:right"') && str_contains($page, '☑ done') && str_contains($page, '<em style') === false && str_contains($page, '<em>b</em>'));
+check('mail template: escaped, relative links made absolute, unsafe ones dropped', str_contains($page, 'Hi &lt;b&gt;') && str_contains($page, 'href="https://a.example/fred/#library/4"') && !str_contains($page, 'javascript:'));
+check('mail template: relative links without a known address are not links', !str_contains(\Talixio\MailTemplate::plain('[n](#library/4)'), 'href') && str_contains(\Talixio\MailTemplate::plain('[n](#library/4)'), '>n</a>'));
+check('mail template: a link with no address to resolve it is emptied', \Talixio\MailTemplate::link('#library/4', '') === '' && \Talixio\MailTemplate::link('/fred/x', 'https://a.example/fred') === 'https://a.example/fred/x'
+    && \Talixio\MailTemplate::link('https://x.io', '') === 'https://x.io');
+$mime = Smtp::build('Talixio <bot@example.com>', 'fred@example.com', 'Hi', "# T", '<id2@example.com>', [], '<p>custom</p>');
+check('email: the HTML part can be given', str_contains($mime, base64_encode('<p>custom</p>')));
+
 // SMTP against a fake server (plain, for testing only)
 $port = $freePort(); $log = "$dir/smtp.log";
 $proc = $spawn('smtp.php', [(string)$port, $log]); $waitPort($port);

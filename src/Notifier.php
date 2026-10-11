@@ -40,7 +40,7 @@ final class Notifier
                     'webpush' => $this->app->webPush()->notify($title, $text, $url),
                     'ntfy' => $this->ntfy($title, $text),
                     'telegram' => (new Telegram($c, null))->send($c->telegramAllowed[0], $plain),
-                    'email' => $this->app->email()->notify($title, $text),
+                    'email' => $this->app->email()->notify($title, $text, $space ? $sp : null, $url),
                     'signal' => $this->app->signal()->notify($title, $plain),
                 });
                 $results[$ch] = 'sent';

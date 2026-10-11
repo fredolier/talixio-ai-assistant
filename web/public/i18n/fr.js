@@ -1999,5 +1999,7 @@ window.I18N.fr = {
 "<b>Android</b>: an app that speaks WebDAV (Solid Explorer, Material Files, CX File Explorer…) → new WebDAV connection → the address above.": "<b>Android</b> : une app qui parle WebDAV (Solid Explorer, Material Files, CX File Explorer…) → nouvelle connexion WebDAV → l'adresse ci-dessus.",
 "The address must be in https (it is behind the server's Caddy). Large files: Windows limits downloads to 50 MB unless its WebClient setting FileSizeLimitInBytes is raised.": "L'adresse doit être en https (elle passe par le Caddy du serveur). Gros fichiers : Windows limite les téléchargements à 50 Mo, sauf si on augmente le réglage FileSizeLimitInBytes de son service WebClient.",
 "Create a password for the drive first.": "Créez d'abord un mot de passe pour le lecteur.",
-"The drive is read only (Settings → Network drive).": "Le lecteur est en lecture seule (Réglages → Lecteur réseau)."
+"The drive is read only (Settings → Network drive).": "Le lecteur est en lecture seule (Réglages → Lecteur réseau).",
+"Open {name}": "Ouvrir {name}",
+"Sent by {name}, your assistant.": "Envoyé par {name}, votre assistant."
 };
