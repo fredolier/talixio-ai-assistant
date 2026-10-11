@@ -51,6 +51,24 @@ final class Files
         return $id;
     }
 
+    /** New content for a file (moved from $tmp): read and indexed again in the background, same id, folder and name. */
+    public function replace(int $id, string $tmp): array
+    {
+        $f = $this->get($id) ?? throw new \InvalidArgumentException("no file $id");
+        Library::guard((string)$f['folder']);
+        if (!@rename($tmp, $f['path']) && !copy($tmp, $f['path'])) throw new \RuntimeException('could not store the file');
+        @chmod($f['path'], 0640);
+        clearstatcache(true, $f['path']);
+        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($f['path']) ?: $f['mime'];
+        if ($mime === 'application/octet-stream' || $mime === 'text/plain' || $mime === 'application/x-empty') $mime = $f['mime']; // a guess no better than the one kept
+        $kind = self::kind($mime, (string)$f['name']);
+        $this->app->store->deleteDocs(['file', 'transcript'], $id);
+        $this->app->store->q('UPDATE files SET size = ?, mime = ?, kind = ?, text = NULL, status = ?, duration = ? WHERE id = ?',
+            [filesize($f['path']), $mime, $kind, $kind === 'other' ? 'ready' : 'pending', $kind === 'audio' ? self::duration($f['path']) : null, $id]);
+        $this->dropPreviews($id);
+        return $this->get($id);
+    }
+
     /** A file; one in the trash only with $trashed (otherwise it is as if it were gone). */
     public function get(int $id, bool $trashed = false): ?array
     {

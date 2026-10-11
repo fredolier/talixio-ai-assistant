@@ -10,6 +10,8 @@ final class Web
     public function handle(string $method, string $path): void
     {
         if ($path === '/sw.js') { $this->serviceWorker(); return; }
+        if ($method === 'OPTIONS' && $path === '/') { header('DAV: 1, 2'); header('MS-Author-Via: DAV'); header('Allow: OPTIONS, GET, HEAD, POST'); header('Content-Length: 0'); return; } // Windows asks the root before /dav/
+        if ($path === '/dav' || str_starts_with($path, '/dav/')) { (new Dav($this->app))->handle($method, substr($path, 4)); return; } // the library as a network drive: its own password, no session
         if ($path === '/share' && $method === 'POST') { $this->shareInbox(); return; }
         if (preg_match('#^/cal/tasks-([0-9a-f]{40})\.ics$#', $path, $cm) && $method === 'GET') { $this->tasksIcs($cm[1]); return; } // calendar apps have no session
         if (preg_match('#^/s/([A-Za-z0-9_-]{20,64})(?:/(view|download|thumb|zip)(?:/(\d+))?)?/?$#', $path, $sm)) { $this->sharePage($sm[1], $sm[2] ?? '', (int)($sm[3] ?? 0), $method); return; } // links for people outside
@@ -192,6 +194,9 @@ final class Web
             $path === '/api/settings' && $m === 'POST' => $this->saveSettings($b),
             $path === '/api/settings/password' && $m === 'POST' => $this->changePassword($b),
             $path === '/api/security' => ['totp' => $this->auth()->totpEnabled()],
+            $path === '/api/dav' && $m === 'GET' => (new Dav($this->app))->status(),
+            $path === '/api/dav' && $m === 'POST' => (new Dav($this->app))->setMode((string)($b['mode'] ?? '')),
+            $path === '/api/dav/password' && $m === 'POST' => (function () use ($b) { $this->checkSecret((string)($b['current'] ?? '')); $d = new Dav($this->app); return ['password' => $d->newPassword()] + $d->status(); })(),
             (bool)preg_match('#^/api/security/totp/(setup|enable|disable)$#', $path, $mm) && $m === 'POST' => $this->totp($mm[1], $b),
             $path === '/api/update' => ['installed' => $this->app->updater()->installed(), 'version' => $this->app->updater()->version(),
                 'status' => $this->app->updater()->status(), 'auto' => $this->app->cfg->autoUpdate],
@@ -959,7 +964,7 @@ final class Web
     }
 
     /** Send a file with ETag revalidation and single Range support. */
-    private function sendPath(string $path, string $type, string $disposition, string $csp, bool $cache = true): void
+    public static function sendPath(string $path, string $type, string $disposition, string $csp, bool $cache = true): void
     {
         while (ob_get_level() > 0) ob_end_clean();
         $size = filesize($path);

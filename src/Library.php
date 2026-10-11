@@ -182,11 +182,18 @@ final class Library
     {
         $f = $this->app->files()->get($id) ?? throw new \InvalidArgumentException("no file $id");
         self::guard((string)$f['folder']);
-        $name = mb_substr(preg_replace('/[^\p{L}\p{N}._ ()&,+\'-]+/u', '_', trim(basename($name))), 0, 120);
+        $name = self::cleanName($name);
         if ($name === '' || $name === '.' || $name === '..') throw new \InvalidArgumentException('invalid name');
         $this->app->store->q('UPDATE files SET name = ? WHERE id = ?', [$name, $id]);
         $this->relabel(['name' => $name] + $f);
         return $this->app->files()->get($id);
+    }
+
+    /** A file name as shown in the library: anything but slashes, control characters and the few that file systems refuse. */
+    public static function cleanName(string $name): string
+    {
+        $name = preg_replace('#.*[/\\\\]#s', '', $name);
+        return mb_substr(trim(preg_replace('/[\x00-\x1f\x7f<>:"|?*]+/u', '_', $name)), 0, 120);
     }
 
     /** Delete a file: to the trash, restorable for TRASH_DAYS days. */

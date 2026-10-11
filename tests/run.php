@@ -1447,6 +1447,75 @@ check('library web: photos and PDFs open natively from "view"', str_contains($ra
 $lib->deleteFile($pid); $lib->purgeFile($pid);
 check('library: previews removed with the file', glob("$ld/previews/$pid-*") === []);
 
+// network drive (WebDAV)
+$dav = function (string $method, string $path, ?string $pw, string $body = '', array $headers = []) use ($webPort) {
+    $ch = curl_init("http://127.0.0.1:$webPort/dav$path");
+    curl_setopt_array($ch, [CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_HTTPHEADER => $headers]
+        + ($pw !== null ? [CURLOPT_USERPWD => "talixio:$pw"] : []) + ($body !== '' ? [CURLOPT_POSTFIELDS => $body] : []));
+    $out = (string)curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE); curl_close($ch);
+    return [$code, $out];
+};
+$hrefs = fn(string $xml) => preg_match_all('#<d:href>([^<]*)</d:href>#', $xml, $mm) ? array_map('rawurldecode', $mm[1]) : [];
+$dm = $wj('/api/dav', ['mode' => 'write']);
+check('dav: off by default, no mode without a password', $dav('PROPFIND', '/', 'x')[0] === 404 && $wj('/api/dav')['mode'] === 'off' && str_contains($dm['error'] ?? '', 'password for the drive'), json_encode($dm));
+$dp = $wj('/api/dav/password', ['current' => 'wrong']);
+$dp2 = $wj('/api/dav/password', ['current' => 'pw']);
+$dpw = (string)($dp2['password'] ?? '');
+check('dav: a new password needs the app password, is shown once and turns the drive on (read only)', isset($dp['error']) && strlen($dpw) === 27 && $dp2['mode'] === 'read'
+    && !isset($wj('/api/dav')['password_value']) && str_ends_with($dp2['url'], '/dav/') && $la->store->get('dav_hash') === hash('sha256', $dpw), json_encode($dp2));
+check('dav: sign in with the drive password only', $dav('PROPFIND', '/', null, '', ['Depth: 0'])[0] === 401 && $dav('PROPFIND', '/', 'pw', '', ['Depth: 0'])[0] === 401
+    && $dav('PROPFIND', '/', $dpw, '', ['Depth: 0'])[0] === 207);
+$la->spaces()->save(['name' => 'Coffre', 'folder' => '/Clients/Secret Co', 'privacy' => 'secret'], (int)$sec['id']);
+$lib->createFolder('/Clients/Secret Co');
+[$c, $x] = $dav('PROPFIND', '/Clients/', $dpw, '', ['Depth: 1']);
+check('dav: folders listed, secret spaces never', $c === 207 && in_array('/dav/Clients/', $hrefs($x), true) && !in_array('/dav/Clients/Secret Co/', $hrefs($x), true)
+    && $dav('PROPFIND', '/Clients/Secret%20Co/', $dpw, '', ['Depth: 0'])[0] === 404, $x);
+[$c, $x] = $dav('PROPFIND', '/Perso/Admin/', $dpw, '', ['Depth: 1']);
+check('dav: files with their size, type and dates', $c === 207 && in_array('/dav/Perso/Admin/contrat.txt', $hrefs($x), true) && str_contains($x, '<d:getcontentlength>') && str_contains($x, '<d:getlastmodified>'), $x);
+check('dav: download a file', $dav('GET', '/Perso/Admin/contrat.txt', $dpw) === [200, 'Contrat de maintenance chaudière']);
+check('dav: read only refuses changes', $dav('PUT', '/Perso/Admin/new.txt', $dpw, 'x')[0] === 403 && $dav('MKCOL', '/Perso/Nouveau', $dpw)[0] === 403);
+$wj('/api/dav', ['mode' => 'write']);
+check('dav: MKCOL', $dav('MKCOL', '/Perso/%C3%89t%C3%A9%202026', $dpw)[0] === 201 && $dav('MKCOL', '/Perso/%C3%89t%C3%A9%202026', $dpw)[0] === 405 && $dav('MKCOL', '/Nope/A', $dpw)[0] === 409);
+check('dav: PUT a new file (name kept as typed)', $dav('PUT', '/Perso/%C3%89t%C3%A9%202026/devis%20n%C2%B0%3A1.txt', $dpw, 'Devis toiture')[0] === 201);
+$dvf = $la->store->q("SELECT * FROM files WHERE folder = '/Perso/Été 2026' AND deleted_at IS NULL")->fetchAll();
+$lf->processPending(5);
+check('dav: … stored in the library, then indexed', count($dvf) === 1 && $dvf[0]['name'] === 'devis n°_1.txt' && $lf->get((int)$dvf[0]['id'])['text'] === 'Devis toiture', json_encode($dvf));
+$dvid = (int)$dvf[0]['id'];
+check('dav: PUT over a file replaces its content (same file, read again)', $dav('PUT', '/Perso/%C3%89t%C3%A9%202026/devis%20n%C2%B0_1.txt', $dpw, 'Devis toiture v2')[0] === 204
+    && $lf->get($dvid)['status'] === 'pending' && $lf->processPending(5) >= 1 && $lf->get($dvid)['text'] === 'Devis toiture v2');
+check('dav: system clutter is kept aside, not in the library', $dav('PUT', '/Perso/%C3%89t%C3%A9%202026/._devis.txt', $dpw, 'x')[0] === 201
+    && $dav('GET', '/Perso/%C3%89t%C3%A9%202026/._devis.txt', $dpw) === [200, 'x'] && (int)$la->store->q("SELECT COUNT(*) FROM files WHERE name LIKE '%devis.txt'")->fetchColumn() === 0
+    && !in_array('/dav/Perso/Été 2026/._devis.txt', $hrefs($dav('PROPFIND', '/Perso/%C3%89t%C3%A9%202026/', $dpw, '', ['Depth: 1'])[1]), true));
+$old = $lf->save(tap_tmp('newer'), 'x.txt', 'text/plain', '/Perso/Été 2026'); $lib->renameFile($old, 'devis n°_1.txt'); // same name, added in the app
+[$c, $x] = $dav('PROPFIND', '/Perso/%C3%89t%C3%A9%202026/', $dpw, '', ['Depth: 1']);
+check('dav: two files with the same name both show (the newest under its name)', in_array('/dav/Perso/Été 2026/devis n°_1.txt', $hrefs($x), true) && in_array("/dav/Perso/Été 2026/devis n°_1 (#$dvid).txt", $hrefs($x), true)
+    && $dav('GET', '/Perso/%C3%89t%C3%A9%202026/devis%20n%C2%B0_1.txt', $dpw) === [200, 'newer'] && $dav('GET', "/Perso/%C3%89t%C3%A9%202026/devis%20n%C2%B0_1%20(%23$dvid).txt", $dpw) === [200, 'Devis toiture v2'], $x);
+$lib->deleteFile($old);
+$dest = fn(string $p) => ["Destination: http://127.0.0.1:$webPort/dav$p"];
+check('dav: MOVE renames and moves a file (same file)', $dav('MOVE', '/Perso/%C3%89t%C3%A9%202026/devis%20n%C2%B0_1.txt', $dpw, '', $dest('/Perso/Admin/Devis%20final.txt'))[0] === 201
+    && $lf->get($dvid)['folder'] === '/Perso/Admin' && $lf->get($dvid)['name'] === 'Devis final.txt');
+check('dav: MOVE with Overwrite: F refuses to replace', $dav('MOVE', '/Perso/Admin/Devis%20final.txt', $dpw, '', [...$dest('/Perso/Admin/contrat.txt'), 'Overwrite: F'])[0] === 412);
+check('dav: COPY makes a new file', $dav('COPY', '/Perso/Admin/Devis%20final.txt', $dpw, '', $dest('/Perso/%C3%89t%C3%A9%202026/Copie.txt'))[0] === 201
+    && $dav('GET', '/Perso/%C3%89t%C3%A9%202026/Copie.txt', $dpw) === [200, 'Devis toiture v2'] && $lf->get($dvid)['folder'] === '/Perso/Admin');
+check('dav: MOVE a folder with its files', $dav('MOVE', '/Perso/%C3%89t%C3%A9%202026/', $dpw, '', $dest('/Perso/Archives/2026/'))[0] === 409
+    && $dav('MOVE', '/Perso/%C3%89t%C3%A9%202026/', $dpw, '', $dest('/Perso/Archives%202026/'))[0] === 201 && $lib->exists('/Perso/Archives 2026') && !$lib->exists('/Perso/Été 2026')
+    && $dav('GET', '/Perso/Archives%202026/Copie.txt', $dpw)[0] === 200);
+check('dav: a folder never goes inside itself', $dav('MOVE', '/Perso/', $dpw, '', $dest('/Perso/Archives%202026/Perso/'))[0] === 403);
+[$c, $x] = $dav('LOCK', '/Perso/Admin/Neuf.docx', $dpw, '<?xml version="1.0"?><d:lockinfo xmlns:d="DAV:"><d:lockscope><d:exclusive/></d:lockscope><d:locktype><d:write/></d:locktype></d:lockinfo>');
+check('dav: LOCK answers with a token (and reserves a new name)', $c === 201 && str_contains($x, 'opaquelocktoken:') && $dav('UNLOCK', '/Perso/Admin/Neuf.docx', $dpw)[0] === 204
+    && $dav('GET', '/Perso/Admin/Neuf.docx', $dpw)[0] === 200);
+check('dav: PROPPATCH is accepted', $dav('PROPPATCH', '/Perso/Admin/Neuf.docx', $dpw, '<?xml version="1.0"?><d:propertyupdate xmlns:d="DAV:" xmlns:z="urn:schemas-microsoft-com:"><d:set><d:prop><z:Win32LastModifiedTime>x</z:Win32LastModifiedTime></d:prop></d:set></d:propertyupdate>')[0] === 207);
+check('dav: DELETE sends files and folders to the trash', $dav('DELETE', '/Perso/Admin/Neuf.docx', $dpw)[0] === 204 && $dav('DELETE', '/Perso/Archives%202026/', $dpw)[0] === 204
+    && !$lib->exists('/Perso/Archives 2026') && count(array_filter($lib->trash(), fn($i) => ($i['path'] ?? '') === '/Perso/Archives 2026' && in_array('Copie.txt', $i['names'], true))) === 1);
+$lib->createFolder('/Clients/Secret Co/Dossier');
+check('dav: nothing goes into a secret space, the FAQ is read only', $dav('PUT', '/Clients/Secret%20Co/Dossier/x.txt', $dpw, 'x')[0] === 404
+    && $dav('MOVE', '/Perso/Admin/Devis%20final.txt', $dpw, '', $dest('/Clients/Secret%20Co/x.txt'))[0] === 403
+    && (!$lib->exists('/FAQ') || $dav('PUT', '/FAQ/x.txt', $dpw, 'x')[0] === 403));
+$la->spaces()->save(['name' => 'Coffre', 'folder' => '/Clients/Secret Co', 'privacy' => 'internal'], (int)$sec['id']);
+for ($i = 0; $i < 10; $i++) $dav('PROPFIND', '/', 'wrong' . $i, '', ['Depth: 0']);
+check('dav: too many wrong passwords block the address for a while', $dav('PROPFIND', '/', $dpw, '', ['Depth: 0'])[0] === 429);
+$la->store->q("DELETE FROM throttle WHERE k LIKE 'dav:%'");
+
 proc_terminate($ws); proc_close($ws);
 putenv('TALIXIO_EMBEDDINGS'); putenv("TALIXIO_DATA_DIR=$dir");
 

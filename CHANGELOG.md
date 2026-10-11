@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.21.0 (2026-10-11)
+- Network drive (WebDAV): the library's folders open as a drive in Windows Explorer, macOS Finder, the Files
+  app on iPhone/iPad and WebDAV apps on Android, at `<address>/dav/`. Settings → Network drive: off, read only
+  or read and write, and its own password (shown once, needs the app password). Files added or changed there
+  are read and indexed again like uploads; moves and renames keep the index; deletions go to the library's
+  trash. Secret spaces never show, the FAQ stays read only, system clutter (.DS_Store, ._ files, Thumbs.db…)
+  is kept out of the library, wrong passwords are throttled per address.
+- File names: renaming keeps any character but slashes, control characters and `<>:"|?*`.
+
 ## 0.20.0 (2026-10-10)
 - Quick capture: a chat message starting with `t:` (or `task:`, `todo:`, `tâche:`) adds a task to the space's
   board, `n:` (or `note:`) saves a note in the space's folder or the Inbox, at once and without calling the

@@ -372,6 +372,29 @@
           </form>
         </div>
       </details>
+
+      <details class="card group" id="dav-card">
+        <summary><b>Network drive (WebDAV)</b> <span id="dav-badge" class="muted small"></span></summary>
+        <div class="fields">
+          <p class="muted small">Open the library's folders from your computer or phone like a shared drive: Windows Explorer, macOS Finder, the Files app on iPhone and Android. Files you add there are read and indexed like uploads; files you delete go to the library's trash. Folders of secret spaces never show.</p>
+          <p class="small">Address: <code id="dav-url"></code> <button id="dav-copy" class="btn small" type="button">Copy</button><br>User: <code id="dav-user">talixio</code></p>
+          <label for="dav-mode">Access</label>
+          <select id="dav-mode"><option value="off">Off</option><option value="read">Read only</option><option value="write">Read and write</option></select>
+          <p class="muted small">The drive has its own password (a drive keeps it in the system's keychain and can't ask for a two-step code). It is shown once: creating a new one stops the old one.</p>
+          <form id="dav-pw" class="fields">
+            <label for="dav-current">App password</label><input id="dav-current" type="password" autocomplete="current-password" required>
+            <div class="row"><button class="btn primary" type="submit">Create a new drive password</button><span id="dav-state" class="muted small"></span></div>
+          </form>
+          <p id="dav-new" class="small" hidden>Drive password: <code id="dav-secret"></code> <button id="dav-secret-copy" class="btn small" type="button">Copy</button><br><span class="muted">Write it in your device now: it won't be shown again.</span></p>
+          <details class="small"><summary>How to connect</summary>
+            <p><b>Windows</b>: File Explorer → This PC → Map network drive → the address above → tick “Connect using different credentials”.</p>
+            <p><b>macOS</b>: Finder → Go → Connect to Server (⌘K) → the address above.</p>
+            <p><b>iPhone, iPad</b>: Files → ⋯ → Connect to Server → the address above.</p>
+            <p><b>Android</b>: an app that speaks WebDAV (Solid Explorer, Material Files, CX File Explorer…) → new WebDAV connection → the address above.</p>
+            <p class="muted">The address must be in https (it is behind the server's Caddy). Large files: Windows limits downloads to 50 MB unless its WebClient setting FileSizeLimitInBytes is raised.</p>
+          </details>
+        </div>
+      </details>
     </section>
 
     <section id="view-privacy" class="view page" hidden>

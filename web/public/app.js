@@ -1826,6 +1826,7 @@ async function loadSettings() {
   loadChannels().catch(e => toast(e.message));
   loadUpdate().catch(() => {});
   loadSecurity();
+  loadDav();
   renderAppearance();
   loadConnectors();
   loadGoogle();
@@ -2050,6 +2051,31 @@ $('#totp-disable').onsubmit = async e => {
   e.preventDefault();
   try { await post('api/security/totp/disable', { password: $('#totp-dis-pw').value, code: $('#totp-dis-code').value }); $('#totp-dis-pw').value = $('#totp-dis-code').value = ''; showTotp(false); toast('Two-step sign-in is off.'); }
   catch (err) { $('#totp-dis-state').textContent = err.message; }
+};
+
+// ---- network drive (WebDAV) ----
+async function loadDav() {
+  try { showDav(await api('api/dav')); } catch { /* shown elsewhere */ }
+}
+function showDav(d) {
+  $('#dav-url').textContent = d.url; $('#dav-user').textContent = d.user;
+  $('#dav-mode').value = d.mode;
+  $('#dav-mode').disabled = !d.password;
+  $('#dav-badge').textContent = '· ' + window.t(d.mode === 'off' ? 'off' : d.mode === 'read' ? 'read only' : 'read and write');
+}
+$('#dav-copy').onclick = () => copyText($('#dav-url').textContent);
+$('#dav-secret-copy').onclick = () => copyText($('#dav-secret').textContent);
+$('#dav-mode').onchange = async () => {
+  try { showDav(await post('api/dav', { mode: $('#dav-mode').value })); } catch (e) { toast(e.message); loadDav(); }
+};
+$('#dav-pw').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const d = await post('api/dav/password', { current: $('#dav-current').value });
+    $('#dav-current').value = ''; $('#dav-state').textContent = '';
+    $('#dav-secret').textContent = d.password; $('#dav-new').hidden = false;
+    showDav(d);
+  } catch (err) { $('#dav-state').textContent = err.message; }
 };
 
 // ---- memory ----
