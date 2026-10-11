@@ -25,7 +25,7 @@ final class OpenAIProvider implements Provider
             $cached = (int)($usage['prompt_tokens_details']['cached_tokens'] ?? 0);
             $onUsage(['model' => $this->tier->model, 'in' => (int)($usage['prompt_tokens'] ?? 0) - $cached,
                 'out' => (int)($usage['completion_tokens'] ?? 0), 'cache_read' => $cached, 'cache_write' => 0, 'cost' => null]);
-            if (empty($m['tool_calls'])) return (string)($m['content'] ?? '');
+            if (empty($m['tool_calls'])) return self::text($m['content'] ?? '');
             $msgs[] = $m;
             $images = [];
             foreach ($m['tool_calls'] as $c) {
@@ -44,7 +44,16 @@ final class OpenAIProvider implements Provider
         $r = $onEvent ? $this->stream($last, $onEvent) : Http::json("{$this->baseUrl}/chat/completions", $last, ['Authorization: Bearer ' . ($this->key ?: 'none')], 300);
         $u = $r['usage'] ?? ['prompt_tokens' => (int)(strlen(json_encode($msgs)) / 4), 'completion_tokens' => 0];
         $onUsage(['model' => $this->tier->model, 'in' => (int)($u['prompt_tokens'] ?? 0), 'out' => (int)($u['completion_tokens'] ?? 0), 'cache_read' => 0, 'cache_write' => 0, 'cost' => null]);
-        return (string)($r['choices'][0]['message']['content'] ?? '') ?: '(stopped after too many tool steps)';
+        return self::text($r['choices'][0]['message']['content'] ?? '') ?: '(stopped after too many tool steps)';
+    }
+
+    /** Message content as text: some servers (Mistral's reasoning models) send a list of chunks, thinking included. */
+    public static function text(mixed $content): string
+    {
+        if (!is_array($content)) return (string)$content;
+        $out = '';
+        foreach ($content as $c) $out .= is_string($c) ? $c : (($c['type'] ?? '') === 'text' ? (string)($c['text'] ?? '') : '');
+        return $out;
     }
 
     /** Streamed chat completion reassembled into a normal response (tool call fragments merged, extra fields kept). */
@@ -56,7 +65,7 @@ final class OpenAIProvider implements Provider
                 if (isset($d['usage'])) $usage = $d['usage'];
                 if (isset($d['error'])) throw new \RuntimeException('API error: ' . ($d['error']['message'] ?? json_encode($d['error'])));
                 $delta = $d['choices'][0]['delta'] ?? [];
-                if (($delta['content'] ?? '') !== '') { $msg['content'] .= $delta['content']; $onEvent(['type' => 'text', 'text' => $delta['content']]); }
+                if (($text = self::text($delta['content'] ?? '')) !== '') { $msg['content'] .= $text; $onEvent(['type' => 'text', 'text' => $text]); }
                 foreach ($delta['tool_calls'] ?? [] as $k => $tc) {
                     $idx = $tc['index'] ?? $k;
                     $cur = $calls[$idx] ?? ['id' => '', 'type' => 'function', 'function' => ['name' => '', 'arguments' => '']];

@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.4 (2026-10-11)
+
+- Mistral: replies (and job results) no longer show "Array". Its newer models send their answer as a list of chunks, thinking included; only the text is kept now.
+
 ## 0.28.3 (2026-10-11)
 
 - A meeting is no longer held back for a missing email address: the assistant creates it without that guest

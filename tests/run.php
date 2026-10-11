@@ -700,6 +700,9 @@ foreach (['anthropic' => new \Talixio\AnthropicProvider('k', new \Talixio\Tier('
 }
 check('step limit: the model is asked for a last answer without tools (what is done, what is missing), not a bare "stopped"',
     !array_filter($capped, fn($t) => !str_starts_with($t, 'Where things stand: Tool step limit reached') || !str_contains($t, 'what you need from them')), json_encode($capped));
+check('mistral reasoning models: content sent as chunks becomes text, thinking left out (not "Array")',
+    \Talixio\OpenAIProvider::text([['type' => 'thinking', 'thinking' => [['type' => 'text', 'text' => 'hmm']]], ['type' => 'text', 'text' => 'Report '], 'ready']) === 'Report ready'
+    && \Talixio\OpenAIProvider::text('plain') === 'plain' && \Talixio\OpenAIProvider::text(null) === '');
 @unlink("$dir/fake-llm.log");
 
 // content conversion
