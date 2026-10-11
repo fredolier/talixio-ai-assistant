@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.10 (2026-10-11)
+
+- Connector list: a "Hosting and cloud" section (OVHcloud, Hostinger; what exists for Scaleway, Infomaniak, o2switch).
+
 ## 0.28.9 (2026-10-11)
 
 - Connectors that drive a web browser (Playwright, Patchright, such as Uber Eats) work: installing one also downloads the

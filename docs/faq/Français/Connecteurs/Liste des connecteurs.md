@@ -158,6 +158,18 @@ dans Réglages → Connecteurs. L'assistant n'a accès qu'à ce que vous autoris
   propre à votre compte : créez votre serveur sur mcp.zapier.com (ou dans Make), copiez son adresse, puis
   ajoutez-la dans Réglages → Connecteurs. Pas de lien direct ici.
 
+## Hébergeurs et cloud
+
+- **OVHcloud (officiel, bêta)** : gérer vos serveurs, instances, stockage, réseau, bases de données et votre compte.
+  Vous vous connectez avec votre compte OVHcloud ; ses droits (IAM) décident de ce que l'assistant peut faire.
+  Adresse pour l'Europe ; pour une autre région, remplacez `eu` dans Réglages → Connecteurs.
+  [▶ Installer](?connector=https://mcp.eu.ovhcloud.com/mcp&name=ovhcloud)
+- **Hostinger (officiel)** : sites, VPS, domaines et DNS, boîtes mail, abonnements. Demande une clé d'API
+  (hPanel → Profil → API), à mettre dans `HOSTINGER_API_TOKEN`.
+  [▶ Installer](?connector=https://github.com/hostinger/api-mcp-server)
+- **Scaleway, Infomaniak** : pas de connecteur officiel, seulement des projets de la communauté, non vérifiés ici.
+- **o2switch** : aucun connecteur connu.
+
 ## Voyages et sorties
 - **Ferryhopper (officiel)** : horaires et prix des ferries en Europe (Grèce, Italie, Corse…). Sans compte.
   [▶ Installer](?connector=https://mcp.ferryhopper.com/mcp&name=ferryhopper)
