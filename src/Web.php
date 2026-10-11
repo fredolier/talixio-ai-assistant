@@ -36,6 +36,7 @@ final class Web
             return;
         }
         if ($path === '/api/google/callback' && $method === 'GET') { $this->googleCallback(); return; } // Google's redirect carries no session cookie (SameSite)
+        if ($path === '/api/microsoft/callback' && $method === 'GET') { $this->microsoftCallback(); return; }
         if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
@@ -144,6 +145,9 @@ final class Web
             $path === '/api/google' => $this->googleState(),
             $path === '/api/google/connect' && $m === 'POST' => ['url' => $this->app->google()->authUrl(Google::redirectUri())],
             $path === '/api/google/disconnect' && $m === 'POST' => (function () { $this->app->google()->disconnect(); return $this->googleState(); })(),
+            $path === '/api/microsoft' => $this->microsoftState(),
+            $path === '/api/microsoft/connect' && $m === 'POST' => ['url' => $this->app->microsoft()->authUrl(Microsoft::redirectUri())],
+            $path === '/api/microsoft/disconnect' && $m === 'POST' => (function () { $this->app->microsoft()->disconnect(); return $this->microsoftState(); })(),
             $path === '/api/spotify' => $this->spotifyState(),
             $path === '/api/spotify/connect' && $m === 'POST' => ['url' => $this->app->spotify()->authUrl(Spotify::redirectUri())],
             $path === '/api/spotify/disconnect' && $m === 'POST' => (function () { $this->app->spotify()->disconnect(); return $this->spotifyState(); })(),
@@ -312,6 +316,26 @@ final class Web
         header('Location: ' . Config::basePath() . '/?google=' . rawurlencode($msg) . '#settings', true, 303);
     }
 
+    private function microsoftState(): array
+    {
+        $ms = $this->app->microsoft(); $t = $ms->tokens();
+        return ['configured' => $ms->configured(), 'connected' => $ms->connected(), 'email' => $t['email'] ?? '', 'redirect' => Microsoft::redirectUri()];
+    }
+
+    /** Microsoft sends the user back here after sign-in (the one-time state proves it was started from the app). */
+    private function microsoftCallback(): void
+    {
+        $msg = 'connected';
+        try {
+            if (isset($_GET['error'])) throw new \RuntimeException('Microsoft: ' . strtok((string)($_GET['error_description'] ?? $_GET['error']), "\r\n"));
+            $this->app->microsoft()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+        } catch (\Throwable $e) {
+            Log::warn("microsoft: {$e->getMessage()}");
+            $msg = $e->getMessage();
+        }
+        header('Location: ' . Config::basePath() . '/?microsoft=' . rawurlencode($msg) . '#settings', true, 303);
+    }
+
     /** Tasks board. The app acts as "you" and may change any space's cards. */
     private function board(string $m, string $path, array $b): array
     {
@@ -343,7 +367,7 @@ final class Web
                 catch (\Throwable $e) { $eventsError = $e->getMessage(); }
             }
             return ['cards' => $cards, 'events' => $events, 'events_error' => $eventsError ?? null, 'calendar' => $this->app->calendar()->enabled(),
-                'google' => $this->app->google()->connected() && $this->app->cfg->tasksGoogle];
+                'google' => $this->app->google()->connected() && $this->app->cfg->tasksGoogle, 'outlook' => $this->app->microsoft()->connected() && $this->app->cfg->tasksGoogle];
         }
         if ($path === '/api/board/ics' && $m === 'GET') return ['url' => $this->baseUrl() . '/cal/tasks-' . $bd->icsToken() . '.ics'];
         if ($path === '/api/board/ics' && $m === 'POST') return ['url' => $this->baseUrl() . '/cal/tasks-' . $bd->icsToken(true) . '.ics'];

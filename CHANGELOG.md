@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.26.0 (2026-10-11)
+
+- Outlook / Microsoft 365 calendar: connect it in Settings → Calendar with your own app registered in
+  Microsoft Entra (the steps are shown there). The assistant reads your Outlook calendar, adds events to
+  it after your approval, and the tasks marked "show in my calendar" go there and are kept up to date
+  (all day, or busy at their hours for a meeting), like with Google Calendar. Both can be connected.
+- European provider: when it refuses its key (expired or deleted, HTTP 401/403), the chat now says so
+  and where to make a new one, instead of the raw error.
+
 ## 0.25.0 (2026-10-11)
 
 - Meeting invitations: a task can have guests (email addresses) and a place. "Send the invitations"

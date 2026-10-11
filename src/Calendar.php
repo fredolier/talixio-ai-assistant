@@ -12,7 +12,7 @@ final class Calendar
     public function __construct(private App $app) {}
 
     public function enabled(): bool { return $this->app->cfg->calendarIcs !== [] || $this->canWrite(); }
-    public function canWrite(): bool { return $this->app->cfg->caldavUrl !== '' || $this->app->google()->connected(); }
+    public function canWrite(): bool { return $this->app->cfg->caldavUrl !== '' || $this->app->google()->connected() || $this->app->microsoft()->connected(); }
     private function caldav(): bool { return $this->app->cfg->caldavUrl !== ''; }
 
     /** Events overlapping [$from, $to). */
@@ -24,6 +24,7 @@ final class Calendar
             $all = array_merge($all, ICal::events($this->ics($url), $from, $to, count($c->calendarIcs) > 1 || $this->canWrite() ? 'calendar ' . ($i + 1) : ''));
         }
         if ($this->app->google()->connected()) $all = array_merge($this->app->google()->events($from, $to), $all); // first: its names win in duplicates
+        if ($this->app->microsoft()->connected()) $all = array_merge($this->app->microsoft()->events($from, $to), $all);
         if ($this->caldav()) {
             foreach ($this->caldavQuery($from, $to) as $ics) $all = array_merge($all, ICal::events($ics, $from, $to, $c->calendarIcs ? 'CalDAV' : ''));
         }
@@ -79,10 +80,14 @@ final class Calendar
     /** Create an event (called after approval). */
     public function add(string $title, int $start, int $end, bool $allDay, string $location = '', string $description = ''): string
     {
-        if (!$this->canWrite()) throw new \RuntimeException('no writable calendar: connect Google Calendar or set a CalDAV calendar');
+        if (!$this->canWrite()) throw new \RuntimeException('no writable calendar: connect Google Calendar or Outlook, or set a CalDAV calendar');
         if ($this->app->google()->connected()) {
             $this->app->google()->insert($title, $start, $end, $allDay, $location, $description);
             return "added to Google Calendar: $title, " . ($allDay ? date('D j M', $start) . ' (all day)' : date('D j M H:i', $start) . '–' . date('H:i', $end));
+        }
+        if ($this->app->microsoft()->connected()) {
+            $this->app->microsoft()->insert($title, $start, $end, $allDay, $location, $description);
+            return "added to Outlook: $title, " . ($allDay ? date('D j M', $start) . ' (all day)' : date('D j M H:i', $start) . '–' . date('H:i', $end));
         }
         $uid = bin2hex(random_bytes(12)) . '@talixio';
         $esc = fn(string $v) => str_replace(["\\", ';', ',', "\n"], ["\\\\", '\;', '\,', '\n'], $v);

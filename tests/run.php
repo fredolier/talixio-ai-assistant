@@ -1849,6 +1849,59 @@ check('tasks → Google: a task with hours is a timed, busy event', ($ev['start'
 $ga->google()->disconnect();
 check('google: disconnect forgets the tokens', !$ga->google()->connected() && !is_file("$ad/google.json"));
 foreach (['AUTH_URL', 'TOKEN_URL', 'REVOKE_URL', 'API_BASE'] as $k) putenv("TALIXIO_GOOGLE_$k");
+
+// Outlook through Microsoft Graph (fake Microsoft)
+$mport = $freePort();
+$ms = proc_open([PHP_BINARY, '-S', "127.0.0.1:$mport", __DIR__ . '/fakes/microsoft.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp);
+$waitPort($mport);
+@unlink(sys_get_temp_dir() . "/fake-microsoft-$mport.json");
+$mlog = fn() => json_decode((string)file_get_contents(sys_get_temp_dir() . "/fake-microsoft-$mport.json"), true);
+\Talixio\Settings::save($ad, ['TALIXIO_MICROSOFT_CLIENT_ID' => 'mcid', 'TALIXIO_MICROSOFT_CLIENT_SECRET' => 'msec']);
+putenv("TALIXIO_MICROSOFT_LOGIN_BASE=http://127.0.0.1:$mport"); putenv("TALIXIO_MICROSOFT_API_BASE=http://127.0.0.1:$mport/v1.0");
+$ga = App::fromEnv();
+$url = $ga->microsoft()->authUrl('https://assistant.example/api/microsoft/callback');
+parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+check('outlook: sign-in link on the common directory, asks for lasting calendar access', str_contains($url, "127.0.0.1:$mport/common/oauth2/v2.0/authorize?") && str_contains($q['scope'], 'offline_access') && str_contains($q['scope'], 'Calendars.ReadWrite') && strlen($q['state']) === 32);
+try { $ga->microsoft()->finish('good-code', 'forged'); check('outlook: forged state refused', false); } catch (\InvalidArgumentException) { check('outlook: forged state refused', true); }
+$url = $ga->microsoft()->authUrl('https://assistant.example/api/microsoft/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+check('outlook: connected, account read from the id token', $ga->microsoft()->finish('good-code', $q['state']) === 'fred@outlook.com' && $ga->microsoft()->connected()
+    && (fileperms("$ad/microsoft.json") & 0777) === 0600);
+$ga = App::fromEnv();
+$ev = $ga->tools->run('calendar_events', []);
+check('outlook: events read (all pages, in UTC), cancelled ones and our own tasks left out', str_contains($ev, 'Lunch with Anna @ Paris') && str_contains($ev, date('H:i', strtotime('tomorrow 10:00 UTC')))
+    && str_contains($ev, 'Holiday') && str_contains($ev, 'Board meeting') && !str_contains($ev, 'Called off') && !str_contains($ev, 'a task') && ($mlog()['views'][0]['prefer'] ?? '') === 'outlook.timezone="UTC"', $ev);
+$ga->tools->run('calendar_add', ['title' => 'Call the notary', 'start' => date('Y-m-d', strtotime('+2 days')) . ' 09:00']);
+$ga->cfg->notify = [];
+$done = $ga->approvals()->decide((int)$ga->approvals()->pending()[0]['id'], true);
+$ins = $mlog()['inserted'][0] ?? [];
+check('outlook: approved event added with the local time and time zone', str_contains($done, 'Outlook') && ($ins['subject'] ?? '') === 'Call the notary'
+    && ($ins['start']['dateTime'] ?? '') === date('Y-m-d', strtotime('+2 days')) . 'T09:00:00' && ($ins['start']['timeZone'] ?? '') === 'Europe/Paris' && $ins['isAllDay'] === false, $done . json_encode($ins));
+$tok = json_decode((string)file_get_contents("$ad/microsoft.json"), true); $tok['expires'] = 0; file_put_contents("$ad/microsoft.json", json_encode($tok));
+$ga->tools->run('calendar_events', []);
+$tok = json_decode((string)file_get_contents("$ad/microsoft.json"), true);
+check('outlook: access token refreshed when expired, the new refresh token kept', $tok['access_token'] === 'mt-2' && $tok['refresh_token'] === 'mr-2');
+$state = $aj('/api/microsoft', null, 'd');
+check('outlook: status for the app (account, redirect address)', $state['connected'] && $state['email'] === 'fred@outlook.com' && str_ends_with($state['redirect'], '/api/microsoft/callback'), json_encode($state));
+$ch = curl_init("http://127.0.0.1:$webPort/api/microsoft/callback?code=x&state=bad"); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]); $h = (string)curl_exec($ch); curl_close($ch);
+check('outlook: callback works without a session and reports errors back in the app', str_contains($h, '303') && str_contains($h, 'Location: /?microsoft=') && str_contains($h, '#settings'));
+$gb = $ga->board();
+check('tasks → Outlook: the timed task shown in the calendar is added', $gb->syncGoogle() === 1);
+$ev = end($mlog()['inserted']);
+check('tasks → Outlook: busy meeting with its hours, marked as a task', ($ev['start']['dateTime'] ?? '') === '2026-11-19T14:00:00' && ($ev['end']['dateTime'] ?? '') === '2026-11-19T15:30:00'
+    && $ev['showAs'] === 'busy' && $ev['isAllDay'] === false && ($ev['singleValueExtendedProperties'][0]['value'] ?? '') === (string)$gm['id'] && str_contains($ev['subject'], 'Point équipe'), json_encode($ev));
+check('tasks → Outlook: nothing to do when nothing changed', $gb->syncGoogle() === 0);
+$gb->update($gm['id'], ['start_time' => '', 'end_time' => '', 'start_date' => '2026-11-17']); $gb->syncGoogle();
+$up = end($mlog()['updated']);
+check('tasks → Outlook: a change updates the same event, all day to the day after the due date', $up['id'] === 'm2' && $up['body']['isAllDay'] === true
+    && $up['body']['start']['dateTime'] === '2026-11-17T00:00:00' && $up['body']['end']['dateTime'] === '2026-11-20T00:00:00' && $up['body']['showAs'] === 'free', json_encode($up));
+$ga->store->q("UPDATE cards SET ocal_id = 'gone', ocal_synced = NULL WHERE id = ?", [$gm['id']]); $gb->syncGoogle();
+check('tasks → Outlook: an event removed in Outlook is added again', $ga->store->q('SELECT ocal_id FROM cards WHERE id = ?', [$gm['id']])->fetchColumn() === 'm3');
+$gb->update($gm['id'], ['in_calendar' => false]); $gb->syncGoogle();
+check('tasks → Outlook: unticked, the event is removed', (end($mlog()['deleted'])['id'] ?? '') === 'm3' && $ga->store->q('SELECT ocal_id FROM cards WHERE id = ?', [$gm['id']])->fetchColumn() === null);
+$ga->microsoft()->disconnect();
+check('outlook: disconnect forgets the tokens', !$ga->microsoft()->connected() && !is_file("$ad/microsoft.json"));
+putenv('TALIXIO_MICROSOFT_LOGIN_BASE'); putenv('TALIXIO_MICROSOFT_API_BASE');
+proc_terminate($ms); proc_close($ms);
 putenv("TALIXIO_DATA_DIR=$dir");
 proc_terminate($gs); proc_close($gs);
 

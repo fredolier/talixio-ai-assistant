@@ -440,6 +440,20 @@
               <div class="row"><button id="google-connect" class="btn primary" type="button">Connect Google Calendar</button><button id="google-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button></div>
             </div>
           </div>
+            <div class="connect" id="microsoft-card">
+            <h5>Outlook / Microsoft 365 <span id="microsoft-badge" class="muted small"></span></h5>
+            <div class="fields">
+              <div id="microsoft-status"></div>
+              <ol class="steps small" id="microsoft-steps">
+                <li>Open <a href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener">entra.microsoft.com → App registrations</a> (sign in with your Outlook or Microsoft 365 account) and press <b>New registration</b>.</li>
+                <li>Name "Talixio"; supported accounts: <i>any organizational directory and personal Microsoft accounts</i> (or only your organisation); redirect URI type <i>Web</i>: <code id="microsoft-redirect"></code> <button id="microsoft-copy" class="btn small" type="button">Copy</button></li>
+                <li><b>API permissions</b> → Add a permission → Microsoft Graph → Delegated: <i>Calendars.ReadWrite</i>, <i>offline_access</i>, <i>User.Read</i>.</li>
+                <li><b>Certificates &amp; secrets</b> → New client secret (24 months). Copy its <i>Value</i> right away.</li>
+                <li>Paste the Application (client) ID and the secret in the fields below, save, then press Connect.</li>
+              </ol>
+              <div class="row"><button id="microsoft-connect" class="btn primary" type="button">Connect Outlook</button><button id="microsoft-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button></div>
+            </div>
+          </div>
             <div class="connect" id="spotify-card">
             <h5>Spotify <span id="spotify-badge" class="muted small"></span></h5>
             <div class="fields">

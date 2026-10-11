@@ -44,6 +44,11 @@ final class Config
     public string $googleTokenUrl = 'https://oauth2.googleapis.com/token';
     public string $googleRevokeUrl = 'https://oauth2.googleapis.com/revoke';
     public string $googleApiBase = 'https://www.googleapis.com/calendar/v3';
+    public string $microsoftClientId = '';
+    public string $microsoftClientSecret = '';
+    public string $microsoftTenant = 'common';
+    public string $microsoftLoginBase = 'https://login.microsoftonline.com';
+    public string $microsoftApiBase = 'https://graph.microsoft.com/v1.0';
     public string $spotifyClientId = '';
     public string $spotifyClientSecret = '';
     public string $spotifyDevice = '';
@@ -199,6 +204,12 @@ final class Config
         $c->googleClientSecret = trim($e('TALIXIO_GOOGLE_CLIENT_SECRET'));
         foreach (['googleAuthUrl' => 'TALIXIO_GOOGLE_AUTH_URL', 'googleTokenUrl' => 'TALIXIO_GOOGLE_TOKEN_URL', 'googleRevokeUrl' => 'TALIXIO_GOOGLE_REVOKE_URL', 'googleApiBase' => 'TALIXIO_GOOGLE_API_BASE'] as $prop => $var) {
             if ($e($var) !== '') $c->$prop = rtrim($e($var), '/'); // tests point these at a fake server
+        }
+        $c->microsoftClientId = trim($e('TALIXIO_MICROSOFT_CLIENT_ID'));
+        $c->microsoftClientSecret = trim($e('TALIXIO_MICROSOFT_CLIENT_SECRET'));
+        $c->microsoftTenant = trim($e('TALIXIO_MICROSOFT_TENANT', 'common')) ?: 'common';
+        foreach (['microsoftLoginBase' => 'TALIXIO_MICROSOFT_LOGIN_BASE', 'microsoftApiBase' => 'TALIXIO_MICROSOFT_API_BASE'] as $prop => $var) {
+            if ($e($var) !== '') $c->$prop = rtrim($e($var), '/');
         }
         $c->spotifyClientId = trim($e('TALIXIO_SPOTIFY_CLIENT_ID'));
         $c->spotifyClientSecret = trim($e('TALIXIO_SPOTIFY_CLIENT_SECRET'));

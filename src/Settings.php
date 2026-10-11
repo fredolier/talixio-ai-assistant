@@ -81,9 +81,12 @@ final class Settings
                 ['TALIXIO_MAILBOX_FROM', 'Your name and address', 'text', 'Frédéric <frederic@talixio.com>'],
                 ['TALIXIO_MAIL_TRIAGE', 'Sort new emails', 'bool', 'Every 15 minutes: to answer / to do / to read / low priority (Mail page, morning briefing). Learns from your corrections; the fast model only when unsure.'],
             ]],
-            'calendar' => ['Calendar', 'Google Calendar: follow the steps, fill in your OAuth client in the fields below, save, then press "Connect Google Calendar". Other calendars: iCal links to read, CalDAV to add events. Events are always added after your approval.', [
+            'calendar' => ['Calendar', 'Google Calendar or Outlook: follow the steps, fill in your app\'s ID and secret in the fields below, save, then press "Connect". Other calendars: iCal links to read, CalDAV to add events. Events are always added after your approval.', [
                 ['TALIXIO_GOOGLE_CLIENT_ID', 'Google OAuth client ID', 'text', 'From console.cloud.google.com → APIs & Services → Credentials (type "Web application").'],
                 ['TALIXIO_GOOGLE_CLIENT_SECRET', 'Google OAuth client secret', 'secret', ''],
+                ['TALIXIO_MICROSOFT_CLIENT_ID', 'Microsoft application (client) ID', 'text', 'Outlook / Microsoft 365: from entra.microsoft.com → App registrations → your app → Overview.'],
+                ['TALIXIO_MICROSOFT_CLIENT_SECRET', 'Microsoft client secret', 'secret', 'Certificates & secrets → New client secret: paste its Value (not its ID). It expires: make a new one in time.'],
+                ['TALIXIO_MICROSOFT_TENANT', 'Microsoft directory', 'text', 'Leave "common" unless your app accepts only your organisation (then its Directory (tenant) ID).'],
                 ['TALIXIO_CALENDAR_ICS', 'iCal links', 'secret', 'Several links separated by commas. These links give access to your calendar: keep them secret.'],
                 ['TALIXIO_CALDAV_URL', 'CalDAV calendar address', 'url', 'Nextcloud, Fastmail, iCloud…'],
                 ['TALIXIO_CALDAV_USER', 'CalDAV username', 'text', ''],
@@ -115,7 +118,7 @@ final class Settings
             ]],
             'tasks' => ['Tasks', 'The tasks board of each space.', [
                 ['TALIXIO_TASK_REMINDER', 'Reminder the day before a due date', 'text', 'At this time (e.g. 18:00), a notification lists the tasks due tomorrow, per space. Empty = off.'],
-                ['TALIXIO_TASKS_GOOGLE', 'Tasks marked "show in my calendar" go to Google Calendar', 'select', 'When Google Calendar is connected: added as all-day events (start to due date) and kept up to date. Otherwise use the private calendar link (Tasks → Calendar).', ['1' => 'on', '0' => 'off']],
+                ['TALIXIO_TASKS_GOOGLE', 'Tasks marked "show in my calendar" go to Google Calendar or Outlook', 'select', 'When Google Calendar or Outlook is connected: added as all-day events (start to due date) and kept up to date. Otherwise use the private calendar link (Tasks → Calendar).', ['1' => 'on', '0' => 'off']],
             ]],
             'audio' => ['Audio, meetings and library', '', [
                 ['TALIXIO_TRANSCRIBE', 'Transcription', 'select', 'auto: Gemini when its key is set, else local when whisper.cpp is installed. Local: the audio never leaves this server, but it is slower (about half the recording\'s length) and has no speaker names (install with sudo ./install.sh --with-whisper). European provider: the audio stays in Europe (Whisper or Voxtral at Mistral, Scaleway, OVHcloud or Infomaniak), with its key.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'local' => 'Local (whisper.cpp, on this server)', 'sovereign' => 'European provider', 'off' => 'off']],

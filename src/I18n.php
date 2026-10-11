@@ -12,6 +12,8 @@ final class I18n
     public const LANGS = ['en', 'fr'];
 
     private const FR = [
+        'The European provider ({name}) refuses its key (HTTP {code}): it has expired or was deleted. Make a new one ({keys}) and paste it in Settings → AI model.' =>
+            'Le fournisseur européen ({name}) refuse sa clé (HTTP {code}) : elle a expiré ou a été supprimée. Créez-en une nouvelle ({keys}) et collez-la dans Réglages → Modèle d\'IA.',
         'Cancelled: {title}' => 'Annulé : {title}',
         'Updated invitation: {title} ({when})' => 'Invitation mise à jour : {title} ({when})',
         'Invitation: {title} ({when})' => 'Invitation : {title} ({when})',

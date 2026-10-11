@@ -91,6 +91,7 @@ final class App
     public function routines(): Routines { return new Routines($this); }
     public function board(): Board { return $this->board ??= new Board($this); }
     public function google(): Google { return new Google($this); }
+    public function microsoft(): Microsoft { return new Microsoft($this); }
     public function spotify(): Spotify { return new Spotify($this); }
     public function shell(): Shell { return new Shell($this); }
     public function mcp(): Mcp { return new Mcp($this); }

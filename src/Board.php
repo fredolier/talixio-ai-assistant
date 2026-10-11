@@ -34,6 +34,8 @@ final class Board
             CREATE INDEX IF NOT EXISTS card_time_card ON card_time(card);");
         $app->store->addColumn('cards', 'gcal_id', 'TEXT');       // its Google Calendar event, when shown in the calendar
         $app->store->addColumn('cards', 'gcal_synced', 'INTEGER'); // version last sent to Google
+        $app->store->addColumn('cards', 'ocal_id', 'TEXT');       // the same in Outlook
+        $app->store->addColumn('cards', 'ocal_synced', 'INTEGER');
         $app->store->addColumn('cards', 'start_time', 'TEXT');    // "09:30": a timed slot (a meeting), on the start day (or the due day)
         $app->store->addColumn('cards', 'end_time', 'TEXT');      // "10:30", on the due day (or the start day)
         $app->store->addColumn('cards', 'attendees', "TEXT NOT NULL DEFAULT ''"); // guests' addresses, comma-separated
@@ -541,7 +543,7 @@ final class Board
         $b = json_decode($l['before'], true);
         $id = (int)$l['card'];
         $now = $this->snapshot($id);
-        $row = array_diff_key($b['row'], array_flip(['id', 'created', 'version', 'gcal_id', 'gcal_synced', 'invited']));
+        $row = array_diff_key($b['row'], array_flip(['id', 'created', 'version', 'gcal_id', 'gcal_synced', 'ocal_id', 'ocal_synced', 'invited']));
         $row['updated'] = time();
         $st->db->beginTransaction();
         $st->q('UPDATE cards SET ' . implode(',', array_map(fn($k) => "$k = ?", array_keys($row))) . ', version = version + 1 WHERE id = ?', [...array_values($row), $id]);
@@ -573,28 +575,37 @@ final class Board
             . (trim($c['body']) !== '' ? "\n\n" . mb_substr(trim($c['body']), 0, 1500) : '');
     }
 
-    /** Worker: tasks marked "show in my calendar" → Google Calendar (added, updated, removed). Returns how many changed. */
+    /** Worker: tasks marked "show in my calendar" → Google Calendar and Outlook (added, updated, removed). Returns how many changed. */
     public function syncGoogle(): int
     {
-        if (!$this->app->cfg->tasksGoogle || !$this->app->google()->connected()) return 0;
-        $st = $this->app->store; $g = $this->app->google(); $n = 0;
-        $todo = $st->q("SELECT id FROM cards WHERE (in_calendar = 1 AND deleted_at IS NULL AND COALESCE(due_date, start_date) IS NOT NULL AND (gcal_id IS NULL OR gcal_synced IS NULL OR gcal_synced < version))
-            OR (gcal_id IS NOT NULL AND (in_calendar = 0 OR deleted_at IS NOT NULL OR COALESCE(due_date, start_date) IS NULL)) LIMIT 20")->fetchAll(\PDO::FETCH_COLUMN);
+        if (!$this->app->cfg->tasksGoogle) return 0;
+        $n = 0;
+        if ($this->app->google()->connected()) $n += $this->syncTo($this->app->google(), 'gcal', 'Google Calendar');
+        if ($this->app->microsoft()->connected()) $n += $this->syncTo($this->app->microsoft(), 'ocal', 'Outlook');
+        return $n;
+    }
+
+    /** $col: the prefix of the columns holding the event id and the version sent ({col}_id, {col}_synced). */
+    private function syncTo(Google|Microsoft $cal, string $col, string $name): int
+    {
+        $st = $this->app->store; $n = 0;
+        $todo = $st->q("SELECT id FROM cards WHERE (in_calendar = 1 AND deleted_at IS NULL AND COALESCE(due_date, start_date) IS NOT NULL AND ({$col}_id IS NULL OR {$col}_synced IS NULL OR {$col}_synced < version))
+            OR ({$col}_id IS NOT NULL AND (in_calendar = 0 OR deleted_at IS NOT NULL OR COALESCE(due_date, start_date) IS NULL)) LIMIT 20")->fetchAll(\PDO::FETCH_COLUMN);
         foreach ($todo as $id) {
             $c = $this->get((int)$id);
-            $raw = $st->q('SELECT gcal_id, version FROM cards WHERE id = ?', [$id])->fetch();
+            $raw = $st->q("SELECT {$col}_id AS eid, version FROM cards WHERE id = ?", [$id])->fetch();
             try {
                 if ($c['in_calendar'] && !$c['deleted_at'] && ($c['due_date'] || $c['start_date'])) {
                     $start = $c['start_date'] ?? $c['due_date']; $end = $c['due_date'] ?? $c['start_date'];
-                    $eid = $g->putTaskEvent($raw['gcal_id'] ?: null, $c['id'], $this->eventTitle($c), $start, $end, $this->eventText($c), self::slot($c), $c['location']);
-                    $st->q('UPDATE cards SET gcal_id = ?, gcal_synced = ? WHERE id = ?', [$eid, $raw['version'], $id]);
+                    $eid = $cal->putTaskEvent($raw['eid'] ?: null, $c['id'], $this->eventTitle($c), $start, $end, $this->eventText($c), self::slot($c), $c['location']);
+                    $st->q("UPDATE cards SET {$col}_id = ?, {$col}_synced = ? WHERE id = ?", [$eid, $raw['version'], $id]);
                 } else {
-                    $g->deleteTaskEvent($raw['gcal_id']);
-                    $st->q('UPDATE cards SET gcal_id = NULL, gcal_synced = NULL WHERE id = ?', [$id]);
+                    $cal->deleteTaskEvent($raw['eid']);
+                    $st->q("UPDATE cards SET {$col}_id = NULL, {$col}_synced = NULL WHERE id = ?", [$id]);
                 }
                 $n++;
             } catch (\Throwable $e) {
-                Log::warn("tasks → Google Calendar ({$c['code']}): {$e->getMessage()}");
+                Log::warn("tasks → $name ({$c['code']}): {$e->getMessage()}");
                 break; // try again next time
             }
         }

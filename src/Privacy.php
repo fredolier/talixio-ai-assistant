@@ -45,6 +45,7 @@ final class Privacy
         'telegram' => ['name' => 'Telegram', 'hosts' => ['api.telegram.org'], 'terms' => ''],
         'google' => ['name' => 'Google (calendar, sign-in)', 'hosts' => ['www.googleapis.com', 'oauth2.googleapis.com', 'accounts.google.com'], 'terms' => ''],
         'spotify' => ['name' => 'Spotify', 'hosts' => ['api.spotify.com', 'accounts.spotify.com'], 'terms' => ''],
+        'microsoft' => ['name' => 'Microsoft (Outlook calendar, sign-in)', 'hosts' => ['graph.microsoft.com', 'login.microsoftonline.com'], 'terms' => ''],
         'push' => ['name' => 'Web push (encrypted)', 'hosts' => ['fcm.googleapis.com', '.push.services.mozilla.com', '.push.apple.com', '.notify.windows.com'], 'terms' => ''],
     ];
 
@@ -266,7 +267,7 @@ final class Privacy
         $purpose = self::$purpose;
         if ($purpose === 'model' && !$svc['local'] && $svc['id'] !== $this->modelService()) { // not the model: what this service is for
             $purpose = match (true) {
-                $svc['id'] === 'telegram' => 'chat', $svc['id'] === 'google' => 'calendar', $svc['id'] === 'spotify' => 'music',
+                $svc['id'] === 'telegram' => 'chat', $svc['id'] === 'google' || $svc['id'] === 'microsoft' => 'calendar', $svc['id'] === 'spotify' => 'music',
                 in_array($svc['id'], ['push', 'ntfy'], true) => 'notify', in_array($svc['id'], ['brave', 'tavily', 'searxng'], true) => 'search',
                 str_starts_with($svc['id'], 'mcp:') => 'connector', $svc['id'] === 'web' => 'web', default => 'other',
             };
@@ -415,6 +416,7 @@ final class Privacy
             $add("mcp:$name", "Connector $name", 'What the assistant sends to its tools.', 'warn', isset($srv['url']) ? 'A service outside: check its terms. Needs your approval in Confidential spaces.' : 'Runs on this server, but may reach the internet. Needs your approval in Confidential spaces.', [['label' => 'Connectors', 'href' => '#settings/connectors']]);
         }
         if ($this->app->calendar()->enabled() && $this->app->google()->connected()) $add('google', 'Google Calendar', 'Events the assistant reads and adds.', 'good', 'Google already holds your calendar.');
+        if ($this->app->calendar()->enabled() && $this->app->microsoft()->connected()) $add('microsoft', 'Outlook calendar', 'Events the assistant reads and adds.', 'good', 'Microsoft already holds your calendar.');
 
         // shared links
         $active = $this->app->shares()->list('active');

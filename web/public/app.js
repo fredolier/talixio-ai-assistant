@@ -1583,7 +1583,7 @@ async function renderCalendar() {
     const k = +b.dataset.m; const t = k ? new Date(y, mo - 1 + k, 1) : now; boardPrefs.month = iso(t).slice(0, 7); saveBoardPrefs(); loadBoard();
   });
   bar.querySelector('#cal-agenda').onchange = e => { boardPrefs.agenda = e.target.checked; saveBoardPrefs(); loadBoard(); };
-  bar.querySelector('#cal-link').onclick = () => showCalendarLink(d.google);
+  bar.querySelector('#cal-link').onclick = () => showCalendarLink(d.google ? 'Google Calendar' : d.outlook ? 'Outlook' : '');
   root.append(bar);
   if (d.events_error) root.append(Object.assign(document.createElement('p'), { className: 'muted small', textContent: 'Your agenda could not be read: ' + d.events_error }));
   // what goes on each day
@@ -1653,7 +1653,7 @@ async function showCalendarLink(google) {
   const { url } = await api('api/board/ics');
   $('#bs-title').textContent = 'Tasks in your calendar';
   $('#bs-list').innerHTML = `<p class="small">Tasks with <b>Show in my calendar</b> ticked appear as all-day events, from their start to their due date. The others stay here.</p>
-    ${google ? '<p class="small">Google Calendar is connected: they are added there automatically and kept up to date.</p>' : ''}
+    ${google ? `<p class="small">${esc(google)} is connected: they are added there automatically and kept up to date.</p>` : ''}
     <p class="small">${google ? 'For another calendar app' : 'To see them in your calendar app'} (Google, Apple, Outlook…), subscribe to this private link. Anyone with it can read those tasks: keep it to yourself.</p>
     <div class="row"><input id="ics-url" readonly value="${esc(url)}" style="flex:1;min-width:0"><button type="button" class="btn small" id="ics-copy">Copy</button></div>
     <p class="muted small">Google Calendar: Other calendars → + → From URL. Subscribed calendars refresh every few hours. <button type="button" class="btn small ghost" id="ics-reset">Make a new link</button> (the old one stops working)</p>`;
@@ -1904,7 +1904,7 @@ function setHealth() {
 /** Connected accounts: Google, Spotify and the connectors that answer (the mailbox counts once set). */
 function setAccounts() {
   const a = state.setAcc || {}, mb = setFields().some(f => f.key === 'TALIXIO_MAILBOX_USER' && (f.value || f.set));
-  setInfo('accounts', (a.google ? 1 : 0) + (a.spotify ? 1 : 0) + (a.mcp || 0) + (mb ? 1 : 0));
+  setInfo('accounts', (a.google ? 1 : 0) + (a.outlook ? 1 : 0) + (a.spotify ? 1 : 0) + (a.mcp || 0) + (mb ? 1 : 0));
 }
 function setInfo(k, v) { if (state.setInfo[k] === v) return; state.setInfo[k] = v; if (!$('#view-settings').hidden) setHealth(); }
 function applyShowIf() {
@@ -1966,7 +1966,7 @@ function fieldHtml(f) {
 function renderGroups(groups) {
   state.setGroups = groups;
   const pool = $('#set-pool');
-  for (const id of ['google-card', 'spotify-card']) pool.append($('#' + id));
+  for (const id of ['google-card', 'microsoft-card', 'spotify-card']) pool.append($('#' + id));
   const openAdv = new Set([...document.querySelectorAll('#view-settings .set-groups details.adv[open]')].map(d => d.dataset.id));
   document.querySelectorAll('#view-settings .set-groups').forEach(b => { b.innerHTML = ''; });
   for (const g of groups) {
@@ -1984,7 +1984,7 @@ function renderGroups(groups) {
       el.querySelector('.fields').prepend(r);
     }
     if (g.id === 'search') { const m = document.createElement('div'); m.className = 'meaning'; m.id = 'meaning'; el.querySelector('.fields').prepend(m); loadMeaning(m).catch(e => { m.textContent = e.message; }); }
-    if (g.id === 'calendar') el.querySelector('.fields').before($('#google-card'));
+    if (g.id === 'calendar') el.querySelector('.fields').before($('#google-card'), $('#microsoft-card'));
     if (g.id === 'spotify') el.querySelector('.fields').before($('#spotify-card'));
     box.append(el);
   }
@@ -2058,7 +2058,7 @@ async function loadSettings() {
   loadEu();
   renderAppearance();
   loadConnectors();
-  loadGoogle();
+  loadGoogle(); loadMicrosoft();
   loadSpotify();
   loadTransfer().catch(() => {});
   refreshStatus().then(setHealth);
@@ -2168,6 +2168,21 @@ async function loadGoogle() { try { showGoogle(await api('api/google')); } catch
 $('#google-copy').onclick = () => copyText($('#google-redirect').textContent);
 $('#google-connect').onclick = async () => { try { location.href = (await post('api/google/connect')).url; } catch (e) { toast(e.message); } };
 $('#google-disconnect').onclick = async () => { try { showGoogle(await post('api/google/disconnect')); toast('Google Calendar disconnected.'); } catch (e) { toast(e.message); } };
+
+// ---- Outlook (Microsoft Graph) ----
+function showMicrosoft(g) {
+  state.setAcc = { ...state.setAcc, outlook: !!g.connected }; setAccounts();
+  $('#microsoft-badge').textContent = g.connected ? `· connected${g.email ? ' as ' + g.email : ''}` : g.configured ? '· not connected' : '· not set up';
+  $('#microsoft-redirect').textContent = g.redirect;
+  $('#microsoft-status').innerHTML = g.connected ? '<p class="small">Reads your Outlook calendar; adds events to it after your approval.</p>' : '';
+  $('#microsoft-steps').hidden = g.connected;
+  $('#microsoft-connect').hidden = g.connected; $('#microsoft-disconnect').hidden = !g.connected;
+  $('#microsoft-connect').disabled = !g.configured; $('#microsoft-connect').title = g.configured ? '' : 'Fill in the application ID and secret first (step 5)';
+}
+async function loadMicrosoft() { try { showMicrosoft(await api('api/microsoft')); } catch {} }
+$('#microsoft-copy').onclick = () => copyText($('#microsoft-redirect').textContent);
+$('#microsoft-connect').onclick = async () => { try { location.href = (await post('api/microsoft/connect')).url; } catch (e) { toast(e.message); } };
+$('#microsoft-disconnect').onclick = async () => { try { showMicrosoft(await post('api/microsoft/disconnect')); toast('Outlook disconnected.'); } catch (e) { toast(e.message); } };
 
 // ---- connectors (MCP) and the sandbox ----
 function showConnectors(d) {
@@ -3438,6 +3453,12 @@ async function handleLaunch() {
     history.replaceState(null, '', './#settings');
     toast(g === 'connected' ? 'Google Calendar connected.' : g);
     if (g === 'connected') setTimeout(() => { showSection('accounts'); $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
+  }
+  if (params.has('microsoft')) {
+    const g = params.get('microsoft');
+    history.replaceState(null, '', './#settings');
+    toast(g === 'connected' ? 'Outlook connected.' : g);
+    if (g === 'connected') setTimeout(() => { showSection('accounts'); $('#microsoft-card').scrollIntoView({ block: 'center' }); }, 600);
   }
   if (params.has('mcp')) {
     const g = params.get('mcp');

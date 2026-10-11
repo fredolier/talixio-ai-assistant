@@ -167,7 +167,7 @@ final class Agent
         if (!$files && !in_array($channel, ['schedule', 'job', 'heartbeat'], true) && ($cap = Routines::parseCapture($text)) !== null) {
             $store->addMessage('user', $channel, $text, null, [], $space);
             try { $done = $this->app->routines()->capture($cap[0], $cap[1], $space); $reply = $done['reply']; }
-            catch (\Throwable $e) { $reply = I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]); }
+            catch (\Throwable $e) { $reply = $this->failure($e); }
             $store->addMessage('assistant', $channel, $reply, ['capture' => $cap[0]], [], $space);
             return $reply;
         }
@@ -238,13 +238,13 @@ final class Agent
                     ? I18n::t($this->app, $level === 'secret'
                         ? 'This is a Secret space: nothing may leave the server, and the assistant runs on a service outside. The library and tasks of this space still work; to chat here, use a model on this server (Settings → AI model).'
                         : 'This is a Confidential space: only a model under business terms (Claude API, OpenAI API, paid Gemini) or a European provider (Mistral, Scaleway, OVHcloud, Infomaniak) may read its content, and the current one is not. Change the model in Settings → AI model, or the level of the space.')
-                    : I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()])));
+                    : $this->failure($e)));
             } catch (Abort $e) {
                 if ($e->getMessage() === 'stopped by the user') $reply = (trim($partial) !== '' ? trim($partial) . "\n\n" : '') . I18n::t($this->app, '*(stopped)*');
                 else $reply = I18n::t($this->app, "I've reached my spending limit, so I'm not calling the model right now. {budget}\nRaise TALIXIO_BUDGET_DAILY_USD / TALIXIO_BUDGET_MONTHLY_USD if needed.", ['budget' => $this->app->budget()->describe()]);
             } catch (\Throwable $e) {
                 Log::error("agent: {$e->getMessage()}");
-                $reply = I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]);
+                $reply = $this->failure($e);
             }
             $trace = Privacy::end();
             if ($trace) $meta = ($meta ?? []) + ['trace' => $trace, 'level' => $level];
@@ -350,5 +350,17 @@ final class Agent
         $store->addMessage('assistant', 'heartbeat', $reply, $meta);
         $store->addHeartbeat('sent', $reply, $tools(), $cost, $meta['model']);
         return $reply;
+    }
+
+    /** What the user reads when the model call failed: a refused European key says what to do. */
+    private function failure(\Throwable $e): string
+    {
+        $c = $this->app->cfg;
+        if ($c->provider === 'sovereign' && preg_match('/^API error (401|403)\b/', $e->getMessage(), $m)) {
+            $info = Sovereign::info($c->sovereign);
+            return I18n::t($this->app, 'The European provider ({name}) refuses its key (HTTP {code}): it has expired or was deleted. Make a new one ({keys}) and paste it in Settings → AI model.',
+                ['name' => $info['name'], 'code' => $m[1], 'keys' => $info['keys']]);
+        }
+        return I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]);
     }
 }
