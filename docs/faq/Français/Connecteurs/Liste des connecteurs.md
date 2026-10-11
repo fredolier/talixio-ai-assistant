@@ -178,8 +178,8 @@ dans Réglages → Connecteurs. L'assistant n'a accès qu'à ce que vous autoris
 Ces services n'ont pas d'API publique. Ces connecteurs se font passer pour un navigateur et peuvent cesser de
 fonctionner à tout moment. Utilisez un compte dont vous acceptez le risque.
 
-- **Uber Eats** : chercher des restaurants, lire les menus, commander. Il pilote un navigateur, qui peut
-  manquer dans votre installation.
+- **Uber Eats** : chercher des restaurants, lire les menus, commander. Il pilote un navigateur, que Talixio
+  télécharge à l'installation (environ 100 Mo, une seule fois).
   [▶ Installer](?connector=https://github.com/markswendsen-code/mcp-ubereats)
 - **E.Leclerc Drive** : chercher des produits, remplir le panier. Demande Node.js 22 ou plus récent.
   [▶ Installer](?connector=https://github.com/skunkobi/mcp-leclerc-drive)

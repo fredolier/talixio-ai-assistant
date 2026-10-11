@@ -232,6 +232,9 @@ final class ConnectorPackage
         return $s;
     }
 
+    /** Where the browsers of Playwright-based connectors go (set for the connectors installed from the library). */
+    public static function browsers(string $dataDir): string { return "$dataDir/ms-playwright"; }
+
     /** The background part (talixio connector-install). */
     public function finish(): void
     {
@@ -247,6 +250,12 @@ final class ConnectorPackage
             $npm = 'npm --no-audit --no-fund --loglevel=error';
             if ($s['build']) { $run("$npm install", 'installing dependencies'); $run('npm run build', 'building'); }
             elseif ($s['deps']) $run("$npm install --omit=dev", 'installing dependencies');
+            // a server that drives a browser (Playwright, Patchright): the Chromium it was built for, downloaded once for all
+            // of them (the headless one only, unless it shows its window)
+            foreach (['patchright-core', 'playwright-core'] as $p) if (is_file("$tmp/node_modules/$p/cli.js")) {
+                $full = trim((string)shell_exec('grep -rlE --include=*.js --include=*.mjs --exclude-dir=node_modules ' . escapeshellarg('headless:[[:space:]]*false|channel:[[:space:]]*.chromium') . ' ' . escapeshellarg($tmp) . ' 2>/dev/null | head -1')) !== '';
+                $run('PLAYWRIGHT_BROWSERS_PATH=' . escapeshellarg(self::browsers($this->app->cfg->dataDir)) . " node node_modules/$p/cli.js install" . ($full ? '' : ' --only-shell') . ' chromium', 'installing the browser');
+            }
             $entry = $s['entry'];
             if (!$entry) foreach (['dist/index.js', 'build/index.js', 'dist/server.js'] as $c) if (is_file("$tmp/$c")) { $entry = $c; break; }
             if (!$entry || !is_file("$tmp/$entry")) throw new \RuntimeException('no server file after building');

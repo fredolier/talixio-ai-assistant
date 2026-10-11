@@ -278,7 +278,7 @@ final class Jobs
         foreach ($c->tiers as $t) {
             $t->maxSteps = max($t->maxSteps, self::STEPS[$effort]);
             // OpenAI-compatible servers only get it where it was set (plain chat models refuse it)
-            if ($c->provider !== 'openai' || $t->reasoningEffort !== '') $t->reasoningEffort = $effort;
+            if (!in_array($c->provider, ['openai', 'sovereign'], true) || $t->reasoningEffort !== '') $t->reasoningEffort = $effort;
         }
         return $effort;
     }

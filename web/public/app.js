@@ -2271,7 +2271,7 @@ async function connectorDialog(fileId) {
       const r = await post('api/connectors/install', { file: +$('#conn-file').value, name: $('#conn-name').value.trim(), env });
       const poll = async () => {
         const s = await api('api/connectors/install');
-        if (s.state === 'running') { state.textContent = t({ unpacked: 'Unpacked…', 'installing dependencies': 'Installing its dependencies (npm)…', building: 'Building…', connecting: 'Starting it and listing its tools…' }[s.step] || 'Installing…'); setTimeout(poll, 2000); return; }
+        if (s.state === 'running') { state.textContent = t({ unpacked: 'Unpacked…', 'installing dependencies': 'Installing its dependencies (npm)…', 'installing the browser': 'Downloading the web browser it drives (about 100 MB, once)…', building: 'Building…', connecting: 'Starting it and listing its tools…' }[s.step] || 'Installing…'); setTimeout(poll, 2000); return; }
         if (s.state === 'done') { state.textContent = t('Ready: {n} tool(s) from “{name}”. The assistant can use them from the next message.', { n: s.tools, name: r.name }); loadConnectors(); }
         else { state.textContent = s.error || t('It did not work.'); $('#conn-go').disabled = false; loadConnectors(); }
       };

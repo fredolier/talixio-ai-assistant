@@ -2238,5 +2238,6 @@ window.I18N.fr = {
 "This connector is already there.": "Ce connecteur est déjà là.",
 "Add the online connector “{name}” ({url})? Talixio will connect to it and list its tools.": "Ajouter le connecteur en ligne « {name} » ({url}) ? Talixio va s'y connecter et lister ses outils.",
 "Connecting to {name}…": "Connexion à {name}…",
-"“{name}” is added: sign in to it in Settings → Connectors.": "« {name} » est ajouté : connectez-vous à lui dans Réglages → Connecteurs."
+"“{name}” is added: sign in to it in Settings → Connectors.": "« {name} » est ajouté : connectez-vous à lui dans Réglages → Connecteurs.",
+"Downloading the web browser it drives (about 100 MB, once)…": "Téléchargement du navigateur qu'il pilote (environ 100 Mo, une seule fois)…"
 };

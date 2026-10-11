@@ -12,6 +12,11 @@ if (str_contains($path, ':generateContent')) {
         'usageMetadata' => ['promptTokenCount' => 1000, 'candidatesTokenCount' => 50]]);
     return;
 }
+if (($req['model'] ?? '') === 'picky-effort' && isset($req['reasoning_effort']) && !in_array($req['reasoning_effort'], ['none', 'high'], true)) { // like Mistral
+    http_response_code(400); header('Content-Type: application/json');
+    echo json_encode(['object' => 'error', 'message' => "reasoning_effort='{$req['reasoning_effort']}' is not supported for this model. Must be one of (none, high)"]);
+    return;
+}
 header('Content-Type: text/event-stream');
 if ($path === '/v1/messages') {
     $last = end($req['messages']);

@@ -16,8 +16,15 @@ final class OpenAIProvider implements Provider
         for ($i = 0; $i < $this->tier->maxSteps; $i++) {
             // read each step: tools_more can add some
             if ($specs = array_map(fn($t) => ['type' => 'function', 'function' => $t], $tools->schemas())) $payload['tools'] = $specs;
-            $r = $onEvent ? $this->stream($payload + ['messages' => $msgs], $onEvent)
-                : Http::json("{$this->baseUrl}/chat/completions", $payload + ['messages' => $msgs], ['Authorization: Bearer ' . ($this->key ?: 'none')], 300);
+            try {
+                $r = $onEvent ? $this->stream($payload + ['messages' => $msgs], $onEvent)
+                    : Http::json("{$this->baseUrl}/chat/completions", $payload + ['messages' => $msgs], ['Authorization: Bearer ' . ($this->key ?: 'none')], 300);
+            } catch (\RuntimeException $e) {
+                // a model that refuses this effort (Mistral: none|high only, plain chat models: none at all): its default instead
+                if (!isset($payload['reasoning_effort']) || !preg_match('/^API error 4\d\d\b.*reasoning_effort/s', $e->getMessage())) throw $e;
+                unset($payload['reasoning_effort']); $i--;
+                continue;
+            }
             $m = $r['choices'][0]['message'] ?? [];
             $usage = $r['usage'] ?? null;
             if ($usage === null) { // some compatible servers don't report usage when streaming: estimate (~4 chars per token)

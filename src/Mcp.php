@@ -153,6 +153,7 @@ final class Mcp
     private function stdio(array $s, string $method, array|object $params, int $timeout): array
     {
         $env = ['PATH' => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin', 'HOME' => getenv('HOME') ?: $this->app->cfg->dataDir, 'LANG' => 'C.UTF-8'];
+        if (isset($s['source']['library_file'])) $env['PLAYWRIGHT_BROWSERS_PATH'] = ConnectorPackage::browsers($this->app->cfg->dataDir);
         foreach ((array)($s['env'] ?? []) as $k => $v) $env[(string)$k] = (string)$v;
         $cmd = array_merge([(string)$s['command']], array_map('strval', (array)($s['args'] ?? [])));
         $err = tempnam(sys_get_temp_dir(), 'mcp');

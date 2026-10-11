@@ -178,8 +178,8 @@ The assistant only gets what you allow.
 These services have no public API. These connectors pretend to be a web browser and may stop working at any
 time. Use an account you are willing to risk.
 
-- **Uber Eats**: search restaurants, read menus, order. It drives a web browser, which your installation
-  may not have.
+- **Uber Eats**: search restaurants, read menus, order. It drives a web browser, which Talixio
+  downloads when installing it (about 100 MB, once).
   [▶ Install](?connector=https://github.com/markswendsen-code/mcp-ubereats)
 - **E.Leclerc Drive**: search products, fill the basket. Needs Node.js 22 or newer.
   [▶ Install](?connector=https://github.com/skunkobi/mcp-leclerc-drive)

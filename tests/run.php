@@ -717,6 +717,12 @@ foreach (['anthropic' => new \Talixio\AnthropicProvider('k', new \Talixio\Tier('
 }
 check('step limit: the model is asked for a last answer without tools (what is done, what is missing), not a bare "stopped"',
     !array_filter($capped, fn($t) => !str_starts_with($t, 'Where things stand: Tool step limit reached') || !str_contains($t, 'what you need from them')), json_encode($capped));
+@unlink("$dir/fake-llm.log");
+$picky = new \Talixio\Tier('standard', 'picky-effort', 5); $picky->reasoningEffort = 'low';
+$text = (new \Talixio\OpenAIProvider('k', $picky, "http://127.0.0.1:$llmPort", true))->complete('sys', '', [['role' => 'user', 'content' => 'tasks?']], $app->tools->only('chat'), fn($u) => null, fn($e) => null);
+$sent = array_map(fn($l) => json_decode($l, true), array_filter(explode("\n", (string)@file_get_contents("$dir/fake-llm.log"))));
+check('openai-compatible: a model refusing the reasoning effort (Mistral: "low") is asked again without it', str_starts_with($text, 'Done: ')
+    && ($sent[0]['reasoning_effort'] ?? '') === 'low' && !array_filter(array_slice($sent, 1), fn($r) => isset($r['reasoning_effort'])), json_encode([$text, array_column($sent, 'reasoning_effort')]));
 check('mistral reasoning models: content sent as chunks becomes text, thinking left out (not "Array")',
     \Talixio\OpenAIProvider::text([['type' => 'thinking', 'thinking' => [['type' => 'text', 'text' => 'hmm']]], ['type' => 'text', 'text' => 'Report '], 'ready']) === 'Report ready'
     && \Talixio\OpenAIProvider::text('plain') === 'plain' && \Talixio\OpenAIProvider::text(null) === '');
@@ -2329,9 +2335,10 @@ const send = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0
 rl.on('line', l => { const m = JSON.parse(l); if (m.id === undefined) return;
   if (m.method === 'initialize') send(m.id, { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'tasks', version: '1' } });
   else if (m.method === 'tools/list') send(m.id, { tools: [{ name: 'open_tasks', description: 'Open tasks at ' + url, inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } }] });
-  else if (m.method === 'tools/call') send(m.id, { content: [{ type: 'text', text: `3 open tasks at ${url} for ${who} (${pw ? 'signed in' : 'no password'})` }] });
+  else if (m.method === 'tools/call') send(m.id, { content: [{ type: 'text', text: `3 open tasks at ${url} for ${who} (${pw ? 'signed in' : 'no password'}), browsers in ${process.env.PLAYWRIGHT_BROWSERS_PATH}` }] });
   else send(m.id, {}); });
 JS);
+$zz->addFromString('mcp/node_modules/playwright-core/cli.js', "require('fs').mkdirSync(process.env.PLAYWRIGHT_BROWSERS_PATH, { recursive: true }); require('fs').writeFileSync(process.env.PLAYWRIGHT_BROWSERS_PATH + '/asked.txt', process.argv.slice(2).join(' '));");
 $zz->addFromString('../evil.txt', 'outside');
 $zz->close();
 Library::$system = true; $zid = $app->files()->save($zp, 'anki-mcp.zip', 'application/zip', '/Connecteurs'); Library::$system = false;
@@ -2345,9 +2352,10 @@ if (trim((string)shell_exec('command -v node')) !== '') {
     $cs = $cp->status(); $srv = $app->mcp()->servers()['anki'] ?? [];
     check('connector: installed, declared and answering', $cs['state'] === 'done' && $cs['tools'] === 1 && ($srv['args'][0] ?? '') === 'src/server.js' && ($srv['cwd'] ?? '') === 'connectors/anki' && is_file("$dir/connectors/anki/src/server.js")
         && ($srv['env']['TALIXIO_PASSWORD'] ?? '') === 's3cret' && !isset($srv['env']['bad key']) && !isset($cs['env']), json_encode([$cs, $srv]));
+    check('connector: driving a browser (Playwright), its headless Chromium is downloaded into the data folder', @file_get_contents("$dir/ms-playwright/asked.txt") === 'install --only-shell chromium');
     check('connector: nothing written outside its folder', !file_exists("$dir/connectors/evil.txt") && !file_exists("$dir/evil.txt") && !file_exists("$dir/connectors/anki/../evil.txt"));
     $out = $app->mcp()->call('anki', 'open_tasks', []);
-    check('connector: its tool works with the settings given', str_contains(is_string($out) ? $out : json_encode($out), '3 open tasks at https://anki.example.com for me@example.com (signed in)'), is_string($out) ? $out : json_encode($out));
+    check('connector: its tool works with the settings given', str_contains(is_string($out) ? $out : json_encode($out), "3 open tasks at https://anki.example.com for me@example.com (signed in), browsers in $dir/ms-playwright"), is_string($out) ? $out : json_encode($out));
     $cp->install($zid, 'anki', ['TALIXIO_URL' => 'https://anki2.example.com', 'TALIXIO_PASSWORD' => ''], false); $cp->finish();
     $srv = $app->mcp()->servers()['anki'];
     check('connector: reinstalling keeps a secret left empty', $srv['env']['TALIXIO_PASSWORD'] === 's3cret' && $srv['env']['TALIXIO_URL'] === 'https://anki2.example.com' && $cp->status()['state'] === 'done');
