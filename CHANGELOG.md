@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.2 (2026-10-11)
+
+- The quick model could repeat the same plan after "yes" instead of doing it. A short "yes" / "go ahead"
+  now gets at least the standard model, and an answer that only repeats the previous one, with no action
+  taken, is handed once to a stronger model, which acts or says plainly what it cannot do.
+- The progress messages in the chat ("Reading the attachments…", "Asking a stronger model…") are now
+  translated.
+
 ## 0.28.1 (2026-10-11)
 
 - Recurring meetings: when asked for a meeting "every Monday until Christmas", the assistant could make one

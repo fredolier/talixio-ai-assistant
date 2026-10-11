@@ -2465,6 +2465,21 @@ check('europe: the fast model is Mistral when the provider has one (it writes Fr
     $tiersEu === ['fast' => 'Mistral-Small-3.2-24B-Instruct-2506', 'standard' => 'gpt-oss-120b', 'deep' => 'qwen-3-5-397b']
     && str_contains((new \Talixio\Agent($app))->systemPrompt(), "answer in the language of the user's last message"), json_encode($tiersEu));
 
+// a fast model restating its plan instead of acting: "oui" goes to a stronger tier, and a repeated answer is handed over once
+$plan = "Je vais créer une réunion récurrente avec Cédric et Paul tous les lundis de 11h à 11h30 jusqu'à Noël. Est-ce que cela vous convient ?";
+$stall = []; $fake->script = function ($last, $tools, $on, $ctx) use ($usage, $plan, &$stall) {
+    $usage($on); preg_match('/\((\w+) tier/', $ctx, $m); $stall[] = $m[1];
+    return $m[1] === 'fast' ? $plan : (str_contains($ctx, 'only restated a plan') ? 'Series created.' : 'Done.');
+};
+@mkdir("$dir/stall"); putenv("TALIXIO_DATA_DIR=$dir/stall");
+$ga = App::fromEnv(); $ga->providerOverride = $fake; $gag = $ga->agent();
+$gag->chat('web', 'Crée une réunion tous les lundis', 'fast');
+$r = $gag->chat('web', "Qu'est-ce que tu attends pour le faire", 'fast');
+check('stuck model: the same answer again, without a tool, is handed to a stronger tier once', $r === 'Series created.' && $stall === ['fast', 'fast', 'standard'], json_encode([$stall, $r]));
+$stall = []; $r = $gag->chat('web', 'Oui', 'fast');
+check('stuck model: "oui" to a plan is answered by at least the standard tier', $r === 'Done.' && $stall === ['standard'] && \Talixio\Agent::isGoAhead('oui je veux') && \Talixio\Agent::isGoAhead('Vas-y !')
+    && !\Talixio\Agent::isGoAhead('ouistiti') && !\Talixio\Agent::isGoAhead("Oui mais d'abord dis-moi qui est invité à la réunion de lundi prochain"), json_encode($stall));
+
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
 exit($fails ? 1 : 0);

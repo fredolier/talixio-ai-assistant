@@ -680,7 +680,7 @@ async function send(opts = {}) {
   thread.append(pending, live); thread.scrollTop = thread.scrollHeight;
   let textSoFar = '';
   const approvalsTimer = setInterval(loadApprovals, 4000);
-  const activity = t => { const a = live.querySelector('.activity'); a.hidden = !t; a.innerHTML = t ? SPIN + esc(t) : ''; thread.scrollTop = thread.scrollHeight; };
+  const activity = s => { const a = live.querySelector('.activity'); a.hidden = !s; a.innerHTML = s ? SPIN + esc(t(s)) : ''; thread.scrollTop = thread.scrollHeight; };
   const livePill = d => { // what is leaving the server right now (or staying here)
     let box = live.querySelector('.live-pills');
     if (!box) { box = document.createElement('div'); box.className = 'live-pills'; live.append(box); }

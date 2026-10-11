@@ -135,6 +135,24 @@ final class Agent
         return [trim($text), $meta];
     }
 
+    /** A short "yes, do it" (oui, vas-y, ok, go ahead, fais-le…). */
+    public static function isGoAhead(string $text): bool
+    {
+        $t = mb_strtolower(trim(preg_replace('/[\s!.?,]+/u', ' ', $text)));
+        return mb_strlen($t) <= 40 && (bool)preg_match("/^(oui|ok|okay|yes|yep|go|vas[- ]y|allez[- ]y|d'accord|daccord|parfait|c'est bon|fais[- ]le|do it|go ahead|sure|bien sûr|exactement|je confirme|confirme)\\b/u", $t);
+    }
+
+    /** Two answers that say the same thing (a model repeating itself). */
+    public static function sameAnswer(string $a, string $b): bool
+    {
+        $n = fn($s) => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $s)));
+        $a = $n($a); $b = $n($b);
+        if ($a === '' || $b === '' || mb_strlen($a) < 40) return false;
+        if ($a === $b) return true;
+        similar_text($a, $b, $pct);
+        return $pct >= 90;
+    }
+
     /**
      * A message from the user on some channel. "/fast" or "/deep" at the start picks the tier.
      * $files: ids of attached files (images are shown to the model, documents and audio as text).
@@ -177,6 +195,8 @@ final class Agent
         if ($channel === 'telegram' && $level !== 'internal') return I18n::t($this->app, '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).', ['name' => $spaces->get($space)['name']]);
         $prompt = $text;
         if ($tier === 'standard' && $space) $tier = $spaces->get($space)['tier'] ?: 'standard';
+        // "oui" / "vas-y" to a plan means: act now with the tools; the fast model tends to restate the plan instead
+        if ($tier === 'fast' && self::isGoAhead($text)) $tier = 'standard';
         if (preg_match('#^/(fast|standard|deep)\b\s*#i', $text, $m)) { $tier = strtolower($m[1]); $prompt = substr($text, strlen($m[0])); }
         $started = microtime(true); $partial = '';
         if ($onEvent) { // the user can stop the answer (Stop button): checked on each streamed event, at most twice a second
@@ -229,6 +249,17 @@ final class Agent
                 if (($why = $this->app->cfg->modelProblem()) !== null) throw new PrivacyBlocked($why); // nothing to answer with yet: say how to set it up
                 [$reply, $meta] = $this->run($channel, $tier, 'chat', $history,
                     $recalled !== '' ? "## Possibly relevant from past conversations\n$recalled" : '', 'main', null, null, $onEvent);
+                // the same answer as last time, and no tool used: the model is stuck in a loop; once, a stronger one takes over
+                $before = '';
+                foreach (array_slice($history, 0, -1) as $h) if ($h['role'] === 'assistant' && is_string($h['content'])) $before = $h['content'];
+                $up = ['fast' => 'standard', 'standard' => 'deep'][$meta['tier']] ?? null;
+                if ($up && self::sameAnswer($reply, $before) && (int)$store->q('SELECT COALESCE(MAX(id),0) FROM tool_log')->fetchColumn() === $toolsBefore) {
+                    Log::warn("agent: {$meta['model']} repeated its last answer, asking the $up tier");
+                    if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Asking a stronger model…']);
+                    [$reply, $meta] = $this->run($channel, $up, 'chat', $history, ($recalled !== '' ? "## Possibly relevant from past conversations\n$recalled\n\n" : '')
+                        . "Your last answer only restated a plan. The user wants it done: do it now with your tools (the actions needing approval ask for it themselves), or say plainly what you cannot do and why.",
+                        'main', null, null, $onEvent);
+                }
                 $reply = $reply ?: I18n::t($this->app, '(no response)');
             } catch (PrivacyBlocked $e) {
                 $reply = in_array($e->getMessage(), ['no-key', 'no-claude-code'], true) ? I18n::t($this->app, $e->getMessage() === 'no-claude-code'

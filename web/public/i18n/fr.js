@@ -2209,5 +2209,9 @@ window.I18N.fr = {
 "Microsoft gave no lasting access: check that the app asks for offline_access, then connect again.": "Microsoft n'a pas donné d'accès durable : vérifiez que l'application demande offline_access, puis reconnectez-vous.",
 "Microsoft sign-in failed: {a}": "Échec de la connexion Microsoft : {a}",
 "Outlook: {a}": "Outlook : {a}",
-"Outlook is not connected": "Outlook n'est pas connecté"
+"Outlook is not connected": "Outlook n'est pas connecté",
+"Asking a stronger model…": "Je passe à un modèle plus solide…",
+"Finishing another task first (a scheduled task or a job report)… your message is queued.": "Je termine d'abord une autre tâche (une routine ou un rapport)… votre message est en attente.",
+"Reading the attachments…": "Lecture des pièces jointes…",
+"Transcribing your voice note…": "Transcription de votre message vocal…"
 };
