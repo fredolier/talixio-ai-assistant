@@ -3,6 +3,20 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.25.0 (2026-10-11)
+
+- Meeting invitations: a task can have guests (email addresses) and a place. "Send the invitations"
+  emails them a standard calendar invitation that Outlook, Gmail, Apple Calendar and Thunderbird show
+  with Accept / Decline; after a change, "Send the update" sends the new time or place, guests removed
+  get a cancellation, and "Cancel the meeting" (or moving the task to the trash) tells everyone. It is
+  sent from your own mailbox when it is connected (a copy goes to Sent, the answers come back to you),
+  otherwise from the assistant's address on your behalf. Only the title, time and place are sent, never
+  the description. The assistant can do it too (board_invite), after your approval. The place also goes
+  to Google Calendar and the iCal link.
+- European provider: "Test the key" now makes a real call, since some providers (OVHcloud) list their
+  models without checking the key: a refused key is reported instead of "it works". The embeddings no
+  longer use a local (Ollama) model name with the European provider. Missing French texts added.
+
 ## 0.24.0 (2026-10-11)
 
 - Tasks can have hours ("From" / "To" next to the dates): a timed task is a meeting slot. It shows with

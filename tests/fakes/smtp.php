@@ -1,8 +1,9 @@
 <?php
-// Fake SMTP server for tests: one session, no TLS, records the transcript to argv[2].
+// Fake SMTP server for tests: one session (or argv[3] sessions), no TLS, records the transcript to argv[2].
 $srv = stream_socket_server('tcp://127.0.0.1:' . $argv[1], $e, $es);
 $log = '';
-for ($tries = 0; $tries < 5; $tries++) { // the test's readiness probe connects and leaves: skip such sessions
+$want = (int)($argv[3] ?? 1); $got = 0;
+for ($tries = 0; $tries < $want + 5; $tries++) { // the test's readiness probe connects and leaves: skip such sessions
 $c = stream_socket_accept($srv, 10);
 if (!$c) break;
 $w = function (string $l) use ($c) { fwrite($c, $l . "\r\n"); };
@@ -22,6 +23,7 @@ while (($line = fgets($c)) !== false) {
     };
     if ($cmd === 'QUIT') break;
 }
-if ($log !== '') break;
+if ($log !== '' && ++$got >= $want) break;
+if ($log !== '') file_put_contents($argv[2], $log);
 }
 file_put_contents($argv[2], $log);

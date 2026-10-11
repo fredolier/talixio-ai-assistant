@@ -350,7 +350,7 @@ final class Tools
         };
         $fields = function (array $a) use ($spaceArg): array {
             $map = ['title' => 'title', 'description' => 'body', 'status' => 'status', 'priority' => 'priority', 'start' => 'start_date', 'due' => 'due_date', 'start_time' => 'start_time', 'end_time' => 'end_time',
-                'workload' => 'estimate_hours', 'tags' => 'tags', 'in_calendar' => 'in_calendar', 'depends_on' => 'depends_on', 'add_depends_on' => 'add_depends_on', 'remove_depends_on' => 'remove_depends_on'];
+                'workload' => 'estimate_hours', 'tags' => 'tags', 'in_calendar' => 'in_calendar', 'guests' => 'attendees', 'place' => 'location', 'depends_on' => 'depends_on', 'add_depends_on' => 'add_depends_on', 'remove_depends_on' => 'remove_depends_on'];
             $d = [];
             foreach ($map as $k => $f) if (array_key_exists($k, $a)) $d[$f] = $a[$k];
             if (($s = $spaceArg($a)) !== null) $d['space'] = $s;
@@ -363,7 +363,9 @@ final class Tools
             'end_time' => ['type' => 'string', 'description' => 'HH:MM on the due day (or the start day); default one hour after the start'],
             'workload' => ['type' => 'string', 'description' => 'estimated work: "3h", "45m", "2d" (7h days)'], 'tags' => ['type' => 'array', 'items' => ['type' => 'string']],
             'depends_on' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'codes of tasks this one waits for (any space)'],
-            'in_calendar' => ['type' => 'boolean', 'description' => "also show it in the user's calendar"], 'space' => ['type' => 'string', 'description' => 'General only: the space to put it in']];
+            'in_calendar' => ['type' => 'boolean', 'description' => "also show it in the user's calendar"],
+            'guests' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'email addresses of the people to meet (then board_invite sends them the invitation)'],
+            'place' => ['type' => 'string', 'description' => 'where: room, address or video link'], 'space' => ['type' => 'string', 'description' => 'General only: the space to put it in']];
         $this->register('board_list',
             "The user's tasks board (to-dos, not routines): this space's tasks by column, with code, priority (P1 most urgent), dates, workload, dependencies and warnings. In General, all_spaces=true shows every space (for arbitration).",
             ['status' => ['type' => 'string', 'enum' => array_keys(Board::STATUSES)], 'tag' => ['type' => 'string'], 'query' => ['type' => 'string'], 'all_spaces' => ['type' => 'boolean']], [],
@@ -404,6 +406,18 @@ final class Tools
                 $c = $mine((string)$a['code']);
                 $waiting = $bd()->delete($c['id'], $who());
                 return "{$c['code']} moved to the trash" . ($waiting ? '. These tasks were waiting for it: ' . implode(', ', $waiting) : '');
+            });
+        $this->register('board_invite',
+            "Email the task's guests a meeting invitation they accept or decline in their calendar (Outlook, Gmail, Apple…); again after a change sends the update, cancel=true tells them it is cancelled. Needs guests and a date (a time for a meeting). The user approves each sending.",
+            ['code' => ['type' => 'string'], 'cancel' => ['type' => 'boolean']], ['code'],
+            function (array $a) use ($bd, $mine, $who) {
+                $c = $mine((string)$a['code']);
+                return $bd()->invite($c['id'], !empty($a['cancel']), $who());
+            },
+            function (array $a) use ($bd, $mine) {
+                $c = $mine((string)$a['code']);
+                $to = !empty($a['cancel']) ? ($c['invited']['to'] ?? []) : $c['attendees'];
+                return (!empty($a['cancel']) ? 'Cancel the meeting' : 'Send the invitation') . " {$c['code']} \"{$c['title']}\" to " . (implode(', ', $to) ?: 'nobody');
             });
         $this->register('board_prioritize',
             "Order tasks: the codes given come first, in this order, in their columns. In General with overall=true: set the overall order across all spaces (arbitration) — propose it to the user first.",

@@ -254,10 +254,12 @@ final class Config
                 default => 'off',
             };
         }
-        $c->embeddingsModel = $e('TALIXIO_EMBEDDINGS_MODEL', match ($c->embeddings) {
+        $embedDefault = match ($c->embeddings) {
             'ollama' => 'qwen3-embedding:0.6b', 'openai' => 'text-embedding-3-small', 'voyage' => 'voyage-3.5-lite', 'gemini' => 'gemini-embedding-001',
             'sovereign' => Sovereign::SERVICES[$c->sovereign]['embed'], default => '',
-        });
+        };
+        $c->embeddingsModel = $e('TALIXIO_EMBEDDINGS_MODEL', $embedDefault);
+        if ($c->embeddings !== 'ollama' && str_contains($c->embeddingsModel, ':')) $c->embeddingsModel = $embedDefault; // an Ollama model left from before the switch
         $c->embeddingsDims = $e('TALIXIO_EMBEDDINGS_DIMS') === '' ? -1 : (int)$e('TALIXIO_EMBEDDINGS_DIMS');
         $c->recallMinSim = (float)$e('TALIXIO_RECALL_MIN_SIMILARITY', $c->embeddings === 'ollama' && str_contains($c->embeddingsModel, 'qwen3') ? '0.45' : '0.5');
         $list = fn(string $v) => array_values(array_filter(array_map(fn($x) => strtolower(trim($x)), explode(',', $v)), 'strlen'));

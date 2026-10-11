@@ -127,4 +127,20 @@ final class Mailbox
         }
         return "sent to $to" . ($cc !== '' ? " (cc $cc)" : '') . ": \"$subject\"";
     }
+
+    public function canSend(): bool { return $this->enabled() && $this->app->cfg->mailboxSmtpHost !== '' && $this->app->cfg->mailboxFrom !== ''; }
+
+    /** A mail with extra parts (a meeting invitation) to several people at once, as the user; a copy goes to Sent. */
+    public function sendParts(array $to, string $subject, string $body, array $parts): void
+    {
+        $c = $this->app->cfg;
+        $headers = ['Auto-Submitted' => null, 'To' => implode(', ', $to)];
+        $smtp = new Smtp($c->mailboxSmtpHost, $c->mailboxSmtpPort, $c->mailboxSmtpSecurity, $c->mailboxUser, $c->mailboxPassword);
+        $id = $smtp->send($c->mailboxFrom, $to[0], $subject, $body, $headers, array_slice($to, 1), null, $parts);
+        try {
+            $this->imap()->append($this->folder('\\Sent', $c->mailboxSent), Smtp::build($c->mailboxFrom, $to[0], $subject, $body, $id, $headers, null, $parts), '\\Seen');
+        } catch (\Throwable $e) {
+            Log::warn("mailbox: sent, but could not save a copy in Sent: {$e->getMessage()}");
+        }
+    }
 }

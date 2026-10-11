@@ -557,6 +557,12 @@
       <label class="cd-check"><input id="cd-cal" type="checkbox"> Show in my calendar</label>
     </div>
     <label class="cd-tags">Tags<input id="cd-tags" placeholder="separated by commas" autocomplete="off"></label>
+    <div class="cd-meet">
+      <label class="cd-tags">Guests<input id="cd-guests" type="text" inputmode="email" placeholder="Email addresses, separated by commas" autocomplete="off"></label>
+      <label class="cd-tags">Place<input id="cd-loc" maxlength="300" placeholder="Room, address or video link" autocomplete="off"></label>
+      <div id="cd-invite" class="row wrap cd-invite" hidden><span id="cd-invite-state" class="muted small"></span><span class="spacer"></span>
+        <button id="cd-invite-cancel" class="btn small ghost danger" type="button">Cancel the meeting</button><button id="cd-invite-send" class="btn small" type="button">Send the invitations</button></div>
+    </div>
     <div class="cd-label">Description</div>
     <div id="cd-rte" class="rte"></div>
     <div class="cd-label">Waits for</div>

@@ -1975,6 +1975,33 @@ check('board: a task with hours is a meeting (one hour by default, busy in the c
     && str_contains($err(['end_time' => '09:00']), 'before the start') && $err(['end_time' => '11:00']) === '' && $bd->get($mt['id'])['end_time'] === '11:00'
     && str_contains($err(['start_time' => '25:00']), 'HH:MM') && str_contains($err(['start_time' => '']), 'needs a start time') && $err(['start_time' => '', 'end_time' => '']) === '', $ics2);
 $ba->store->q('DELETE FROM cards WHERE id = ?', [$mt['id']]); // gone for good, so the trash checks below stay as they were
+// meeting invitations by email (iTIP): Outlook, Gmail, Apple... show them with Accept / Decline
+foreach (['smtpHost' => '127.0.0.1', 'smtpSecurity' => 'none', 'emailFrom' => 'Talixio <bot@example.com>', 'emailTo' => 'Fred Dupont <fred@example.com>', 'mailboxSmtpHost' => ''] as $k => $v) $ba->cfg->$k = $v;
+$ba->cfg->smtpPort = $iport2 = $freePort();
+$mi = $bd->create(['title' => 'Point budget', 'due_date' => '2026-12-04', 'start_time' => '14:00', 'attendees' => 'Ann <ANN@example.com>, bob@example.org; ann@example.com', 'location' => 'Salle 2'], (int)$bsp['id']);
+$ierr = function (array $d) use ($bd, $mi) { try { $bd->update($mi['id'], $d); return ''; } catch (\InvalidArgumentException $e) { return $e->getMessage(); } };
+$sp = $spawn('smtp.php', [(string)$iport2, "$dir/invite1.log"]); $waitPort($iport2);
+$ir = $bd->invite($mi['id']); proc_close($sp);
+$il = (string)@file_get_contents("$dir/invite1.log"); $iu = preg_match_all('/^UID:(.+)$/m', $il, $mm) ? $mm[1][0] : '';
+$mi2 = $bd->get($mi['id']);
+check('board: guests and place are kept, and an invitation goes to every guest as a calendar event (Outlook, Gmail...)', $mi['attendees'] === ['ann@example.com', 'bob@example.org'] && $mi['location'] === 'Salle 2'
+    && $mi['invite_state'] === 'unsent' && $mi2['invite_state'] === 'sent' && $ir === "{$mi['code']}: invitation sent to ann@example.com, bob@example.org"
+    && str_contains($il, 'RCPT TO:<ann@example.com>') && str_contains($il, 'RCPT TO:<bob@example.org>') && str_contains($il, 'text/calendar; method=REQUEST')
+    && str_contains($il, 'Reply-To: fred@example.com'), $il);
+$ical = implode('', array_map(fn($b) => base64_decode(preg_replace('/\s+/', '', $b)), preg_match_all("/Content-Type: text\/calendar[^\r\n]*\r\n(?:[^\r\n]+\r\n)*\r\n(.+?)\r\n--/s", $il, $mm2) ? $mm2[1] : [])); $ical = str_replace("\r\n ", '', $ical); // unfolded
+check('board: the invitation is standard iCalendar (method, organizer, guests asked to answer, time, place)', str_contains($ical, 'METHOD:REQUEST') && str_contains($ical, 'ORGANIZER;CN="Fred Dupont":mailto:fred@example.com')
+    && str_contains($ical, 'RSVP=TRUE:mailto:bob@example.org') && str_contains($ical, 'LOCATION:Salle 2') && str_contains($ical, 'SEQUENCE:0')
+    && str_contains($ical, 'DTSTART:' . gmdate('Ymd\THis\Z', strtotime('2026-12-04 14:00'))) && preg_match('/^UID:task-\d+-[0-9a-f]{12}@talixio\r?$/m', $ical), $ical ?: $il);
+$bd->update($mi['id'], ['attendees' => ['ann@example.com'], 'start_time' => '15:00']);
+check('board: a change after the invitations says to send the update; bad guests are refused', $bd->get($mi['id'])['invite_state'] === 'outdated'
+    && str_contains($ierr(['attendees' => 'ann@@example.com']), 'Not an email address') && str_contains($bd->line($bd->get($mi['id'])), 'out of date'));
+$sp = $spawn('smtp.php', [(string)$iport2, "$dir/invite2.log", '2']); $waitPort($iport2);
+$ir2 = $bd->invite($mi['id']); proc_terminate($sp); proc_close($sp);
+$il2 = (string)@file_get_contents("$dir/invite2.log");
+check('board: the update goes to the guests, a removed guest is told it is cancelled', $ir2 === "{$mi['code']}: invitation updated for ann@example.com; cancelled for bob@example.org"
+    && str_contains($il2, 'text/calendar; method=REQUEST') && str_contains($il2, 'text/calendar; method=CANCEL') && preg_match('/RCPT TO:<bob@example.org>\r?\n(?:(?!RCPT TO).)*method=CANCEL/s', $il2)
+    && $bd->get($mi['id'])['invited']['seq'] === 1 && $bd->get($mi['id'])['invite_state'] === 'sent', $ir2 . "\n" . $il2);
+$ba->store->q('DELETE FROM cards WHERE id = ?', [$mi['id']]);
 $tok = $bd->icsToken();
 $ch = curl_init("http://127.0.0.1:$webPort/cal/tasks-$tok.ics"); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true]); $feed = (string)curl_exec($ch); $fcode = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
 $ch = curl_init("http://127.0.0.1:$webPort/cal/tasks-" . str_repeat('0', 40) . '.ics'); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true]); curl_exec($ch); $bcode = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);

@@ -14,7 +14,8 @@ final class Board
 {
     public const STATUSES = ['idea' => 'Ideas', 'todo' => 'To do', 'doing' => 'In progress', 'blocked' => 'Blocked', 'done' => 'Done'];
     public const HOURS_PER_DAY = 7;
-    private const FIELDS = ['title', 'body', 'status', 'priority', 'start_date', 'due_date', 'start_time', 'end_time', 'estimate_hours', 'tags', 'in_calendar', 'space', 'links'];
+    private const EMAIL = '/[^\s,;<>"\'()]+@[^\s,;<>"\'()]+/';
+    private const FIELDS = ['title', 'body', 'status', 'priority', 'start_date', 'due_date', 'start_time', 'end_time', 'estimate_hours', 'tags', 'in_calendar', 'space', 'links', 'attendees', 'location'];
 
     public function __construct(private App $app)
     {
@@ -35,6 +36,9 @@ final class Board
         $app->store->addColumn('cards', 'gcal_synced', 'INTEGER'); // version last sent to Google
         $app->store->addColumn('cards', 'start_time', 'TEXT');    // "09:30": a timed slot (a meeting), on the start day (or the due day)
         $app->store->addColumn('cards', 'end_time', 'TEXT');      // "10:30", on the due day (or the start day)
+        $app->store->addColumn('cards', 'attendees', "TEXT NOT NULL DEFAULT ''"); // guests' addresses, comma-separated
+        $app->store->addColumn('cards', 'location', "TEXT NOT NULL DEFAULT ''");  // a room, an address or a video link
+        $app->store->addColumn('cards', 'invited', 'TEXT');       // the last invitation sent: {"seq":2,"to":[...],"hash":"...","at":...}
         $app->store->addColumn('cards', 'old_codes', "TEXT NOT NULL DEFAULT ''"); // ',GEN-3,': codes it had in other spaces, still recognised
     }
 
@@ -69,6 +73,12 @@ final class Board
         foreach (['done_at', 'deleted_at'] as $k) $c[$k] = $c[$k] === null ? null : (int)$c[$k];
         $c['tags'] = Store::tagList($c['tags']);
         $c['links'] = json_decode($c['links'], true) ?: [];
+        $c['attendees'] = self::emails((string)($c['attendees'] ?? ''));
+        $c['location'] = (string)($c['location'] ?? '');
+        $c['invited'] = json_decode((string)($c['invited'] ?? ''), true) ?: null;
+        // invitations: null (no guests), unsent, sent (up to date) or outdated (time, title, place or guests changed since)
+        $c['invite_state'] = !$c['attendees'] && !($c['invited']['to'] ?? []) ? null
+            : (!($c['invited']['to'] ?? []) ? 'unsent' : (($c['invited']['hash'] ?? '') === self::inviteHash($c) ? 'sent' : 'outdated'));
         $c['spent_hours'] = (float)$this->app->store->q('SELECT COALESCE(SUM(hours),0) FROM card_time WHERE card = ?', [$c['id']])->fetchColumn();
         preg_match_all('/^\s*[-*+]\s+\[([ xX])\]/m', $c['body'], $m);
         $c['checklist'] = ['done' => count(array_filter($m[1], fn($x) => $x !== ' ')), 'total' => count($m[1])];
@@ -176,6 +186,13 @@ final class Board
         return sprintf('%02d:%02d', (int)$m[1], (int)($m[2] ?? 0));
     }
 
+    /** The addresses in a list ("Ann <ann@x.org>, bob@y.com; ..."), lowercased, once each. */
+    public static function emails(string $text): array
+    {
+        preg_match_all(self::EMAIL, $text, $m);
+        return array_values(array_unique(array_filter(array_map('mb_strtolower', $m[0]), fn($a) => filter_var($a, FILTER_VALIDATE_EMAIL))));
+    }
+
     /** First and last minute of a timed task, as timestamps; null when it has no start time (all-day). */
     public static function slot(array $c): ?array
     {
@@ -200,6 +217,15 @@ final class Board
         if (array_key_exists('estimate_hours', $d)) $v['estimate_hours'] = self::hours($d['estimate_hours']);
         if (array_key_exists('tags', $d)) $v['tags'] = Store::tagString(is_array($d['tags']) ? $d['tags'] : (string)$d['tags']);
         if (array_key_exists('in_calendar', $d)) $v['in_calendar'] = $d['in_calendar'] && $d['in_calendar'] !== 'false' ? 1 : 0;
+        if (array_key_exists('attendees', $d)) {
+            $raw = is_array($d['attendees']) ? implode(',', $d['attendees']) : (string)$d['attendees'];
+            preg_match_all(self::EMAIL, $raw, $m);
+            foreach ($m[0] as $a) if (!filter_var($a, FILTER_VALIDATE_EMAIL)) throw new \InvalidArgumentException("Not an email address: $a");
+            $list = self::emails($raw);
+            if (count($list) > 50) throw new \InvalidArgumentException('At most 50 guests.');
+            $v['attendees'] = implode(',', $list);
+        }
+        if (array_key_exists('location', $d)) $v['location'] = mb_substr(trim(preg_replace('/\s+/', ' ', (string)$d['location'])), 0, 300);
         if (array_key_exists('links', $d)) $v['links'] = json_encode(array_values(array_filter((array)$d['links'], 'is_array')), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (array_key_exists('space', $d)) { $s = (int)$d['space']; if (!$this->app->spaces()->get($s)) throw new \InvalidArgumentException('no such space'); $v['space'] = $s; }
         if (isset($v['start_date'], $v['due_date']) && $v['start_date'] > $v['due_date']) throw new \InvalidArgumentException('The start is after the due date.');
@@ -515,7 +541,7 @@ final class Board
         $b = json_decode($l['before'], true);
         $id = (int)$l['card'];
         $now = $this->snapshot($id);
-        $row = array_diff_key($b['row'], array_flip(['id', 'created', 'version', 'gcal_id', 'gcal_synced']));
+        $row = array_diff_key($b['row'], array_flip(['id', 'created', 'version', 'gcal_id', 'gcal_synced', 'invited']));
         $row['updated'] = time();
         $st->db->beginTransaction();
         $st->q('UPDATE cards SET ' . implode(',', array_map(fn($k) => "$k = ?", array_keys($row))) . ', version = version + 1 WHERE id = ?', [...array_values($row), $id]);
@@ -560,7 +586,7 @@ final class Board
             try {
                 if ($c['in_calendar'] && !$c['deleted_at'] && ($c['due_date'] || $c['start_date'])) {
                     $start = $c['start_date'] ?? $c['due_date']; $end = $c['due_date'] ?? $c['start_date'];
-                    $eid = $g->putTaskEvent($raw['gcal_id'] ?: null, $c['id'], $this->eventTitle($c), $start, $end, $this->eventText($c), self::slot($c));
+                    $eid = $g->putTaskEvent($raw['gcal_id'] ?: null, $c['id'], $this->eventTitle($c), $start, $end, $this->eventText($c), self::slot($c), $c['location']);
                     $st->q('UPDATE cards SET gcal_id = ?, gcal_synced = ? WHERE id = ?', [$eid, $raw['version'], $id]);
                 } else {
                     $g->deleteTaskEvent($raw['gcal_id']);
@@ -586,25 +612,115 @@ final class Board
     /** The tasks marked "show in my calendar", as an iCal feed (all-day from start to due date, or the hours given). */
     public function ics(): string
     {
-        $esc = fn(string $v) => str_replace(["\\", ';', ',', "\n"], ["\\\\", '\;', '\,', '\n'], $v);
-        $fold = function (string $l): string { // lines of at most 75 bytes, never cutting a character
-            $out = ''; $cur = '';
-            foreach (mb_str_split($l) as $ch) { if (strlen($cur) + strlen($ch) > 73) { $out .= "$cur\r\n "; $cur = ''; } $cur .= $ch; }
-            return $out . $cur;
-        };
-        $out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Talixio//Tasks//EN', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:' . $esc($this->app->cfg->name . ' tasks'), 'REFRESH-INTERVAL;VALUE=DURATION:PT1H'];
+        $out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Talixio//Tasks//EN', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:' . self::icsText($this->app->cfg->name . ' tasks'), 'REFRESH-INTERVAL;VALUE=DURATION:PT1H'];
         $rows = $this->app->store->q("SELECT * FROM cards WHERE in_calendar = 1 AND deleted_at IS NULL AND COALESCE(due_date, start_date) IS NOT NULL")->fetchAll();
         foreach ($rows as $r) {
             $c = $this->shape($r);
-            $start = $c['start_date'] ?? $c['due_date']; $end = $c['due_date'] ?? $c['start_date'];
-            $slot = self::slot($c);
-            $when = $slot ? ['DTSTART:' . gmdate('Ymd\THis\Z', $slot[0]), 'DTEND:' . gmdate('Ymd\THis\Z', $slot[1])]
-                : ['DTSTART;VALUE=DATE:' . str_replace('-', '', $start), 'DTEND;VALUE=DATE:' . date('Ymd', strtotime("$end +1 day"))];
-            array_push($out, 'BEGIN:VEVENT', "UID:task-{$c['id']}@talixio", 'DTSTAMP:' . gmdate('Ymd\THis\Z', $c['updated']), 'SEQUENCE:' . $c['version'], ...[...$when,
-                $fold('SUMMARY:' . $esc($this->eventTitle($c))), $fold('DESCRIPTION:' . $esc($this->eventText($c))), 'TRANSP:' . ($slot ? 'OPAQUE' : 'TRANSPARENT'), 'END:VEVENT']);
+            array_push($out, 'BEGIN:VEVENT', "UID:task-{$c['id']}@talixio", 'DTSTAMP:' . gmdate('Ymd\THis\Z', $c['updated']), 'SEQUENCE:' . $c['version'], ...[...self::icsWhen($c),
+                self::icsFold('SUMMARY:' . self::icsText($this->eventTitle($c))), self::icsFold('DESCRIPTION:' . self::icsText($this->eventText($c))),
+                ...($c['location'] !== '' ? [self::icsFold('LOCATION:' . self::icsText($c['location']))] : []), 'TRANSP:' . (self::slot($c) ? 'OPAQUE' : 'TRANSPARENT'), 'END:VEVENT']);
         }
         $out[] = 'END:VCALENDAR';
         return implode("\r\n", $out) . "\r\n";
+    }
+
+    private static function icsText(string $v): string { return str_replace(["\\", ';', ',', "\n"], ["\\\\", '\;', '\,', '\n'], $v); }
+
+    /** Lines of at most 75 bytes, never cutting a character. */
+    private static function icsFold(string $l): string
+    {
+        $out = ''; $cur = '';
+        foreach (mb_str_split($l) as $ch) { if (strlen($cur) + strlen($ch) > 73) { $out .= "$cur\r\n "; $cur = ''; } $cur .= $ch; }
+        return $out . $cur;
+    }
+
+    /** DTSTART and DTEND: the hours given (in UTC), or whole days from the start to the due date. */
+    private static function icsWhen(array $c): array
+    {
+        if ($slot = self::slot($c)) return ['DTSTART:' . gmdate('Ymd\THis\Z', $slot[0]), 'DTEND:' . gmdate('Ymd\THis\Z', $slot[1])];
+        $start = $c['start_date'] ?? $c['due_date']; $end = $c['due_date'] ?? $c['start_date'];
+        return ['DTSTART;VALUE=DATE:' . str_replace('-', '', $start), 'DTEND;VALUE=DATE:' . date('Ymd', strtotime("$end +1 day"))];
+    }
+
+    // ---------- invitations ----------
+
+    /** What the guests were told: when the time, title, place or guests change, the invitation is out of date. */
+    private static function inviteHash(array $c): string
+    {
+        $g = $c['attendees']; sort($g);
+        return substr(md5(json_encode([self::slot($c) ?? [$c['start_date'] ?? $c['due_date'] ?? '', $c['due_date'] ?? $c['start_date'] ?? ''], $c['title'], $c['location'], $g])), 0, 12);
+    }
+
+    /** Who can send invitations: the user's own mailbox (best: replies come back to it), or the assistant's address. */
+    public function canInvite(): bool
+    {
+        return $this->app->mailbox()->canSend() || ($this->app->email()->canSend() && $this->app->cfg->emailTo !== '');
+    }
+
+    /**
+     * Meeting invitations by email, in the iCalendar standard that Outlook, Gmail, Apple Calendar, Thunderbird... show with
+     * Accept / Decline: sent from the user's mailbox when it is connected (a copy goes to Sent), otherwise from the assistant's
+     * address on the user's behalf (the answers go to the user). The guests get the event, or its update; guests removed since
+     * the last sending get a cancellation; $cancel cancels it for everyone. Only the title, the time and the place are sent,
+     * never the description.
+     */
+    public function invite(int $id, bool $cancel = false, string $who = 'you'): string
+    {
+        $c = $this->get($id) ?? throw new \InvalidArgumentException("no task $id");
+        if (!$this->canInvite()) throw new \RuntimeException('To send invitations, connect your mailbox in Settings (or set up the assistant\'s email).');
+        $prev = $c['invited']['to'] ?? [];
+        if ($cancel) {
+            if (!$prev) throw new \InvalidArgumentException('No invitation was sent for this task.');
+            [$send, $gone] = [[], $prev];
+        } else {
+            if ($c['deleted_at']) throw new \InvalidArgumentException("{$c['code']} is in the trash: restore it first.");
+            if (!$c['attendees']) throw new \InvalidArgumentException('Add guests first.');
+            if (!$c['start_date'] && !$c['due_date']) throw new \InvalidArgumentException('An invitation needs a date.');
+            [$send, $gone] = [$c['attendees'], array_values(array_diff($prev, $c['attendees']))];
+        }
+        $seq = ($c['invited']['seq'] ?? -1) + 1;
+        if ($send) $this->mailInvite($c, 'REQUEST', $send, $seq, (bool)$prev);
+        if ($gone) $this->mailInvite($c, 'CANCEL', $gone, $seq);
+        $this->app->store->q('UPDATE cards SET invited = ? WHERE id = ?', [json_encode(['seq' => $seq, 'to' => $send, 'hash' => $send ? self::inviteHash($c) : '', 'at' => time()]), $id]);
+        $what = $cancel ? 'meeting cancelled for ' . implode(', ', $gone)
+            : ($prev ? 'invitation updated for ' : 'invitation sent to ') . implode(', ', $send) . ($gone ? '; cancelled for ' . implode(', ', $gone) : '');
+        $this->log($id, $who, 'invite', $what, null);
+        return "{$c['code']}: $what";
+    }
+
+    private function mailInvite(array $c, string $method, array $to, int $seq, bool $update = false): void
+    {
+        $cfg = $this->app->cfg;
+        $own = $this->app->mailbox()->canSend();
+        $from = $own ? $cfg->mailboxFrom : (explode(',', $cfg->emailTo)[0]);
+        $org = Smtp::address($from);
+        $name = preg_match('/^\s*"?([^"<]+?)"?\s*</', $from, $m) ? trim($m[1]) : '';
+        $inst = $this->app->store->get('invite_uid');
+        if ($inst === '') { $inst = bin2hex(random_bytes(6)); $this->app->store->set('invite_uid', $inst); } // tasks of other assistants have the same ids
+        $lines = ['BEGIN:VCALENDAR', 'PRODID:-//Talixio//Tasks//EN', 'VERSION:2.0', 'CALSCALE:GREGORIAN', "METHOD:$method", 'BEGIN:VEVENT',
+            "UID:task-{$c['id']}-$inst@talixio", 'DTSTAMP:' . gmdate('Ymd\THis\Z'), "SEQUENCE:$seq", ...self::icsWhen($c),
+            self::icsFold('SUMMARY:' . self::icsText($c['title'])), ...($c['location'] !== '' ? [self::icsFold('LOCATION:' . self::icsText($c['location']))] : []),
+            self::icsFold('ORGANIZER' . ($name !== '' ? ';CN="' . str_replace('"', '', $name) . '"' : '') . ":mailto:$org")];
+        foreach ($to as $a) $lines[] = self::icsFold('ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=' . ($method === 'REQUEST' ? 'TRUE' : 'FALSE') . ":mailto:$a");
+        array_push($lines, 'STATUS:' . ($method === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED'), 'TRANSP:OPAQUE', 'END:VEVENT', 'END:VCALENDAR');
+        $ics = implode("\r\n", $lines) . "\r\n";
+
+        $t = fn(string $s, array $v = []) => I18n::t($this->app, $s, $v);
+        $slot = self::slot($c);
+        $start = $c['start_date'] ?? $c['due_date']; $end = $c['due_date'] ?? $c['start_date'];
+        $when = $slot ? date('Y-m-d H:i', $slot[0]) . ' – ' . date(date('Y-m-d', $slot[0]) === date('Y-m-d', $slot[1]) ? 'H:i' : 'Y-m-d H:i', $slot[1]) . ' (' . $cfg->timezone . ')'
+            : ($start === $end ? $start : "$start – $end");
+        $subject = match (true) {
+            $method === 'CANCEL' => $t('Cancelled: {title}', ['title' => $c['title']]),
+            $update => $t('Updated invitation: {title} ({when})', ['title' => $c['title'], 'when' => $when]),
+            default => $t('Invitation: {title} ({when})', ['title' => $c['title'], 'when' => $when]),
+        };
+        $body = ($method === 'CANCEL' ? $t('This meeting is cancelled.') . "\n\n" : '') . "**{$c['title']}**\n\n" . $t('When: {when}', ['when' => $when])
+            . ($c['location'] !== '' ? "  \n" . $t('Where: {where}', ['where' => $c['location']]) : '') . "  \n" . $t('Organizer: {who}', ['who' => $name !== '' ? "$name ($org)" : $org])
+            . ($method === 'REQUEST' ? "\n\n" . $t('Accept or decline it in your calendar.') : '');
+        $parts = ["text/calendar; method=$method" => $ics];
+        if ($own) $this->app->mailbox()->sendParts($to, $subject, $body, $parts);
+        else $this->app->email()->sendParts($to, $subject, $body, $parts, ['Reply-To' => $org]);
     }
 
     /** Worker, once a day at TALIXIO_TASK_REMINDER: what is due tomorrow, per space. */
@@ -636,7 +752,7 @@ final class Board
         $bits = [self::STATUSES[$c['status']], "P{$c['priority']}"];
         if ($c['start_date']) $bits[] = "start {$c['start_date']}";
         if ($c['due_date']) $bits[] = "due {$c['due_date']}";
-        if ($c['start_time']) $bits[] = "from {$c['start_time']}" . ($c['end_time'] ? " to {$c['end_time']}" : '');
+        if ($c['start_time'] ?? '') $bits[] = "from {$c['start_time']}" . ($c['end_time'] ? " to {$c['end_time']}" : '');
         if ($c['estimate_hours'] !== null) $bits[] = 'workload ' . self::fmtHours($c['estimate_hours']) . ($c['spent_hours'] ? ', spent ' . self::fmtHours($c['spent_hours']) : '');
         if ($c['checklist']['total']) $bits[] = "checklist {$c['checklist']['done']}/{$c['checklist']['total']}";
         if ($c['tags']) $bits[] = '#' . implode(' #', $c['tags']);
@@ -644,6 +760,8 @@ final class Board
         if ($withSpace) $bits[] = 'space ' . ($this->app->spaces()->get($c['space'])['name'] ?? $c['space']);
         if ($c['global_rank'] !== null) $bits[] = 'overall #' . (int)$c['global_rank'];
         if ($c['in_calendar']) $bits[] = 'in calendar';
+        if (($c['location'] ?? '') !== '') $bits[] = "at {$c['location']}";
+        if ($c['attendees'] ?? []) $bits[] = 'guests ' . implode(', ', $c['attendees']) . ' (invitation ' . ['unsent' => 'not sent yet', 'sent' => 'sent', 'outdated' => 'out of date: send the update'][$c['invite_state']] . ')';
         $warn = array_column($this->warnings($c), 'text');
         return "{$c['code']} {$c['title']} — " . implode(', ', $bits) . ($warn ? ' ⚠ ' . implode('; ', $warn) : '');
     }

@@ -12,6 +12,14 @@ final class I18n
     public const LANGS = ['en', 'fr'];
 
     private const FR = [
+        'Cancelled: {title}' => 'Annulé : {title}',
+        'Updated invitation: {title} ({when})' => 'Invitation mise à jour : {title} ({when})',
+        'Invitation: {title} ({when})' => 'Invitation : {title} ({when})',
+        'This meeting is cancelled.' => 'Cette réunion est annulée.',
+        'When: {when}' => 'Quand : {when}',
+        'Where: {where}' => 'Où : {where}',
+        'Organizer: {who}' => 'Organisateur : {who}',
+        'Accept or decline it in your calendar.' => 'Acceptez-la ou refusez-la dans votre agenda.',
         "I've reached my spending limit, so I'm not calling the model right now. {budget}\nRaise TALIXIO_BUDGET_DAILY_USD / TALIXIO_BUDGET_MONTHLY_USD if needed." =>
             "J'ai atteint ma limite de dépenses : je n'appelle pas le modèle pour l'instant. {budget}\nAugmentez le budget dans Réglages → Budget si besoin.",
         "I couldn't answer: {error}" => "Je n'ai pas pu répondre : {error}",

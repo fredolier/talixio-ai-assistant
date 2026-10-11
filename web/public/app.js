@@ -1433,7 +1433,7 @@ async function openCard(id, prefill = {}) {
   const dlg = $('#card-dialog');
   if (!cardRte) cardRte = makeRte($('#cd-rte'));
   let d = { card: { space: prefill.space ?? state.space, status: prefill.status || 'todo', priority: 3, title: prefill.title || '', body: prefill.body || '', due_date: prefill.due_date || null,
-    tags: [], links: prefill.links || [], depends_on: [], blocks: [], in_calendar: 0 }, history: [], time: [], depends_on: [], blocks: [] };
+    tags: [], links: prefill.links || [], depends_on: [], blocks: [], in_calendar: 0 }, can_invite: true, history: [], time: [], depends_on: [], blocks: [] };
   if (id) { try { d = await api(`api/board/${id}`); } catch (e) { toast(e.message); return; } }
   const c = d.card, isNew = !id;
   let deps = d.depends_on.slice();
@@ -1455,6 +1455,37 @@ async function openCard(id, prefill = {}) {
   $('#cd-estimate').value = c.estimate_hours != null ? fmtH(c.estimate_hours) : '';
   $('#cd-cal').checked = !!c.in_calendar;
   $('#cd-tags').value = (c.tags || []).join(', ');
+  $('#cd-guests').value = (c.attendees || []).join(', '); $('#cd-loc').value = c.location || '';
+  // meeting invitations, by email (Outlook, Gmail, Apple Calendar... show Accept / Decline)
+  const sent = c.invited?.to?.length ? c.invited : null;
+  const paintInvite = () => {
+    const guests = $('#cd-guests').value.trim();
+    $('#cd-invite').hidden = !guests && !sent;
+    const changed = sent && (c.invite_state === 'outdated' || guests !== (c.attendees || []).join(', ') || $('#cd-loc').value !== (c.location || '')
+      || $('#cd-title').value !== c.title || ['start', 'due', 'from', 'to'].some(k => $('#cd-' + k).value !== (c[{ start: 'start_date', due: 'due_date', from: 'start_time', to: 'end_time' }[k]] || '')));
+    $('#cd-invite-state').textContent = !d.can_invite ? t('To send invitations, connect your mailbox in Settings.')
+      : !sent ? t('Not invited yet: they get an invitation to accept in their calendar (Outlook, Gmail, Apple…).')
+      : changed ? t('Changed since the invitations: send them the update.')
+      : t('Invitations sent on {a} to {b}.', { a: new Date(sent.at * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), b: sent.to.join(', ') });
+    $('#cd-invite-send').textContent = !sent ? t('Send the invitations') : changed ? t('Send the update') : t('Send again');
+    $('#cd-invite-send').disabled = !d.can_invite || !guests;
+    $('#cd-invite-cancel').hidden = !sent || !d.can_invite;
+  };
+  ['cd-guests', 'cd-loc', 'cd-title', 'cd-start', 'cd-due', 'cd-from', 'cd-to'].forEach(i => $('#' + i).oninput = paintInvite);
+  $('#cd-invite-send').onclick = async () => {
+    if (!$('#cd-start').value && !$('#cd-due').value) { toast(t('An invitation needs a date.')); return; }
+    try {
+      let id = c.id;
+      if (isNew) id = (await post('api/board', formBody())).card.id; // saved first: the guests get what is shown
+      else await post(`api/board/${c.id}`, { ...formBody(), version: c.version });
+      const r = await post(`api/board/${id}/invite`, {});
+      toast(r.result); close(); loadBoard();
+    } catch (err) { toast(err.message); }
+  };
+  $('#cd-invite-cancel').onclick = async () => {
+    if (!confirm(t('Tell the {a} guest(s) that the meeting is cancelled?', { a: sent.to.length }))) return;
+    try { const r = await post(`api/board/${c.id}/invite`, { cancel: true }); toast(r.result); close(); loadBoard(); } catch (err) { toast(err.message); }
+  };
   cardRte.value = c.body || '';
   const warn = (c.warnings || []);
   $('#cd-warn').hidden = !warn.length; $('#cd-warn').innerHTML = warn.map(w => `<div>${BICON.warn}<span>${esc(w.text)}</span></div>`).join('');
@@ -1503,13 +1534,18 @@ async function openCard(id, prefill = {}) {
   $('#cd-delete').onclick = async e => {
     const b = e.currentTarget;
     if (b.dataset.confirm !== '1' && c.blocks?.length) { b.dataset.confirm = '1'; b.textContent = `${c.blocks.length} task(s) wait for it: delete anyway?`; return; }
+    if (sent && d.can_invite && confirm(t('Also tell the {a} guest(s) that the meeting is cancelled?', { a: sent.to.length }))) {
+      try { await post(`api/board/${c.id}/invite`, { cancel: true }); } catch (err) { toast(err.message); return; }
+    }
     try { const r = await post(`api/board/${c.id}/delete`); close(); toast(`${c.code} moved to the trash` + (r.waiting.length ? ` (${r.waiting.join(', ')} waited for it)` : '')); loadBoard(); } catch (err) { toast(err.message); }
   };
+  const formBody = () => ({ title: $('#cd-title').value, body: cardRte.value, status: $('#cd-status').value, priority: +$('#cd-priority').value, start_date: $('#cd-start').value,
+    due_date: $('#cd-due').value, start_time: $('#cd-from').value, end_time: $('#cd-from').value ? $('#cd-to').value : '', estimate_hours: $('#cd-estimate').value.trim(), in_calendar: $('#cd-cal').checked, tags: $('#cd-tags').value,
+    attendees: $('#cd-guests').value, location: $('#cd-loc').value,
+    space: +$('#cd-space').value, depends_on: deps.map(x => x.id), ...(isNew && c.links?.length ? { links: c.links } : {}) });
   $('#card-form').onsubmit = async e => {
     e.preventDefault();
-    const body = { title: $('#cd-title').value, body: cardRte.value, status: $('#cd-status').value, priority: +$('#cd-priority').value, start_date: $('#cd-start').value,
-      due_date: $('#cd-due').value, start_time: $('#cd-from').value, end_time: $('#cd-from').value ? $('#cd-to').value : '', estimate_hours: $('#cd-estimate').value.trim(), in_calendar: $('#cd-cal').checked, tags: $('#cd-tags').value,
-      space: +$('#cd-space').value, depends_on: deps.map(x => x.id), ...(isNew && c.links?.length ? { links: c.links } : {}) };
+    const body = formBody();
     try {
       if (isNew) { const r = await post('api/board', body); toast(`${r.card.code} added`); }
       else await post(`api/board/${c.id}`, { ...body, version: c.version });
@@ -1519,6 +1555,7 @@ async function openCard(id, prefill = {}) {
       else toast(err.message);
     }
   };
+  paintInvite();
   dlg.showModal();
   if (isNew) $('#cd-title').focus(); else dlg.focus(); // no keyboard popping up on phones
 }

@@ -116,9 +116,15 @@ final class Sovereign
         if ($code === 401 || $code === 403) throw new \InvalidArgumentException('The provider refused the key (HTTP ' . $code . ').');
         $ids = array_column(json_decode($body, true)['data'] ?? [], 'id');
         if ($code >= 400 || !$ids) throw new \InvalidArgumentException('The provider did not answer as expected (HTTP ' . $code . ').');
+        $tiers = self::choose($service, $ids);
+        // some providers list their models to anyone (OVHcloud): a short answer from the fast model really checks the key
+        try { [$code, $body] = Privacy::as('model', fn() => Http::request('POST', $url . '/chat/completions', ['Content-Type: application/json', ...($key !== '' ? ['Authorization: Bearer ' . $key] : [])],
+            json_encode(['model' => $tiers['fast'], 'messages' => [['role' => 'user', 'content' => 'Say OK.']], 'max_tokens' => 5]), 30)); }
+        catch (\RuntimeException $e) { throw new \InvalidArgumentException('Could not reach the provider: ' . $e->getMessage()); }
+        if ($code === 401 || $code === 403) throw new \InvalidArgumentException('The provider refused the key (HTTP ' . $code . '): make a new one in its console.');
         $info = self::SERVICES[$service];
         $has = fn(string $m) => (bool)array_filter($ids, fn($i) => strcasecmp($i, $m) === 0 || stripos($i, $m) !== false);
-        return ['models' => count($ids), 'tiers' => self::choose($service, $ids), 'embed' => $has($info['embed']), 'transcribe' => $has($info['transcribe'])];
+        return ['models' => count($ids), 'tiers' => $tiers, 'embed' => $has($info['embed']), 'transcribe' => $has($info['transcribe'])];
     }
 
     /**

@@ -357,7 +357,7 @@ final class Web
         $id = (int)$mm[1]; $act = $mm[2] ?? '';
         if ($act === '' && $m === 'GET') {
             $c = $bd->get($id) ?? $this->fail(404, 'no such task');
-            return ['card' => $card($c), 'history' => $bd->history($id), 'time' => $bd->timeEntries($id),
+            return ['card' => $card($c), 'can_invite' => $bd->canInvite(), 'history' => $bd->history($id), 'time' => $bd->timeEntries($id),
                 'depends_on' => array_values(array_filter(array_map($brief, $c['depends_on']))), 'blocks' => array_values(array_filter(array_map($brief, $c['blocks'])))];
         }
         if ($m !== 'POST') $this->fail(405, 'method not allowed');
@@ -366,6 +366,7 @@ final class Web
             'move' => ['card' => $card($bd->move($id, (string)($b['status'] ?? ''), isset($b['before']) ? (int)$b['before'] : null))],
             'delete' => ['waiting' => $bd->delete($id)],
             'restore' => ['card' => $card($bd->restore($id))],
+            'invite' => ['result' => $bd->invite($id, !empty($b['cancel']))],
             'time' => ['card' => $card($bd->addTime($id, $b['hours'] ?? null, (string)($b['day'] ?? ''), (string)($b['note'] ?? '')))],
             'unrank' => (function () use ($bd, $id) { $bd->clearGlobalRank($id); return ['ok' => true]; })(),
             default => $this->fail(404, 'not found'),

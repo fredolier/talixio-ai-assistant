@@ -26,6 +26,12 @@ final class Email
         return $this->smtp()->send($this->app->cfg->emailFrom, $to, $subject, $markdown, $headers, [], $this->html($markdown, $page));
     }
 
+    /** A mail with extra parts (a meeting invitation) to several people, written by the user (not marked automatic). */
+    public function sendParts(array $to, string $subject, string $markdown, array $parts, array $headers = []): void
+    {
+        $this->smtp()->send($this->app->cfg->emailFrom, $to[0], $subject, $markdown, ['To' => implode(', ', $to), 'Auto-Submitted' => null] + $headers, array_slice($to, 1), null, $parts);
+    }
+
     /** $space: the space's row (name, color), when the message belongs to one; $url: the page to open, relative to the app. */
     public function notify(string $title, string $text, ?array $space = null, string $url = ''): void
     {

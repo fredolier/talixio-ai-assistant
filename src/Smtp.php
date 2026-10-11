@@ -14,7 +14,7 @@ final class Smtp
      * @param array<string,string> $headers extra headers (In-Reply-To, References...)
      * @return string the Message-ID used
      */
-    public function send(string $from, string $to, string $subject, string $markdown, array $headers = [], array $cc = [], ?string $html = null): string
+    public function send(string $from, string $to, string $subject, string $markdown, array $headers = [], array $cc = [], ?string $html = null, array $parts = []): string
     {
         $domain = substr(strrchr(self::address($from), '@') ?: '@localhost', 1);
         $msgId = '<' . bin2hex(random_bytes(12)) . '@' . $domain . '>';
@@ -23,7 +23,7 @@ final class Smtp
             $this->cmd('MAIL FROM:<' . self::address($from) . '>', 250);
             foreach (array_merge([$to], $cc) as $rcpt) $this->cmd('RCPT TO:<' . self::address($rcpt) . '>', [250, 251]);
             $this->cmd('DATA', 354);
-            $data = self::build($from, $to, $subject, $markdown, $msgId, $headers, $html);
+            $data = self::build($from, $to, $subject, $markdown, $msgId, $headers, $html, $parts);
             $data = preg_replace('/^\./m', '..', $data); // dot-stuffing
             $this->write($data . "\r\n.");
             $this->expect(250);
@@ -46,8 +46,11 @@ final class Smtp
         return preg_match('/<([^>]+)>/', $mailbox, $m) ? trim($m[1]) : trim($mailbox);
     }
 
-    /** $html: the HTML part (MailTemplate::page for the assistant's own mail); by default the Markdown, formatted. */
-    public static function build(string $from, string $to, string $subject, string $markdown, string $msgId, array $headers = [], ?string $html = null): string
+    /**
+     * $html: the HTML part (MailTemplate::page for the assistant's own mail); by default the Markdown, formatted.
+     * $parts: more alternatives, [content type => body], e.g. an invitation ['text/calendar; method=REQUEST' => ics].
+     */
+    public static function build(string $from, string $to, string $subject, string $markdown, string $msgId, array $headers = [], ?string $html = null, array $parts = []): string
     {
         $b = 'b' . bin2hex(random_bytes(8));
         $html ??= MailTemplate::plain($markdown);
@@ -62,7 +65,9 @@ final class Smtp
         foreach ($h as $k => $v) $out .= "$k: $v\r\n";
         $part = fn(string $type, string $body) => "--$b\r\nContent-Type: $type; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
             . rtrim(chunk_split(base64_encode($body), 76, "\r\n")) . "\r\n";
-        return $out . "\r\n" . $part('text/plain', $markdown) . $part('text/html', $html) . "--$b--";
+        $more = '';
+        foreach ($parts as $type => $body) $more .= $part($type, $body);
+        return $out . "\r\n" . $part('text/plain', $markdown) . $part('text/html', $html) . $more . "--$b--";
     }
 
     private static function encodeMailbox(string $m): string

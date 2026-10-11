@@ -646,6 +646,8 @@ ul.plain{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;g
 .cd-grid input,.cd-grid select,.cd-tags input,.card-dialog .deps input,.cd-sec input{font:inherit;font-size:.9rem;padding:7px 9px;border-radius:9px;border:1px solid var(--line);background:var(--sunk);color:var(--ink);min-width:0}
 .cd-grid .cd-check{flex-direction:row;align-items:center;gap:8px;font-size:.88rem;color:var(--ink);padding-top:18px;white-space:nowrap}
 .cd-grid .cd-check input{width:18px;height:18px;padding:0;flex:none;accent-color:var(--accent)}
+.cd-meet{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}.cd-meet .cd-invite{grid-column:1/-1;gap:8px;align-items:center}
+@media (max-width:640px){.cd-meet{grid-template-columns:1fr}}
 .cd-label{font-size:.78rem;color:var(--muted);margin-bottom:-6px}
 .rte{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 .rte:focus-within{border-color:var(--accent)}
