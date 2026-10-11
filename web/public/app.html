@@ -257,144 +257,189 @@
       <div class="row"><button id="mem-save" class="btn primary" type="button">Save</button><span id="mem-state" class="muted small"></span></div>
     </section>
 
-    <section id="view-settings" class="view page" hidden>
-      <header class="page-head"><h2>Settings</h2>
-        <p class="muted">Everything is set here. Values saved in the app override <code>/etc/talixio/talixio.env</code>; "Reset" goes back to the file's value. Changes apply right away.</p></header>
+    <section id="view-settings" class="view page settings-page" hidden>
+      <header class="page-head set-head">
+        <div><h2>Settings</h2>
+          <p class="muted small">Values saved in the app override <code>/etc/talixio/talixio.env</code>; "Reset" goes back to the file's value. Changes apply once you press Save.</p></div>
+        <input id="set-search" type="search" placeholder='Find a setting (e.g. "key", "Telegram")' aria-label="Find a setting" autocomplete="off">
+      </header>
 
-      <div id="update" class="card update" hidden></div>
-
-      <div class="card" id="install-card">
-        <div class="row between"><h3>App on your devices</h3><button id="install-card-btn" class="btn primary" type="button">Install the app</button></div>
-        <p class="muted small" id="install-card-text">Install Talixio like a native app on your computer and phone: its own window and icon, notifications, and "Share to Talixio" from other apps on Android.</p>
+      <div id="set-health" class="set-health">
+        <span class="dot"></span>
+        <div class="sh-text"><b id="sh-title">Checking…</b><span id="sh-list" class="small"></span></div>
+        <button id="doctor-run" class="btn" type="button">Run checks</button>
       </div>
+      <ul id="doctor" class="doctor card" hidden></ul>
 
-      <div class="card">
-        <div class="row between"><h3>Check configuration</h3><button id="doctor-run" class="btn" type="button">Run checks</button></div>
-        <p class="muted small">Tests logins (email, calendar…) and makes one short call per model tier.</p>
-        <ul id="doctor" class="doctor" hidden></ul>
-      </div>
+      <nav id="set-chips" class="set-chips" aria-label="Sections"></nav>
+      <div class="set-layout">
+        <nav id="set-nav" class="set-nav" aria-label="Sections"></nav>
+        <div class="set-main">
 
-      <div class="card" id="transfer-card">
-        <div class="row between"><h3>Move to another server</h3><button id="transfer-code" class="btn" type="button">Create a transfer code</button></div>
-        <p class="muted small">Everything goes: conversations, memory, skills, library, tasks, settings and keys, password. On the new server, the administrator
-          chooses <b>From another server</b> on the admin page (or runs <code>sudo talixio transfer-pull</code>) with this assistant's address and the code.
-          Test copies stay paused there; the final one pauses this assistant. The code works for a day.</p>
-        <div id="transfer-state" class="small"></div>
-      </div>
-
-      <h3>Channels</h3>
-      <div id="channels" class="list"></div>
-      <div class="row"><button id="test-notify" class="btn" type="button">Send a test notification</button><span id="test-result" class="muted small"></span></div>
-
-      <h3>Configuration</h3>
-      <div id="settings-groups" class="groups"></div>
-
-      <details class="card group" id="appearance-card">
-        <summary><b>Appearance</b> <span class="muted small">on this device</span></summary>
-        <div class="fields">
-          <label for="theme-mode">Theme</label>
-          <select id="theme-mode"><option value="">Automatic (follows the device)</option><option value="light">Light</option><option value="dark">Dark</option></select>
-          <label>Accent colour</label><div id="theme-colors" class="swatches" role="radiogroup"></div>
-          <p class="muted small">Each space can have its own colour: the app takes it while you are in that space.</p>
-        </div>
-      </details>
-
-      <details class="card group" id="google-card">
-        <summary><b>Google Calendar</b> <span id="google-badge" class="muted small"></span></summary>
-        <div class="fields">
-          <div id="google-status"></div>
-          <ol class="steps small" id="google-steps">
-            <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">console.cloud.google.com</a>, create a project (e.g. "Talixio").</li>
-            <li><a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener">Enable the Google Calendar API</a>.</li>
-            <li><a href="https://console.cloud.google.com/auth/branding" target="_blank" rel="noopener">OAuth consent screen</a>: type <i>External</i>, your email as contact. Under <i>Audience</i>, press <b>Publish app</b> ("In production"): in "Testing" Google cuts the access after 7 days. Google will show "unverified app" when you connect: that's your own app, continue.</li>
-            <li><a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener">Create an OAuth client</a>: type <i>Web application</i>, authorised redirect URI: <code id="google-redirect"></code> <button id="google-copy" class="btn small" type="button">Copy</button></li>
-            <li>Paste its client ID and secret in <b>Configuration → Calendar</b> below, save, then press Connect.</li>
-          </ol>
-          <div class="row"><button id="google-connect" class="btn primary" type="button">Connect Google Calendar</button><button id="google-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button></div>
-        </div>
-      </details>
-
-      <details class="card group" id="spotify-card">
-        <summary><b>Spotify</b> <span id="spotify-badge" class="muted small"></span></summary>
-        <div class="fields">
-          <p class="muted small">Ask "play Daft Punk", "pause", "next song", "add this to my running playlist": the music plays on your phone or speaker. Needs Spotify Premium, and Spotify open (or used recently) on the device.</p>
-          <div id="spotify-status"></div>
-          <ol class="steps small" id="spotify-steps">
-            <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> (sign in with your Spotify account) and press <b>Create app</b>: any name (e.g. "Talixio"), tick <i>Web API</i>, redirect URI: <code id="spotify-redirect"></code> <button id="spotify-copy" class="btn small" type="button">Copy</button></li>
-            <li>In the app's <b>Settings</b>, copy the <i>Client ID</i> and press <i>View client secret</i>.</li>
-            <li>Paste both in <b>Configuration → Spotify</b> below, save, then press Connect.</li>
-          </ol>
-          <div class="row"><button id="spotify-connect" class="btn primary" type="button">Connect Spotify</button><button id="spotify-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button></div>
-        </div>
-      </details>
-
-      <details class="card group" id="mcp-card">
-        <summary><b>Connectors (MCP)</b> <span id="mcp-badge" class="muted small"></span></summary>
-        <div class="fields">
-          <p class="muted small">Give the assistant tools from MCP servers: GitHub, Notion, your home automation, your own scripts… Local servers are started by command (Node servers need <code>install.sh --with-node</code>); remote ones by URL with a token in <code>headers</code>, or <b>Sign in</b> for services that use OAuth (Notion, Linear, Atlassian…). Tools that change something wait for your approval, unless the server has <code>"trust": "all"</code>. Saved in <code>data/mcp.json</code>.</p>
-          <div class="row wrap"><button id="conn-install" class="btn" type="button">Install from the library…</button><span class="muted small">Your own connector: put its folder as a .zip in the library (e.g. /Connecteurs), then install it here.</span></div>
-          <div id="mcp-servers" class="mcp-servers"></div>
-          <label for="mcp-raw">Configuration</label>
-          <textarea id="mcp-raw" class="editor mono" rows="10" spellcheck="false" placeholder='{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "…"}}}}'></textarea>
-          <div class="row"><button id="mcp-save" class="btn primary" type="button">Save and connect</button><button id="mcp-refresh" class="btn" type="button">Check again</button><span id="mcp-state" class="muted small"></span></div>
-          <p class="muted small">Sandboxed shell: <span id="shell-state">…</span> <button id="shell-test" class="btn small" type="button">Test the sandbox</button></p>
-        </div>
-      </details>
-
-      <details class="card group">
-        <summary><b>App password</b></summary>
-        <form id="pw-form" class="fields">
-          <label for="pw-current">Current password</label><input id="pw-current" type="password" autocomplete="current-password" required>
-          <label for="pw-new">New password (12+ characters)</label><input id="pw-new" type="password" autocomplete="new-password" minlength="12" required>
-          <div class="row"><button class="btn primary" type="submit">Change password</button><span id="pw-state" class="muted small"></span></div>
-        </form>
-      </details>
-
-      <details class="card group" id="totp-card">
-        <summary><b>Two-step sign-in</b> <span id="totp-badge" class="muted small"></span></summary>
-        <div class="fields">
-          <p class="muted small">After your password, the app asks for a 6-digit code from an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, 1Password, Aegis…). Someone who learns your password still can't get in.</p>
-          <div id="totp-off">
-            <button id="totp-setup" class="btn primary" type="button">Turn on</button>
+          <div class="set-sec" data-sec="essentials">
+            <header><h3>Essentials</h3><p class="muted small">Who your assistant is, and how it shows on your devices.</p></header>
+            <div class="set-groups" data-groups="essentials"></div>
+            <div class="card set-card" id="appearance-card">
+            <h4>Appearance <span class="muted small">on this device</span></h4>
+            <div class="fields">
+              <label for="theme-mode">Theme</label>
+              <select id="theme-mode"><option value="">Automatic (follows the device)</option><option value="light">Light</option><option value="dark">Dark</option></select>
+              <label>Accent colour</label><div id="theme-colors" class="swatches" role="radiogroup"></div>
+              <p class="muted small">Each space can have its own colour: the app takes it while you are in that space.</p>
+            </div>
           </div>
-          <form id="totp-enable" hidden>
-            <p class="small">1. Scan this code with your authenticator app (or tap the link on this phone, or type the key).</p>
-            <div id="totp-qr" class="qr"></div>
-            <p class="small">Key: <code id="totp-secret"></code> · <a id="totp-link" href="#">Open in an authenticator app</a></p>
-            <label for="totp-code">2. Type the code it shows</label><input id="totp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required>
-            <div class="row"><button class="btn primary" type="submit">Confirm and turn on</button><span id="totp-state" class="muted small"></span></div>
-          </form>
-          <form id="totp-disable" hidden>
-            <p class="small">On. Lost your phone? On the server: <code>sudo talixio totp off</code>.</p>
-            <label for="totp-dis-pw">Password</label><input id="totp-dis-pw" type="password" autocomplete="current-password" required>
-            <label for="totp-dis-code">Current code</label><input id="totp-dis-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required>
-            <div class="row"><button class="btn danger" type="submit">Turn off</button><span id="totp-dis-state" class="muted small"></span></div>
-          </form>
-        </div>
-      </details>
+            <div class="card set-card" id="install-card">
+              <div class="row between"><h4>App on your devices</h4><button id="install-card-btn" class="btn primary" type="button">Install the app</button></div>
+              <p class="muted small" id="install-card-text">Install Talixio like a native app on your computer and phone: its own window and icon, notifications, and "Share to Talixio" from other apps on Android.</p>
+            </div>
+          </div>
 
-      <details class="card group" id="dav-card">
-        <summary><b>Network drive (WebDAV)</b> <span id="dav-badge" class="muted small"></span></summary>
-        <div class="fields">
-          <p class="muted small">Open the library's folders from your computer or phone like a shared drive: Windows Explorer, macOS Finder, the Files app on iPhone and Android. Files you add there are read and indexed like uploads; files you delete go to the library's trash. Folders of secret spaces never show.</p>
-          <p class="small">Address: <code id="dav-url"></code> <button id="dav-copy" class="btn small" type="button">Copy</button><br>User: <code id="dav-user">talixio</code></p>
-          <label for="dav-mode">Access</label>
-          <select id="dav-mode"><option value="off">Off</option><option value="read">Read only</option><option value="write">Read and write</option></select>
-          <p class="muted small">The drive has its own password (a drive keeps it in the system's keychain and can't ask for a two-step code). It is shown once: creating a new one stops the old one.</p>
-          <form id="dav-pw" class="fields">
-            <label for="dav-current">App password</label><input id="dav-current" type="password" autocomplete="current-password" required>
-            <div class="row"><button class="btn primary" type="submit">Create a new drive password</button><span id="dav-state" class="muted small"></span></div>
-          </form>
-          <p id="dav-new" class="small" hidden>Drive password: <code id="dav-secret"></code> <button id="dav-secret-copy" class="btn small" type="button">Copy</button><br><span class="muted">Write it in your device now: it won't be shown again.</span></p>
-          <details class="small"><summary>How to connect</summary>
-            <p><b>Windows</b>: File Explorer → This PC → Map network drive → the address above → tick “Connect using different credentials”.</p>
-            <p><b>macOS</b>: Finder → Go → Connect to Server (⌘K) → the address above.</p>
-            <p><b>iPhone, iPad</b>: Files → ⋯ → Connect to Server → the address above.</p>
-            <p><b>Android</b>: an app that speaks WebDAV (Solid Explorer, Material Files, CX File Explorer…) → new WebDAV connection → the address above.</p>
-            <p class="muted">The address must be in https (it is behind the server's Caddy). Large files: Windows limits downloads to 50 MB unless its WebClient setting FileSizeLimitInBytes is raised.</p>
-          </details>
+          <div class="set-sec" data-sec="model" hidden>
+            <header><h3>Model and budget</h3><p class="muted small">The assistant's brain, and how much it may spend.</p></header>
+            <div class="set-groups" data-groups="model"></div>
+          </div>
+
+          <div class="set-sec" data-sec="channels" hidden>
+            <header><h3>Channels</h3><p class="muted small">Where the assistant reaches you, and where you can write to it.</p></header>
+            <div class="card set-card" id="channels-card">
+              <h4>Status</h4>
+              <div id="channels" class="list"></div>
+              <div class="row"><button id="test-notify" class="btn" type="button">Send a test notification</button><span id="test-result" class="muted small"></span></div>
+            </div>
+            <div class="set-groups" data-groups="channels"></div>
+          </div>
+
+          <div class="set-sec" data-sec="accounts" hidden>
+            <header><h3>Connected accounts</h3><p class="muted small">The services the assistant uses for you: your mailbox, calendar, music and other tools.</p></header>
+            <div class="set-groups" data-groups="accounts"></div>
+            <div class="card set-card" id="mcp-card">
+            <h4>Connectors (MCP) <span id="mcp-badge" class="muted small"></span></h4>
+            <div class="fields">
+              <p class="muted small">Give the assistant tools from MCP servers: GitHub, Notion, your home automation, your own scripts… Local servers are started by command (Node servers need <code>install.sh --with-node</code>); remote ones by URL with a token in <code>headers</code>, or <b>Sign in</b> for services that use OAuth (Notion, Linear, Atlassian…). Tools that change something wait for your approval, unless the server has <code>"trust": "all"</code>. Saved in <code>data/mcp.json</code>.</p>
+              <div class="row wrap"><button id="conn-install" class="btn" type="button">Install from the library…</button><span class="muted small">Your own connector: put its folder as a .zip in the library (e.g. /Connecteurs), then install it here.</span></div>
+              <div id="mcp-servers" class="mcp-servers"></div>
+              <details class="adv" id="mcp-config"><summary>Configuration (JSON)</summary>
+              <textarea id="mcp-raw" class="editor mono" rows="10" spellcheck="false" placeholder='{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "…"}}}}'></textarea>
+              <div class="row"><button id="mcp-save" class="btn primary" type="button">Save and connect</button><button id="mcp-refresh" class="btn" type="button">Check again</button><span id="mcp-state" class="muted small"></span></div>
+              </details>
+              <p class="muted small">Sandboxed shell: <span id="shell-state">…</span> <button id="shell-test" class="btn small" type="button">Test the sandbox</button></p>
+            </div>
+          </div>
+          </div>
+
+          <div class="set-sec" data-sec="library" hidden>
+            <header><h3>Library and memory</h3><p class="muted small">Search, documents, recordings, and what the assistant learns.</p></header>
+            <div class="set-groups" data-groups="library"></div>
+            <div class="card set-card" id="dav-card">
+            <h4>Network drive (WebDAV) <span id="dav-badge" class="muted small"></span></h4>
+            <div class="fields">
+              <p class="muted small">Open the library's folders from your computer or phone like a shared drive: Windows Explorer, macOS Finder, the Files app on iPhone and Android. Files you add there are read and indexed like uploads; files you delete go to the library's trash. Folders of secret spaces never show.</p>
+              <p class="small">Address: <code id="dav-url"></code> <button id="dav-copy" class="btn small" type="button">Copy</button><br>User: <code id="dav-user">talixio</code></p>
+              <label for="dav-mode">Access</label>
+              <select id="dav-mode"><option value="off">Off</option><option value="read">Read only</option><option value="write">Read and write</option></select>
+              <p class="muted small">The drive has its own password (a drive keeps it in the system's keychain and can't ask for a two-step code). It is shown once: creating a new one stops the old one.</p>
+              <form id="dav-pw" class="fields">
+                <label for="dav-current">App password</label><input id="dav-current" type="password" autocomplete="current-password" required>
+                <div class="row"><button class="btn primary" type="submit">Create a new drive password</button><span id="dav-state" class="muted small"></span></div>
+              </form>
+              <p id="dav-new" class="small" hidden>Drive password: <code id="dav-secret"></code> <button id="dav-secret-copy" class="btn small" type="button">Copy</button><br><span class="muted">Write it in your device now: it won't be shown again.</span></p>
+              <details class="small"><summary>How to connect</summary>
+                <p><b>Windows</b>: File Explorer → This PC → Map network drive → the address above → tick “Connect using different credentials”.</p>
+                <p><b>macOS</b>: Finder → Go → Connect to Server (⌘K) → the address above.</p>
+                <p><b>iPhone, iPad</b>: Files → ⋯ → Connect to Server → the address above.</p>
+                <p><b>Android</b>: an app that speaks WebDAV (Solid Explorer, Material Files, CX File Explorer…) → new WebDAV connection → the address above.</p>
+                <p class="muted">The address must be in https (it is behind the server's Caddy). Large files: Windows limits downloads to 50 MB unless its WebClient setting FileSizeLimitInBytes is raised.</p>
+              </details>
+            </div>
+          </div>
+          </div>
+
+          <div class="set-sec" data-sec="security" hidden>
+            <header><h3>Security</h3><p class="muted small">Signing in, and what the assistant may do without asking you. What leaves your server is on the <a href="#privacy">Privacy</a> page.</p></header>
+            <div class="card set-card">
+            <h4>App password</h4>
+            <form id="pw-form" class="fields">
+              <label for="pw-current">Current password</label><input id="pw-current" type="password" autocomplete="current-password" required>
+              <label for="pw-new">New password (12+ characters)</label><input id="pw-new" type="password" autocomplete="new-password" minlength="12" required>
+              <div class="row"><button class="btn primary" type="submit">Change password</button><span id="pw-state" class="muted small"></span></div>
+            </form>
+          </div>
+            <div class="card set-card" id="totp-card">
+            <h4>Two-step sign-in <span id="totp-badge" class="muted small"></span></h4>
+            <div class="fields">
+              <p class="muted small">After your password, the app asks for a 6-digit code from an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, 1Password, Aegis…). Someone who learns your password still can't get in.</p>
+              <div id="totp-off">
+                <button id="totp-setup" class="btn primary" type="button">Turn on</button>
+              </div>
+              <form id="totp-enable" hidden>
+                <p class="small">1. Scan this code with your authenticator app (or tap the link on this phone, or type the key).</p>
+                <div id="totp-qr" class="qr"></div>
+                <p class="small">Key: <code id="totp-secret"></code> · <a id="totp-link" href="#">Open in an authenticator app</a></p>
+                <label for="totp-code">2. Type the code it shows</label><input id="totp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required>
+                <div class="row"><button class="btn primary" type="submit">Confirm and turn on</button><span id="totp-state" class="muted small"></span></div>
+              </form>
+              <form id="totp-disable" hidden>
+                <p class="small">On. Lost your phone? On the server: <code>sudo talixio totp off</code>.</p>
+                <label for="totp-dis-pw">Password</label><input id="totp-dis-pw" type="password" autocomplete="current-password" required>
+                <label for="totp-dis-code">Current code</label><input id="totp-dis-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required>
+                <div class="row"><button class="btn danger" type="submit">Turn off</button><span id="totp-dis-state" class="muted small"></span></div>
+              </form>
+            </div>
+          </div>
+            <div class="set-groups" data-groups="security"></div>
+          </div>
+
+          <div class="set-sec" data-sec="system" hidden>
+            <header><h3>System</h3><p class="muted small">Updates, backups, moving to another server.</p></header>
+            <div id="update" class="card set-card update" hidden></div>
+            <div class="set-groups" data-groups="system"></div>
+            <div class="card set-card" id="transfer-card">
+              <div class="row between"><h4>Move to another server</h4><button id="transfer-code" class="btn" type="button">Create a transfer code</button></div>
+              <p class="muted small">Everything goes: conversations, memory, skills, library, tasks, settings and keys, password. On the new server, the administrator
+                chooses <b>From another server</b> on the admin page (or runs <code>sudo talixio transfer-pull</code>) with this assistant's address and the code.
+                Test copies stay paused there; the final one pauses this assistant. The code works for a day.</p>
+              <div id="transfer-state" class="small"></div>
+            </div>
+          </div>
+
+          <p id="set-empty" class="muted" hidden>No setting matches.</p>
         </div>
-      </details>
+      </div>
+
+      <div id="set-pool" hidden>
+            <div class="connect" id="google-card">
+            <h5>Google Calendar <span id="google-badge" class="muted small"></span></h5>
+            <div class="fields">
+              <div id="google-status"></div>
+              <ol class="steps small" id="google-steps">
+                <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">console.cloud.google.com</a>, create a project (e.g. "Talixio").</li>
+                <li><a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener">Enable the Google Calendar API</a>.</li>
+                <li><a href="https://console.cloud.google.com/auth/branding" target="_blank" rel="noopener">OAuth consent screen</a>: type <i>External</i>, your email as contact. Under <i>Audience</i>, press <b>Publish app</b> ("In production"): in "Testing" Google cuts the access after 7 days. Google will show "unverified app" when you connect: that's your own app, continue.</li>
+                <li><a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener">Create an OAuth client</a>: type <i>Web application</i>, authorised redirect URI: <code id="google-redirect"></code> <button id="google-copy" class="btn small" type="button">Copy</button></li>
+                <li>Paste its client ID and secret in the fields below, save, then press Connect.</li>
+              </ol>
+              <div class="row"><button id="google-connect" class="btn primary" type="button">Connect Google Calendar</button><button id="google-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button></div>
+            </div>
+          </div>
+            <div class="connect" id="spotify-card">
+            <h5>Spotify <span id="spotify-badge" class="muted small"></span></h5>
+            <div class="fields">
+              <p class="muted small">Ask "play Daft Punk", "pause", "next song", "add this to my running playlist": the music plays on your phone or speaker. Needs Spotify Premium, and Spotify open (or used recently) on the device.</p>
+              <div id="spotify-status"></div>
+              <ol class="steps small" id="spotify-steps">
+                <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> (sign in with your Spotify account) and press <b>Create app</b>: any name (e.g. "Talixio"), tick <i>Web API</i>, redirect URI: <code id="spotify-redirect"></code> <button id="spotify-copy" class="btn small" type="button">Copy</button></li>
+                <li>In the app's <b>Settings</b>, copy the <i>Client ID</i> and press <i>View client secret</i>.</li>
+                <li>Paste both in the fields below, save, then press Connect.</li>
+              </ol>
+              <div class="row"><button id="spotify-connect" class="btn primary" type="button">Connect Spotify</button><button id="spotify-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button></div>
+            </div>
+          </div>
+      </div>
+
+      <div id="set-save" class="set-save" hidden>
+        <span id="set-save-n" class="small"></span><span class="spacer"></span>
+        <button id="set-cancel" class="btn ghost" type="button">Cancel</button><button id="set-save-btn" class="btn primary" type="button">Save</button>
+      </div>
     </section>
 
     <section id="view-privacy" class="view page" hidden>

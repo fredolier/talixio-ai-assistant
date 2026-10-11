@@ -77,7 +77,7 @@ final class Settings
                 ['TALIXIO_MAILBOX_FROM', 'Your name and address', 'text', 'Frédéric <frederic@talixio.com>'],
                 ['TALIXIO_MAIL_TRIAGE', 'Sort new emails', 'bool', 'Every 15 minutes: to answer / to do / to read / low priority (Mail page, morning briefing). Learns from your corrections; the fast model only when unsure.'],
             ]],
-            'calendar' => ['Calendar', 'Google Calendar: fill in your OAuth client below, then press "Connect Google Calendar" (Settings → Google Calendar card; the steps are there). Other calendars: iCal links to read, CalDAV to add events. Events are always added after your approval.', [
+            'calendar' => ['Calendar', 'Google Calendar: follow the steps, fill in your OAuth client in the fields below, save, then press "Connect Google Calendar". Other calendars: iCal links to read, CalDAV to add events. Events are always added after your approval.', [
                 ['TALIXIO_GOOGLE_CLIENT_ID', 'Google OAuth client ID', 'text', 'From console.cloud.google.com → APIs & Services → Credentials (type "Web application").'],
                 ['TALIXIO_GOOGLE_CLIENT_SECRET', 'Google OAuth client secret', 'secret', ''],
                 ['TALIXIO_CALENDAR_ICS', 'iCal links', 'secret', 'Several links separated by commas. These links give access to your calendar: keep them secret.'],
@@ -85,7 +85,7 @@ final class Settings
                 ['TALIXIO_CALDAV_USER', 'CalDAV username', 'text', ''],
                 ['TALIXIO_CALDAV_PASSWORD', 'CalDAV password', 'secret', ''],
             ]],
-            'spotify' => ['Spotify', 'Play music on your phone or speakers from the chat (Spotify Premium needed). Create your Spotify app, then press "Connect Spotify" (Settings → Spotify card; the steps are there).', [
+            'spotify' => ['Spotify', 'Play music on your phone or speakers from the chat (Spotify Premium needed). Create your Spotify app with the steps below, then press "Connect Spotify".', [
                 ['TALIXIO_SPOTIFY_CLIENT_ID', 'Spotify client ID', 'text', 'From developer.spotify.com → Dashboard → your app → Settings.'],
                 ['TALIXIO_SPOTIFY_CLIENT_SECRET', 'Spotify client secret', 'secret', ''],
                 ['TALIXIO_SPOTIFY_DEVICE', 'Usual device', 'text', 'Where to play when nothing is playing, e.g. "Galaxy S25 Ultra". Empty = your phone.'],
@@ -134,10 +134,12 @@ final class Settings
                 ['TALIXIO_SHELL_NETWORK', 'Internet access in the sandbox', 'bool', 'To install Python packages (pip) or download data. Off is safer.'],
                 ['TALIXIO_SHELL_TIMEOUT', 'Time limit per command (seconds)', 'number', ''],
             ]],
-            'maintenance' => ['Learning, backups, updates', '', [
+            'learning' => ['Learning', 'What the assistant learns by itself from your history.', [
                 ['TALIXIO_MIND', 'Character and values', 'bool', 'Learns by itself from your history what matters to you, how you decide, and what kind of assistant to be; it weighs this in its choices (Memory page). A few cents a day.'],
                 ['TALIXIO_LEARN', 'Learn from tasks (skills)', 'bool', 'After a multi-step task, a small agent decides whether to keep it (max $0.05).'],
                 ['TALIXIO_LEARN_MIN_STEPS', 'Minimum steps to learn', 'number', ''],
+            ]],
+            'maintenance' => ['Backups and updates', '', [
                 ['TALIXIO_BACKUP_KEEP', 'Backups kept', 'number', 'One per night. 0 = no backups.'],
                 ['TALIXIO_BACKUP_FILES', 'Include received files', 'bool', 'Recordings, PDFs…'],
                 ['TALIXIO_BACKUP_DIR', 'Backup folder', 'text', 'Empty = /var/lib/talixio/backups. Use another disk to survive losing the VM.'],
@@ -151,6 +153,34 @@ final class Settings
             ]],
         ];
     }
+
+    /** Where each group shows on the Settings page (its sections, in order). */
+    public const SECTIONS = [
+        'assistant' => 'essentials', 'tasks' => 'essentials',
+        'brain' => 'model', 'budget' => 'model',
+        'notify' => 'channels', 'email' => 'channels', 'signal' => 'channels', 'telegram' => 'channels',
+        'mailbox' => 'accounts', 'calendar' => 'accounts', 'spotify' => 'accounts',
+        'search' => 'library', 'audio' => 'library', 'learning' => 'library',
+        'browser' => 'security', 'shell' => 'security',
+        'maintenance' => 'system', 'advanced' => 'system',
+    ];
+
+    /** Rarely changed: folded under "Advanced settings" in their group. */
+    public const ADVANCED = [
+        'TALIXIO_HISTORY_MESSAGES', 'TALIXIO_HISTORY_TOKENS',
+        'TALIXIO_MODEL_FAST', 'TALIXIO_MODEL', 'TALIXIO_MODEL_DEEP', 'TALIXIO_DEEP_THINKING_TOKENS', 'TALIXIO_DEEP_REASONING_EFFORT',
+        'TALIXIO_MAX_PARALLEL_JOBS', 'TALIXIO_JOB_MAX_USD_LIMIT', 'TALIXIO_JOB_EFFORT', 'TALIXIO_PRICES',
+        'TALIXIO_NTFY_TOKEN', 'TALIXIO_VAPID_SUBJECT', 'TALIXIO_HEARTBEAT_MINUTES',
+        'TALIXIO_SMTP_SECURITY', 'TALIXIO_IMAP_PORT', 'TALIXIO_IMAP_USER', 'TALIXIO_IMAP_PASSWORD', 'TALIXIO_EMAIL_REQUIRE_AUTH',
+        'TALIXIO_MAILBOX_IMAP_PORT', 'TALIXIO_MAILBOX_SMTP_HOST', 'TALIXIO_MAILBOX_SMTP_PORT',
+        'TALIXIO_SPOTIFY_DEVICE',
+        'TALIXIO_EMBEDDINGS', 'TALIXIO_EMBEDDINGS_MODEL', 'TALIXIO_EMBEDDINGS_DIMS', 'VOYAGE_API_KEY', 'TALIXIO_OLLAMA_URL',
+        'TALIXIO_TRANSCRIBE_MODEL', 'TALIXIO_VOICE_NOTE_MAX_SECONDS', 'TALIXIO_MEETING_TIER',
+        'TALIXIO_LEARN_MIN_STEPS',
+        'TALIXIO_BROWSER_LANG', 'TALIXIO_BROWSER_ALLOW_PRIVATE', 'TALIXIO_BROWSER_NO_SANDBOX', 'TALIXIO_APPROVAL_WAIT_SECONDS',
+        'TALIXIO_SHELL_TIMEOUT', 'TALIXIO_BACKUP_DIR',
+        'TALIXIO_CLAUDE_BIN', 'TALIXIO_SIGNAL_CLI', 'TALIXIO_CHROME_BIN', 'TALIXIO_RECALL_MIN_SIMILARITY',
+    ];
 
     private const EFFORT_CHOICES = ['' => 'default', 'low' => 'low', 'medium' => 'medium', 'high' => 'high', 'xhigh' => 'very high', 'max' => 'max'];
 
@@ -213,10 +243,10 @@ final class Settings
                 $value = (string)(getenv($key) !== false ? getenv($key) : '');
                 $source = array_key_exists($key, $over) ? 'app' : ((self::$original[$key] ?? getenv($key)) ? 'file' : 'default');
                 $items[] = ['key' => $key, 'label' => $label, 'type' => $type, 'help' => $f[3] ?? '', 'options' => $f[4] ?? null, 'default' => self::DEFAULTS[$key] ?? '',
-                    'value' => $type === 'secret' ? '' : $value, 'set' => $value !== '', 'source' => $source,
+                    'value' => $type === 'secret' ? '' : $value, 'set' => $value !== '', 'source' => $source, 'advanced' => in_array($key, self::ADVANCED, true),
                     'hint' => $type === 'secret' && $value !== '' ? '•••• ' . (mb_strlen($value) > 12 ? mb_substr($value, -4) : '') : ''];
             }
-            $groups[] = ['id' => $g, 'title' => $title, 'intro' => $intro, 'fields' => $items];
+            $groups[] = ['id' => $g, 'title' => $title, 'intro' => $intro, 'section' => self::SECTIONS[$g] ?? 'system', 'fields' => $items];
         }
         return $groups;
     }

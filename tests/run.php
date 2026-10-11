@@ -1015,6 +1015,8 @@ $desc = \Talixio\Settings::describe($sd);
 $fields = array_merge(...array_map(fn($g) => $g['fields'], $desc));
 $byKey = array_column($fields, null, 'key');
 check('settings: secrets never sent back, only masked', $byKey['TALIXIO_SMTP_PASSWORD']['value'] === '' && $byKey['TALIXIO_SMTP_PASSWORD']['set'] === true && !str_contains(json_encode($desc), 'file-secret'));
+check('settings: every group has a section of the page, advanced keys exist', !array_diff(array_column($desc, 'section'), ['essentials', 'model', 'channels', 'accounts', 'library', 'security', 'system'])
+    && count(array_unique(array_column($desc, 'section'))) === 7 && !array_diff(\Talixio\Settings::ADVANCED, array_keys($byKey)) && $byKey['TALIXIO_PRICES']['advanced'] && !$byKey['TALIXIO_NAME']['advanced']);
 check('settings: source shown', $byKey['TALIXIO_NAME']['source'] === 'app' && $byKey['TALIXIO_SMTP_PASSWORD']['source'] === 'file');
 \Talixio\Settings::save($sd, [], ['TALIXIO_NAME']);
 check('settings: reset goes back to the file value in the same process', \Talixio\Config::fromEnv()->name === 'FromFile');

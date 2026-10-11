@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.22.0 (2026-10-11)
+- Settings redesigned. Seven sections (Essentials, Model and budget, Channels, Connected accounts, Library
+  and memory, Security, System) in a side menu, shown as chips at the top on a phone. A status band at the
+  top lists what needs attention, each section shows a dot (ok / to review), advanced settings are folded,
+  a search box filters every field, and one Save bar applies all changes at once (with Cancel).
+- Old links (#settings/google, #settings/budget…) open the matching new section.
+- Network drive (WebDAV): the address shown is now the one the page is open on, instead of the stored
+  public address (which could be a placeholder such as assistant.example.com).
+
 ## 0.21.4 (2026-10-11)
 - Document sheet on a phone: the buttons no longer take half the screen. Only "Ask about it" and a "More"
   button show; "More" unfolds Download, Open in a new tab, Share, Rename, Move, Review and Delete. Margins

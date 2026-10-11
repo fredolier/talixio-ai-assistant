@@ -1671,6 +1671,7 @@ async function loadChannels() {
     }
     box.append(el);
   }
+  setInfo('channels', channels.filter(c => c.state === 'on').length);
 }
 
 // ---- updates ----
@@ -1682,6 +1683,7 @@ async function loadUpdate() {
   if (!d.installed) { box.innerHTML = `<div class="row between"><h3>Updates</h3><span class="version">${esc(t('Version {v}', { v: d.version?.label || '?' }))}</span></div><p class="muted small">Updates from the app work on an installation made with <code>git clone</code> + <code>install.sh</code>.</p>`; return; }
   const v = d.version || {}, st = d.status || {};
   const busy = ['updating', 'checking'].includes(st.state);
+  setInfo('update', st.state === 'available');
   if (state.updating && !busy && state.updateFrom && v.sha !== state.updateFrom) { toast('Updated. Reloading…'); setTimeout(() => location.reload(), 1200); return; }
   if (state.updating && !busy && ['failed', 'done', 'rolled_back'].includes(st.state)) { state.updating = false; if (st.state !== 'failed') { setTimeout(() => location.reload(), 1200); } }
   const when = t => t ? new Date(t * 1000).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' }) : 'never';
@@ -1734,41 +1736,6 @@ function initialValue(f) {
   if (f.type === 'select') return eff;
   return f.value;
 }
-function renderGroups(groups) {
-  const box = $('#settings-groups'); const open = new Set([...box.querySelectorAll('details[open]')].map(d => d.dataset.id)); box.innerHTML = '';
-  for (const g of groups) {
-    const el = document.createElement('details'); el.className = 'card group'; el.dataset.id = g.id; if (open.has(g.id)) el.open = true;
-    const setCount = g.fields.filter(f => f.set).length;
-    el.innerHTML = `<summary><b>${esc(g.title)}</b><span class="count">${setCount ? setCount + ' set' : ''}</span></summary>
-      ${g.intro ? `<p class="muted small">${esc(g.intro)}</p>` : ''}
-      <div class="fields">${g.fields.map(f => `<div class="field ${f.type === 'bool' ? 'bool' : ''}" data-key="${f.key}">
-          ${f.type === 'bool' ? fieldInput(f) : ''}
-          <div style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1">
-            <div class="top"><label for="set-${f.key}">${esc(f.label)}</label>
-              ${f.source === 'app' ? `<span class="src">set in the app · <button type="button" data-reset="${f.key}">reset</button></span>` : f.source === 'file' ? '<span class="src">from the config file</span>' : ''}
-              ${f.type === 'secret' && f.set && f.source === 'app' ? '' : ''}</div>
-            ${f.type !== 'bool' ? fieldInput(f) : ''}
-            ${f.help ? `<p class="help">${esc(f.help)}</p>` : ''}<p class="err" hidden></p>
-          </div></div>`).join('')}
-        <div class="row"><button class="btn primary" type="button" data-save>Save</button><span class="muted small" data-state></span></div></div>`;
-    el.querySelectorAll('.field').forEach(fe => {
-      const f = g.fields.find(x => x.key === fe.dataset.key);
-      const mark = () => fe.classList.toggle('changed', fieldValue(f) !== initialValue(f));
-      fe.addEventListener('input', mark); fe.addEventListener('change', mark);
-    });
-    el.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => saveSettings(el, g, [b.dataset.reset]));
-    el.querySelector('[data-save]').onclick = () => saveSettings(el, g, []);
-    if (g.id === 'brain' && state.status?.claude_code) { // the simplest way: the Claude plan, signed in from here
-      const r = document.createElement('div'); r.className = 'row wrap';
-      r.innerHTML = `<button class="btn" type="button">${esc(t('Sign in with Claude'))}</button><span class="muted small">${esc(t('Uses your Claude Pro or Max plan; no API key needed.'))}</span>`;
-      r.querySelector('button').onclick = claudeSignIn;
-      el.querySelector('.fields').prepend(r);
-    }
-    if (g.id === 'search') { const m = document.createElement('div'); m.className = 'meaning'; m.id = 'meaning'; el.querySelector('.fields').prepend(m); loadMeaning(m).catch(e => { m.textContent = e.message; }); }
-    if (g.id === 'brain' && location.hash === '#settings/brain') { el.open = true; setTimeout(() => el.scrollIntoView({ block: 'start' }), 50); }
-    box.append(el);
-  }
-}
 /** Settings → Search by meaning: pick who computes the vectors, see the index and what it costs here. */
 async function loadMeaning(box = $('#meaning')) {
   if (!box) return;
@@ -1803,26 +1770,203 @@ async function loadMeaning(box = $('#meaning')) {
     try { await post('api/meaning/measure'); await loadMeaning(box); } catch (err) { box.querySelector('[data-a=out]').textContent = err.message; b.disabled = false; }
   };
   clearTimeout(loadMeaning.t);
-  if ((m.pull?.state === 'running' || idx < 100) && box.isConnected) loadMeaning.t = setTimeout(() => { if (box.isConnected && box.closest('details')?.open) loadMeaning(box).catch(() => {}); }, 5000);
+  if ((m.pull?.state === 'running' || idx < 100) && box.isConnected) loadMeaning.t = setTimeout(() => { if (box.isConnected && !box.closest('.set-sec')?.hidden) loadMeaning(box).catch(() => {}); }, 5000);
 }
-async function saveSettings(el, g, reset) {
+// ---- settings page: sections, one Save for everything, search ----
+const SET_SECTIONS = [
+  ['essentials', 'Essentials', 'M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z'],
+  ['model', 'Model and budget', 'M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3M6 6h12v12H6zM10 10h4v4h-4z'],
+  ['channels', 'Channels', 'M4 5h16v11H8l-4 4z'],
+  ['accounts', 'Connected accounts', 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'],
+  ['library', 'Library and memory', 'M4 4h5v16H4zM10 4h5v16h-5zM16 5l4 1-3 14-4-1'],
+  ['security', 'Security', 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],
+  ['system', 'System', 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2'],
+];
+/** Old links (#settings/brain, #settings/memory…) and names used in messages: which section they mean. */
+const SET_ALIAS = { brain: 'model', budget: 'model', memory: 'library', search: 'library', connectors: 'accounts', google: 'accounts', calendar: 'accounts',
+  spotify: 'accounts', mcp: 'accounts', mailbox: 'accounts', notify: 'channels', update: 'system', backups: 'system', totp: 'security' };
+/** Fields only useful with a given choice; shown anyway once they hold a value. */
+const SHOW_IF = {
+  ANTHROPIC_API_KEY: ['TALIXIO_PROVIDER', ['anthropic']], CLAUDE_CODE_OAUTH_TOKEN: ['TALIXIO_PROVIDER', ['claude-code']],
+  OPENAI_API_KEY: ['TALIXIO_PROVIDER', ['openai']], OPENAI_BASE_URL: ['TALIXIO_PROVIDER', ['openai']],
+  BRAVE_API_KEY: ['TALIXIO_SEARCH', ['brave']], TAVILY_API_KEY: ['TALIXIO_SEARCH', ['tavily']], SEARXNG_URL: ['TALIXIO_SEARCH', ['searxng']],
+};
+state.setInfo = {};
+const setFields = () => (state.setGroups || []).flatMap(g => g.fields);
+const fold = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function setSection() {
+  const p = location.hash.split('/')[1] || '';
+  const id = SET_ALIAS[p] || p;
+  return SET_SECTIONS.some(s => s[0] === id) ? id : (state.setSection || 'essentials');
+}
+function showSection(id, scroll = true) {
+  id = SET_ALIAS[id] || id;
+  if (!SET_SECTIONS.some(s => s[0] === id)) id = 'essentials';
+  state.setSection = id;
+  if ($('#set-search').value) { $('#set-search').value = ''; setSearch(); }
+  document.querySelectorAll('#view-settings .set-sec').forEach(s => { s.hidden = s.dataset.sec !== id; });
+  document.querySelectorAll('#set-nav a, #set-chips a').forEach(a => { a.classList.toggle('on', a.dataset.sec === id); a.setAttribute('aria-current', a.dataset.sec === id ? 'page' : 'false'); });
+  $('#set-chips a.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  if (location.hash !== '#settings/' + id) history.replaceState(null, '', '#settings/' + id);
+  if (scroll) { const pg = $('#view-settings'); if (pg.scrollTop > $('.set-layout').offsetTop) pg.scrollTop = $('.set-layout').offsetTop - 8; }
+}
+/** The menu (computer) and chips (phone), each section with a word on its state. */
+function renderSetNav() {
+  const i = state.setInfo, s = state.status || {};
+  const note = {
+    model: s.model_problem ? ['w', t('to set up')] : i.budget ? ['w', t('budget reached')] : ['o', shortModel(s.model || '')],
+    channels: i.channels != null ? [i.channels ? 'o' : 'w', t('{n} active', { n: i.channels })] : null,
+    accounts: i.accounts != null ? [i.accounts ? 'o' : '', t('{n} connected', { n: i.accounts })] : null,
+    security: i.totp != null ? (i.totp ? ['o', t('two-step on')] : ['w', t('two-step off')]) : null,
+    system: i.update ? ['w', t('update available')] : null,
+  };
+  const html = (chip) => SET_SECTIONS.map(([id, title, d]) => {
+    const n = note[id];
+    return `<a href="#settings/${id}" data-sec="${id}" class="${id === state.setSection ? 'on' : ''}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>
+      <span class="sn-t">${esc(t(title))}${!chip && n?.[1] ? `<small>${esc(n[1])}</small>` : ''}</span>${n?.[0] ? `<i class="dot ${n[0]}" title="${esc(n[1] || '')}"></i>` : ''}</a>`;
+  }).join('');
+  $('#set-nav').innerHTML = html(false); $('#set-chips').innerHTML = html(true);
+  document.querySelectorAll('#set-nav a, #set-chips a').forEach(a => a.onclick = e => { e.preventDefault(); showSection(a.dataset.sec); });
+}
+/** The band at the top: what needs a look, each point opening its section. */
+function setHealth() {
+  const s = state.status || {}, i = state.setInfo, pts = [];
+  if (s.model_problem) pts.push(['model', t('The AI model is not set up')]);
+  if (s.budget?.state === 'blocked') pts.push(['model', t('The budget is reached')]);
+  if (state.status && !s.worker_online) pts.push(['system', t('The background worker is not running')]);
+  if (i.update) pts.push(['system', t('An update is available')]);
+  if (i.totp === false) pts.push(['security', t('Two-step sign-in is off')]);
+  const b = $('#set-health');
+  b.classList.toggle('warn', pts.length > 0); b.classList.toggle('ok', !pts.length && !!state.status);
+  $('#sh-title').textContent = !state.status ? t('Checking…') : pts.length ? (pts.length === 1 ? t('1 point to review') : t('{n} points to review', { n: pts.length })) : t('Everything looks fine');
+  $('#sh-list').innerHTML = pts.map(([sec, txt]) => `<a href="#settings/${sec}" data-sec="${sec}">${esc(txt)}</a>`).join(' · ');
+  $('#sh-list').querySelectorAll('a').forEach(a => a.onclick = e => { e.preventDefault(); showSection(a.dataset.sec); });
+  renderSetNav();
+}
+/** Connected accounts: Google, Spotify and the connectors that answer (the mailbox counts once set). */
+function setAccounts() {
+  const a = state.setAcc || {}, mb = setFields().some(f => f.key === 'TALIXIO_MAILBOX_USER' && (f.value || f.set));
+  setInfo('accounts', (a.google ? 1 : 0) + (a.spotify ? 1 : 0) + (a.mcp || 0) + (mb ? 1 : 0));
+}
+function setInfo(k, v) { if (state.setInfo[k] === v) return; state.setInfo[k] = v; if (!$('#view-settings').hidden) setHealth(); }
+function applyShowIf() {
+  for (const [key, [dep, vals]] of Object.entries(SHOW_IF)) {
+    const fe = document.querySelector(`#view-settings .field[data-key="${key}"]`), d = setFields().find(f => f.key === dep);
+    if (!fe || !d || !document.getElementById('set-' + dep)) continue;
+    const f = setFields().find(x => x.key === key);
+    fe.classList.toggle('cond-off', !vals.includes(fieldValue(d)) && !f.set && !f.value && !fe.classList.contains('changed'));
+  }
+}
+/** Counts what differs from what is saved and shows the Save bar. */
+function setDirty() {
+  let n = 0;
+  for (const f of setFields()) {
+    const fe = document.querySelector(`#view-settings .field[data-key="${f.key}"]`); if (!fe) continue;
+    const ch = fieldValue(f) !== initialValue(f); fe.classList.toggle('changed', ch); if (ch) n++;
+  }
+  applyShowIf();
+  $('#set-save').hidden = !n;
+  $('#set-save-n').textContent = n === 1 ? t('1 unsaved change') : t('{n} unsaved changes', { n });
+  return n;
+}
+function fieldHtml(f) {
+  return `<div class="field ${f.type === 'bool' ? 'bool' : ''}" data-key="${f.key}">
+    ${f.type === 'bool' ? fieldInput(f) : ''}
+    <div class="fbody">
+      <div class="top"><label for="set-${f.key}">${esc(f.label)}</label>
+        ${f.source === 'app' ? `<span class="src">set in the app · <button type="button" data-reset="${f.key}">reset</button></span>` : f.source === 'file' ? '<span class="src">from the config file</span>' : ''}</div>
+      ${f.type !== 'bool' ? fieldInput(f) : ''}
+      ${f.help ? `<p class="help">${esc(f.help)}</p>` : ''}<p class="err" hidden></p>
+    </div></div>`;
+}
+function renderGroups(groups) {
+  state.setGroups = groups;
+  const pool = $('#set-pool');
+  for (const id of ['google-card', 'spotify-card']) pool.append($('#' + id));
+  const openAdv = new Set([...document.querySelectorAll('#view-settings .set-groups details.adv[open]')].map(d => d.dataset.id));
+  document.querySelectorAll('#view-settings .set-groups').forEach(b => { b.innerHTML = ''; });
+  for (const g of groups) {
+    const box = document.querySelector(`#view-settings .set-groups[data-groups="${g.section}"]`); if (!box) continue;
+    const main = g.fields.filter(f => !f.advanced), adv = g.fields.filter(f => f.advanced);
+    const el = document.createElement('div'); el.className = 'card set-card group-card'; el.dataset.id = g.id;
+    el.innerHTML = `<h4>${esc(g.title)}</h4>${g.intro ? `<p class="muted small">${esc(g.intro)}</p>` : ''}
+      <div class="fields">${main.map(fieldHtml).join('')}</div>
+      ${adv.length ? `<details class="adv" data-id="${g.id}" ${openAdv.has(g.id) ? 'open' : ''}><summary>${esc(t('Advanced settings ({n})', { n: adv.length }))}</summary><div class="fields">${adv.map(fieldHtml).join('')}</div></details>` : ''}`;
+    el.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => saveSettings([b.dataset.reset]));
+    if (g.id === 'brain' && state.status?.claude_code) { // the simplest way: the Claude plan, signed in from here
+      const r = document.createElement('div'); r.className = 'row wrap';
+      r.innerHTML = `<button class="btn" type="button">${esc(t('Sign in with Claude'))}</button><span class="muted small">${esc(t('Uses your Claude Pro or Max plan; no API key needed.'))}</span>`;
+      r.querySelector('button').onclick = claudeSignIn;
+      el.querySelector('.fields').prepend(r);
+    }
+    if (g.id === 'search') { const m = document.createElement('div'); m.className = 'meaning'; m.id = 'meaning'; el.querySelector('.fields').prepend(m); loadMeaning(m).catch(e => { m.textContent = e.message; }); }
+    if (g.id === 'calendar') el.querySelector('.fields').before($('#google-card'));
+    if (g.id === 'spotify') el.querySelector('.fields').before($('#spotify-card'));
+    box.append(el);
+  }
+  const page = $('#view-settings');
+  page.oninput = page.onchange = e => { if (e.target.closest('.set-groups')) setDirty(); };
+  setDirty(); setAccounts();
+  if ($('#set-search').value) setSearch();
+}
+async function saveSettings(reset = []) {
   const changes = {};
-  if (!reset.length) for (const f of g.fields) { const v = fieldValue(f); if (v !== initialValue(f)) changes[f.key] = v; }
-  const state = el.querySelector('[data-state]');
-  if (!reset.length && !Object.keys(changes).length) { state.textContent = 'Nothing changed.'; return; }
-  el.querySelectorAll('.err').forEach(e => { e.hidden = true; });
+  if (!reset.length) for (const f of setFields()) { if (!document.getElementById('set-' + f.key)) continue; const v = fieldValue(f); if (v !== initialValue(f)) changes[f.key] = v; }
+  if (!reset.length && !Object.keys(changes).length) return;
+  document.querySelectorAll('#view-settings .set-groups .err').forEach(e => { e.hidden = true; });
+  const btn = $('#set-save-btn'); btn.disabled = true;
   try {
     const res = await fetch('api/settings', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Talixio': '1' }, body: JSON.stringify({ changes, reset }) });
     const d = await res.json();
     if (!res.ok) {
-      for (const [k, msg] of Object.entries(d.errors || {})) { const e = el.querySelector(`[data-key="${k}"] .err`); if (e) { e.textContent = msg; e.hidden = false; } }
-      state.textContent = d.error || 'Not saved.'; return;
+      let first = null;
+      for (const [k, msg] of Object.entries(d.errors || {})) {
+        const fe = document.querySelector(`#view-settings .field[data-key="${k}"]`); if (!fe) continue;
+        const e = fe.querySelector('.err'); e.textContent = msg; e.hidden = false; first ||= fe;
+      }
+      if (first) { showSection(first.closest('.set-sec').dataset.sec, false); const a = first.closest('details.adv'); if (a) a.open = true; first.scrollIntoView({ block: 'center' }); }
+      toast(d.error || t('Not saved.')); return;
     }
     renderGroups(d.groups); toast(reset.length ? 'Back to the config file value' : 'Saved. The background worker restarts to apply it.');
-    refreshStatus();
+    refreshStatus().then(setHealth);
   } catch (e) { toast(e.message); }
+  finally { btn.disabled = false; }
 }
+$('#set-save-btn').onclick = () => saveSettings();
+$('#set-cancel').onclick = () => renderGroups(state.setGroups);
+/** Finds a setting anywhere on the page: every section shows, only what matches stays. */
+function setSearch() {
+  const q = fold($('#set-search').value.trim()), page = $('#view-settings');
+  page.classList.toggle('searching', !!q);
+  if (!q) {
+    page.querySelectorAll('.set-sec').forEach(s => { s.hidden = s.dataset.sec !== state.setSection; });
+    page.querySelectorAll('.set-sec .set-card, .set-sec .field').forEach(e => e.classList.remove('nomatch'));
+    page.querySelectorAll('details.adv[data-found]').forEach(d => { d.open = false; delete d.dataset.found; });
+    $('#set-empty').hidden = true; return;
+  }
+  let any = false;
+  page.querySelectorAll('.set-sec').forEach(sec => {
+    let secHit = fold(sec.querySelector('header').textContent).includes(q);
+    sec.querySelectorAll(':scope > .set-card, :scope > form.set-card, .set-groups > .set-card').forEach(card => {
+      const fields = [...card.querySelectorAll('.field[data-key]')];
+      const head = fold((card.querySelector('h4')?.textContent || '') + ' ' + (card.querySelector(':scope > p')?.textContent || ''));
+      let hit = head.includes(q), fHit = false;
+      if (fields.length) for (const fe of fields) {
+        const m = fold(fe.textContent + ' ' + fe.dataset.key).includes(q);
+        fe.classList.toggle('nomatch', !m && !hit); fHit ||= m;
+        const a = fe.closest('details.adv'); if (m && a && !a.open) { a.open = true; a.dataset.found = '1'; }
+      } else hit ||= fold(card.textContent).includes(q);
+      card.classList.toggle('nomatch', !(hit || fHit)); secHit ||= hit || fHit;
+    });
+    sec.hidden = !secHit; any ||= secHit;
+  });
+  $('#set-empty').hidden = any;
+}
+$('#set-search').oninput = setSearch;
+$('#set-search').onkeydown = e => { if (e.key === 'Escape') { e.target.value = ''; setSearch(); } };
 async function loadSettings() {
+  showSection(setSection(), false);
+  setHealth();
   loadChannels().catch(e => toast(e.message));
   loadUpdate().catch(() => {});
   loadSecurity();
@@ -1832,7 +1976,8 @@ async function loadSettings() {
   loadGoogle();
   loadSpotify();
   loadTransfer().catch(() => {});
-  renderGroups((await api('api/settings')).groups);
+  refreshStatus().then(setHealth);
+  if (!state.setGroups || $('#set-save').hidden) renderGroups((await api('api/settings')).groups);
 }
 $('#doctor-run').onclick = async () => {
   const b = $('#doctor-run'); b.disabled = true; b.textContent = 'Checking…';
@@ -1904,6 +2049,7 @@ function renderPaused(p) {
 
 // ---- Spotify ----
 function showSpotify(g) {
+  state.setAcc = { ...state.setAcc, spotify: !!g.connected }; setAccounts();
   $('#spotify-badge').textContent = g.connected ? `· connected${g.name ? ' as ' + g.name : ''}` : g.configured ? '· not connected' : '· not set up';
   $('#spotify-redirect').textContent = g.redirect;
   $('#spotify-status').innerHTML = g.connected
@@ -1921,6 +2067,7 @@ $('#spotify-disconnect').onclick = async () => { try { showSpotify(await post('a
 
 // ---- Google Calendar ----
 function showGoogle(g) {
+  state.setAcc = { ...state.setAcc, google: !!g.connected }; setAccounts();
   $('#google-badge').textContent = g.connected ? `· connected${g.email ? ' as ' + g.email : ''}` : g.configured ? '· not connected' : '· not set up';
   $('#google-redirect').textContent = g.redirect;
   $('#google-status').innerHTML = g.connected
@@ -1939,6 +2086,7 @@ $('#google-disconnect').onclick = async () => { try { showGoogle(await post('api
 function showConnectors(d) {
   if (document.activeElement !== $('#mcp-raw')) $('#mcp-raw').value = d.raw;
   const ok = d.servers.filter(x => !x.error).length;
+  state.setAcc = { ...state.setAcc, mcp: ok }; setAccounts();
   $('#mcp-badge').textContent = d.servers.length ? `· ${ok}/${d.servers.length} connected` : '· none';
   $('#mcp-servers').innerHTML = d.servers.map(x => `<div class="mcp-server ${x.error && x.auth !== 'needed' ? 'bad' : ''}">
       <div class="row"><b>${esc(x.name)}</b><span class="chip">${x.kind}</span>${x.trust === 'all' ? '<span class="chip">trusted: no approval</span>' : ''}
@@ -1952,7 +2100,7 @@ function showConnectors(d) {
     try { location.href = (await post('api/mcp/oauth/start', { server: b.dataset.signin })).url; } catch (e) { $('#mcp-state').textContent = e.message; b.disabled = false; }
   });
   $('#mcp-servers').querySelectorAll('[data-signout]').forEach(b => b.onclick = () => mcpAction('api/mcp/oauth/forget', { server: b.dataset.signout }));
-  $('#shell-state').textContent = !d.shell.installed ? 'not installed (install.sh --with-shell).' : d.shell.mode === 'off' ? 'installed, off (Settings → Sandboxed shell).' : d.shell.mode === 'ask' ? 'on, asks before each command.' : 'on, runs without asking.';
+  $('#shell-state').textContent = !d.shell.installed ? 'not installed (install.sh --with-shell).' : d.shell.mode === 'off' ? 'installed, off (Settings → Security → Sandboxed shell).' : d.shell.mode === 'ask' ? 'on, asks before each command.' : 'on, runs without asking.';
 }
 async function loadConnectors() { try { showConnectors(await api('api/mcp')); } catch {} }
 const mcpAction = async (path, body) => {
@@ -2019,6 +2167,7 @@ async function loadSecurity() {
   try { showTotp((await api('api/security')).totp); } catch { /* shown elsewhere */ }
 }
 function showTotp(on) {
+  setInfo('totp', !!on);
   $('#totp-badge').textContent = on ? '· on' : '· off';
   $('#totp-off').hidden = on; $('#totp-disable').hidden = !on; $('#totp-enable').hidden = true;
 }
@@ -2058,7 +2207,7 @@ async function loadDav() {
   try { showDav(await api('api/dav')); } catch { /* shown elsewhere */ }
 }
 function showDav(d) {
-  $('#dav-url').textContent = d.url; $('#dav-user').textContent = d.user;
+  $('#dav-url').textContent = location.origin + location.pathname.replace(/\/[^/]*$/, '') + '/dav/'; // the address this page is open on always works $('#dav-user').textContent = d.user;
   $('#dav-mode').value = d.mode;
   $('#dav-mode').disabled = !d.password;
   $('#dav-badge').textContent = '· ' + window.t(d.mode === 'off' ? 'off' : d.mode === 'read' ? 'read only' : 'read and write');
@@ -2620,7 +2769,7 @@ const MAIL_LABELS = { reply: 'To answer', action: 'To do', fyi: 'To read', low: 
 async function loadMail() {
   const d = await api('api/mail' + ($('#mail-all').checked ? '?all=1' : ''));
   const box = $('#mail-list');
-  if (!d.mailbox) { box.innerHTML = '<div class="placeholder">Connect your mailbox first: Settings → Configuration → Your mailbox.</div>'; return; }
+  if (!d.mailbox) { box.innerHTML = '<div class="placeholder">Connect your mailbox first: Settings → Connected accounts → Your mailbox.</div>'; return; }
   if (!d.enabled) { box.innerHTML = '<div class="placeholder">Email sorting is off: Settings → Your mailbox → Sort new emails.</div>'; return; }
   if (!d.emails.length) { box.innerHTML = `<div class="placeholder">${d.last_run ? 'Nothing waiting. 🎉' : 'Not checked yet: press "Check now" (it then runs every 15 minutes).'}</div>`; return; }
   box.innerHTML = '';
@@ -3133,19 +3282,19 @@ async function handleLaunch() {
     const g = params.get('google');
     history.replaceState(null, '', './#settings');
     toast(g === 'connected' ? 'Google Calendar connected.' : g);
-    if (g === 'connected') setTimeout(() => { $('#google-card').open = true; $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
+    if (g === 'connected') setTimeout(() => { showSection('accounts'); $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
   }
   if (params.has('mcp')) {
     const g = params.get('mcp');
     history.replaceState(null, '', './#settings');
     toast(g.startsWith('connected:') ? `Connected to ${g.slice(10)}: its tools are available from the next message.` : g);
-    setTimeout(() => { $('#mcp-card').open = true; $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600);
+    setTimeout(() => { showSection('accounts'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600);
   }
   if (params.has('spotify')) {
     const g = params.get('spotify');
     history.replaceState(null, '', './#settings');
     toast(g === 'connected' ? 'Spotify connected.' : g);
-    setTimeout(() => { $('#spotify-card').open = true; $('#spotify-card').scrollIntoView({ block: 'center' }); }, 600);
+    setTimeout(() => { showSection('accounts'); $('#spotify-card').scrollIntoView({ block: 'center' }); }, 600);
   }
   if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', '/' + location.hash);
   if (token) {

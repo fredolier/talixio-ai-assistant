@@ -32,7 +32,7 @@ final class Spotify
 
     public function authUrl(string $redirect): string
     {
-        if (!$this->configured()) throw new \InvalidArgumentException('Fill in the Spotify client ID and secret first (Settings → Configuration → Spotify).');
+        if (!$this->configured()) throw new \InvalidArgumentException('Fill in the Spotify client ID and secret first (Settings → Connected accounts → Spotify).');
         $state = bin2hex(random_bytes(16));
         $this->app->store->set('spotify_state', json_encode(['state' => $state, 'ts' => time(), 'redirect' => $redirect]));
         return $this->app->cfg->spotifyAuthUrl . '?' . http_build_query(['client_id' => $this->app->cfg->spotifyClientId, 'response_type' => 'code',
