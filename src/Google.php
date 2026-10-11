@@ -144,10 +144,13 @@ final class Google
     }
 
     /** An all-day event for a task (created, or updated when $id is given). Returns its id. */
-    public function putTaskEvent(?string $id, int $cardId, string $title, string $startDay, string $endDay, string $description): string
+    /** $slot: [from, to] timestamps for a timed task (a meeting, shown as busy); null for all-day. */
+    public function putTaskEvent(?string $id, int $cardId, string $title, string $startDay, string $endDay, string $description, ?array $slot = null): string
     {
-        $body = ['summary' => $title, 'description' => $description, 'start' => ['date' => $startDay], 'end' => ['date' => date('Y-m-d', strtotime("$endDay +1 day"))],
-            'transparency' => 'transparent', 'extendedProperties' => ['private' => ['talixioTask' => (string)$cardId]]];
+        $tz = $this->app->cfg->timezone;
+        $body = ['summary' => $title, 'description' => $description, 'extendedProperties' => ['private' => ['talixioTask' => (string)$cardId]]]
+            + ($slot ? ['start' => ['dateTime' => date('c', $slot[0]), 'timeZone' => $tz], 'end' => ['dateTime' => date('c', $slot[1]), 'timeZone' => $tz], 'transparency' => 'opaque']
+                : ['start' => ['date' => $startDay], 'end' => ['date' => date('Y-m-d', strtotime("$endDay +1 day"))], 'transparency' => 'transparent']);
         if ($id) {
             try { return (string)($this->api('PUT', '/calendars/primary/events/' . rawurlencode($id), $body)['id'] ?? $id); }
             catch (\RuntimeException $e) { if (!preg_match('/not found|deleted|HTTP 404|HTTP 410/i', $e->getMessage())) throw $e; } // removed in Calendar: add it again

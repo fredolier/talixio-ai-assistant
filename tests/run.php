@@ -1842,6 +1842,10 @@ check('tasks → Google: a change updates the same event', (end($gs1['updated'])
 $gb->update($gc['id'], ['in_calendar' => false]); $gb->syncGoogle();
 $gs1 = json_decode((string)file_get_contents(sys_get_temp_dir() . "/fake-google-$gport.json"), true);
 check('tasks → Google: unticked, the event is removed', count($gs1['deleted'] ?? []) === 1 && $ga->store->q('SELECT gcal_id FROM cards WHERE id = ?', [$gc['id']])->fetchColumn() === null);
+$gm = $gb->create(['title' => 'Point équipe', 'due_date' => '2026-11-19', 'start_time' => '14:00', 'end_time' => '15:30', 'in_calendar' => true], 0); $gb->syncGoogle();
+$gs1 = json_decode((string)file_get_contents(sys_get_temp_dir() . "/fake-google-$gport.json"), true); $ev = end($gs1['inserted']);
+check('tasks → Google: a task with hours is a timed, busy event', ($ev['start']['dateTime'] ?? '') === date('c', strtotime('2026-11-19 14:00')) && ($ev['end']['dateTime'] ?? '') === date('c', strtotime('2026-11-19 15:30'))
+    && $ev['transparency'] === 'opaque' && $ev['start']['timeZone'] === 'Europe/Paris', json_encode($ev));
 $ga->google()->disconnect();
 check('google: disconnect forgets the tokens', !$ga->google()->connected() && !is_file("$ad/google.json"));
 foreach (['AUTH_URL', 'TOKEN_URL', 'REVOKE_URL', 'API_BASE'] as $k) putenv("TALIXIO_GOOGLE_$k");
@@ -1963,6 +1967,14 @@ check('board api: trash and restore', count($aj('/api/board/trash', null, 'd')['
 $bd->update($c1['id'], ['in_calendar' => true]);
 $ics = $bd->ics();
 check('board: calendar feed has the shown tasks only, all day', str_contains($ics, 'SUMMARY:MAI-1 · Repeindre la cuisine') && str_contains($ics, 'DTSTART;VALUE=DATE:20261130') && !str_contains($ics, 'Changer le joint') && !preg_match('/^.{76,}$/m', $ics));
+$mt = $bd->create(['title' => 'Réunion syndic', 'due_date' => '2026-12-03', 'start_time' => '9h30', 'in_calendar' => true], (int)$bsp['id']);
+$ics2 = $bd->ics(); $slot = \Talixio\Board::slot($mt);
+$err = fn(array $d) => (function () use ($bd, $mt, $d) { try { $bd->update($mt['id'], $d); return ''; } catch (\InvalidArgumentException $e) { return $e->getMessage(); } })();
+check('board: a task with hours is a meeting (one hour by default, busy in the calendar feed, checked)', $mt['start_time'] === '09:30' && $slot[1] - $slot[0] === 3600
+    && str_contains($ics2, 'DTSTART:' . gmdate('Ymd\THis\Z', strtotime('2026-12-03 09:30'))) && str_contains($ics2, 'TRANSP:OPAQUE') && str_contains($bd->line($mt), 'from 09:30')
+    && str_contains($err(['end_time' => '09:00']), 'before the start') && $err(['end_time' => '11:00']) === '' && $bd->get($mt['id'])['end_time'] === '11:00'
+    && str_contains($err(['start_time' => '25:00']), 'HH:MM') && str_contains($err(['start_time' => '']), 'needs a start time') && $err(['start_time' => '', 'end_time' => '']) === '', $ics2);
+$ba->store->q('DELETE FROM cards WHERE id = ?', [$mt['id']]); // gone for good, so the trash checks below stay as they were
 $tok = $bd->icsToken();
 $ch = curl_init("http://127.0.0.1:$webPort/cal/tasks-$tok.ics"); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true]); $feed = (string)curl_exec($ch); $fcode = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
 $ch = curl_init("http://127.0.0.1:$webPort/cal/tasks-" . str_repeat('0', 40) . '.ics'); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true]); curl_exec($ch); $bcode = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);

@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.24.0 (2026-10-11)
+
+- Tasks can have hours ("From" / "To" next to the dates): a timed task is a meeting slot. It shows with
+  its time in the calendar view and on the board, and in Google Calendar and the iCal link it is a timed
+  event marked busy (one hour by default). Entering a start time ticks "Show in my calendar". The
+  assistant can set the hours too (start_time / end_time).
+
 ## 0.23.5 (2026-10-11)
 
 - Library: "Ask about this document" now attaches the document and leaves the message box empty, with

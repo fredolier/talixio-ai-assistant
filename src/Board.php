@@ -14,7 +14,7 @@ final class Board
 {
     public const STATUSES = ['idea' => 'Ideas', 'todo' => 'To do', 'doing' => 'In progress', 'blocked' => 'Blocked', 'done' => 'Done'];
     public const HOURS_PER_DAY = 7;
-    private const FIELDS = ['title', 'body', 'status', 'priority', 'start_date', 'due_date', 'estimate_hours', 'tags', 'in_calendar', 'space', 'links'];
+    private const FIELDS = ['title', 'body', 'status', 'priority', 'start_date', 'due_date', 'start_time', 'end_time', 'estimate_hours', 'tags', 'in_calendar', 'space', 'links'];
 
     public function __construct(private App $app)
     {
@@ -33,6 +33,8 @@ final class Board
             CREATE INDEX IF NOT EXISTS card_time_card ON card_time(card);");
         $app->store->addColumn('cards', 'gcal_id', 'TEXT');       // its Google Calendar event, when shown in the calendar
         $app->store->addColumn('cards', 'gcal_synced', 'INTEGER'); // version last sent to Google
+        $app->store->addColumn('cards', 'start_time', 'TEXT');    // "09:30": a timed slot (a meeting), on the start day (or the due day)
+        $app->store->addColumn('cards', 'end_time', 'TEXT');      // "10:30", on the due day (or the start day)
         $app->store->addColumn('cards', 'old_codes', "TEXT NOT NULL DEFAULT ''"); // ',GEN-3,': codes it had in other spaces, still recognised
     }
 
@@ -167,6 +169,22 @@ final class Board
         return $s;
     }
 
+    private static function time(mixed $v, string $what): ?string
+    {
+        if ($v === null || $v === '') return null;
+        if (!preg_match('/^([01]?\d|2[0-3])\s*[:hH.]\s*([0-5]\d)?$/', trim((string)$v), $m)) throw new \InvalidArgumentException("$what must be a time HH:MM");
+        return sprintf('%02d:%02d', (int)$m[1], (int)($m[2] ?? 0));
+    }
+
+    /** First and last minute of a timed task, as timestamps; null when it has no start time (all-day). */
+    public static function slot(array $c): ?array
+    {
+        if (empty($c['start_time']) || !($c['start_date'] ?? $c['due_date'] ?? null)) return null;
+        $from = strtotime(($c['start_date'] ?? $c['due_date']) . ' ' . $c['start_time']);
+        $to = $c['end_time'] ? strtotime(($c['due_date'] ?? $c['start_date']) . ' ' . $c['end_time']) : $from + 3600;
+        return [$from, max($to, $from + 900)];
+    }
+
     /** Validated column values from user/assistant input (only the keys given). */
     private function values(array $d): array
     {
@@ -177,6 +195,8 @@ final class Board
         if (array_key_exists('priority', $d)) { $p = (int)preg_replace('/\D/', '', (string)$d['priority']); if ($p < 1 || $p > 5) throw new \InvalidArgumentException('priority is 1 (most urgent) to 5'); $v['priority'] = $p; }
         if (array_key_exists('start_date', $d)) $v['start_date'] = self::date($d['start_date'], 'start');
         if (array_key_exists('due_date', $d)) $v['due_date'] = self::date($d['due_date'], 'due');
+        if (array_key_exists('start_time', $d)) $v['start_time'] = self::time($d['start_time'], 'The start time');
+        if (array_key_exists('end_time', $d)) $v['end_time'] = self::time($d['end_time'], 'The end time');
         if (array_key_exists('estimate_hours', $d)) $v['estimate_hours'] = self::hours($d['estimate_hours']);
         if (array_key_exists('tags', $d)) $v['tags'] = Store::tagString(is_array($d['tags']) ? $d['tags'] : (string)$d['tags']);
         if (array_key_exists('in_calendar', $d)) $v['in_calendar'] = $d['in_calendar'] && $d['in_calendar'] !== 'false' ? 1 : 0;
@@ -184,6 +204,14 @@ final class Board
         if (array_key_exists('space', $d)) { $s = (int)$d['space']; if (!$this->app->spaces()->get($s)) throw new \InvalidArgumentException('no such space'); $v['space'] = $s; }
         if (isset($v['start_date'], $v['due_date']) && $v['start_date'] > $v['due_date']) throw new \InvalidArgumentException('The start is after the due date.');
         return $v;
+    }
+
+    private static function checkSlot(array $c): void
+    {
+        if ($c['end_time'] && !$c['start_time']) throw new \InvalidArgumentException('An end time needs a start time.');
+        if ($c['start_time'] && !$c['start_date'] && !$c['due_date']) throw new \InvalidArgumentException('A time needs a date.');
+        if ($c['start_time'] && $c['end_time'] && ($c['start_date'] ?? $c['due_date']) === ($c['due_date'] ?? $c['start_date']) && $c['end_time'] <= $c['start_time'])
+            throw new \InvalidArgumentException('The end time is before the start time.');
     }
 
     // ---------- writing ----------
@@ -194,6 +222,7 @@ final class Board
         $d += ['status' => 'todo', 'priority' => 3];
         $v = $this->values($d + ['space' => $space]);
         if (!isset($v['title'])) throw new \InvalidArgumentException('A task needs a title.');
+        self::checkSlot($v + ['start_date' => null, 'due_date' => null, 'start_time' => null, 'end_time' => null]);
         $st = $this->app->store;
         $space = $v['space'];
         // new cards go after the cards of the same or higher priority in their column
@@ -221,6 +250,8 @@ final class Board
         $start = $v['start_date'] ?? (array_key_exists('start_date', $v) ? null : $c['start_date']);
         $due = $v['due_date'] ?? (array_key_exists('due_date', $v) ? null : $c['due_date']);
         if ($start && $due && $start > $due) throw new \InvalidArgumentException('The start is after the due date.');
+        $keep = fn(string $k) => array_key_exists($k, $v) ? $v[$k] : $c[$k];
+        self::checkSlot(['start_date' => $start, 'due_date' => $due, 'start_time' => $keep('start_time'), 'end_time' => $keep('end_time')]);
         $before = $this->snapshot($id);
         $changes = [];
         foreach ($v as $k => $val) {
@@ -529,7 +560,7 @@ final class Board
             try {
                 if ($c['in_calendar'] && !$c['deleted_at'] && ($c['due_date'] || $c['start_date'])) {
                     $start = $c['start_date'] ?? $c['due_date']; $end = $c['due_date'] ?? $c['start_date'];
-                    $eid = $g->putTaskEvent($raw['gcal_id'] ?: null, $c['id'], $this->eventTitle($c), $start, $end, $this->eventText($c));
+                    $eid = $g->putTaskEvent($raw['gcal_id'] ?: null, $c['id'], $this->eventTitle($c), $start, $end, $this->eventText($c), self::slot($c));
                     $st->q('UPDATE cards SET gcal_id = ?, gcal_synced = ? WHERE id = ?', [$eid, $raw['version'], $id]);
                 } else {
                     $g->deleteTaskEvent($raw['gcal_id']);
@@ -552,7 +583,7 @@ final class Board
         return $t;
     }
 
-    /** The tasks marked "show in my calendar", as an iCal feed (all-day, start to due date). */
+    /** The tasks marked "show in my calendar", as an iCal feed (all-day from start to due date, or the hours given). */
     public function ics(): string
     {
         $esc = fn(string $v) => str_replace(["\\", ';', ',', "\n"], ["\\\\", '\;', '\,', '\n'], $v);
@@ -566,9 +597,11 @@ final class Board
         foreach ($rows as $r) {
             $c = $this->shape($r);
             $start = $c['start_date'] ?? $c['due_date']; $end = $c['due_date'] ?? $c['start_date'];
-            array_push($out, 'BEGIN:VEVENT', "UID:task-{$c['id']}@talixio", 'DTSTAMP:' . gmdate('Ymd\THis\Z', $c['updated']), 'SEQUENCE:' . $c['version'],
-                'DTSTART;VALUE=DATE:' . str_replace('-', '', $start), 'DTEND;VALUE=DATE:' . date('Ymd', strtotime("$end +1 day")),
-                $fold('SUMMARY:' . $esc($this->eventTitle($c))), $fold('DESCRIPTION:' . $esc($this->eventText($c))), 'TRANSP:TRANSPARENT', 'END:VEVENT');
+            $slot = self::slot($c);
+            $when = $slot ? ['DTSTART:' . gmdate('Ymd\THis\Z', $slot[0]), 'DTEND:' . gmdate('Ymd\THis\Z', $slot[1])]
+                : ['DTSTART;VALUE=DATE:' . str_replace('-', '', $start), 'DTEND;VALUE=DATE:' . date('Ymd', strtotime("$end +1 day"))];
+            array_push($out, 'BEGIN:VEVENT', "UID:task-{$c['id']}@talixio", 'DTSTAMP:' . gmdate('Ymd\THis\Z', $c['updated']), 'SEQUENCE:' . $c['version'], ...[...$when,
+                $fold('SUMMARY:' . $esc($this->eventTitle($c))), $fold('DESCRIPTION:' . $esc($this->eventText($c))), 'TRANSP:' . ($slot ? 'OPAQUE' : 'TRANSPARENT'), 'END:VEVENT']);
         }
         $out[] = 'END:VCALENDAR';
         return implode("\r\n", $out) . "\r\n";
@@ -603,6 +636,7 @@ final class Board
         $bits = [self::STATUSES[$c['status']], "P{$c['priority']}"];
         if ($c['start_date']) $bits[] = "start {$c['start_date']}";
         if ($c['due_date']) $bits[] = "due {$c['due_date']}";
+        if ($c['start_time']) $bits[] = "from {$c['start_time']}" . ($c['end_time'] ? " to {$c['end_time']}" : '');
         if ($c['estimate_hours'] !== null) $bits[] = 'workload ' . self::fmtHours($c['estimate_hours']) . ($c['spent_hours'] ? ', spent ' . self::fmtHours($c['spent_hours']) : '');
         if ($c['checklist']['total']) $bits[] = "checklist {$c['checklist']['done']}/{$c['checklist']['total']}";
         if ($c['tags']) $bits[] = '#' . implode(' #', $c['tags']);

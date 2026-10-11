@@ -1325,7 +1325,8 @@ function cardHtml(c, opts = {}) {
   const sp = spaceOf(c.space), waits = c.depends_on.filter(d => board.refs[d] && board.refs[d].status !== 'done' && !board.refs[d].deleted_at);
   const warn = c.warnings.filter(w => w.kind !== 'waiting' && w.kind !== 'overdue');
   const bits = [];
-  if (c.due_date) bits.push(`<span class="kb ${dueClass(c)}" title="Due ${esc(c.due_date)}${c.start_date ? ', starts ' + esc(c.start_date) : ''}">${BICON.due}${fmtDay(c.due_date)}</span>`);
+  if (c.start_time) bits.push(`<span class="kb ${dueClass(c)}" title="${esc(c.start_time)}${c.end_time ? '–' + esc(c.end_time) : ''}">${BICON.due}${fmtDay(c.start_date || c.due_date)} ${esc(c.start_time)}</span>`);
+  else if (c.due_date) bits.push(`<span class="kb ${dueClass(c)}" title="Due ${esc(c.due_date)}${c.start_date ? ', starts ' + esc(c.start_date) : ''}">${BICON.due}${fmtDay(c.due_date)}</span>`);
   if (c.estimate_hours != null || c.spent_hours) bits.push(`<span class="kb${c.estimate_hours && c.spent_hours > c.estimate_hours ? ' late' : ''}" title="Workload${c.spent_hours ? ': ' + fmtH(c.spent_hours) + ' spent' : ''}${c.estimate_hours != null ? ' of ' + fmtH(c.estimate_hours) + ' planned' : ''}">${BICON.load}${c.spent_hours ? fmtH(c.spent_hours) + '/' : ''}${fmtH(c.estimate_hours) || '?'}</span>`);
   if (c.checklist.total) bits.push(`<span class="kb${c.checklist.done === c.checklist.total ? ' ok' : ''}" title="Checklist">${BICON.check}${c.checklist.done}/${c.checklist.total}</span>`);
   if (waits.length) bits.push(`<span class="kb wait" title="Waits for ${esc(waits.map(d => board.refs[d].code + ' ' + board.refs[d].title).join(', '))}">${BICON.lock}${esc(waits.map(d => board.refs[d].code).join(', '))}</span>`);
@@ -1444,6 +1445,13 @@ async function openCard(id, prefill = {}) {
   $('#cd-status').innerHTML = Object.entries(board.statuses && Object.keys(board.statuses).length ? board.statuses : { idea: 'Ideas', todo: 'To do', doing: 'In progress', blocked: 'Blocked', done: 'Done' }).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('#cd-status').value = c.status; $('#cd-priority').value = String(c.priority);
   $('#cd-start').value = c.start_date || ''; $('#cd-due').value = c.due_date || '';
+  $('#cd-from').value = c.start_time || ''; $('#cd-to').value = c.end_time || '';
+  $('#cd-from').onchange = () => { // a time makes it a meeting: one hour by default, shown in the calendar
+    const f = $('#cd-from').value; if (!f) return;
+    if (!$('#cd-to').value) { const [h, m] = f.split(':').map(Number); $('#cd-to').value = `${String(Math.min(h + 1, 23)).padStart(2, '0')}:${String(h >= 23 ? 59 : m).padStart(2, '0')}`; }
+    if (!c.start_time) $('#cd-cal').checked = true;
+    if (!$('#cd-start').value && !$('#cd-due').value) $('#cd-due').value = today();
+  };
   $('#cd-estimate').value = c.estimate_hours != null ? fmtH(c.estimate_hours) : '';
   $('#cd-cal').checked = !!c.in_calendar;
   $('#cd-tags').value = (c.tags || []).join(', ');
@@ -1500,7 +1508,7 @@ async function openCard(id, prefill = {}) {
   $('#card-form').onsubmit = async e => {
     e.preventDefault();
     const body = { title: $('#cd-title').value, body: cardRte.value, status: $('#cd-status').value, priority: +$('#cd-priority').value, start_date: $('#cd-start').value,
-      due_date: $('#cd-due').value, estimate_hours: $('#cd-estimate').value.trim(), in_calendar: $('#cd-cal').checked, tags: $('#cd-tags').value,
+      due_date: $('#cd-due').value, start_time: $('#cd-from').value, end_time: $('#cd-from').value ? $('#cd-to').value : '', estimate_hours: $('#cd-estimate').value.trim(), in_calendar: $('#cd-cal').checked, tags: $('#cd-tags').value,
       space: +$('#cd-space').value, depends_on: deps.map(x => x.id), ...(isNew && c.links?.length ? { links: c.links } : {}) };
     try {
       if (isNew) { const r = await post('api/board', body); toast(`${r.card.code} added`); }
@@ -1545,6 +1553,7 @@ async function renderCalendar() {
   const days = {};
   const put = (day, item) => (days[day] ||= []).push(item);
   for (const c of d.cards) {
+    if (c.start_time) { put(c.start_date || c.due_date, { c, kind: 'slot', time: c.start_time }); if (c.due_date && c.start_date && c.due_date !== c.start_date) put(c.due_date, { c, kind: 'due' }); continue; }
     if (c.due_date) put(c.due_date, { c, kind: 'due' });
     if (c.start_date && c.start_date !== c.due_date) put(c.start_date, { c, kind: 'start' });
   }
@@ -1555,11 +1564,12 @@ async function renderCalendar() {
   const t0 = iso(now);
   const chip = it => {
     if (it.e) return `<div class="cal-ev" title="${esc(it.e.title)}${it.e.location ? ' · ' + esc(it.e.location) : ''}">${it.time ? `<span>${it.time}</span> ` : ''}${esc(it.e.title)}</div>`;
-    const c = it.c, s = spaceOf(c.space), late = it.kind === 'due' && c.status !== 'done' && c.due_date < t0;
-    return `<div class="cal-task p${c.priority}${c.status === 'done' ? ' done' : ''}${late ? ' late' : ''}${it.kind === 'start' ? ' start' : ''}" data-id="${c.id}" draggable="${it.kind === 'due'}" style="--sp:${esc(s.color || 'var(--muted)')}"
-      title="${esc(c.code)} ${esc(c.title)} · ${it.kind === 'start' ? 'starts' : 'due'}${c.in_calendar ? ' · in your calendar' : ''}">${it.kind === 'start' ? '▸ ' : ''}<b>${esc(c.code)}</b> ${esc(c.title)}</div>`;
+    const c = it.c, s = spaceOf(c.space), late = it.kind !== 'start' && c.status !== 'done' && (c.due_date || c.start_date) < t0;
+    const hours = c.start_time ? c.start_time + (c.end_time ? '–' + c.end_time : '') : '';
+    return `<div class="cal-task p${c.priority}${c.status === 'done' ? ' done' : ''}${late ? ' late' : ''}${it.kind === 'start' ? ' start' : ''}" data-id="${c.id}" draggable="${it.kind !== 'start'}" style="--sp:${esc(s.color || 'var(--muted)')}"
+      title="${esc(c.code)} ${esc(c.title)} · ${it.kind === 'start' ? 'starts' : it.kind === 'slot' ? esc(hours) : 'due'}${c.in_calendar ? ' · in your calendar' : ''}">${it.kind === 'start' ? '▸ ' : ''}${it.kind === 'slot' ? `<span>${esc(c.start_time)}</span> ` : ''}<b>${esc(c.code)}</b> ${esc(c.title)}</div>`;
   };
-  const sortDay = list => list.sort((a, b) => (a.e ? 0 : 1) - (b.e ? 0 : 1) || (a.c && b.c ? a.c.priority - b.c.priority : 0));
+  const sortDay = list => list.sort((a, b) => (a.time ? 0 : 1) - (b.time ? 0 : 1) || (a.time || '').localeCompare(b.time || '') || (a.e ? 0 : 1) - (b.e ? 0 : 1) || (a.c && b.c ? a.c.priority - b.c.priority : 0));
   const narrow = matchMedia('(max-width: 760px)').matches;
   if (narrow) { // agenda: days with something, from the start of the month (or today)
     const list = document.createElement('div'); list.className = 'cal-list';
@@ -1583,7 +1593,9 @@ async function renderCalendar() {
       cell.ondragleave = () => cell.classList.remove('over');
       cell.ondrop = async e => {
         e.preventDefault(); cell.classList.remove('over');
-        const id = +e.dataTransfer.getData('text/plain'); const c = d.cards.find(x => x.id === id); if (!c || c.due_date === k) return;
+        const id = +e.dataTransfer.getData('text/plain'); const c = d.cards.find(x => x.id === id); if (!c) return;
+        if (!c.due_date) { if (c.start_date !== k) { try { await post(`api/board/${id}`, { start_date: k, version: c.version }); toast(`${c.code}: ${fmtDay(k)}`); } catch (err) { toast(err.message); } loadBoard(); } return; }
+        if (c.due_date === k) return;
         const shift = (Date.parse(k) - Date.parse(c.due_date)) / 864e5; const body = { due_date: k, version: c.version };
         if (c.start_date) { const s = new Date(c.start_date + 'T12:00:00'); s.setDate(s.getDate() + shift); body.start_date = iso(s); }
         try { await post(`api/board/${id}`, body); toast(`${c.code}: due ${fmtDay(k)}`); } catch (err) { toast(err.message); }

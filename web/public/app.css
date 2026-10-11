@@ -699,6 +699,7 @@ ul.plain{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;g
 .cal-task,.cal-ev{font-size:.74rem;line-height:1.3;padding:2px 6px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .cal-task{background:color-mix(in srgb,var(--sp) 16%,var(--surface));border-left:3px solid var(--sp);color:var(--ink)}
 .cal-task b{font-family:var(--mono);font-weight:600;font-size:.68rem;opacity:.75}
+.cal-task span{font-variant-numeric:tabular-nums;font-weight:600}
 .cal-task.p1{box-shadow:inset 0 0 0 1px #dc2626}
 .cal-task.start{background:none;border-left-style:dashed;color:var(--muted)}
 .cal-task.done{opacity:.55;text-decoration:line-through}

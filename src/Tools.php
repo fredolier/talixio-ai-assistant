@@ -349,7 +349,7 @@ final class Tools
             return (int)(($this->app->spaces()->find((string)$a['space']) ?? throw new \InvalidArgumentException("no space \"{$a['space']}\""))['id']);
         };
         $fields = function (array $a) use ($spaceArg): array {
-            $map = ['title' => 'title', 'description' => 'body', 'status' => 'status', 'priority' => 'priority', 'start' => 'start_date', 'due' => 'due_date',
+            $map = ['title' => 'title', 'description' => 'body', 'status' => 'status', 'priority' => 'priority', 'start' => 'start_date', 'due' => 'due_date', 'start_time' => 'start_time', 'end_time' => 'end_time',
                 'workload' => 'estimate_hours', 'tags' => 'tags', 'in_calendar' => 'in_calendar', 'depends_on' => 'depends_on', 'add_depends_on' => 'add_depends_on', 'remove_depends_on' => 'remove_depends_on'];
             $d = [];
             foreach ($map as $k => $f) if (array_key_exists($k, $a)) $d[$f] = $a[$k];
@@ -359,6 +359,8 @@ final class Tools
         $common = ['description' => ['type' => 'string', 'description' => 'Markdown; checklists as "- [ ] item"'],
             'status' => ['type' => 'string', 'enum' => array_keys(Board::STATUSES)], 'priority' => ['type' => 'integer', 'description' => '1 (most urgent) to 5'],
             'start' => ['type' => 'string', 'description' => 'YYYY-MM-DD, "" to clear'], 'due' => ['type' => 'string', 'description' => 'YYYY-MM-DD, "" to clear'],
+            'start_time' => ['type' => 'string', 'description' => 'HH:MM on the start day (or the due day): makes it a timed slot, e.g. a meeting; "" to clear'],
+            'end_time' => ['type' => 'string', 'description' => 'HH:MM on the due day (or the start day); default one hour after the start'],
             'workload' => ['type' => 'string', 'description' => 'estimated work: "3h", "45m", "2d" (7h days)'], 'tags' => ['type' => 'array', 'items' => ['type' => 'string']],
             'depends_on' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'codes of tasks this one waits for (any space)'],
             'in_calendar' => ['type' => 'boolean', 'description' => "also show it in the user's calendar"], 'space' => ['type' => 'string', 'description' => 'General only: the space to put it in']];
