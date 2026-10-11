@@ -82,6 +82,7 @@ page, paste the code back. Needs Claude Code on the server (`--with-claude-code`
 | Claude Pro/Max subscription | `./install.sh --with-claude-code`, then `sudo -u talixio HOME=/var/lib/talixio /var/lib/talixio/.local/bin/claude setup-token`, put the token in `CLAUDE_CODE_OAUTH_TOKEN=` and set `TALIXIO_PROVIDER=claude-code` |
 | OpenAI | `TALIXIO_PROVIDER=openai`, `OPENAI_API_KEY=...` |
 | Local model (Ollama...) | `TALIXIO_PROVIDER=openai`, `OPENAI_BASE_URL=http://localhost:11434/v1`, `TALIXIO_MODEL=llama3.1` |
+| European provider (OVHcloud, Mistral, Scaleway, Infomaniak) | `TALIXIO_PROVIDER=sovereign`, `TALIXIO_SOVEREIGN=ovhcloud`, `TALIXIO_SOVEREIGN_KEY=...` (or Settings → Model and budget → **Europe only**) |
 
 With Gemini, the tier models are picked automatically from the models your key can use (newest
 Flash-Lite / Flash / Pro, checked daily); `sudo talixio doctor` shows which. Web search uses Google
@@ -92,6 +93,17 @@ your prompts to improve its products and rate limits are low; enable billing on 
 With the Claude subscription option, usage counts against your plan's limits. Anthropic's policy on this
 has changed several times in 2026; see
 [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).
+
+**Europe only.** Settings → Model and budget → *Europe only* switches everything the assistant sends to an AI
+(conversation, transcription, memory search) to one provider hosted in Europe, under the GDPR, paid by use with
+nothing to host: OVHcloud AI Endpoints (France; open models including Mistral's, works without a key with low
+limits to try it), Mistral AI (France; on the free Experiment plan Mistral may train on your data), Scaleway
+(Paris) or Infomaniak (Switzerland). *Test* checks the key and shows the models picked for each tier. The lock
+(`TALIXIO_SOVEREIGN_ONLY=1`) turns off what has no European option (web search other than your own SearXNG,
+online embeddings or transcription elsewhere), and the card lists what still leaves Europe (Telegram, Google
+Calendar, Spotify, remote connectors) with where to change it. On a multi-user server, the admin page can give
+every assistant one European account (Settings → *AI in Europe for everyone*). Check each provider's data
+processing agreement for your own use.
 
 ### Security
 The web app is password protected (`TALIXIO_WEB_PASSWORD`, generated at install; sessions last 30

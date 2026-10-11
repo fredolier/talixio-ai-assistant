@@ -41,7 +41,7 @@ $background = function (string $kind, string $arg = '') use ($state, $json, $fle
 try {
     $m = [];
     match (true) {
-        $path === '/instances' && $method === 'GET' => $json(['instances' => $fleet->list(), 'settings' => $fleet->state()['settings']]),
+        $path === '/instances' && $method === 'GET' => $json(['instances' => $fleet->list(), 'settings' => Fleet::publicSettings($fleet->state()['settings'])]),
         $path === '/instances' && $method === 'POST' => $json($fleet->create((string)($b['id'] ?? ''), (string)($b['name'] ?? ''), (string)($b['email'] ?? ''),
             isset($b['memory_mb']) ? (int)$b['memory_mb'] : null, isset($b['cpus']) ? (float)$b['cpus'] : null)),
         (bool)preg_match('#^/instances/([a-z0-9-]+)/(start|stop|restart|recreate|reset-password|reset-totp|doctor|logs|backup|limits|remove)$#', $path, $m) && $method === 'POST' => (function () use ($fleet, $m, $b, $json) {
@@ -64,10 +64,10 @@ try {
             $fleet->reloadCaddy();
             if (($before['ollama'] ?? true) !== $after['ollama']) { try { $fleet->setOllama($after['ollama']); } catch (\Throwable $e) { error_log('ollama: ' . $e->getMessage()); } }
             // what instances get from these settings changed: make their containers again
-            $keys = ['mode', 'ollama', 'ollama_model', 'google_client_id', 'google_client_secret', 'apparmor_unconfined', 'domain'];
+            $keys = ['mode', 'ollama', 'ollama_model', 'google_client_id', 'google_client_secret', 'apparmor_unconfined', 'domain', 'eu_provider', 'eu_key', 'eu_url', 'eu_only'];
             $redo = array_filter($keys, fn($k) => ($before[$k] ?? null) !== ($after[$k] ?? null));
             if ($redo) foreach (array_keys($fleet->state()['instances']) as $id) $fleet->recreate($id);
-            $json(['settings' => $after, 'recreated' => (bool)$redo]);
+            $json(['settings' => Fleet::publicSettings($after), 'recreated' => (bool)$redo]);
         })(),
         $path === '/server' => $json($fleet->server()),
         $path === '/caddyfile' => $json(['caddyfile' => $fleet->caddyfile()]),

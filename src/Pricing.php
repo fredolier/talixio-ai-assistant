@@ -16,6 +16,9 @@ final class Pricing
         'flash-lite' => [0.25, 1.5], 'gemini-flash' => [0.75, 3.75], 'flash' => [0.75, 3.75], 'gemini' => [2.0, 12.0],
         'gpt-4.1-nano' => [0.1, 0.4], 'gpt-4.1-mini' => [0.4, 1.6], 'gpt-4.1' => [2.0, 8.0],
         'gpt-4o-mini' => [0.15, 0.6], 'gpt-4o' => [2.5, 10.0],
+        // European providers (Mistral, OVHcloud, Scaleway, Infomaniak): approximate list prices (Oct 2026), check them
+        'mistral-small' => [0.1, 0.3], 'mistral-medium' => [0.4, 2.0], 'mistral-large' => [2.0, 6.0], 'ministral' => [0.1, 0.1], 'magistral' => [2.0, 5.0],
+        'gpt-oss-120b' => [0.09, 0.47], 'gpt-oss-20b' => [0.05, 0.2], 'qwen3-235b' => [0.75, 2.25], 'qwen3-32b' => [0.09, 0.25], 'qwen3' => [0.1, 0.3], 'llama-3.3-70b' => [0.79, 0.79],
     ];
 
     /** @var array<string,array{0:float,1:float}> */

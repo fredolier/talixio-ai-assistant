@@ -193,6 +193,9 @@ final class Web
             $path === '/api/channels' => $this->channels(),
             $path === '/api/settings' && $m === 'GET' => ['groups' => Settings::describe($this->app->cfg->dataDir)],
             $path === '/api/settings' && $m === 'POST' => $this->saveSettings($b),
+            $path === '/api/sovereign' && $m === 'GET' => $this->sovereign($this->app),
+            $path === '/api/sovereign/test' && $m === 'POST' => Sovereign::test((string)($b['service'] ?? ''), $this->sovereignKey($b), (string)($b['url'] ?? '')),
+            $path === '/api/sovereign/apply' && $m === 'POST' => $this->sovereignApply($b),
             $path === '/api/settings/password' && $m === 'POST' => $this->changePassword($b),
             $path === '/api/security' => ['totp' => $this->auth()->totpEnabled()],
             $path === '/api/dav' && $m === 'GET' => (new Dav($this->app))->status(),
@@ -557,6 +560,41 @@ final class Web
         if ($errors) { http_response_code(422); return ['errors' => $errors, 'error' => 'Some values are not valid.']; }
         Settings::apply($this->app->cfg->dataDir);
         return ['ok' => true, 'groups' => Settings::describe($this->app->cfg->dataDir)];
+    }
+
+    /** The "Europe only" card: the providers, what is set, and what still leaves Europe. */
+    private function sovereign(App $app): array
+    {
+        $c = $app->cfg;
+        return ['services' => Sovereign::catalog(), 'service' => $c->sovereign, 'has_key' => $c->sovereignKey !== '',
+            'url' => getenv('TALIXIO_SOVEREIGN_URL') ?: '', 'active' => $c->provider === 'sovereign', 'only' => $c->sovereignOnly,
+            'tiers' => $c->provider === 'sovereign' ? array_map(fn(Tier $t) => $t->model, $c->tiers) : [], 'outside' => Sovereign::outside($app)];
+    }
+
+    /** The key typed in, or the saved one when the provider has not changed. */
+    private function sovereignKey(array $b): string
+    {
+        $key = trim((string)($b['key'] ?? ''));
+        return $key === '' && (string)($b['service'] ?? '') === $this->app->cfg->sovereign ? $this->app->cfg->sovereignKey : $key;
+    }
+
+    /** One click: the model, transcription, memory search and web search to Europe (what runs on this server stays). */
+    private function sovereignApply(array $b): array
+    {
+        $service = (string)($b['service'] ?? ''); $url = trim((string)($b['url'] ?? ''));
+        $test = Sovereign::test($service, $this->sovereignKey($b), $url); // nothing is saved when the provider says no
+        $c = $this->app->cfg;
+        $changes = ['TALIXIO_PROVIDER' => 'sovereign', 'TALIXIO_SOVEREIGN' => $service, 'TALIXIO_SOVEREIGN_URL' => $url,
+            'TALIXIO_SOVEREIGN_ONLY' => empty($b['only']) ? '0' : '1', 'TALIXIO_MODEL_FAST' => '', 'TALIXIO_MODEL' => '', 'TALIXIO_MODEL_DEEP' => ''];
+        if (trim((string)($b['key'] ?? '')) !== '') $changes['TALIXIO_SOVEREIGN_KEY'] = trim((string)$b['key']);
+        if ($c->transcribe !== 'local') $changes['TALIXIO_TRANSCRIBE'] = 'auto';
+        if ($c->embeddings !== 'ollama') $changes['TALIXIO_EMBEDDINGS'] = 'auto';
+        if ($c->search !== 'searxng') $changes['TALIXIO_SEARCH'] = 'auto';
+        $errors = Settings::save($c->dataDir, $changes, []);
+        if ($errors) { http_response_code(422); return ['errors' => $errors, 'error' => 'Some values are not valid.']; }
+        $this->app->store->set('sovereign_models', json_encode(['id' => $service . '|' . rtrim($url !== '' ? $url : Sovereign::SERVICES[$service]['url'], '/'), 'ts' => time(), 'tiers' => $test['tiers']]));
+        $app = new App(Config::fromEnv()); // the new settings, to say what still leaves Europe
+        return ['ok' => true, 'test' => $test] + $this->sovereign($app);
     }
 
     private function changePassword(array $b): array

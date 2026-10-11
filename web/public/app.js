@@ -1789,6 +1789,7 @@ const SET_ALIAS = { brain: 'model', budget: 'model', memory: 'library', search: 
 const SHOW_IF = {
   ANTHROPIC_API_KEY: ['TALIXIO_PROVIDER', ['anthropic']], CLAUDE_CODE_OAUTH_TOKEN: ['TALIXIO_PROVIDER', ['claude-code']],
   OPENAI_API_KEY: ['TALIXIO_PROVIDER', ['openai']], OPENAI_BASE_URL: ['TALIXIO_PROVIDER', ['openai']],
+  TALIXIO_SOVEREIGN: ['TALIXIO_PROVIDER', ['sovereign']], TALIXIO_SOVEREIGN_KEY: ['TALIXIO_PROVIDER', ['sovereign']], TALIXIO_SOVEREIGN_URL: ['TALIXIO_PROVIDER', ['sovereign']],
   BRAVE_API_KEY: ['TALIXIO_SEARCH', ['brave']], TAVILY_API_KEY: ['TALIXIO_SEARCH', ['tavily']], SEARXNG_URL: ['TALIXIO_SEARCH', ['searxng']],
 };
 state.setInfo = {};
@@ -1971,6 +1972,7 @@ async function loadSettings() {
   loadUpdate().catch(() => {});
   loadSecurity();
   loadDav();
+  loadEu();
   renderAppearance();
   loadConnectors();
   loadGoogle();
@@ -2207,7 +2209,8 @@ async function loadDav() {
   try { showDav(await api('api/dav')); } catch { /* shown elsewhere */ }
 }
 function showDav(d) {
-  $('#dav-url').textContent = location.origin + location.pathname.replace(/\/[^/]*$/, '') + '/dav/'; // the address this page is open on always works $('#dav-user').textContent = d.user;
+  $('#dav-url').textContent = location.origin + location.pathname.replace(/\/[^/]*$/, '') + '/dav/'; // the address this page is open on always works
+  $('#dav-user').textContent = d.user;
   $('#dav-mode').value = d.mode;
   $('#dav-mode').disabled = !d.password;
   $('#dav-badge').textContent = '· ' + window.t(d.mode === 'off' ? 'off' : d.mode === 'read' ? 'read only' : 'read and write');
@@ -2226,6 +2229,56 @@ $('#dav-pw').onsubmit = async e => {
     $('#dav-secret').textContent = d.password; $('#dav-new').hidden = false;
     showDav(d);
   } catch (err) { $('#dav-state').textContent = err.message; }
+};
+
+// ---- Europe only (a European AI provider for everything) ----
+async function loadEu() {
+  try { showEu(await api('api/sovereign')); } catch { /* shown elsewhere */ }
+}
+function showEu(d) {
+  state.eu = d;
+  const sel = $('#eu-service');
+  if (!sel.options.length) sel.innerHTML = d.services.map(s => `<option value="${esc(s.id)}">${esc(window.t(s.name))} (${esc(window.t(s.country))})</option>`).join('');
+  sel.value = d.service; $('#eu-url').value = d.url || '';
+  $('#eu-only').checked = d.active ? d.only : true;
+  $('#eu-badge').textContent = d.active ? '· ' + window.t(d.only ? 'on, locked' : 'on') : '';
+  $('#eu-badge').className = d.active ? 'ok small' : 'muted small';
+  $('#eu-tiers').innerHTML = d.active && Object.keys(d.tiers).length ? window.t('Models') + ': ' + Object.entries(d.tiers).map(([k, m]) => `${esc(window.t(k))} <code>${esc(m)}</code>`).join(', ') : '';
+  const out = $('#eu-outside');
+  out.innerHTML = d.outside.length
+    ? `<p class="small"><b>${esc(window.t('Still outside Europe'))}</b></p><ul class="small">` + d.outside.map(o => `<li><a href="${esc(o.href)}">${esc(o.name.startsWith('Connector ') ? window.t('Connector') + ' ' + o.name.slice(10) : window.t(o.name))}</a> — <span class="muted">${esc(window.t(o.why))}</span></li>`).join('') + '</ul>'
+    : (d.active ? `<p class="small ok">${esc(window.t('Nothing else leaves Europe.'))}</p>` : '');
+  euService();
+}
+function euService() {
+  const s = (state.eu?.services || []).find(x => x.id === $('#eu-service').value); if (!s) return;
+  $('#eu-about').textContent = window.t(s.about) + (s.note ? ' ' + window.t(s.note) : '');
+  $('#eu-keys').href = s.keys; $('#eu-terms').href = s.terms;
+  $('#eu-url-row').hidden = s.id !== 'infomaniak' && !$('#eu-url').value;
+  const saved = state.eu.has_key && s.id === state.eu.service;
+  $('#eu-key').placeholder = window.t(saved ? 'saved (leave empty to keep it)' : s.key ? 'API key' : 'API key (optional to try it)');
+}
+$('#eu-service').onchange = euService;
+const euBody = () => ({ service: $('#eu-service').value, key: $('#eu-key').value.trim(), url: $('#eu-url').value.trim(), only: $('#eu-only').checked });
+$('#eu-test').onclick = async () => {
+  const st = $('#eu-state'); st.className = 'muted small'; st.textContent = window.t('Checking…');
+  try {
+    const r = await post('api/sovereign/test', euBody());
+    st.className = 'ok small';
+    st.textContent = window.t('It works: {n} models.').replace('{n}', r.models) + ' ' + Object.entries(r.tiers).map(([k, m]) => window.t(k) + ' ' + m).join(', ');
+  } catch (e) { st.className = 'bad small'; st.textContent = e.message; }
+};
+$('#eu-form').onsubmit = async e => {
+  e.preventDefault();
+  const st = $('#eu-state'), b = $('#eu-apply'); st.className = 'muted small'; st.textContent = window.t('Checking…'); b.disabled = true;
+  try {
+    const r = await post('api/sovereign/apply', euBody());
+    $('#eu-key').value = ''; st.className = 'ok small'; st.textContent = window.t('Done: everything the assistant sends to an AI now stays in Europe.');
+    showEu(r);
+    renderGroups((await api('api/settings')).groups);
+    refreshStatus().then(setHealth);
+  } catch (err) { st.className = 'bad small'; st.textContent = err.message; }
+  finally { b.disabled = false; }
 };
 
 // ---- memory ----

@@ -2288,6 +2288,24 @@ check('where is…: names are found without accents or case, folders too', in_ar
     && in_array('Contrat cadre.md', array_column($app->library()->find('CONTRAT')['files'], 'name'), true) && $fd2['files'] === [] && $app->library()->find('contrat', 20, '/Autre')['files'] === [], json_encode($fd));
 check('where is…: the kb_find tool answers with paths and links', str_contains($ff = $tools->run('kb_find', ['query' => 'contrat cadre']), '/Clients/Société Générale') && str_contains($ff, '/files/'), $ff);
 
+// Europe only
+$ep = new Pricing();
+check('europe: European models have list prices, without catching gpt-4o', $ep->priceFor('Mistral-Small-3.2-24B-Instruct-2506') === [0.1, 0.3] && $ep->priceFor('gpt-oss-120b') === [0.09, 0.47] && $ep->priceFor('gpt-4o') === [2.5, 10.0]);
+$errs = [];
+foreach ([['nope', 'k', ''], ['mistral', '', ''], ['infomaniak', 'k', 'http://x']] as [$sv, $k, $u]) { try { \Talixio\Sovereign::test($sv, $k, $u); $errs[] = 'none'; } catch (\InvalidArgumentException $e) { $errs[] = $e->getMessage(); } }
+check('europe: a test refuses an unknown provider, a missing key, an address not in https', $errs === ['Unknown provider.', 'Paste your API key.', 'Give the provider\'s address (https://…).'], json_encode($errs));
+$cat = \Talixio\Sovereign::catalog();
+check('europe: OVHcloud first, every provider says where to get a key', $cat[0]['id'] === 'ovhcloud' && count(array_filter($cat, fn($x) => str_starts_with($x['keys'], 'https://'))) === 4 && !isset($cat[0]['fallback']));
+$out = \Talixio\Sovereign::outside($app);
+check('europe: what still leaves Europe is listed, with where to change it', $out && !array_filter($out, fn($o) => !str_starts_with($o['href'], '#settings/') || $o['why'] === ''), json_encode($out));
+$fl = new \Talixio\Fleet($dir . '/fleet');
+$fs = $fl->state(); $fs['instances']['ann'] = ['id' => 'ann', 'memory_mb' => 1024, 'cpus' => 1.5];
+$fs['settings'] = $fl->setSettings(['eu_provider' => 'ovhcloud', 'eu_key' => 'sk-eu', 'eu_only' => true]);
+$fenv = $fl->spec('ann', $fs)['Env'];
+try { $fl->setSettings(['eu_provider' => 'openai']); $ferr = ''; } catch (\InvalidArgumentException $e) { $ferr = $e->getMessage(); }
+check('europe: the server can give every assistant one European provider; the key never goes back to the admin page', in_array('TALIXIO_PROVIDER=sovereign', $fenv, true) && in_array('TALIXIO_SOVEREIGN=ovhcloud', $fenv, true)
+    && in_array('TALIXIO_SOVEREIGN_KEY=sk-eu', $fenv, true) && in_array('TALIXIO_SOVEREIGN_ONLY=1', $fenv, true) && \Talixio\Fleet::publicSettings($fs['settings'])['eu_key'] === true && $ferr === 'Unknown European provider.', json_encode($fenv));
+
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
 exit($fails ? 1 : 0);

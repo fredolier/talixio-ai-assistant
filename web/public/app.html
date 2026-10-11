@@ -296,6 +296,23 @@
 
           <div class="set-sec" data-sec="model" hidden>
             <header><h3>Model and budget</h3><p class="muted small">The assistant's brain, and how much it may spend.</p></header>
+            <div class="card set-card" id="eu-card">
+              <h4>Europe only <span id="eu-badge" class="muted small"></span></h4>
+              <p class="muted small">Your messages, documents and recordings go to an AI provider hosted in Europe, under the GDPR, and nothing goes to the big American platforms. Paid by use, nothing to host.</p>
+              <form id="eu-form" class="fields">
+                <label for="eu-service">Provider</label>
+                <select id="eu-service"></select>
+                <p id="eu-about" class="muted small"></p>
+                <label for="eu-key">API key</label>
+                <input id="eu-key" type="password" autocomplete="off" spellcheck="false">
+                <p class="muted small"><a id="eu-keys" target="_blank" rel="noopener">Get a key</a> · <a id="eu-terms" target="_blank" rel="noopener">Data processing terms</a></p>
+                <div id="eu-url-row" hidden><label for="eu-url">Address</label><input id="eu-url" type="url" placeholder="https://…/v1" spellcheck="false"></div>
+                <label class="check"><input id="eu-only" type="checkbox"> Lock: never send anything to an AI or search service outside Europe</label>
+                <div class="row"><button id="eu-test" class="btn" type="button">Test</button><button id="eu-apply" class="btn primary" type="submit">Switch everything to Europe</button><span id="eu-state" class="muted small"></span></div>
+                <p id="eu-tiers" class="small"></p>
+                <div id="eu-outside"></div>
+              </form>
+            </div>
             <div class="set-groups" data-groups="model"></div>
           </div>
 

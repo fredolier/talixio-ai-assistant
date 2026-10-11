@@ -14,17 +14,24 @@ final class Sovereign
         'mistral' => ['name' => 'Mistral AI', 'country' => 'France', 'url' => 'https://api.mistral.ai/v1', 'hosts' => ['api.mistral.ai'],
             'terms' => 'https://mistral.ai/terms', 'embed' => 'mistral-embed', 'transcribe' => 'voxtral-mini-latest', 'key' => true,
             'fallback' => ['fast' => 'mistral-small-latest', 'standard' => 'mistral-medium-latest', 'deep' => 'mistral-large-latest'],
+            'keys' => 'https://console.mistral.ai/api-keys', 'about' => 'Mistral\'s own models (Small, Medium, Large), voice with Voxtral. Pay as you go.',
             'note' => 'On the free Experiment plan, Mistral may use what you send for training: turn it off in the admin console, or use a paid plan.'],
         'scaleway' => ['name' => 'Scaleway', 'country' => 'France', 'url' => 'https://api.scaleway.ai/v1', 'hosts' => ['api.scaleway.ai'],
             'terms' => 'https://www.scaleway.com/en/contracts/', 'embed' => 'qwen3-embedding-8b', 'transcribe' => 'whisper-large-v3', 'key' => true,
-            'fallback' => ['fast' => 'mistral-small-3.2-24b-instruct-2506', 'standard' => 'gpt-oss-120b', 'deep' => 'qwen3-235b-a22b-instruct-2507'], 'note' => ''],
+            'fallback' => ['fast' => 'mistral-small-3.2-24b-instruct-2506', 'standard' => 'gpt-oss-120b', 'deep' => 'qwen3-235b-a22b-instruct-2507'], 'note' => '',
+            'keys' => 'https://console.scaleway.com/iam/api-keys', 'about' => 'Open models (Mistral, Qwen, gpt-oss, Llama) hosted in Paris. Pay as you go.'],
         'ovhcloud' => ['name' => 'OVHcloud AI Endpoints', 'country' => 'France', 'url' => 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1', 'hosts' => ['.endpoints.kepler.ai.cloud.ovh.net'],
             'terms' => 'https://www.ovhcloud.com/en/terms-and-conditions/contracts/', 'embed' => 'bge-m3', 'transcribe' => 'whisper-large-v3', 'key' => false, // works without a key, with lower limits
-            'fallback' => ['fast' => 'Mistral-Small-3.2-24B-Instruct-2506', 'standard' => 'gpt-oss-120b', 'deep' => 'gpt-oss-120b'], 'note' => ''],
+            'fallback' => ['fast' => 'Mistral-Small-3.2-24B-Instruct-2506', 'standard' => 'gpt-oss-120b', 'deep' => 'gpt-oss-120b'], 'note' => '',
+            'keys' => 'https://www.ovh.com/manager/#/public-cloud/', 'about' => 'Open models (Mistral, gpt-oss, Qwen, Llama) hosted in France. Pay as you go; works without a key with low limits, to try it.'],
         'infomaniak' => ['name' => 'Infomaniak', 'country' => 'Switzerland', 'url' => '', 'hosts' => ['api.infomaniak.com'], // the address holds your product id
             'terms' => 'https://www.infomaniak.com/en/legal', 'embed' => 'bge_multilingual_gemma2', 'transcribe' => 'whisper', 'key' => true,
-            'fallback' => ['fast' => 'mistral3', 'standard' => 'qwen3', 'deep' => 'qwen3'], 'note' => ''],
+            'fallback' => ['fast' => 'mistral3', 'standard' => 'qwen3', 'deep' => 'qwen3'], 'note' => '',
+            'keys' => 'https://manager.infomaniak.com/', 'about' => 'Open models hosted in Switzerland. Paste the address shown in your AI Tools dashboard (it holds your product id).'],
     ];
+
+    /** The order they are offered in. */
+    public const ORDER = ['ovhcloud', 'mistral', 'scaleway', 'infomaniak'];
 
     /** Not a chat model: vectors, audio, moderation, OCR, code-only. */
     private const NOT_CHAT = '/embed|bge|e5-|minilm|rerank|whisper|voxtral|transcri|tts|audio|speech|guard|moderation|ocr|pixtral|codestral|devstral|diffusion|flux|stable|sdxl|image/i';
@@ -84,6 +91,52 @@ final class Sovereign
             }
         }
         foreach ($missing as $name => $t) $t->model = $cached['tiers'][$name] ?? $fb[$name];
+    }
+
+
+    /** What the Settings page offers. */
+    public static function catalog(): array
+    {
+        return array_map(fn($id) => ['id' => $id] + array_intersect_key(self::SERVICES[$id], array_flip(['name', 'country', 'url', 'terms', 'keys', 'about', 'note', 'key'])), self::ORDER);
+    }
+
+    /**
+     * Checks a key against the provider: lists its models and picks the tiers.
+     * @return array{models:int, tiers:array<string,string>, embed:bool, transcribe:bool}
+     */
+    public static function test(string $service, string $key, string $url): array
+    {
+        if (!isset(self::SERVICES[$service])) throw new \InvalidArgumentException('Unknown provider.');
+        $url = rtrim($url !== '' ? $url : self::SERVICES[$service]['url'], '/');
+        if (!preg_match('#^https://\S+$#', $url)) throw new \InvalidArgumentException('Give the provider\'s address (https://…).');
+        if ($key === '' && self::SERVICES[$service]['key']) throw new \InvalidArgumentException('Paste your API key.');
+        try { [$code, $body] = Privacy::as('model', fn() => Http::request('GET', $url . '/models', $key !== '' ? ['Authorization: Bearer ' . $key] : [], null, 20)); }
+        catch (\RuntimeException $e) { throw new \InvalidArgumentException('Could not reach the provider: ' . $e->getMessage()); }
+        if ($code === 401 || $code === 403) throw new \InvalidArgumentException('The provider refused the key (HTTP ' . $code . ').');
+        $ids = array_column(json_decode($body, true)['data'] ?? [], 'id');
+        if ($code >= 400 || !$ids) throw new \InvalidArgumentException('The provider did not answer as expected (HTTP ' . $code . ').');
+        $info = self::SERVICES[$service];
+        $has = fn(string $m) => (bool)array_filter($ids, fn($i) => strcasecmp($i, $m) === 0 || stripos($i, $m) !== false);
+        return ['models' => count($ids), 'tiers' => self::choose($service, $ids), 'embed' => $has($info['embed']), 'transcribe' => $has($info['transcribe'])];
+    }
+
+    /**
+     * What still leaves Europe with the current settings, besides the AI provider: each with why and where to change it.
+     * @return list<array{name:string, why:string, href:string}>
+     */
+    public static function outside(App $app): array
+    {
+        $c = $app->cfg; $out = [];
+        $eu = fn(string $x) => in_array($x, ['local', 'off', 'ollama', 'sovereign', 'searxng'], true);
+        if ($c->provider !== 'sovereign' && !in_array($c->provider, ['echo'], true) && !$c->localModels()) $out[] = ['name' => 'AI model', 'why' => 'The conversation model is not a European provider.', 'href' => '#settings/model'];
+        if (!$eu($c->transcribe)) $out[] = ['name' => 'Transcription', 'why' => 'Recordings go to a provider outside Europe.', 'href' => '#settings/library'];
+        if (!$eu($c->embeddings)) $out[] = ['name' => 'Search by meaning', 'why' => 'Your texts are indexed by a provider outside Europe.', 'href' => '#settings/library'];
+        if (!$eu($c->search)) $out[] = ['name' => 'Web search', 'why' => 'Search queries go to a service outside Europe. Use your own SearXNG, or turn it off.', 'href' => '#settings/library'];
+        if (in_array('telegram', $c->notify, true) && $c->telegramToken !== '') $out[] = ['name' => 'Telegram', 'why' => 'Telegram\'s servers can read the messages. Signal or email are better choices.', 'href' => '#settings/channels'];
+        if ($app->google()->connected()) $out[] = ['name' => 'Google Calendar', 'why' => 'Your events are held by Google. A European calendar (Infomaniak, OVHcloud, Nextcloud…) can be added by its link instead.', 'href' => '#settings/accounts'];
+        if ($app->spotify()->connected()) $out[] = ['name' => 'Spotify', 'why' => 'What you listen to.', 'href' => '#settings/accounts'];
+        foreach ($app->mcp()->servers() as $name => $srv) if (isset($srv['url'])) $out[] = ['name' => "Connector $name", 'why' => 'A service outside: check where it is hosted.', 'href' => '#settings/accounts'];
+        return $out;
     }
 
     /** The service a URL belongs to (null: not a European provider). */

@@ -13,7 +13,7 @@ final class Config
     }
 
     public string $provider = 'anthropic';      // anthropic | openai | gemini | sovereign | claude-code | echo
-    public string $sovereign = 'mistral';        // the European provider (Sovereign::SERVICES)
+    public string $sovereign = 'ovhcloud';        // the European provider (Sovereign::SERVICES)
     public string $sovereignKey = '';
     public string $sovereignUrl = '';
     public bool $sovereignOnly = false;          // never send anything to an AI or search service outside Europe
@@ -163,8 +163,8 @@ final class Config
             $c->openaiKey = $c->geminiKey;
             $c->openaiBaseUrl = $c->geminiBaseUrl . '/openai';
         }
-        $c->sovereign = strtolower($e('TALIXIO_SOVEREIGN', 'mistral'));
-        if (!isset(Sovereign::SERVICES[$c->sovereign])) $c->sovereign = 'mistral';
+        $c->sovereign = strtolower($e('TALIXIO_SOVEREIGN', 'ovhcloud'));
+        if (!isset(Sovereign::SERVICES[$c->sovereign])) $c->sovereign = 'ovhcloud';
         $c->sovereignKey = $e('TALIXIO_SOVEREIGN_KEY');
         $c->sovereignUrl = rtrim($e('TALIXIO_SOVEREIGN_URL', Sovereign::SERVICES[$c->sovereign]['url']), '/');
         $c->sovereignOnly = $e('TALIXIO_SOVEREIGN_ONLY', '0') === '1';

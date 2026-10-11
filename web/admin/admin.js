@@ -267,15 +267,19 @@ function renderSettings() {
   $('#st-domain').value = s.domain; document.querySelectorAll('[name=mode]').forEach(r => r.checked = r.value === s.mode);
   $('#st-mem').value = s.memory_mb; $('#st-cpus').value = s.cpus; $('#st-ollama').checked = !!s.ollama; renderModels(s.ollama_model);
   $('#st-gid').value = s.google_client_id; $('#st-apparmor').checked = !!s.apparmor_unconfined;
+  $('#st-eu').value = s.eu_provider || ''; $('#st-eu-url').value = s.eu_url || ''; $('#st-eu-only').checked = !!s.eu_only;
+  $('#st-gsecret').placeholder = t(s.google_client_secret ? 'unchanged' : 'not set'); $('#st-eu-key').placeholder = t(s.eu_key ? 'unchanged' : 'not set');
   $('#st-redirects').textContent = state.instances.map(p => p.url + 'api/google/callback').join('\n') || '(add people first)';
 }
 $('#settings').onsubmit = async e => {
   e.preventDefault();
   const body = { domain: $('#st-domain').value.trim(), mode: document.querySelector('[name=mode]:checked')?.value, memory_mb: +$('#st-mem').value, cpus: +$('#st-cpus').value,
-    ollama: $('#st-ollama').checked, ollama_model: $('#st-model').value.trim(), google_client_id: $('#st-gid').value.trim(), apparmor_unconfined: $('#st-apparmor').checked };
+    ollama: $('#st-ollama').checked, ollama_model: $('#st-model').value.trim(), google_client_id: $('#st-gid').value.trim(), apparmor_unconfined: $('#st-apparmor').checked,
+    eu_provider: $('#st-eu').value, eu_url: $('#st-eu-url').value.trim(), eu_only: $('#st-eu-only').checked };
   if ($('#st-gsecret').value) body.google_client_secret = $('#st-gsecret').value;
+  if ($('#st-eu-key').value) body.eu_key = $('#st-eu-key').value.trim();
   $('#st-msg').textContent = 'Saving…';
-  try { const r = await api('api/settings', body); $('#st-msg').textContent = r.recreated ? 'Saved; the assistants were restarted.' : 'Saved.'; $('#st-gsecret').value = ''; document.activeElement.blur(); load(); }
+  try { const r = await api('api/settings', body); $('#st-msg').textContent = r.recreated ? 'Saved; the assistants were restarted.' : 'Saved.'; $('#st-gsecret').value = $('#st-eu-key').value = ''; document.activeElement.blur(); load(); }
   catch (err) { $('#st-msg').textContent = err.message; }
 };
 /** The shared Ollama's model: the three local choices people also see in their Settings, and what is downloaded. */

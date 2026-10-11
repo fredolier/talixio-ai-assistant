@@ -85,6 +85,14 @@
         <label>Client secret<input id="st-gsecret" type="password" autocomplete="off" placeholder="unchanged"></label>
         <pre id="st-redirects" class="small"></pre>
       </fieldset>
+      <fieldset><legend>AI in Europe for everyone (optional)</legend>
+        <p class="muted small">One account with a European provider for all the assistants: their messages, documents and recordings stay with a provider hosted in Europe, under the GDPR. Each person can still choose otherwise in their Settings.</p>
+        <label>Provider<select id="st-eu"><option value="">None (each person sets their own)</option><option value="ovhcloud">OVHcloud AI Endpoints (France)</option><option value="mistral">Mistral AI (France)</option><option value="scaleway">Scaleway (France)</option><option value="infomaniak">Infomaniak (Switzerland)</option></select></label>
+        <label>API key<input id="st-eu-key" type="password" autocomplete="off" placeholder="unchanged"></label>
+        <label>Address (optional; Infomaniak: from your AI Tools dashboard)<input id="st-eu-url" type="url" placeholder="https://…/v1"></label>
+        <label class="check"><input id="st-eu-only" type="checkbox"> <span>Lock: assistants never send anything to an AI or search service outside Europe.</span></label>
+        <p class="muted small">Usage is billed to this one account. Set each person's budget in their Settings.</p>
+      </fieldset>
       <fieldset><legend>Sandboxes</legend>
         <label class="check"><input id="st-apparmor" type="checkbox"> <span>Run assistants without Docker's AppArmor profile, so the shell sandbox and the browser keep their own sandboxes (needed on Ubuntu; seccomp and no privileges still apply).</span></label>
       </fieldset>

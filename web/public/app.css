@@ -887,6 +887,11 @@ a.cite.folder svg{fill:none;stroke:currentColor;stroke-width:2}
 .set-groups:empty{display:none}
 .set-card h4{margin:0;font-size:1rem;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .set-card>p{margin:0}
+.set-card select{font:inherit;color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:9px 10px;max-width:100%}
+.set-card label.check{display:flex;flex-direction:row;align-items:flex-start;gap:8px;color:var(--ink);font-size:.9rem} .set-card label.check input{width:auto;margin-top:3px}
+#eu-card .fields{gap:8px} #eu-card .fields>p,#eu-card .fields>div>p{margin:0} #eu-card .fields>label:not(.check){font-size:.88rem;font-weight:600;margin-top:4px} #eu-card #eu-url-row{display:flex;flex-direction:column;gap:8px} #eu-card #eu-url-row[hidden]{display:none}
+#eu-card .row{flex-wrap:wrap} #eu-card #eu-state:not(:empty){flex-basis:100%} #eu-card a{color:var(--accent)}
+#eu-card .ok{color:var(--accent)} #eu-card .bad{color:var(--danger)} #eu-card ul{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px} #eu-card #eu-outside p{margin:8px 0 0}
 .set-card .fields{margin-top:4px}
 .field .fbody{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
 .field.cond-off,.nomatch{display:none!important}

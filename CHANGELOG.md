@@ -3,6 +3,17 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.23.0 (2026-10-11)
+- Europe only: a card in Settings → Model and budget switches the conversation model, transcription and memory
+  search to one European provider (OVHcloud AI Endpoints by default, Mistral AI, Scaleway, Infomaniak), with a
+  Test button, links to get a key and the provider's data terms, and a lock that never sends anything to an AI
+  or search service outside Europe. It lists what still leaves Europe (web search, Telegram, Google Calendar,
+  Spotify, remote connectors…) with a link to change each one.
+- The European provider is also in the regular settings (Provider, transcription, memory search).
+- Multi-user server: the admin page can give every assistant one European provider account (key never sent
+  back to the page; the Google client secret isn't either anymore).
+- List prices for the European providers' models (Mistral, gpt-oss, Qwen, Llama), approximate.
+
 ## 0.22.0 (2026-10-11)
 - Settings redesigned. Seven sections (Essentials, Model and budget, Channels, Connected accounts, Library
   and memory, Security, System) in a side menu, shown as chips at the top on a phone. A status band at the

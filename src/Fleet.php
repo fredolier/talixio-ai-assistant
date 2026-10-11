@@ -37,7 +37,8 @@ final class Fleet
     {
         $s = json_decode((string)@file_get_contents($this->stateFile), true) ?: [];
         $s['settings'] = ($s['settings'] ?? []) + ['domain' => getenv('TALIXIO_DOMAIN') ?: 'localhost', 'mode' => 'path', 'memory_mb' => 1024, 'cpus' => 1.5,
-            'ollama' => true, 'ollama_model' => 'qwen3-embedding:0.6b', 'google_client_id' => '', 'google_client_secret' => '', 'apparmor_unconfined' => true];
+            'ollama' => true, 'ollama_model' => 'qwen3-embedding:0.6b', 'google_client_id' => '', 'google_client_secret' => '', 'apparmor_unconfined' => true,
+            'eu_provider' => '', 'eu_key' => '', 'eu_url' => '', 'eu_only' => false];
         $s['instances'] = $s['instances'] ?? [];
         $s['image'] = $s['image'] ?? ['current' => self::IMAGE . ':current', 'previous' => null];
         return $s;
@@ -98,8 +99,19 @@ final class Fleet
         if (isset($d['ollama_model'])) { $m = trim((string)$d['ollama_model']); if (!preg_match('/^[a-z0-9][a-z0-9._:\/-]{0,80}$/i', $m)) throw new \InvalidArgumentException('Unexpected model name.'); $set['ollama_model'] = $m; }
         foreach (['google_client_id', 'google_client_secret'] as $k) if (isset($d[$k])) $set[$k] = mb_substr(trim((string)$d[$k]), 0, 300);
         if (isset($d['apparmor_unconfined'])) $set['apparmor_unconfined'] = (bool)$d['apparmor_unconfined'];
+        if (isset($d['eu_provider'])) { if ($d['eu_provider'] !== '' && !isset(Sovereign::SERVICES[$d['eu_provider']])) throw new \InvalidArgumentException('Unknown European provider.'); $set['eu_provider'] = (string)$d['eu_provider']; }
+        if (isset($d['eu_key'])) $set['eu_key'] = mb_substr(trim((string)$d['eu_key']), 0, 300);
+        if (isset($d['eu_url'])) { $u = rtrim(trim((string)$d['eu_url']), '/'); if ($u !== '' && !preg_match('#^https://\S{4,300}$#', $u)) throw new \InvalidArgumentException('The European provider\'s address starts with https://.'); $set['eu_url'] = $u; }
+        if (isset($d['eu_only'])) $set['eu_only'] = (bool)$d['eu_only'];
         $s['settings'] = $set;
         $this->save($s);
+        return $set;
+    }
+
+    /** The settings as the admin page sees them: secrets only say whether they are set. */
+    public static function publicSettings(array $set): array
+    {
+        foreach (['google_client_secret', 'eu_key'] as $k) $set[$k] = ($set[$k] ?? '') !== '';
         return $set;
     }
 
@@ -133,6 +145,11 @@ final class Fleet
         if (!empty($i['reset'])) $env[] = 'TALIXIO_RESET=' . $i['reset'];                                // a new password or 2-step reset, applied once
         if ($set['ollama']) array_push($env, 'TALIXIO_EMBEDDINGS=ollama', 'TALIXIO_EMBEDDINGS_MODEL=' . $set['ollama_model'], 'TALIXIO_OLLAMA_URL=http://' . self::CADDY . ':11434');
         if ($set['google_client_id'] !== '') array_push($env, 'TALIXIO_GOOGLE_CLIENT_ID=' . $set['google_client_id'], 'TALIXIO_GOOGLE_CLIENT_SECRET=' . $set['google_client_secret']);
+        if ($set['eu_provider'] !== '') { // a European AI provider for everyone, unless a person picks another in their Settings
+            array_push($env, 'TALIXIO_PROVIDER=sovereign', 'TALIXIO_SOVEREIGN=' . $set['eu_provider'], 'TALIXIO_SOVEREIGN_ONLY=' . ($set['eu_only'] ? '1' : '0'));
+            if ($set['eu_key'] !== '') $env[] = 'TALIXIO_SOVEREIGN_KEY=' . $set['eu_key'];
+            if ($set['eu_url'] !== '') $env[] = 'TALIXIO_SOVEREIGN_URL=' . $set['eu_url'];
+        }
         $secOpt = ['no-new-privileges', 'seccomp=' . (string)file_get_contents(dirname(__DIR__) . '/deploy/docker/seccomp-sandbox.json')];
         if ($set['apparmor_unconfined']) $secOpt[] = 'apparmor=unconfined'; // Ubuntu: Docker's profile forbids the sandboxes' mounts (seccomp and no privileges still apply)
         return [

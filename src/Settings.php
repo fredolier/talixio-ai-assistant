@@ -22,7 +22,11 @@ final class Settings
                 ['TALIXIO_HISTORY_TOKENS', 'Size of the recent messages (tokens)', 'number', 'Long messages (pasted documents…) are shortened or left to memory search beyond this. Fewer tokens = cheaper answers.'],
             ]],
             'brain' => ['AI model', 'The assistant\'s brain. "Check configuration" makes one test call per tier.', [
-                ['TALIXIO_PROVIDER', 'Provider', 'select', 'claude-code uses your Claude Pro/Max plan (installed with --with-claude-code).', ['anthropic' => 'Claude (API)', 'claude-code' => 'Claude Code (Pro/Max plan)', 'gemini' => 'Gemini (API)', 'openai' => 'OpenAI or compatible server (Ollama…)', 'echo' => 'Echo (test, no model)']],
+                ['TALIXIO_PROVIDER', 'Provider', 'select', 'claude-code uses your Claude Pro/Max plan (installed with --with-claude-code).', ['anthropic' => 'Claude (API)', 'claude-code' => 'Claude Code (Pro/Max plan)', 'gemini' => 'Gemini (API)', 'openai' => 'OpenAI or compatible server (Ollama…)', 'sovereign' => 'European provider (OVHcloud, Mistral…)', 'echo' => 'Echo (test, no model)']],
+                ['TALIXIO_SOVEREIGN', 'European provider', 'select', 'Hosted in Europe, under the GDPR. One key also does transcription and memory search.', ['ovhcloud' => 'OVHcloud AI Endpoints (France)', 'mistral' => 'Mistral AI (France)', 'scaleway' => 'Scaleway (France)', 'infomaniak' => 'Infomaniak (Switzerland)']],
+                ['TALIXIO_SOVEREIGN_KEY', 'European provider API key', 'secret', 'See "Europe only" above for where to get one.'],
+                ['TALIXIO_SOVEREIGN_URL', 'European provider address', 'url', 'Empty = the provider\'s usual address. Infomaniak: the address from your AI Tools dashboard.'],
+                ['TALIXIO_SOVEREIGN_ONLY', 'Europe only', 'bool', 'Never send anything to an AI or search service outside Europe: what has no European option is turned off.'],
                 ['ANTHROPIC_API_KEY', 'Claude API key', 'secret', 'console.anthropic.com'],
                 ['CLAUDE_CODE_OAUTH_TOKEN', 'Claude Code token', 'secret', 'From "claude setup-token" (see the README).'],
                 ['GEMINI_API_KEY', 'Gemini API key', 'secret', 'aistudio.google.com/apikey. Also used for transcription, memory search and web search.'],
@@ -103,7 +107,7 @@ final class Settings
                 ['BRAVE_API_KEY', 'Brave Search key', 'secret', ''],
                 ['TAVILY_API_KEY', 'Tavily key', 'secret', ''],
                 ['SEARXNG_URL', 'SearXNG address', 'url', ''],
-                ['TALIXIO_EMBEDDINGS', 'Search by meaning (embeddings)', 'select', 'Keyword search always works. After a change, memory is re-indexed in the background.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'voyage' => 'Voyage', 'ollama' => 'Ollama (local)', 'off' => 'off']],
+                ['TALIXIO_EMBEDDINGS', 'Search by meaning (embeddings)', 'select', 'Keyword search always works. After a change, memory is re-indexed in the background.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'voyage' => 'Voyage', 'ollama' => 'Ollama (local)', 'sovereign' => 'European provider', 'off' => 'off']],
                 ['TALIXIO_EMBEDDINGS_MODEL', 'Embeddings model', 'text', 'Empty = the service\'s default. Ollama: qwen3-embedding:0.6b (recommended, multilingual), embeddinggemma, bge-m3. Install with install.sh --with-ollama; a new model must be pulled first (ollama pull …).'],
                 ['TALIXIO_EMBEDDINGS_DIMS', 'Vector size', 'number', 'Empty = automatic (512 for models built for it: faster search, nearly the same quality). 0 = full size. Changing it re-indexes memory in the background.'],
                 ['VOYAGE_API_KEY', 'Voyage key', 'secret', ''],
@@ -114,7 +118,7 @@ final class Settings
                 ['TALIXIO_TASKS_GOOGLE', 'Tasks marked "show in my calendar" go to Google Calendar', 'select', 'When Google Calendar is connected: added as all-day events (start to due date) and kept up to date. Otherwise use the private calendar link (Tasks → Calendar).', ['1' => 'on', '0' => 'off']],
             ]],
             'audio' => ['Audio, meetings and library', '', [
-                ['TALIXIO_TRANSCRIBE', 'Transcription', 'select', 'auto: Gemini when its key is set, else local when whisper.cpp is installed. Local: the audio never leaves this server, but it is slower (about half the recording\'s length) and has no speaker names (install with sudo ./install.sh --with-whisper).', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'local' => 'Local (whisper.cpp, on this server)', 'off' => 'off']],
+                ['TALIXIO_TRANSCRIBE', 'Transcription', 'select', 'auto: Gemini when its key is set, else local when whisper.cpp is installed. Local: the audio never leaves this server, but it is slower (about half the recording\'s length) and has no speaker names (install with sudo ./install.sh --with-whisper).', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'local' => 'Local (whisper.cpp, on this server)', 'sovereign' => 'European provider', 'off' => 'off']],
                 ['TALIXIO_TRANSCRIBE_MODEL', 'Transcription model', 'text', 'Empty = automatic. Local: large-v3-turbo-q5_0 (default), medium, small, or the path of a model file.'],
                 ['TALIXIO_MEETING_TIER', 'Tier for meeting summaries', 'select', '', ['standard' => 'standard', 'deep' => 'deep', 'fast' => 'fast']],
                 ['TALIXIO_VOICE_NOTE_MAX_SECONDS', 'Longer than this (seconds) = a meeting', 'number', ''],
@@ -168,7 +172,7 @@ final class Settings
     /** Rarely changed: folded under "Advanced settings" in their group. */
     public const ADVANCED = [
         'TALIXIO_HISTORY_MESSAGES', 'TALIXIO_HISTORY_TOKENS',
-        'TALIXIO_MODEL_FAST', 'TALIXIO_MODEL', 'TALIXIO_MODEL_DEEP', 'TALIXIO_DEEP_THINKING_TOKENS', 'TALIXIO_DEEP_REASONING_EFFORT',
+        'TALIXIO_SOVEREIGN_URL', 'TALIXIO_MODEL_FAST', 'TALIXIO_MODEL', 'TALIXIO_MODEL_DEEP', 'TALIXIO_DEEP_THINKING_TOKENS', 'TALIXIO_DEEP_REASONING_EFFORT',
         'TALIXIO_MAX_PARALLEL_JOBS', 'TALIXIO_JOB_MAX_USD_LIMIT', 'TALIXIO_JOB_EFFORT', 'TALIXIO_PRICES',
         'TALIXIO_NTFY_TOKEN', 'TALIXIO_VAPID_SUBJECT', 'TALIXIO_HEARTBEAT_MINUTES',
         'TALIXIO_SMTP_SECURITY', 'TALIXIO_IMAP_PORT', 'TALIXIO_IMAP_USER', 'TALIXIO_IMAP_PASSWORD', 'TALIXIO_EMAIL_REQUIRE_AUTH',
@@ -196,6 +200,7 @@ final class Settings
         'TALIXIO_APPROVAL_WAIT_SECONDS' => '600', 'TALIXIO_LEARN' => '1', 'TALIXIO_MIND' => '1', 'TALIXIO_GEMINI_PAID' => '0', 'TALIXIO_NOTIFY_NEUTRAL' => '0', 'TALIXIO_LEARN_MIN_STEPS' => '4', 'TALIXIO_BACKUP_KEEP' => '7',
         'TALIXIO_BACKUP_FILES' => '1', 'TALIXIO_AUTO_UPDATE' => '0', 'TALIXIO_CLAUDE_BIN' => 'claude', 'TALIXIO_SIGNAL_CLI' => 'signal-cli',
         'TALIXIO_RECALL_MIN_SIMILARITY' => '0.5', 'TALIXIO_SHELL' => 'off', 'TALIXIO_AUTO_FILE' => 'suggest', 'TALIXIO_MAIL_TRIAGE' => '1', 'TALIXIO_SHELL_NETWORK' => '0', 'TALIXIO_SHELL_TIMEOUT' => '120', 'TALIXIO_DEEP_REASONING_EFFORT' => '',
+        'TALIXIO_SOVEREIGN' => 'ovhcloud', 'TALIXIO_SOVEREIGN_ONLY' => '0',
     ];
 
     /** @return array<string,array> key => field */
