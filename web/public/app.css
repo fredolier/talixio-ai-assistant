@@ -188,7 +188,8 @@ main{min-width:0;height:100%;overflow:hidden}
 .job .more{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-top:6px;width:100%}
 .jsched{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:.85rem}
 .jsched select,.jsched input{font:inherit;font-size:.85rem;padding:4px 6px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
-.task.job .actions{flex-wrap:wrap;justify-content:flex-end}
+.task.job{grid-template-columns:minmax(14rem,1fr) auto}
+.task.job .actions{flex-wrap:wrap;justify-content:flex-end;align-content:flex-start;max-width:30rem}
 .task.job.archived{opacity:.75}
 .filters select{font:inherit;font-size:.85rem;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
 .running .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:5px;animation:blink 1.2s infinite}

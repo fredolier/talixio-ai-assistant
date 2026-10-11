@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.5 (2026-10-11)
+
+- Jobs: a finished job's card no longer squeezes its title into a narrow column; the buttons wrap on the right instead.
+
 ## 0.28.4 (2026-10-11)
 
 - Mistral: replies (and job results) no longer show "Array". Its newer models send their answer as a list of chunks, thinking included; only the text is kept now.
