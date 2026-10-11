@@ -2538,6 +2538,7 @@ async function openFile(id, opts = {}) {
   const f = lib.file = d.file;
   v.hidden = false; $('#viewer-form').hidden = true;
   $('#viewer-name').textContent = f.name;
+  moreActions(false);
   $('#viewer-path').textContent = `${f.folder} · ${fmtSize(f.size)} · ${fmtDate(f.created)} · #${f.id}`;
   const officePages = f.kind === 'office' && d.pages; // LibreOffice installed: the real pages
   const rendered = RENDERED.includes(f.kind) && !officePages;
@@ -3023,6 +3024,13 @@ document.addEventListener('keydown', e => { // Esc: stops a running search (then
   e.preventDefault(); libSearch.ctl ? libSearchStop() : libSearchClose();
 });
 $('#viewer-close').onclick = closeViewer;
+// on a phone only the main actions show; "More" unfolds the rest
+function moreActions(open) {
+  $('.viewer-actions').classList.toggle('open', open);
+  $('#viewer-more').setAttribute('aria-expanded', String(open));
+  $('#viewer-more').textContent = open ? t('Less') : t('More') + ' ▾';
+}
+$('#viewer-more').onclick = () => moreActions(!$('.viewer-actions').classList.contains('open'));
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#viewer').hidden) closeViewer(); });
 $('#viewer-form-cancel').onclick = () => { $('#viewer-form').hidden = true; };
 $('#viewer-rename').onclick = () => viewerForm(lib.file.name, async v => { const { file } = await post(`api/files/${lib.file.id}/rename`, { name: v }); await loadLibrary(); openFile(file.id); });

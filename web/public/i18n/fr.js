@@ -2001,5 +2001,6 @@ window.I18N.fr = {
 "Create a password for the drive first.": "Créez d'abord un mot de passe pour le lecteur.",
 "The drive is read only (Settings → Network drive).": "Le lecteur est en lecture seule (Réglages → Lecteur réseau).",
 "Open {name}": "Ouvrir {name}",
-"Sent by {name}, your assistant.": "Envoyé par {name}, votre assistant."
+"Sent by {name}, your assistant.": "Envoyé par {name}, votre assistant.",
+"Less": "Moins"
 };

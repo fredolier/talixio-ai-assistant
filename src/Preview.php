@@ -58,6 +58,8 @@ final class Preview
 body{margin:0;padding:24px clamp(14px,4vw,40px);font:15px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:#fff;overflow-wrap:anywhere}
 .doc{max-width:820px;margin:0 auto}
 h1,h2,h3,h4,h5,h6{line-height:1.25;margin:1.3em 0 .5em} h1{font-size:1.8em} h2{font-size:1.45em;border-bottom:1px solid var(--line);padding-bottom:.25em} h3{font-size:1.2em}
+body>:first-child,.doc>:first-child{margin-top:0}
+@media (max-width:520px){body{padding:14px 12px;font-size:14.5px} h1{font-size:1.45em} h2{font-size:1.25em} h3{font-size:1.1em}}
 .doc>:first-child{margin-top:0}
 p{margin:.6em 0} a{color:var(--accent)} img{max-width:100%;height:auto}
 code{font:.88em ui-monospace,Menlo,Consolas,monospace;background:var(--sunk);padding:.1em .35em;border-radius:4px}

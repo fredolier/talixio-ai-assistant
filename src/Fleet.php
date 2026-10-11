@@ -656,6 +656,7 @@ final class Fleet
                 throw new \RuntimeException("$id did not start on the new version (back on the previous one).");
             }
         }
+        try { $this->reloadCaddy(); } catch (\Throwable $e) { error_log('caddy reload: ' . $e->getMessage()); }
         $this->refreshStack($progress, 'Every instance runs the new version.');
     }
 
@@ -702,7 +703,12 @@ final class Fleet
                 curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 3]);
                 $ok = curl_exec($ch) !== false && curl_getinfo($ch, CURLINFO_RESPONSE_CODE) === 200;
                 curl_close($ch);
-                if ($ok) { $this->docker('DELETE', "/containers/$agent-old", null, ['force' => 'true']); return; } // ends this process too
+                if ($ok) {
+                    // the routes (Caddyfile) of the new version, written by its own code
+                    try { $this->exec($agent, ['php', '/opt/talixio/deploy/docker/fleetctl.php', 'reload'], 60); } catch (\Throwable $e) { error_log('caddy reload: ' . $e->getMessage()); }
+                    $this->docker('DELETE', "/containers/$agent-old", null, ['force' => 'true']);
+                    return; // ends this process too
+                }
             }
             throw new \RuntimeException('the new agent did not answer');
         } catch (\Throwable $e) {
@@ -724,8 +730,23 @@ final class Fleet
         foreach ($c['NetworkSettings']['Networks'] ?? [] as $net => $n)
             $eps[$net] = ['Aliases' => array_values(array_filter($n['Aliases'] ?? [], fn($a) => $a !== $short && $a !== ltrim($c['Name'] ?? '', '/')))];
         $cfg['NetworkingConfig'] = ['EndpointsConfig' => $eps];
-        $this->ok($this->docker('POST', '/containers/create', $cfg, ['name' => $name]), "create $name");
+        $this->ok($this->docker('POST', '/containers/create', self::objects($cfg), ['name' => $name]), "create $name");
         $this->ok($this->docker('POST', "/containers/$name/start"), "start $name");
+    }
+
+    /**
+     * An inspected container's settings, ready to send back: decoded as arrays, Docker's empty objects
+     * ({"80/tcp": {}}, "Labels": {}) would go out as [] and be refused.
+     */
+    public static function objects(mixed $v, string $key = ''): mixed
+    {
+        if (!is_array($v)) return $v;
+        $maps = ['Labels', 'ExposedPorts', 'Volumes', 'Config', 'Sysctls', 'StorageOpt', 'Tmpfs', 'DriverOpts', 'Options',
+            'PortBindings', 'EndpointsConfig', 'Annotations', 'NetworkingConfig'];
+        if ($v === []) return in_array($key, $maps, true) ? new \stdClass() : [];
+        $out = [];
+        foreach ($v as $k => $x) $out[$k] = in_array($key, ['ExposedPorts', 'Volumes'], true) && $x === [] ? new \stdClass() : self::objects($x, (string)$k);
+        return $out;
     }
 
     private function tag(string $image, string $repo, string $tag): void

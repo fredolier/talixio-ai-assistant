@@ -3,6 +3,16 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.21.4 (2026-10-11)
+- Document sheet on a phone: the buttons no longer take half the screen. Only "Ask about it" and a "More"
+  button show; "More" unfolds Download, Open in a new tab, Share, Rename, Move, Review and Delete. Margins
+  are tighter and the preview uses the full width, with smaller headings on narrow screens.
+- Multi-user server: an update no longer breaks the admin page. Moving the admin and agent containers to
+  the new version sent Docker empty lists where it expects empty objects (`ExposedPorts`, `Volumes`…),
+  which Docker refused (HTTP 400). The update now also reloads Caddy, so its new routes apply right away:
+  this is what kept the WebDAV fixes of 0.21.2 from reaching servers updated from the admin page.
+  To recover a server where the update failed: `git pull` then `sudo deploy/docker/install-stack.sh`.
+
 ## 0.21.3 (2026-10-11)
 - Emails look better. The messages the assistant sends by email (scheduled jobs, morning briefing, reports,
   notifications, answers to emails) now come in a proper HTML layout: a card with the title, the space and

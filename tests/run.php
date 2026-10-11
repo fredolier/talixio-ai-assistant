@@ -2023,6 +2023,8 @@ proc_terminate($ws); proc_close($ws);
 
 // ---- multi-user server: the agent's locked template, Caddy configuration, admin checks ----
 $fl = new \Talixio\Fleet("$dir/fleet", "$dir/no-docker.sock");
+$o = json_encode(\Talixio\Fleet::objects(json_decode('{"Cmd":[],"Labels":{},"ExposedPorts":{"80/tcp":{}},"Volumes":{"/data":{}},"HostConfig":{"LogConfig":{"Type":"json-file","Config":{}},"PortBindings":{}}}', true)), JSON_UNESCAPED_SLASHES);
+check('fleet: a respawned container keeps Docker\'s empty objects', $o === '{"Cmd":[],"Labels":{},"ExposedPorts":{"80/tcp":{}},"Volumes":{"/data":{}},"HostConfig":{"LogConfig":{"Type":"json-file","Config":{}},"PortBindings":{}}}', $o);
 check('fleet: identifiers', \Talixio\Fleet::validId('alice') && \Talixio\Fleet::validId('jean-paul') && !\Talixio\Fleet::validId('admin') && !\Talixio\Fleet::validId('A') && !\Talixio\Fleet::validId('x') && !\Talixio\Fleet::validId('bob-') && !\Talixio\Fleet::validId('../etc'));
 // a long action whose process died (the agent replaced by install-stack.sh) no longer blocks the admin page
 $jf = "$dir/fleet/job.json";
