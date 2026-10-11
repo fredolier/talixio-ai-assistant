@@ -51,6 +51,37 @@ final class Fleet
         rename($tmp, $this->stateFile);
     }
 
+    /**
+     * The long action the admin page follows (job.json). One whose process is gone (the agent was restarted or
+     * replaced, e.g. by install-stack.sh, while it ran) is marked as interrupted, so it no longer blocks the page.
+     */
+    public function job(): array
+    {
+        $file = "$this->stateDir/job.json";
+        $job = json_decode((string)@file_get_contents($file), true) ?: ['state' => 'none'];
+        if (($job['state'] ?? '') !== 'running') return $job;
+        $pid = (int)($job['pid'] ?? 0);
+        if ($pid > 0 && ($job['host'] ?? '') === gethostname() && str_contains((string)@file_get_contents("/proc/$pid/cmdline"), 'fleet-job.php')) return $job;
+        if ($pid === 0 && time() - (int)($job['updated'] ?? 0) < 120) return $job; // just started: its process has not written yet
+        $msg = 'Interrupted: the process running it stopped (the agent restarted, or an update was made from the command line). Check the version in service, and start it again if needed.';
+        $job = ['state' => 'failed', 'phase' => 'interrupted', 'message' => $msg, 'log' => array_merge(array_slice((array)($job['log'] ?? []), -39), [date('H:i:s') . ' ' . $msg]), 'updated' => time()] + $job;
+        @file_put_contents("$file.tmp", json_encode($job, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        @rename("$file.tmp", $file);
+        return $job;
+    }
+
+    /** After install-stack.sh built talixio:current itself: what runs is recorded, as an update from the admin page would. */
+    public function installed(string $branch): void
+    {
+        $tag = date('Ymd-His');
+        $this->tag(self::IMAGE . ':current', self::IMAGE, $tag);
+        $s = $this->state();
+        $s['image'] = ['current' => self::IMAGE . ':current', 'previous' => $s['image']['previous'] ?? null, 'built' => self::IMAGE . ":$tag", 'built_at' => time(),
+            'branch' => preg_match('/^[A-Za-z0-9._\/-]{1,100}$/', $branch) ? $branch : ($s['image']['branch'] ?? '')];
+        $this->save($s);
+        $this->job(); // a job the restart cut short
+    }
+
     /** Domain, path or subdomains, default limits, shared services. */
     public function setSettings(array $d): array
     {

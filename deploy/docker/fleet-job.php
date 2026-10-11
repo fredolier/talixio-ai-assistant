@@ -10,10 +10,14 @@ $log = [];
 $progress = function (string $phase, string $message) use ($state, $kind, &$log): void {
     $log[] = date('H:i:s') . ' ' . $message;
     $job = ['kind' => $kind, 'state' => in_array($phase, ['done', 'failed'], true) ? $phase : 'running', 'phase' => $phase, 'message' => $message,
-        'log' => array_slice($log, -40), 'updated' => time()];
+        'log' => array_slice($log, -40), 'updated' => time(), 'pid' => getmypid(), 'host' => gethostname()]; // pid, host: the agent can tell when it died
     file_put_contents("$state/job.json.tmp", json_encode($job, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     rename("$state/job.json.tmp", "$state/job.json");
 };
+// the agent's start wrote job.json: add this process, so a job cut short (agent replaced) is seen as such
+$started = json_decode((string)@file_get_contents("$state/job.json"), true) ?: [];
+file_put_contents("$state/job.json.tmp", json_encode(['pid' => getmypid(), 'host' => gethostname(), 'updated' => time()] + $started, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+rename("$state/job.json.tmp", "$state/job.json");
 try {
     match ($kind) {
         'update' => $fleet->update($arg !== '' ? $arg : 'main', $progress),

@@ -30,9 +30,9 @@ if (strlen($token) < 32 || !hash_equals($token, (string)($_SERVER['HTTP_X_AGENT_
 $b = json_decode((string)file_get_contents('php://input'), true) ?: [];
 
 /** Long actions (update, rollback, model download) run on their own; the admin page follows them in job.json. */
-$background = function (string $kind, string $arg = '') use ($state, $json): void {
-    $job = json_decode((string)@file_get_contents("$state/job.json"), true) ?: [];
-    if (in_array($job['state'] ?? '', ['running'], true) && time() - (int)($job['updated'] ?? 0) < 3600) { $json(['error' => 'Another long action is running: ' . ($job['kind'] ?? '')], 409); return; }
+$background = function (string $kind, string $arg = '') use ($state, $json, $fleet): void {
+    $job = $fleet->job();
+    if (($job['state'] ?? '') === 'running') { $json(['error' => 'Another long action is running: ' . ($job['kind'] ?? '')], 409); return; }
     file_put_contents("$state/job.json", json_encode(['kind' => $kind, 'state' => 'running', 'message' => 'Starting…', 'log' => [], 'started' => time(), 'updated' => time()]));
     Talixio\Background::start([PHP_BINARY, __DIR__ . '/fleet-job.php', $kind, $arg], "$state/job.out");
     $json(['ok' => true]);
@@ -72,7 +72,7 @@ try {
         $path === '/server' => $json($fleet->server()),
         $path === '/caddyfile' => $json(['caddyfile' => $fleet->caddyfile()]),
         $path === '/check-update' => $json($fleet->checkUpdate((string)($_GET['branch'] ?? (getenv('TALIXIO_GIT_BRANCH') ?: 'main')))),
-        $path === '/job' => $json(json_decode((string)@file_get_contents("$state/job.json"), true) ?: ['state' => 'none']),
+        $path === '/job' => $json($fleet->job()),
         $path === '/update' && $method === 'POST' => $background('update', (string)($b['branch'] ?? (getenv('TALIXIO_GIT_BRANCH') ?: 'main'))),
         $path === '/rollback' && $method === 'POST' => $background('rollback'),
         $path === '/pull-model' && $method === 'POST' => $background('pull-model', (string)($b['model'] ?? '')),

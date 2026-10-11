@@ -2011,6 +2011,20 @@ proc_terminate($ws); proc_close($ws);
 // ---- multi-user server: the agent's locked template, Caddy configuration, admin checks ----
 $fl = new \Talixio\Fleet("$dir/fleet", "$dir/no-docker.sock");
 check('fleet: identifiers', \Talixio\Fleet::validId('alice') && \Talixio\Fleet::validId('jean-paul') && !\Talixio\Fleet::validId('admin') && !\Talixio\Fleet::validId('A') && !\Talixio\Fleet::validId('x') && !\Talixio\Fleet::validId('bob-') && !\Talixio\Fleet::validId('../etc'));
+// a long action whose process died (the agent replaced by install-stack.sh) no longer blocks the admin page
+$jf = "$dir/fleet/job.json";
+file_put_contents($jf, json_encode(['kind' => 'update', 'state' => 'running', 'log' => ['18:03:03 Step 6/6 : USER talixio'], 'updated' => time() - 600, 'pid' => 999999, 'host' => gethostname()]));
+$jb = $fl->job();
+check('fleet: a job whose process is gone shows as interrupted', $jb['state'] === 'failed' && $jb['phase'] === 'interrupted' && $jb['kind'] === 'update' && count($jb['log']) === 2
+    && (json_decode((string)file_get_contents($jf), true)['state'] ?? '') === 'failed');
+file_put_contents($jf, json_encode(['kind' => 'update', 'state' => 'running', 'updated' => time() - 9000])); // written before pids were recorded
+$jb1 = $fl->job();
+file_put_contents($jf, json_encode(['kind' => 'update', 'state' => 'running', 'updated' => time()])); // just started
+$jb2 = $fl->job();
+file_put_contents($jf, json_encode(['kind' => 'update', 'state' => 'running', 'updated' => time() - 600, 'pid' => getmypid(), 'host' => gethostname()]));
+$jb3 = $fl->job(); // this process is not fleet-job.php: a reused pid
+check('fleet: an old job without pid is interrupted, a new one is not, a reused pid is not mistaken for the job', $jb1['state'] === 'failed' && $jb2['state'] === 'running' && $jb3['state'] === 'failed');
+@unlink($jf);
 $fs = $fl->state(); $fs['settings']['domain'] = 'assistant.example.com';
 $fs['instances']['alice'] = ['name' => 'Alice', 'email' => '', 'memory_mb' => 1024, 'cpus' => 1.5, 'created' => time(), 'password_hash' => '$2y$x', 'reset' => '', 'timezone' => 'Europe/Paris'];
 $spec = $fl->spec('alice', $fs);

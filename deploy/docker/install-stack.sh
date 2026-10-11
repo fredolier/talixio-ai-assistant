@@ -142,6 +142,7 @@ if [ -n "$MIGRATE" ]; then
   esac
 fi
 docker exec talixio-agent php /opt/talixio/deploy/docker/fleetctl.php reload >/dev/null 2>&1 || true
+docker exec talixio-agent php /opt/talixio/deploy/docker/fleetctl.php installed "$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)" >/dev/null 2>&1 || true
 # the existing assistants move to the image just built
 docker exec talixio-agent php -r 'require "/opt/talixio/src/autoload.php"; $f = new Talixio\Fleet("/state"); foreach (array_keys($f->state()["instances"]) as $id) { $f->recreate($id); echo "    $id restarted on the new image\n"; }'
 

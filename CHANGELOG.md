@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.21.1 (2026-10-11)
+- Admin page (multi-user server): an update cut short, e.g. because `install-stack.sh` was run from the
+  command line while it was building and replaced the agent, no longer stays "in progress" forever and blocks
+  the Update buttons. The agent now records the job's process and shows a job whose process is gone as
+  interrupted, so a new update can start. `install-stack.sh` also records the image it built, so "Running…"
+  in the Update tab shows it rather than the last update made from the admin page.
+
 ## 0.21.0 (2026-10-11)
 - Network drive (WebDAV): the library's folders open as a drive in Windows Explorer, macOS Finder, the Files
   app on iPhone/iPad and WebDAV apps on Android, at `<address>/dav/`. Settings → Network drive: off, read only
