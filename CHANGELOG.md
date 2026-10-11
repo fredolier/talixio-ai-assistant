@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.27.0 (2026-10-11)
+
+- Calendar: the assistant can now create recurring meetings (every day, every weekday, every week or
+  every month, until a date), leave out some days or the French public holidays, and invite people by
+  email. Google Calendar and Outlook send the invitations; with CalDAV the guests are in the event.
+  The approval request shows the series and the guests.
+- When you answer "yes" to something the assistant proposed, it now does it with its tools instead of
+  repeating its plan, and it says plainly what it cannot do.
+
 ## 0.26.0 (2026-10-11)
 
 - Outlook / Microsoft 365 calendar: connect it in Settings → Calendar with your own app registered in

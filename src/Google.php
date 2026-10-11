@@ -164,11 +164,18 @@ final class Google
         catch (\RuntimeException $e) { if (!preg_match('/not found|deleted|HTTP 404|HTTP 410/i', $e->getMessage())) throw $e; }
     }
 
-    public function insert(string $title, int $start, int $end, bool $allDay, string $location = '', string $description = ''): array
+    /** $opt: see Calendar::options() — guests are invited by Google (sendUpdates), the days left out are excluded from the series. */
+    public function insert(string $title, int $start, int $end, bool $allDay, string $location = '', string $description = '', array $opt = []): array
     {
         $tz = $this->app->cfg->timezone;
         $when = fn(int $t) => $allDay ? ['date' => date('Y-m-d', $t)] : ['dateTime' => date('c', $t), 'timeZone' => $tz];
+        $rec = null;
+        if (!empty($opt['repeat'])) {
+            $rec = ['RRULE:' . Calendar::rrule($opt, $allDay)];
+            foreach ($opt['skip'] ?? [] as $d) $rec[] = $allDay ? 'EXDATE;VALUE=DATE:' . str_replace('-', '', $d) : "EXDATE;TZID=$tz:" . date('Ymd\THis', Calendar::sameTime($start, $d));
+        }
+        $guests = array_map(fn($a) => ['email' => $a], $opt['attendees'] ?? []);
         return $this->api('POST', '/calendars/primary/events', array_filter(['summary' => $title, 'start' => $when($start), 'end' => $when($end),
-            'location' => $location ?: null, 'description' => $description ?: null]));
+            'location' => $location ?: null, 'description' => $description ?: null, 'recurrence' => $rec, 'attendees' => $guests ?: null]), $guests ? ['sendUpdates' => 'all'] : []);
     }
 }

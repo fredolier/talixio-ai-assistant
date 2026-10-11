@@ -16,6 +16,15 @@ if ($path === '/common/oauth2/v2.0/token') {
     http_response_code(400); echo '{"error":"invalid_grant"}'; return;
 }
 if (!in_array($_SERVER['HTTP_AUTHORIZATION'] ?? '', ['Bearer mt-1', 'Bearer mt-2'], true)) { http_response_code(401); echo '{"error":{"code":"InvalidAuthenticationToken","message":"bad token"}}'; return; }
+if (preg_match('#^/v1.0/me/events/([^/]+)/instances$#', $path, $m)) { // weekly occurrences of the inserted series in the range asked, in UTC
+    $ev = $state['inserted'][(int)substr($m[1], 1) - 1] ?? [];
+    $t = (new DateTime($ev['start']['dateTime'] ?? 'now', new DateTimeZone($ev['start']['timeZone'] ?? 'UTC')))->getTimestamp();
+    $out = [];
+    for ($i = 0; $t <= strtotime($_GET['endDateTime'] ?? 'now') && $i < 100; $i++, $t = strtotime('+1 week', $t)) {
+        if ($t >= strtotime($_GET['startDateTime'] ?? 'now')) $out[] = ['id' => "$m[1]-" . gmdate('Ymd', $t), 'start' => ['dateTime' => gmdate('Y-m-d\TH:i:s.0000000', $t), 'timeZone' => 'UTC']];
+    }
+    echo json_encode(['value' => $out]); return;
+}
 if (preg_match('#^/v1.0/me/events/([^/]+)$#', $path, $m)) { // task events: update, delete
     $state[$_SERVER['REQUEST_METHOD'] === 'DELETE' ? 'deleted' : 'updated'][] = ['id' => $m[1], 'body' => json_decode((string)file_get_contents('php://input'), true)];
     file_put_contents($log, json_encode($state));

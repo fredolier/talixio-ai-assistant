@@ -3,7 +3,7 @@ declare(strict_types=1);
 // Run: php tests/run.php   (no network, no API key needed)
 require __DIR__ . '/../src/autoload.php';
 use Talixio\{App, Config, Cron, Email, GeminiModels, Skills, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker, Privacy};
-use Talixio\{Embeddings, Meaning, Settings};
+use Talixio\{Calendar, Embeddings, Meaning, Settings};
 
 $fails = 0;
 function tap_tmp(string $content): string { $t = tempnam(sys_get_temp_dir(), 'tt'); file_put_contents($t, $content); return $t; }
@@ -818,6 +818,28 @@ $icsFiles = glob("$cdir/*.ics");
 check('caldav: event created with UTC times', count($icsFiles) === 1 && str_contains(file_get_contents($icsFiles[0]), 'DTSTART:20261020T120000Z') && str_contains(file_get_contents($icsFiles[0]), 'LOCATION:Rue de Rivoli'));
 check('caldav: events read back with time range', str_contains($app->tools->run('calendar_events', ['from' => '2026-10-20', 'to' => '2026-10-20']), '14:00–15:00: Dentist @ Rue de Rivoli')
     && str_contains((string)file_get_contents("$cdir/report.xml"), 'start="20261019T220000Z"'));
+$hol = Calendar::holidays(2026);
+check('calendar: French public holidays (Easter computed)', count($hol) === 11 && isset($hol['2026-04-06'], $hol['2026-05-14'], $hol['2026-05-25'], $hol['2026-11-11'], $hol['2026-12-25']) && isset(Calendar::holidays(2027)['2027-03-29']), json_encode($hol));
+$o = Calendar::options(['repeat' => 'weekly', 'until' => '2026-12-24', 'skip_holidays' => true, 'attendees' => ['Cedric@Example.com', 'paul@example.com']], strtotime('2026-10-12 11:00'));
+check('calendar: Mondays until Christmas, no holiday on a Monday, guests kept', count(Calendar::occurrences(strtotime('2026-10-12 11:00'), 'weekly', '2026-12-24')) === 11 && $o['skip'] === []
+    && $o['attendees'] === ['cedric@example.com', 'paul@example.com'], json_encode($o));
+$o = Calendar::options(['repeat' => 'weekly', 'until' => '2027-06-01', 'skip_holidays' => true, 'skip' => ['2026-11-04', '2026-11-05']], strtotime('2026-11-04 09:00'));
+check('calendar: holidays and given days left out only when they fall on an occurrence', $o['skip'] === ['2026-11-04', '2026-11-11'], json_encode($o));
+$o = Calendar::options(['repeat' => 'weekdays', 'until' => '2026-12-31', 'skip_holidays' => true], strtotime('2026-12-21 09:00'));
+check('calendar: weekdays skip Christmas', $o['skip'] === ['2026-12-25'] && !in_array('2026-12-26', Calendar::occurrences(strtotime('2026-12-21'), 'weekdays', '2026-12-31'), true), json_encode($o));
+$bad = fn(array $a) => (function () use ($a) { try { Calendar::options($a, strtotime('2026-10-12 11:00')); return ''; } catch (\InvalidArgumentException $e) { return $e->getMessage(); } })();
+check('calendar: bad guests, repeat or end refused with a hint', str_contains($bad(['attendees' => ['Cédric']]), 'contact_find') && str_contains($bad(['repeat' => 'yearly']), 'weekly')
+    && str_contains($bad(['repeat' => 'weekly', 'until' => '2026-10-01']), 'until') && str_contains($bad(['repeat' => 'daily', 'until' => '2026-10-12', 'skip' => ['2026-10-12']]), 'every occurrence'));
+$app->tools->run('calendar_add', ['title' => 'Weekly sync', 'start' => '2026-10-12 11:00', 'end' => '2026-10-12 11:30', 'attendees' => ['cedric@example.com', 'paul@example.com'],
+    'repeat' => 'weekly', 'until' => '2026-12-24', 'skip' => ['2026-11-02'], 'skip_holidays' => true]);
+$pend = $app->approvals()->pending();
+check('approval: the series and guests shown in the request', str_contains($pend[0]['summary'] ?? '', 'every week until 2026-12-24, except 2026-11-02; guests: cedric@example.com, paul@example.com'), $pend[0]['summary'] ?? '');
+$before = glob("$cdir/*.ics");
+$done = $app->approvals()->decide((int)$pend[0]['id'], true);
+$ics = (string)file_get_contents(array_values(array_diff(glob("$cdir/*.ics"), $before))[0] ?? '/dev/null');
+check('caldav: recurring event with end, day left out and guests', str_contains($ics, 'RRULE:FREQ=WEEKLY;UNTIL=20261224T225959Z') && str_contains($ics, 'EXDATE') && str_contains($ics, '20261102T')
+    && str_contains($ics, 'mailto:cedric@example.com') && str_contains($ics, 'mailto:paul@example.com') && str_contains($ics, 'DTEND:20261012T093000Z') && str_contains($done, 'every week'), $done . "\n" . $ics);
+foreach (array_diff(glob("$cdir/*.ics"), $before) as $f) unlink($f);
 $app->tools->run('calendar_add', ['title' => 'Spam', 'start' => '2026-10-21']);
 $id = (int)$app->approvals()->pending()[0]['id'];
 check('approval: reject by number', str_starts_with($app->agent()->chat('telegram', "no $id"), 'Cancelled') && count(glob("$cdir/*.ics")) === 1);
@@ -1820,6 +1842,12 @@ $ga->cfg->notify = [];
 $done = $ga->approvals()->decide((int)$ga->approvals()->pending()[0]['id'], true);
 $ins = json_decode((string)file_get_contents(sys_get_temp_dir() . "/fake-google-$gport.json"), true)['inserted'][0] ?? [];
 check('google: approved event added to the main calendar with the time zone', str_contains($done, 'Google Calendar') && ($ins['summary'] ?? '') === 'Call the bank' && ($ins['start']['timeZone'] ?? '') === 'Europe/Paris', $done . json_encode($ins));
+$ga->tools->run('calendar_add', ['title' => 'Team', 'start' => '2026-10-12 11:00', 'end' => '2026-10-12 11:30', 'attendees' => ['cedric@example.com'], 'repeat' => 'weekly', 'until' => '2026-12-24', 'skip' => ['2026-11-02']]);
+$ga->approvals()->decide((int)$ga->approvals()->pending()[0]['id'], true);
+$gl = json_decode((string)file_get_contents(sys_get_temp_dir() . "/fake-google-$gport.json"), true);
+$ins = end($gl['inserted']);
+check('google: recurring event with guests, invitations sent', ($ins['recurrence'][0] ?? '') === 'RRULE:FREQ=WEEKLY;UNTIL=20261224T225959Z' && ($ins['recurrence'][1] ?? '') === 'EXDATE;TZID=Europe/Paris:20261102T110000'
+    && ($ins['attendees'][0]['email'] ?? '') === 'cedric@example.com' && ($gl['insert_query']['sendUpdates'] ?? '') === 'all', json_encode($ins) . json_encode($gl['insert_query'] ?? null));
 $tok = json_decode((string)file_get_contents("$ad/google.json"), true); $tok['expires'] = 0; file_put_contents("$ad/google.json", json_encode($tok));
 $ga->store->set('google_calendars', '');
 check('google: access token refreshed when expired', str_contains($ga->tools->run('calendar_events', []), 'Dentist') && json_decode((string)file_get_contents("$ad/google.json"), true)['access_token'] === 'at-2');
@@ -1898,6 +1926,11 @@ $ga->store->q("UPDATE cards SET ocal_id = 'gone', ocal_synced = NULL WHERE id = 
 check('tasks → Outlook: an event removed in Outlook is added again', $ga->store->q('SELECT ocal_id FROM cards WHERE id = ?', [$gm['id']])->fetchColumn() === 'm3');
 $gb->update($gm['id'], ['in_calendar' => false]); $gb->syncGoogle();
 check('tasks → Outlook: unticked, the event is removed', (end($mlog()['deleted'])['id'] ?? '') === 'm3' && $ga->store->q('SELECT ocal_id FROM cards WHERE id = ?', [$gm['id']])->fetchColumn() === null);
+$ga->tools->run('calendar_add', ['title' => 'Team', 'start' => '2026-10-12 11:00', 'end' => '2026-10-12 11:30', 'attendees' => ['cedric@example.com', 'paul@example.com'], 'repeat' => 'weekly', 'until' => '2026-12-24', 'skip' => ['2026-11-02', '2026-12-07']]);
+$done = $ga->approvals()->decide((int)$ga->approvals()->pending()[0]['id'], true);
+$ml = $mlog(); $ins = end($ml['inserted']); $mid = 'm' . count($ml['inserted']);
+check('outlook: recurring event with guests, the days left out deleted', ($ins['recurrence']['pattern']['daysOfWeek'] ?? []) === ['monday'] && ($ins['recurrence']['range']['endDate'] ?? '') === '2026-12-24'
+    && count($ins['attendees'] ?? []) === 2 && array_values(array_filter(array_column($ml['deleted'] ?? [], 'id'), fn($i) => str_contains($i, '-'))) === ["$mid-20261102", "$mid-20261207"] && str_contains($done, 'Outlook'), $done . json_encode($ml['deleted'] ?? null) . json_encode($ins));
 $ga->microsoft()->disconnect();
 check('outlook: disconnect forgets the tokens', !$ga->microsoft()->connected() && !is_file("$ad/microsoft.json"));
 putenv('TALIXIO_MICROSOFT_LOGIN_BASE'); putenv('TALIXIO_MICROSOFT_API_BASE');

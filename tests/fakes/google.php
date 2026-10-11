@@ -30,6 +30,7 @@ if (preg_match('#^/calendar/v3/calendars/([^/]+)/events$#', $path, $m)) {
     $cal = rawurldecode($m[1]);
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $state['inserted'][] = json_decode((string)file_get_contents('php://input'), true);
+        $state['insert_query'] = $_GET;
         file_put_contents($log, json_encode($state)); echo json_encode(['id' => 'new' . count($state['inserted'])]); return;
     }
     $t = strtotime('tomorrow 10:00');

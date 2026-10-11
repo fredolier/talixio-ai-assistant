@@ -156,10 +156,39 @@ final class Microsoft
         catch (\RuntimeException $e) { if (!preg_match('/not found|HTTP 404|HTTP 410/i', $e->getMessage())) throw $e; }
     }
 
-    public function insert(string $title, int $start, int $end, bool $allDay, string $location = '', string $description = ''): array
+    /** $opt: see Calendar::options() — Outlook sends the invitations itself; the days left out are removed from the series once made. */
+    public function insert(string $title, int $start, int $end, bool $allDay, string $location = '', string $description = '', array $opt = []): array
     {
         if ($allDay && $end <= $start) $end = strtotime('+1 day', $start);
-        return $this->api('POST', '/me/events', array_filter(['subject' => $title, 'start' => $this->when($start, $allDay), 'end' => $this->when($end, $allDay), 'isAllDay' => $allDay,
-            'location' => $location !== '' ? ['displayName' => $location] : null, 'body' => $description !== '' ? ['contentType' => 'text', 'content' => $description] : null], fn($v) => $v !== null));
+        $rec = null;
+        if (!empty($opt['repeat'])) {
+            $day = strtolower(date('l', $start));
+            $rec = ['pattern' => match ($opt['repeat']) {
+                'daily' => ['type' => 'daily', 'interval' => 1],
+                'weekdays' => ['type' => 'weekly', 'interval' => 1, 'daysOfWeek' => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'], 'firstDayOfWeek' => 'monday'],
+                'weekly' => ['type' => 'weekly', 'interval' => 1, 'daysOfWeek' => [$day], 'firstDayOfWeek' => 'monday'],
+                'monthly' => ['type' => 'absoluteMonthly', 'interval' => 1, 'dayOfMonth' => (int)date('j', $start)],
+            }, 'range' => ($opt['until'] ?? '') !== '' ? ['type' => 'endDate', 'startDate' => date('Y-m-d', $start), 'endDate' => $opt['until']]
+                : ['type' => 'noEnd', 'startDate' => date('Y-m-d', $start)]];
+        }
+        $ev = $this->api('POST', '/me/events', array_filter(['subject' => $title, 'start' => $this->when($start, $allDay), 'end' => $this->when($end, $allDay), 'isAllDay' => $allDay,
+            'location' => $location !== '' ? ['displayName' => $location] : null, 'body' => $description !== '' ? ['contentType' => 'text', 'content' => $description] : null,
+            'recurrence' => $rec, 'attendees' => array_map(fn($a) => ['emailAddress' => ['address' => $a], 'type' => 'required'], $opt['attendees'] ?? []) ?: null], fn($v) => $v !== null));
+        if (!empty($opt['skip']) && !empty($ev['id'])) {
+            // Graph makes a series without exceptions: the occurrences on the days left out are deleted (the guests get a cancellation for those days only)
+            $skip = array_flip($opt['skip']);
+            $next = '/me/events/' . rawurlencode($ev['id']) . '/instances';
+            $query = ['startDateTime' => gmdate('Y-m-d\TH:i:s\Z', strtotime(min($opt['skip']))), 'endDateTime' => gmdate('Y-m-d\TH:i:s\Z', strtotime(max($opt['skip']) . ' +1 day')),
+                '$select' => 'id,start', '$top' => 250];
+            for ($i = 0; $next && $i < 10; $i++) {
+                $d = $this->api('GET', $next, null, $query);
+                foreach ($d['value'] ?? [] as $o) {
+                    $at = $allDay ? substr((string)($o['start']['dateTime'] ?? ''), 0, 10) : date('Y-m-d', strtotime(substr((string)($o['start']['dateTime'] ?? ''), 0, 19) . 'Z'));
+                    if (isset($skip[$at])) $this->api('DELETE', '/me/events/' . rawurlencode((string)$o['id']));
+                }
+                $next = $d['@odata.nextLink'] ?? null; $query = [];
+            }
+        }
+        return $ev;
     }
 }

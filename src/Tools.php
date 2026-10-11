@@ -255,13 +255,20 @@ final class Tools
                 });
         }
         if ($app->calendar()->canWrite()) {
-            $this->register('calendar_add', "Add an event to the user's calendar (asks the user to approve first). start/end in local time 'YYYY-MM-DD HH:MM', or 'YYYY-MM-DD' for all-day. Default length 1 hour.",
-                ['title' => ['type' => 'string'], 'start' => ['type' => 'string'], 'end' => ['type' => 'string'], 'location' => ['type' => 'string'], 'description' => ['type' => 'string']],
+            $this->register('calendar_add', "Add an event or meeting to the user's calendar (asks the user to approve first: call it as soon as you know what to add, the approval is the confirmation). start/end in local time 'YYYY-MM-DD HH:MM', or 'YYYY-MM-DD' for all-day. Default length 1 hour. "
+                . "attendees: guests' email addresses (find them with contact_find; ask the user for any you lack): the calendar sends them the invitation. "
+                . "repeat (daily, weekdays, weekly, monthly) makes a recurring event from start, until: its last day (YYYY-MM-DD); skip: dates (YYYY-MM-DD) left out; skip_holidays: true leaves out French public holidays. One call makes the whole series.",
+                ['title' => ['type' => 'string'], 'start' => ['type' => 'string'], 'end' => ['type' => 'string'], 'location' => ['type' => 'string'], 'description' => ['type' => 'string'],
+                    'attendees' => ['type' => 'array', 'items' => ['type' => 'string']], 'repeat' => ['type' => 'string', 'enum' => Calendar::REPEATS], 'until' => ['type' => 'string'],
+                    'skip' => ['type' => 'array', 'items' => ['type' => 'string']], 'skip_holidays' => ['type' => 'boolean']],
                 ['title', 'start'], function (array $a) {
-                    [$start, $allDay] = Calendar::parseTime($a['start']);
-                    $end = isset($a['end']) && $a['end'] !== '' ? Calendar::parseTime($a['end'])[0] + ($allDay ? 86400 : 0) : $start + ($allDay ? 86400 : 3600);
-                    return $this->app->calendar()->add($a['title'], $start, $end, $allDay, (string)($a['location'] ?? ''), (string)($a['description'] ?? ''));
-                }, fn(array $a) => "Add to calendar: \"{$a['title']}\", {$a['start']}" . (!empty($a['end']) ? " to {$a['end']}" : '') . (!empty($a['location']) ? " at {$a['location']}" : ''));
+                    [$start, $allDay, $end] = self::calendarTimes($a);
+                    return $this->app->calendar()->add($a['title'], $start, $end, $allDay, (string)($a['location'] ?? ''), (string)($a['description'] ?? ''), Calendar::options($a, $start));
+                }, function (array $a) {
+                    [$start] = self::calendarTimes($a);
+                    return "Add to calendar: \"{$a['title']}\", {$a['start']}" . (!empty($a['end']) ? " to {$a['end']}" : '') . (!empty($a['location']) ? " at {$a['location']}" : '')
+                        . Calendar::describe(Calendar::options($a, $start));
+                });
         }
         if ($app->mailbox()->enabled()) {
             $this->register('mail_list', "List emails in the user's own mailbox (newest first, nothing is marked read). query: words to search; unread: only unread; days: how far back (default 7).",
@@ -669,5 +676,13 @@ final class Tools
         $text = str_contains($type, 'html') ? Http::htmlToText($body) : $body;
         if (!mb_check_encoding($text, 'UTF-8')) $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8, ISO-8859-1');
         return "HTTP $code $final\n\n" . mb_substr($text, 0, 15000);
+    }
+
+    /** calendar_add: [start, all day, end] from its arguments. */
+    private static function calendarTimes(array $a): array
+    {
+        [$start, $allDay] = Calendar::parseTime((string)$a['start']);
+        $end = isset($a['end']) && $a['end'] !== '' ? Calendar::parseTime((string)$a['end'])[0] + ($allDay ? 86400 : 0) : $start + ($allDay ? 86400 : 3600);
+        return [$start, $allDay, $end];
     }
 }

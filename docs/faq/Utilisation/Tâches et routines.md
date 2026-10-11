@@ -3,7 +3,8 @@
 ## Tâches (un tableau par espace)
 - Colonnes Idées / À faire / En cours / Bloqué / Fait ; codes par espace (MAI-12), priorité P1 à P5,
   dates de début et d'échéance, charge, temps passé, étiquettes, description, dépendances (même entre espaces).
-- Vue **calendrier** ; une tâche peut apparaître dans Google Agenda ou via un lien iCal privé.
+- Vue **calendrier** ; une tâche peut apparaître dans Google Agenda, Outlook ou via un lien iCal privé,
+  avec ses heures si elle en a (voir « Agenda et réunions »).
 - La veille d'une échéance, une notification liste ce qui est dû demain.
 - Corbeille de 30 jours, historique de chaque modification, annulable.
 - Un e-mail devient une tâche en un clic ; les actions d'une réunion aussi.
