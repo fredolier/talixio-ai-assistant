@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.21.2 (2026-10-11)
+- Network drive (WebDAV) on Windows: Windows could not map `https://…/<id>/dav/` on a multi-user server
+  because it first probes the folders above (`/` and `/<id>`), which answered "not found" or redirected.
+  Caddy now answers those probes like a WebDAV server, `/<id>` reaches the assistant without a redirect for
+  WebDAV requests, and the assistant answers OPTIONS before sign-in. Run the update so Caddy picks up the
+  new configuration. In Settings, a new attempt to create a drive password hides the previous one, so an
+  "incorrect password" message is no longer shown next to an old drive password.
+
 ## 0.21.1 (2026-10-11)
 - Admin page (multi-user server): an update cut short, e.g. because `install-stack.sh` was run from the
   command line while it was building and replaced the agent, no longer stays "in progress" forever and blocks

@@ -554,13 +554,19 @@ final class Fleet
     // ---------- Caddy ----------
 
     /** The whole Caddy configuration, from the instances and settings. */
+    /** A WebDAV answer for the server's root: an empty folder (what's inside is each assistant's, with its own password). */
+    public const DAV_ROOT = '<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:"><d:response><d:href>/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>';
+
     public function caddyfile(?array $s = null): string
     {
         $s ??= $this->state(); $set = $s['settings']; $dom = $set['domain'];
         $ids = array_keys($s['instances']); sort($ids);
         $common = "\tencode zstd gzip\n\theader {\n\t\t-Server\n\t\tStrict-Transport-Security \"max-age=31536000\"\n\t\tX-Content-Type-Options nosniff\n\t\tReferrer-Policy same-origin\n\t}\n";
         $admin = "\tredir /admin /admin/\n\thandle_path /admin/* {\n\t\treverse_proxy talixio-admin:8080\n\t}\n";
-        $home = "\thandle {\n\t\theader Content-Type \"text/html; charset=utf-8\"\n\t\trespond \"<!doctype html><meta name=viewport content='width=device-width'><title>Talixio</title><p style='font:16px system-ui;margin:3em auto;max-width:30em'>Talixio. Open the address you were given.</p>\" 404\n\t}\n";
+        // Windows' drive client (WebDAV) asks the server's root before an assistant's /<id>/dav/: a 404 there and it gives up
+        $davRoot = "\t@davopt {\n\t\tmethod OPTIONS\n\t\tpath /\n\t}\n\thandle @davopt {\n\t\theader DAV \"1, 2\"\n\t\theader MS-Author-Via DAV\n\t\theader Allow \"OPTIONS, GET, HEAD\"\n\t\trespond 200\n\t}\n"
+            . "\t@davfind {\n\t\tmethod PROPFIND\n\t\tpath /\n\t}\n\thandle @davfind {\n\t\theader Content-Type \"application/xml; charset=utf-8\"\n\t\trespond `" . self::DAV_ROOT . "` 207\n\t}\n";
+        $home = $davRoot . "\thandle {\n\t\theader Content-Type \"text/html; charset=utf-8\"\n\t\trespond \"<!doctype html><meta name=viewport content='width=device-width'><title>Talixio</title><p style='font:16px system-ui;margin:3em auto;max-width:30em'>Talixio. Open the address you were given.</p>\" 404\n\t}\n";
         $proxied = self::behindProxy();
         $out = "# managed by the Talixio agent: changes here are overwritten\n{\n" . ($proxied
                 // another proxy in front does HTTPS: plain HTTP here, and the visitor's address from its headers
@@ -568,7 +574,8 @@ final class Fleet
                 : "\temail " . (getenv('ACME_EMAIL') ?: 'admin@' . $dom) . "\n" . ($set['mode'] === 'subdomain' ? "\ton_demand_tls {\n\t\task http://talixio-agent:8090/ask\n\t}\n" : '')) . "}\n\n";
         $site = ($proxied ? ':80' : ($dom === 'localhost' ? 'http://localhost' : $dom)) . " {\n$common$admin";
         if ($set['mode'] === 'path') {
-            foreach ($ids as $id) $site .= "\tredir /$id /$id/\n\thandle_path /$id/* {\n\t\treverse_proxy {$this->containerName($id)}:8080\n\t}\n";
+            // /<id> without its slash: a browser is sent to /<id>/, a network drive (PROPFIND, OPTIONS) reaches the assistant
+            foreach ($ids as $id) $site .= "\t@$id-bare {\n\t\tpath /$id\n\t\tmethod GET HEAD\n\t}\n\tredir @$id-bare /$id/\n\t@$id path /$id /$id/*\n\thandle @$id {\n\t\turi strip_prefix /$id\n\t\treverse_proxy {$this->containerName($id)}:8080\n\t}\n";
         } elseif ($proxied) { // subdomains: the proxy in front sends *.domain here
             foreach ($ids as $id) $site .= "\t@$id host $id.$dom\n\thandle @$id {\n\t\treverse_proxy {$this->containerName($id)}:8080\n\t}\n";
         }

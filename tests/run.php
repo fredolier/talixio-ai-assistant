@@ -2035,7 +2035,9 @@ check('fleet: containers are locked down (no privileges, read-only, limits, own 
 check('fleet: the shared whisper models are mounted read-only', $hc['Mounts'][1] === ['Type' => 'volume', 'Source' => 'talixio-whisper', 'Target' => '/opt/whisper.cpp/models', 'ReadOnly' => true] && !\Talixio\Fleet::validId('whisper'));
 check('fleet: instance settings (prefix, shared Ollama through Caddy)', in_array('TALIXIO_BASE_PATH=alice', $spec['Env'], true) && in_array('TALIXIO_OLLAMA_URL=http://talixio-caddy:11434', $spec['Env'], true));
 $cf = $fl->caddyfile($fs);
-check('fleet: Caddy routes the admin page and each assistant under its path', str_contains($cf, "assistant.example.com {") && str_contains($cf, 'handle_path /admin/*') && str_contains($cf, "handle_path /alice/* {\n\t\treverse_proxy talixio-alice:8080") && !str_contains($cf, 'on_demand'));
+check('fleet: Caddy routes the admin page and each assistant under its path', str_contains($cf, "assistant.example.com {") && str_contains($cf, 'handle_path /admin/*') && str_contains($cf, "handle @alice {\n\t\turi strip_prefix /alice\n\t\treverse_proxy talixio-alice:8080") && !str_contains($cf, 'on_demand'));
+check('fleet: a network drive finds its way (root answers WebDAV, /alice without slash reaches the assistant except for browsers)', str_contains($cf, "@alice path /alice /alice/*")
+    && str_contains($cf, "@alice-bare {\n\t\tpath /alice\n\t\tmethod GET HEAD\n\t}\n\tredir @alice-bare /alice/") && str_contains($cf, "handle @davopt {\n\t\theader DAV \"1, 2\"") && str_contains($cf, 'respond `<?xml') && str_contains($cf, '` 207'));
 check('fleet: Ollama only for embeddings', str_contains($cf, '@embed path /api/embed /api/embeddings /api/tags /api/version') && str_contains($cf, 'respond 403'));
 $fs['settings']['mode'] = 'subdomain';
 $cf = $fl->caddyfile($fs);
@@ -2044,7 +2046,7 @@ check('fleet: subdomain mode, certificates on demand only for existing people', 
 putenv('TALIXIO_BEHIND_PROXY=1');
 $fs['settings']['mode'] = 'path'; $cfp = $fl->caddyfile($fs);
 check('fleet: behind another proxy: plain HTTP for any host, no certificates', str_contains($cfp, 'auto_https off') && str_contains($cfp, "\n:80 {") && str_contains($cfp, 'trusted_proxies static private_ranges')
-    && str_contains($cfp, 'handle_path /alice/*') && !str_contains($cfp, 'email '));
+    && str_contains($cfp, '@alice path /alice /alice/*') && !str_contains($cfp, 'email '));
 $fs['settings']['mode'] = 'subdomain'; $cfp = $fl->caddyfile($fs);
 check('fleet: behind another proxy, subdomains are routed by host', str_contains($cfp, '@alice host alice.assistant.example.com') && !str_contains($cfp, 'on_demand'));
 putenv('TALIXIO_BEHIND_PROXY');

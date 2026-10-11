@@ -10,6 +10,7 @@ final class Web
     public function handle(string $method, string $path): void
     {
         if ($path === '/sw.js') { $this->serviceWorker(); return; }
+        if ($method === 'PROPFIND' && $path === '/') { http_response_code(207); header('Content-Type: application/xml; charset=utf-8'); echo str_replace('<d:href>/</d:href>', '<d:href>' . htmlspecialchars(Config::basePath() . '/', ENT_XML1) . '</d:href>', Fleet::DAV_ROOT); return; } // Windows looks at the folder above /dav/ too
         if ($method === 'OPTIONS' && $path === '/') { header('DAV: 1, 2'); header('MS-Author-Via: DAV'); header('Allow: OPTIONS, GET, HEAD, POST'); header('Content-Length: 0'); return; } // Windows asks the root before /dav/
         if ($path === '/dav' || str_starts_with($path, '/dav/')) { (new Dav($this->app))->handle($method, substr($path, 4)); return; } // the library as a network drive: its own password, no session
         if ($path === '/share' && $method === 'POST') { $this->shareInbox(); return; }

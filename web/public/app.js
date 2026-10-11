@@ -2071,6 +2071,7 @@ $('#dav-mode').onchange = async () => {
 $('#dav-pw').onsubmit = async e => {
   e.preventDefault();
   try {
+    $('#dav-new').hidden = true; $('#dav-state').textContent = '';
     const d = await post('api/dav/password', { current: $('#dav-current').value });
     $('#dav-current').value = ''; $('#dav-state').textContent = '';
     $('#dav-secret').textContent = d.password; $('#dav-new').hidden = false;

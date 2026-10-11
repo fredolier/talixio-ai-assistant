@@ -64,6 +64,7 @@ final class Dav
         header('Cache-Control: private, no-cache');
         $method = strtoupper($method);
         if ($this->mode() === 'off') { $this->status404(); return; }
+        if ($method === 'OPTIONS') { $this->options(); return; } // asked before signing in (Windows): says nothing about the files
         if (!$this->signedIn()) return;
         $path = self::decode($rawPath);
         try {
