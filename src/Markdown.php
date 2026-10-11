@@ -35,7 +35,27 @@ final class Markdown
     public static function document(string $md): string
     {
         $lines = explode("\n", str_replace(["\r\n", "\r", "\t"], ["\n", "\n", '    '], $md));
-        return self::blocks($lines);
+        $front = self::frontMatter($lines);
+        return $front . self::blocks($lines);
+    }
+
+    /** A YAML header (--- key: value --- at the very top): shown as a small table of properties, not as a heading. */
+    private static function frontMatter(array &$lines): string
+    {
+        if (trim($lines[0] ?? '') !== '---') return '';
+        $end = null;
+        for ($i = 1, $n = min(count($lines), 80); $i < $n; $i++) if (in_array(rtrim($lines[$i]), ['---', '...'], true)) { $end = $i; break; }
+        if ($end === null) return '';
+        $rows = [];
+        foreach (array_slice($lines, 1, $end - 1) as $l) {
+            if (preg_match('/^([\w][\w .-]{0,40}):\s*(.*)$/u', $l, $m)) $rows[] = [$m[1], $m[2]];
+            elseif (trim($l) !== '' && $rows) $rows[count($rows) - 1][1] .= ' ' . trim($l);
+            elseif (trim($l) !== '' && !str_starts_with(ltrim($l), '#')) return ''; // not a header after all
+        }
+        if (!$rows) return '';
+        $lines = array_slice($lines, $end + 1);
+        $v = fn(string $s) => htmlspecialchars(preg_replace('/^(["\'])(.*)\1$/s', '$2', trim($s)));
+        return '<table class="front">' . implode('', array_map(fn($r) => '<tr><th>' . $v($r[0]) . '</th><td>' . $v($r[1]) . '</td></tr>', $rows)) . "</table>\n";
     }
 
     private const HR = '/^ {0,3}([-*_])( *\1){2,} *$/';

@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.23.5 (2026-10-11)
+
+- Library: "Ask about this document" now attaches the document and leaves the message box empty, with
+  "Ask about <name>…" as its hint, instead of a long cut-off line of text.
+- Markdown files that start with a YAML header (`---` type, id, title… `---`) show it as a small table of
+  properties instead of a huge bold heading.
+- Wide screens: the library uses up to 1400px, and the document reader is wider and sits beside the list
+  instead of covering it.
+
 ## 0.23.4 (2026-10-11)
 - Mail: links to a document of the library open it in the app, at its page, on the app's own address. They used
   to point to the server root (without /fred), and some models made up an address like assistant.example.com:

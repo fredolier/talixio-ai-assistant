@@ -2136,5 +2136,6 @@ window.I18N.fr = {
 "100% Europe · GDPR": "100 % Europe · RGPD",
 "Also move search by meaning and transcription from this server to the provider (a smaller server is enough)": "Faire aussi la recherche par le sens et la transcription chez le fournisseur plutôt que sur ce serveur (un serveur plus petit suffit)",
 "Also move search by meaning from this server (Ollama) to the provider (a smaller server is enough)": "Faire aussi la recherche par le sens chez le fournisseur plutôt que sur ce serveur (Ollama) — un serveur plus petit suffit",
-"Also move transcription from this server to the provider (a smaller server is enough)": "Faire aussi la transcription chez le fournisseur plutôt que sur ce serveur (un serveur plus petit suffit)"
+"Also move transcription from this server to the provider (a smaller server is enough)": "Faire aussi la transcription chez le fournisseur plutôt que sur ce serveur (un serveur plus petit suffit)",
+"Ask about {a}…": "Poser une question sur {a}…"
 };

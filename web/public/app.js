@@ -341,12 +341,19 @@ async function loadSpaces() {
   try { const d = await api('api/spaces'); state.spaces = d.spaces; state.spaceColors = d.colors; } catch { state.spaces = state.spaces.length ? state.spaces : [{ id: 0, name: 'General', slug: 'general', folder: '', color: '', unread: 0 }]; }
   renderSpaceHead();
 }
+/** The composer's hint: the attached document to ask about, or the space and its confidentiality. */
+function inputPlaceholder() {
+  const sp = spaceOf(state.space), lvl = levelOf(sp);
+  const doc = state.pending.length === 1 && state.pending[0].id ? state.pending[0].info.name : '';
+  $('#input').placeholder = doc ? t('Ask about {a}…', { a: doc }) : lvl === 'secret' ? t('Secret · nothing leaves the server')
+    : lvl === 'confidential' ? t('Confidential · only the AI model receives your messages')
+    : !sp.id ? t('Message {a}…', { a: state.status?.name || 'Talixio' }) : t('Message in {a}…', { a: sp.name });
+}
 function renderSpaceHead() {
   const sp = spaceOf(state.space), general = !sp.id;
   $('#chat-title').textContent = general ? (state.status?.name || 'Talixio') : sp.name;
   const lvl = levelOf(sp);
-  $('#input').placeholder = lvl === 'secret' ? 'Secret · nothing leaves the server' : lvl === 'confidential' ? 'Confidential · only the AI model receives your messages'
-    : general ? `Message ${state.status?.name || 'Talixio'}…` : `Message in ${sp.name}…`;
+  inputPlaceholder();
   const pb = $('#privacy-badge'); pb.className = 'privacy-badge ' + lvl;
   pb.querySelector('span').textContent = lvl === 'internal' ? '' : LEVELS[lvl].label;
   pb.title = t('Confidentiality: {level}', { level: t(LEVELS[lvl].label) }); pb.setAttribute('aria-label', pb.title);
@@ -802,6 +809,7 @@ function renderPending() {
     c.querySelector('button').onclick = () => { state.pending.splice(i, 1); renderPending(); };
     box.append(c);
   });
+  inputPlaceholder();
   saveDraft();
 }
 function uploadFile(file, name, folder) {
@@ -2781,7 +2789,7 @@ async function openFile(id, opts = {}) {
   let d;
   try { d = await api(`api/files/${id}/text`); } catch (e) { toast(e.message); return; }
   const f = lib.file = d.file;
-  v.hidden = false; $('#viewer-form').hidden = true;
+  v.hidden = false; document.body.classList.add('viewer-open'); $('#viewer-form').hidden = true;
   $('#viewer-name').textContent = f.name;
   moreActions(false);
   $('#viewer-path').textContent = `${f.folder} · ${fmtSize(f.size)} · ${fmtDate(f.created)} · #${f.id}`;
@@ -2845,7 +2853,7 @@ async function openFile(id, opts = {}) {
   });
   $('#viewer-editor')?.addEventListener('input', () => { $('#viewer-state').textContent = 'Unsaved changes'; });
 }
-function closeViewer() { $('#viewer').hidden = true; lib.file = null; }
+function closeViewer() { $('#viewer').hidden = true; lib.file = null; document.body.classList.remove('viewer-open'); }
 function viewerForm(value, onOk, folders = false) {
   const form = $('#viewer-form'), input = $('#viewer-input');
   form.hidden = false; input.value = value; folderPicker(input, folders); input.focus(); input.select();
@@ -2939,7 +2947,7 @@ function showPerson(p) {
     const body = Object.fromEntries(new FormData(e.target));
     try { const r = await post(c.id ? `api/contacts/${c.id}` : 'api/contacts', body); toast('Saved.'); loadPeople(); openPerson(r.contact.id); } catch (err) { toast(err.message); }
   };
-  box.querySelector('[data-a=ask]')?.addEventListener('click', () => { location.hash = '#chat'; $('#input').value = `About ${c.name}: `; autosize(); $('#input').focus(); });
+  box.querySelector('[data-a=ask]')?.addEventListener('click', () => { location.hash = '#chat'; $('#input').value = t('About {a}:', { a: c.name }) + ' '; setTimeout(() => { autosize(); $('#input').focus(); }, 50); });
   box.querySelector('[data-a=delete]')?.addEventListener('click', async e => {
     const b = e.currentTarget; if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Confirm delete'; return; }
     try { await post(`api/contacts/${c.id}/delete`); box.hidden = true; loadPeople(); } catch (err) { toast(err.message); }
@@ -3292,7 +3300,7 @@ $('#viewer-ask').onclick = () => {
   const f = lib.file;
   state.pending.push({ id: f.id, info: f }); renderPending();
   closeViewer(); location.hash = '#chat';
-  const i = $('#input'); if (!i.value) i.value = `About ${joinPath(f.folder, f.name)}: `; autosize(); i.focus();
+  setTimeout(() => { autosize(); $('#input').focus(); }, 50); // the document is attached: the question is enough
 };
 $('#more-btn').onclick = () => { $('#more-sheet').hidden = false; $('#more-install').hidden = $('#install-btn').hidden; };
 $('#more-sheet').onclick = e => { if (e.target === $('#more-sheet') || e.target.closest('a')) $('#more-sheet').hidden = true; };

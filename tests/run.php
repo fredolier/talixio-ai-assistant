@@ -1441,6 +1441,11 @@ check('preview: Excel as a table', str_contains($xh, '<td>Bob</td><td class="num
 check('preview: PowerPoint slides', substr_count(\Talixio\Preview::pptx($lf->get($idPptx)['path']), 'class="slide"') === 2);
 check('preview: OpenDocument headings and paragraphs', str_contains($oh = \Talixio\Preview::odf($zip(['content.xml' => '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><text:h text:outline-level="1">Bail</text:h><text:p>Loyer révisé chaque janvier</text:p></office:text></office:body></office:document-content>'])), '<h1>Bail</h1>') && str_contains($oh, '<p>Loyer révisé chaque janvier</p>'), $oh);
 check('preview: CSV as a table (separator detected)', str_contains(\Talixio\Preview::csv("a;b\n1;x\n"), '<th>a</th><th>b</th></tr><tr><td class="num">1</td><td>x</td>'));
+$md = \Talixio\Markdown::document("---\ntype: partagia\ntitre: \"Atelier 1\"\n---\n\n# Atelier\n\ntexte\n\n---\nfin");
+check('markdown: a YAML header at the top is a small table, not a big heading',
+    str_contains($md, '<table class="front"><tr><th>type</th><td>partagia</td></tr><tr><th>titre</th><td>Atelier 1</td></tr></table>')
+    && str_contains($md, '<h1>Atelier</h1>') && !str_contains($md, '<h2>') && str_contains($md, '<hr')
+    && !str_contains(\Talixio\Markdown::document("---\n\ntexte"), 'front'));
 $md = \Talixio\Markdown::document("# T\n\n| a | b |\n|---|---|\n| 1 | **2** |\n\n- [x] done\n- [ ] todo\n\n> q\n\n[x](javascript:alert(1)) <b>raw</b>");
 check('preview: Markdown tables, task lists, quotes; HTML and javascript: links neutralised', str_contains($md, '<h1>T</h1>') && str_contains($md, '<td><strong>2</strong></td>') && str_contains($md, 'checked')
     && str_contains($md, '<blockquote>') && !str_contains($md, 'javascript') && str_contains($md, '&lt;b&gt;raw&lt;/b&gt;'), $md);
