@@ -355,6 +355,16 @@ final class Tools
             if ($here() !== 0) throw new \InvalidArgumentException('Only General can put tasks in another space.');
             return (int)(($this->app->spaces()->find((string)$a['space']) ?? throw new \InvalidArgumentException("no space \"{$a['space']}\""))['id']);
         };
+        // A task is one slot: a meeting "every Monday until Christmas" is not 13/10 11:00 → 24/12 11:30 (busy for months).
+        $oneSlot = function (array $d, array $c = []) {
+            $v = fn($k) => array_key_exists($k, $d) ? ((string)$d[$k] ?: null) : ($c[$k] ?? null);
+            $from = $v('start_date') ?? $v('due_date');
+            $to = $v('due_date') ?? $from;
+            if (!$v('start_time') || !$from || strtotime($to) - strtotime($from) <= 7 * 86400) return;
+            throw new \InvalidArgumentException("A task with a time is one slot: $from {$v('start_time')} to $to would be one meeting lasting weeks. "
+                . ($this->app->calendar()->canWrite() ? 'For a recurring meeting (every Monday…), use calendar_add with repeat, until and attendees: one call makes the series.' : 'A task cannot repeat: a recurring meeting needs a connected calendar; say so to the user.')
+                . ' Or give the task no time (a period of work).');
+        };
         $fields = function (array $a) use ($spaceArg): array {
             $map = ['title' => 'title', 'description' => 'body', 'status' => 'status', 'priority' => 'priority', 'start' => 'start_date', 'due' => 'due_date', 'start_time' => 'start_time', 'end_time' => 'end_time',
                 'workload' => 'estimate_hours', 'tags' => 'tags', 'in_calendar' => 'in_calendar', 'guests' => 'attendees', 'place' => 'location', 'depends_on' => 'depends_on', 'add_depends_on' => 'add_depends_on', 'remove_depends_on' => 'remove_depends_on'];
@@ -393,17 +403,19 @@ final class Tools
                 if ($here() !== 0 && $c['space'] !== $here()) return $bd()->line($bd()->brief($c) + ['estimate_hours' => null, 'spent_hours' => 0, 'checklist' => ['total' => 0], 'tags' => [], 'depends_on' => [], 'global_rank' => null, 'in_calendar' => 0, 'body' => ''], true) . ' (another space: details hidden)';
                 return $bd()->describeCard($c);
             });
-        $this->register('board_add', "Add a task to this space's board. Choose the priority from what the user says (default 3). Its code (e.g. MAI-12) is generated.",
-            ['title' => ['type' => 'string']] + $common, ['title'], function (array $a) use ($bd, $here, $fields, $who) {
+        $this->register('board_add', "Add a task to this space's board (one task = one slot: a recurring meeting is calendar_add with repeat). Choose the priority from what the user says (default 3). Its code (e.g. MAI-12) is generated.",
+            ['title' => ['type' => 'string']] + $common, ['title'], function (array $a) use ($bd, $here, $fields, $who, $oneSlot) {
+                $oneSlot($fields($a));
                 $c = $bd()->create($fields($a), $here(), $who());
                 return 'added ' . $bd()->line($c);
             });
         $this->register('board_update', "Change a task of this space: any field, status (move to a column), dependencies (add_depends_on / remove_depends_on), or add_note to append to its description.",
             ['code' => ['type' => 'string'], 'title' => ['type' => 'string'], 'add_note' => ['type' => 'string'],
              'add_depends_on' => ['type' => 'array', 'items' => ['type' => 'string']], 'remove_depends_on' => ['type' => 'array', 'items' => ['type' => 'string']]] + $common, ['code'],
-            function (array $a) use ($bd, $mine, $fields, $who) {
+            function (array $a) use ($bd, $mine, $fields, $who, $oneSlot) {
                 $c = $mine((string)$a['code']);
                 $d = $fields($a);
+                $oneSlot($d, $c);
                 if (!empty($a['add_note'])) $d['body'] = rtrim($d['body'] ?? $c['body']) . "\n\n" . trim((string)$a['add_note']);
                 $n = $bd()->update($c['id'], $d, $who());
                 return 'updated ' . $bd()->line($n);

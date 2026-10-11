@@ -2032,6 +2032,10 @@ $r = $ba->tools->run('board_add', ['title' => 'Changer le joint', 'priority' => 
 check('board tools: add in this space', str_contains($r, 'MAI-3 Changer le joint') && str_contains($r, 'workload 45m') && str_contains($r, 'waits for MAI-2'), $r);
 $r = $ba->tools->run('board_update', ['code' => 'MAI-3', 'status' => 'done', 'add_note' => 'Fait le 9/10']);
 check('board tools: update and note', str_contains($r, 'Done') && str_contains($bd->find('MAI-3')['body'], 'Fait le 9/10'), $r);
+$r = $ba->tools->run('board_add', ['title' => 'Réunion avec Cédric', 'start' => '2026-10-13', 'due' => '2026-12-24', 'start_time' => '11:00', 'end_time' => '11:30']);
+check('board tools: a recurring meeting is not one task spanning weeks', str_contains($r, 'one slot') && !$bd->find('MAI-4'), $r);
+$r = $ba->tools->run('board_update', ['code' => 'MAI-3', 'start' => '2026-10-13', 'due' => '2026-12-24', 'start_time' => '11:00']);
+check('board tools: ... nor once changed', str_contains($r, 'one slot') && !$bd->find('MAI-3')['start_time'], $r);
 $r = $ba->tools->run('board_delete', ['code' => 'MAI-2']);
 check('board tools: delete says who was waiting', str_contains($r, 'trash') && str_contains($r, 'MAI-1'), $r);
 check('board: who changed it is logged', str_contains($bd->recent((int)$bsp['id'])[0]['who'], 'assistant in Maison'));

@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.1 (2026-10-11)
+
+- Recurring meetings: when asked for a meeting "every Monday until Christmas", the assistant could make one
+  task running from the first Monday to Christmas (busy for weeks in your calendar). It now makes the
+  series in the calendar (with the guests and the days left out), and a task with a time can no longer
+  span more than a week when the assistant makes it.
+
 ## 0.28.0 (2026-10-11)
 
 - FAQ: one folder per language in the library, /FAQ/Français and /FAQ/English (every page now also in
