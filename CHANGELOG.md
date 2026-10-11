@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.23.3 (2026-10-11)
+- Europe only: a new option moves search by meaning (Ollama) and transcription from this server to the European
+  provider, so a smaller server is enough. Changing the search model re-indexes the library in the background.
+- European providers: the fast model is a Mistral model when the provider offers one (gpt-oss, the usual
+  alternative, tends to answer in English). The assistant is also told explicitly to answer in the language of
+  the user's last message, even when tools and documents are in English.
+
 ## 0.23.2 (2026-10-11)
 - Europe only: "Run checks" no longer reports "sovereign credentials" as failing with a European provider (the
   check did not know it; nothing was wrong). It now names the provider's key and adds an "EU · GDPR" step that says

@@ -2276,6 +2276,11 @@ function showEu(d) {
   out.innerHTML = d.outside.length
     ? `<p class="small"><b>${esc(window.t('Still outside Europe'))}</b></p><ul class="small">` + d.outside.map(o => `<li><a href="${esc(o.href)}">${esc(o.name.startsWith('Connector ') ? window.t('Connector') + ' ' + o.name.slice(10) : window.t(o.name))}</a> — <span class="muted">${esc(window.t(o.why))}</span></li>`).join('') + '</ul>'
     : (d.active ? `<p class="small ok">${esc(window.t('Nothing else leaves Europe.'))}</p>` : '');
+  const on = d.on_server || [];
+  $('#eu-light-row').hidden = !on.length;
+  $('#eu-light-text').textContent = on.length === 2 ? t('Also move search by meaning and transcription from this server to the provider (a smaller server is enough)')
+    : on[0] === 'embeddings' ? t('Also move search by meaning from this server (Ollama) to the provider (a smaller server is enough)')
+    : t('Also move transcription from this server to the provider (a smaller server is enough)');
   const st = $('#eu-stamp'), svc = d.services.find(s => s.id === d.service);
   st.hidden = !d.active;
   st.classList.toggle('partial', d.outside.length > 0);
@@ -2293,7 +2298,7 @@ function euService() {
   $('#eu-key').placeholder = window.t(saved ? 'saved (leave empty to keep it)' : s.key ? 'API key' : 'API key (optional to try it)');
 }
 $('#eu-service').onchange = euService;
-const euBody = () => ({ service: $('#eu-service').value, key: $('#eu-key').value.trim(), url: $('#eu-url').value.trim(), only: $('#eu-only').checked });
+const euBody = () => ({ service: $('#eu-service').value, key: $('#eu-key').value.trim(), url: $('#eu-url').value.trim(), only: $('#eu-only').checked, light: !$('#eu-light-row').hidden && $('#eu-light').checked });
 $('#eu-test').onclick = async () => {
   const st = $('#eu-state'); st.className = 'muted small'; st.textContent = window.t('Checking…');
   try {

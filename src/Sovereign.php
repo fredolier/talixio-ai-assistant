@@ -62,6 +62,7 @@ final class Sovereign
         $names = array_keys($sized);
         $fast = $names[0];
         foreach ($names as $n) if ($sized[$n] >= 12) { $fast = $n; break; } // the smallest that still follows instructions well
+        foreach ($names as $n) if ($sized[$n] >= 12 && $sized[$n] <= 40 && stripos($n, 'mistral') !== false) { $fast = $n; break; } // Mistral writes French and other European languages best
         $deep = end($names);
         $std = null;
         foreach ($names as $n) if (preg_match('/gpt-oss-120b/i', $n)) $std = $n; // good with tools, fast for its size

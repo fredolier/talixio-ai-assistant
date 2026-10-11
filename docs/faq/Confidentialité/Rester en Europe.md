@@ -43,6 +43,20 @@ de partir ailleurs :
 - la recherche par le sens et la transcription chez un service hors d'Europe (on garde la recherche
   par les mots, et la transcription sur ce serveur si elle est installée).
 
+## Un serveur plus petit
+Par défaut, ce qui tourne déjà sur votre serveur y reste : la recherche par le sens avec Ollama, et la
+transcription locale. Cochez **Faire aussi la recherche par le sens et la transcription chez le
+fournisseur** avant *Tout passer en Europe* : ces deux tâches partent chez le fournisseur européen
+(chez OVHcloud : bge-m3 et whisper-large-v3), et le serveur n'a plus de modèle à faire tourner.
+La bibliothèque et la mémoire sont réindexées en arrière-plan avec le nouveau modèle. En multi-utilisateur,
+décochez ensuite Ollama dans l'administration : c'est ce qui consomme le plus de mémoire.
+
+## Les clés hors d'Europe ne servent-elles vraiment à rien ?
+Avec le verrou, chaque requête vers Anthropic, OpenAI, Gemini, Voyage, Brave ou Tavily est **refusée au
+moment de partir**, même si une clé est enregistrée. La tentative est notée dans **Confidentialité →
+journal** : vous pouvez vérifier qu'elle n'a jamais lieu. Sans verrou, une clé ne sert que si un service
+est explicitement réglé sur ce fournisseur.
+
 ## Comment savoir que tout reste en Europe
 - En haut des **Réglages**, un tampon **★ 100 % Europe · RGPD** s'affiche dès que plus rien ne sort
   d'Europe (survolez-le pour voir le fournisseur et le pays). S'il reste quelque chose, il devient

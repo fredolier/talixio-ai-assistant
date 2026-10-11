@@ -2319,6 +2319,10 @@ $drEu = array_values(array_filter($dr, fn($r) => $r['status'] === 'eu' || str_st
 check('europe: the checks know the European provider and say whether everything stays in Europe', ($drKey['status'] ?? '') === 'ok' && !preg_grep('/sovereign credentials/', array_column($dr, 'text'))
     && ($drEu['status'] ?? '') === (\Talixio\Sovereign::outside($ea) ? 'fail' : 'eu') && ($drEu['status'] !== 'eu' || ($drEu['locked'] === true && str_contains($drEu['provider'], 'France'))), json_encode($dr));
 foreach ($envBefore as [$k, $v]) putenv($v === false ? $k : "$k=$v");
+$tiersEu = \Talixio\Sovereign::choose('ovhcloud', ['gpt-oss-20b', 'gpt-oss-120b', 'Mistral-Small-3.2-24B-Instruct-2506', 'Llama-3.1-8B-Instruct', 'qwen-3-5-397b', 'bge-m3']);
+check('europe: the fast model is Mistral when the provider has one (it writes French best); the answer follows the user\'s language',
+    $tiersEu === ['fast' => 'Mistral-Small-3.2-24B-Instruct-2506', 'standard' => 'gpt-oss-120b', 'deep' => 'qwen-3-5-397b']
+    && str_contains((new \Talixio\Agent($app))->systemPrompt(), "answer in the language of the user's last message"), json_encode($tiersEu));
 
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";

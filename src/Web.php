@@ -568,7 +568,8 @@ final class Web
         $c = $app->cfg;
         return ['services' => Sovereign::catalog(), 'service' => $c->sovereign, 'has_key' => $c->sovereignKey !== '',
             'url' => getenv('TALIXIO_SOVEREIGN_URL') ?: '', 'active' => $c->provider === 'sovereign', 'only' => $c->sovereignOnly,
-            'tiers' => $c->provider === 'sovereign' ? array_map(fn(Tier $t) => $t->model, $c->tiers) : [], 'outside' => Sovereign::outside($app)];
+            'tiers' => $c->provider === 'sovereign' ? array_map(fn(Tier $t) => $t->model, $c->tiers) : [], 'outside' => Sovereign::outside($app),
+            'on_server' => array_keys(array_filter(['embeddings' => $c->embeddings === 'ollama', 'transcribe' => $c->transcribe === 'local']))];
     }
 
     /** The key typed in, or the saved one when the provider has not changed. */
@@ -578,7 +579,7 @@ final class Web
         return $key === '' && (string)($b['service'] ?? '') === $this->app->cfg->sovereign ? $this->app->cfg->sovereignKey : $key;
     }
 
-    /** One click: the model, transcription, memory search and web search to Europe (what runs on this server stays). */
+    /** One click: the model, transcription, memory search and web search to Europe (what runs on this server stays, unless asked). */
     private function sovereignApply(array $b): array
     {
         $service = (string)($b['service'] ?? ''); $url = trim((string)($b['url'] ?? ''));
@@ -587,8 +588,11 @@ final class Web
         $changes = ['TALIXIO_PROVIDER' => 'sovereign', 'TALIXIO_SOVEREIGN' => $service, 'TALIXIO_SOVEREIGN_URL' => $url,
             'TALIXIO_SOVEREIGN_ONLY' => empty($b['only']) ? '0' : '1', 'TALIXIO_MODEL_FAST' => '', 'TALIXIO_MODEL' => '', 'TALIXIO_MODEL_DEEP' => ''];
         if (trim((string)($b['key'] ?? '')) !== '') $changes['TALIXIO_SOVEREIGN_KEY'] = trim((string)$b['key']);
-        if ($c->transcribe !== 'local') $changes['TALIXIO_TRANSCRIBE'] = 'auto';
-        if ($c->embeddings !== 'ollama') $changes['TALIXIO_EMBEDDINGS'] = 'auto';
+        $light = !empty($b['light']); // what runs on this server moves to the provider too: a smaller server is enough
+        if ($light && $test['transcribe']) $changes['TALIXIO_TRANSCRIBE'] = 'sovereign';
+        elseif ($c->transcribe !== 'local') $changes['TALIXIO_TRANSCRIBE'] = 'auto';
+        if ($light && $test['embed']) $changes += ['TALIXIO_EMBEDDINGS' => 'sovereign', 'TALIXIO_EMBEDDINGS_MODEL' => ''];
+        elseif ($c->embeddings !== 'ollama') $changes['TALIXIO_EMBEDDINGS'] = 'auto';
         if ($c->search !== 'searxng') $changes['TALIXIO_SEARCH'] = 'auto';
         $errors = Settings::save($c->dataDir, $changes, []);
         if ($errors) { http_response_code(422); return ['errors' => $errors, 'error' => 'Some values are not valid.']; }
