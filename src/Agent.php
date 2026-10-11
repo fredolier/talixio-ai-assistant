@@ -231,11 +231,12 @@ final class Agent
                 $reply = in_array($e->getMessage(), ['no-key', 'no-claude-code'], true) ? I18n::t($this->app, $e->getMessage() === 'no-claude-code'
                     ? 'Claude Code is not installed on this server, so your Claude plan cannot be used. Choose another model in Settings → AI model, or install it (sudo ./install.sh --with-claude-code).'
                     : 'No AI model is set up yet, so I cannot answer. In Settings → AI model: sign in with your Claude account (Pro/Max plan), or paste an API key (Claude, Gemini or OpenAI).')
+                    : ($e->getMessage() === 'sovereign-only' ? I18n::t($this->app, 'Only European providers may be used (Settings → AI model), and the current model is not one. Choose Mistral, Scaleway, OVHcloud or Infomaniak, or turn that setting off.')
                     : (in_array($e->getMessage(), ['secret', 'confidential'], true) && $privacy->modelBlocked($level) !== null
                     ? I18n::t($this->app, $level === 'secret'
                         ? 'This is a Secret space: nothing may leave the server, and the assistant runs on a service outside. The library and tasks of this space still work; to chat here, use a model on this server (Settings → AI model).'
-                        : 'This is a Confidential space: only a model under business terms (Claude API, OpenAI API, paid Gemini) may read its content, and the current one is not. Change the model in Settings → AI model, or the level of the space.')
-                    : I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()]));
+                        : 'This is a Confidential space: only a model under business terms (Claude API, OpenAI API, paid Gemini) or a European provider (Mistral, Scaleway, OVHcloud, Infomaniak) may read its content, and the current one is not. Change the model in Settings → AI model, or the level of the space.')
+                    : I18n::t($this->app, "I couldn't answer: {error}", ['error' => $e->getMessage()])));
             } catch (Abort $e) {
                 if ($e->getMessage() === 'stopped by the user') $reply = (trim($partial) !== '' ? trim($partial) . "\n\n" : '') . I18n::t($this->app, '*(stopped)*');
                 else $reply = I18n::t($this->app, "I've reached my spending limit, so I'm not calling the model right now. {budget}\nRaise TALIXIO_BUDGET_DAILY_USD / TALIXIO_BUDGET_MONTHLY_USD if needed.", ['budget' => $this->app->budget()->describe()]);

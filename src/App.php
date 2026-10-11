@@ -27,6 +27,7 @@ final class App
         $this->store = new Store($cfg->dbPath());
         if ($this->store->get('data_dir', '') !== $cfg->dataDir) $this->relocate(); // the data was moved (Docker, another server)
         if ($cfg->provider === 'gemini') GeminiModels::apply($cfg, $this->store);
+        if ($cfg->provider === 'sovereign') Sovereign::apply($cfg, $this->store);
         $this->ws = new Workspace($cfg->workspaceDir());
         $this->embeddings = new Embeddings($cfg);
         $this->tools = new Tools($this);
@@ -59,6 +60,7 @@ final class App
         return match ($c->provider) {
             'anthropic' => new AnthropicProvider($c->anthropicKey, $tier, $c->search === 'builtin' && $this->privacy()->effective() === 'internal', $c->anthropicBaseUrl), // the model's own search can't be checked here
             'openai', 'gemini' => new OpenAIProvider($c->openaiKey, $tier, $c->openaiBaseUrl),
+            'sovereign' => new OpenAIProvider($c->openaiKey, $tier, $c->openaiBaseUrl, $c->sovereign === 'mistral'), // Mistral refuses stream_options
             'claude-code' => new ClaudeCodeProvider($c->claudeBin, $tier, $c->search === 'builtin' && $this->privacy()->effective() === 'internal', dirname(__DIR__) . '/bin/talixio'),
             'echo' => new EchoProvider(),
             default => throw new \InvalidArgumentException("unknown TALIXIO_PROVIDER {$c->provider}"),

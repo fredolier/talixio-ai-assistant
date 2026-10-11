@@ -25,6 +25,7 @@ final class Meaning
                 'gemini' => $c->geminiKey === '' ? 'no-key' : null,
                 'openai' => $c->openaiKey === '' ? 'no-key' : null,
                 'voyage' => $c->voyageKey === '' ? 'no-key' : null,
+                'sovereign' => $c->sovereignReady() ? null : 'no-key',
                 default => null,
             };
             $presets[] = ['id' => $k, 'local' => $p['backend'] === 'ollama'] + $p + ['problem' => $why];
@@ -70,6 +71,8 @@ final class Meaning
         $c = $this->app->cfg;
         if (in_array($p['backend'], ['gemini', 'openai', 'voyage'], true) && ($p['backend'] === 'gemini' ? $c->geminiKey : ($p['backend'] === 'openai' ? $c->openaiKey : $c->voyageKey)) === '')
             throw new \InvalidArgumentException('Add the ' . $p['label'] . ' key first (Settings → AI model, or Web search and memory for Voyage).');
+        if ($p['backend'] === 'sovereign' && !$c->sovereignReady()) throw new \InvalidArgumentException('Set up the European provider first (Settings → AI model).');
+        if ($p['backend'] === 'sovereign') $p['model'] = Sovereign::info($c->sovereign)['embed'];
         $err = Settings::save($c->dataDir, ['TALIXIO_EMBEDDINGS' => $p['backend'], 'TALIXIO_EMBEDDINGS_MODEL' => $p['model']], ['TALIXIO_EMBEDDINGS_DIMS']);
         if ($err) throw new \RuntimeException(implode(' ', $err));
         $this->app->store->set('meaning_measure', ''); // measured with the previous one

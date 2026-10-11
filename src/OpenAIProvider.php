@@ -5,7 +5,8 @@ namespace Talixio;
 /** OpenAI, Gemini, or any OpenAI-compatible server (Ollama, vLLM, OpenRouter...) via the base URL. */
 final class OpenAIProvider implements Provider
 {
-    public function __construct(private string $key, private Tier $tier, private string $baseUrl) {}
+    /** @param bool $plainStream the server refuses stream_options (Mistral): usage still comes in the last chunk */
+    public function __construct(private string $key, private Tier $tier, private string $baseUrl, private bool $plainStream = false) {}
 
     public function complete(string $system, string $context, array $messages, Tools $tools, callable $onUsage, ?callable $onEvent = null): string
     {
@@ -44,7 +45,7 @@ final class OpenAIProvider implements Provider
     private function stream(array $payload, callable $onEvent): array
     {
         $msg = ['role' => 'assistant', 'content' => '']; $calls = []; $usage = null;
-        Http::sse("{$this->baseUrl}/chat/completions", $payload + ['stream' => true, 'stream_options' => ['include_usage' => true]],
+        Http::sse("{$this->baseUrl}/chat/completions", $payload + ['stream' => true] + ($this->plainStream ? [] : ['stream_options' => ['include_usage' => true]]),
             ['Authorization: Bearer ' . ($this->key ?: 'none')], function (string $ev, array $d) use (&$msg, &$calls, &$usage, $onEvent) {
                 if (isset($d['usage'])) $usage = $d['usage'];
                 if (isset($d['error'])) throw new \RuntimeException('API error: ' . ($d['error']['message'] ?? json_encode($d['error'])));

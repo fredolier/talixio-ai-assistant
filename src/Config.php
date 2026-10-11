@@ -12,7 +12,11 @@ final class Config
         return $p === '' || !preg_match('#^[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$#', $p) ? '' : '/' . $p;
     }
 
-    public string $provider = 'anthropic';      // anthropic | openai | claude-code | echo
+    public string $provider = 'anthropic';      // anthropic | openai | gemini | sovereign | claude-code | echo
+    public string $sovereign = 'mistral';        // the European provider (Sovereign::SERVICES)
+    public string $sovereignKey = '';
+    public string $sovereignUrl = '';
+    public bool $sovereignOnly = false;          // never send anything to an AI or search service outside Europe
     /** @var array<string,Tier> */ public array $tiers = [];
     public string $anthropicKey = '';
     public string $anthropicBaseUrl = 'https://api.anthropic.com';
@@ -140,14 +144,14 @@ final class Config
             'anthropic' => ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
             'openai' => ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1'],
             'claude-code' => ['haiku', 'sonnet', 'opus'],
-            default => ['', '', ''], // gemini: chosen from the models your key can use (GeminiModels)
+            default => ['', '', ''], // gemini, sovereign: chosen from the models your key can use (GeminiModels, Sovereign)
         };
         $std = $e('TALIXIO_MODEL', $std);
         $c->tiers = [
             'fast' => new Tier('fast', $e('TALIXIO_MODEL_FAST', $e('TALIXIO_CHEAP_MODEL', $fast)), 6),
             'standard' => new Tier('standard', $std, 12),
             'deep' => new Tier('deep', $e('TALIXIO_MODEL_DEEP', $deep), 25,
-                (int)$e('TALIXIO_DEEP_THINKING_TOKENS', '8000'), self::effort($e('TALIXIO_DEEP_REASONING_EFFORT', $c->provider === 'openai' ? '' : 'high'))),
+                (int)$e('TALIXIO_DEEP_THINKING_TOKENS', '8000'), self::effort($e('TALIXIO_DEEP_REASONING_EFFORT', in_array($c->provider, ['openai', 'sovereign'], true) ? '' : 'high'))),
         ];
         $c->anthropicKey = $e('ANTHROPIC_API_KEY');
         $c->anthropicBaseUrl = rtrim($e('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'), '/');
@@ -159,16 +163,28 @@ final class Config
             $c->openaiKey = $c->geminiKey;
             $c->openaiBaseUrl = $c->geminiBaseUrl . '/openai';
         }
+        $c->sovereign = strtolower($e('TALIXIO_SOVEREIGN', 'mistral'));
+        if (!isset(Sovereign::SERVICES[$c->sovereign])) $c->sovereign = 'mistral';
+        $c->sovereignKey = $e('TALIXIO_SOVEREIGN_KEY');
+        $c->sovereignUrl = rtrim($e('TALIXIO_SOVEREIGN_URL', Sovereign::SERVICES[$c->sovereign]['url']), '/');
+        $c->sovereignOnly = $e('TALIXIO_SOVEREIGN_ONLY', '0') === '1';
+        if ($c->provider === 'sovereign') { // a European provider through its OpenAI-compatible endpoint
+            $c->openaiKey = $c->sovereignKey;
+            $c->openaiBaseUrl = $c->sovereignUrl;
+        }
+        $euFirst = $c->sovereignReady() && ($c->provider === 'sovereign' || $c->sovereignOnly); // its key does everything
         $c->transcribe = strtolower($e('TALIXIO_TRANSCRIBE', 'auto'));
         if ($c->transcribe === 'auto') {
             $c->transcribe = match (true) {
+                $euFirst => 'sovereign',
+                $c->sovereignOnly => Transcriber::whisperReady() ? 'local' : 'off',
                 $c->geminiKey !== '' => 'gemini',
                 $c->provider === 'openai' && $c->openaiKey !== '' && str_contains($c->openaiBaseUrl, 'api.openai.com') => 'openai',
                 Transcriber::whisperReady() => 'local', // install.sh --with-whisper, or the Docker image with a model in its volume
                 default => 'off',
             };
         }
-        $c->transcribeModel = $e('TALIXIO_TRANSCRIBE_MODEL', match ($c->transcribe) { 'openai' => 'gpt-4o-transcribe', default => '' });
+        $c->transcribeModel = $e('TALIXIO_TRANSCRIBE_MODEL', match ($c->transcribe) { 'openai' => 'gpt-4o-transcribe', 'sovereign' => Sovereign::SERVICES[$c->sovereign]['transcribe'], default => '' });
         $c->meetingTier = $e('TALIXIO_MEETING_TIER', 'standard');
         $c->voiceNoteMaxSeconds = (int)$e('TALIXIO_VOICE_NOTE_MAX_SECONDS', '180');
         $c->visionIndex = $e('TALIXIO_VISION_INDEX', '1') !== '0';
@@ -209,6 +225,7 @@ final class Config
         $c->search = strtolower($e('TALIXIO_SEARCH', 'auto'));
         if ($c->search === 'auto') {
             $c->search = match (true) {
+                $c->sovereignOnly => $c->searxngUrl !== '' ? 'searxng' : 'off', // the others are outside Europe
                 $c->braveKey !== '' => 'brave',
                 $c->tavilyKey !== '' => 'tavily',
                 $c->searxngUrl !== '' => 'searxng',
@@ -229,6 +246,8 @@ final class Config
         $c->embeddings = strtolower($e('TALIXIO_EMBEDDINGS', 'auto'));
         if ($c->embeddings === 'auto') {
             $c->embeddings = match (true) {
+                $euFirst => 'sovereign',
+                $c->sovereignOnly => 'off',
                 $c->voyageKey !== '' => 'voyage',
                 $c->geminiKey !== '' => 'gemini',
                 $c->openaiKey !== '' && str_contains($c->openaiBaseUrl, 'api.openai.com') => 'openai',
@@ -236,7 +255,8 @@ final class Config
             };
         }
         $c->embeddingsModel = $e('TALIXIO_EMBEDDINGS_MODEL', match ($c->embeddings) {
-            'ollama' => 'qwen3-embedding:0.6b', 'openai' => 'text-embedding-3-small', 'voyage' => 'voyage-3.5-lite', 'gemini' => 'gemini-embedding-001', default => '',
+            'ollama' => 'qwen3-embedding:0.6b', 'openai' => 'text-embedding-3-small', 'voyage' => 'voyage-3.5-lite', 'gemini' => 'gemini-embedding-001',
+            'sovereign' => Sovereign::SERVICES[$c->sovereign]['embed'], default => '',
         });
         $c->embeddingsDims = $e('TALIXIO_EMBEDDINGS_DIMS') === '' ? -1 : (int)$e('TALIXIO_EMBEDDINGS_DIMS');
         $c->recallMinSim = (float)$e('TALIXIO_RECALL_MIN_SIMILARITY', $c->embeddings === 'ollama' && str_contains($c->embeddingsModel, 'qwen3') ? '0.45' : '0.5');
@@ -309,6 +329,7 @@ final class Config
             'echo' => null,
             'anthropic' => $this->anthropicKey === '' ? 'no-key' : null,
             'gemini' => $this->geminiKey === '' ? 'no-key' : null,
+            'sovereign' => $this->sovereignReady() ? null : 'no-key',
             'openai' => $this->openaiKey === '' && str_contains($this->openaiBaseUrl, 'api.openai.com') ? 'no-key' : null, // a local server needs none
             'claude-code' => !ClaudeLogin::installed($this) ? 'no-claude-code'
                 : ((getenv('CLAUDE_CODE_OAUTH_TOKEN') ?: '') === '' && $this->anthropicKey === '' && !is_file((getenv('HOME') ?: '') . '/.claude/.credentials.json') ? 'no-key' : null),
@@ -322,5 +343,7 @@ final class Config
     /** Models served by a local OpenAI-compatible server cost nothing. */
     public function localModels(): bool { return $this->provider === 'openai' && !str_contains($this->openaiBaseUrl, 'openai.com'); }
     /** Providers that speak the OpenAI chat completions API. */
-    public function openaiCompatible(): bool { return in_array($this->provider, ['openai', 'gemini'], true); }
+    public function openaiCompatible(): bool { return in_array($this->provider, ['openai', 'gemini', 'sovereign'], true); }
+    /** The European provider has an address and, when it needs one, a key. */
+    public function sovereignReady(): bool { return $this->sovereignUrl !== '' && ($this->sovereignKey !== '' || !Sovereign::info($this->sovereign)['key']); }
 }

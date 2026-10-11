@@ -21,7 +21,9 @@ final class Transcriber
         try {
             return match ($c->transcribe) {
                 'gemini' => Privacy::as('transcription', fn() => $this->gemini($path, $meeting)),
-                'openai' => Privacy::as('transcription', fn() => $this->openai($path)),
+                'openai' => Privacy::as('transcription', fn() => $this->openai($path, 'https://api.openai.com/v1', $c->openaiKey, $c->transcribeModel ?: 'gpt-4o-transcribe', 'OpenAI')),
+                'sovereign' => Privacy::as('transcription', fn() => $this->openai($path, $c->sovereignUrl, $c->sovereignKey,
+                    preg_match('/whisper|voxtral/i', $c->transcribeModel) ? $c->transcribeModel : Sovereign::info($c->sovereign)['transcribe'], Sovereign::info($c->sovereign)['name'])),
                 default => throw new \RuntimeException("unknown TALIXIO_TRANSCRIBE {$c->transcribe}"),
             };
         } finally {
@@ -109,18 +111,19 @@ final class Transcriber
         return $file;
     }
 
-    private function openai(string $path): string
+    /** The OpenAI audio API, also spoken by the European providers. */
+    private function openai(string $path, string $base, string $key, string $model, string $name): string
     {
-        $c = $this->app->cfg;
-        if (filesize($path) > 25_000_000) throw new \RuntimeException('recording too large for OpenAI transcription (25 MB max); use Gemini');
-        Http::check('https://api.openai.com/v1/audio/transcriptions', (int)filesize($path));
-        $ch = curl_init('https://api.openai.com/v1/audio/transcriptions');
+        if (filesize($path) > 25_000_000) throw new \RuntimeException("recording too large for $name transcription (25 MB max); use Gemini or local transcription");
+        $url = rtrim($base, '/') . '/audio/transcriptions';
+        Http::check($url, (int)filesize($path));
+        $ch = curl_init($url);
         curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 900,
-            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $c->openaiKey],
-            CURLOPT_POSTFIELDS => ['model' => $c->transcribeModel ?: 'gpt-4o-transcribe', 'file' => new \CURLFile($path)]]);
+            CURLOPT_HTTPHEADER => $key !== '' ? ['Authorization: Bearer ' . $key] : [],
+            CURLOPT_POSTFIELDS => ['model' => $model, 'file' => new \CURLFile($path)]]);
         $out = (string)curl_exec($ch); $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE); curl_close($ch);
         $text = json_decode($out, true)['text'] ?? null;
-        if ($code >= 400 || $text === null) throw new \RuntimeException("OpenAI transcription failed ($code): " . mb_substr($out, 0, 200));
+        if ($code >= 400 || $text === null) throw new \RuntimeException("$name transcription failed ($code): " . mb_substr($out, 0, 200));
         return trim($text);
     }
 

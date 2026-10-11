@@ -9,8 +9,8 @@ namespace Talixio;
  * confidentiality level of the work in progress, written to the journal (service, purpose, size: never the content)
  * and added to the trace of the current answer (shown under it in the app).
  *
- * Levels, per space: internal (as configured), confidential (only a model under business terms gets the content;
- * transcription and search by meaning stay local, the web needs an approval each time, notifications say nothing),
+ * Levels, per space: internal (as configured), confidential (only a model under business terms or a European provider
+ * gets the content; transcription and search by meaning stay local or with the European provider, the web needs an approval each time, notifications say nothing),
  * secret (nothing leaves: a model on this server only). The level of the work is the space's, raised to the
  * strictest space whose documents or conversations it read (a General question that reads a confidential folder
  * becomes confidential from then on).
@@ -20,6 +20,9 @@ final class Privacy
     public const LEVELS = ['internal', 'confidential', 'secret'];
     /** Tools that send something to the outside: an approval each time in a confidential space, never in a secret one. */
     public const OUTSIDE_TOOLS = ['web_search', 'fetch_url', 'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot'];
+
+    /** AI and search services outside Europe: refused when TALIXIO_SOVEREIGN_ONLY is on, whatever the level. */
+    public const NOT_SOVEREIGN = ['anthropic', 'openai', 'gemini', 'voyage', 'brave', 'tavily'];
 
     /** What the current request is for: model, transcription, embeddings, search, web, notify, connector, calendar, chat, music. */
     public static string $purpose = 'model';
@@ -110,10 +113,11 @@ final class Privacy
         return $out;
     }
 
-    /** Doc ids (docs table) that must not be sent to an embeddings service outside: confidential and secret content. */
+    /** Doc ids (docs table) that must not be sent to an embeddings service outside: confidential and secret content (secret only for a European provider). */
     public function noOutsideEmbedding(): array
     {
         $strict = $this->strictSpaces();
+        if ($this->app->cfg->embeddings === 'sovereign') $strict = array_values(array_filter($strict, fn($s) => $s['privacy'] === 'secret'));
         if (!$strict) return [];
         $ids = [];
         $spaceIds = array_column($strict, 'id');
@@ -190,6 +194,7 @@ final class Privacy
         $host = strtolower((string)parse_url($url, PHP_URL_HOST));
         $c = $this->app->cfg;
         if (self::isLocalHost($host)) return ['id' => 'local', 'name' => $host === parse_url($c->ollamaUrl, PHP_URL_HOST) ? 'Ollama' : 'this server', 'local' => true, 'host' => $host];
+        if ($eu = Sovereign::serviceOf($url)) return ['id' => $eu, 'name' => Sovereign::SERVICES[$eu]['name'], 'local' => false, 'host' => $host];
         foreach (self::SERVICES as $id => $s) {
             foreach ($s['hosts'] as $h) if ($host === $h || (str_starts_with($h, '.') && str_ends_with($host, $h))) return ['id' => $id, 'name' => $s['name'], 'local' => false, 'host' => $host];
         }
@@ -218,7 +223,7 @@ final class Privacy
         $c = $this->app->cfg;
         return match ($c->provider) {
             'anthropic' => $this->service($c->anthropicBaseUrl ?: 'https://api.anthropic.com')['id'],
-            'openai', 'gemini' => $this->service($c->openaiBaseUrl)['id'],
+            'openai', 'gemini', 'sovereign' => $this->service($c->openaiBaseUrl)['id'],
             'claude-code' => 'anthropic',
             default => 'local',
         };
@@ -226,7 +231,7 @@ final class Privacy
 
     /**
      * How the conversation model treats your data: local (this server), business (API under business terms, no training
-     * on your data), free (may be used to improve the provider's models), consumer (a personal subscription), unknown.
+     * on your data), sovereign (a European provider: business terms, in Europe, under European law), free (may be used to improve the provider's models), consumer (a personal subscription), unknown.
      */
     public function modelGrade(): string
     {
@@ -235,6 +240,7 @@ final class Privacy
         return match (true) {
             $c->provider === 'echo' || $svc === 'local' => 'local',
             $c->provider === 'claude-code' => 'consumer',
+            self::isSovereign($svc) => 'sovereign',
             $c->provider === 'gemini' => $c->geminiPaid ? 'business' : 'free',
             in_array($svc, ['anthropic', 'openai'], true) => 'business',
             default => 'unknown',
@@ -246,9 +252,12 @@ final class Privacy
     {
         $g = $this->modelGrade();
         if ($level === 'secret' && $g !== 'local') return 'secret';
-        if ($level === 'confidential' && !in_array($g, ['local', 'business'], true)) return 'confidential';
+        if ($level === 'confidential' && !in_array($g, ['local', 'business', 'sovereign'], true)) return 'confidential';
+        if ($this->app->cfg->sovereignOnly && in_array($this->modelService(), self::NOT_SOVEREIGN, true)) return 'sovereign-only';
         return null;
     }
+
+    public static function isSovereign(string $serviceId): bool { return isset(Sovereign::SERVICES[$serviceId]); }
 
     /** Called by Http before every request to the outside. Throws PrivacyBlocked when the level forbids it. */
     public function outbound(string $url, int $bytes): void
@@ -266,10 +275,16 @@ final class Privacy
             if ($purpose !== 'model' || $svc['name'] === 'Ollama') self::local($svc['name'] === 'Ollama' ? 'Ollama' : ucfirst($purpose));
             return;
         }
+        if ($this->app->cfg->sovereignOnly && in_array($svc['id'], self::NOT_SOVEREIGN, true)) { // no approval opens it
+            $this->log($svc['id'], $purpose, $bytes, $this->effective(), true);
+            self::blocked(self::label($svc, $purpose));
+            throw new PrivacyBlocked('blocked: only European providers may be used (Settings → AI model): ' . self::label($svc, $purpose) . ' would send data to ' . $svc['name']);
+        }
         $level = $this->effective();
         $allowed = self::$allowOnce || $purpose === 'notify' // notifications say nothing at these levels
             || $level === 'internal'
-            || ($level === 'confidential' && in_array($purpose, ['model', 'vision'], true) && $svc['id'] === $this->modelService() && $this->modelBlocked('confidential') === null);
+            || ($level === 'confidential' && in_array($purpose, ['model', 'vision'], true) && $svc['id'] === $this->modelService() && $this->modelBlocked('confidential') === null)
+            || ($level === 'confidential' && in_array($purpose, ['embeddings', 'transcription'], true) && self::isSovereign($svc['id'])); // stays in Europe, business terms
         $this->log($svc['id'], $purpose, $bytes, $level, !$allowed);
         if (!$allowed) {
             self::blocked(self::label($svc, $purpose));
@@ -336,16 +351,18 @@ final class Privacy
         $add = function (string $id, string $name, string $what, string $status, string $why, array $fix = [], string $terms = '') use (&$out) {
             $out[] = compact('id', 'name', 'what', 'status', 'why', 'fix', 'terms');
         };
-        $terms = fn(string $id) => self::SERVICES[$id]['terms'] ?? '';
         $whisper = Transcriber::whisper($c);
         $whisperReady = $whisper[0] !== '' && is_file($whisper[1]);
 
         // the model
         $g = $this->modelGrade(); $svc = $this->modelService();
-        $mname = $c->provider === 'claude-code' ? 'Claude (Pro/Max subscription)' : ($svc === 'local' ? 'Model on this server' : (self::SERVICES[$svc]['name'] ?? substr($svc, 6)));
+        $mname = $c->provider === 'claude-code' ? 'Claude (Pro/Max subscription)' : ($svc === 'local' ? 'Model on this server' : (self::SERVICES[$svc]['name'] ?? Sovereign::SERVICES[$svc]['name'] ?? substr($svc, 6)));
+        $eu = fn(string $id) => trim('European provider (' . Sovereign::SERVICES[$id]['country'] . '): business terms, processed in Europe, not subject to the US CLOUD Act. ' . Sovereign::SERVICES[$id]['note']);
+        $terms = fn(string $id) => self::SERVICES[$id]['terms'] ?? Sovereign::SERVICES[$id]['terms'] ?? '';
         $what = 'Your messages, the documents and memories it reads, images and scanned pages to describe.';
         match ($g) {
             'local' => $add('model', $mname, $what, 'local', 'Runs on this server.'),
+            'sovereign' => $add('model', $mname, $what, 'good', $eu($svc), [], $terms($svc)),
             'business' => $add('model', $mname, $what, 'good', 'Business terms: your data is not used to train models.', [], $terms($svc)),
             'free' => $add('model', $mname, $what, 'bad', 'Free tier: Google may use what you send to improve its products.', [['label' => 'My Gemini key is on a paid plan', 'set' => ['TALIXIO_GEMINI_PAID' => '1']]], $terms('gemini')),
             'consumer' => $add('model', $mname, $what, 'bad', 'Personal subscription: consumer terms, not a business contract. Use the Claude API for work data.', [['label' => 'Choose the provider', 'href' => '#settings/brain']], 'https://www.anthropic.com/legal/consumer-terms'),
@@ -358,12 +375,14 @@ final class Privacy
             $c->geminiPaid ? 'Paid plan: not used to train models.' : 'Free tier: Google may use the recordings to improve its products.',
             $whisperReady ? [['label' => 'Transcribe on this server', 'set' => ['TALIXIO_TRANSCRIBE' => 'local']]] : [['label' => 'My Gemini key is on a paid plan', 'set' => ['TALIXIO_GEMINI_PAID' => '1']]], $terms('gemini'));
         elseif ($c->transcribe === 'openai') $add('transcription', 'Transcription (OpenAI)', 'Voice notes and meeting recordings.', 'good', 'API terms: not used to train models.', [], $terms('openai'));
+        elseif ($c->transcribe === 'sovereign') $add('transcription', 'Transcription (' . Sovereign::info($c->sovereign)['name'] . ')', 'Voice notes and meeting recordings.', 'good', $eu($c->sovereign), [], $terms($c->sovereign));
 
         // search by meaning
         $e = $c->embeddings;
         if ($e === 'ollama') $add('embeddings', 'Search by meaning (Ollama)', 'Text of your memory and documents, to index them.', 'local', 'Runs on this server.');
         elseif ($e === 'gemini') $add('embeddings', 'Search by meaning (Google Gemini)', 'Text of your memory and documents, to index them.', $c->geminiPaid ? 'good' : 'bad',
             $c->geminiPaid ? 'Paid plan: not used to train models.' : 'Free tier: Google may use the text to improve its products.', [['label' => 'Use Ollama on this server', 'href' => '#settings/memory']], $terms('gemini'));
+        elseif ($e === 'sovereign') $add('embeddings', 'Search by meaning (' . Sovereign::info($c->sovereign)['name'] . ')', 'Text of your memory and documents, to index them.', 'good', $eu($c->sovereign), [], $terms($c->sovereign));
         elseif (in_array($e, ['openai', 'voyage'], true)) $add('embeddings', 'Search by meaning (' . ($e === 'openai' ? 'OpenAI' : 'Voyage AI') . ')', 'Text of your memory and documents, to index them.', 'good', 'API terms: not used to train models.', [], $terms($e));
 
         // web search
@@ -414,6 +433,10 @@ final class Privacy
         $outside = array_filter($flows, fn($f) => $f['status'] !== 'local');
         $issues = array_values(array_filter($flows, fn($f) => in_array($f['status'], ['bad', 'warn'], true) && ($f['status'] === 'bad' || $f['fix'])));
         $level = !$outside ? 'local' : (array_filter($flows, fn($f) => $f['status'] === 'bad') ? 'personal' : 'business');
+        $c = $this->app->cfg;
+        $ai = array_filter([$this->modelService(), $c->transcribe === 'sovereign' ? $c->sovereign : $c->transcribe, $c->embeddings === 'sovereign' ? $c->sovereign : $c->embeddings],
+            fn($x) => !in_array($x, ['local', 'off', 'ollama'], true));
+        $european = $level !== 'personal' && !array_filter($ai, fn($x) => !self::isSovereign($x)); // every AI service is local or European
         $auth = new Auth($this->app);
         $security = [
             ['label' => 'HTTPS', 'ok' => str_starts_with($this->app->shares()->baseUrl(), 'https://') || $this->app->shares()->baseUrl() === ''],
@@ -421,7 +444,7 @@ final class Privacy
             ['label' => 'Nightly backups', 'ok' => $this->app->cfg->backupKeep > 0],
         ];
         $spaces = array_map(fn($s) => ['id' => (int)$s['id'], 'name' => $s['id'] ? $s['name'] : 'General', 'level' => $s['privacy'] ?? 'internal', 'color' => $s['color']], $this->app->spaces()->all());
-        return ['level' => $level, 'model_grade' => $this->modelGrade(), 'flows' => $flows, 'issues' => count($issues), 'security' => $security, 'spaces' => $spaces];
+        return ['level' => $level, 'european' => $european, 'sovereign_only' => $c->sovereignOnly, 'model_grade' => $this->modelGrade(), 'flows' => $flows, 'issues' => count($issues), 'security' => $security, 'spaces' => $spaces];
     }
 
     /** The journal: requests per service, today and over $days days, and per space. */
@@ -457,7 +480,7 @@ final class Privacy
         $strict = array_filter($this->overview()['spaces'], fn($s) => $s['level'] !== 'internal');
         if ($strict) {
             $lines[] = ''; $lines[] = '## Spaces with stricter rules'; $lines[] = '';
-            foreach ($strict as $s) $lines[] = "- {$s['name']}: " . ($s['level'] === 'secret' ? 'Secret (nothing leaves the server)' : 'Confidential (only the business-terms model receives content)');
+            foreach ($strict as $s) $lines[] = "- {$s['name']}: " . ($s['level'] === 'secret' ? 'Secret (nothing leaves the server)' : 'Confidential (only a business-terms or European model receives content)');
         }
         return implode("\n", $lines) . "\n";
     }
