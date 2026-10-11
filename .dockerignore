@@ -4,3 +4,4 @@ research
 tests/fakes/*.json
 *.deb
 .env
+docs/screenshots

@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.0 (2026-10-11)
+
+- FAQ: one folder per language in the library, /FAQ/Français and /FAQ/English (every page now also in
+  English). The release notes and the reference documents are in /FAQ/English. The assistant cites the page
+  in your language. The old folders are replaced on the first start.
+- README: screenshots, and what makes Talixio European and GDPR-friendly (your server, AI from Europe only
+  with a lock, a log of every outside request, a confidentiality level per space).
+
 ## 0.27.0 (2026-10-11)
 
 - Calendar: the assistant can now create recurring meetings (every day, every weekday, every week or

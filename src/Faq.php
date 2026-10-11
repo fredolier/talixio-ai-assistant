@@ -3,9 +3,9 @@ declare(strict_types=1);
 namespace Talixio;
 
 /**
- * The notes about Talixio itself, in the library under /FAQ (read-only): the pages of docs/faq (using it,
- * privacy, installing and updating, administration), one page per version from CHANGELOG.md (/FAQ/Nouveautés)
- * and the reference documents. Brought up to date when a new version starts, indexed like any document,
+ * The notes about Talixio itself, in the library under /FAQ (read-only): the pages of docs/faq, one folder per
+ * language (/FAQ/Français, /FAQ/English: using it, privacy, installing and updating, administration), one page
+ * per version from CHANGELOG.md (/FAQ/English/What's new) and the reference documents (/FAQ/English/Reference). Brought up to date when a new version starts, indexed like any document,
  * so the assistant answers questions about itself from them (kb_search in /FAQ).
  */
 final class Faq
@@ -26,9 +26,9 @@ final class Faq
             $rel = substr($f->getPathname(), strlen("$root/docs/faq"));
             $out[] = [Library::normalize(Library::FAQ . dirname($rel)), basename($rel), (string)file_get_contents($f->getPathname())];
         }
-        foreach (self::releases((string)@file_get_contents("$root/CHANGELOG.md")) as $v => $text) $out[] = [Library::FAQ . '/Nouveautés', "Talixio $v.md", $text];
-        foreach (['README.md' => 'README - anglais.md', 'deploy/docker/README.md' => 'Docker - anglais.md'] as $src => $name) {
-            if (is_file("$root/$src")) $out[] = [Library::FAQ . '/Référence', $name, (string)file_get_contents("$root/$src")];
+        foreach (self::releases((string)@file_get_contents("$root/CHANGELOG.md")) as $v => $text) $out[] = [Library::FAQ . "/English/What's new", "Talixio $v.md", $text];
+        foreach (['README.md' => 'README.md', 'deploy/docker/README.md' => 'Docker.md'] as $src => $name) {
+            if (is_file("$root/$src")) $out[] = [Library::FAQ . '/English/Reference', $name, (string)file_get_contents("$root/$src")];
         }
         return $out;
     }

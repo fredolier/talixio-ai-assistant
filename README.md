@@ -1,9 +1,51 @@
 # Talixio AI Assistant
 
-A personal AI assistant that runs 24/7 on your own server. You chat with it from a web app (desktop
-or phone) or Telegram. It remembers you, searches the web, and can message you first: reminders,
-recurring briefings, and periodic checks. The brain is Claude (API key **or your Claude Pro/Max
-subscription** through Claude Code), OpenAI, or a local model.
+**A personal AI assistant that is European by design and GDPR-friendly: it runs on your own server, and it can
+use only AI hosted in Europe.**
+
+It runs 24/7 on your server. You chat with it from a web app (desktop or phone) or Telegram. It remembers you,
+keeps your tasks, documents and calendar, searches the web, and can message you first with reminders, briefings
+and periodic checks.
+
+![Chat: morning briefing and a recurring meeting set up after approval](docs/screenshots/chat.png)
+
+## 🇪🇺 European and GDPR-friendly
+
+- **Your data stays on your server.** The conversations, memory, library, tasks and logs are stored on a VM you
+  control (in Europe, if you pick a European host), not in someone else's cloud. Back it up, move it to another
+  server, or delete it.
+- **AI from Europe only.** Use one switch to send everything the assistant sends to an AI (conversation,
+  transcription, memory search) to one provider hosted in Europe, under the GDPR and outside the US CLOUD Act:
+  **OVHcloud** (France), **Mistral AI** (France), **Scaleway** (Paris) or **Infomaniak** (Switzerland). You pay
+  by use and have nothing to host. You can also run a local model (Ollama), so nothing leaves the server at all.
+- **Locked, not just a preference.** `TALIXIO_SOVEREIGN_ONLY=1` turns off whatever has no European option, and
+  the settings list what would still leave Europe and where to change it. The check runs where requests leave
+  the server, not in the model's good will.
+- **Every outside request is logged.** The log records the service, purpose, size and space, but never the
+  content. It can be exported as CSV, and a GDPR record of processing can be downloaded to start from.
+- **A confidentiality level per space.** *Internal*, *Confidential* (only business-terms models, approval
+  before going on the web, content-free notifications) or *Secret* (nothing leaves the server).
+- **Self-hosted, public source.** You can read what it does. You need no account with us, and it sends no telemetry.
+
+| Europe only, locked | Where your data goes |
+|---|---|
+| ![Settings: Europe only, OVHcloud, locked](docs/screenshots/settings.png) | ![Privacy page: level, spaces, and where data goes](docs/screenshots/privacy.png) |
+
+Claude, OpenAI and Gemini are still available if you choose them (API key, or your Claude Pro/Max subscription
+through Claude Code). The Privacy page then shows exactly what goes to them.
+
+## A look around
+
+| Tasks: a board per space | Calendar: tasks with times, next to your agenda |
+|---|---|
+| ![Kanban board](docs/screenshots/tasks.png) | ![Calendar view](docs/screenshots/calendar.png) |
+
+<p align="center"><img src="docs/screenshots/phone.png" width="300" alt="On the phone, dark theme"></p>
+
+It works with Google, Outlook or any CalDAV calendar, including recurring meetings with guests and public
+holidays left out. It handles mail (IMAP and SMTP), Signal and Telegram, voice notes and meeting summaries, a
+searchable library with citations, routines, and connectors (MCP). You can install it as an app on your computer
+and phone. The full list is under [What it can do](#what-it-can-do).
 
 See [docs/what-an-assistant-is-2026.md](docs/what-an-assistant-is-2026.md) for the target definition
 and roadmap.
@@ -194,10 +236,11 @@ server, which then shows the new address. What the destination held before is ke
 
 ## FAQ in the library
 
-`/FAQ` (read-only, in French) holds the notes about Talixio: using it, privacy, installing and updating,
-administration, and one page per version from this changelog (`/FAQ/Nouveautés`). Pages come from
-`docs/faq/` and are brought up to date when a new version starts; they are indexed, so the assistant
-answers questions about itself from them.
+`/FAQ` (read-only) holds the notes about Talixio, in French (`/FAQ/Français`) and English (`/FAQ/English`):
+using it, privacy, installing and updating, administration, connectors. It also has one page per version from
+the changelog (`/FAQ/English/What's new`) and this README (`/FAQ/English/Reference`). Pages come from
+`docs/faq/<language>/` and are brought up to date when a new version starts. They are indexed, so the assistant
+answers questions about itself from them, in your language.
 
 ## Privacy (what leaves the server)
 

@@ -2273,9 +2273,12 @@ $pages = Faq::pages();
 $n = $faq->sync();
 $inFaq = (int)$s->q("SELECT COUNT(*) FROM files WHERE folder = '/FAQ' OR folder LIKE '/FAQ/%'")->fetchColumn();
 check('faq: every page in /FAQ, in its subfolder', $n === count($pages) && $inFaq === count($pages)
-    && $s->q("SELECT 1 FROM files WHERE folder = '/FAQ/Administration' AND name = 'Transférer un assistant vers un autre serveur.md'")->fetchColumn(), "$n $inFaq " . count($pages));
+    && $s->q("SELECT 1 FROM files WHERE folder = '/FAQ/Français/Administration' AND name = 'Transférer un assistant vers un autre serveur.md'")->fetchColumn(), "$n $inFaq " . count($pages));
+$byLang = fn($l) => array_filter($pages, fn($p) => str_starts_with($p[0], "/FAQ/$l") && !preg_match("~^/FAQ/English/(What's new|Reference)~", $p[0]));
+check('faq: one folder per language, the same pages in each', count($byLang('Français')) === count($byLang('English')) && count($byLang('English')) >= 20
+    && !array_filter($pages, fn($p) => !preg_match('~^/FAQ/(Français|English)(/|$)~', $p[0])), count($byLang('Français')) . ' ' . count($byLang('English')));
 $ver = trim((string)file_get_contents(dirname(__DIR__) . '/VERSION'));
-check('faq: release notes, one page per version', (bool)$s->q("SELECT 1 FROM files WHERE folder = '/FAQ/Nouveautés' AND name = ?", ["Talixio $ver.md"])->fetchColumn()
+check('faq: release notes, one page per version', (bool)$s->q("SELECT 1 FROM files WHERE folder = '/FAQ/English/What''s new' AND name = ?", ["Talixio $ver.md"])->fetchColumn()
     && count(Faq::releases((string)file_get_contents(dirname(__DIR__) . '/CHANGELOG.md'))) >= 5);
 check('faq: nothing to do when the version did not change', $faq->sync() === 0);
 $hits = $app->library()->search('code de transfert', '/FAQ');
@@ -2318,21 +2321,21 @@ if (trim((string)shell_exec('command -v node')) !== '') {
     $srv = $app->mcp()->servers()['anki'];
     check('connector: reinstalling keeps a secret left empty', $srv['env']['TALIXIO_PASSWORD'] === 's3cret' && $srv['env']['TALIXIO_URL'] === 'https://anki2.example.com' && $cp->status()['state'] === 'done');
 }
-$fid = (int)$s->q("SELECT id FROM files WHERE folder = '/FAQ/Utilisation' LIMIT 1")->fetchColumn();
+$fid = (int)$s->q("SELECT id FROM files WHERE folder = '/FAQ/Français/Utilisation' LIMIT 1")->fetchColumn();
 $ro = function (callable $fn) { try { $fn(); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), 'read-only'); } };
 $tmpf = "$dir/x.txt"; file_put_contents($tmpf, 'hello');
 check('faq: read-only (no delete, rename, edit, move in or out, upload, new folder, folder move or delete)',
     $ro(fn() => $app->library()->deleteFile($fid)) && $ro(fn() => $app->library()->renameFile($fid, 'x.md')) && $ro(fn() => $app->library()->saveNote('/FAQ', '', 'x', $fid))
-    && $ro(fn() => $app->library()->moveFile($fid, '/Inbox')) && $ro(fn() => $app->files()->save($tmpf, 'x.txt', 'text/plain', '/FAQ/Utilisation'))
+    && $ro(fn() => $app->library()->moveFile($fid, '/Inbox')) && $ro(fn() => $app->files()->save($tmpf, 'x.txt', 'text/plain', '/FAQ/Français/Utilisation'))
     && $ro(fn() => $app->library()->createFolder('/FAQ/Mine')) && $ro(fn() => $app->library()->moveFolder('/FAQ', '/Docs')) && $ro(fn() => $app->library()->deleteFolder('/FAQ', true))
     && $ro(fn() => $app->library()->moveFile($app->files()->save($tmpf, 'x.txt', 'text/plain', '/Inbox'), '/FAQ')));
 check('faq: the library says which folders are read-only', $app->library()->list('/FAQ')['readonly'] === true && $app->library()->list('/Inbox')['readonly'] === false
-    && array_values(array_filter($app->library()->tree(), fn($t) => $t['path'] === '/FAQ/Utilisation'))[0]['readonly'] === true);
+    && array_values(array_filter($app->library()->tree(), fn($t) => $t['path'] === '/FAQ/Français/Utilisation'))[0]['readonly'] === true);
 Library::$system = true; file_put_contents($tmpf, 'old page'); $oldId = $app->files()->save($tmpf, 'Ancienne.md', 'text/markdown', '/FAQ/Ancien'); Library::$system = false;
 $map = json_decode($s->get('faq_files'), true); $map['/FAQ/Ancien/Ancienne.md'] = [$oldId, 'x']; $s->set('faq_files', json_encode($map)); $s->set('faq_rev', '');
 $faq->sync();
-check('faq: a page gone from the new version is removed, with its empty folder', !$app->files()->get($oldId) && !$app->library()->exists('/FAQ/Ancien') && $app->library()->exists('/FAQ/Utilisation'));
-Library::$system = true; file_put_contents($tmpf, 'copy'); $app->files()->save($tmpf, 'Lecteur réseau (WebDAV).md', 'text/markdown', '/FAQ/Utilisation'); Library::$system = false;
+check('faq: a page gone from the new version is removed, with its empty folder', !$app->files()->get($oldId) && !$app->library()->exists('/FAQ/Ancien') && $app->library()->exists('/FAQ/Français/Utilisation'));
+Library::$system = true; file_put_contents($tmpf, 'copy'); $app->files()->save($tmpf, 'Lecteur réseau (WebDAV).md', 'text/markdown', '/FAQ/Français/Utilisation'); Library::$system = false;
 $s->set('faq_files', ''); $s->set('faq_rev', ''); // a sync cut short: its list of pages lost, a copy left behind
 $faq->sync();
 [$fw, $fa] = Library::within(Library::FAQ);

@@ -28,7 +28,8 @@
   `sudo deploy/docker/install-stack.sh`. Pour couper l'accès, révoquez le jeton sur GitHub.
 
 ## Ce qui a changé
-Le dossier **/FAQ/Nouveautés** contient une page par version. La version installée est en bas du menu
+Le dossier **/FAQ/English/What's new** contient une page par version (en anglais, tirée du journal des
+modifications). La version installée est en bas du menu
 et dans Réglages → *Mises à jour*.
 
 ## L'app reste figée après une mise à jour ?
