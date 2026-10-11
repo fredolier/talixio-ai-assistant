@@ -370,6 +370,10 @@ content-free.
   `"oauth": {"client_id": "…", "client_secret": "…"}` and the redirect URI
   `<your address>/api/mcp/oauth/callback`). Their tools join the assistant's; tools not marked read-only wait for your approval
   unless the server has `"trust": "all"`. Background jobs only get the read-only ones.
+  Your own local server installs without SSH: *Install a connector…* takes the address of a public
+  GitHub repository (`https://github.com/owner/repo`, or `…/tree/main/folder`) or a `.zip` of its folder
+  from the library; Talixio unpacks it in `data/connectors/<name>`, installs its Node dependencies and
+  declares it. The assistant can do it too when you give it the address (after your approval).
 - **Approvals**: anything with outside effects (sending email as you, adding calendar events)
   waits for you: Approve/Reject buttons in the app, or reply "yes 12" / "no 12" on Signal,
   Telegram or email. Requests expire after 7 days. `TALIXIO_AUTO_APPROVE` skips the question for

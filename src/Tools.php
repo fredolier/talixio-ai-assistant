@@ -37,6 +37,7 @@ final class Tools
         'music' => [['spotify_'], '/musique|music|joue|play|chanson|song|spotify|playlist|album|artist|volume|écoute|listen/iu', 'Spotify'],
         'skills' => [['skill_'], '/compétence|skill|méthode|procédure|apprend|learn|retiens|à l\'avenir|next time|prochaine fois|toujours|always|jamais|never/iu', 'save or delete a skill (a method to reuse)'],
         'spaces' => [['spaces'], '/espace|space/iu', 'the user\'s spaces'],
+        'connectors' => [['connector_'], '/\bmcp\b|connect(eu|o)rs?|github|plugin|intégration|integration/iu', 'install a connector (MCP server) from GitHub'],
         'usage' => [['usage_'], '/coût|cost|budget|dépens|spent|spend|token|usage|consomm|factur|bill|prix|price|combien|how much/iu', 'what the assistant has spent'],
     ];
 
@@ -351,6 +352,13 @@ final class Tools
                     return 'saved ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']})";
                 });
         }
+        $this->register('connector_install_github',
+            "Install a local connector (an MCP server, Node.js or Python) from the address of its public GitHub repository, e.g. https://github.com/owner/repo or .../tree/main/folder for a server in a sub-folder. "
+            . "Asks the user to approve first. It is downloaded into /Connecteurs and, if it needs no settings, installed and started by Talixio itself; otherwise you get the link the user opens to fill them in. "
+            . "Use it when the user wants a connector from GitHub: never tell them to git clone, npm install, npm start or declare a localhost address. Only for MCP servers: an ordinary REST API is not one.",
+            ['url' => ['type' => 'string'], 'name' => ['type' => 'string', 'description' => 'short name, lowercase (optional)']], ['url'],
+            fn(array $a) => $this->connectorFromGithub($a),
+            fn(array $a) => "Install the connector from GitHub: {$a['url']}\nIts code is downloaded into /Connecteurs, its dependencies installed (npm), and it runs inside your assistant: only approve code whose origin you trust.");
         $this->app->mcp()->register($this);
         $this->registerBoard();
         $this->app->spotify()->register($this);
@@ -689,6 +697,20 @@ final class Tools
         }
         $this->app->store->q('UPDATE spaces SET notes = ? WHERE id = ?', [mb_substr(ltrim($notes), 0, 20000), $sp['id']]);
         return 'saved';
+    }
+
+    /** After approval: fetch the repository, then install it at once when it reads no settings (secrets are never typed in the chat). */
+    private function connectorFromGithub(array $a): string
+    {
+        $cp = new ConnectorPackage($this->app);
+        $i = $cp->fromGithub((string)$a['url']);
+        $file = '[' . Library::join(ConnectorPackage::FOLDER, $i['file_name']) . "](/files/{$i['file']})";
+        if (!$i['entry'] && !$i['build']) return "error: downloaded as $file, but there is no MCP server in it (no package.json with bin or main, no server.js, index.js or server.py). It may not be an MCP server: look at its README, or a sub-folder (give its /tree/<branch>/<folder> address).";
+        if ($i['env']) return "Downloaded as $file, not installed yet: it reads these settings: " . implode(', ', $i['env'])
+            . ". Give the user this link: they open it, tap \"Install as a connector\" and fill in what they need (addresses, account, keys: never ask for passwords or keys in the chat).";
+        $r = $cp->install($i['file'], trim((string)($a['name'] ?? '')) ?: $i['name'], []);
+        return "Installing the connector \"{$r['name']}\" from $file (starts with " . ($i['runtime'] === 'python' ? 'python3' : 'node') . ' ' . ($i['entry'] ?: 'its build') . ')'
+            . ($i['deps'] || $i['build'] ? ', its dependencies are being installed (about a minute)' : '') . ". Its tools are available from a following message; Settings → Connectors shows when it is ready. No restart needed.";
     }
 
     /** In "ask" mode every command waits for the user's approval first. */

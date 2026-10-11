@@ -2222,12 +2222,17 @@ $('#mcp-save').onclick = () => mcpAction('api/mcp', { raw: $('#mcp-raw').value }
 async function connectorDialog(fileId) {
   const d = $('#conn-dialog'), state = $('#conn-state');
   state.textContent = ''; $('#conn-go').disabled = false;
-  const { packages } = await api('api/connectors/packages');
-  if (!packages.length) { toast(t('Put the connector\'s folder as a .zip in the library first (e.g. in /Connecteurs).')); return; }
-  $('#conn-file').innerHTML = packages.map(p => `<option value="${p.id}">${esc(joinPath(p.folder, p.name))}</option>`).join('');
+  const fill = async () => {
+    const { packages } = await api('api/connectors/packages');
+    $('#conn-file').innerHTML = packages.length ? packages.map(p => `<option value="${p.id}">${esc(joinPath(p.folder, p.name))}</option>`).join('')
+      : `<option value="">${esc(t('None yet: give a GitHub address above, or put a .zip in /Connecteurs.'))}</option>`;
+    return packages.length;
+  };
+  const any = await fill();
   if (fileId) $('#conn-file').value = String(fileId);
   let info = null;
   const inspect = async () => {
+    if (!$('#conn-file').value) { $('#conn-info').textContent = ''; $('#conn-env').innerHTML = ''; $('#conn-go').disabled = true; return; }
     $('#conn-info').textContent = t('Reading the package…'); $('#conn-env').innerHTML = '';
     try {
       info = await api('api/connectors/inspect?file=' + $('#conn-file').value);
@@ -2242,6 +2247,20 @@ async function connectorDialog(fileId) {
     } catch (e) { $('#conn-info').textContent = e.message; $('#conn-go').disabled = true; }
   };
   $('#conn-file').onchange = inspect;
+  $('#conn-gh').value = '';
+  $('#conn-gh').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#conn-gh-go').click(); } }; // not the Install button
+  $('#conn-gh-go').onclick = async () => {
+    const url = $('#conn-gh').value.trim();
+    if (!url) { $('#conn-gh').focus(); return; }
+    $('#conn-gh-go').disabled = true; state.textContent = t('Fetching it from GitHub…');
+    try {
+      const r = await post('api/connectors/github', { url });
+      await fill(); $('#conn-file').value = String(r.file);
+      state.textContent = t('Saved in the library as {path}.', { path: joinPath('/Connecteurs', r.file_name) });
+      await inspect();
+    } catch (e) { state.textContent = e.message; }
+    $('#conn-gh-go').disabled = false;
+  };
   $('#conn-close').onclick = () => d.close();
   $('#conn-form').onsubmit = async e => {
     e.preventDefault();
@@ -2259,7 +2278,7 @@ async function connectorDialog(fileId) {
     } catch (err) { state.textContent = err.message; $('#conn-go').disabled = false; }
   };
   d.showModal();
-  await inspect();
+  if (any) await inspect(); else { $('#conn-info').textContent = ''; $('#conn-env').innerHTML = ''; $('#conn-go').disabled = true; $('#conn-gh').focus(); }
 }
 $('#conn-install').onclick = () => connectorDialog().catch(e => toast(e.message));
 $('#viewer-connector').onclick = () => connectorDialog(lib.file.id).catch(e => toast(e.message));

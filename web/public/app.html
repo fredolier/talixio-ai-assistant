@@ -335,7 +335,7 @@
             <h4>Connectors (MCP) <span id="mcp-badge" class="muted small"></span></h4>
             <div class="fields">
               <p class="muted small">Give the assistant tools from MCP servers: GitHub, Notion, your home automation, your own scripts… Local servers are started by command (Node servers need <code>install.sh --with-node</code>); remote ones by URL with a token in <code>headers</code>, or <b>Sign in</b> for services that use OAuth (Notion, Linear, Atlassian…). Tools that change something wait for your approval, unless the server has <code>"trust": "all"</code>. Saved in <code>data/mcp.json</code>.</p>
-              <div class="row wrap"><button id="conn-install" class="btn" type="button">Install from the library…</button><span class="muted small">Your own connector: put its folder as a .zip in the library (e.g. /Connecteurs), then install it here.</span></div>
+              <div class="row wrap"><button id="conn-install" class="btn" type="button">Install a connector…</button><span class="muted small">A local connector: give the address of its GitHub repository, or put its folder as a .zip in the library (e.g. /Connecteurs).</span></div>
               <div id="mcp-servers" class="mcp-servers"></div>
               <details class="adv" id="mcp-config"><summary>Configuration (JSON)</summary>
               <textarea id="mcp-raw" class="editor mono" rows="10" spellcheck="false" placeholder='{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "…"}}}}'></textarea>
@@ -526,7 +526,9 @@
   <form id="conn-form" method="dialog" class="fields">
     <h3 id="conn-title">Install a connector</h3>
     <p class="muted small">From a .zip of the connector's folder in your library. It is unpacked in your assistant, its dependencies installed, and its tools added.</p>
-    <label for="conn-file">Package</label><select id="conn-file"></select>
+    <label for="conn-gh">From a GitHub address</label>
+    <div class="row"><input id="conn-gh" type="url" placeholder="https://github.com/owner/repo" autocomplete="off"><button id="conn-gh-go" class="btn" type="button">Fetch</button></div>
+    <label for="conn-file">Or a .zip from the library</label><select id="conn-file"></select>
     <div id="conn-info" class="muted small"></div>
     <label for="conn-name">Name</label><input id="conn-name" required maxlength="40" pattern="[a-z0-9-]+" placeholder="anki">
     <div id="conn-env" class="fields"></div>

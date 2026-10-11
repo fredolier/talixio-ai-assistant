@@ -44,7 +44,7 @@ final class Agent
             . "## How you work\n"
             . "- Long-term memory: save durable facts about the user (name, family, preferences, routines, projects) to USER.md and decisions/notes to MEMORY.md. Keep them tidy: correct or remove outdated lines with memory_replace. Don't announce routine saves.\n"
             . "- Older parts of the conversation are compacted into summaries (below); everything stays searchable with search_memory. Relevant snippets may also be added automatically; use them only if they really apply.\n"
-            . "- The user's library is their personal knowledge base (documents, notes, PDFs, Office files, recordings, photos, in folders). For questions about their own documents, clients, contracts, admin papers..., search it with kb_search (optionally in one folder), read files with file_read and cite them with the link kb_search gives, e.g. [Bail Dupont p. 3](/files/12#p3): the user clicks it to open the document at that page. Keep these links exactly as given, also in emails and notifications (they are made into full addresses when sent): never add a web address in front of them. Save useful write-ups there with kb_save_note when asked. To give someone outside access to a document or folder, share_create makes a link (the user approves it). Attachments land in /Inbox; file them with kb_move when the user asks. Deleted files stay in the trash for 30 days: kb_trash lists and restores them. When the user asks where a file or folder is (\"où est…\", \"where is…\"), use kb_find for names (kb_search for what is inside) and answer with the path and the link. Questions about Talixio itself (how to use it, settings, installing, updating, administration, privacy, what a version brought): search the read-only folder /FAQ with kb_search and answer from it, citing the page (the same pages are in /FAQ/Français and /FAQ/English: cite the one in the user's language). When the user asks \"from my documents in /Folder\", search that folder (several searches if needed), answer only from what you found, cite the files, and say clearly when the documents don't contain the answer.\n"
+            . "- The user's library is their personal knowledge base (documents, notes, PDFs, Office files, recordings, photos, in folders). For questions about their own documents, clients, contracts, admin papers..., search it with kb_search (optionally in one folder), read files with file_read and cite them with the link kb_search gives, e.g. [Bail Dupont p. 3](/files/12#p3): the user clicks it to open the document at that page. Keep these links exactly as given, also in emails and notifications (they are made into full addresses when sent): never add a web address in front of them. Save useful write-ups there with kb_save_note when asked. To give someone outside access to a document or folder, share_create makes a link (the user approves it). Attachments land in /Inbox; file them with kb_move when the user asks. Deleted files stay in the trash for 30 days: kb_trash lists and restores them. When the user asks where a file or folder is (\"où est…\", \"where is…\"), use kb_find for names (kb_search for what is inside) and answer with the path and the link. Questions about Talixio itself (how to use it, settings, installing, updating, administration, privacy, what a version brought): search the read-only folder /FAQ with kb_search and answer from it, citing the page (the same pages are in /FAQ/Français and /FAQ/English: cite the one in the user's language). Never describe Talixio's settings, connectors or installation from general knowledge: read the FAQ first, and if it doesn't say, say so. Connectors (MCP): a local one is installed from a GitHub address (connector_install_github) or a .zip in the library, by Talixio itself: never tell the user to git clone, npm install, npm start, use a localhost address or restart anything; the Configuration field is strict JSON, without comments; an ordinary REST API is not an MCP server. When the user asks \"from my documents in /Folder\", search that folder (several searches if needed), answer only from what you found, cite the files, and say clearly when the documents don't contain the answer.\n"
             . "- Reminders, follow-ups and recurring reports: use schedule_task (a \"routine\") and confirm the exact time back. When the user reacts to what a routine sent (\"less of this\", \"that was useful\", \"stop telling me about X\"), record it with routine_feedback so its next runs take it into account.\n"
             . "- Tasks (to-dos): each space has a tasks board (board_list, board_add, board_update...): things to do, with a code like MAI-12, priority P1 (most urgent) to P5, dates, workload and dependencies. When the user says \"add a task\", \"I need to...\", it goes on the board, not into a routine. Keep tasks up to date when the user reports progress (status, notes, time spent). In General you can see all spaces' tasks and propose an overall order; set it only once the user agrees.\n"
             . "- Phone: the user often chats from their Android phone. To open an app, start navigation, call or text someone, use phone_action: it gives a button the user taps (you can't open apps by yourself)."
@@ -151,6 +151,21 @@ final class Agent
         $files = is_array($last['content'] ?? null) && array_filter($last['content'], fn($p) => is_array($p) && ($p['type'] ?? 'text') !== 'text');
         $files = $files || preg_match('/^\[[^\]\n]+ #\d+: /m', $text); // an attached document
         return $tools->focus($text, (bool)$files); // last: tools_more works on this copy
+    }
+
+    /**
+     * A question about connectors gets the FAQ page with it: weaker models otherwise answer from memory, with
+     * procedures that are not Talixio's (git clone, npm start, a localhost address, a restart).
+     */
+    public function faqFor(string $text): string
+    {
+        if (!preg_match('/\bmcp\b|\bconnect(eu|o)rs?\b/iu', $text)) return '';
+        $fr = I18n::lang($this->app) === 'fr' || preg_match('/\bconnecteurs?\b|\b(comment|installer|est-ce|je|tu|le|la|les|un|une)\b/iu', $text);
+        $page = dirname(__DIR__) . '/docs/faq/' . ($fr ? 'Français/Connecteurs/Installer un connecteur.md' : 'English/Connectors/Installing a connector.md');
+        $body = (string)@file_get_contents($page);
+        if ($body === '') return '';
+        return '## From the FAQ (' . Library::FAQ . '/' . ($fr ? 'Français/Connecteurs/Installer un connecteur.md' : 'English/Connectors/Installing a connector.md')
+            . "): how connectors work in Talixio. Answer from this, not from general knowledge.\n" . trim($body);
     }
 
     /** A short "yes, do it" (oui, vas-y, ok, go ahead, fais-le…). */
@@ -265,8 +280,8 @@ final class Agent
             try {
                 if (($why = $privacy->modelBlocked($level)) !== null) throw new PrivacyBlocked($why);
                 if (($why = $this->app->cfg->modelProblem()) !== null) throw new PrivacyBlocked($why); // nothing to answer with yet: say how to set it up
-                [$reply, $meta] = $this->run($channel, $tier, 'chat', $history,
-                    $recalled !== '' ? "## Possibly relevant from past conversations\n$recalled" : '', 'main', null, null, $onEvent);
+                $extra = trim(($recalled !== '' ? "## Possibly relevant from past conversations\n$recalled" : '') . "\n\n" . $this->faqFor($prompt));
+                [$reply, $meta] = $this->run($channel, $tier, 'chat', $history, $extra, 'main', null, null, $onEvent);
                 // the same answer as last time, and no tool used: the model is stuck in a loop; once, a stronger one takes over
                 $before = '';
                 foreach (array_slice($history, 0, -1) as $h) if ($h['role'] === 'assistant' && is_string($h['content'])) $before = $h['content'];
@@ -274,7 +289,7 @@ final class Agent
                 if ($up && self::sameAnswer($reply, $before) && (int)$store->q('SELECT COALESCE(MAX(id),0) FROM tool_log')->fetchColumn() === $toolsBefore) {
                     Log::warn("agent: {$meta['model']} repeated its last answer, asking the $up tier");
                     if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Asking a stronger model…']);
-                    [$reply, $meta] = $this->run($channel, $up, 'chat', $history, ($recalled !== '' ? "## Possibly relevant from past conversations\n$recalled\n\n" : '')
+                    [$reply, $meta] = $this->run($channel, $up, 'chat', $history, ($extra !== '' ? "$extra\n\n" : '')
                         . "Your last answer only restated a plan. The user wants it done: do it now with your tools (the actions needing approval ask for it themselves), or say plainly what you cannot do and why.",
                         'main', null, null, $onEvent);
                 }

@@ -7,6 +7,7 @@ namespace Talixio;
  * /Connecteurs), picks it in Settings → Connectors (or "Install as a connector" on the file), fills in what it
  * needs (URL, account...), and it is unpacked in data/connectors/<name>, its Node dependencies installed, and
  * added to the connectors. No SSH, no administrator. It runs like any connector the person could already declare.
+ * A public GitHub repository works too: its address is enough, the archive is fetched into /Connecteurs first.
  */
 final class ConnectorPackage
 {
@@ -14,7 +15,89 @@ final class ConnectorPackage
     private const MAX_FILES = 20000;
     private const SKIP_ENV = ['NODE_ENV', 'HOME', 'PATH', 'PWD', 'DEBUG', 'TERM', 'LANG', 'TZ', 'PORT', 'HOST', 'CI', 'NODE_OPTIONS', 'TMPDIR', 'USER', 'SHELL'];
 
+    public const FOLDER = '/Connecteurs';
+    private const MAX_DOWNLOAD = 40 << 20;
+    /** @var callable|null fn(string $url): string, the archive (tests run without the network) */
+    public static $fetch = null;
+
     public function __construct(private App $app) {}
+
+    /**
+     * github.com/owner/repo, with /tree/<branch>/<folder> for a server in a sub-folder, .git or git@ addresses.
+     * @return array{owner:string,repo:string,ref:string,dir:string}
+     */
+    public static function parseGithub(string $url): array
+    {
+        $u = trim($url);
+        $u = preg_replace('#^git@github\.com:#i', 'https://github.com/', $u);
+        $u = preg_replace('#^(?:https?://)?(?:www\.)?github\.com/#i', '', $u, 1, $n);
+        if (!$n || !preg_match('#^([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100}?)(?:\.git)?(?:/(?:tree|blob)/([^/?\#]+)((?:/[^/?\#]+)*))?/?(?:[?\#].*)?$#', $u, $m)) {
+            throw new \InvalidArgumentException('Give the address of a GitHub repository, like https://github.com/owner/repo.');
+        }
+        $dir = trim(rawurldecode($m[4] ?? ''), '/');
+        if (preg_match('#(^|/)\.\.?(/|$)#', $dir)) throw new \InvalidArgumentException('Give the address of a GitHub repository, like https://github.com/owner/repo.');
+        return ['owner' => $m[1], 'repo' => $m[2], 'ref' => rawurldecode($m[3] ?? '') ?: 'HEAD', 'dir' => $dir];
+    }
+
+    /** Fetches a public GitHub repository into /Connecteurs as a .zip (only the sub-folder asked for). @return array what inspect() says, with the file id */
+    public function fromGithub(string $url): array
+    {
+        $g = self::parseGithub($url);
+        if (!class_exists(\ZipArchive::class)) throw new \RuntimeException('php-zip is missing (sudo ./install.sh again).');
+        $archive = "https://github.com/{$g['owner']}/{$g['repo']}/archive/" . rawurlencode($g['ref']) . '.zip';
+        if (self::$fetch) $body = (string)(self::$fetch)($archive);
+        else {
+            [$code, $body] = Http::safeGet($archive, self::MAX_DOWNLOAD, 120);
+            if ($code === 404) throw new \InvalidArgumentException("GitHub has no public repository {$g['owner']}/{$g['repo']}" . ($g['ref'] !== 'HEAD' ? " with the branch {$g['ref']}" : '') . ' (a private one cannot be fetched: download it as a .zip and put it in the library).');
+            if ($code !== 200) throw new \RuntimeException("GitHub answered $code for $archive.");
+        }
+        $base = $this->dir(); if (!is_dir($base)) mkdir($base, 0700, true);
+        $tmp = "$base/.download-" . bin2hex(random_bytes(4)) . '.zip';
+        file_put_contents($tmp, $body); unset($body);
+        try {
+            $z = new \ZipArchive();
+            if ($z->open($tmp) !== true) throw new \RuntimeException('What GitHub sent is not a .zip archive.');
+            if ($g['dir'] !== '') $this->keepFolder($z, $tmp, $g['dir']);
+            else $z->close();
+            $name = self::slug($g['dir'] !== '' ? basename($g['dir']) : $g['repo']) . '.zip';
+            $lib = $this->app->library();
+            foreach ($this->app->store->q('SELECT id FROM files WHERE folder = ? AND name = ? AND deleted_at IS NULL', [self::FOLDER, $name])->fetchAll() as $old) {
+                $lib->deleteFile((int)$old['id']); // the previous download of the same repository (it stays in the trash)
+            }
+            $id = $this->app->files()->save($tmp, $name, 'application/zip', self::FOLDER);
+        } finally {
+            if (is_file($tmp)) unlink($tmp);
+        }
+        $src = json_decode($this->app->store->get('connector_sources', ''), true) ?: [];
+        $src[$id] = "https://github.com/{$g['owner']}/{$g['repo']}" . ($g['ref'] !== 'HEAD' || $g['dir'] !== '' ? "/tree/{$g['ref']}" . ($g['dir'] !== '' ? "/{$g['dir']}" : '') : '');
+        $this->app->store->set('connector_sources', json_encode(array_slice($src, -50, null, true), JSON_UNESCAPED_SLASHES));
+        Log::info("connector: fetched {$src[$id]} into the library (file #$id)");
+        return $this->inspect($id) + ['github' => $src[$id]];
+    }
+
+    /** Rewrites the archive with only one of its folders (GitHub puts everything under repo-branch/). */
+    private function keepFolder(\ZipArchive $z, string $path, string $dir): void
+    {
+        $keep = [];
+        for ($i = 0; $i < $z->numFiles; $i++) {
+            $n = (string)$z->getNameIndex($i);
+            $rel = preg_replace('#^[^/]+/#', '', $n); // without repo-branch/
+            if (str_starts_with($rel, "$dir/") && !str_ends_with($rel, '/')) $keep[substr($rel, strlen($dir) + 1)] = $i;
+        }
+        if (!$keep) { $z->close(); throw new \InvalidArgumentException("There is no folder \"$dir\" in this repository."); }
+        $out = new \ZipArchive(); $new = "$path.part";
+        $out->open($new, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $bytes = 0;
+        foreach ($keep as $rel => $i) {
+            $z->getExternalAttributesIndex($i, $opsys, $attr);
+            if ($opsys === \ZipArchive::OPSYS_UNIX && (($attr >> 16) & 0170000) === 0120000) continue; // no symbolic links
+            if (($bytes += (int)$z->statIndex($i)['size']) > self::MAX_BYTES) { $z->close(); $out->close(); @unlink($new); throw new \InvalidArgumentException('This folder is too big for a connector (80 MB).'); }
+            $out->addFromString($rel, (string)$z->getFromIndex($i));
+            $out->setExternalAttributesName($rel, $opsys, $attr);
+        }
+        $z->close(); $out->close();
+        rename($new, $path);
+    }
 
     public function dir(): string { return $this->app->cfg->dataDir . '/connectors'; }
 
@@ -130,8 +213,9 @@ final class ConnectorPackage
             throw $e;
         }
         $z->close();
+        $github = (json_decode($this->app->store->get('connector_sources', ''), true) ?: [])[$fileId] ?? null;
         $state = ['name' => $name, 'state' => 'running', 'step' => 'unpacked', 'ts' => time(), 'tmp' => basename($tmp), 'file' => $fileId,
-            'runtime' => $info['runtime'], 'entry' => $info['entry'], 'deps' => $info['deps'], 'build' => $info['build'], 'env' => $clean];
+            'runtime' => $info['runtime'], 'entry' => $info['entry'], 'deps' => $info['deps'], 'build' => $info['build'], 'env' => $clean] + ($github ? ['github' => $github] : []);
         $this->setState($state);
         if ($background) Background::start([PHP_BINARY, dirname(__DIR__) . '/bin/talixio', 'connector-install'], $this->app->cfg->dataDir . '/connectors/install.log');
         Log::info("connector $name: installing from library file #$fileId");
@@ -173,7 +257,7 @@ final class ConnectorPackage
             $raw = json_decode($mcp->raw(), true) ?: ['mcpServers' => []];
             // paths relative to the data folder: they still hold after a move (install.sh → Docker, a transfer)
             $raw['mcpServers'][$name] = ['command' => $s['runtime'] === 'python' ? 'python3' : 'node', 'args' => [$entry], 'cwd' => "connectors/$name"]
-                + ($s['env'] ? ['env' => $s['env']] : []) + ['source' => ['library_file' => (int)$s['file'], 'installed' => date('c')]]
+                + ($s['env'] ? ['env' => $s['env']] : []) + ['source' => ['library_file' => (int)$s['file']] + (isset($s['github']) ? ['github' => $s['github']] : []) + ['installed' => date('c')]]
                 + array_intersect_key((array)($raw['mcpServers'][$name] ?? []), ['trust' => 1]);
             $mcp->saveRaw(json_encode($raw, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
             $s['step'] = 'connecting'; $this->setState($s);

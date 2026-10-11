@@ -158,6 +158,7 @@ final class Web
             $path === '/api/meaning/measure' && $m === 'POST' => (function () { set_time_limit(0); return (new Meaning($this->app))->measure(); })(),
             $path === '/api/connectors/packages' => ['packages' => (new ConnectorPackage($this->app))->packages()],
             $path === '/api/connectors/inspect' => (new ConnectorPackage($this->app))->inspect((int)($_GET['file'] ?? 0)),
+            $path === '/api/connectors/github' && $m === 'POST' => (function () use ($b) { set_time_limit(300); return (new ConnectorPackage($this->app))->fromGithub((string)($b['url'] ?? '')); })(),
             $path === '/api/connectors/install' && $m === 'POST' => (new ConnectorPackage($this->app))->install((int)($b['file'] ?? 0), (string)($b['name'] ?? ''), (array)($b['env'] ?? [])),
             $path === '/api/connectors/install' && $m === 'GET' => (new ConnectorPackage($this->app))->status(),
             $path === '/api/mcp' && $m === 'GET' => $this->connectors(),

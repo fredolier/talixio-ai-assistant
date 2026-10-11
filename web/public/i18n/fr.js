@@ -2225,5 +2225,13 @@ window.I18N.fr = {
 "Tools sent to the model": "Outils envoyés au modèle",
 "Each tool description costs tokens at every step. Focused: only the tools a message seems to need (the model can ask for more). Automatic: focused with the European and OpenAI-compatible providers, all with Claude and Gemini (their prompt cache makes them cheap).": "Chaque description d'outil coûte des tokens à chaque étape. Ciblés : seulement les outils dont un message semble avoir besoin (le modèle peut en demander d'autres). Automatique : ciblés avec les fournisseurs européens et compatibles OpenAI, tous avec Claude et Gemini (leur cache de prompt les rend peu coûteux).",
 "Focused": "Ciblés",
-"All": "Tous"
+"All": "Tous",
+"Install a connector…": "Installer un connecteur…",
+"A local connector: give the address of its GitHub repository, or put its folder as a .zip in the library (e.g. /Connecteurs).": "Un connecteur local : donnez l'adresse de son dépôt GitHub, ou mettez son dossier en .zip dans la bibliothèque (par exemple dans /Connecteurs).",
+"From a GitHub address": "Depuis une adresse GitHub",
+"Fetch": "Récupérer",
+"Or a .zip from the library": "Ou un .zip de la bibliothèque",
+"None yet: give a GitHub address above, or put a .zip in /Connecteurs.": "Aucun pour l'instant : donnez une adresse GitHub ci-dessus, ou mettez un .zip dans /Connecteurs.",
+"Fetching it from GitHub…": "Récupération depuis GitHub…",
+"Saved in the library as {path}.": "Enregistré dans la bibliothèque : {path}."
 };

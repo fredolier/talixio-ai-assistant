@@ -91,7 +91,7 @@ final class Http
      * cannot trick the assistant into reading your router or cloud metadata), pins the resolved IP
      * against DNS rebinding, and re-checks every redirect.
      */
-    public static function safeGet(string $url, int $maxBytes = 2_000_000): array
+    public static function safeGet(string $url, int $maxBytes = 2_000_000, int $timeout = 20): array
     {
         for ($hop = 0; $hop < 5; $hop++) {
             $p = parse_url($url);
@@ -100,7 +100,7 @@ final class Http
             if (!in_array($scheme, ['http', 'https'], true) || $host === '') throw new \InvalidArgumentException('only http(s) URLs are allowed');
             $port = $p['port'] ?? ($scheme === 'https' ? 443 : 80);
             $ip = self::publicIp($host);
-            [$code, $body, $headers] = self::request('GET', $url, ['Accept: text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5'], null, 20, [
+            [$code, $body, $headers] = self::request('GET', $url, ['Accept: text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5'], null, $timeout, [
                 CURLOPT_RESOLVE => ["$host:$port:" . (str_contains($ip, ':') ? "[$ip]" : $ip)],
                 CURLOPT_FOLLOWLOCATION => false,
                 CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,

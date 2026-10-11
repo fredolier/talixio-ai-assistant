@@ -515,6 +515,8 @@ check('tools focus: tools_more adds a group', in_array('board_list', $names($foc
 $foc2 = $all->focus('Bonjour');
 $foc2->run('usage_report', []);
 check('tools focus: a hidden tool called by name runs and is then shown', in_array('usage_report', $names($foc2), true));
+check('tools focus: a connector question brings the GitHub installer, which asks for approval', in_array('connector_install_github', $names($all->focus('Installe le connecteur MCP https://github.com/acme/tasks-mcp')), true)
+    && !in_array('connector_install_github', $names($foc2), true) && $app->tools->needsApproval('connector_install_github'));
 check('job toolset cannot write memory', !in_array('memory_append', $app->tools->only('job')->names(), true));
 
 // ---- channels ----
@@ -2350,6 +2352,50 @@ if (trim((string)shell_exec('command -v node')) !== '') {
     $srv = $app->mcp()->servers()['anki'];
     check('connector: reinstalling keeps a secret left empty', $srv['env']['TALIXIO_PASSWORD'] === 's3cret' && $srv['env']['TALIXIO_URL'] === 'https://anki2.example.com' && $cp->status()['state'] === 'done');
 }
+// … or from the address of a GitHub repository (fetched into /Connecteurs, then the same installation)
+$gh = fn(string $u) => \Talixio\ConnectorPackage::parseGithub($u);
+check('connector from GitHub: addresses understood', $gh('https://github.com/acme/tasks-mcp') === ['owner' => 'acme', 'repo' => 'tasks-mcp', 'ref' => 'HEAD', 'dir' => '']
+    && $gh('github.com/acme/tasks-mcp.git') === ['owner' => 'acme', 'repo' => 'tasks-mcp', 'ref' => 'HEAD', 'dir' => '']
+    && $gh('git@github.com:acme/tasks-mcp.git')['repo'] === 'tasks-mcp'
+    && $gh('https://github.com/acme/tools/tree/main/servers/tasks/') === ['owner' => 'acme', 'repo' => 'tools', 'ref' => 'main', 'dir' => 'servers/tasks']
+    && $gh('https://www.github.com/acme/tasks-mcp?tab=readme')['repo'] === 'tasks-mcp');
+$bad = 0;
+foreach (['https://gitlab.com/acme/x', 'https://github.com/acme', 'https://github.com.evil.example/acme/x', 'https://github.com/acme/x/tree/main/../../etc', 'file:///etc/passwd'] as $u) {
+    try { $gh($u); } catch (\InvalidArgumentException) { $bad++; }
+}
+check('connector from GitHub: other addresses refused', $bad === 5, (string)$bad);
+$ghz = "$dir/gh.zip"; $zz = new \ZipArchive(); $zz->open($ghz, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+$zz->addFromString('tools-main/README.md', 'Several servers');
+$zz->addFromString('tools-main/servers/tasks/package.json', json_encode(['name' => 'tasks-mcp', 'main' => 'index.js']));
+$zz->addFromString('tools-main/servers/tasks/index.js', 'const k = process.env.TASKS_API_KEY;');
+$zz->addFromString('tools-main/servers/other/server.js', 'other');
+$zz->close();
+$asked = [];
+\Talixio\ConnectorPackage::$fetch = function (string $u) use (&$asked, $ghz) { $asked[] = $u; return file_get_contents($ghz); };
+$gi = $cp->fromGithub('https://github.com/acme/tools/tree/main/servers/tasks');
+$gf = $app->files()->get($gi['file']);
+$gz = new \ZipArchive(); $gz->open($gf['path']); $inside = []; for ($i = 0; $i < $gz->numFiles; $i++) $inside[] = $gz->getNameIndex($i); $gz->close(); sort($inside);
+check('connector from GitHub: the sub-folder fetched into /Connecteurs, read like a .zip', $asked === ['https://github.com/acme/tools/archive/main.zip'] && $gf['folder'] === '/Connecteurs' && $gf['name'] === 'tasks.zip'
+    && $inside === ['index.js', 'package.json'] && $gi['entry'] === 'index.js' && $gi['name'] === 'tasks-mcp' && $gi['env'] === ['TASKS_API_KEY'] && $gi['github'] === 'https://github.com/acme/tools/tree/main/servers/tasks', json_encode([$asked, $inside, $gi]));
+$gi2 = $cp->fromGithub('https://github.com/acme/tools/tree/main/servers/tasks');
+check('connector from GitHub: fetched again, the previous copy goes to the trash', !$app->files()->get($gi['file']) && $app->files()->get($gi2['file'])['name'] === 'tasks.zip');
+try { $cp->fromGithub('https://github.com/acme/tools/tree/main/nowhere'); $err = ''; } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
+check('connector from GitHub: a missing folder is said', str_contains($err, 'no folder "nowhere"'), $err);
+$out = $app->tools->execute('connector_install_github', ['url' => 'https://github.com/acme/tools/tree/main/servers/tasks']);
+check('connector from GitHub (assistant): settings to fill in, so not installed: the link to the file is given, no secret asked in the chat', str_contains($out, 'TASKS_API_KEY') && preg_match('#\(/files/\d+\)#', $out) && str_contains($out, 'never ask for passwords'), $out);
+$asked = [];
+$whole = $cp->fromGithub('https://github.com/acme/tools');
+check('connector from GitHub: a whole repository, its default branch', $asked === ['https://github.com/acme/tools/archive/HEAD.zip'] && $app->files()->get($whole['file'])['name'] === 'tools.zip' && $whole['entry'] === null, json_encode([$asked, $whole]));
+\Talixio\ConnectorPackage::$fetch = null;
+
+// connector questions come with the FAQ page (weaker models otherwise invent npm start, localhost, a restart)
+$ag = new \Talixio\Agent($app);
+$fq = $ag->faqFor('Comment je peux installer ce serveur MCP ?');
+check('agent: a connector question brings the FAQ page, in the user\'s language', str_contains($fq, 'Installer un connecteur.md') && str_contains($fq, 'npm start') && str_contains($fq, 'GitHub')
+    && str_contains($ag->faqFor('How do I add a connector?'), 'Installing a connector') && $ag->faqFor('Quoi de neuf ?') === '' && $ag->faqFor('connected to wifi') === '');
+try { $app->mcp()->saveRaw("{\"mcpServers\": {\n  // my server\n  \"x\": {\"url\": \"https://mcp.example.com\"}}}"); $err = ''; } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
+check('mcp: a configuration with comments is refused', $err !== '', $err);
+
 $fid = (int)$s->q("SELECT id FROM files WHERE folder = '/FAQ/Français/Utilisation' LIMIT 1")->fetchColumn();
 $ro = function (callable $fn) { try { $fn(); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), 'read-only'); } };
 $tmpf = "$dir/x.txt"; file_put_contents($tmpf, 'hello');
