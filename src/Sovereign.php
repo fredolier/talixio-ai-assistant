@@ -135,7 +135,7 @@ final class Sovereign
         if (in_array('telegram', $c->notify, true) && $c->telegramToken !== '') $out[] = ['name' => 'Telegram', 'why' => 'Telegram\'s servers can read the messages. Signal or email are better choices.', 'href' => '#settings/channels'];
         if ($app->google()->connected()) $out[] = ['name' => 'Google Calendar', 'why' => 'Your events are held by Google. A European calendar (Infomaniak, OVHcloud, Nextcloud…) can be added by its link instead.', 'href' => '#settings/accounts'];
         if ($app->spotify()->connected()) $out[] = ['name' => 'Spotify', 'why' => 'What you listen to.', 'href' => '#settings/accounts'];
-        foreach ($app->mcp()->servers() as $name => $srv) if (isset($srv['url'])) $out[] = ['name' => "Connector $name", 'why' => 'A service outside: check where it is hosted.', 'href' => '#settings/accounts'];
+        foreach ($app->mcp()->servers() as $name => $srv) if (isset($srv['url']) && !Privacy::isLocalHost((string)parse_url((string)$srv['url'], PHP_URL_HOST))) $out[] = ['name' => "Connector $name", 'why' => 'A service outside: check where it is hosted.', 'href' => '#settings/accounts'];
         return $out;
     }
 

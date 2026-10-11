@@ -2311,6 +2311,14 @@ $fenv = $fl->spec('ann', $fs)['Env'];
 try { $fl->setSettings(['eu_provider' => 'openai']); $ferr = ''; } catch (\InvalidArgumentException $e) { $ferr = $e->getMessage(); }
 check('europe: the server can give every assistant one European provider; the key never goes back to the admin page', in_array('TALIXIO_PROVIDER=sovereign', $fenv, true) && in_array('TALIXIO_SOVEREIGN=ovhcloud', $fenv, true)
     && in_array('TALIXIO_SOVEREIGN_KEY=sk-eu', $fenv, true) && in_array('TALIXIO_SOVEREIGN_ONLY=1', $fenv, true) && \Talixio\Fleet::publicSettings($fs['settings'])['eu_key'] === true && $ferr === 'Unknown European provider.', json_encode($fenv));
+$envBefore = array_map(fn($k) => [$k, getenv($k)], $euKeys = ['TALIXIO_PROVIDER', 'TALIXIO_SOVEREIGN', 'TALIXIO_SOVEREIGN_ONLY', 'TALIXIO_EMBEDDINGS', 'TALIXIO_TRANSCRIBE', 'TALIXIO_SEARCH']);
+foreach (['TALIXIO_PROVIDER=sovereign', 'TALIXIO_SOVEREIGN=ovhcloud', 'TALIXIO_SOVEREIGN_ONLY=1', 'TALIXIO_EMBEDDINGS=off', 'TALIXIO_TRANSCRIBE=off', 'TALIXIO_SEARCH=off'] as $kv) putenv($kv);
+$dr = (new \Talixio\Doctor($ea = App::fromEnv()))->run(false);
+$drKey = array_values(array_filter($dr, fn($r) => str_starts_with($r['text'], 'European provider key')))[0] ?? null;
+$drEu = array_values(array_filter($dr, fn($r) => $r['status'] === 'eu' || str_starts_with($r['text'], 'Europe only:')))[0] ?? null;
+check('europe: the checks know the European provider and say whether everything stays in Europe', ($drKey['status'] ?? '') === 'ok' && !preg_grep('/sovereign credentials/', array_column($dr, 'text'))
+    && ($drEu['status'] ?? '') === (\Talixio\Sovereign::outside($ea) ? 'fail' : 'eu') && ($drEu['status'] !== 'eu' || ($drEu['locked'] === true && str_contains($drEu['provider'], 'France'))), json_encode($dr));
+foreach ($envBefore as [$k, $v]) putenv($v === false ? $k : "$k=$v");
 
 exec('rm -rf ' . escapeshellarg($dir));
 echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";

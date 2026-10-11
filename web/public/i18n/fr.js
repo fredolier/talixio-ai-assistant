@@ -2123,5 +2123,15 @@ window.I18N.fr = {
 "The European provider's address starts with https://.": "L'adresse du fournisseur européen commence par https://.",
 "Could not reach the provider: {error}": "Impossible de joindre le fournisseur : {error}",
 "The provider refused the key (HTTP {code}).": "Le fournisseur a refusé la clé (HTTP {code}).",
-"The provider did not answer as expected (HTTP {code}).": "Le fournisseur n'a pas répondu comme prévu (HTTP {code})."
+"The provider did not answer as expected (HTTP {code}).": "Le fournisseur n'a pas répondu comme prévu (HTTP {code}).",
+"Set from the \"Europe only\" card above: everything goes to a European provider.": "Réglé depuis la carte « Europe uniquement » ci-dessus : tout passe par un fournisseur européen.",
+"Keys for providers outside Europe, not used while the European provider is on.": "Clés des fournisseurs hors d’Europe, inutilisées tant que le fournisseur européen est actif.",
+"Hide them": "Les masquer",
+"Keys for providers outside Europe are kept but not used.": "Les clés des fournisseurs hors d’Europe sont conservées mais ne servent pas.",
+"Show them": "Les afficher",
+"EU · GDPR": "UE · RGPD",
+"Everything stays in Europe: {provider}, under the GDPR.": "Tout reste en Europe : {provider}, sous le RGPD.",
+"Locked: nothing can be sent outside Europe.": "Verrouillé : rien ne peut partir hors d’Europe.",
+"Europe: {n} outside": "Europe : {n} hors UE",
+"100% Europe · GDPR": "100 % Europe · RGPD"
 };

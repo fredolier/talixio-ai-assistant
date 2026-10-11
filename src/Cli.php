@@ -103,7 +103,7 @@ final class Cli
         echo "Talixio doctor, version " . Version::get()['label'] . "\n";
         $ok = true;
         foreach ((new Doctor($app))->run() as $r) {
-            echo match ($r['status']) { 'ok' => ' ok  ', 'fail' => ' !!  ', default => '     ' }, $r['text'], "\n";
+            echo match ($r['status']) { 'ok' => ' ok  ', 'eu' => ' EU  ', 'fail' => ' !!  ', default => '     ' }, $r['text'], "\n";
             if ($r['status'] === 'fail') $ok = false;
         }
         return $ok ? 0 : 1;

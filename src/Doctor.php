@@ -26,10 +26,14 @@ final class Doctor
         foreach (['curl', 'pdo_sqlite', 'mbstring', 'openssl'] as $ext) $this->line(extension_loaded($ext), "PHP extension $ext");
         $this->line(is_writable($c->dataDir), "data folder {$c->dataDir} writable");
         $this->line((new Auth($app))->hasPassword(), 'app password set');
-        $this->line(match ($c->provider) {
-            'anthropic' => $c->anthropicKey !== '', 'openai' => $c->openaiKey !== '' || !str_contains($c->openaiBaseUrl, 'openai.com'),
-            'gemini' => $c->openaiKey !== '', 'claude-code', 'echo' => true, default => false,
-        }, "{$c->provider} credentials");
+        $eu = $c->provider === 'sovereign' ? Sovereign::SERVICES[$c->sovereign] ?? null : null;
+        $this->line($c->modelProblem() === null, $eu ? "European provider key ({$eu['name']})" : "{$c->provider} credentials");
+        if ($eu) { // the European stamp, or what still leaves Europe
+            $out = Sovereign::outside($app);
+            if ($out) $this->line(false, 'Europe only: still outside Europe: ' . implode(', ', array_column($out, 'name')));
+            else $this->out[] = ['status' => 'eu', 'text' => "Everything stays in Europe: {$eu['name']} ({$eu['country']}), under the GDPR" . ($c->sovereignOnly ? ', locked' : ''),
+                    'provider' => "{$eu['name']} ({$eu['country']})", 'locked' => $c->sovereignOnly];
+        }
         if ($c->embeddings !== 'off') {
             $this->attempt("search by meaning ({$c->embeddings}: {$c->embeddingsModel})", function () use ($app, $c) {
                 if ($c->embeddings === 'ollama') {

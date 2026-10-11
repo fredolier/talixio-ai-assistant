@@ -1857,6 +1857,32 @@ function applyShowIf() {
     const f = setFields().find(x => x.key === key);
     fe.classList.toggle('cond-off', !vals.includes(fieldValue(d)) && !f.set && !f.value && !fe.classList.contains('changed'));
   }
+  euFields();
+}
+/** With a European provider, keys for providers outside Europe are kept but out of sight (they are not used). */
+const FOREIGN = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_API_KEY', 'OPENAI_BASE_URL'];
+function euFields() {
+  const prov = setFields().find(f => f.key === 'TALIXIO_PROVIDER'), pe = document.querySelector('#view-settings .field[data-key="TALIXIO_PROVIDER"]');
+  if (!prov || !pe || !document.getElementById('set-TALIXIO_PROVIDER')) return;
+  const eu = fieldValue(prov) === 'sovereign', show = !eu || state.showForeign;
+  // Gemini also serves transcription and search: hidden only when nothing can use it
+  const gemini = eu && (state.eu?.only || !(state.eu?.outside || []).length);
+  let hidden = 0;
+  for (const key of [...FOREIGN, 'GEMINI_API_KEY', 'TALIXIO_GEMINI_PAID']) {
+    const fe = document.querySelector(`#view-settings .field[data-key="${key}"]`); if (!fe) continue;
+    const off = !show && (FOREIGN.includes(key) || gemini) && !fe.classList.contains('changed');
+    fe.classList.toggle('eu-off', off); if (off) hidden++;
+  }
+  const cl = $('#cl-row'); if (cl) { cl.hidden = eu && !state.showForeign; if (cl.hidden) hidden++; }
+  const help = pe.querySelector('.help');
+  if (help) { help.dataset.orig ??= help.textContent; help.textContent = eu ? t('Set from the "Europe only" card above: everything goes to a European provider.') : help.dataset.orig; }
+  let note = $('#eu-foreign');
+  if (!note) { note = document.createElement('p'); note.id = 'eu-foreign'; note.className = 'small muted eu-foreign'; pe.after(note); }
+  note.hidden = !eu || (!hidden && !state.showForeign);
+  note.innerHTML = state.showForeign
+    ? `${esc(t('Keys for providers outside Europe, not used while the European provider is on.'))} <button type="button" class="link">${esc(t('Hide them'))}</button>`
+    : `${esc(t('Keys for providers outside Europe are kept but not used.'))} <button type="button" class="link">${esc(t('Show them'))}</button>`;
+  note.querySelector('button').onclick = () => { state.showForeign = !state.showForeign; euFields(); };
 }
 /** Counts what differs from what is saved and shows the Save bar. */
 function setDirty() {
@@ -1895,7 +1921,7 @@ function renderGroups(groups) {
       ${adv.length ? `<details class="adv" data-id="${g.id}" ${openAdv.has(g.id) ? 'open' : ''}><summary>${esc(t('Advanced settings ({n})', { n: adv.length }))}</summary><div class="fields">${adv.map(fieldHtml).join('')}</div></details>` : ''}`;
     el.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => saveSettings([b.dataset.reset]));
     if (g.id === 'brain' && state.status?.claude_code) { // the simplest way: the Claude plan, signed in from here
-      const r = document.createElement('div'); r.className = 'row wrap';
+      const r = document.createElement('div'); r.className = 'row wrap'; r.id = 'cl-row';
       r.innerHTML = `<button class="btn" type="button">${esc(t('Sign in with Claude'))}</button><span class="muted small">${esc(t('Uses your Claude Pro or Max plan; no API key needed.'))}</span>`;
       r.querySelector('button').onclick = claudeSignIn;
       el.querySelector('.fields').prepend(r);
@@ -1984,7 +2010,9 @@ async function loadSettings() {
 $('#doctor-run').onclick = async () => {
   const b = $('#doctor-run'); b.disabled = true; b.textContent = 'Checking…';
   const ul = $('#doctor'); ul.hidden = false; ul.innerHTML = '<li class="info">Running checks (this can take a few seconds)…</li>';
-  try { const { results } = await post('api/doctor'); ul.innerHTML = results.map(r => `<li class="${r.status}">${esc(r.text)}</li>`).join(''); }
+  try { const { results } = await post('api/doctor'); ul.innerHTML = results.map(r => r.status === 'eu'
+    ? `<li class="eu"><span class="eu-seal">★ ${esc(t('EU · GDPR'))}</span><span>${esc(t('Everything stays in Europe: {provider}, under the GDPR.', { provider: r.provider }))}${r.locked ? ' ' + esc(t('Locked: nothing can be sent outside Europe.')) : ''}</span></li>`
+    : `<li class="${r.status}">${esc(r.text)}</li>`).join(''); }
   catch (e) { ul.innerHTML = `<li class="fail">${esc(e.message)}</li>`; }
   b.disabled = false; b.textContent = 'Run checks';
 };
@@ -2248,7 +2276,13 @@ function showEu(d) {
   out.innerHTML = d.outside.length
     ? `<p class="small"><b>${esc(window.t('Still outside Europe'))}</b></p><ul class="small">` + d.outside.map(o => `<li><a href="${esc(o.href)}">${esc(o.name.startsWith('Connector ') ? window.t('Connector') + ' ' + o.name.slice(10) : window.t(o.name))}</a> — <span class="muted">${esc(window.t(o.why))}</span></li>`).join('') + '</ul>'
     : (d.active ? `<p class="small ok">${esc(window.t('Nothing else leaves Europe.'))}</p>` : '');
-  euService();
+  const st = $('#eu-stamp'), svc = d.services.find(s => s.id === d.service);
+  st.hidden = !d.active;
+  st.classList.toggle('partial', d.outside.length > 0);
+  st.textContent = d.outside.length ? t('Europe: {n} outside', { n: d.outside.length }) : '★ ' + t('100% Europe · GDPR');
+  st.title = d.outside.length ? d.outside.map(o => o.name).join(', ')
+    : t('Everything stays in Europe: {provider}, under the GDPR.', { provider: svc ? `${window.t(svc.name)} (${window.t(svc.country)})` : '' }) + (d.only ? ' ' + t('Locked: nothing can be sent outside Europe.') : '');
+  euService(); euFields();
 }
 function euService() {
   const s = (state.eu?.services || []).find(x => x.id === $('#eu-service').value); if (!s) return;

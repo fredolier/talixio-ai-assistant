@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.23.2 (2026-10-11)
+- Europe only: "Run checks" no longer reports "sovereign credentials" as failing with a European provider (the
+  check did not know it; nothing was wrong). It now names the provider's key and adds an "EU · GDPR" step that says
+  everything stays in Europe, or lists what still leaves it.
+- Settings: a "100% Europe · GDPR" stamp next to "Run checks" while nothing leaves Europe (orange, with a count,
+  when something still does). With a European provider, the keys and sign-in for providers outside Europe are kept
+  but hidden, with a link to show them.
+- Connectors running on this server or the local network are no longer counted as leaving Europe.
+
 ## 0.23.1 (2026-10-11)
 - FAQ: no more copies of the same page ("Page (#12).md" over WebDAV). A sync cut short (or run twice at once) lost
   track of the pages it had made and made them all again; pages are now found again by folder and name, only one

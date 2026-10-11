@@ -43,6 +43,15 @@ de partir ailleurs :
 - la recherche par le sens et la transcription chez un service hors d'Europe (on garde la recherche
   par les mots, et la transcription sur ce serveur si elle est installée).
 
+## Comment savoir que tout reste en Europe
+- En haut des **Réglages**, un tampon **★ 100 % Europe · RGPD** s'affiche dès que plus rien ne sort
+  d'Europe (survolez-le pour voir le fournisseur et le pays). S'il reste quelque chose, il devient
+  orange et indique combien de services sortent encore.
+- **Lancer les vérifications** ajoute une étape *UE · RGPD* : elle confirme que tout reste en Europe, chez
+  quel fournisseur, et si le verrou est mis ; sinon elle signale en rouge ce qui sort encore.
+- Dans *Modèle d'IA*, les clés des fournisseurs hors d'Europe (Claude, OpenAI, Gemini) sont masquées :
+  elles restent enregistrées mais ne servent pas. *Les afficher* les fait réapparaître.
+
 ## Ce qui sort encore d'Europe
 La carte en dresse la liste, avec un lien pour changer chaque point. Les cas habituels :
 

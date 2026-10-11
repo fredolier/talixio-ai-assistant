@@ -226,6 +226,14 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .doctor li::before{content:'•';color:var(--muted);width:1em;flex:none;text-align:center}
 .doctor li.ok::before{content:'✓';color:var(--accent)} .doctor li.fail::before{content:'!';color:var(--danger);font-weight:700}
 .doctor li.fail{color:var(--danger)}
+.doctor li.eu{align-items:center;font-weight:600;padding:6px 0}
+.doctor li.eu::before{display:none}
+.eu-seal,.eu-stamp{flex:none;display:inline-flex;align-items:center;gap:4px;border:2px solid #003399;color:#003399;background:color-mix(in srgb,#003399 8%,var(--surface));border-radius:6px;padding:2px 8px;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;text-decoration:none;transform:rotate(-2deg)}
+.eu-stamp.partial{border-color:var(--warn);color:var(--warn);background:none;transform:none}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .eu-seal,:root:not([data-theme=light]) .eu-stamp:not(.partial){color:#8fb0ff;border-color:#8fb0ff}}
+:root[data-theme=dark] .eu-seal,:root[data-theme=dark] .eu-stamp:not(.partial){color:#8fb0ff;border-color:#8fb0ff}
+.field.eu-off,#cl-row[hidden],.eu-stamp[hidden]{display:none!important}
+.eu-foreign{margin:-4px 0 4px}
 .groups{display:flex;flex-direction:column;gap:10px}
 .group summary{cursor:pointer;display:flex;justify-content:space-between;gap:12px;align-items:center;list-style:none}
 .group summary::-webkit-details-marker{display:none}
