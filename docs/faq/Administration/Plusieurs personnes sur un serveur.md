@@ -17,7 +17,7 @@ Ollama, l'agent et la page d'administration, puis affiche un **code de mise en r
   réinitialiser la connexion en deux étapes, retirer (avec ou sans ses données).
 - *Depuis un autre serveur* : faire venir un assistant existant (voir *Transférer un assistant*).
 - **Mises à jour**, **Réglages** (domaine, adresses en /personne ou en sous-domaines, limites par
-  défaut, Ollama, client Google), **Sécurité** (adresses autorisées, mot de passe), **Activité** (journal).
+  défaut, Ollama, client Google, fournisseur européen commun), **Sécurité** (adresses autorisées, mot de passe), **Activité** (journal).
 
 ## Le serveur est-il bien dimensionné ?
 En haut de l'onglet Personnes, le panneau **Serveur** montre :

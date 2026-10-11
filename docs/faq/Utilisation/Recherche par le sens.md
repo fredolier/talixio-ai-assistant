@@ -10,14 +10,15 @@ chaque passage en vecteur : c'est ce calcul qu'on choisit dans **Réglages → R
 | Sur ce serveur : léger | Ollama, EmbeddingGemma | ≈ 0,7 Go | 2 fois plus léger, presque aussi bon |
 | Sur ce serveur : meilleure qualité | Ollama, Qwen3-Embedding 0.6B | ≈ 1,5 Go | le plus précis ; veut un processeur récent (AVX2) |
 | Google Gemini, OpenAI, Voyage | en ligne | rien ici | il faut la clé ; Gemini gratuit peut utiliser les textes |
+| Fournisseur européen | en ligne, en Europe | rien ici | la clé du fournisseur européen (voir *Rester en Europe*) |
 | Désactivée | — | — | recherche par les mots seulement |
 
 - **Changer de choix réindexe tout** en arrière-plan (les vecteurs dépendent du modèle). Pendant ce temps,
   la recherche par les mots reste disponible ; l'avancement s'affiche sous les choix.
 - **Mesurer sur ce serveur** donne le temps d'une recherche, d'une indexation (par passage) et de la
   comparaison avec tous les vecteurs : de quoi décider sur des chiffres.
-- Les espaces **Confidentiels et Secrets** ne sont indexés que par un modèle sur ce serveur. Avec un service
-  en ligne, on y cherche par les mots.
+- Les espaces **Secrets** ne sont indexés que par un modèle sur ce serveur, les **Confidentiels** aussi par
+  le fournisseur européen. Avec un autre service en ligne, on y cherche par les mots.
 - **sqlite-vec** (dans l'image Docker, et installé par `install.sh`) compare les vecteurs dans SQLite,
   environ 6 fois plus vite qu'en PHP (20 000 passages : 0,15 s au lieu de 0,95 s sur une machine de test).
   Sans lui, la comparaison se fait en PHP, plus lentement mais sans rien perdre.

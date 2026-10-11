@@ -14,5 +14,7 @@ Pour passer au niveau Entreprise, en général :
 - notifications sans contenu si vous utilisez Telegram ;
 - mot de passe sur les liens de partage.
 
+Pour que rien ne sorte d'Europe : voir *Rester en Europe*.
+
 Sur un serveur à plusieurs (Docker), chaque personne a ses propres données ; l'administrateur du
 serveur peut techniquement y accéder.

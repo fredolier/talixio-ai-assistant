@@ -21,6 +21,7 @@ Réglages → *Modèle d'IA* :
 | Abonnement Claude Pro/Max | `--with-claude-code`, puis `claude setup-token` ; fournisseur `claude-code` |
 | API Gemini | fournisseur `gemini`, clé `GEMINI_API_KEY` (https://aistudio.google.com/apikey) |
 | OpenAI | fournisseur `openai`, clé `OPENAI_API_KEY` |
+| Fournisseur européen (OVHcloud, Mistral, Scaleway, Infomaniak) | carte *Europe only* (voir *Rester en Europe*) ; fournisseur `sovereign` |
 | Modèle local (Ollama…) | fournisseur `openai`, adresse `http://localhost:11434/v1`, nom du modèle |
 
 - Trois niveaux : **rapide** (résumés, vérifications), **standard** (conversation), **approfondi** (raisonnements difficiles).
