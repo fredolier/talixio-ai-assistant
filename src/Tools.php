@@ -346,6 +346,11 @@ final class Tools
             $this->register('browser_select', 'Choose an option in a select (drop-down) by its number and the option text or value.',
                 ['ref' => $ref, 'value' => ['type' => 'string']], ['ref', 'value'], fn(array $a) => $b()->select((int)$a['ref'], $a['value']));
             $this->register('browser_back', 'Go back to the previous page.', [], [], fn() => $b()->back());
+            $this->register('browser_save_login', 'After the user logged in to a site in this browser, save that login (its cookies) to the file a connector reads, '
+                . 'so the connector works without its own login (e.g. the cookiesPath an Uber Eats connector reports). Asks the user to approve first.',
+                ['domains' => ['type' => 'string', 'description' => 'comma-separated, e.g. "ubereats.com, uber.com"'],
+                 'path' => ['type' => 'string', 'description' => 'the .json file the connector reads, e.g. ~/.strider/ubereats/cookies.json']], ['domains', 'path'],
+                fn(array $a) => $this->saveLogin((string)$a['domains'], (string)$a['path']));
             $this->register('browser_screenshot', 'Take a screenshot of the visible part of the current page, to see its layout or images.', [], [],
                 fn() => '[[image:' . $b()->screenshot() . ']]');
         }
@@ -684,6 +689,48 @@ final class Tools
         return $this->app->approvals()->ask('browser_submit', ['ref' => $ref], $summary)
             ? $act()
             : 'error: the user did not approve submitting this form (rejected or no answer in time). Nothing was submitted.';
+    }
+
+    /** Write the browser's cookies for some domains to a connector's cookie file (Playwright format). */
+    private function saveLogin(string $domains, string $path): string
+    {
+        $file = self::loginFile($path, [getenv('HOME') ?: $this->app->cfg->dataDir, $this->app->cfg->dataDir]);
+        if (str_starts_with($file, 'error:')) return $file;
+        $old = is_file($file) ? json_decode((string)file_get_contents($file), true) : null;
+        if (is_file($file) && !self::isCookieFile($old)) return "error: $file exists and is not a cookie file; nothing was written";
+        $cookies = Browser::get($this->app)->cookies(explode(',', $domains));
+        if (!$cookies) return "error: the browser has no cookies for $domains: log in first with browser_open (and check the domain)";
+        $summary = 'Save your login to ' . trim($domains) . ' (' . count($cookies) . " cookies) for a connector, in $file";
+        if (!in_array('browser_save_login', $this->app->cfg->autoApprove, true)) {
+            if (App::$inWorker) return "error: saving a login needs the user's approval, which can't be awaited here. Use delegate to hand the whole web task to a background job.";
+            if (!$this->app->approvals()->ask('browser_save_login', ['domains' => $domains, 'path' => $file], $summary)) return 'error: the user did not approve saving this login. Nothing was written.';
+        }
+        $data = is_array($old) && isset($old['cookies']) ? ['cookies' => $cookies, 'origins' => $old['origins'] ?? []] : $cookies;
+        if (!is_dir(dirname($file))) mkdir(dirname($file), 0700, true);
+        file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        chmod($file, 0600);
+        return 'saved ' . count($cookies) . " cookies to $file. Now check the connector's login status.";
+    }
+
+    /** Resolve a cookie file path: a .json file under one of these folders, nothing else. */
+    public static function loginFile(string $path, array $roots): string
+    {
+        $path = trim($path);
+        if (str_starts_with($path, '~/')) $path = rtrim($roots[0], '/') . substr($path, 1);
+        if (!str_starts_with($path, '/') || str_contains($path, '/../') || !str_ends_with(strtolower($path), '.json')) return 'error: give the full path of the connector\'s .json cookie file';
+        foreach ($roots as $r) {
+            foreach ([rtrim((string)$r, '/'), rtrim((string)realpath((string)$r), '/')] as $base) {
+                if ($base !== '' && str_starts_with($path, "$base/")) return $path;
+            }
+        }
+        return 'error: the cookie file must be in the server\'s home or data folder';
+    }
+
+    /** A Playwright cookie list, or a storage state ({cookies, origins}). */
+    public static function isCookieFile(mixed $d): bool
+    {
+        if (is_array($d) && array_is_list($d)) return $d === [] || isset($d[0]['name'], $d[0]['domain']);
+        return is_array($d) && isset($d['cookies']) && is_array($d['cookies']);
     }
 
     private function spaceFolder(): string

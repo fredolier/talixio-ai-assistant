@@ -538,6 +538,12 @@ check('tools focus: a connector question brings the GitHub installer, which asks
     && !in_array('connector_install_github', $names($foc2), true) && $app->tools->needsApproval('connector_install_github'));
 check('tools focus: "regarde sur Uber Eats" calls for the browser', (bool)preg_match(Talixio\Tools::GROUPS['browser'][1], 'regarde sur uber eat pour une repas à 2 dans le 13006')
     && (bool)preg_match(Talixio\Tools::GROUPS['browser'][1], 'check on deliveroo') && !preg_match(Talixio\Tools::GROUPS['browser'][1], 'Bonjour, quoi de neuf ?'));
+$lf = fn($p) => Talixio\Tools::loginFile($p, ['/data/home', '/srv/talixio-data']);
+check('browser_save_login: only a .json file under the home or data folder', $lf('~/.strider/ubereats/cookies.json') === '/data/home/.strider/ubereats/cookies.json'
+    && $lf('/srv/talixio-data/x/c.json') === '/srv/talixio-data/x/c.json' && str_starts_with($lf('/etc/c.json'), 'error:')
+    && str_starts_with($lf('/data/home/../../etc/c.json'), 'error:') && str_starts_with($lf('/data/home/.bashrc'), 'error:') && str_starts_with($lf('cookies.json'), 'error:'));
+check('browser_save_login: overwrites only cookie files', Talixio\Tools::isCookieFile([]) && Talixio\Tools::isCookieFile([['name' => 'sid', 'domain' => '.acme.example']])
+    && Talixio\Tools::isCookieFile(['cookies' => [], 'origins' => []]) && !Talixio\Tools::isCookieFile(['model' => 'x']) && !Talixio\Tools::isCookieFile(null));
 check('tools focus: groups kept from earlier messages stay', in_array('board_list', $names($all->focus('Bonjour', false, ['tasks'])), true)
     && in_array('tasks', $foc->shownGroups(), true) && in_array('tasks', $cal->shownGroups(), true) && !in_array('mail', $cal->shownGroups(), true));
 $ctx = Talixio\Content::withContext([['role' => 'user', 'content' => 'Salut'], ['role' => 'assistant', 'content' => 'Bonjour'], ['role' => 'user', 'content' => 'Et demain ?']], 'Current local time: x');

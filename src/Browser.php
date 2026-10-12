@@ -255,6 +255,26 @@ final class Browser
         return $this->snapshot();
     }
 
+    /**
+     * The browser's cookies for these domains (and their subdomains), in Playwright's cookie format,
+     * so a connector that drives its own browser can reuse a login done here.
+     */
+    public function cookies(array $domains): array
+    {
+        $domains = array_values(array_filter(array_map(fn($d) => ltrim(strtolower(trim((string)$d)), '.'), $domains)));
+        $out = [];
+        foreach ($this->call('Storage.getCookies', [], false)['cookies'] ?? [] as $c) {
+            $host = ltrim(strtolower((string)$c['domain']), '.');
+            $match = false;
+            foreach ($domains as $d) if ($host === $d || str_ends_with($host, ".$d")) $match = true;
+            if (!$match) continue;
+            $out[] = ['name' => $c['name'], 'value' => $c['value'], 'domain' => $c['domain'], 'path' => $c['path'] ?? '/',
+                'expires' => !empty($c['session']) ? -1 : (float)($c['expires'] ?? -1), 'httpOnly' => (bool)($c['httpOnly'] ?? false),
+                'secure' => (bool)($c['secure'] ?? false), 'sameSite' => in_array($c['sameSite'] ?? '', ['Strict', 'Lax', 'None'], true) ? $c['sameSite'] : 'Lax'];
+        }
+        return $out;
+    }
+
     /** PNG of the visible page, stored as a file. Returns the file id. */
     public function screenshot(): int
     {

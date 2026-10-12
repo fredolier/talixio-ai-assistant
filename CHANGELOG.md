@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.17 (2026-10-12)
+
+- New browser tool `browser_save_login`: after logging in to a site in Talixio's browser (the user gives the code they
+  receive), the assistant saves that login's cookies to the file a connector reads (e.g. the `cookiesPath` an Uber Eats
+  connector reports), so connectors that ask for a login "in your browser" work on a headless server. Playwright cookie
+  format (or storage state if the file already has that shape), only a `.json` file under the server's home or data
+  folder, never over a file that isn't a cookie file, and it asks for approval first.
+- Prompt: when a connector says it isn't logged in, the assistant does that login in its browser and saves it.
+
 ## 0.28.16 (2026-10-12)
 
 - Asked to "look on Uber Eats" for dinner, the assistant asked "shall I proceed?" before checking the connector's
