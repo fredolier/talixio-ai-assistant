@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.16 (2026-10-12)
+
+- Asked to "look on Uber Eats" for dinner, the assistant asked "shall I proceed?" before checking the connector's
+  status. Looking things up (a site, a connector's status, the web, the documents) is now done straight away;
+  when a tool fails, the assistant gives its actual error. Without browser tools on the server, it uses a connector
+  made for the site if there is one, otherwise says so in one sentence. "regarde sur…", "check on…", a site's
+  address and common sites (Uber, Deliveroo, Amazon, Doctolib, SNCF…) bring the browser tools to the first answer.
+- It no longer guesses what a postal code means (13006 is Marseille 6e, not Paris 13e): when unsure, it looks it up.
+
 ## 0.28.15 (2026-10-12)
 
 - Your own scripts: **New script** and **Upload a .py** on the Memory page, and **Use as a script** on a `.py` of

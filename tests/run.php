@@ -536,6 +536,8 @@ $foc2->run('usage_report', []);
 check('tools focus: a hidden tool called by name runs and is then shown', in_array('usage_report', $names($foc2), true));
 check('tools focus: a connector question brings the GitHub installer, which asks for approval', in_array('connector_install_github', $names($all->focus('Installe le connecteur MCP https://github.com/acme/tasks-mcp')), true)
     && !in_array('connector_install_github', $names($foc2), true) && $app->tools->needsApproval('connector_install_github'));
+check('tools focus: "regarde sur Uber Eats" calls for the browser', (bool)preg_match(Talixio\Tools::GROUPS['browser'][1], 'regarde sur uber eat pour une repas à 2 dans le 13006')
+    && (bool)preg_match(Talixio\Tools::GROUPS['browser'][1], 'check on deliveroo') && !preg_match(Talixio\Tools::GROUPS['browser'][1], 'Bonjour, quoi de neuf ?'));
 check('tools focus: groups kept from earlier messages stay', in_array('board_list', $names($all->focus('Bonjour', false, ['tasks'])), true)
     && in_array('tasks', $foc->shownGroups(), true) && in_array('tasks', $cal->shownGroups(), true) && !in_array('mail', $cal->shownGroups(), true));
 $ctx = Talixio\Content::withContext([['role' => 'user', 'content' => 'Salut'], ['role' => 'assistant', 'content' => 'Bonjour'], ['role' => 'user', 'content' => 'Et demain ?']], 'Current local time: x');
