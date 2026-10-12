@@ -536,6 +536,17 @@ $foc2->run('usage_report', []);
 check('tools focus: a hidden tool called by name runs and is then shown', in_array('usage_report', $names($foc2), true));
 check('tools focus: a connector question brings the GitHub installer, which asks for approval', in_array('connector_install_github', $names($all->focus('Installe le connecteur MCP https://github.com/acme/tasks-mcp')), true)
     && !in_array('connector_install_github', $names($foc2), true) && $app->tools->needsApproval('connector_install_github'));
+check('tools focus: groups kept from earlier messages stay', in_array('board_list', $names($all->focus('Bonjour', false, ['tasks'])), true)
+    && in_array('tasks', $foc->shownGroups(), true) && in_array('tasks', $cal->shownGroups(), true) && !in_array('mail', $cal->shownGroups(), true));
+$ctx = Talixio\Content::withContext([['role' => 'user', 'content' => 'Salut'], ['role' => 'assistant', 'content' => 'Bonjour'], ['role' => 'user', 'content' => 'Et demain ?']], 'Current local time: x');
+check('turn context: in front of the last user message only, earlier ones untouched', $ctx[0]['content'] === 'Salut'
+    && str_starts_with($ctx[2]['content'], '[Turn context from Talixio') && str_ends_with($ctx[2]['content'], "\n\nEt demain ?") && str_contains($ctx[2]['content'], 'Current local time: x'));
+$ctxParts = Talixio\Content::withContext([['role' => 'user', 'content' => [['type' => 'text', 'text' => 'Voici']]]], 'ctx');
+check('turn context: a message with parts gets a first text part; none after an assistant message',
+    count($ctxParts[0]['content']) === 2 && str_contains($ctxParts[0]['content'][0]['text'], 'ctx')
+    && Talixio\Content::withContext([['role' => 'assistant', 'content' => 'x']], 'ctx') === null && Talixio\Content::withContext([['role' => 'user', 'content' => 'x']], '') === [['role' => 'user', 'content' => 'x']]);
+$cached = Talixio\AnthropicProvider::cacheUpTo([['role' => 'user', 'content' => 'a'], ['role' => 'assistant', 'content' => [['type' => 'text', 'text' => 'b']]], ['role' => 'user', 'content' => 'c']]);
+check('anthropic cache: a breakpoint on the last message only', ($cached[2]['content'][0]['cache_control']['type'] ?? '') === 'ephemeral' && $cached[0]['content'] === 'a' && !isset($cached[1]['content'][0]['cache_control']));
 check('job toolset cannot write memory', !in_array('memory_append', $app->tools->only('job')->names(), true));
 
 // ---- channels ----

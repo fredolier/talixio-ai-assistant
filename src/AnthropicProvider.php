@@ -8,6 +8,9 @@ final class AnthropicProvider implements Provider
 
     public function complete(string $system, string $context, array $messages, Tools $tools, callable $onUsage, ?callable $onEvent = null): string
     {
+        // the context goes with the last user message so that the instructions and the history stay a cacheable prefix
+        $turn = Content::withContext($messages, $context);
+        if ($turn !== null) { $messages = $turn; $context = ''; }
         $messages = Content::messages($messages, [Content::class, 'anthropic']);
         $specsOf = function () use ($tools) { // read each step: tools_more can add some
             $specs = array_map(fn($t) => ['name' => $t['name'], 'description' => $t['description'], 'input_schema' => $t['parameters']], $tools->schemas());
@@ -31,8 +34,9 @@ final class AnthropicProvider implements Provider
         if (!$legacy && $this->tier->reasoningEffort !== '') $payload['output_config'] = ['effort' => $this->tier->reasoningEffort];
         for ($i = 0; $i < $this->tier->maxSteps; $i++) {
             if ($i > 0 && ($specs = $specsOf())) $payload['tools'] = $specs;
-            $r = $onEvent ? $this->stream($payload + ['messages' => $messages], $onEvent)
-                : Http::json("{$this->baseUrl}/v1/messages", $payload + ['messages' => $messages], $this->headers(), 600);
+            $sent = self::cacheUpTo($messages);
+            $r = $onEvent ? $this->stream($payload + ['messages' => $sent], $onEvent)
+                : Http::json("{$this->baseUrl}/v1/messages", $payload + ['messages' => $sent], $this->headers(), 600);
             $u = $r['usage'] ?? [];
             $onUsage(['model' => $this->tier->model, 'in' => (int)($u['input_tokens'] ?? 0), 'out' => (int)($u['output_tokens'] ?? 0),
                 'cache_read' => (int)($u['cache_read_input_tokens'] ?? 0), 'cache_write' => (int)($u['cache_creation_input_tokens'] ?? 0), 'cost' => null]);
@@ -71,6 +75,23 @@ final class AnthropicProvider implements Provider
         $onUsage(['model' => $this->tier->model, 'in' => (int)($u['input_tokens'] ?? 0), 'out' => (int)($u['output_tokens'] ?? 0),
             'cache_read' => (int)($u['cache_read_input_tokens'] ?? 0), 'cache_write' => (int)($u['cache_creation_input_tokens'] ?? 0), 'cost' => null]);
         return implode('', array_map(fn($b) => ($b['type'] ?? '') === 'text' ? $b['text'] : '', $r['content'] ?? [])) ?: '(stopped after too many tool steps)';
+    }
+
+    /**
+     * The messages with a cache breakpoint on the last one: the next step (and the next turn) re-reads the whole
+     * conversation so far at 10% of the price instead of paying for it again.
+     */
+    public static function cacheUpTo(array $messages): array
+    {
+        $i = array_key_last($messages);
+        if ($i === null) return $messages;
+        $c = $messages[$i]['content'];
+        if (is_string($c)) $c = [['type' => 'text', 'text' => $c]];
+        $k = array_key_last($c);
+        if ($k === null || in_array($c[$k]['type'] ?? '', ['thinking', 'redacted_thinking'], true)) return $messages;
+        $c[$k]['cache_control'] = ['type' => 'ephemeral'];
+        $messages[$i]['content'] = $c;
+        return $messages;
     }
 
     /** Claude 3.x and 4.0-4.5 take a thinking budget in tokens; later models think adaptively, steered by the effort level. */

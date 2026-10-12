@@ -3,6 +3,16 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.13 (2026-10-12)
+
+- Lower model bills through the prompt cache. The time, budget and recalled memories of each turn now come in front
+  of the latest user message instead of after the instructions, so the instructions and the earlier conversation
+  stay identical from one call to the next, and the provider bills them as cached input (10% of the price with
+  Mistral, OpenAI and Claude). With Claude the conversation itself is now cached too, at every tool step.
+- With focused tools (the default for European and OpenAI-compatible providers), a tool group given to one message
+  stays for the next 30 minutes in that space, so the list of tools doesn't change from message to message and
+  break the cache.
+
 ## 0.28.12 (2026-10-12)
 
 - Routines are set in plain words: `schedule_task` and `schedule_job` take `when`, like "every weekday at 8:00",

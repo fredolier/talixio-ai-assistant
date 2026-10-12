@@ -45,6 +45,8 @@ final class Tools
     private array $tools = [];
     /** @var array<string,true>|null the tools sent to the model (null: all); the others still run when called by name */
     private ?array $shown = null;
+    /** @var string[] */
+    private array $shownGroups = [];
     /** @var array<string,callable> tool => fn(args): string summary; these tools wait for the user's approval */
     private array $approval = [];
     /** @var string[] connector (MCP) tools marked read-only: also given to background jobs and the heartbeat */
@@ -529,11 +531,12 @@ final class Tools
      * tools_more to get the others. Connector tools come with their server's name.
      * @param string $text the last messages; $files: the user sent a file
      */
-    public function focus(string $text, bool $files = false): self
+    public function focus(string $text, bool $files = false, array $keep = []): self
     {
         $copy = clone $this;
         $groups = array_keys(array_filter(self::GROUPS, fn($g) => preg_match($g[1], $text)));
         if ($files) $groups[] = 'library';
+        $groups = array_values(array_unique(array_merge($groups, array_intersect($keep, array_keys(self::GROUPS)))));
         $copy->shown = array_fill_keys(array_intersect(self::CORE, array_keys($this->tools)), true);
         $copy->show($groups);
         foreach (array_keys($this->tools) as $n) { // connectors: by the name of their server
@@ -561,10 +564,14 @@ final class Tools
         return array_values(array_filter(array_keys($this->tools), fn($n) => str_starts_with($n, 'mcp_') && str_starts_with($this->tools[$n][0]['description'], "[$group]")));
     }
 
+    /** @return string[] the groups (GROUPS keys) this answer was given, also through tools_more */
+    public function shownGroups(): array { return $this->shownGroups; }
+
     /** Adds groups to the tools sent. @return string[] the tools added */
     private function show(array $groups): array
     {
         if ($this->shown === null) return [];
+        foreach ($groups as $g) if (isset(self::GROUPS[trim($g)]) && !in_array(trim($g), $this->shownGroups, true)) $this->shownGroups[] = trim($g);
         $added = [];
         foreach ($groups as $g) foreach ($this->groupTools(trim($g)) as $n) if (!isset($this->shown[$n])) { $this->shown[$n] = true; $added[] = $n; }
         return $added;

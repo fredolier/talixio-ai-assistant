@@ -10,7 +10,10 @@ final class OpenAIProvider implements Provider
 
     public function complete(string $system, string $context, array $messages, Tools $tools, callable $onUsage, ?callable $onEvent = null): string
     {
-        $msgs = array_merge([['role' => 'system', 'content' => trim("$system\n\n$context")]], Content::messages($messages, [Content::class, 'openai']));
+        // the context goes with the last user message so that the instructions and the history stay a cacheable prefix
+        $turn = Content::withContext($messages, $context);
+        $msgs = array_merge([['role' => 'system', 'content' => trim($turn === null ? "$system\n\n$context" : $system)]],
+            Content::messages($turn ?? $messages, [Content::class, 'openai']));
         $payload = ['model' => $this->tier->model];
         if ($this->tier->reasoningEffort !== '') $payload['reasoning_effort'] = in_array($this->tier->reasoningEffort, ['xhigh', 'max'], true) ? 'high' : $this->tier->reasoningEffort;
         for ($i = 0; $i < $this->tier->maxSteps; $i++) {
