@@ -2268,5 +2268,10 @@ window.I18N.fr = {
 "What it does, so the assistant knows when to use it": "Ce qu'il fait, pour que l'assistant sache quand s'en servir",
 "Script {name} added": "Script {name} ajouté",
 "Script {name} updated": "Script {name} mis à jour",
-"(it runs once the sandbox is on: install.sh --with-shell)": "(il s'exécutera une fois le bac à sable activé : install.sh --with-shell)"
+"(it runs once the sandbox is on: install.sh --with-shell)": "(il s'exécutera une fois le bac à sable activé : install.sh --with-shell)",
+"Write here…": "Écrivez ici…",
+"Content (Markdown)": "Contenu (Markdown)",
+"Full screen": "Plein écran",
+"Exit full screen": "Quitter le plein écran",
+"Full screen (Esc to leave)": "Plein écran (Échap pour quitter)"
 };

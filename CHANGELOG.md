@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.19 (2026-10-12)
+
+- Library: Markdown files are edited in the visual editor (headings, lists, checklists, tables, links), with the **MD**
+  button for the source; files with front matter, HTML or fenced code with a language open on the source. A file
+  saved without changes is kept byte for byte.
+- The library editor has a *Full screen* button (Esc leaves full screen before closing the viewer).
+- The visual editor keeps `####` headings instead of turning them into `###`.
+
 ## 0.28.18 (2026-10-12)
 
 - Updates and restarts no longer silently lose running jobs: a job killed by a restart is started again once (a

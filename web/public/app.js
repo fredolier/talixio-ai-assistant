@@ -1175,7 +1175,8 @@ function htmlToMd(root) {
     switch (n.tagName) {
       case 'H1': case 'H2': case 'H3': return '# ' + inline(n).replace(/\s+/g, ' ').trim();
       case 'H4': return '## ' + inline(n).replace(/\s+/g, ' ').trim();
-      case 'H5': case 'H6': return '### ' + inline(n).replace(/\s+/g, ' ').trim();
+      case 'H5': return '### ' + inline(n).replace(/\s+/g, ' ').trim();
+      case 'H6': return '#### ' + inline(n).replace(/\s+/g, ' ').trim();
       case 'UL': case 'OL': return list(n, 0);
       case 'LI': return '- ' + inline(n).trim();
       case 'BLOCKQUOTE': return blocks(n).split('\n').map(l => l ? '> ' + l : '>').join('\n');
@@ -1194,8 +1195,8 @@ function htmlToMd(root) {
   return blocks(root).replace(/\n{3,}/g, '\n\n').trim();
 }
 
-/** A Markdown editor that looks like the result. rte.value / rte.value = '...' */
-function makeRte(box) {
+/** A Markdown editor that looks like the result. rte.value / rte.value = '...'; opts.source opens on the Markdown. */
+function makeRte(box, opts = {}) {
   box.innerHTML = `<div class="rte-bar" role="toolbar" aria-label="Formatting">
       <button type="button" data-c="bold" title="Bold (Ctrl+B)"><b>B</b></button><button type="button" data-c="italic" title="Italic (Ctrl+I)"><i>I</i></button>
       <button type="button" data-c="strike" title="Strikethrough"><s>S</s></button><button type="button" data-c="h" title="Heading">H</button>
@@ -1203,8 +1204,8 @@ function makeRte(box) {
       <button type="button" data-c="task" title="Checklist">☑</button><button type="button" data-c="quote" title="Quote">❝</button>
       <button type="button" data-c="code" title="Code">&lt;/&gt;</button><button type="button" data-c="link" title="Link">🔗</button>
       <span class="spacer"></span><button type="button" data-c="src" title="Edit the Markdown source" class="src">MD</button></div>
-    <div class="rte-area doc" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Description" data-placeholder="Details, steps, links… (checklists count as progress)"></div>
-    <textarea class="rte-src" hidden aria-label="Description (Markdown)"></textarea>`;
+    <div class="rte-area doc" contenteditable="true" role="textbox" aria-multiline="true" aria-label="${opts.label ? 'Content' : 'Description'}" data-placeholder="${opts.label ? 'Write here…' : 'Details, steps, links… (checklists count as progress)'}"></div>
+    <textarea class="rte-src" hidden aria-label="${opts.label ? 'Content (Markdown)' : 'Description (Markdown)'}" spellcheck="true"></textarea>`;
   const area = box.querySelector('.rte-area'), src = box.querySelector('.rte-src');
   let srcMode = false;
   const load = markdown => {
@@ -1272,7 +1273,12 @@ function makeRte(box) {
   });
   return {
     get value() { return srcMode ? src.value.trim() : htmlToMd(area); },
-    set value(v) { srcMode = false; area.hidden = false; src.hidden = true; box.querySelector('.src').classList.remove('on'); box.querySelectorAll('.rte-bar button').forEach(x => x.disabled = false); load(v); },
+    set value(v) {
+      srcMode = !!opts.source; area.hidden = srcMode; src.hidden = !srcMode; box.querySelector('.src').classList.toggle('on', srcMode);
+      box.querySelectorAll('.rte-bar button:not(.src)').forEach(x => x.disabled = srcMode);
+      if (srcMode) { src.value = v || ''; area.innerHTML = ''; } else load(v);
+    },
+    focus() { (srcMode ? src : area).focus(); },
   };
 }
 
@@ -2960,7 +2966,7 @@ async function openFile(id, opts = {}) {
   let d;
   try { d = await api(`api/files/${id}/text`); } catch (e) { toast(e.message); return; }
   const f = lib.file = d.file;
-  v.hidden = false; document.body.classList.add('viewer-open'); $('#viewer-form').hidden = true;
+  v.hidden = false; fullViewer(false); document.body.classList.add('viewer-open'); $('#viewer-form').hidden = true;
   $('#viewer-name').textContent = f.name;
   moreActions(false);
   $('#viewer-path').textContent = `${f.folder} · ${fmtSize(f.size)} · ${fmtDate(f.created)} · #${f.id}`;
@@ -2990,7 +2996,8 @@ async function openFile(id, opts = {}) {
   if (tabs.length > 1) html += `<div class="tabs" role="tablist">${tabs.map(([k, l], i) => `<button class="tab" data-tab="${k}" type="button" role="tab" aria-selected="${i === 0}">${l}</button>`).join('')}</div>`;
   if (paged) html += `<div data-pane="pages">${pagesHtml()}</div>`;
   if (rendered) html += `<iframe id="viewer-frame" class="doc-frame" data-pane="view" title="${esc(f.name)}" sandbox="${FRAME_SANDBOX}" referrerpolicy="no-referrer"></iframe>`;
-  if (editable) html += `<div id="viewer-edit-box" class="viewer-edit" data-pane="edit" ${rendered ? 'hidden' : ''}><textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea><div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span></div></div>`;
+  const wysiwyg = editable && /\.(md|markdown)$/i.test(f.name);
+  if (editable) html += `<div id="viewer-edit-box" class="viewer-edit" data-pane="edit" ${rendered ? 'hidden' : ''}>${wysiwyg ? '<div id="viewer-rte" class="rte"></div>' : `<textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea>`}<div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span><span class="spacer"></span><button id="viewer-full" class="btn small ghost" type="button" aria-pressed="false" title="Full screen (Esc to leave)">Full screen</button></div></div>`;
   if (hasText) html += `<pre class="extracted" data-pane="text" hidden>${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
   if (!rendered) {
     if (f.status === 'pending' || f.status === 'processing') html += '<p class="muted">Reading this file… it will be searchable in a moment.</p>';
@@ -2998,6 +3005,12 @@ async function openFile(id, opts = {}) {
     else if (f.kind === 'other') html += '<p class="muted">This kind of file cannot be shown here; download it to open it.</p>';
   }
   body.innerHTML = html;
+  let rte = null, base = '';
+  if (wysiwyg) { // front matter, HTML or fenced code with a language would not survive the visual editor: open on the Markdown
+    rte = makeRte($('#viewer-rte'), { label: true, source: /^---\n|<\/?[a-z][^>]*>|^ {0,3}```\w/im.test(d.text) });
+    rte.value = d.text; base = rte.value;
+  }
+  const content = () => rte ? (rte.value === base ? d.text : rte.value + '\n') : $('#viewer-editor').value; // untouched: the file stays as it was
   if (opts.page && paged) { // open on the cited page
     const pg = body.querySelectorAll('.pdf-page')[opts.page - 1];
     if (pg) setTimeout(() => { pg.scrollIntoView({ block: 'start' }); pg.classList.add('flash'); }, 300);
@@ -3013,19 +3026,28 @@ async function openFile(id, opts = {}) {
   body.querySelectorAll('[data-tab]').forEach(t => t.onclick = () => {
     body.querySelectorAll('[data-tab]').forEach(o => o.setAttribute('aria-selected', String(o === t)));
     body.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== t.dataset.tab; });
-    if (t.dataset.tab === 'edit') $('#viewer-editor').focus();
+    if (t.dataset.tab === 'edit') rte ? rte.focus() : $('#viewer-editor').focus();
+    if (t.dataset.tab !== 'edit') fullViewer(false);
   });
+  $('#viewer-full')?.addEventListener('click', () => fullViewer(!v.classList.contains('full')));
   $('#viewer-save')?.addEventListener('click', async () => {
     try {
-      await post('api/library/note', { id: f.id, folder: f.folder, name: f.name, content: $('#viewer-editor').value });
+      await post('api/library/note', { id: f.id, folder: f.folder, name: f.name, content: content() });
       $('#viewer-state').textContent = 'Saved';
+      if (rte) { d.text = rte.value + '\n'; base = rte.value; }
       const fr = $('#viewer-frame'); if (fr) fillPreview(fr, f.id);
       loadLibrary();
     } catch (e) { toast(e.message); }
   });
-  $('#viewer-editor')?.addEventListener('input', () => { $('#viewer-state').textContent = 'Unsaved changes'; });
+  $('#viewer-edit-box')?.addEventListener('input', () => { $('#viewer-state').textContent = 'Unsaved changes'; });
+  $('#viewer-rte .rte-bar')?.addEventListener('click', e => { if (e.target.closest('button:not(.src)')) $('#viewer-state').textContent = 'Unsaved changes'; });
 }
-function closeViewer() { $('#viewer').hidden = true; lib.file = null; document.body.classList.remove('viewer-open'); }
+function fullViewer(on) {
+  const v = $('#viewer'), b = $('#viewer-full');
+  v.classList.toggle('full', on);
+  if (b) { b.textContent = on ? 'Exit full screen' : 'Full screen'; b.setAttribute('aria-pressed', String(on)); }
+}
+function closeViewer() { fullViewer(false); $('#viewer').hidden = true; lib.file = null; document.body.classList.remove('viewer-open'); }
 function viewerForm(value, onOk, folders = false) {
   const form = $('#viewer-form'), input = $('#viewer-input');
   form.hidden = false; input.value = value; folderPicker(input, folders); input.focus(); input.select();
@@ -3488,7 +3510,7 @@ function moreActions(open) {
   $('#viewer-more').textContent = open ? t('Less') : t('More') + ' ▾';
 }
 $('#viewer-more').onclick = () => moreActions(!$('.viewer-actions').classList.contains('open'));
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#viewer').hidden) closeViewer(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#viewer').hidden) $('#viewer').classList.contains('full') ? fullViewer(false) : closeViewer(); });
 $('#viewer-form-cancel').onclick = () => { $('#viewer-form').hidden = true; };
 $('#viewer-rename').onclick = () => viewerForm(lib.file.name, async v => { const { file } = await post(`api/files/${lib.file.id}/rename`, { name: v }); await loadLibrary(); openFile(file.id); });
 $('#viewer-move').onclick = () => viewerForm(lib.file.folder, async v => { const { file } = await post(`api/files/${lib.file.id}/move`, { folder: v }); toast('Moved to ' + file.folder); await loadLibrary(); openFile(file.id); }, true);
