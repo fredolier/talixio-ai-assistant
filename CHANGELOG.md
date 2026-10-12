@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.20 (2026-10-12)
+- Library: the Markdown editor is now Milkdown Crepe (MIT), self-hosted in `web/public/vendor/` and loaded only
+  when you edit. Type `/` for headings, lists, quotes, code, tables or a divider; select text for the formatting
+  toolbar; edit tables from their handles. **Markdown** switches to the source. A file saved without changes is
+  kept byte for byte. The build recipe is in `web/vendor-src/milkdown`.
+- Library: Esc closes the editor's menus first and only then the viewer.
+- Library: **Use as a script** now confirms in the viewer where the script went (Memory › Scripts), with a
+  **Show the script** button that opens it.
+
 ## 0.28.19 (2026-10-12)
 
 - Library: Markdown files are edited in the visual editor (headings, lists, checklists, tables, links), with the **MD**

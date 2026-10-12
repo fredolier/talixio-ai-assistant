@@ -404,8 +404,29 @@ tr:last-child td{border-bottom:0}
 .viewer-edit .rte-bar{flex:none;position:sticky;top:0}
 .viewer-edit .rte-area{flex:1;max-height:none;min-height:200px}
 .viewer-edit .rte-src{flex:1;min-height:200px;resize:none;height:auto!important}
+.viewer-notice{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:10px 12px;margin-bottom:10px;border-radius:10px;background:var(--accent-soft);color:var(--ink);font-size:.9rem}
 .viewer.full{left:0;width:100%;border-left:0;box-shadow:none}
-.viewer.full .viewer-edit .rte-area,.viewer.full .viewer-edit .rte-src,.viewer.full .viewer-edit>.editor{width:100%;max-width:980px;margin:0 auto}
+.viewer.full .viewer-edit .rte-area,.viewer.full .viewer-edit .rte-src,.viewer.full .viewer-edit>.editor,.viewer.full .md-editor{width:100%;max-width:980px;margin:0 auto}
+/* the Markdown editor (Milkdown, vendor/milkdown-*.css) in the app's colours */
+.md-editor{flex:1;min-height:0;display:flex;flex-direction:column}
+.md-editor [hidden]{display:none!important}
+.md-visual{flex:1;min-height:200px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+.md-src{flex:1;min-height:200px;resize:none}
+.md-editor .milkdown{
+  --crepe-color-background:var(--surface); --crepe-color-on-background:var(--ink); --crepe-color-surface:var(--surface);
+  --crepe-color-surface-low:var(--sunk); --crepe-color-on-surface:var(--ink); --crepe-color-on-surface-variant:var(--muted);
+  --crepe-color-outline:var(--muted); --crepe-color-primary:var(--accent); --crepe-color-secondary:var(--accent-soft);
+  --crepe-color-on-secondary:var(--ink); --crepe-color-inverse:var(--ink); --crepe-color-on-inverse:var(--surface);
+  --crepe-color-inline-code:var(--danger); --crepe-color-error:var(--danger);
+  --crepe-color-hover:color-mix(in srgb,var(--ink) 7%,transparent); --crepe-color-selected:color-mix(in srgb,var(--accent) 22%,transparent);
+  --crepe-color-inline-area:var(--sunk); --crepe-base-font-size:15px;
+  --crepe-font-title:var(--sans); --crepe-font-default:var(--sans); --crepe-font-code:var(--mono);
+  --crepe-shadow-1:0 1px 3px rgba(0,0,0,.18); --crepe-shadow-2:0 4px 14px rgba(0,0,0,.2);
+  background:var(--surface); color:var(--ink); min-height:100%;
+}
+.md-editor .milkdown .ProseMirror{padding:16px 20px 40px 52px;outline:none;font-family:var(--sans);font-size:inherit;line-height:1.55;min-height:0;resize:none;background:none}
+.md-editor .milkdown .ProseMirror h1{font-size:1.7em}.md-editor .milkdown .ProseMirror h2{font-size:1.4em}.md-editor .milkdown .ProseMirror h3{font-size:1.2em}
+@media (max-width:600px){.md-editor .milkdown .ProseMirror{padding:12px 12px 32px 36px}}
 .preview-page{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg)}
 .pp-bar{display:flex;align-items:center;gap:8px;padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top,0px));border-bottom:1px solid var(--line);background:var(--surface)}
 .pp-title{flex:1;min-width:0;display:flex;flex-direction:column}

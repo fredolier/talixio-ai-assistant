@@ -2273,5 +2273,21 @@ window.I18N.fr = {
 "Content (Markdown)": "Contenu (Markdown)",
 "Full screen": "Plein écran",
 "Exit full screen": "Quitter le plein écran",
-"Full screen (Esc to leave)": "Plein écran (Échap pour quitter)"
+"Full screen (Esc to leave)": "Plein écran (Échap pour quitter)",
+"Paste a link…": "Collez un lien…",
+"Type / for headings, lists, tables…": "Tapez / pour les titres, listes, tableaux…",
+"Paragraph": "Paragraphe",
+"Heading 1": "Titre 1",
+"Heading 2": "Titre 2",
+"Heading 3": "Titre 3",
+"Heading 4": "Titre 4",
+"Heading 5": "Titre 5",
+"Heading 6": "Titre 6",
+"Lists": "Listes",
+"Divider": "Séparateur",
+"Bullet list": "Liste à puces",
+"Table": "Tableau",
+"in Memory › Scripts. The assistant can now run it.": "dans Mémoire › Scripts. L’assistant peut maintenant l’exécuter.",
+"Show the script": "Voir le script",
+"in Memory › Scripts.": "dans Mémoire › Scripts."
 };

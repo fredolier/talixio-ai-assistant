@@ -46,8 +46,10 @@
 *New note* creates an editable Markdown note. The assistant can also save notes (`kb_save_note`).
 
 *Edit* on a Markdown file opens a visual editor: headings, lists, checklists, tables and links look as they will
-be read. **MD** switches to the Markdown source (files with front matter or HTML open on it). *Full screen* gives
-the editor the whole window; Esc leaves it. A file you open and save without changing it is kept exactly as it was.
+be read. Type `/` on an empty line for headings, lists, quotes, code, tables or a divider; select text for the
+formatting toolbar; in a table, add or move rows and columns from its handles. **Markdown** switches to the source
+(files with front matter or HTML open on it). *Full screen* gives the editor the whole window; Esc closes a menu
+first, then leaves it. A file you open and save without changing it is kept exactly as it was.
 
 ## The /FAQ folder
 It is read-only and refreshed with each version: these pages are part of it.

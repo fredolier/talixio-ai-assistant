@@ -2323,12 +2323,31 @@ document.addEventListener('click', e => {
 });
 $('#viewer-connector').onclick = () => connectorDialog(lib.file.id).catch(e => toast(e.message));
 $('#viewer-script').onclick = async () => {
+  const b = $('#viewer-script'); b.disabled = true;
   try {
     const r = await post(`api/files/${lib.file.id}/as-script`);
-    toast(t(r.replaced ? 'Script {name} updated' : 'Script {name} added', { name: r.name })
-      + (r.enabled ? '' : ' ' + t('(it runs once the sandbox is on: install.sh --with-shell)')));
+    moreActions(false);
+    // stays in the viewer (a toast is easy to miss): what happened, where it is, a way there
+    $('#viewer-notice')?.remove();
+    $('#viewer-body').insertAdjacentHTML('afterbegin', `<div id="viewer-notice" class="viewer-notice" role="status">✓ ${esc(t(r.replaced ? 'Script {name} updated' : 'Script {name} added', { name: r.name }))}
+      — ${esc(r.enabled ? t('in Memory › Scripts. The assistant can now run it.') : t('in Memory › Scripts.') + ' ' + t('(it runs once the sandbox is on: install.sh --with-shell)'))}
+      <button class="btn small" type="button">${esc(t('Show the script'))}</button></div>`);
+    $('#viewer-notice button').onclick = () => showScript(r.name);
   } catch (e) { toast(e.message); }
+  b.disabled = false;
 };
+/** Memory › Scripts, with that script open. */
+function showScript(name) {
+  closeViewer(); location.hash = '#memory';
+  let tries = 0;
+  const open = () => {
+    const h = [...document.querySelectorAll('#scripts .skill h4')].find(x => x.textContent === name);
+    if (!h) { if (++tries < 20) setTimeout(open, 150); return; }
+    h.closest('.skill').querySelector('[data-a=edit]').click();
+    $('#scripts-sec').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  };
+  open();
+}
 $('#mcp-refresh').onclick = () => mcpAction('api/mcp/refresh');
 $('#shell-test').onclick = async () => {
   const b = $('#shell-test'); b.disabled = true;
@@ -2997,20 +3016,26 @@ async function openFile(id, opts = {}) {
   if (paged) html += `<div data-pane="pages">${pagesHtml()}</div>`;
   if (rendered) html += `<iframe id="viewer-frame" class="doc-frame" data-pane="view" title="${esc(f.name)}" sandbox="${FRAME_SANDBOX}" referrerpolicy="no-referrer"></iframe>`;
   const wysiwyg = editable && /\.(md|markdown)$/i.test(f.name);
-  if (editable) html += `<div id="viewer-edit-box" class="viewer-edit" data-pane="edit" ${rendered ? 'hidden' : ''}>${wysiwyg ? '<div id="viewer-rte" class="rte"></div>' : `<textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea>`}<div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span><span class="spacer"></span><button id="viewer-full" class="btn small ghost" type="button" aria-pressed="false" title="Full screen (Esc to leave)">Full screen</button></div></div>`;
+  if (editable) html += `<div id="viewer-edit-box" class="viewer-edit" data-pane="edit" ${rendered ? 'hidden' : ''}>${wysiwyg ? '<div id="viewer-rte"></div>' : `<textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea>`}<div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span><span class="spacer"></span>${wysiwyg ? '<button id="viewer-src" class="btn small ghost" type="button" aria-pressed="false" title="Edit the Markdown source">Markdown</button>' : ''}<button id="viewer-full" class="btn small ghost" type="button" aria-pressed="false" title="Full screen (Esc to leave)">Full screen</button></div></div>`;
   if (hasText) html += `<pre class="extracted" data-pane="text" hidden>${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
   if (!rendered) {
     if (f.status === 'pending' || f.status === 'processing') html += '<p class="muted">Reading this file… it will be searchable in a moment.</p>';
     else if (d.text && !hasText) html += `<h4>${f.kind === 'audio' ? 'Transcript' : f.kind === 'image' ? 'What the assistant sees' : 'Text'}</h4><pre class="extracted">${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
     else if (f.kind === 'other') html += '<p class="muted">This kind of file cannot be shown here; download it to open it.</p>';
   }
+  viewerEd?.destroy(); viewerEd = null;
   body.innerHTML = html;
-  let rte = null, base = '';
-  if (wysiwyg) { // front matter, HTML or fenced code with a language would not survive the visual editor: open on the Markdown
-    rte = makeRte($('#viewer-rte'), { label: true, source: /^---\n|<\/?[a-z][^>]*>|^ {0,3}```\w/im.test(d.text) });
-    rte.value = d.text; base = rte.value;
+  const dirty = () => { const s = $('#viewer-state'); if (s) s.textContent = 'Unsaved changes'; };
+  let rte = null;
+  if (wysiwyg) {
+    const source = /^---\n|<\/?[a-z][^>]*>|^ {0,3}```\w/im.test(d.text); // front matter, HTML, code with a language: start on the source
+    rte = await makeMdEditor($('#viewer-rte'), d.text, { source, onChange: dirty });
+    if (lib.file !== f) { rte.destroy(); return; } // another file was opened meanwhile
+    viewerEd = rte;
+    const sb = $('#viewer-src'); sb.hidden = !rte.toggleSource; sb.setAttribute('aria-pressed', String(rte.source));
+    sb.onclick = async () => { sb.disabled = true; try { sb.setAttribute('aria-pressed', String(await rte.toggleSource())); } finally { sb.disabled = false; } };
   }
-  const content = () => rte ? (rte.value === base ? d.text : rte.value + '\n') : $('#viewer-editor').value; // untouched: the file stays as it was
+  const content = () => rte ? rte.value : $('#viewer-editor').value;
   if (opts.page && paged) { // open on the cited page
     const pg = body.querySelectorAll('.pdf-page')[opts.page - 1];
     if (pg) setTimeout(() => { pg.scrollIntoView({ block: 'start' }); pg.classList.add('flash'); }, 300);
@@ -3034,20 +3059,86 @@ async function openFile(id, opts = {}) {
     try {
       await post('api/library/note', { id: f.id, folder: f.folder, name: f.name, content: content() });
       $('#viewer-state').textContent = 'Saved';
-      if (rte) { d.text = rte.value + '\n'; base = rte.value; }
+      if (rte) rte.saved();
       const fr = $('#viewer-frame'); if (fr) fillPreview(fr, f.id);
       loadLibrary();
     } catch (e) { toast(e.message); }
   });
-  $('#viewer-edit-box')?.addEventListener('input', () => { $('#viewer-state').textContent = 'Unsaved changes'; });
-  $('#viewer-rte .rte-bar')?.addEventListener('click', e => { if (e.target.closest('button:not(.src)')) $('#viewer-state').textContent = 'Unsaved changes'; });
+  $('#viewer-edit-box')?.addEventListener('input', dirty);
+  $('#viewer-rte .rte-bar')?.addEventListener('click', e => { if (e.target.closest('button:not(.src)')) dirty(); });
+}
+let viewerEd = null;
+
+// ---- the library's Markdown editor: Milkdown (vendor/, loaded the first time it is needed) ----
+const MILKDOWN = 'vendor/milkdown-7.22.3';
+let milkdownLib = null;
+function loadMilkdown() {
+  if (!document.querySelector(`link[href="${MILKDOWN}.css"]`)) document.head.insertAdjacentHTML('beforeend', `<link rel="stylesheet" href="${MILKDOWN}.css">`);
+  // from the page's address: app.js itself is served under v/<version>/
+  return milkdownLib ||= import(new URL(MILKDOWN + '.js', document.baseURI).href).catch(e => { milkdownLib = null; throw e; });
+}
+/**
+ * A Markdown file edited like a document, its source one click away (toggleSource). value is the file to save:
+ * the text it was opened with as long as nothing changed, so a file is never reformatted just by opening it.
+ * Without the editor (the script failed to load), the task editor (makeRte) does the job.
+ */
+async function makeMdEditor(box, text, { source = false, onChange = () => {} } = {}) {
+  let M;
+  try { M = await loadMilkdown(); } catch {
+    box.className = 'rte';
+    const r = makeRte(box, { label: true, source }); r.value = text; let loaded = text, base = r.value;
+    return {
+      get value() { return r.value === base ? loaded : r.value + '\n'; },
+      saved() { loaded = r.value + '\n'; base = r.value; },
+      focus: () => r.focus(), destroy() {}, source,
+    };
+  }
+  const T = window.t || (x => x);
+  box.className = 'md-editor';
+  box.innerHTML = '<div class="md-visual"></div><textarea class="md-src editor" hidden spellcheck="true" aria-label="Content (Markdown)"></textarea>';
+  const vis = box.querySelector('.md-visual'), src = box.querySelector('.md-src');
+  let crepe = null, loaded = text, base = '', ready = false, srcMode = source;
+  src.addEventListener('input', () => onChange());
+  const item = l => ({ label: T(l) });
+  const build = async markdown => {
+    ready = false;
+    await crepe?.destroy(); vis.innerHTML = '';
+    crepe = new M.CrepeBuilder({ root: vis, defaultValue: markdown });
+    crepe.editor.config(ctx => ctx.update(M.remarkStringifyOptionsCtx, o => ({ ...o, bullet: '-' })));
+    crepe.addFeature(M.cursor).addFeature(M.listItem).addFeature(M.table).addFeature(M.toolbar)
+      .addFeature(M.linkTooltip, { inputPlaceholder: T('Paste a link…') })
+      .addFeature(M.placeholder, { text: T('Type / for headings, lists, tables…') })
+      .addFeature(M.topBar, { headingOptions: [{ label: T('Paragraph'), level: null }, ...[1, 2, 3, 4, 5, 6].map(level => ({ label: T('Heading ' + level), level }))] })
+      .addFeature(M.blockEdit, {
+        textGroup: { label: T('Text'), text: item('Text'), h1: item('Heading 1'), h2: item('Heading 2'), h3: item('Heading 3'), h4: item('Heading 4'), h5: item('Heading 5'), h6: item('Heading 6'), quote: item('Quote'), divider: item('Divider') },
+        listGroup: { label: T('Lists'), bulletList: item('Bullet list'), orderedList: item('Numbered list'), taskList: item('Checklist') },
+        advancedGroup: { label: T('More'), image: null, math: null, codeBlock: item('Code'), table: item('Table') },
+      });
+    crepe.on(l => l.markdownUpdated((_, now) => { if (ready && now !== base) onChange(); }));
+    await crepe.create();
+    loaded = markdown; base = crepe.getMarkdown(); ready = true;
+  };
+  const visual = () => { const m = crepe.getMarkdown(); return m === base ? loaded : m.replace(/\n*$/, '\n'); };
+  if (srcMode) { src.value = text; vis.hidden = true; src.hidden = false; } else await build(text);
+  return {
+    get value() { return srcMode ? src.value : visual(); },
+    get source() { return srcMode; },
+    saved() { if (srcMode) return; loaded = visual(); base = crepe.getMarkdown(); },
+    async toggleSource() {
+      if (srcMode) { await build(src.value); srcMode = false; } else { src.value = visual(); srcMode = true; }
+      vis.hidden = srcMode; src.hidden = !srcMode; this.focus();
+      return srcMode;
+    },
+    focus() { srcMode ? src.focus() : vis.querySelector('.ProseMirror')?.focus(); },
+    destroy() { crepe?.destroy(); crepe = null; },
+  };
 }
 function fullViewer(on) {
   const v = $('#viewer'), b = $('#viewer-full');
   v.classList.toggle('full', on);
   if (b) { b.textContent = on ? 'Exit full screen' : 'Full screen'; b.setAttribute('aria-pressed', String(on)); }
 }
-function closeViewer() { fullViewer(false); $('#viewer').hidden = true; lib.file = null; document.body.classList.remove('viewer-open'); }
+function closeViewer() { fullViewer(false); viewerEd?.destroy(); viewerEd = null; $('#viewer').hidden = true; lib.file = null; document.body.classList.remove('viewer-open'); }
 function viewerForm(value, onOk, folders = false) {
   const form = $('#viewer-form'), input = $('#viewer-input');
   form.hidden = false; input.value = value; folderPicker(input, folders); input.focus(); input.select();
@@ -3510,7 +3601,11 @@ function moreActions(open) {
   $('#viewer-more').textContent = open ? t('Less') : t('More') + ' ▾';
 }
 $('#viewer-more').onclick = () => moreActions(!$('.viewer-actions').classList.contains('open'));
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#viewer').hidden) $('#viewer').classList.contains('full') ? fullViewer(false) : closeViewer(); });
+// capture: seen before the Markdown editor closes its own menu, which is all Esc does then
+const MD_MENUS = ['slash-menu', 'toolbar', 'link-edit', 'link-preview'].map(c => `#viewer .milkdown-${c}[data-show=true]`).join() + ',#viewer .top-bar-heading-dropdown';
+let mdMenuOpen = false;
+window.addEventListener('keydown', e => { mdMenuOpen = e.key === 'Escape' && !!$(MD_MENUS); }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#viewer').hidden && !mdMenuOpen) $('#viewer').classList.contains('full') ? fullViewer(false) : closeViewer(); });
 $('#viewer-form-cancel').onclick = () => { $('#viewer-form').hidden = true; };
 $('#viewer-rename').onclick = () => viewerForm(lib.file.name, async v => { const { file } = await post(`api/files/${lib.file.id}/rename`, { name: v }); await loadLibrary(); openFile(file.id); });
 $('#viewer-move').onclick = () => viewerForm(lib.file.folder, async v => { const { file } = await post(`api/files/${lib.file.id}/move`, { folder: v }); toast('Moved to ' + file.folder); await loadLibrary(); openFile(file.id); }, true);

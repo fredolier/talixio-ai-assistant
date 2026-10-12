@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "description": "Builds web/public/vendor/milkdown-<version>.{js,css}: the library's Markdown editor (see build.sh)",
+  "dependencies": {
+    "@milkdown/crepe": "7.22.3",
+    "esbuild": "0.28.2"
+  }
+}

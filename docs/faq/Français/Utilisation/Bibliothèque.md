@@ -46,9 +46,11 @@
 *Nouvelle note* crée une note Markdown modifiable. L'assistant peut aussi en enregistrer (`kb_save_note`).
 
 *Modifier* sur un fichier Markdown ouvre un éditeur visuel : titres, listes, cases à cocher, tableaux et liens
-s'affichent comme à la lecture. **MD** bascule sur la source Markdown (les fichiers avec en-tête YAML ou HTML
-s'ouvrent dessus). *Plein écran* donne toute la fenêtre à l'éditeur ; Échap en sort. Un fichier ouvert puis
-enregistré sans modification reste exactement tel quel.
+s'affichent comme à la lecture. Tapez `/` sur une ligne vide pour les titres, listes, citations, code, tableaux ou
+un séparateur ; sélectionnez du texte pour la barre de mise en forme ; dans un tableau, ajoutez ou déplacez lignes
+et colonnes depuis ses poignées. **Markdown** bascule sur la source (les fichiers avec en-tête YAML ou HTML
+s'ouvrent dessus). *Plein écran* donne toute la fenêtre à l'éditeur ; Échap ferme d'abord un menu, puis en sort.
+Un fichier ouvert puis enregistré sans modification reste exactement tel quel.
 
 ## Le dossier /FAQ
 Il est en lecture seule et remis à jour à chaque version : ces pages en font partie.
