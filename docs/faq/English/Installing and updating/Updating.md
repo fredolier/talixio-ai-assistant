@@ -35,3 +35,10 @@ and in Settings → *Updates*.
 ## The app is stuck after an update?
 Reload the page (or close and reopen the app). Since 0.12.1, scripts are served from an address
 that includes the version: a page can no longer run with scripts from another version.
+
+## What happens to running jobs?
+The update first waits up to 10 minutes for running background jobs to finish, and starts no new
+one meanwhile. A job still running when the app restarts (or after a server reboot) is started
+again once: a research job carries on from the steps it had already done. You get one message
+listing the interrupted jobs. Queued jobs and routines simply run once the app is back; an answer
+being written in the chat is cut off, so ask again.

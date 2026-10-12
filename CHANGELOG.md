@@ -3,6 +3,21 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.18 (2026-10-12)
+
+- Updates and restarts no longer silently lose running jobs: a job killed by a restart is started again once (a
+  research job carries on from the steps it had done; a job that was already such a restart is not retried again),
+  and the user gets one message, in the thread and on their notification channels, listing the interrupted jobs.
+- The update waits up to 10 minutes for running jobs to finish before restarting, and starts no new job meanwhile
+  (`talixio drain`, released by the restart or `talixio drain off` if the install fails).
+- Prompt: Python tools the assistant writes for itself go through `script_save` (stored in /tools with their header,
+  shown on the Memory page), never as `.py` files in the library; "outil", "tool" and "simulat…" now bring the
+  sandbox tools.
+- Prompt: the assistant never says it created, saved or scheduled something unless a tool did it and returned success
+  (it had announced three scripts in a library folder that were never written).
+- Prompt: for a study or long project, ask the user a numbered list of questions first, keep the report in the folder
+  the user named and update it there, and offer a weekly routine to move it forward.
+
 ## 0.28.17 (2026-10-12)
 
 - New browser tool `browser_save_login`: after logging in to a site in Talixio's browser (the user gives the code they

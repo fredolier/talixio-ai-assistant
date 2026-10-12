@@ -71,9 +71,17 @@ update() {
   if ! { echo "== git"; timeout 300 runuser -u "$OWNER" -- git -C "$SRC" fetch origin "$BRANCH" && git_src merge --ff-only "origin/$BRANCH"; } >>"$LOG" 2>&1; then
     status failed "The repository has local changes or diverged from origin/$BRANCH: update it by hand (git pull) and run install.sh."; return 1
   fi
+  status updating "Waiting for running jobs to finish…"
+  # the restart kills running jobs: let them finish first (no new one starts meanwhile), 10 minutes at most
+  for _ in $(seq 60); do
+    n="$("$APP/deploy/talixio-cli" drain 2>>"$LOG" | tail -1)"
+    [ "${n:-0}" -gt 0 ] 2>/dev/null || break
+    echo "== waiting for $n running job(s)" >>"$LOG"; sleep 10
+  done
   status updating "Installing… the app restarts in a moment."
   # shellcheck disable=SC2086
   if ! { echo "== install.sh $ARGS"; eval "bash \"$SRC/install.sh\" $ARGS"; } >>"$LOG" 2>&1; then
+    "$APP/deploy/talixio-cli" drain off >>"$LOG" 2>&1 || true
     status failed "install.sh failed (see the log). You can restore the previous version."; return 1
   fi
   CURRENT="$(installed_sha)"; LATEST="$CURRENT"; COMMITS=""

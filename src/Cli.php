@@ -65,6 +65,11 @@ final class Cli
                     }
                     Settings::write($dir, $over);
                     return 0;
+                case 'drain': // before an update: start no new job, print how many are still running
+                    if (($argv[2] ?? '') === 'off') { @unlink(Jobs::drainFile($app->cfg->dataDir)); return 0; }
+                    touch(Jobs::drainFile($app->cfg->dataDir));
+                    echo count($app->store->jobsWithStatus('running')), "\n";
+                    return 0;
                 case 'backup':
                     echo $app->backup()->run(), "\n";
                     return 0;
@@ -89,7 +94,7 @@ final class Cli
                     $p = proc_open(array_merge([$c->signalCli, '--config', $c->dataDir . '/signal', '-a', $c->signalNumber], array_slice($argv, 2)), [STDIN, STDOUT, STDERR], $pipes);
                     return is_resource($p) ? proc_close($p) : 1;
                 default:
-                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|backup|password|totp [off]|signal ARGS|transfer-pull URL CODE [--final] [--url URL]|mcp|index|job ID\n");
+                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|backup|password|totp [off]|signal ARGS|transfer-pull URL CODE [--final] [--url URL]|mcp|index|job ID|drain [off]\n");
                     return 2;
             }
         } catch (\Throwable $e) {

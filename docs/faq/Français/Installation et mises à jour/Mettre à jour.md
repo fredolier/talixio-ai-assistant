@@ -35,3 +35,10 @@ et dans Réglages → *Mises à jour*.
 ## L'app reste figée après une mise à jour ?
 Rechargez la page (ou fermez et rouvrez l'app). Depuis la 0.12.1, les scripts sont servis à une adresse
 qui porte la version : une page ne peut plus tourner avec des scripts d'une autre version.
+
+## Que deviennent les jobs en cours ?
+La mise à jour attend d'abord jusqu'à 10 minutes que les jobs en arrière-plan se terminent, sans en
+lancer de nouveaux. Un job encore en cours au redémarrage de l'app (ou après un redémarrage du
+serveur) est relancé une fois : un job de recherche reprend à partir des étapes déjà faites. Vous
+recevez un message listant les jobs interrompus. Les jobs en attente et les routines s'exécutent
+dès que l'app est revenue ; une réponse en cours d'écriture dans le chat est coupée : reposez la question.

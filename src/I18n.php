@@ -43,6 +43,10 @@ final class I18n
         'Approved: {what}. Continuing.' => 'Validé : {what}. Je continue.',
         'Done: {what}' => 'Fait : {what}',
         'Failed: {what}' => 'Échec : {what}',
+        'Jobs interrupted by a restart' => 'Jobs interrompus par un redémarrage',
+        'The assistant restarted (an update or a reboot) while these jobs were running:' => 'L\'assistant a redémarré (une mise à jour ou un redémarrage du serveur) pendant que ces jobs tournaient :',
+        '→ started again as job #{id}' => '→ relancé (job n° {id})',
+        '→ not started again: run it again from Jobs if you still need it' => '→ pas relancé : relancez-le depuis Jobs si vous en avez encore besoin',
         'Learned a skill: **{name}**: {description}' . "\n" . 'You can see or edit it on the Memory page.' =>
             'Nouveau savoir-faire : **{name}** : {description}' . "\n" . 'Vous pouvez le voir ou le modifier dans la page Mémoire.',
         'Updated a skill: **{name}**: {description}' . "\n" . 'You can see or edit it on the Memory page.' =>

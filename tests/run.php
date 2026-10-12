@@ -320,6 +320,22 @@ check('job stops at its cost cap', $s->job($id)['status'] === 'failed' && str_co
 $id = $s->addJob('Cancel me', 'x', 'fast', 0.5);
 check('cancel queued job', $app->jobs()->cancel($id) && $s->job($id)['status'] === 'cancelled' && !$app->jobs()->cancel($id));
 
+// a restart (update, reboot) kills running jobs: each is started again once, the user is told
+$r1 = $s->addJob('Long study', 'x', 'fast', 1.0); $s->claimJob($r1);
+$rq = $s->addJob('Waiting', 'x', 'fast', 1.0);
+$back = $app->jobs()->recoverInterrupted();
+$again = $back[$r1] ?? 0;
+check('restart: a running job is marked interrupted and continued once; queued ones wait', $s->job($r1)['result'] === Talixio\Jobs::INTERRUPTED
+    && $again && $s->job($again)['status'] === 'queued' && (int)$s->job($again)['parent'] === $r1 && $s->job($rq)['status'] === 'queued' && !isset($back[$rq]));
+$rm = $s->messagesAfter(0);
+check('restart: the user is told which jobs were interrupted', str_contains(end($rm)['content'] ?? '', "Long study (#$r1)"));
+$s->claimJob($again);
+$back2 = $app->jobs()->recoverInterrupted();
+check('restart: a job already restarted once is not restarted again', array_key_exists($again, $back2) && $back2[$again] === null);
+check('restart: the update can hold new jobs back', !Talixio\Jobs::draining($dir) && touch(Talixio\Jobs::drainFile($dir)) && Talixio\Jobs::draining($dir)
+    && (function () use ($app, $s, $rq, $dir) { $app->jobs()->dispatch(); $ok = $s->job($rq)['status'] === 'queued'; unlink(Talixio\Jobs::drainFile($dir)); return $ok; })());
+$s->q("DELETE FROM jobs WHERE status = 'queued'");
+
 // job cap and effort: chosen per job, warned at 80% so the report is written
 $out = $app->tools->run('delegate', ['title' => 'Big study', 'instructions' => 'x', 'effort' => 'xhigh', 'max_usd' => 50]);
 $big = $s->job((int)preg_replace('/\D.*/s', '', substr($out, 5)));

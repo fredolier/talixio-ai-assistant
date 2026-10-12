@@ -175,11 +175,49 @@ final class Jobs
     }
 
     /** Worker startup: jobs left "running" by a previous worker were killed with it. */
-    public function recoverInterrupted(): void
+    public const INTERRUPTED = 'Interrupted by a restart.';
+
+    /**
+     * At worker start: jobs left running were killed by the restart (an update, a reboot). Each is marked failed and
+     * started again once (a research job carries on from its steps); a job that was already a retry is not retried again.
+     * The user gets one message listing them. Returns [job id => new job id or null].
+     */
+    public function recoverInterrupted(): array
     {
-        foreach ($this->app->store->jobsWithStatus('running') as $j) {
-            $this->app->store->updateJob((int)$j['id'], ['status' => 'failed', 'result' => 'Interrupted by a restart.', 'finished' => time()]);
+        $store = $this->app->store;
+        $out = [];
+        foreach ($store->jobsWithStatus('running') as $j) {
+            $id = (int)$j['id'];
+            $store->updateJob($id, ['status' => 'failed', 'result' => self::INTERRUPTED, 'finished' => time()]);
+            $new = null;
+            if ($j['kind'] !== 'reflect' && !$this->wasRetried($j)) {
+                try { $new = $j['kind'] === 'agent' ? $this->continue($id) : $this->rerun($id); }
+                catch (\Throwable $e) { Log::warn("job $id: not restarted: {$e->getMessage()}"); }
+            }
+            $out[$id] = $new;
+            Log::info("job $id interrupted by a restart" . ($new ? ", started again as job $new" : ''));
         }
+        $shown = array_filter($store->q('SELECT id, title, kind, space FROM jobs WHERE id IN (' . (implode(',', array_keys($out)) ?: '0') . ')')->fetchAll(), fn($j) => $j['kind'] !== 'reflect');
+        if ($shown) {
+            $lines = array_map(fn($j) => '- ' . $j['title'] . ' (#' . $j['id'] . ') ' . ($out[(int)$j['id']]
+                ? I18n::t($this->app, '→ started again as job #{id}', ['id' => $out[(int)$j['id']]])
+                : I18n::t($this->app, '→ not started again: run it again from Jobs if you still need it')), $shown);
+            $text = I18n::t($this->app, 'The assistant restarted (an update or a reboot) while these jobs were running:') . "\n" . implode("\n", $lines);
+            $space = (int)reset($shown)['space'];
+            $store->addMessage('assistant', 'job', "⚠️ $text", null, [], $space); // in the thread, so the assistant knows too
+            try {
+                $this->app->notifier()->notify(I18n::t($this->app, 'Jobs interrupted by a restart'), $text, $space);
+            } catch (\Throwable $e) { Log::warn("interrupted jobs: not notified: {$e->getMessage()}"); }
+        }
+        return $out;
+    }
+
+    /** Whether this job is itself the restart of a job a restart interrupted (so it isn't restarted forever). */
+    private function wasRetried(array $j): bool
+    {
+        if (!empty($j['parent'])) return ($this->app->store->job((int)$j['parent'])['result'] ?? '') === self::INTERRUPTED;
+        return (int)$this->app->store->q("SELECT COUNT(*) FROM jobs WHERE title = ? AND kind = ? AND id <> ? AND result = ? AND finished >= ?",
+            [$j['title'], $j['kind'], (int)$j['id'], self::INTERRUPTED, time() - 86400])->fetchColumn() > 0;
     }
 
     /** Worker tick: reap finished processes, stop cancelled ones, start queued jobs. */
@@ -198,6 +236,7 @@ final class Jobs
                 proc_terminate($proc);
             }
         }
+        if (self::draining($this->app->cfg->dataDir)) return; // an update is waiting for the running jobs to finish
         foreach ($store->jobsWithStatus('queued') as $j) {
             if (count(self::$procs) >= $this->app->cfg->maxParallelJobs) break;
             if (!$store->claimJob((int)$j['id'])) continue;
@@ -208,6 +247,10 @@ final class Jobs
     }
 
     public static function runningCount(): int { return count(self::$procs); }
+
+    /** The update asks the worker not to start new jobs while it waits for the running ones (for 15 minutes at most). */
+    public static function drainFile(string $dataDir): string { return "$dataDir/update-draining"; }
+    public static function draining(string $dataDir): bool { return (@filemtime(self::drainFile($dataDir)) ?: 0) > time() - 900; }
 
     /** Runs inside the job process. */
     public function runJob(int $id): void
