@@ -12,6 +12,9 @@ final class I18n
     public const LANGS = ['en', 'fr'];
 
     private const FR = [
+        'Costs are estimated from list prices; no real bill reported yet.' => 'Les coûts sont estimés à partir des prix publics ; aucune facture réelle saisie pour l\'instant.',
+        'Estimates are corrected ×{factor}, from the last {n} bills you reported.' => 'Les estimations sont corrigées ×{factor}, d\'après les {n} dernières factures saisies.',
+        'Estimates are corrected ×{factor}, from the bill you reported.' => 'Les estimations sont corrigées ×{factor}, d\'après la facture saisie.',
         'The European provider ({name}) refuses its key (HTTP {code}): it has expired or was deleted. Make a new one ({keys}) and paste it in Settings → AI model.' =>
             'Le fournisseur européen ({name}) refuse sa clé (HTTP {code}) : elle a expiré ou a été supprimée. Créez-en une nouvelle ({keys}) et collez-la dans Réglages → Modèle d\'IA.',
         'Cancelled: {title}' => 'Annulé : {title}',

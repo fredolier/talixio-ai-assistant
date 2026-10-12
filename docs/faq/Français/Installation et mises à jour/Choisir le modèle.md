@@ -27,5 +27,7 @@ Réglages → *Modèle d'IA* :
 - Trois niveaux : **rapide** (résumés, vérifications), **standard** (conversation), **approfondi** (raisonnements difficiles).
 - **Budget** : limites par jour et par mois en dollars. Au-delà de 80 %, il passe au niveau rapide ;
   à 100 %, il n'appelle plus de modèle.
-- Les coûts affichés sont des estimations à partir des prix publics.
+- Les coûts affichés sont des estimations à partir des prix publics. Une fois par mois, l'assistant demande ce que
+  votre fournisseur a réellement facturé (ou saisissez-le dans Activité → la ligne sous les jauges) : le budget est alors
+  corrigé par le rapport entre les vraies factures et les estimations, sur les trois dernières factures.
 - Avec Gemini gratuit, Google peut utiliser vos données et les limites sont basses : activez la facturation.

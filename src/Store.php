@@ -330,6 +330,12 @@ final class Store
         return (float)$this->q('SELECT COALESCE(SUM(cost_usd),0) FROM usage WHERE ts >= ?', [$ts])->fetchColumn();
     }
 
+    /** Estimated cost from $from (included) to $to (excluded). */
+    public function spentBetween(int $from, int $to): float
+    {
+        return (float)$this->q('SELECT COALESCE(SUM(cost_usd),0) FROM usage WHERE ts >= ? AND ts < ?', [$from, $to])->fetchColumn();
+    }
+
     public function usageByDay(int $days = 30): array
     {
         return $this->q("SELECT date(ts,'unixepoch','localtime') AS day, SUM(input_tokens+cache_read+cache_write) AS input, SUM(output_tokens) AS output,

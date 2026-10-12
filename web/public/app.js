@@ -2497,6 +2497,29 @@ async function loadSkills() {
   }
 }
 
+async function loadScripts() {
+  const { enabled, scripts } = await api('api/scripts');
+  $('#scripts-sec').hidden = !enabled && !scripts.length;
+  const box = $('#scripts'); box.innerHTML = '';
+  if (!scripts.length) { box.innerHTML = '<div class="placeholder">No scripts yet. When it does the same mechanical work a second time, it saves the code as a script to reuse.</div>'; return; }
+  for (const k of scripts) {
+    const el = document.createElement('div'); el.className = 'skill';
+    el.innerHTML = `<h4>${esc(k.name)}</h4><div class="actions"><button class="btn small" data-a="edit" type="button">Open</button><button class="btn small ghost" data-a="del" type="button">Delete</button></div>
+      <p>${esc(k.description)}${k.usage ? ` · <code>${esc(k.usage)}</code>` : ''}${k.used ? ` · used ${k.used}×` : ''}${k.approved ? '' : ' · <span class="muted">not approved yet</span>'}</p>`;
+    el.querySelector('[data-a=edit]').onclick = async () => {
+      const { content } = await api('api/scripts/' + encodeURIComponent(k.name));
+      state.script = k.name; $('#script-editor').value = content; $('#script-edit').hidden = false; $('#script-state').textContent = '';
+      $('#script-editor').focus();
+    };
+    el.querySelector('[data-a=del]').onclick = async () => {
+      const b = el.querySelector('[data-a=del]');
+      if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Confirm delete'; return; }
+      try { await post(`api/scripts/${encodeURIComponent(k.name)}/delete`); toast('Script deleted'); loadScripts(); } catch (e) { toast(e.message); }
+    };
+    box.append(el);
+  }
+}
+
 function showDigest(d) {
   const l = d.levels || {};
   const parts = [l[3] && `${l[3]} month(s)`, l[2] && `${l[2]} week(s)`, l[1] && `${l[1]} recent summary(ies)`].filter(Boolean);
@@ -2559,6 +2582,7 @@ function showMind(d) {
 async function loadMemory() {
   loadMind().catch(e => toast(e.message));
   loadSkills().catch(e => toast(e.message));
+  loadScripts().catch(e => toast(e.message));
   loadDigest().catch(() => {});
   state.memFiles = (await api('api/memory')).files;
   const tabs = $('#mem-tabs'); tabs.innerHTML = '';
@@ -3153,7 +3177,7 @@ function chartHover(chart) {
 
 async function loadActivity() {
   loadHeartbeats().catch(() => {});
-  const { usage, tools, budget, by_tier, by_source, memory, backup } = await api('api/activity');
+  const { usage, tools, budget, by_tier, by_source, memory, backup, calibration } = await api('api/activity');
   const meter = (label, spent, limit) => {
     const pct = limit > 0 ? Math.min(100, spent / limit * 100) : 0;
     const cls = !limit ? '' : pct >= 100 ? 'blocked' : pct >= 80 ? 'low' : '';
@@ -3161,6 +3185,10 @@ async function loadActivity() {
       <b>$${spent.toFixed(2)}</b><div class="track ${cls}"><i style="width:${pct.toFixed(1)}%"></i></div></div>`;
   };
   $('#budget').innerHTML = meter('Spent today', budget.today, budget.daily_limit) + meter('Spent this month', budget.month, budget.monthly_limit);
+  $('#calib-text').textContent = calibration.text;
+  if (!$('#bill-month').value) $('#bill-month').value = calibration.last_month;
+  $('#bills tbody').innerHTML = calibration.reports.length ? calibration.reports.map(r => `<tr><td>${esc(r.from)} → ${esc(r.to)}</td><td>${r.amount.toFixed(2)} ${esc(r.currency)}</td><td>$${r.estimate.toFixed(2)}</td><td>${r.estimate >= 0.01 ? '×' + (r.usd / r.estimate).toFixed(2) : '–'}</td></tr>`).join('')
+    : '<tr><td colspan="4" class="muted">No bill recorded yet.</td></tr>';
   const rows = list => list.length ? list.map(r => `<tr><td>${esc(r.name || '-')}</td><td>${nf.format(r.calls)}</td><td>${ktok(+r.input + +r.output)}</td><td>${r.cost == null ? '?' : money(+r.cost) || '$0'}</td></tr>`).join('')
     : '<tr><td colspan="4" class="muted">Nothing yet.</td></tr>';
   $('#by-tier tbody').innerHTML = rows(by_tier);
@@ -3306,11 +3334,21 @@ $('#search-form').onsubmit = e => {
     box.innerHTML = (phase === 'meaning' ? searchWait('Searching by meaning…') : '') + results.map(hit).join('') + (phase === 'done' && !results.length ? '<div class="placeholder">Nothing found.</div>' : '');
   });
 };
+$('#bill-form').onsubmit = async e => {
+  e.preventDefault();
+  try { await post('api/bill', { month: $('#bill-month').value, amount: +$('#bill-amount').value, currency: $('#bill-currency').value }); $('#bill-amount').value = ''; loadActivity(); }
+  catch (err) { toast(err.message); }
+};
 $('#skill-save').onclick = async () => {
   try { await post('api/skills/' + encodeURIComponent(state.skill), { content: $('#skill-editor').value }); $('#skill-state').textContent = 'Saved'; loadSkills(); }
   catch (e) { toast(e.message); }
 };
 $('#skill-cancel').onclick = () => { $('#skill-edit').hidden = true; };
+$('#script-save').onclick = async () => {
+  try { await post('api/scripts/' + encodeURIComponent(state.script), { content: $('#script-editor').value }); $('#script-state').textContent = 'Saved'; loadScripts(); }
+  catch (e) { toast(e.message); }
+};
+$('#script-cancel').onclick = () => { $('#script-edit').hidden = true; };
 $('#mem-editor').addEventListener('input', () => { $('#mem-state').textContent = 'Unsaved changes'; });
 $('#mem-save').onclick = async () => {
   try {

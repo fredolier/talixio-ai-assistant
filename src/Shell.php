@@ -5,7 +5,7 @@ namespace Talixio;
 /**
  * Commands in a sandbox (bubblewrap): the assistant gets a Linux machine of its own to compute, convert files,
  * analyse data with Python... It sees only the system programs (read-only) and its work folder (/work, kept
- * between runs); not the rest of the server, its data, keys or other processes. No network unless allowed.
+ * between runs) and its own scripts (/tools, read-only); not the rest of the server, its data, keys or other processes. No network unless allowed.
  * TALIXIO_SHELL: off | ask (every command waits for your approval) | auto (runs without asking, still sandboxed).
  */
 final class Shell
@@ -35,7 +35,7 @@ final class Shell
         $a = [self::binary(), '--die-with-parent', '--new-session', '--unshare-all'];
         if ($network) $a[] = '--share-net';
         array_push($a, '--ro-bind', '/usr', '/usr', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
-            '--bind', $this->workDir(), '/work', '--chdir', '/work', '--clearenv',
+            '--bind', $this->workDir(), '/work', '--ro-bind', $this->app->scripts()->dir(), '/tools', '--chdir', '/work', '--clearenv',
             '--setenv', 'HOME', '/work', '--setenv', 'PATH', '/work/.local/bin:/usr/local/bin:/usr/bin:/bin', '--setenv', 'LANG', 'C.UTF-8',
             '--setenv', 'TZ', $this->app->cfg->timezone, '--setenv', 'MPLBACKEND', 'Agg', '--setenv', 'PYTHONUNBUFFERED', '1');
         foreach (['bin', 'lib', 'lib64', 'sbin'] as $l) if (is_link("/$l")) array_push($a, '--symlink', "usr/$l", "/$l");

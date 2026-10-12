@@ -73,6 +73,7 @@ final class Config
     public string $searxngUrl = '';
     public float $budgetDaily = 0.0;
     public float $budgetMonthly = 0.0;
+    public float $eurUsd = 1.10;               // to compare bills in euros with prices in dollars
     public string $prices = '';
     public int $maxParallelJobs = 3;
     public float $jobMaxUsd = 2.0;               // default cost cap of a background job
@@ -251,6 +252,7 @@ final class Config
         }
         $c->budgetDaily = (float)$e('TALIXIO_BUDGET_DAILY_USD', '0');
         $c->budgetMonthly = (float)$e('TALIXIO_BUDGET_MONTHLY_USD', '0');
+        $c->eurUsd = (float)$e('TALIXIO_EUR_USD', '1.10') ?: 1.10;
         $c->prices = $e('TALIXIO_PRICES');
         $c->maxParallelJobs = max(1, (int)$e('TALIXIO_MAX_PARALLEL_JOBS', '3'));
         $c->jobMaxUsd = max(0.0, (float)$e('TALIXIO_JOB_MAX_USD', '2.00'));

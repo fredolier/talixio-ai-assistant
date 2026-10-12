@@ -2244,5 +2244,22 @@ window.I18N.fr = {
 "A message about routines and reminders, a retry, or a turn after a failed tool goes to the Deep model instead of the Standard one. Automatic: on with the European providers, whose Standard model is a small one.": "Un message sur les routines et rappels, une nouvelle tentative, ou le tour qui suit un outil en échec passe au modèle Approfondi au lieu du Standard. Automatique : activé avec les fournisseurs européens, dont le modèle Standard est un petit modèle.",
 "Always": "Toujours",
 "Never": "Jamais",
-"Using a stronger model…": "J'utilise un modèle plus solide…"
+"Using a stronger model…": "J'utilise un modèle plus solide…",
+"Enter what your AI provider actually billed (its console shows it). Talixio compares it with its own estimate for the same month and corrects the budget from the last three bills.": "Saisissez ce que votre fournisseur d'IA a réellement facturé (sa console l'indique). Talixio le compare à sa propre estimation pour le même mois et corrige le budget d'après les trois dernières factures.",
+"Amount": "Montant",
+"Record the bill": "Enregistrer la facture",
+"Period": "Période",
+"Billed": "Facturé",
+"Estimated": "Estimé",
+"Ratio": "Ratio",
+"No bill recorded yet.": "Aucune facture enregistrée pour l'instant.",
+"Euro to dollar rate": "Taux euro → dollar",
+"To compare a bill in euros (Mistral bills in euros) with the estimates in dollars.": "Pour comparer une facture en euros (Mistral facture en euros) aux estimations en dollars.",
+"Scripts": "Scripts",
+"Python scripts it wrote for mechanical tasks it does again (converting an export, tidying a table, a recurring calculation). They run in the sandbox, which sees only its work folder. When commands need your approval, you approve a script's code once; saving it here counts as approving it.": "Des scripts Python qu'il a écrits pour les tâches mécaniques qu'il refait (convertir un export, ranger un tableau, un calcul récurrent). Ils tournent dans le bac à sable, qui ne voit que son dossier de travail. Quand les commandes demandent votre accord, vous approuvez le code d'un script une seule fois ; l'enregistrer ici vaut approbation.",
+"Save script": "Enregistrer le script",
+"Script": "Script",
+"No scripts yet. When it does the same mechanical work a second time, it saves the code as a script to reuse.": "Pas encore de script. Quand il refait le même travail mécanique, il enregistre le code comme script à réutiliser.",
+"not approved yet": "pas encore approuvé",
+"Script deleted": "Script supprimé"
 };

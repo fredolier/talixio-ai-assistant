@@ -6,6 +6,9 @@
   by period, then by week and by month. Nothing is deleted: everything stays searchable.
 - **Skills**: the procedures learned for you, in Markdown; the assistant tells you
   when it learns one. View, edit or delete them on the Memory page.
+- **Scripts** (with the sandbox): when it does the same mechanical work again (converting an export,
+  tidying a table), it saves the Python code as a script and reuses it. When commands need your approval,
+  you approve a script's code once. View, edit or delete them on the Memory page.
 - **Character and values**: what matters to you, how you work, what it should do
   better; each belief with its evidence, *Why?* and *Forget*. Never about health, religion,
   politics, sexuality or origins.

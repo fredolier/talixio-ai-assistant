@@ -70,7 +70,8 @@ final class App
     public function agent(): Agent { return new Agent($this); }
     public function jobs(): Jobs { return new Jobs($this); }
     public function recall(): Recall { return new Recall($this->store, $this->embeddings, $this); }
-    public function budget(): Budget { return new Budget($this->store, $this->cfg->budgetDaily, $this->cfg->budgetMonthly); }
+    public function budget(): Budget { return new Budget($this->store, $this->cfg->budgetDaily, $this->cfg->budgetMonthly, $this->calibration()->factor()); }
+    public function calibration(): Calibration { return new Calibration($this); }
     public function pricing(): Pricing { return new Pricing($this->cfg->prices, $this->cfg->localModels() || $this->cfg->provider === 'echo'); }
     public function notifier(): Notifier { return new Notifier($this); }
     public function email(): Email { return new Email($this); }
@@ -94,6 +95,7 @@ final class App
     public function microsoft(): Microsoft { return new Microsoft($this); }
     public function spotify(): Spotify { return new Spotify($this); }
     public function shell(): Shell { return new Shell($this); }
+    public function scripts(): Scripts { return new Scripts($this); }
     public function mcp(): Mcp { return new Mcp($this); }
     public function mcpOAuth(): McpOAuth { return new McpOAuth($this); }
     public function browserAvailable(): bool { return $this->cfg->browser !== 'off' && Browser::findBinary($this->cfg->chromeBin) !== null; }

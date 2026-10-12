@@ -3,6 +3,19 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.14 (2026-10-12)
+
+- Cost estimates that learn from your real bills. Once a month (from the 3rd), the assistant asks at the end of
+  an answer what your AI provider actually billed for last month, and records it (`usage_bill`). Talixio
+  compares it with its own estimate for the same days, and corrects the budget by that ratio, averaged over the
+  last three bills: the estimates get closer to the bill each month. You can also enter a bill under Activity
+  (the line below the meters). Bills in euros are converted with Settings → Budget → Euro to dollar rate.
+- Reusable scripts. With the sandbox on, the assistant can save the Python code of a mechanical task it does
+  again (converting a bank export, tidying a table, a recurring calculation) as a script, and run it next time
+  with its arguments instead of rewriting the code. The scripts are listed in its instructions with what they
+  do, mounted read-only in the sandbox, and shown on the Memory page (open, edit, delete). With
+  `TALIXIO_SHELL=ask`, you approve a script's code once; it then runs without asking until it changes.
+
 ## 0.28.13 (2026-10-12)
 
 - Lower model bills through the prompt cache. The time, budget and recalled memories of each turn now come in front

@@ -8,16 +8,16 @@ final class Tools
     /** Which tools each kind of run gets. Sub-agents can read and research but not change memory, schedules or spawn more jobs. */
     public const SETS = [
         'chat' => null, // everything
-        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'mail_triage', 'contact_find', 'file_read', 'kb_search', 'kb_find', 'kb_list', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report', 'board_list', 'board_get'],
+        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'mail_triage', 'contact_find', 'file_read', 'kb_search', 'kb_find', 'kb_list', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report', 'usage_bill', 'board_list', 'board_get'],
         'reflect' => ['skill_read', 'skill_save'],
         'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'kb_search', 'kb_find', 'kb_list', 'calendar_events', 'mail_list', 'mail_read',
-            'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot', 'shell_run', 'mail_triage', 'contact_find', 'board_list', 'board_get'],
+            'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot', 'shell_run', 'script_run', 'script_read', 'mail_triage', 'contact_find', 'board_list', 'board_get'],
         'none' => [],
     ];
 
     /** Always sent when tools are focused: memory, search, reading. */
     private const CORE = ['memory_read', 'memory_append', 'memory_replace', 'skill_read', 'search_memory', 'web_search', 'fetch_url',
-        'file_read', 'kb_search', 'kb_find', 'kb_list', 'mind_observe', 'space_notes', 'list_tasks'];
+        'file_read', 'kb_search', 'kb_find', 'kb_list', 'mind_observe', 'space_notes', 'list_tasks', 'script_run'];
 
     /**
      * The other tools by group: [name prefixes, words in the conversation that call for them, what the group does].
@@ -32,7 +32,7 @@ final class Tools
         'browser' => [['browser_'], '/site|page|navig|browser|clique|click|formulaire|form\b|connecte|log ?in|réserv|book|https?:\/\/|www\.|command|order|achète|buy/iu', 'a web browser that clicks and types on pages'],
         'schedule' => [['schedule_task', 'cancel_task', 'routine_'], '/rappel|remind|chaque|tous les|toutes les|every|daily|quotidien|hebdo|weekly|mensuel|monthly|routine|programm|planifi|schedul|automati|plus tard|later|\bdans \d|\bin \d/iu', 'reminders and recurring routines'],
         'jobs' => [['delegate', 'list_jobs', 'continue_job', 'cancel_job', 'archive_job', 'schedule_job'], '/job|recherch|research|cherche|enquête|compar|analys|étude|study|arrière-plan|background|rapport|report|veille|approfondi|trouve|find|liste d|list of/iu', 'background jobs: long research and reports'],
-        'shell' => [['shell_'], '/script|commande|command|shell|code|python|calcul|comput|csv|excel|xlsx|json|convert|graph|chart|zip|statisti/iu', 'run code in a sandbox (calculations, files, conversions)'],
+        'shell' => [['shell_', 'script_'], '/script|commande|command|shell|code|python|calcul|comput|csv|excel|xlsx|json|convert|graph|chart|zip|statisti/iu', 'run code in a sandbox (calculations, files, conversions)'],
         'phone' => [['phone_'], '/appel|call|sms|texto|téléphon|phone|whatsapp|signal/iu', 'calls and texts from the phone'],
         'music' => [['spotify_'], '/musique|music|joue|play|chanson|song|spotify|playlist|album|artist|volume|écoute|listen/iu', 'Spotify'],
         'skills' => [['skill_'], '/compétence|skill|méthode|procédure|apprend|learn|retiens|à l\'avenir|next time|prochaine fois|toujours|always|jamais|never/iu', 'save or delete a skill (a method to reuse)'],
@@ -278,6 +278,16 @@ final class Tools
             fn(array $a) => $this->app->jobs()->cancel((int)$a['id']) ? 'cancelled' : 'error: job not found or already finished');
         $this->register('usage_report', 'Your spending: budget status, cost and tokens by tier and by source (chat, schedules, jobs...) today and this month.',
             [], [], fn() => $this->usageReport());
+        $this->register('usage_bill', "Record what the AI provider really billed (the figure the user read in the provider's console), to correct your cost estimates. Default period: last month.",
+            ['amount' => ['type' => 'number'], 'currency' => ['type' => 'string', 'enum' => ['EUR', 'USD']],
+             'month' => ['type' => 'string', 'description' => 'YYYY-MM; or give from and to'], 'from' => ['type' => 'string', 'description' => 'YYYY-MM-DD'], 'to' => ['type' => 'string', 'description' => 'YYYY-MM-DD, included']],
+            ['amount', 'currency'],
+            function (array $a) {
+                $r = $this->app->calibration()->report((float)$a['amount'], (string)$a['currency'], (string)($a['month'] ?? ''), (string)($a['from'] ?? ''), (string)($a['to'] ?? ''));
+                return sprintf('recorded: %s %.2f for %s → %s ($%.2f); Talixio had estimated $%.2f%s. Correction now ×%.2f.',
+                    $r['currency'], $r['amount'], $r['from'], $r['to'], $r['usd'], $r['estimate'],
+                    $r['ratio'] === null ? ' (too little to compare)' : sprintf(' (ratio %.2f)', $r['ratio']), $r['factor']);
+            });
 
         if ($app->calendar()->enabled()) {
             $this->register('calendar_events', "The user's calendar events between two dates (local time, YYYY-MM-DD or YYYY-MM-DD HH:MM). Default: today and the next 7 days.",
@@ -349,6 +359,21 @@ final class Tools
                 . "Time limit {$cfg->shellTimeout} s. Save results for the user with shell_save.$ask",
                 ['command' => ['type' => 'string'], 'files' => ['type' => 'array', 'items' => ['type' => 'integer']]], ['command'],
                 fn(array $a) => $this->shellRun($a));
+            $this->register('script_run', 'Run one of your saved Python scripts (listed under "Your scripts") in the sandbox, from /work: '
+                . 'python3 /tools/<name>.py with these arguments. files: library file ids to copy into /work/in first.',
+                ['name' => ['type' => 'string'], 'args' => ['type' => 'array', 'items' => ['type' => 'string']], 'files' => ['type' => 'array', 'items' => ['type' => 'integer']]], ['name'],
+                fn(array $a) => $this->scriptRun($a));
+            $this->register('script_save', 'Save a reusable Python script for a mechanical task you will do again (same conversion, cleanup or calculation), '
+                . 'so next time you run it with script_run instead of rewriting the code. It reads its inputs from its arguments (sys.argv) and /work, writes to /work, '
+                . 'and prints a short result. Test it with shell_run first (python3 - <<EOF ... or a file in /work). Saving a script with the same name replaces it.'
+                . ($cfg->shell === 'ask' ? ' The user approves its code once; running it afterwards needs no approval.' : ''),
+                ['name' => ['type' => 'string'], 'description' => ['type' => 'string', 'description' => 'what it does and when to use it'],
+                 'usage' => ['type' => 'string', 'description' => 'e.g. "<in.csv> <out.csv> [--month YYYY-MM]"'], 'code' => ['type' => 'string']], ['name', 'description', 'code'],
+                fn(array $a) => $this->scriptSave($a));
+            $this->register('script_read', 'Read the code of one of your saved scripts (to fix or extend it).', ['name' => ['type' => 'string']], ['name'],
+                fn(array $a) => $this->app->scripts()->read((string)$a['name']) ?? "error: no script named '{$a['name']}'");
+            $this->register('script_delete', 'Delete one of your saved scripts.', ['name' => ['type' => 'string']], ['name'],
+                fn(array $a) => $this->app->scripts()->delete((string)$a['name']) ? 'deleted' : "error: no script named '{$a['name']}'");
             $this->register('shell_save', "Save a file from the sandbox's /work folder into the user's library (e.g. a chart, a converted document, a CSV). Default folder /Inbox.",
                 ['path' => ['type' => 'string'], 'folder' => ['type' => 'string'], 'name' => ['type' => 'string']], ['path'],
                 function (array $a) {
@@ -736,6 +761,39 @@ final class Tools
         return $this->app->shell()->run($cmd, $files);
     }
 
+    private function scriptSave(array $a): string
+    {
+        $scripts = $this->app->scripts();
+        $slug = Skills::slug((string)$a['name']);
+        $content = Scripts::render($slug, (string)$a['description'], (string)($a['usage'] ?? ''), (string)$a['code']);
+        $ask = $this->app->cfg->shell === 'ask' && !in_array('script_save', $this->app->cfg->autoApprove, true);
+        if ($ask && $scripts->read($slug) !== $content) {
+            if (App::$inWorker) return "error: saving a script needs the user's approval, which can't be awaited here. Run the code with shell_run instead.";
+            $summary = ($scripts->read($slug) !== null ? "Replace" : "Save") . " the script $slug (runs in the sandbox, without approval afterwards):\n" . mb_substr($content, 0, 6000);
+            if (!$this->app->approvals()->ask('script_save', ['name' => $slug], $summary)) return 'error: the user did not approve this script. Nothing was saved.';
+        }
+        $existed = $scripts->read($slug) !== null;
+        $scripts->save($slug, (string)$a['description'], (string)$a['code'], (string)($a['usage'] ?? ''), true);
+        return ($existed ? 'updated' : 'saved') . " script '$slug': run it with script_run name=$slug.";
+    }
+
+    private function scriptRun(array $a): string
+    {
+        $scripts = $this->app->scripts();
+        $name = (string)$a['name'];
+        if ($scripts->read($name) === null) return "error: no script named '$name'. Yours: " . (implode(', ', array_column($scripts->all(), 'name')) ?: 'none yet');
+        $files = array_map('intval', (array)($a['files'] ?? []));
+        $cmd = $scripts->command($name, (array)($a['args'] ?? []));
+        if ($this->app->cfg->shell === 'ask' && !$scripts->approved($name) && !in_array('shell_run', $this->app->cfg->autoApprove, true)) {
+            if (App::$inWorker) return "error: this script changed since the user approved it, and approval can't be awaited here. Use delegate to hand the task to a background job.";
+            $summary = "Run the script $name (changed since you approved it):\n$cmd\n\n" . mb_substr((string)$scripts->read($name), 0, 6000);
+            if (!$this->app->approvals()->ask('shell_run', ['command' => $cmd], $summary)) return 'error: the user did not approve this script. Nothing was run.';
+            $scripts->approve($name);
+        }
+        $scripts->used($name);
+        return $this->app->shell()->run($cmd, $files);
+    }
+
     private function schedule(array $a): string
     {
         try {
@@ -804,7 +862,8 @@ final class Tools
             $r['name'] ?: '-', $r['calls'], number_format((int)$r['input']), number_format((int)$r['output']),
             $r['cost'] === null ? 'cost unknown' : '$' . number_format((float)$r['cost'], 4)), $rows)) ?: '  nothing yet';
         $today = strtotime('today'); $month = strtotime('first day of this month 00:00');
-        return $this->app->budget()->describe() . "\n\nToday by tier:\n" . $fmt($s->usageBy('tier', $today))
+        return $this->app->budget()->describe() . ' ' . $this->app->calibration()->describe() . ' The figures below are uncorrected estimates.'
+            . "\n\nToday by tier:\n" . $fmt($s->usageBy('tier', $today))
             . "\nToday by source:\n" . $fmt($s->usageBy('source', $today))
             . "\nThis month by model:\n" . $fmt($s->usageBy('model', $month));
     }

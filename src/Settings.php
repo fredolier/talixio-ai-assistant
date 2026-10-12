@@ -44,6 +44,7 @@ final class Settings
             'budget' => ['Budget', 'Estimated from list prices. 0 = no limit. At 80%: fast model and no sub-agents; at 100%: no more model calls.', [
                 ['TALIXIO_BUDGET_DAILY_USD', 'Daily budget ($)', 'number', 'Set 0 with the Claude Code plan (already paid for).'],
                 ['TALIXIO_BUDGET_MONTHLY_USD', 'Monthly budget ($)', 'number', ''],
+                ['TALIXIO_EUR_USD', 'Euro to dollar rate', 'number', 'To compare a bill in euros (Mistral bills in euros) with the estimates in dollars.'],
                 ['TALIXIO_MAX_PARALLEL_JOBS', 'Sub-agents in parallel', 'number', ''],
                 ['TALIXIO_JOB_MAX_USD', 'Cap per background job ($)', 'number', 'Default for each job. A job that reaches it is stopped (it is warned at 80% to write its report). 0 = no cap.'],
                 ['TALIXIO_JOB_MAX_USD_LIMIT', 'Highest cap for one job ($)', 'number', 'When you ask for a bigger job ("budget 5 $"), the assistant may raise its cap up to this.'],
@@ -196,7 +197,7 @@ final class Settings
     /** Defaults used by Config when nothing is set (shown in the app as placeholders). */
     public const DEFAULTS = [
         'TALIXIO_NAME' => 'Talixio', 'TALIXIO_LANG' => 'auto', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_HISTORY_TOKENS' => '12000', 'TALIXIO_PROVIDER' => 'anthropic',
-        'TALIXIO_DEEP_THINKING_TOKENS' => '8000', 'TALIXIO_BUDGET_DAILY_USD' => '0', 'TALIXIO_BUDGET_MONTHLY_USD' => '0', 'TALIXIO_MAX_PARALLEL_JOBS' => '3',
+        'TALIXIO_DEEP_THINKING_TOKENS' => '8000', 'TALIXIO_BUDGET_DAILY_USD' => '0', 'TALIXIO_BUDGET_MONTHLY_USD' => '0', 'TALIXIO_EUR_USD' => '1.10', 'TALIXIO_MAX_PARALLEL_JOBS' => '3',
         'TALIXIO_JOB_MAX_USD' => '2.00', 'TALIXIO_JOB_MAX_USD_LIMIT' => '10', 'TALIXIO_JOB_EFFORT' => 'medium', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0', 'TALIXIO_TASK_REMINDER' => '18:00', 'TALIXIO_TASKS_GOOGLE' => '1',
         'TALIXIO_SMTP_PORT' => '587', 'TALIXIO_SMTP_SECURITY' => 'auto', 'TALIXIO_IMAP_PORT' => '993', 'TALIXIO_EMAIL_REQUIRE_AUTH' => '1',
         'TALIXIO_MAILBOX_IMAP_PORT' => '993', 'TALIXIO_MAILBOX_SMTP_PORT' => '465', 'TALIXIO_SEARCH' => 'auto', 'TALIXIO_EMBEDDINGS' => 'auto',

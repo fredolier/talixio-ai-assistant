@@ -189,6 +189,10 @@ final class Web
             })(),
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
             $path === '/api/activity' => $this->activity(),
+            $path === '/api/bill' && $m === 'POST' => (function () use ($b) {
+                try { return $this->app->calibration()->report((float)($b['amount'] ?? -1), (string)($b['currency'] ?? 'EUR'), (string)($b['month'] ?? '')); }
+                catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+            })(),
             str_starts_with($path, '/api/board') => $this->board($m, $path, $b),
             $path === '/api/jobs' => $this->jobList(),
             $path === '/api/jobs/archive-finished' && $m === 'POST' => ['count' => $this->app->jobs()->archiveFinished(isset($b['space']) && $b['space'] !== '' ? (int)$b['space'] : null, (string)($b['tag'] ?? ''))],
@@ -224,6 +228,13 @@ final class Web
             (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'GET' => ['content' => $this->app->skills()->raw($mm[1]) ?? $this->fail(404, 'no such skill')],
             (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) { $this->app->skills()->writeRaw($mm[1], (string)($b['content'] ?? '')); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/skills/([\w-]+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->skills()->delete($mm[1])],
+            $path === '/api/scripts' => ['enabled' => $this->app->shell()->enabled(), 'scripts' => $this->app->scripts()->all()],
+            (bool)preg_match('#^/api/scripts/([\w-]+)$#', $path, $mm) && $m === 'GET' => ['content' => $this->app->scripts()->read($mm[1]) ?? $this->fail(404, 'no such script')],
+            (bool)preg_match('#^/api/scripts/([\w-]+)$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
+                try { $this->app->scripts()->writeRaw($mm[1], (string)($b['content'] ?? '')); } catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+                return ['ok' => true];
+            })(),
+            (bool)preg_match('#^/api/scripts/([\w-]+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->scripts()->delete($mm[1])],
             $path === '/api/approvals' => ['approvals' => array_map(fn($a) => $a + ['args_decoded' => json_decode($a['args'], true)], $this->app->approvals()->pending())],
             (bool)preg_match('#^/api/approvals/(\d+)/(approve|reject)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) {
                 $before = $this->app->store->maxMessageId();
@@ -751,6 +762,8 @@ final class Web
         $month = strtotime('first day of this month 00:00');
         return ['usage' => $s->usageByDay(30), 'by_tier' => $s->usageBy('tier', $month), 'by_source' => $s->usageBy('source', $month),
             'by_model' => $s->usageBy('model', $month), 'budget' => $this->app->budget()->status(), 'tools' => $s->toolLog(100),
+            'calibration' => ['text' => $this->app->calibration()->describe(I18n::lang($this->app)), 'reports' => array_reverse($this->app->calibration()->reports()),
+                'last_month' => date('Y-m', strtotime('first day of last month'))],
             'memory' => [
                 'messages' => (int)$s->q('SELECT COUNT(*) FROM messages')->fetchColumn(),
                 'summaries' => (int)$s->q('SELECT COUNT(*) FROM summaries')->fetchColumn(),

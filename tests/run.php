@@ -547,6 +547,28 @@ check('turn context: a message with parts gets a first text part; none after an 
     && Talixio\Content::withContext([['role' => 'assistant', 'content' => 'x']], 'ctx') === null && Talixio\Content::withContext([['role' => 'user', 'content' => 'x']], '') === [['role' => 'user', 'content' => 'x']]);
 $cached = Talixio\AnthropicProvider::cacheUpTo([['role' => 'user', 'content' => 'a'], ['role' => 'assistant', 'content' => [['type' => 'text', 'text' => 'b']]], ['role' => 'user', 'content' => 'c']]);
 check('anthropic cache: a breakpoint on the last message only', ($cached[2]['content'][0]['cache_control']['type'] ?? '') === 'ephemeral' && $cached[0]['content'] === 'a' && !isset($cached[1]['content'][0]['cache_control']));
+// ---- cost calibration from real bills ----
+$cal = $app->calibration();
+$lm = date('Y-m', strtotime('first day of last month'));
+$s->q('DELETE FROM usage');
+$s->q('INSERT INTO usage(ts,model,input_tokens,output_tokens,cache_read,cache_write,cost_usd,source,tier,job_id) VALUES(?,?,0,0,0,0,?,?,?,NULL)', [strtotime("$lm-10 12:00"), 'm', 2.0, 'web', 'fast']);
+$s->q('INSERT INTO usage(ts,model,input_tokens,output_tokens,cache_read,cache_write,cost_usd,source,tier,job_id) VALUES(?,?,0,0,0,0,?,?,?,NULL)', [time(), 'm', 1.0, 'web', 'fast']);
+check('calibration: factor 1 and no ask without a bill (echo provider)', $cal->factor() === 1.0 && $cal->due() === null && str_contains($cal->describe(), 'no real bill'));
+$prov = $app->cfg->provider; $app->cfg->provider = 'sovereign';
+$fourth = strtotime(date('Y-m-04 10:00'));
+check('calibration: last month is due from the 3rd, not before', $cal->due($fourth) === $lm && $cal->due(strtotime(date('Y-m-02 10:00'))) === null);
+check('calibration: the ask is sent once a week at most', str_contains($cal->ask(), 'usage_bill') && $cal->ask() === '');
+$out = $app->tools->run('usage_bill', ['amount' => 3.0, 'currency' => 'USD']);
+$s->set('bill_asked', '0');
+check('calibration: a bill gives the ratio to the estimate, and is not asked again', str_contains($out, 'ratio 1.50') && abs($cal->factor() - 1.5) < 1e-9 && $cal->due($fourth) === null, $out);
+$b = $app->budget()->status();
+check('calibration: the budget is corrected', abs($b['month'] - 1.5) < 1e-6 && str_contains($app->budget()->describe(), '×1.50'), json_encode($b));
+$cal->report(2.0, 'EUR', $lm);
+check('calibration: a new bill for the same month replaces it; euros converted', count($cal->reports()) === 1 && abs($cal->factor() - 2.0 * $app->cfg->eurUsd / 2.0) < 1e-6);
+$cal->report(100.0, 'USD', $lm);
+check('calibration: a wild bill is clamped', $cal->factor() === 5.0);
+try { $cal->report(1.0, 'GBP'); check('calibration: unknown currency refused', false); } catch (\InvalidArgumentException) { check('calibration: unknown currency refused', true); }
+$app->cfg->provider = $prov; $s->set('bill_reports', '[]'); $s->set('bill_asked', '0'); $s->q('DELETE FROM usage');
 check('job toolset cannot write memory', !in_array('memory_append', $app->tools->only('job')->names(), true));
 
 // ---- channels ----
@@ -1787,7 +1809,22 @@ if (\Talixio\Shell::binary()) {
     check('shell: results saved to the library', str_contains($sa->tools->run('shell_save', ['path' => '/work/note.txt', 'folder' => '/Results']), '/Results/note.txt'));
     check('shell: cannot save outside /work', str_starts_with($sa->tools->run('shell_save', ['path' => '../../settings.json']), 'error'));
     check('shell: time limit', str_contains($sa->shell()->run('sleep 10', [], 1), 'stopped after 1 s'));
+    $out = $sa->tools->run('script_save', ['name' => 'Add Up', 'description' => 'Sum numbers', 'usage' => '<n>...', 'code' => "import sys\nprint(sum(float(x) for x in sys.argv[1:]))"]);
+    check('scripts: saved with a header, listed in the prompt', str_contains($out, "saved script 'add-up'") && str_contains($sa->scripts()->read('add-up'), "name: add-up\ndescription: Sum numbers\nusage: <n>...")
+        && str_contains($sa->agent()->systemPrompt(), '- add-up: Sum numbers (usage: <n>...)'), $out);
+    $out = $sa->tools->run('script_run', ['name' => 'add-up', 'args' => ['2', '40', "'; touch pwned"]]);
+    check('scripts: run in the sandbox with escaped arguments', str_contains($out, '[exit code 1]') && !is_file($sa->shell()->workDir() . '/pwned'), $out);
+    check('scripts: run', str_contains($sa->tools->run('script_run', ['name' => 'add-up', 'args' => ['2', '40']]), '42.0'));
+    check('scripts: read-only in the sandbox', !str_contains($sa->shell()->run('echo x > /tools/add-up.py && echo written'), "\nwritten"));
+    check('scripts: unknown script', str_contains($sa->tools->run('script_run', ['name' => 'nope']), 'add-up'));
     putenv('TALIXIO_SHELL=ask'); $sa = App::fromEnv(); App::$inWorker = true;
+    check('scripts: approved code runs without asking in "ask" mode', str_contains($sa->tools->run('script_run', ['name' => 'add-up', 'args' => ['1', '1']]), '2.0'));
+    file_put_contents($sa->scripts()->dir() . '/add-up.py', "\nprint('changed')\n", FILE_APPEND);
+    check('scripts: changed code needs approval again', !$sa->scripts()->approved('add-up') && str_contains($sa->tools->run('script_run', ['name' => 'add-up']), 'changed since'));
+    $sa->scripts()->writeRaw('add-up', (string)$sa->scripts()->read('add-up'));
+    check('scripts: saving from the editor approves it', $sa->scripts()->approved('add-up') && str_contains($sa->tools->run('script_save', ['name' => 'x', 'description' => 'd', 'code' => 'print(1)']), 'approval'));
+    check('scripts: parse keeps the code, drops the header', Talixio\Scripts::parse((string)$sa->scripts()->read('add-up'))[1] === "import sys\nprint(sum(float(x) for x in sys.argv[1:]))\n\nprint('changed')");
+    check('scripts: delete', $sa->tools->run('script_delete', ['name' => 'add-up']) === 'deleted' && $sa->scripts()->all() === []);
     check('shell: "ask" mode cannot wait inside the worker', str_contains($sa->tools->run('shell_run', ['command' => 'ls']), 'delegate'));
     App::$inWorker = false; putenv('TALIXIO_SHELL');
 } else {

@@ -27,5 +27,7 @@ Settings → *AI model*:
 - Three tiers: **fast** (summaries, checks), **standard** (conversation), **deep** (hard reasoning).
 - **Budget**: daily and monthly limits in dollars. Above 80%, it switches to the fast tier;
   at 100%, it stops calling any model.
-- The costs shown are estimates based on public prices.
+- The costs shown are estimates based on public prices. Once a month the assistant asks what your provider
+  really billed (or enter it under Activity → the line below the meters): the budget is then corrected
+  by the ratio between the real bills and the estimates, over the last three bills.
 - With free Gemini, Google may use your data and the limits are low: turn on billing.

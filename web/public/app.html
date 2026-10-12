@@ -246,6 +246,15 @@
         <textarea id="skill-editor" class="editor" spellcheck="false" aria-label="Skill"></textarea>
         <div class="row"><button id="skill-save" class="btn primary" type="button">Save skill</button><button id="skill-cancel" class="btn" type="button">Close</button><span id="skill-state" class="muted small"></span></div>
       </div>
+      <div id="scripts-sec" hidden>
+        <h3>Scripts</h3>
+        <p class="muted small">Python scripts it wrote for mechanical tasks it does again (converting an export, tidying a table, a recurring calculation). They run in the sandbox, which sees only its work folder. When commands need your approval, you approve a script's code once; saving it here counts as approving it.</p>
+        <div id="scripts" class="list"></div>
+        <div id="script-edit" class="skill-edit" hidden>
+          <textarea id="script-editor" class="editor" spellcheck="false" aria-label="Script"></textarea>
+          <div class="row"><button id="script-save" class="btn primary" type="button">Save script</button><button id="script-cancel" class="btn" type="button">Close</button><span id="script-state" class="muted small"></span></div>
+        </div>
+      </div>
       <h3>Conversation digest</h3>
       <p class="muted small">The assistant keeps the latest messages word for word. Older ones are summarised, then each past week and month is condensed further: details fade, what matters stays. It reads this digest before every answer; everything remains searchable above.</p>
       <div class="row"><span id="digest-state" class="muted small"></span><button id="digest-compact" class="btn" type="button">Compact now</button></div>
@@ -495,6 +504,12 @@
     <section id="view-activity" class="view page" hidden>
       <header class="page-head"><h2>Activity</h2><p class="muted">Spending, model usage and every tool the assistant used. Costs are estimates from list prices.</p></header>
       <div id="budget" class="budget"></div>
+      <details id="calib" class="calib"><summary class="muted small" id="calib-text"></summary>
+        <p class="muted small">Enter what your AI provider actually billed (its console shows it). Talixio compares it with its own estimate for the same month and corrects the budget from the last three bills.</p>
+        <form id="bill-form" class="row wrap"><input type="month" id="bill-month" required> <input type="number" id="bill-amount" step="0.01" min="0" placeholder="Amount" required>
+          <select id="bill-currency"><option>EUR</option><option>USD</option></select> <button class="btn small" type="submit">Record the bill</button></form>
+        <div class="table-wrap"><table id="bills"><thead><tr><th>Period</th><th>Billed</th><th>Estimated</th><th>Ratio</th></tr></thead><tbody></tbody></table></div>
+      </details>
       <div id="usage" class="usage"></div>
       <div class="split"><div><h3>This month by tier</h3><div class="table-wrap"><table id="by-tier"><thead><tr><th>Tier</th><th>Calls</th><th>Tokens</th><th>Cost</th></tr></thead><tbody></tbody></table></div></div>
         <div><h3>This month by source</h3><div class="table-wrap"><table id="by-source"><thead><tr><th>Source</th><th>Calls</th><th>Tokens</th><th>Cost</th></tr></thead><tbody></tbody></table></div></div></div>
