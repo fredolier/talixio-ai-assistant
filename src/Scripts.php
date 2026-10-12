@@ -90,8 +90,32 @@ final class Scripts
     public function writeRaw(string $name, string $content): void
     {
         [$meta, $code] = self::parse($content);
-        $this->save($meta['name'] ?? $name, $meta['description'] ?? 'Script', $code, $meta['usage'] ?? '', true);
+        $this->save($meta['name'] ?? $name, $meta['description'] ?? self::guessDescription($code), $code, $meta['usage'] ?? '', true);
         if (isset($meta['name']) && Skills::slug($meta['name']) !== Skills::slug($name)) $this->delete($name); // renamed
+    }
+
+    /**
+     * A script the user brings (written in the editor, uploaded, or a .py of the library): approved, named by its header
+     * or else by $name. $replace: false refuses to overwrite a script of the same name.
+     * @return string its name
+     */
+    public function import(string $content, string $name, bool $replace = false): string
+    {
+        [$meta] = self::parse($content);
+        $name = trim($meta['name'] ?? $name);
+        if (!preg_match('/[a-z0-9]/i', $name)) throw new \InvalidArgumentException('give the script a name (a "name:" line in its header)');
+        $slug = Skills::slug($name);
+        if (!$replace && $this->read($slug) !== null) throw new \InvalidArgumentException("a script named $slug already exists: open it to change it");
+        $this->writeRaw($slug, $content);
+        return $slug;
+    }
+
+    /** Without a header: the module docstring's or the first comment's first line. */
+    private static function guessDescription(string $code): string
+    {
+        if (preg_match('/^(?:#![^\n]*\n)?\s*(?:"""|\'\'\')\s*([^\n]+)/', $code, $m)) return trim($m[1], " \t\"'");
+        if (preg_match('/^\s*#(?!!)\s*(\S[^\n]*)/m', $code, $m)) return trim($m[1]);
+        return 'Script';
     }
 
     public function approve(string $name): void

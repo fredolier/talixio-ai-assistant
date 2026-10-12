@@ -228,6 +228,10 @@ final class Web
             (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'GET' => ['content' => $this->app->skills()->raw($mm[1]) ?? $this->fail(404, 'no such skill')],
             (bool)preg_match('#^/api/skills/([\w-]+)$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) { $this->app->skills()->writeRaw($mm[1], (string)($b['content'] ?? '')); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/skills/([\w-]+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->skills()->delete($mm[1])],
+            $path === '/api/scripts' && $m === 'POST' => (function () use ($b) {
+                try { return ['name' => $this->app->scripts()->import((string)($b['content'] ?? ''), (string)($b['name'] ?? ''))]; }
+                catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+            })(),
             $path === '/api/scripts' => ['enabled' => $this->app->shell()->enabled(), 'scripts' => $this->app->scripts()->all()],
             (bool)preg_match('#^/api/scripts/([\w-]+)$#', $path, $mm) && $m === 'GET' => ['content' => $this->app->scripts()->read($mm[1]) ?? $this->fail(404, 'no such script')],
             (bool)preg_match('#^/api/scripts/([\w-]+)$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
@@ -277,6 +281,7 @@ final class Web
             (bool)preg_match('#^/api/files/(\d+)/text$#', $path, $mm) => $this->fileText((int)$mm[1]),
             (bool)preg_match('#^/api/files/(\d+)/preview$#', $path, $mm) => $this->filePreview((int)$mm[1]),
             (bool)preg_match('#^/api/files/(\d+)/(move|rename|delete|reindex)$#', $path, $mm) && $m === 'POST' => $this->fileAction((int)$mm[1], $mm[2], $b),
+            (bool)preg_match('#^/api/files/(\d+)/as-script$#', $path, $mm) && $m === 'POST' => $this->fileAsScript((int)$mm[1]),
             (bool)preg_match('#^/api/files/(\d+)/file-it$#', $path, $mm) && $m === 'POST' => ['file' => $this->fileInfo((new Filing($this->app))->apply((int)$mm[1],
                 isset($b['folder']) ? (string)$b['folder'] : null, isset($b['name']) ? (string)$b['name'] : null))],
             (bool)preg_match('#^/api/files/(\d+)/dismiss$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { (new Filing($this->app))->dismiss((int)$mm[1]); return ['ok' => true]; })(),
@@ -850,6 +855,19 @@ final class Web
         if (!is_file($f['path'])) $this->fail(404, 'The file is missing on the server.');
         if (!Preview::renders($f)) $this->fail(400, 'No page preview for this kind of file.');
         return ['file' => $this->fileInfo($f), 'html' => (new Preview($this->app))->render($f)];
+    }
+
+    /** A .py of the library copied into the assistant's scripts (/tools), approved: the user chose it. */
+    private function fileAsScript(int $id): array
+    {
+        $f = $this->app->files()->get($id) ?? $this->fail(404, 'not found');
+        if (!preg_match('/\.py$/i', $f['name'])) $this->fail(400, 'only a .py file can become a script');
+        if ($f['size'] > 1_000_000) $this->fail(400, 'too big for a script');
+        $content = (string)file_get_contents($f['path']);
+        $before = array_column($this->app->scripts()->all(), 'name');
+        try { $name = $this->app->scripts()->import($content, preg_replace('/\.py$/i', '', $f['name']), true); }
+        catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+        return ['name' => $name, 'replaced' => in_array($name, $before, true), 'enabled' => $this->app->shell()->enabled()];
     }
 
     private function fileAction(int $id, string $action, array $b): array

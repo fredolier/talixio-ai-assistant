@@ -2316,6 +2316,13 @@ document.addEventListener('click', e => {
   installFromLink(q.get('connector'), q.get('name')).catch(err => toast(err.message));
 });
 $('#viewer-connector').onclick = () => connectorDialog(lib.file.id).catch(e => toast(e.message));
+$('#viewer-script').onclick = async () => {
+  try {
+    const r = await post(`api/files/${lib.file.id}/as-script`);
+    toast(t(r.replaced ? 'Script {name} updated' : 'Script {name} added', { name: r.name })
+      + (r.enabled ? '' : ' ' + t('(it runs once the sandbox is on: install.sh --with-shell)')));
+  } catch (e) { toast(e.message); }
+};
 $('#mcp-refresh').onclick = () => mcpAction('api/mcp/refresh');
 $('#shell-test').onclick = async () => {
   const b = $('#shell-test'); b.disabled = true;
@@ -2967,6 +2974,7 @@ async function openFile(id, opts = {}) {
   const ro = isReadonly(f.folder);
   for (const b of ['#viewer-rename', '#viewer-move', '#viewer-reindex', '#viewer-delete']) $(b).hidden = ro;
   $('#viewer-connector').hidden = !/\.zip$/i.test(lib.file?.name || '');
+  $('#viewer-script').hidden = !/\.py$/i.test(lib.file?.name || '');
   const editable = !ro && f.note || !ro && (f.kind === 'text' && f.size < 2_000_000 && !/\.(html?|eml)$/i.test(f.name));
   const hasText = !editable && (f.kind === 'office' || f.kind === 'pdf' || /\.(html?|eml)$/i.test(f.name)) && d.text && !/^\(No text found/.test(d.text);
   const paged = officePages || (f.kind === 'pdf' && d.pages);
@@ -3345,8 +3353,24 @@ $('#skill-save').onclick = async () => {
 };
 $('#skill-cancel').onclick = () => { $('#skill-edit').hidden = true; };
 $('#script-save').onclick = async () => {
-  try { await post('api/scripts/' + encodeURIComponent(state.script), { content: $('#script-editor').value }); $('#script-state').textContent = 'Saved'; loadScripts(); }
-  catch (e) { toast(e.message); }
+  try {
+    if (state.script) await post('api/scripts/' + encodeURIComponent(state.script), { content: $('#script-editor').value });
+    else state.script = (await post('api/scripts', { content: $('#script-editor').value })).name; // a new one: named by its header
+    $('#script-state').textContent = 'Saved'; loadScripts();
+  } catch (e) { toast(e.message); }
+};
+$('#script-new').onclick = () => {
+  state.script = null; $('#script-state').textContent = ''; $('#script-edit').hidden = false;
+  $('#script-editor').value = `"""\nname: my-script\ndescription: ${t('What it does, so the assistant knows when to use it')}\nusage: my-script <in.csv> <out.csv>\n"""\nimport sys\n\n`;
+  $('#script-editor').focus();
+};
+$('#script-upload').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const { name } = await post('api/scripts', { content: await f.text(), name: f.name.replace(/\.py$/i, '') });
+    toast(t('Script {name} added', { name })); loadScripts();
+  } catch (err) { toast(err.message); }
 };
 $('#script-cancel').onclick = () => { $('#script-edit').hidden = true; };
 $('#mem-editor').addEventListener('input', () => { $('#mem-state').textContent = 'Unsaved changes'; });

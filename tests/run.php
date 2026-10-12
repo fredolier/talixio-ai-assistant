@@ -1825,6 +1825,16 @@ if (\Talixio\Shell::binary()) {
     check('scripts: saving from the editor approves it', $sa->scripts()->approved('add-up') && str_contains($sa->tools->run('script_save', ['name' => 'x', 'description' => 'd', 'code' => 'print(1)']), 'approval'));
     check('scripts: parse keeps the code, drops the header', Talixio\Scripts::parse((string)$sa->scripts()->read('add-up'))[1] === "import sys\nprint(sum(float(x) for x in sys.argv[1:]))\n\nprint('changed')");
     check('scripts: delete', $sa->tools->run('script_delete', ['name' => 'add-up']) === 'deleted' && $sa->scripts()->all() === []);
+    $n = $sa->scripts()->import("# Tidy a bank export\nprint('ok')\n", 'Bank Tidy');
+    check('scripts: an uploaded file without a header is named and described', $n === 'bank-tidy' && $sa->scripts()->approved('bank-tidy')
+        && ($sa->scripts()->all()[0]['description'] ?? '') === 'Tidy a bank export');
+    try { $sa->scripts()->import("\"\"\"\nname: bank-tidy\ndescription: other\n\"\"\"\nprint(2)\n", 'x'); $dup = false; } catch (InvalidArgumentException) { $dup = true; }
+    check('scripts: a new script does not overwrite one of the same name', $dup && str_contains((string)$sa->scripts()->read('bank-tidy'), "print('ok')"));
+    check('scripts: re-importing a library file replaces it', $sa->scripts()->import("print(3)\n", 'bank-tidy', true) === 'bank-tidy'
+        && str_contains((string)$sa->scripts()->read('bank-tidy'), 'print(3)'));
+    try { $sa->scripts()->import("print(1)\n", ''); $noname = false; } catch (InvalidArgumentException) { $noname = true; }
+    check('scripts: a script needs a name', $noname);
+    $sa->scripts()->delete('bank-tidy');
     check('shell: "ask" mode cannot wait inside the worker', str_contains($sa->tools->run('shell_run', ['command' => 'ls']), 'delegate'));
     App::$inWorker = false; putenv('TALIXIO_SHELL');
 } else {

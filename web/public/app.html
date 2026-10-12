@@ -250,6 +250,7 @@
         <h3>Scripts</h3>
         <p class="muted small">Python scripts it wrote for mechanical tasks it does again (converting an export, tidying a table, a recurring calculation). They run in the sandbox, which sees only its work folder. When commands need your approval, you approve a script's code once; saving it here counts as approving it.</p>
         <div id="scripts" class="list"></div>
+        <div class="row"><button id="script-new" class="btn small" type="button">New script</button><label class="btn small ghost">Upload a .py<input id="script-upload" type="file" accept=".py,text/x-python" hidden></label></div>
         <div id="script-edit" class="skill-edit" hidden>
           <textarea id="script-editor" class="editor" spellcheck="false" aria-label="Script"></textarea>
           <div class="row"><button id="script-save" class="btn primary" type="button">Save script</button><button id="script-cancel" class="btn" type="button">Close</button><span id="script-state" class="muted small"></span></div>
@@ -679,6 +680,7 @@
     <button id="viewer-move" class="btn small" type="button">Move</button>
     <button id="viewer-reindex" class="btn small ghost" type="button">Read again</button>
     <button id="viewer-connector" class="btn small" type="button" hidden>Install as a connector</button>
+    <button id="viewer-script" class="btn small" type="button" hidden>Use as a script</button>
     <button id="viewer-delete" class="btn small ghost danger" type="button">Delete</button>
   </div>
   <form id="viewer-form" class="lib-inline" hidden><input id="viewer-input" list="folder-list" required><button class="btn primary small" type="submit">OK</button><button id="viewer-form-cancel" class="btn small" type="button">Cancel</button></form>

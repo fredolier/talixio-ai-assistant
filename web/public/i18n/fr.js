@@ -2261,5 +2261,12 @@ window.I18N.fr = {
 "Script": "Script",
 "No scripts yet. When it does the same mechanical work a second time, it saves the code as a script to reuse.": "Pas encore de script. Quand il refait le même travail mécanique, il enregistre le code comme script à réutiliser.",
 "not approved yet": "pas encore approuvé",
-"Script deleted": "Script supprimé"
+"Script deleted": "Script supprimé",
+"New script": "Nouveau script",
+"Upload a .py": "Importer un .py",
+"Use as a script": "Utiliser comme script",
+"What it does, so the assistant knows when to use it": "Ce qu'il fait, pour que l'assistant sache quand s'en servir",
+"Script {name} added": "Script {name} ajouté",
+"Script {name} updated": "Script {name} mis à jour",
+"(it runs once the sandbox is on: install.sh --with-shell)": "(il s'exécutera une fois le bac à sable activé : install.sh --with-shell)"
 };

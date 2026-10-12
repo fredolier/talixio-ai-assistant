@@ -9,6 +9,8 @@
 - **Scripts** (avec le bac à sable) : quand il refait le même travail mécanique (convertir un export,
   ranger un tableau), il enregistre le code Python comme script et le réutilise. Quand les commandes demandent
   votre accord, vous approuvez le code d'un script une seule fois. À voir, modifier ou supprimer dans la page Mémoire.
+  Pour ajouter les vôtres : **Nouveau script** ou **Importer un .py** sur cette page, ou ouvrez un `.py` de la bibliothèque
+  et choisissez **Utiliser comme script** (dans Plus).
 - **Caractère et valeurs** : ce qui compte pour vous, comment vous travaillez, ce qu'il doit faire
   mieux ; chaque croyance avec ses preuves, *Pourquoi ?* et *Oublier*. Jamais sur la santé, la religion,
   la politique, la sexualité ou les origines.

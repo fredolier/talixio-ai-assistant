@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.15 (2026-10-12)
+
+- Your own scripts: **New script** and **Upload a .py** on the Memory page, and **Use as a script** on a `.py` of
+  the library (under More), which copies it into the assistant's scripts (using it again updates the copy). A
+  script you add counts as approved. Without a header, it is named after the file and described by its first
+  comment.
+
 ## 0.28.14 (2026-10-12)
 
 - Cost estimates that learn from your real bills. Once a month (from the 3rd), the assistant asks at the end of
