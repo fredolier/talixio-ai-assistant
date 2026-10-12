@@ -194,7 +194,7 @@ final class Web
             $path === '/api/jobs/archive-finished' && $m === 'POST' => ['count' => $this->app->jobs()->archiveFinished(isset($b['space']) && $b['space'] !== '' ? (int)$b['space'] : null, (string)($b['tag'] ?? ''))],
             (bool)preg_match('#^/api/jobs/(\d+)/archive$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->archive((int)$mm[1], ($b['archived'] ?? true) !== false)],
             (bool)preg_match('#^/api/jobs/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->jobs()->delete((int)$mm[1]); return ['ok' => true]; })(),
-            (bool)preg_match('#^/api/jobs/(\d+)/schedule$#', $path, $mm) && $m === 'POST' => ['task' => $this->app->jobs()->schedule((int)$mm[1], (string)($b['cron'] ?? ''), (string)($b['at'] ?? ''))],
+            (bool)preg_match('#^/api/jobs/(\d+)/schedule$#', $path, $mm) && $m === 'POST' => ['task' => $this->app->jobs()->schedule((int)$mm[1], (string)($b['cron'] ?? ''), (string)($b['at'] ?? ''), (string)($b['when'] ?? ''))],
             (bool)preg_match('#^/api/jobs/(\d+)/tags$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->setTags((int)$mm[1], $b['tags'] ?? [])],
             $path === '/api/channels' => $this->channels(),
             $path === '/api/settings' && $m === 'GET' => ['groups' => Settings::describe($this->app->cfg->dataDir)],

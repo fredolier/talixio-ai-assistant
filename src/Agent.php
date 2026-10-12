@@ -179,6 +179,34 @@ final class Agent
     }
 
     /** A short "yes, do it" (oui, vas-y, ok, go ahead, fais-le…). */
+    /**
+     * Why this message should go to the deep model rather than the standard one, or null. Only when the standard model is a
+     * small one (Config::escalates): setting up routines and reminders (cron, wording the future prompt), a retry after
+     * something went wrong, or the turn right after a tool failed in this space.
+     */
+    public function escalate(string $text, int $space, string $channel): ?string
+    {
+        if (!$this->app->cfg->escalates() || in_array($channel, ['schedule', 'job', 'heartbeat'], true)) return null;
+        if (self::aboutScheduling($text)) return 'scheduling';
+        if (self::saysFailed($text)) return 'retry';
+        if ((int)$this->app->store->get("trouble_$space", '0') > time() - 1800) return 'a tool failed last turn';
+        return null;
+    }
+
+    public static function aboutScheduling(string $text): bool
+    {
+        $t = mb_strtolower($text);
+        if (preg_match('/\b(remind|reminders?|rappel\w*|routines?|schedul\w*|planifi\w*|programm\w*|r[ée]curren\w*|cron)\b|\brappelle[- ]moi\b/u', $t)) return true;
+        $often = preg_match('/\b(every|each|daily|weekly|monthly|tous les|toutes les|chaque|quotidien\w*|hebdo\w*|mensuel\w*)\b/u', $t);
+        $when = preg_match('/\b(\d{1,2}\s?(h|:\d{2}|am|pm)|morning|evening|matin|soir|midi|noon|monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|weekdays?|semaine|mois|month)\b/u', $t);
+        return $often && $when;
+    }
+
+    public static function saysFailed(string $text): bool
+    {
+        return (bool)preg_match('/\b(doesn\'t work|does not work|didn\'t work|did not work|not working|that\'s wrong|is wrong|try again|retry|ça (ne )?marche pas|ca (ne )?marche pas|(ne )?fonctionne pas|n\'a pas marché|n\'a pas fonctionné|c\'est faux|réessaie|reessaie|recommence|toujours pas|still not|still wrong)\b/u', mb_strtolower($text));
+    }
+
     public static function isGoAhead(string $text): bool
     {
         $t = mb_strtolower(trim(preg_replace('/[\s!.?,]+/u', ' ', $text)));
@@ -241,6 +269,11 @@ final class Agent
         // "oui" / "vas-y" to a plan means: act now with the tools; the fast model tends to restate the plan instead
         if ($tier === 'fast' && self::isGoAhead($text)) $tier = 'standard';
         if (preg_match('#^/(fast|standard|deep)\b\s*#i', $text, $m)) { $tier = strtolower($m[1]); $prompt = substr($text, strlen($m[0])); }
+        elseif ($tier === 'standard' && ($why = $this->escalate($prompt, $space, $channel)) !== null) { // a small standard model: the deep one takes the hard turns
+            $tier = 'deep';
+            Log::info("agent: deep tier for this turn ($why)");
+            if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Using a stronger model…']);
+        }
         $started = microtime(true); $partial = '';
         if ($onEvent) { // the user can stop the answer (Stop button): checked on each streamed event, at most twice a second
             $inner = $onEvent; $checked = 0.0;
@@ -302,6 +335,12 @@ final class Agent
                     [$reply, $meta] = $this->run($channel, $up, 'chat', $history, ($extra !== '' ? "$extra\n\n" : '')
                         . "Your last answer only restated a plan. The user wants it done: do it now with your tools (the actions needing approval ask for it themselves), or say plainly what you cannot do and why.",
                         'main', null, null, $onEvent);
+                }
+                // a tool failed and stayed failed this turn: the next turn in this space goes to the stronger model
+                if ($this->app->cfg->escalates() && $channel !== 'schedule' && $channel !== 'job') {
+                    $last = [];
+                    foreach ($store->q('SELECT tool, result FROM tool_log WHERE id > ? AND job_id IS NULL ORDER BY id', [$toolsBefore]) as $r) $last[$r['tool']] = str_starts_with((string)$r['result'], 'error');
+                    $store->set("trouble_$space", in_array(true, $last, true) ? (string)time() : '0');
                 }
                 $reply = $reply ?: I18n::t($this->app, '(no response)');
             } catch (PrivacyBlocked $e) {

@@ -13,7 +13,7 @@ final class Sovereign
     public const SERVICES = [
         'mistral' => ['name' => 'Mistral AI', 'country' => 'France', 'url' => 'https://api.mistral.ai/v1', 'hosts' => ['api.mistral.ai'],
             'terms' => 'https://mistral.ai/terms', 'embed' => 'mistral-embed', 'transcribe' => 'voxtral-mini-latest', 'key' => true,
-            'fallback' => ['fast' => 'mistral-small-latest', 'standard' => 'mistral-medium-latest', 'deep' => 'mistral-large-latest'],
+            'fallback' => ['fast' => 'mistral-small-latest', 'standard' => 'mistral-small-latest', 'deep' => 'mistral-medium-latest'],
             'keys' => 'https://console.mistral.ai/api-keys', 'about' => 'Mistral\'s own models (Small, Medium, Large), voice with Voxtral. Pay as you go.',
             'note' => 'On the free Experiment plan, Mistral may use what you send for training: turn it off in the admin console, or use a paid plan.'],
         'scaleway' => ['name' => 'Scaleway', 'country' => 'France', 'url' => 'https://api.scaleway.ai/v1', 'hosts' => ['api.scaleway.ai'],
@@ -52,7 +52,8 @@ final class Sovereign
                 return $c[0] ?? null;
             };
             $small = $pick('small'); $medium = $pick('medium'); $large = $pick('large');
-            return ['fast' => $small ?? $medium ?? $fb['fast'], 'standard' => $medium ?? $large ?? $small ?? $fb['standard'], 'deep' => $large ?? $medium ?? $fb['deep']];
+            // Small for everyday work (Medium costs ten times more); Medium takes over when a turn needs more (Agent::escalate)
+            return ['fast' => $small ?? $medium ?? $fb['fast'], 'standard' => $small ?? $medium ?? $fb['standard'], 'deep' => $medium ?? $large ?? $fb['deep']];
         }
         // the others serve open models: rank them by size (parameters in the name; a mixture of experts by its total)
         $sized = [];
@@ -78,13 +79,13 @@ final class Sovereign
         $fb = self::info($c->sovereign)['fallback'];
         $id = $c->sovereign . '|' . $c->sovereignUrl;
         $cached = json_decode($store->get('sovereign_models'), true);
-        if (!is_array($cached) || ($cached['id'] ?? '') !== $id || ($cached['ts'] ?? 0) < time() - 86400) {
+        if (!is_array($cached) || ($cached['id'] ?? '') !== $id || ($cached['ts'] ?? 0) < time() - 86400 || ($cached['v'] ?? 1) < 2) { // v2: Small for standard on Mistral
             try {
                 if ($c->sovereignUrl === '') throw new \RuntimeException('no address');
                 [$code, $body] = Http::request('GET', $c->sovereignUrl . '/models', $c->sovereignKey !== '' ? ['Authorization: Bearer ' . $c->sovereignKey] : [], null, 15);
                 $ids = array_column(json_decode($body, true)['data'] ?? [], 'id');
                 if ($code >= 400 || !$ids) throw new \RuntimeException("HTTP $code");
-                $cached = ['id' => $id, 'ts' => time(), 'tiers' => self::choose($c->sovereign, $ids)];
+                $cached = ['id' => $id, 'ts' => time(), 'v' => 2, 'tiers' => self::choose($c->sovereign, $ids)];
                 $store->set('sovereign_models', json_encode($cached));
             } catch (\Throwable $e) {
                 Log::warn("{$c->sovereign}: could not list models ({$e->getMessage()}); using " . implode(', ', $fb));

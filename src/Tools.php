@@ -230,8 +230,8 @@ final class Tools
             fn(array $a) => $this->app->skills()->delete($a['name']) ? 'deleted' : 'error: no such skill');
 
         $this->register('schedule_task',
-            "A routine (not a to-do: those go on the tasks board): schedule a prompt that you will run later and send the result to the user (reminders, recurring reports, follow-ups). Give either `at` (local time 'YYYY-MM-DD HH:MM', timezone {$cfg->timezone}) for a one-off, or `cron` (5 fields, local time, e.g. '0 8 * * 1-5') for recurring. The prompt is an instruction to your future self, e.g. 'Remind the user to call the dentist.' tier: the model that runs it: fast for simple reminders, standard (default) for briefings, deep only for demanding reports.",
-            ['title' => ['type' => 'string'], 'prompt' => ['type' => 'string'], 'at' => ['type' => 'string'], 'cron' => ['type' => 'string'], 'tier' => ['type' => 'string', 'enum' => Tier::NAMES]],
+            "A routine (not a to-do: those go on the tasks board): schedule a prompt that you will run later and send the result to the user (reminders, recurring reports, follow-ups). `when`: the schedule in plain words, in local time ({$cfg->timezone}), e.g. 'every weekday at 8:00', 'every monday and thursday at 18:30', 'on the 1st of every month at 9:00', 'tomorrow at 14:30', 'in 20 minutes', 'tous les jours à 7h'. The reply lists the next runs: check them against what the user asked. The prompt is an instruction to your future self, written as if the user asked it then, e.g. 'Remind the user to call the dentist.' or 'Give me the weather in Lyon for today.' tier: the model that runs it: fast for simple reminders, standard (default) for briefings, deep only for demanding reports.",
+            ['title' => ['type' => 'string'], 'prompt' => ['type' => 'string'], 'when' => ['type' => 'string', 'description' => 'the schedule in plain words'], 'tier' => ['type' => 'string', 'enum' => Tier::NAMES]],
             ['title', 'prompt'], fn(array $a) => $this->schedule($a));
         $this->register('list_tasks', 'List routines (scheduled prompts). The to-do tasks are on the board: board_list.', [], [], fn() => $this->listTasks());
         $this->register('cancel_task', 'Delete a scheduled task by id.', ['id' => ['type' => 'integer']], ['id'],
@@ -256,12 +256,14 @@ final class Tools
                 foreach ($ids as $id) $this->app->jobs()->archive($id, ($a['archived'] ?? true) !== false);
                 return sprintf('%d job(s) %s', count($ids), ($a['archived'] ?? true) !== false ? 'archived' : 'back in the list');
             });
-        $this->register('schedule_job', "Make a routine that runs a finished research job again on a schedule (same instructions, model, effort, cap and report folder), e.g. a weekly watch. Give `cron` (5 fields, local time {$cfg->timezone}, e.g. '0 8 * * 1') for recurring, or `at` ('YYYY-MM-DD HH:MM') for once. Each run's report comes in the chat and is saved in the library.",
-            ['id' => ['type' => 'integer'], 'cron' => ['type' => 'string'], 'at' => ['type' => 'string']], ['id'],
+        $this->register('schedule_job', "Make a routine that runs a finished research job again on a schedule (same instructions, model, effort, cap and report folder), e.g. a weekly watch. `when`: the schedule in plain words, local time ({$cfg->timezone}), e.g. 'every monday at 8:00', 'on the 1st of every month at 9:00', 'tomorrow at 7:00'. Each run's report comes in the chat and is saved in the library.",
+            ['id' => ['type' => 'integer'], 'when' => ['type' => 'string', 'description' => 'the schedule in plain words']], ['id'],
             function (array $a) {
-                $t = $this->app->jobs()->schedule((int)$a['id'], (string)($a['cron'] ?? ''), (string)($a['at'] ?? ''));
-                return sprintf('routine #%d "%s" made: %s, next run %s (%s). The user can pause or delete it in Routines.', $t['id'], $t['title'],
-                    $t['cron'] ? "cron {$t['cron']}" : 'once', date('D Y-m-d H:i', (int)$t['next_run']), $this->app->cfg->timezone);
+                try {
+                    $t = $this->app->jobs()->schedule((int)$a['id'], (string)($a['cron'] ?? ''), (string)($a['at'] ?? ''), (string)($a['when'] ?? ''));
+                } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
+                return sprintf('routine #%d "%s" made: %s (%s). The user can pause or delete it in Routines.', $t['id'], $t['title'],
+                    When::preview($t['cron'] ?: null, (int)$t['next_run']), $this->app->cfg->timezone);
             });
         $this->register('continue_job', "Carry on a background job from where it stopped (cost cap reached, or the user wants it to go further): a new job that starts from the earlier run's steps and findings. Only when the user asks. max_usd: its cost cap (default: the same as before; up to \${$cfg->jobMaxUsdLimit}); effort: optional; note: what the user wants added or changed.",
             ['id' => ['type' => 'integer'], 'max_usd' => ['type' => 'number'], 'effort' => ['type' => 'string', 'enum' => Tier::EFFORTS], 'note' => ['type' => 'string']], ['id'],
@@ -729,19 +731,28 @@ final class Tools
 
     private function schedule(array $a): string
     {
-        $cron = trim((string)($a['cron'] ?? ''));
-        $at = trim((string)($a['at'] ?? ''));
-        if (($cron === '') === ($at === '')) return 'error: give exactly one of `at` or `cron`';
-        if ($cron !== '') {
-            $next = Cron::next($cron, time());
-        } else {
-            $dt = \DateTimeImmutable::createFromFormat('!Y-m-d H:i', $at) ?: throw new \InvalidArgumentException('bad `at`, use YYYY-MM-DD HH:MM');
-            $next = $dt->getTimestamp();
-            if ($next < time() - 60) return 'error: that time is in the past';
-        }
+        try {
+            $w = self::when($a);
+        } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
         $tier = in_array($a['tier'] ?? '', Tier::NAMES, true) ? $a['tier'] : 'standard';
-        $id = $this->app->store->addTask($a['title'], $a['prompt'], $cron ?: null, $next, $tier, $this->app->space);
-        return "scheduled task #$id ($tier tier" . ($this->app->space ? ', answers in this space' : '') . "), next run " . date('D Y-m-d H:i', $next) . " ({$this->app->cfg->timezone})";
+        $id = $this->app->store->addTask($a['title'], $a['prompt'], $w['cron'], $w['next'], $tier, $this->app->space);
+        return "scheduled task #$id \"{$a['title']}\" ($tier tier" . ($this->app->space ? ', answers in this space' : '') . '): '
+            . When::preview($w['cron'], $w['next']) . " ({$this->app->cfg->timezone}). It will run this prompt: \"{$a['prompt']}\". "
+            . 'If the runs are not what the user asked, cancel_task and schedule it again.';
+    }
+
+    /**
+     * The schedule of a routine from the tool arguments: `when` in plain words, or the older `cron` / `at`.
+     * @return array{cron:?string, next:int}
+     */
+    public static function when(array $a, ?int $now = null): array
+    {
+        $now ??= time();
+        $text = trim((string)($a['when'] ?? ''));
+        if ($text === '') $text = trim((string)($a['cron'] ?? '')) ?: str_replace('T', ' ', trim((string)($a['at'] ?? '')));
+        if ($text === '') throw new \InvalidArgumentException('say when, in `when`, like ' . When::EXAMPLES);
+        $r = When::parse($text, $now);
+        return ['cron' => $r['cron'], 'next' => $r['cron'] ? Cron::next($r['cron'], $now) : $r['at']];
     }
 
     private function listTasks(): string

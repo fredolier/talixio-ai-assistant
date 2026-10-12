@@ -17,6 +17,7 @@ final class Config
     public string $sovereignKey = '';
     public string $sovereignUrl = '';
     public bool $sovereignOnly = false;          // never send anything to an AI or search service outside Europe
+    public string $escalate = 'auto';            // auto | on | off: a stronger model takes over for scheduling, retries and after a failed tool
     public string $tools = 'auto';               // auto | all | focused: send only the tools a message seems to need
     /** @var array<string,Tier> */ public array $tiers = [];
     public string $anthropicKey = '';
@@ -175,6 +176,7 @@ final class Config
         $c->sovereignUrl = rtrim($e('TALIXIO_SOVEREIGN_URL', Sovereign::SERVICES[$c->sovereign]['url']), '/');
         $c->sovereignOnly = $e('TALIXIO_SOVEREIGN_ONLY', '0') === '1';
         $c->tools = in_array($t = $e('TALIXIO_TOOLS', 'auto'), ['auto', 'all', 'focused'], true) ? $t : 'auto';
+        $c->escalate = in_array($t = $e('TALIXIO_ESCALATE', 'auto'), ['auto', 'on', 'off'], true) ? $t : 'auto';
         if ($c->provider === 'sovereign') { // a European provider through its OpenAI-compatible endpoint
             $c->openaiKey = $c->sovereignKey;
             $c->openaiBaseUrl = $c->sovereignUrl;
@@ -358,6 +360,13 @@ final class Config
     /** Models served by a local OpenAI-compatible server cost nothing. */
     public function localModels(): bool { return $this->provider === 'openai' && !str_contains($this->openaiBaseUrl, 'openai.com'); }
     /** Providers that speak the OpenAI chat completions API. */
+    /** Whether a turn on the standard tier may move up to the deep model when it looks hard (Agent::escalate). Automatic: with a European provider, whose standard model is a small one. */
+    public function escalates(): bool
+    {
+        if ($this->escalate === 'off' || $this->tiers['deep']->model === $this->tiers['standard']->model) return false;
+        return $this->escalate === 'on' || $this->provider === 'sovereign';
+    }
+
     public function openaiCompatible(): bool { return in_array($this->provider, ['openai', 'gemini', 'sovereign'], true); }
     /** The European provider has an address and, when it needs one, a key. */
     public function sovereignReady(): bool { return $this->sovereignUrl !== '' && ($this->sovereignKey !== '' || !Sovereign::info($this->sovereign)['key']); }

@@ -2239,5 +2239,10 @@ window.I18N.fr = {
 "Add the online connector “{name}” ({url})? Talixio will connect to it and list its tools.": "Ajouter le connecteur en ligne « {name} » ({url}) ? Talixio va s'y connecter et lister ses outils.",
 "Connecting to {name}…": "Connexion à {name}…",
 "“{name}” is added: sign in to it in Settings → Connectors.": "« {name} » est ajouté : connectez-vous à lui dans Réglages → Connecteurs.",
-"Downloading the web browser it drives (about 100 MB, once)…": "Téléchargement du navigateur qu'il pilote (environ 100 Mo, une seule fois)…"
+"Downloading the web browser it drives (about 100 MB, once)…": "Téléchargement du navigateur qu'il pilote (environ 100 Mo, une seule fois)…",
+"Stronger model when needed": "Modèle plus solide si besoin",
+"A message about routines and reminders, a retry, or a turn after a failed tool goes to the Deep model instead of the Standard one. Automatic: on with the European providers, whose Standard model is a small one.": "Un message sur les routines et rappels, une nouvelle tentative, ou le tour qui suit un outil en échec passe au modèle Approfondi au lieu du Standard. Automatique : activé avec les fournisseurs européens, dont le modèle Standard est un petit modèle.",
+"Always": "Toujours",
+"Never": "Jamais",
+"Using a stronger model…": "J'utilise un modèle plus solide…"
 };

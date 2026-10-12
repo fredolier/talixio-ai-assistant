@@ -48,6 +48,25 @@ check('schedule cron', str_starts_with($r, 'scheduled task #2'), $r);
 check('schedule needs one of at/cron', str_starts_with($tools->run('schedule_task', ['title' => 'x', 'prompt' => 'y']), 'error'));
 check('schedule refuses the past', str_starts_with($tools->run('schedule_task', ['title' => 'x', 'prompt' => 'y', 'at' => '2020-01-01 10:00']), 'error'));
 check('list tasks', str_contains($tools->run('list_tasks', []), '#2 Brief | cron 0 8 * * 1-5'));
+$wq = function (string $w) use ($t) { try { $r = \Talixio\When::parse($w, $t); return $r['cron'] ?? date('D Y-m-d H:i', $r['at']); } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); } };
+$wcases = ['every weekday at 8:00' => '0 8 * * 1-5', 'every monday and thursday at 18:30' => '30 18 * * 1,4', 'every day at 7am' => '0 7 * * *',
+    'every 2 hours' => '0 */2 * * *', 'every 15 minutes' => '*/15 * * * *', 'on the 1st of every month at 9:00' => '0 9 1 * *', 'every friday at 5pm' => '0 17 * * 5',
+    'mondays to fridays at 7:45' => '45 7 * * 1-5', '30 * * * 1-5' => '30 * * * 1-5', 'tomorrow at 14:30' => 'Fri 2026-10-09 14:30', 'in 20 minutes' => 'Thu 2026-10-08 10:37',
+    '2026-11-03T09:00' => 'Tue 2026-11-03 09:00', 'november 15 at 10am' => 'Sun 2026-11-15 10:00', 'monday at 9' => 'Mon 2026-10-12 09:00',
+    'tous les jours à 7h' => '0 7 * * *', 'du lundi au vendredi à 8h' => '0 8 * * 1-5', 'chaque mardi à 18h30' => '30 18 * * 2', 'tous les lundis et jeudis à 8h30' => '30 8 * * 1,4',
+    'le week-end à 10h' => '0 10 * * 0,6', 'le 1er de chaque mois à 9h' => '0 9 1 * *', 'tous les mois le 15 à 8h' => '0 8 15 * *', 'chaque jour à midi' => '0 12 * * *',
+    'tous les soirs' => '0 19 * * *', 'every saturday' => '0 9 * * 6', 'demain à 9h' => 'Fri 2026-10-09 09:00', 'dans 2 heures' => 'Thu 2026-10-08 12:17',
+    'le 15 novembre à 10h' => 'Sun 2026-11-15 10:00', '15/11 à 10h' => 'Sun 2026-11-15 10:00', 'ce soir à 20h' => 'Thu 2026-10-08 20:00'];
+$wbad = array_filter($wcases, fn($want, $w) => $wq($w) !== $want, ARRAY_FILTER_USE_BOTH);
+check('when: plain-words schedules in English and French become cron or a date', !$wbad, json_encode(array_map(fn($w) => $wq($w), array_keys($wbad))));
+check('when: what cron cannot say, the past and vague repeats are refused with examples', str_contains($wq('the first monday of the month'), 'cannot be set')
+    && str_contains($wq('2026-10-01 09:00'), 'in the past') && str_contains($wq('every week'), 'which day') && str_contains($wq('whenever'), "'every weekday at 8:00'"));
+check('when: the read-back lists the next runs', \Talixio\When::preview('0 8 * * 1-5', \Talixio\Cron::next('0 8 * * 1-5', $t)) === 'repeats; next runs Fri 9 Oct 08:00, Mon 12 Oct 08:00, Tue 13 Oct 08:00 (cron 0 8 * * 1-5)');
+$r = $tools->run('schedule_task', ['title' => 'Plants', 'prompt' => 'Remind the user to water the plants', 'when' => 'every saturday at 10:00']);
+check('schedule_task takes the schedule in words and reads it back with the prompt', str_contains($r, 'repeats; next runs Sat') && str_contains($r, '(cron 0 10 * * 6)')
+    && str_contains($r, 'water the plants') && $app->store->q("SELECT cron FROM tasks WHERE title = 'Plants'")->fetchColumn() === '0 10 * * 6', $r);
+check('schedule_task: a schedule it cannot read is an error with examples', str_starts_with($r = $tools->run('schedule_task', ['title' => 'x', 'prompt' => 'y', 'when' => 'sometimes']), 'error: could not read') && str_contains($r, 'tous les jours'), $r);
+$app->store->q("DELETE FROM tasks WHERE title = 'Plants'");
 check('tool calls are audited', count($s->toolLog()) >= 7);
 check('heartbeat file empty means no heartbeat', !$app->ws->hasContent('HEARTBEAT.md'));
 
@@ -2566,6 +2585,22 @@ $tiersEu = \Talixio\Sovereign::choose('ovhcloud', ['gpt-oss-20b', 'gpt-oss-120b'
 check('europe: the fast model is Mistral when the provider has one (it writes French best); the answer follows the user\'s language',
     $tiersEu === ['fast' => 'Mistral-Small-3.2-24B-Instruct-2506', 'standard' => 'gpt-oss-120b', 'deep' => 'qwen-3-5-397b']
     && str_contains((new \Talixio\Agent($app))->systemPrompt(), "answer in the language of the user's last message"), json_encode($tiersEu));
+
+$tiersMi = \Talixio\Sovereign::choose('mistral', ['mistral-small-latest', 'mistral-medium-latest', 'mistral-large-latest', 'mistral-embed', 'ministral-3b-latest']);
+check('europe: on Mistral, Small does the everyday work and Medium takes over for the hard turns', $tiersMi === ['fast' => 'mistral-small-latest', 'standard' => 'mistral-small-latest', 'deep' => 'mistral-medium-latest'], json_encode($tiersMi));
+$escBefore = [$app->cfg->escalate, $app->cfg->tiers['standard']->model, $app->cfg->tiers['deep']->model];
+$ag = new \Talixio\Agent($app);
+$app->cfg->escalate = 'on'; $app->cfg->tiers['standard']->model = 'small'; $app->cfg->tiers['deep']->model = 'medium';
+$esc = [$ag->escalate('Rappelle-moi tous les lundis à 9h de faire les comptes', 0, 'web'), $ag->escalate('every morning at 7 send me the news', 0, 'web'),
+    $ag->escalate("ça ne marche pas, réessaie", 0, 'web'), $ag->escalate('Quel temps fait-il à Lyon ?', 0, 'web'), $ag->escalate('Rappelle-moi demain', 0, 'schedule')];
+$app->store->set('trouble_0', (string)time());
+$esc[] = $ag->escalate('Quel temps fait-il à Lyon ?', 0, 'web');
+$app->store->set('trouble_0', '0');
+$app->cfg->escalate = 'off'; $esc[] = $ag->escalate('Rappelle-moi demain à 9h', 0, 'web');
+$app->cfg->escalate = 'on'; $app->cfg->tiers['deep']->model = 'small'; $esc[] = $ag->escalate('Rappelle-moi demain à 9h', 0, 'web');
+[$app->cfg->escalate, $app->cfg->tiers['standard']->model, $app->cfg->tiers['deep']->model] = $escBefore;
+check('stronger model: routines, retries and the turn after a failed tool go to deep; not in routines themselves, when off, or with one model',
+    $esc === ['scheduling', 'scheduling', 'retry', null, null, 'a tool failed last turn', null, null], json_encode($esc));
 
 $rt = $app->tools->only('chat')->forAnswer();
 $rr = [$rt->run('contact_find', ['query' => 'Cédric']), $rt->run('contact_find', ['query' => 'Cédric']), $rt->run('contact_find', ['query' => 'Cédric']), $rt->run('contact_find', ['query' => 'Paul'])];

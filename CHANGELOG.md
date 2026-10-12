@@ -3,6 +3,19 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.12 (2026-10-12)
+
+- Routines are set in plain words: `schedule_task` and `schedule_job` take `when`, like "every weekday at 8:00",
+  "every monday and thursday at 18:30", "on the 1st of every month at 9:00", "tomorrow at 14:30", "in 20 minutes",
+  or in French "tous les jours à 7h", "du lundi au vendredi à 8h", "demain à 9h". Talixio turns it into the repeat
+  itself, so small models no longer get cron fields wrong. The reply lists the next three runs and the prompt that will
+  run, so the model can check them; a schedule it cannot read comes back with examples. `cron` and `at` still work.
+- Mistral costs much less: Small now does the everyday work (Standard), and Medium the hard turns (Deep), instead of
+  Medium and Large. Small costs a tenth of Medium.
+- A stronger model when needed (Settings → AI model → advanced, "Stronger model when needed"): with a European provider,
+  a message about routines and reminders, a retry ("ça ne marche pas", "try again"), or the turn after a tool failed
+  goes to the Deep model, with "Using a stronger model…" shown while it works.
+
 ## 0.28.11 (2026-10-11)
 
 - A connector driving a web browser that was installed before its browser was (Uber Eats before 0.28.9) no longer fails
