@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.24 (2026-10-13)
+- Memory page redesigned like Settings: a side menu (chips on a phone) with one section at a time (Character and
+  values, Skills, Scripts, Conversation digest, Memory files), each showing what it holds (beliefs established,
+  skills, scripts to approve, digest depth, unsaved changes). Search moves to the header and replaces the sections
+  while it runs; links such as `#memory/scripts` open a section directly. Memory files gain "Undo changes".
+
 ## 0.28.23 (2026-10-13)
 - Linux drive script: checks for FUSE before mounting and says what to do when it is missing (on WSL, map the drive
   in Windows and mount it with drvfs) instead of blaming the address or password; no more locale warning.

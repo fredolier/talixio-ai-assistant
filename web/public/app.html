@@ -228,43 +228,70 @@
       <div id="jobs" class="list"></div>
     </section>
 
-    <section id="view-memory" class="view page" hidden>
-      <header class="page-head"><h2>Memory</h2>
-        <p class="muted">Search everything you've discussed. Below, the files the assistant reads before every answer and updates as it learns; you can edit them too.</p></header>
-      <form id="search-form" class="search" role="search">
-        <input id="search-q" type="search" placeholder="Search everything you've discussed…" aria-label="Search history">
-        <button class="btn" type="submit">Search</button>
-      </form>
-      <div id="search-results" class="results" hidden></div>
-      <h3>Character and values</h3>
-      <p class="muted small">Learned by itself from your history together: what matters to you, how you decide, and what kind of assistant it has become. A belief grows stronger when it is confirmed over time, weaker when contradicted, and fades when nothing confirms it. It weighs the established ones in its choices. "Forget" removes a belief for good.</p>
-      <div id="mind" class="mind"></div>
-      <h3>Skills</h3>
-      <p class="muted small">Procedures it has learned for you. It reads the matching one before doing a task, and updates them as it learns. You can edit or delete them.</p>
-      <div id="skills" class="list"></div>
-      <div id="skill-edit" class="skill-edit" hidden>
-        <textarea id="skill-editor" class="editor" spellcheck="false" aria-label="Skill"></textarea>
-        <div class="row"><button id="skill-save" class="btn primary" type="button">Save skill</button><button id="skill-cancel" class="btn" type="button">Close</button><span id="skill-state" class="muted small"></span></div>
-      </div>
-      <div id="scripts-sec" hidden>
-        <h3>Scripts</h3>
-        <p class="muted small">Python scripts it wrote for mechanical tasks it does again (converting an export, tidying a table, a recurring calculation). They run in the sandbox, which sees only its work folder. When commands need your approval, you approve a script's code once; saving it here counts as approving it.</p>
-        <div id="scripts" class="list"></div>
-        <div class="row"><button id="script-new" class="btn small" type="button">New script</button><label class="btn small ghost">Upload a .py<input id="script-upload" type="file" accept=".py,text/x-python" hidden></label></div>
-        <div id="script-edit" class="skill-edit" hidden>
-          <textarea id="script-editor" class="editor" spellcheck="false" aria-label="Script"></textarea>
-          <div class="row"><button id="script-save" class="btn primary" type="button">Save script</button><button id="script-cancel" class="btn" type="button">Close</button><span id="script-state" class="muted small"></span></div>
+    <section id="view-memory" class="view page settings-page memory-page" hidden>
+      <header class="page-head set-head">
+        <div><h2>Memory</h2>
+          <p class="muted small">What the assistant knows about you and how it works for you. It reads all of this before answering, and keeps it up to date as it learns; you can edit or remove anything.</p></div>
+        <form id="search-form" class="mem-search" role="search">
+          <input id="search-q" type="search" placeholder="Search everything you've discussed…" aria-label="Search history" autocomplete="off">
+        </form>
+      </header>
+
+      <nav id="mem-chips" class="set-chips" aria-label="Sections"></nav>
+      <div class="set-layout">
+        <nav id="mem-nav" class="set-nav" aria-label="Sections"></nav>
+        <div class="set-main">
+
+          <div id="mem-results" class="set-sec" hidden>
+            <header><h3>Search</h3><p class="muted small">In every conversation, by words and by meaning.</p></header>
+            <div id="search-results" class="results"></div>
+            <div class="row"><button id="search-clear" class="btn" type="button">Back to memory</button></div>
+          </div>
+
+          <div class="set-sec" data-sec="mind">
+            <header><h3>Character and values</h3><p class="muted small">Learned by itself from your history together: what matters to you, how you decide, and what kind of assistant it has become. A belief grows stronger when it is confirmed over time, weaker when contradicted, and fades when nothing confirms it. It weighs the established ones in its choices. "Forget" removes a belief for good.</p></header>
+            <div id="mind" class="mind"></div>
+          </div>
+
+          <div class="set-sec" data-sec="skills" hidden>
+            <header><h3>Skills</h3><p class="muted small">Procedures it has learned for you. It reads the matching one before doing a task, and updates them as it learns. You can edit or delete them.</p></header>
+            <div id="skills" class="list"></div>
+            <div id="skill-edit" class="card skill-edit" hidden>
+              <textarea id="skill-editor" class="editor" spellcheck="false" aria-label="Skill"></textarea>
+              <div class="row"><button id="skill-save" class="btn primary" type="button">Save skill</button><button id="skill-cancel" class="btn" type="button">Close</button><span id="skill-state" class="muted small"></span></div>
+            </div>
+          </div>
+
+          <div class="set-sec" data-sec="scripts" id="scripts-sec" hidden>
+            <header><h3>Scripts</h3><p class="muted small">Python scripts it wrote for mechanical tasks it does again (converting an export, tidying a table, a recurring calculation). They run in the sandbox, which sees only its work folder. When commands need your approval, you approve a script's code once; saving it here counts as approving it.</p></header>
+            <div id="scripts" class="list"></div>
+            <div class="row"><button id="script-new" class="btn small" type="button">New script</button><label class="btn small ghost">Upload a .py<input id="script-upload" type="file" accept=".py,text/x-python" hidden></label></div>
+            <div id="script-edit" class="card skill-edit" hidden>
+              <textarea id="script-editor" class="editor" spellcheck="false" aria-label="Script"></textarea>
+              <div class="row"><button id="script-save" class="btn primary" type="button">Save script</button><button id="script-cancel" class="btn" type="button">Close</button><span id="script-state" class="muted small"></span></div>
+            </div>
+          </div>
+
+          <div class="set-sec" data-sec="digest" hidden>
+            <header><h3>Conversation digest</h3><p class="muted small">The assistant keeps the latest messages word for word. Older ones are summarised, then each past week and month is condensed further: details fade, what matters stays. It reads this digest before every answer; everything remains searchable.</p></header>
+            <div class="card mem-digest">
+              <div class="row"><span id="digest-state" class="muted small"></span><button id="digest-compact" class="btn" type="button">Compact now</button></div>
+              <div id="digest" class="doc"></div>
+            </div>
+          </div>
+
+          <div class="set-sec" data-sec="files" hidden>
+            <header><h3>Memory files</h3><p class="muted small">Plain text it reads before every answer. It adds to them as it learns; what you write here counts as much as what it writes.</p></header>
+            <div class="card mem-files">
+              <div class="tabs" id="mem-tabs" role="tablist"></div>
+              <p class="muted small" id="mem-help"></p>
+              <textarea id="mem-editor" class="editor" spellcheck="false" aria-label="File content"></textarea>
+              <div class="row"><button id="mem-save" class="btn primary" type="button">Save</button><button id="mem-revert" class="btn" type="button" hidden>Undo changes</button><span id="mem-state" class="muted small"></span></div>
+            </div>
+          </div>
+
         </div>
       </div>
-      <h3>Conversation digest</h3>
-      <p class="muted small">The assistant keeps the latest messages word for word. Older ones are summarised, then each past week and month is condensed further: details fade, what matters stays. It reads this digest before every answer; everything remains searchable above.</p>
-      <div class="row"><span id="digest-state" class="muted small"></span><button id="digest-compact" class="btn" type="button">Compact now</button></div>
-      <details class="card digest"><summary>Show the digest</summary><div id="digest" class="doc"></div></details>
-      <h3>Memory files</h3>
-      <div class="tabs" id="mem-tabs" role="tablist"></div>
-      <p class="muted small" id="mem-help"></p>
-      <textarea id="mem-editor" class="editor" spellcheck="false" aria-label="File content"></textarea>
-      <div class="row"><button id="mem-save" class="btn primary" type="button">Save</button><span id="mem-state" class="muted small"></span></div>
     </section>
 
     <section id="view-settings" class="view page settings-page" hidden>

@@ -1,7 +1,10 @@
 # Mémoire et apprentissage
 
-- **Page Mémoire** : `USER.md` (sur vous), `MEMORY.md` (notes), `SOUL.md` (personnalité),
-  `HEARTBEAT.md` (liste de contrôle), modifiables ; une recherche dans tout l'historique.
+- **Page Mémoire** : une section à la fois depuis le menu latéral (des pastilles sur téléphone), chacune avec
+  un mot sur son contenu : *Caractère et valeurs*, *Savoir-faire*, *Scripts*, *Condensé de la conversation* et
+  *Fichiers de mémoire* : `USER.md` (sur vous), `MEMORY.md` (notes), `SOUL.md` (personnalité), `HEARTBEAT.md`
+  (liste de contrôle), modifiables. La case en haut cherche dans tout l'historique ; Échap ou la vider fait
+  revenir les sections.
 - **Oubli progressif** : les derniers messages sont envoyés mot pour mot, les plus anciens résumés
   par périodes, puis par semaine et par mois. Rien n'est supprimé : tout reste cherchable.
 - **Compétences (skills)** : les procédures apprises pour vous, en Markdown ; l'assistant vous dit

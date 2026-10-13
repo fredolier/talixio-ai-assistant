@@ -1879,7 +1879,7 @@ function showSection(id, scroll = true) {
   document.querySelectorAll('#set-nav a, #set-chips a').forEach(a => { a.classList.toggle('on', a.dataset.sec === id); a.setAttribute('aria-current', a.dataset.sec === id ? 'page' : 'false'); });
   $('#set-chips a.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   if (location.hash !== '#settings/' + id) history.replaceState(null, '', '#settings/' + id);
-  if (scroll) { const pg = $('#view-settings'); if (pg.scrollTop > $('.set-layout').offsetTop) pg.scrollTop = $('.set-layout').offsetTop - 8; }
+  if (scroll) { const pg = $('#view-settings'); const top = $('#view-settings .set-layout').offsetTop; if (pg.scrollTop > top) pg.scrollTop = top - 8; }
 }
 /** The menu (computer) and chips (phone), each section with a word on its state. */
 function renderSetNav() {
@@ -2338,13 +2338,14 @@ $('#viewer-script').onclick = async () => {
 };
 /** Memory › Scripts, with that script open. */
 function showScript(name) {
-  closeViewer(); location.hash = '#memory';
+  closeViewer(); state.memSection = 'scripts';
+  if (location.hash.split('/')[0] === '#memory') showMemSection('scripts'); else location.hash = '#memory/scripts';
   let tries = 0;
   const open = () => {
     const h = [...document.querySelectorAll('#scripts .skill h4')].find(x => x.textContent === name);
     if (!h) { if (++tries < 20) setTimeout(open, 150); return; }
     h.closest('.skill').querySelector('[data-a=edit]').click();
-    $('#scripts-sec').scrollIntoView({ block: 'start', behavior: 'smooth' });
+    $('#script-edit').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   };
   open();
 }
@@ -2513,6 +2514,7 @@ const MEM_HELP = {
 };
 async function loadSkills() {
   const { skills } = await api('api/skills');
+  state.memInfo.skills = skills.length; renderMemNav();
   const box = $('#skills'); box.innerHTML = '';
   if (!skills.length) { box.innerHTML = '<div class="placeholder">No skills yet. After multi-step tasks it writes down how it did them, so next time is faster and closer to what you want.</div>'; return; }
   for (const k of skills) {
@@ -2535,7 +2537,9 @@ async function loadSkills() {
 
 async function loadScripts() {
   const { enabled, scripts } = await api('api/scripts');
-  $('#scripts-sec').hidden = !enabled && !scripts.length;
+  Object.assign(state.memInfo, { scripts: scripts.length, scriptsOff: !enabled && !scripts.length, toApprove: scripts.filter(k => !k.approved).length });
+  if (state.memInfo.scriptsOff && state.memSection === 'scripts') showMemSection('mind', false);
+  renderMemNav();
   const box = $('#scripts'); box.innerHTML = '';
   if (!scripts.length) { box.innerHTML = '<div class="placeholder">No scripts yet. When it does the same mechanical work a second time, it saves the code as a script to reuse.</div>'; return; }
   for (const k of scripts) {
@@ -2560,6 +2564,7 @@ function showDigest(d) {
   const l = d.levels || {};
   const parts = [l[3] && `${l[3]} month(s)`, l[2] && `${l[2]} week(s)`, l[1] && `${l[1]} recent summary(ies)`].filter(Boolean);
   $('#digest-state').textContent = (parts.length ? 'Digest: ' + parts.join(', ') + '. ' : 'No digest yet. ') + `${d.waiting} message(s) word for word or waiting to be summarised.`;
+  state.memInfo.digest = parts.length ? (l[3] ? t('{n} month(s)', { n: l[3] }) : l[2] ? t('{n} week(s)', { n: l[2] }) : t('{n} summary(ies)', { n: l[1] })) : t('not started'); renderMemNav();
   $('#digest').innerHTML = d.digest ? md(d.digest) : '<p class="muted">Nothing compacted yet: it starts once the conversation grows.</p>';
 }
 async function loadDigest() { showDigest(await api('api/memory/digest')); }
@@ -2574,6 +2579,7 @@ const MIND_KIND = { value: 'What matters to you', pattern: 'How you work and dec
 async function loadMind() { showMind(await api('api/mind')); }
 function showMind(d) {
   const box = $('#mind');
+  state.memInfo.mind = d.enabled ? d.beliefs.filter(b => b.status === 'established').length : false; renderMemNav();
   if (!d.enabled) { box.innerHTML = '<div class="placeholder">Learning is off (Settings → Learning, backups, updates → Character and values).</div>'; return; }
   const est = d.beliefs.filter(b => b.status === 'established'), emerging = d.beliefs.filter(b => b.status !== 'established');
   const item = b => `<li class="belief" data-id="${b.id}"><div class="b-text">${esc(b.text)}${b.space_name ? ` <span class="chip small">${esc(b.space_name)}</span>` : ''}</div>
@@ -2615,12 +2621,59 @@ function showMind(d) {
   };
 }
 
+// ---- memory page: sections like Settings ----
+const MEM_SECTIONS = [
+  ['mind', 'Character and values', 'M12 21s-7-4.4-9.3-9A5.3 5.3 0 0 1 12 6a5.3 5.3 0 0 1 9.3 6c-2.3 4.6-9.3 9-9.3 9z'],
+  ['skills', 'Skills', 'M14 7l3-3 3 3-3 3M17 4v0M4 20l9-9M11 7l6 6'],
+  ['scripts', 'Scripts', 'M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14'],
+  ['digest', 'Conversation digest', 'M4 5h16M4 10h12M4 15h8M4 20h5'],
+  ['files', 'Memory files', 'M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6'],
+];
+state.memInfo = {};
+const memIds = () => MEM_SECTIONS.map(s => s[0]).filter(id => id !== 'scripts' || !state.memInfo.scriptsOff);
+function showMemSection(id, scroll = true) {
+  if (!memIds().includes(id)) id = 'mind';
+  state.memSection = id;
+  if ($('#search-q').value || !$('#mem-results').hidden) memSearchClear();
+  document.querySelectorAll('#view-memory .set-sec[data-sec]').forEach(s => { s.hidden = s.dataset.sec !== id; });
+  document.querySelectorAll('#mem-nav a, #mem-chips a').forEach(a => { a.classList.toggle('on', a.dataset.sec === id); a.setAttribute('aria-current', a.dataset.sec === id ? 'page' : 'false'); });
+  $('#mem-chips a.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  if (location.hash.split('/')[0] === '#memory' && location.hash !== '#memory/' + id) history.replaceState(null, '', '#memory/' + id);
+  if (scroll) { const pg = $('#view-memory'), top = $('#view-memory .set-layout').offsetTop; if (pg.scrollTop > top) pg.scrollTop = top - 8; }
+}
+/** The memory menu (computer) and chips (phone), each section with a word on what it holds. */
+function renderMemNav() {
+  const i = state.memInfo, n = (v, one, many) => t(v === 1 ? one : many, { n: v });
+  const note = {
+    mind: i.mind === false ? ['w', t('learning off')] : i.mind != null ? [i.mind ? 'o' : '', n(i.mind, '{n} established', '{n} established')] : null,
+    skills: i.skills != null ? [i.skills ? 'o' : '', n(i.skills, '{n} skill', '{n} skills')] : null,
+    scripts: i.toApprove ? ['w', t('{n} to approve', { n: i.toApprove })] : i.scripts != null ? [i.scripts ? 'o' : '', n(i.scripts, '{n} script', '{n} scripts')] : null,
+    digest: i.digest ? ['', i.digest] : null,
+    files: i.dirty ? ['w', t('unsaved changes')] : i.files != null ? ['', n(i.files, '{n} file', '{n} files')] : null,
+  };
+  const html = chip => MEM_SECTIONS.filter(s => memIds().includes(s[0])).map(([id, title, d]) => {
+    const x = note[id];
+    return `<a href="#memory/${id}" data-sec="${id}" class="${id === state.memSection ? 'on' : ''}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>
+      <span class="sn-t">${esc(t(title))}${!chip && x?.[1] ? `<small>${esc(x[1])}</small>` : ''}</span>${x?.[0] ? `<i class="dot ${x[0]}" title="${esc(x[1] || '')}"></i>` : ''}</a>`;
+  }).join('');
+  $('#mem-nav').innerHTML = html(false); $('#mem-chips').innerHTML = html(true);
+  document.querySelectorAll('#mem-nav a, #mem-chips a').forEach(a => a.onclick = e => { e.preventDefault(); showMemSection(a.dataset.sec); });
+}
+function memSearchClear() {
+  twoPassStop('memory'); $('#search-q').value = '';
+  $('#mem-results').hidden = true; $('#view-memory').classList.remove('searching');
+  document.querySelectorAll('#view-memory .set-sec[data-sec]').forEach(s => { s.hidden = s.dataset.sec !== state.memSection; });
+}
 async function loadMemory() {
+  const p = location.hash.split('/')[1];
+  showMemSection(MEM_SECTIONS.some(s => s[0] === p) ? p : state.memSection || 'mind', false);
+  renderMemNav();
   loadMind().catch(e => toast(e.message));
   loadSkills().catch(e => toast(e.message));
   loadScripts().catch(e => toast(e.message));
   loadDigest().catch(() => {});
   state.memFiles = (await api('api/memory')).files;
+  state.memInfo.files = Object.keys(state.memFiles).length; state.memInfo.dirty = false; renderMemNav();
   const tabs = $('#mem-tabs'); tabs.innerHTML = '';
   for (const f of Object.keys(state.memFiles)) {
     const b = document.createElement('button');
@@ -2635,7 +2688,8 @@ function loadMemoryTab() {
   document.querySelectorAll('#mem-tabs .tab').forEach(b => b.setAttribute('aria-selected', String(b.textContent === state.memFile)));
   $('#mem-editor').value = state.memFiles[state.memFile] ?? '';
   $('#mem-help').textContent = MEM_HELP[state.memFile] || '';
-  $('#mem-state').textContent = '';
+  $('#mem-state').textContent = ''; $('#mem-revert').hidden = true;
+  if (state.memInfo.dirty) { state.memInfo.dirty = false; renderMemNav(); }
 }
 
 
@@ -3450,8 +3504,9 @@ $('#test-notify').onclick = async () => {
 $('#search-form').onsubmit = e => {
   e.preventDefault();
   const q = $('#search-q').value.trim(); const box = $('#search-results');
-  if (!q) { twoPassStop('memory'); box.hidden = true; return; }
-  box.hidden = false;
+  if (!q) { memSearchClear(); return; }
+  $('#view-memory').classList.add('searching'); $('#mem-results').hidden = false;
+  document.querySelectorAll('#view-memory .set-sec[data-sec]').forEach(s => { s.hidden = true; });
   const hit = r => `<div class="hit"><div class="meta"><span class="chip">${esc(r.label)}</span><span>${new Date(r.ts * 1000).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' })}</span>${r.sim != null ? `<span>${Math.round(r.sim * 100)}% similar</span>` : ''}</div>${esc(r.text.slice(0, 600))}</div>`;
   twoPass('memory', 'api/search?q=' + encodeURIComponent(q), (results, phase, err) => {
     if (phase === 'error') { box.innerHTML = `<div class="placeholder">${esc(err.message)}</div>`; return; }
@@ -3459,6 +3514,9 @@ $('#search-form').onsubmit = e => {
     box.innerHTML = (phase === 'meaning' ? searchWait('Searching by meaning…') : '') + results.map(hit).join('') + (phase === 'done' && !results.length ? '<div class="placeholder">Nothing found.</div>' : '');
   });
 };
+$('#search-q').addEventListener('input', e => { if (!e.target.value.trim() && !$('#mem-results').hidden) memSearchClear(); });
+$('#search-q').addEventListener('keydown', e => { if (e.key === 'Escape') memSearchClear(); });
+$('#search-clear').onclick = () => memSearchClear();
 $('#bill-form').onsubmit = async e => {
   e.preventDefault();
   try { await post('api/bill', { month: $('#bill-month').value, amount: +$('#bill-amount').value, currency: $('#bill-currency').value }); $('#bill-amount').value = ''; loadActivity(); }
@@ -3490,11 +3548,17 @@ $('#script-upload').onchange = async e => {
   } catch (err) { toast(err.message); }
 };
 $('#script-cancel').onclick = () => { $('#script-edit').hidden = true; };
-$('#mem-editor').addEventListener('input', () => { $('#mem-state').textContent = 'Unsaved changes'; });
+$('#mem-editor').addEventListener('input', () => {
+  const dirty = $('#mem-editor').value !== (state.memFiles[state.memFile] ?? '');
+  $('#mem-state').textContent = dirty ? 'Unsaved changes' : ''; $('#mem-revert').hidden = !dirty;
+  if (state.memInfo.dirty !== dirty) { state.memInfo.dirty = dirty; renderMemNav(); }
+});
+$('#mem-revert').onclick = () => loadMemoryTab();
 $('#mem-save').onclick = async () => {
   try {
     await post('api/memory', { file: state.memFile, content: $('#mem-editor').value });
     state.memFiles[state.memFile] = $('#mem-editor').value; $('#mem-state').textContent = 'Saved';
+    $('#mem-revert').hidden = true; state.memInfo.dirty = false; renderMemNav();
   } catch (e) { toast(e.message); }
 };
 // tapping the Library tab while already in the library goes back to the top

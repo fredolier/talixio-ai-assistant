@@ -1,7 +1,9 @@
 # Memory and learning
 
-- **Memory page**: `USER.md` (about you), `MEMORY.md` (notes), `SOUL.md` (personality),
-  `HEARTBEAT.md` (checklist), all editable; a search across the whole history.
+- **Memory page**: one section at a time from the side menu (chips on a phone), each with a word on what it
+  holds: *Character and values*, *Skills*, *Scripts*, *Conversation digest* and *Memory files*: `USER.md`
+  (about you), `MEMORY.md` (notes), `SOUL.md` (personality), `HEARTBEAT.md` (checklist), all editable. The box
+  at the top searches the whole history; Esc or emptying it brings the sections back.
 - **Gradual forgetting**: the latest messages are sent word for word, older ones are summarised
   by period, then by week and by month. Nothing is deleted: everything stays searchable.
 - **Skills**: the procedures learned for you, in Markdown; the assistant tells you
