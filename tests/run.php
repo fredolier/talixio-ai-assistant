@@ -1667,9 +1667,14 @@ check('dav: nothing goes into a secret space, the FAQ is read only', $dav('PUT',
     && $dav('MOVE', '/Perso/Admin/Devis%20final.txt', $dpw, '', $dest('/Clients/Secret%20Co/x.txt'))[0] === 403
     && (!$lib->exists('/FAQ') || $dav('PUT', '/FAQ/x.txt', $dpw, 'x')[0] === 403));
 $la->spaces()->save(['name' => 'Coffre', 'folder' => '/Clients/Secret Co', 'privacy' => 'internal'], (int)$sec['id']);
+for ($i = 0; $i < 20; $i++) $dav('PROPFIND', '/', 'old-saved-password', '', ['Depth: 0']);
+check('dav: a device retrying the same wrong password is one mistake, not a block', $dav('PROPFIND', '/', 'wrong', '', ['Depth: 0'])[0] === 401 && !$wj('/api/dav')['blocked']);
 for ($i = 0; $i < 10; $i++) $dav('PROPFIND', '/', 'wrong' . $i, '', ['Depth: 0']);
-check('dav: too many wrong passwords block the address for a while', $dav('PROPFIND', '/', $dpw, '', ['Depth: 0'])[0] === 429);
-$la->store->q("DELETE FROM throttle WHERE k LIKE 'dav:%'");
+check('dav: too many different wrong passwords block the address for a while', $dav('PROPFIND', '/', 'wrong-again', '', ['Depth: 0'])[0] === 429 && $wj('/api/dav')['blocked'] === true);
+check('dav: the right password still gets in from a blocked address', $dav('PROPFIND', '/', $dpw, '', ['Depth: 0'])[0] === 207);
+$ub = $wj('/api/dav/unblock', []);
+check('dav: Unblock lets the address try again', $ub['blocked'] === false && $dav('PROPFIND', '/', 'wrong-again', '', ['Depth: 0'])[0] === 401, json_encode($ub));
+$la->store->q("DELETE FROM throttle WHERE k LIKE 'dav:%' OR k LIKE 'davp%'");
 
 proc_terminate($ws); proc_close($ws);
 putenv('TALIXIO_EMBEDDINGS'); putenv("TALIXIO_DATA_DIR=$dir");

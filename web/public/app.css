@@ -404,6 +404,7 @@ tr:last-child td{border-bottom:0}
 .viewer-edit .rte-bar{flex:none;position:sticky;top:0}
 .viewer-edit .rte-area{flex:1;max-height:none;min-height:200px}
 .viewer-edit .rte-src{flex:1;min-height:200px;resize:none;height:auto!important}
+.dav-blocked{padding:8px 10px;border-radius:8px;border:1px solid var(--warn);color:var(--ink)}
 .viewer-notice{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:10px 12px;margin-bottom:10px;border-radius:10px;background:var(--accent-soft);color:var(--ink);font-size:.9rem}
 .viewer.full{left:0;width:100%;border-left:0;box-shadow:none}
 .viewer.full .viewer-edit .rte-area,.viewer.full .viewer-edit .rte-src,.viewer.full .viewer-edit>.editor,.viewer.full .md-editor{width:100%;max-width:980px;margin:0 auto}

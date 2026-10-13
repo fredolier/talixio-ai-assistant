@@ -210,6 +210,7 @@ final class Web
             $path === '/api/security' => ['totp' => $this->auth()->totpEnabled()],
             $path === '/api/dav' && $m === 'GET' => (new Dav($this->app))->status(),
             $path === '/api/dav' && $m === 'POST' => (new Dav($this->app))->setMode((string)($b['mode'] ?? '')),
+            $path === '/api/dav/unblock' && $m === 'POST' => (new Dav($this->app))->unblock(),
             $path === '/api/dav/password' && $m === 'POST' => (function () use ($b) { $this->checkSecret((string)($b['current'] ?? '')); $d = new Dav($this->app); return ['password' => $d->newPassword()] + $d->status(); })(),
             (bool)preg_match('#^/api/security/totp/(setup|enable|disable)$#', $path, $mm) && $m === 'POST' => $this->totp($mm[1], $b),
             $path === '/api/update' => ['installed' => $this->app->updater()->installed(), 'version' => $this->app->updater()->version(),

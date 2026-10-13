@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.21 (2026-10-13)
+- Network drive: a device retrying an old saved password no longer locks the drive. Each different wrong password
+  counts once, the right password always gets in (it is long and random), Settings › Network drive shows when an
+  address is blocked with **Unblock now**, and a new drive password unblocks every address.
+
 ## 0.28.20 (2026-10-12)
 - Library: the Markdown editor is now Milkdown Crepe (MIT), self-hosted in `web/public/vendor/` and loaded only
   when you edit. Type `/` for headings, lists, quotes, code, tables or a divider; select text for the formatting

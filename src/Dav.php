@@ -31,7 +31,7 @@ final class Dav
     {
         $base = $this->app->shares()->baseUrl();
         return ['mode' => $this->mode(), 'password' => $this->app->store->get('dav_hash') !== '', 'user' => self::USER,
-            'url' => ($base !== '' ? $base : Config::basePath()) . '/dav/', 'since' => (int)$this->app->store->get('dav_since', '0')];
+            'url' => ($base !== '' ? $base : Config::basePath()) . '/dav/', 'since' => (int)$this->app->store->get('dav_since', '0'), 'blocked' => $this->blocked()];
     }
 
     public function setMode(string $mode): array
@@ -49,6 +49,7 @@ final class Dav
         $pw = implode('-', str_split(Auth::base32(random_bytes(15)), 6));
         $this->app->store->set('dav_hash', hash('sha256', $pw));
         $this->app->store->set('dav_since', (string)time());
+        $this->app->store->q("DELETE FROM throttle WHERE k LIKE 'dav:%' OR k LIKE 'davpw:%'"); // a fresh start for every device
         if (!in_array($this->app->store->get('dav_mode', 'off'), ['read', 'write'], true)) $this->app->store->set('dav_mode', 'read');
         return $pw;
     }
@@ -89,12 +90,15 @@ final class Dav
         }
     }
 
-    /** Basic auth with the drive's password; wrong ones are counted per address. */
+    /**
+     * Basic auth with the drive's password. It is long and random, so the right one always gets in, even from a
+     * blocked address. Wrong ones are counted per address, each different password once: a device that keeps
+     * retrying an old saved password is one mistake, not a guessing attack that locks everyone out.
+     */
     private function signedIn(): bool
     {
         $auth = new Auth($this->app);
         $ip = Auth::clientIp();
-        if ($auth->count("dav:$ip", Auth::WINDOW) >= self::MAX_FAILS) { header('Retry-After: ' . Auth::WINDOW); $this->send(429, 'Too many wrong passwords: try again later.'); return false; }
         $pw = null;
         if (preg_match('/^Basic\s+(\S+)/i', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? ''), $m)) {
             $pair = (string)base64_decode($m[1], true);
@@ -102,14 +106,34 @@ final class Dav
         } elseif (isset($_SERVER['PHP_AUTH_PW'])) {
             $pw = (string)$_SERVER['PHP_AUTH_PW'];
         }
-        if ($pw !== null && hash_equals($this->app->store->get('dav_hash'), hash('sha256', strtoupper(trim($pw))))) return true;
+        $hash = $this->app->store->get('dav_hash');
+        if ($pw !== null && hash_equals($hash, hash('sha256', strtoupper(trim($pw))))) return true;
+        if ($auth->count("dav:$ip", Auth::WINDOW) >= self::MAX_FAILS) { header('Retry-After: ' . Auth::WINDOW); $this->send(429, 'Too many wrong passwords: try again later.'); return false; }
         if ($pw !== null) {
-            $auth->hit("dav:$ip");
-            if ($auth->count("dav:$ip", Auth::WINDOW) === self::MAX_FAILS) Log::warn("dav: $ip blocked after " . self::MAX_FAILS . ' wrong passwords');
+            $tried = "davpw:$ip:" . substr(hash_hmac('sha256', $pw, $hash), 0, 16); // which wrong password, never the password itself
+            if ($auth->count($tried, Auth::WINDOW) === 0) {
+                $auth->hit($tried);
+                $auth->hit("dav:$ip");
+                if ($auth->count("dav:$ip", Auth::WINDOW) === self::MAX_FAILS) Log::warn("dav: $ip blocked after " . self::MAX_FAILS . ' wrong passwords');
+            }
         }
         header('WWW-Authenticate: Basic realm="' . addcslashes($this->app->cfg->name, '"\\') . ' (library)", charset="UTF-8"');
         $this->send(401, 'Sign in with the drive password (Settings → Network drive).');
         return false;
+    }
+
+    /** Is an address refused for now after wrong passwords? */
+    public function blocked(): bool
+    {
+        return (bool)$this->app->store->q("SELECT 1 FROM throttle WHERE k LIKE 'dav:%' AND ts > ? GROUP BY k HAVING COUNT(*) >= " . self::MAX_FAILS . " LIMIT 1", [time() - Auth::WINDOW])->fetchColumn();
+    }
+
+    /** Let every address try again. */
+    public function unblock(): array
+    {
+        $this->app->store->q("DELETE FROM throttle WHERE k LIKE 'dav:%' OR k LIKE 'davpw:%'");
+        Log::info('dav: addresses unblocked');
+        return $this->status();
     }
 
     private function writable(): void

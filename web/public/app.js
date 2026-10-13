@@ -2404,8 +2404,12 @@ function showDav(d) {
   $('#dav-user').textContent = d.user;
   $('#dav-mode').value = d.mode;
   $('#dav-mode').disabled = !d.password;
+  $('#dav-blocked').hidden = !d.blocked;
   $('#dav-badge').textContent = '· ' + window.t(d.mode === 'off' ? 'off' : d.mode === 'read' ? 'read only' : 'read and write');
 }
+$('#dav-unblock').onclick = async () => {
+  try { showDav(await post('api/dav/unblock', {})); toast('Devices can sign in to the drive again.'); } catch (e) { toast(e.message); }
+};
 $('#dav-copy').onclick = () => copyText($('#dav-url').textContent);
 $('#dav-secret-copy').onclick = () => copyText($('#dav-secret').textContent);
 $('#dav-mode').onchange = async () => {

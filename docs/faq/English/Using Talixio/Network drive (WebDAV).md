@@ -17,5 +17,7 @@
 - Folders of **Secret** spaces do not appear. The FAQ is read-only.
 - System files (`.DS_Store`, `._…`, `Thumbs.db`, `desktop.ini`…) are kept aside, outside the library.
 - Two files with the same name in a folder: the most recent keeps its name, the others show as "name (#id).ext".
-- Too many wrong passwords from the same address block it for 15 minutes.
+- Ten different wrong passwords from the same address block it for 15 minutes; the right password still gets in.
+  A device retrying an old saved password counts once. When an address is blocked, Settings › Network drive says
+  so, with **Unblock now**; creating a new drive password also unblocks every address.
 - "The current password is wrong." when creating a drive password: it is the app password you typed that was refused; nothing has changed, and the old drive password still works.

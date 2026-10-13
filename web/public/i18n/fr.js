@@ -2289,5 +2289,8 @@ window.I18N.fr = {
 "Table": "Tableau",
 "in Memory › Scripts. The assistant can now run it.": "dans Mémoire › Scripts. L’assistant peut maintenant l’exécuter.",
 "Show the script": "Voir le script",
-"in Memory › Scripts.": "dans Mémoire › Scripts."
+"in Memory › Scripts.": "dans Mémoire › Scripts.",
+"A device was refused after 10 wrong drive passwords (often an old password still saved on it). It can try again within 15 minutes.": "Un appareil a été refusé après 10 mauvais mots de passe du lecteur (souvent un ancien mot de passe resté enregistré). Il pourra réessayer d'ici 15 minutes.",
+"Unblock now": "Débloquer maintenant",
+"Devices can sign in to the drive again.": "Les appareils peuvent de nouveau se connecter au lecteur."
 };

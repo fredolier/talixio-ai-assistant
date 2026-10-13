@@ -364,6 +364,7 @@
             <div class="fields">
               <p class="muted small">Open the library's folders from your computer or phone like a shared drive: Windows Explorer, macOS Finder, the Files app on iPhone and Android. Files you add there are read and indexed like uploads; files you delete go to the library's trash. Folders of secret spaces never show.</p>
               <p class="small">Address: <code id="dav-url"></code> <button id="dav-copy" class="btn small" type="button">Copy</button><br>User: <code id="dav-user">talixio</code></p>
+              <p id="dav-blocked" class="small dav-blocked" role="status" hidden>A device was refused after 10 wrong drive passwords (often an old password still saved on it). It can try again within 15 minutes. <button id="dav-unblock" class="btn small" type="button">Unblock now</button></p>
               <label for="dav-mode">Access</label>
               <select id="dav-mode"><option value="off">Off</option><option value="read">Read only</option><option value="write">Read and write</option></select>
               <p class="muted small">The drive has its own password (a drive keeps it in the system's keychain and can't ask for a two-step code). It is shown once: creating a new one stops the old one.</p>

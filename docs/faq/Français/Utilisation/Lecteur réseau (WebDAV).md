@@ -17,5 +17,8 @@
 - Les dossiers des espaces **Secret** n'apparaissent pas. La FAQ est en lecture seule.
 - Les fichiers techniques des systèmes (`.DS_Store`, `._…`, `Thumbs.db`, `desktop.ini`…) sont gardés à part, hors de la bibliothèque.
 - Deux fichiers du même nom dans un dossier : le plus récent garde son nom, les autres s'affichent « nom (#id).ext ».
-- Trop de mauvais mots de passe depuis une même adresse la bloquent 15 minutes.
+- Dix mauvais mots de passe différents depuis une même adresse la bloquent 15 minutes ; le bon mot de passe passe
+  toujours. Un appareil qui réessaie un ancien mot de passe enregistré ne compte qu'une fois. Quand une adresse est
+  bloquée, Réglages › Lecteur réseau l'indique, avec **Débloquer maintenant** ; créer un nouveau mot de passe du
+  lecteur débloque aussi toutes les adresses.
 - « Mot de passe actuel incorrect » en créant un mot de passe du lecteur : c'est le mot de passe de l'app saisi qui est refusé ; rien n'a changé, l'ancien mot de passe du lecteur reste valable.
