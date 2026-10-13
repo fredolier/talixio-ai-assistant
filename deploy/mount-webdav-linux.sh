@@ -13,8 +13,9 @@ U=${SUDO_USER:-root}
 G=$(id -gn "$U")
 
 # Encodes spaces and accents in the address (%20, %C3%A9…), keeps what is already encoded
-encode_url() {
-    local LC_ALL=C s=$1 out='' c h i
+encode_url() (
+    LC_ALL=C
+    local s=$1 out='' c h i
     for ((i = 0; i < ${#s}; i++)); do
         c=${s:i:1}
         case "$c" in
@@ -23,7 +24,7 @@ encode_url() {
         esac
     done
     printf '%s' "$out"
-}
+)
 
 echo "=== Talixio network drive (WebDAV) with davfs2 ==="
 
@@ -53,6 +54,25 @@ MOUNT=${MOUNT:-/mnt/talixio}
 MOUNT=${MOUNT%/}
 if [[ "$MOUNT" =~ [[:space:]] ]]; then
     echo "The mount point cannot contain spaces."
+    exit 1
+fi
+
+# davfs2 needs FUSE in the kernel
+if [ ! -e /dev/fuse ]; then
+    modprobe fuse 2>/dev/null || true
+    if [ ! -e /dev/fuse ] && grep -qw fuse /proc/filesystems; then
+        mknod -m 666 /dev/fuse c 10 229
+    fi
+fi
+if [ ! -e /dev/fuse ]; then
+    echo "This Linux has no FUSE, which davfs2 needs to mount a drive."
+    if grep -qi microsoft /proc/version; then
+        echo "On WSL: map the drive in Windows (File Explorer › This PC › Map network drive, letter Z:),"
+        echo "then in WSL: sudo mkdir -p /mnt/z && sudo mount -t drvfs Z: /mnt/z"
+        echo "Or update WSL from Windows (wsl --update) and run this script again."
+    else
+        echo "Install a kernel with FUSE (or the fuse3 package) and run this script again."
+    fi
     exit 1
 fi
 
@@ -101,7 +121,8 @@ if [[ "${ANSWER:-}" =~ ^([yYoO]|)$ ]]; then
     if mount "$MOUNT"; then
         echo "Drive mounted on $MOUNT"
     else
-        echo "Mounting failed. Check the address and the drive password, then run this script again."
+        echo
+        echo "Mounting failed (see the message above). For a wrong address or password, run this script again."
         exit 1
     fi
 fi

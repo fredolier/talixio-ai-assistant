@@ -19,6 +19,8 @@
     works without sudo once you have signed in again. Run it again to change the address or the password.
     davfs2 sends a file a few seconds after it is closed, and files added from the web app can take up to a minute to
     appear. Its `lost+found` folder exists only on the computer.
+    **WSL** (Linux on Windows) often has no FUSE, which davfs2 needs ("can't open fuse device"): map the drive
+    in Windows (letter `Z:`), then in WSL `sudo mkdir -p /mnt/z && sudo mount -t drvfs Z: /mnt/z`.
 - A subfolder can be opened directly: add its path to the address, for example `https://…/dav/Clients/`
   (spaces and accents encoded on macOS and Linux: `My%20Folder`). The spelling must be exact, capital letters
   included. The drive password still opens the whole drive.

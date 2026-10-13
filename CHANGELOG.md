@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.23 (2026-10-13)
+- Linux drive script: checks for FUSE before mounting and says what to do when it is missing (on WSL, map the drive
+  in Windows and mount it with drvfs) instead of blaming the address or password; no more locale warning.
+
 ## 0.28.22 (2026-10-13)
 - Network drive on Linux: `deploy/mount-webdav-linux.sh` installs davfs2 and sets up the mount (address with spaces
   and accents encoded, files owned by the user, mount without sudo, run again to change the address or password).

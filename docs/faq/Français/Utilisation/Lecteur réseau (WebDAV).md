@@ -19,6 +19,8 @@
     `mount /mnt/talixio` marche sans sudo après une nouvelle connexion. Le relancer pour changer d'adresse ou de mot de passe.
     davfs2 envoie un fichier quelques secondes après sa fermeture, et les fichiers ajoutés depuis l'app web peuvent
     mettre jusqu'à une minute à apparaître. Son dossier `lost+found` n'existe que sur l'ordinateur.
+    **WSL** (Linux sous Windows) n'a souvent pas FUSE, dont davfs2 a besoin (« can't open fuse device ») : connecter
+    le lecteur dans Windows (lettre `Z:`), puis dans WSL `sudo mkdir -p /mnt/z && sudo mount -t drvfs Z: /mnt/z`.
 - Un sous-dossier peut s'ouvrir directement : ajouter son chemin à l'adresse, par exemple `https://…/dav/Clients/`
   (espaces et accents encodés sur macOS et Linux : `Mon%20dossier`). L'orthographe doit être exacte, majuscules
   comprises. Le mot de passe du lecteur ouvre toujours tout le lecteur.
