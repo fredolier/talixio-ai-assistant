@@ -10,6 +10,18 @@
   - **macOS**: Finder → Go → Connect to Server (⌘K).
   - **iPhone, iPad**: Files → ⋯ → Connect to Server.
   - **Android**: a WebDAV app (Solid Explorer, Material Files, CX File Explorer…).
+  - **Linux** (Debian, Ubuntu): the script `deploy/mount-webdav-linux.sh` installs davfs2 and sets up the mount:
+    ```
+    curl -fsSLO https://raw.githubusercontent.com/fredolier/talixio-ai-assistant/HEAD/deploy/mount-webdav-linux.sh
+    sudo bash mount-webdav-linux.sh
+    ```
+    It asks for the address, the drive password and the mount point (`/mnt/talixio` by default); then `mount /mnt/talixio`
+    works without sudo once you have signed in again. Run it again to change the address or the password.
+    davfs2 sends a file a few seconds after it is closed, and files added from the web app can take up to a minute to
+    appear. Its `lost+found` folder exists only on the computer.
+- A subfolder can be opened directly: add its path to the address, for example `https://…/dav/Clients/`
+  (spaces and accents encoded on macOS and Linux: `My%20Folder`). The spelling must be exact, capital letters
+  included. The drive password still opens the whole drive.
 - These are the same folders and files as in the library:
   - a file added or changed is read and indexed again (search by words and by meaning), just like an upload from the app;
   - a file renamed or moved keeps its index, under its new name;

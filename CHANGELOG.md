@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.22 (2026-10-13)
+- Network drive on Linux: `deploy/mount-webdav-linux.sh` installs davfs2 and sets up the mount (address with spaces
+  and accents encoded, files owned by the user, mount without sudo, run again to change the address or password).
+  The FAQ explains it, and how to open a subfolder directly.
+
 ## 0.28.21 (2026-10-13)
 - Network drive: a device retrying an old saved password no longer locks the drive. Each different wrong password
   counts once, the right password always gets in (it is long and random), Settings › Network drive shows when an
