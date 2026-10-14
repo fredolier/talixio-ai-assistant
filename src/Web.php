@@ -63,7 +63,8 @@ final class Web
                 echo $this->app->privacy()->register(); return;
             }
             if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
-            $this->json($this->route($method, $path, $body));
+            $out = $this->route($method, $path, $body);
+            $this->json($out, isset($out['errors']) ? 422 : 200); // values that did not validate
         } catch (Conflict $e) {
             $this->json(['error' => $e->getMessage(), 'conflict' => true], 409);
         } catch (\InvalidArgumentException $e) {
@@ -631,7 +632,7 @@ final class Web
     private function saveSettings(array $b): array
     {
         $errors = Settings::save($this->app->cfg->dataDir, (array)($b['changes'] ?? []), array_map('strval', (array)($b['reset'] ?? [])));
-        if ($errors) { http_response_code(422); return ['errors' => $errors, 'error' => 'Some values are not valid.']; }
+        if ($errors) { return ['errors' => $errors, 'error' => 'Some values are not valid.']; }
         Settings::apply($this->app->cfg->dataDir);
         return ['ok' => true, 'groups' => Settings::describe($this->app->cfg->dataDir)];
     }
@@ -678,7 +679,7 @@ final class Web
         elseif ($c->embeddings !== 'ollama') $changes['TALIXIO_EMBEDDINGS'] = 'auto';
         if ($c->search !== 'searxng') $changes['TALIXIO_SEARCH'] = 'auto';
         $errors = Settings::save($c->dataDir, $changes, []);
-        if ($errors) { http_response_code(422); return ['errors' => $errors, 'error' => 'Some values are not valid.']; }
+        if ($errors) { return ['errors' => $errors, 'error' => 'Some values are not valid.']; }
         $this->app->store->set('sovereign_models', json_encode(['id' => $service . '|' . rtrim($url !== '' ? $url : Sovereign::SERVICES[$service]['url'], '/'), 'ts' => time(), 'tiers' => $test['tiers']]));
         $app = new App(Config::fromEnv()); // the new settings, to say what still leaves Europe
         return ['ok' => true, 'test' => $test] + $this->sovereign($app);
