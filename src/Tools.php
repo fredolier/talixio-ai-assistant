@@ -126,7 +126,8 @@ final class Tools
         $this->register('kb_list', "List a folder of the user's library: its subfolders and files (id, size, date). folder '/' is the top; omit it to see the whole folder tree.",
             ['folder' => ['type' => 'string']], [], fn(array $a) => $this->kbList($a['folder'] ?? null));
         $this->register('kb_save_note',
-            "Save a Markdown note in the user's library (it becomes searchable), e.g. meeting notes, a summary of research, a checklist. Give id to update an existing note.",
+            "Save a note in the user's library (it becomes searchable), e.g. meeting notes, a summary of research, a checklist. Markdown by default; "
+            . "a name ending in .html, .csv, .json, .xml or .txt saves that format instead (a newsletter or web page: name it page.html, full HTML in content). Give id to update an existing file, keeping its name unless you give a new one.",
             ['folder' => ['type' => 'string'], 'name' => ['type' => 'string'], 'content' => ['type' => 'string'], 'id' => ['type' => 'integer']], ['content'],
             function (array $a) {
                 $f = $this->app->library()->saveNote((string)($a['folder'] ?? ($this->spaceFolder() !== '' ? $this->spaceFolder() . '/Notes' : Library::NOTES)), (string)($a['name'] ?? ''), $a['content'], isset($a['id']) ? (int)$a['id'] : null);

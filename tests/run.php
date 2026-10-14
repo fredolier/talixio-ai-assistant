@@ -1322,6 +1322,17 @@ $note = $lib->saveNote('/Notes', 'Idées cadeaux', "- Livre de cuisine pour Mari
 check('library: notes are Markdown files, searchable right away', $note['note'] == 1 && $note['name'] === 'Idées cadeaux.md' && array_column($lib->search('cuisine Marie'), 'id') === [(int)$note['id']]);
 $lib->saveNote('/Notes', 'Idées cadeaux.md', "- Vélo pour Paul\n", (int)$note['id']);
 check('library: editing a note re-indexes it', $lib->search('cuisine Marie') === [] && array_column($lib->search('vélo Paul'), 'id') === [(int)$note['id']]);
+$page = $lib->saveNote('/Notes', 'Lettre.html', "<!DOCTYPE html><html><body><h1>Le Fil</h1></body></html>");
+check('library: a note named .html is saved as a web page, not as Markdown', $page['name'] === 'Lettre.html' && !$page['note'] && $page['kind'] === 'text' && $page['mime'] === 'text/html'
+    && str_contains((new \Talixio\Preview($la))->render($page), 'Le Fil') && !str_contains((new \Talixio\Preview($la))->render($page), '&lt;h1'));
+$md = $lib->saveNote('/Notes', 'Brouillon', "<p>x</p>");
+$md = $lib->renameFile((int)$md['id'], 'Brouillon.html');
+check('library: renaming a note to .html makes it a web page', !$md['note'] && $md['mime'] === 'text/html');
+$md = $lib->renameFile((int)$md['id'], 'Brouillon.md');
+check('library: and back to .md, a note again', $md['note'] == 1 && $md['mime'] === 'text/markdown');
+$la->store->q("UPDATE files SET note = 1, mime = 'text/markdown' WHERE id = ?", [$page['id']]); $la->store->set('fix.html_notes', '');
+new \Talixio\Store($la->store->path);
+check('library: notes already named .html are repaired once', !$lf->get((int)$page['id'])['note'] && $lf->get((int)$page['id'])['mime'] === 'text/html' && $lf->get((int)$md['id'])['note'] == 1);
 // images: described by the fast model when allowed (skipped with the echo provider)
 $png = (function () { $im = imagecreatetruecolor(40, 30); ob_start(); imagepng($im); return (string)ob_get_clean(); })();
 $idImg = $lf->save($mk('x', $png), 'ticket.png', 'image/png', '/Perso/Admin/Budget');

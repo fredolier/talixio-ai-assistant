@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.28 (2026-10-14)
+
+- Notes in other formats: the assistant's `kb_save_note` keeps a `.html`, `.csv`, `.json`, `.xml` or `.txt` name and saves that format, instead of adding `.md` (`page.html.md`). An HTML newsletter now shows as HTML in the library and opens as a web page.
+- Renaming a text file to another extension changes its type: a note renamed `page.html` stops being a note (and is no longer shown as Markdown source); renamed back to `.md`, it is a note again.
+- Notes already renamed to `.html` (or another non-note extension) are repaired once at startup.
+
 ## 0.28.27 (2026-10-14)
 Test coverage release: the test suite now runs 97% of the code's lines and 88% of its branches (was 81% / 69%).
 - **New tests** in `tests/more/`, run by `tests/run.php` after the main suite: `content.php` (previews, privacy,

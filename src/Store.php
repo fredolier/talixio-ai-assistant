@@ -52,6 +52,11 @@ final class Store
             $this->db->exec("UPDATE files SET status = 'ready'"); // files from before the library: never re-read (no surprise transcription costs)
         }
         $this->addColumn('files', 'note', 'INTEGER NOT NULL DEFAULT 0');
+        if ($this->get('fix.html_notes') === '') { // before 0.28.28, a note renamed page.html stayed a Markdown note
+            $this->db->exec("UPDATE files SET note = 0, kind = 'text', mime = CASE WHEN lower(name) LIKE '%.htm' OR lower(name) LIKE '%.html' THEN 'text/html' ELSE mime END
+                WHERE note = 1 AND lower(name) NOT LIKE '%.md' AND lower(name) NOT LIKE '%.markdown' AND lower(name) NOT LIKE '%.txt'");
+            $this->set('fix.html_notes', '1');
+        }
         $this->addColumn('files', 'suggestion', 'TEXT'); // where to file it (Filing): JSON, or {"done":true} / {"dismissed":true}           // 1 = Markdown note editable in the app
         $this->db->exec("CREATE TABLE IF NOT EXISTS folders(path TEXT PRIMARY KEY, created INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS files_folder ON files(folder);");

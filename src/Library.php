@@ -185,9 +185,22 @@ final class Library
         $name = self::cleanName($name);
         if ($name === '' || $name === '.' || $name === '..') throw new \InvalidArgumentException('invalid name');
         $this->app->store->q('UPDATE files SET name = ? WHERE id = ?', [$name, $id]);
+        if ($f['kind'] === 'text' && strtolower(pathinfo($name, PATHINFO_EXTENSION)) !== strtolower(pathinfo((string)$f['name'], PATHINFO_EXTENSION))) {
+            // a text file follows its new extension: page.md renamed page.html is shown as a web page, no longer as a note
+            $mime = self::textMime($name);
+            $this->app->store->q('UPDATE files SET mime = ?, kind = ?, note = ? WHERE id = ?', [$mime, Files::kind($mime, $name), (int)self::isNoteName($name), $id]);
+        }
         $this->relabel(['name' => $name] + $f);
         return $this->app->files()->get($id);
     }
+
+    /** Text files the assistant writes: the extension decides the format; Markdown (or plain text) is a note, editable in the app. */
+    public const TEXT_TYPES = ['md' => 'text/markdown', 'markdown' => 'text/markdown', 'txt' => 'text/plain', 'html' => 'text/html', 'htm' => 'text/html',
+        'csv' => 'text/csv', 'json' => 'application/json', 'xml' => 'application/xml'];
+
+    public static function isNoteName(string $name): bool { return (bool)preg_match('/\.(md|markdown|txt)$/i', $name); }
+
+    public static function textMime(string $name): string { return self::TEXT_TYPES[strtolower(pathinfo($name, PATHINFO_EXTENSION))] ?? 'text/plain'; }
 
     /** A file name as shown in the library: anything but slashes, control characters and the few that file systems refuse. */
     public static function cleanName(string $name): string
@@ -270,7 +283,7 @@ final class Library
         return count($ids);
     }
 
-    /** Create or update a Markdown note. */
+    /** Create or update a note: Markdown by default, or the text format its name says (page.html, data.csv…). */
     public function saveNote(string $folder, string $name, string $content, ?int $id = null): array
     {
         $files = $this->app->files();
@@ -283,11 +296,11 @@ final class Library
             if ($name !== '' && $name !== $f['name']) $this->renameFile($id, $name);
         } else {
             $name = trim($name) !== '' ? trim($name) : 'Note ' . date('Y-m-d H.i');
-            if (!preg_match('/\.(md|txt)$/i', $name)) $name .= '.md';
+            if (!isset(self::TEXT_TYPES[strtolower(pathinfo($name, PATHINFO_EXTENSION))])) $name .= '.md';
             $tmp = tempnam(sys_get_temp_dir(), 'note');
             file_put_contents($tmp, $content);
-            $id = $files->save($tmp, $name, 'text/markdown', $folder);
-            $this->app->store->q('UPDATE files SET note = 1 WHERE id = ?', [$id]);
+            $id = $files->save($tmp, $name, self::textMime($name), $folder);
+            if (self::isNoteName($name)) $this->app->store->q('UPDATE files SET note = 1 WHERE id = ?', [$id]);
         }
         $files->text($id); // small: index right away
         return $files->get($id);
