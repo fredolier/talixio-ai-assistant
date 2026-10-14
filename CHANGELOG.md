@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.32 (2026-10-14)
+
+- Linux drive script: with davfs2 1.7.0 and a recent kernel (WSL2 6.x among them), the drive mounted but every `ls`
+  failed with "Invalid argument": davfs2 reads folders through a 16 KiB buffer and the kernel asks for 32 KiB.
+  The script now sets `buf_size 64` for the mount point in `/etc/davfs2/davfs2.conf`.
+
 ## 0.28.31 (2026-10-14)
 
 - Linux drive script: inside a Docker container, where the kernel has FUSE but `/dev/fuse` is not handed over,

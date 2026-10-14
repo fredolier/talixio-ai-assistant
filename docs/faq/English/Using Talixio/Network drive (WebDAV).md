@@ -26,6 +26,8 @@
     Windows' client refuses files over 50 MB by default. After a restart of WSL: `sudo mount /mnt/talixio`.
     **In a Docker container**, start it with `--device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined`,
     or mount the drive on the host and share it with `-v /mnt/talixio:/mnt/talixio`.
+    If `ls` answers "Invalid argument", add `buf_size 64` to `/etc/davfs2/davfs2.conf` and mount again
+    (davfs2 1.7.0 with a recent kernel; the script now does it).
 - A subfolder can be opened directly: add its path to the address, for example `https://…/dav/Clients/`
   (spaces and accents encoded on macOS and Linux: `My%20Folder`). The spelling must be exact, capital letters
   included. The drive password still opens the whole drive.

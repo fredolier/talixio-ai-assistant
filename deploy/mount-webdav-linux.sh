@@ -171,7 +171,14 @@ cat /etc/davfs2/secrets.new > /etc/davfs2/secrets
 rm -f /etc/davfs2/secrets.new
 unset PASS
 
-# fstab: replaces any davfs line for this mount point
+# davfs2 up to 1.7.0 reads folders through a 16 KiB buffer, but recent kernels
+# ask for 32 KiB and then every `ls` fails with "Invalid argument"
+touch /etc/davfs2/davfs2.conf
+awk -v m="[$MOUNT]" '/^\[/ { skip = ($1 == m) } !skip' /etc/davfs2/davfs2.conf > /etc/davfs2/davfs2.conf.new
+printf '[%s]\nbuf_size 64\n' "$MOUNT" >> /etc/davfs2/davfs2.conf.new
+cat /etc/davfs2/davfs2.conf.new > /etc/davfs2/davfs2.conf
+rm -f /etc/davfs2/davfs2.conf.new
+
 awk -v m="$MOUNT" '!($2 == m && $3 == "davfs")' /etc/fstab > /etc/fstab.new
 echo "$URL $MOUNT davfs rw,_netdev,noauto,user,uid=$U,gid=$G,file_mode=0644,dir_mode=0755 0 0" >> /etc/fstab.new
 cp /etc/fstab /etc/fstab.bak
