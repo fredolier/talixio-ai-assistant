@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.30 (2026-10-14)
+
+- Linux drive script: on WSL without FUSE ("can't open fuse device"), `mount-webdav-linux.sh` no longer stops
+  with advice. Windows connects the drive (`net.exe use`, kept at sign-in), and WSL mounts that letter with
+  drvfs, plus an fstab line for `sudo mount /mnt/talixio`. A rootless FUSE client would not help, because it
+  needs `/dev/fuse` too.
+
 ## 0.28.29 (2026-10-14)
 
 - One name per folder, with versions: saving a file under a name already used in its folder (an upload in the library, the assistant saving a note again, the network drive, the shell) now replaces that file in place, with the same id, links and shares. What it held is kept as a version for 30 days, at most 20 per file.

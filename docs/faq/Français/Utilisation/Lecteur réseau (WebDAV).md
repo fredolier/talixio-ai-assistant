@@ -19,8 +19,12 @@
     `mount /mnt/talixio` marche sans sudo après une nouvelle connexion. Le relancer pour changer d'adresse ou de mot de passe.
     davfs2 envoie un fichier quelques secondes après sa fermeture, et les fichiers ajoutés depuis l'app web peuvent
     mettre jusqu'à une minute à apparaître. Son dossier `lost+found` n'existe que sur l'ordinateur.
-    **WSL** (Linux sous Windows) n'a souvent pas FUSE, dont davfs2 a besoin (« can't open fuse device ») : connecter
-    le lecteur dans Windows (lettre `Z:`), puis dans WSL `sudo mkdir -p /mnt/z && sudo mount -t drvfs Z: /mnt/z`.
+    **WSL** (Linux sous Windows) n'a souvent pas FUSE, dont davfs2 a besoin (« can't open fuse device »). Le script
+    fait alors connecter le lecteur par Windows (une lettre libre, reconnectée à l'ouverture de session) et monte
+    cette lettre dans WSL avec drvfs : pas besoin de FUSE. Si Windows dit que le nom réseau est introuvable, démarrer
+    une fois son client WebDAV, dans PowerShell en administrateur :
+    `Start-Service WebClient; Set-Service WebClient -StartupType Automatic`. Le client de Windows refuse par défaut
+    les fichiers de plus de 50 Mo. Après un redémarrage de WSL : `sudo mount /mnt/talixio`.
 - Un sous-dossier peut s'ouvrir directement : ajouter son chemin à l'adresse, par exemple `https://…/dav/Clients/`
   (espaces et accents encodés sur macOS et Linux : `Mon%20dossier`). L'orthographe doit être exacte, majuscules
   comprises. Le mot de passe du lecteur ouvre toujours tout le lecteur.

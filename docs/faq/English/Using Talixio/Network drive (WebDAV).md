@@ -19,8 +19,11 @@
     works without sudo once you have signed in again. Run it again to change the address or the password.
     davfs2 sends a file a few seconds after it is closed, and files added from the web app can take up to a minute to
     appear. Its `lost+found` folder exists only on the computer.
-    **WSL** (Linux on Windows) often has no FUSE, which davfs2 needs ("can't open fuse device"): map the drive
-    in Windows (letter `Z:`), then in WSL `sudo mkdir -p /mnt/z && sudo mount -t drvfs Z: /mnt/z`.
+    **WSL** (Linux on Windows) often has no FUSE, which davfs2 needs ("can't open fuse device"). The script
+    then lets Windows connect the drive (a free letter, kept at sign-in) and mounts that letter in WSL with
+    drvfs: no FUSE needed. If Windows says the network name cannot be found, start its WebDAV client once, in
+    PowerShell as administrator: `Start-Service WebClient; Set-Service WebClient -StartupType Automatic`.
+    Windows' client refuses files over 50 MB by default. After a restart of WSL: `sudo mount /mnt/talixio`.
 - A subfolder can be opened directly: add its path to the address, for example `https://…/dav/Clients/`
   (spaces and accents encoded on macOS and Linux: `My%20Folder`). The spelling must be exact, capital letters
   included. The drive password still opens the whole drive.
