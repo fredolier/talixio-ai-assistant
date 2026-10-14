@@ -292,7 +292,7 @@ final class Fleet
         $s['instances'][$id] = ($s['instances'][$id] ?? []) + ['name' => mb_substr(trim($name), 0, 80), 'email' => '', 'memory_mb' => $s['settings']['memory_mb'], 'cpus' => $s['settings']['cpus'],
             'created' => time(), 'password_hash' => '', 'reset' => '', 'timezone' => 'Europe/Paris'];
         $this->save($s);
-        $progress('stopping', "Stopping $id…");
+        $progress('stopping', "Stopping {$id}…");
         $this->removeContainer($id);
         $this->ensureNetwork(self::PREFIX . 'i-' . $id);
         [$code0] = $this->docker('GET', '/volumes/' . self::PREFIX . $id);
@@ -306,7 +306,7 @@ final class Fleet
                 'ReadonlyRootfs' => true, 'Tmpfs' => ['/tmp' => 'rw,nosuid,nodev,size=256m'], 'CapDrop' => ['ALL'], 'SecurityOpt' => ['no-new-privileges'],
                 'Memory' => 512 * 1048576, 'PidsLimit' => 64]], ['name' => $job]), 'create the transfer');
         $this->ok($this->docker('POST', "/containers/$job/start"), 'start the transfer');
-        $progress('copying', "Copying from $source…");
+        $progress('copying', "Copying from {$source}…");
         $log = ''; $exit = null; $shown = '';
         for ($t = 0; $t < 6 * 3600; $t += 5) {
             [, $c] = $this->docker('GET', "/containers/$job/json");
@@ -324,7 +324,7 @@ final class Fleet
             $this->createAndStart($id, $this->state()); // what was there before starts again (unchanged when the copy failed)
             throw new \RuntimeException($exit === null ? 'The copy took more than 6 hours: stopped.' : 'The copy failed: ' . $last);
         }
-        $progress('starting', "Starting $id…");
+        $progress('starting', "Starting {$id}…");
         $this->createAndStart($id, $this->state());
         $this->reloadCaddy();
         if (!$this->waitHealthy($id, 120)) throw new \RuntimeException("$id does not start after the copy: see its logs (docker logs talixio-$id). The data before the copy is in its volume, in .previous-*.");
@@ -662,7 +662,7 @@ final class Fleet
         [, $oldImg] = $this->docker('GET', '/images/' . rawurlencode($old) . '/json');
         $this->tag($tag, self::IMAGE, 'current');
         if (is_array($oldImg) && isset($oldImg['Id'])) $this->tag($oldImg['Id'], self::IMAGE, 'previous');
-        $s['image'] = ['current' => self::IMAGE . ':current', 'previous' => is_array($oldImg) ? self::IMAGE . ':previous' : null, 'built' => $tag, 'built_at' => time(), 'branch' => $branch];
+        $s['image'] = ['current' => self::IMAGE . ':current', 'previous' => isset($oldImg['Id']) ? self::IMAGE . ':previous' : null, 'built' => $tag, 'built_at' => time(), 'branch' => $branch];
         $this->save($s);
         foreach (array_keys($s['instances']) as $id) {
             $progress('rolling', "Moving $id to the new version…");
