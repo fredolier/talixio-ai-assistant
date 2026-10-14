@@ -108,7 +108,7 @@ CSS;
         }
         $html = Mime::htmlBody($raw);
         $body = $html !== ''
-            ? preg_replace('#<(script|style|head|title|meta|link|base)\b.*?(</\1>|>)#is', '', $html) // keep the message's layout, drop its page-level parts
+            ? preg_replace(['#<(script|style|head|title)\b[^>]*>.*?</\1\s*>#is', '#</?(script|style|head|title|meta|link|base)\b[^>]*>#i'], '', $html) // keep the message's layout, drop its page-level parts and their text
             : '<div class="doc"><pre class="code">' . self::e($m['text']) . '</pre></div>';
         return self::page($name, '<table class="mail">' . $rows . '</table><hr>' . $body);
     }
@@ -477,7 +477,7 @@ CSS;
                     break;
                 case 'list':
                     $out .= '<ul>';
-                    foreach ($x->query('text:list-item', $n) as $li) $out .= '<li>' . preg_replace('#^<p>(.*)</p>$#s', '$1', self::odfBlocks($x, $li, $z)) . '</li>';
+                    foreach ($x->query('text:list-item', $n) as $li) $out .= '<li>' . preg_replace('#^<p>((?:(?!</?p>).)*)</p>$#s', '$1', self::odfBlocks($x, $li, $z)) . '</li>';
                     $out .= '</ul>';
                     break;
                 case 'table':

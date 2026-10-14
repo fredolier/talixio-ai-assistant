@@ -48,9 +48,10 @@ final class Markdown
         if ($end === null) return '';
         $rows = [];
         foreach (array_slice($lines, 1, $end - 1) as $l) {
+            if (str_starts_with(ltrim($l), '#')) continue; // a YAML comment
             if (preg_match('/^([\w][\w .-]{0,40}):\s*(.*)$/u', $l, $m)) $rows[] = [$m[1], $m[2]];
             elseif (trim($l) !== '' && $rows) $rows[count($rows) - 1][1] .= ' ' . trim($l);
-            elseif (trim($l) !== '' && !str_starts_with(ltrim($l), '#')) return ''; // not a header after all
+            elseif (trim($l) !== '') return ''; // not a header after all
         }
         if (!$rows) return '';
         $lines = array_slice($lines, $end + 1);

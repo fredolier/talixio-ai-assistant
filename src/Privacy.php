@@ -204,7 +204,7 @@ final class Privacy
     {
         $host = strtolower((string)parse_url($url, PHP_URL_HOST));
         $c = $this->app->cfg;
-        if (self::isLocalHost($host)) return ['id' => 'local', 'name' => $host === parse_url($c->ollamaUrl, PHP_URL_HOST) ? 'Ollama' : 'this server', 'local' => true, 'host' => $host];
+        if (self::isLocalHost($host)) return ['id' => 'local', 'name' => $host === parse_url($c->ollamaUrl, PHP_URL_HOST) && (parse_url($url, PHP_URL_PORT) ?: 80) === (parse_url($c->ollamaUrl, PHP_URL_PORT) ?: 80) ? 'Ollama' : 'this server', 'local' => true, 'host' => $host];
         if ($eu = Sovereign::serviceOf($url)) return ['id' => $eu, 'name' => Sovereign::SERVICES[$eu]['name'], 'local' => false, 'host' => $host];
         foreach (self::SERVICES as $id => $s) {
             foreach ($s['hosts'] as $h) if ($host === $h || (str_starts_with($h, '.') && str_ends_with($host, $h))) return ['id' => $id, 'name' => $s['name'], 'local' => false, 'host' => $host];
