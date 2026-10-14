@@ -1,17 +1,10 @@
 <?php
 declare(strict_types=1);
 // Run: php tests/run.php   (no network, no API key needed)
-require __DIR__ . '/../src/autoload.php';
+require __DIR__ . '/helpers.php';
 use Talixio\{App, Config, Cron, Email, GeminiModels, Skills, Http, Imap, Markdown, McpServer, Mime, Pricing, Smtp, WebPush, Provider, Recall, Store, Summarizer, Tools, Worker, Privacy};
 use Talixio\{Calendar, Embeddings, Meaning, Settings};
 
-$fails = 0;
-function tap_tmp(string $content): string { $t = tempnam(sys_get_temp_dir(), 'tt'); file_put_contents($t, $content); return $t; }
-function check(string $name, bool $ok, string $detail = ''): void {
-    global $fails;
-    echo ($ok ? "ok   " : "FAIL ") . $name . ($ok || $detail === '' ? '' : "  -> $detail") . "\n";
-    if (!$ok) $fails++;
-}
 
 date_default_timezone_set('Europe/Paris');
 $t = strtotime('2026-10-08 10:17:00'); // a Thursday
@@ -97,15 +90,7 @@ check('mcp schema encodes empty properties as object', str_contains(json_encode(
 $call = $mcp->handle(['jsonrpc' => '2.0', 'id' => 3, 'method' => 'tools/call', 'params' => ['name' => 'list_tasks', 'arguments' => []]]);
 check('mcp tools/call', str_contains($call['result']['content'][0]['text'], 'Brief'));
 
-// ---- a scriptable fake model ----
-final class FakeModel implements Provider {
-    public array $calls = [];
-    /** @var callable */ public $script;
-    public function complete(string $system, string $context, array $messages, Tools $tools, callable $onUsage, ?callable $onEvent = null): string {
-        $this->calls[] = compact('system', 'context', 'messages') + ['tools' => $tools->names()];
-        return ($this->script)(\Talixio\Content::text(end($messages)["content"]), $tools, $onUsage, $context, $messages, $onEvent);
-    }
-}
+// ---- a scriptable fake model (tests/helpers.php) ----
 $fake = new FakeModel();
 $usage = fn(callable $on, string $model = 'claude-sonnet-x', int $in = 1000, int $out = 200) => $on(['model' => $model, 'in' => $in, 'out' => $out, 'cache_read' => 0, 'cache_write' => 0, 'cost' => null]);
 $fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return 'Time to call the bank.'; };
@@ -610,13 +595,8 @@ check('job toolset cannot write memory', !in_array('memory_append', $app->tools-
 $app->cfg->budgetDaily = 0; $app->cfg->budgetMonthly = 0;
 $fake->script = function ($last, $tools, $on) { return "Reply to: " . mb_substr($last, 0, 60); };
 $spawn = function (string $script, array $args) { return proc_open([PHP_BINARY, __DIR__ . "/fakes/$script", ...$args], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $p); };
-$freePort = function (): int { // ask the OS for a free port instead of guessing
-    $sock = stream_socket_server('tcp://127.0.0.1:0');
-    $port = (int)substr(strrchr(stream_socket_get_name($sock, false), ':'), 1);
-    fclose($sock);
-    return $port;
-};
-$waitPort = function (int $port) { for ($i = 0; $i < 50; $i++) { $c = @fsockopen('127.0.0.1', $port); if ($c) { fclose($c); return; } usleep(50000); } };
+$freePort = fn(): int => free_port();
+$waitPort = fn(int $port) => wait_port($port);
 
 // markdown + MIME building
 check('markdown to html escapes and formats', Markdown::toHtml("Hi <b>\n\n- **A**\n- see https://x.io") === "<p>Hi &lt;b&gt;</p>\n<ul><li><strong>A</strong></li><li>see <a href=\"https://x.io\">https://x.io</a></li></ul>");
@@ -2862,5 +2842,6 @@ check('stuck model: "oui" to a plan is answered by at least the standard tier', 
     && !\Talixio\Agent::sameAnswer('Voici vos tâches de la semaine : MAI-2 et MAI-3, rien de bloquant.', 'La réunion est créée tous les lundis de 11h à 11h30, invitations envoyées.') && !\Talixio\Agent::isGoAhead("Oui mais d'abord dis-moi qui est invité à la réunion de lundi prochain"), json_encode($stall));
 
 exec('rm -rf ' . escapeshellarg($dir));
-echo $fails ? "\n$fails FAILED\n" : "\nall passed\n";
-exit($fails ? 1 : 0);
+// the more focused files, each also runnable alone
+foreach (glob(__DIR__ . '/more/*.php') as $more) (function () use ($more) { require $more; })();
+tests_done();

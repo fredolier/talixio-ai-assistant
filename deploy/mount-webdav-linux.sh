@@ -28,6 +28,25 @@ encode_url() (
 
 echo "=== Talixio network drive (WebDAV) with davfs2 ==="
 
+# davfs2 needs FUSE in the kernel: checked first, before installing or asking anything
+if [ ! -e /dev/fuse ]; then
+    modprobe fuse 2>/dev/null || true
+    if [ ! -e /dev/fuse ] && grep -qw fuse /proc/filesystems; then
+        mknod -m 666 /dev/fuse c 10 229
+    fi
+fi
+if [ ! -e /dev/fuse ]; then
+    echo "This Linux has no FUSE, which davfs2 needs to mount a drive."
+    if grep -qi microsoft /proc/version; then
+        echo "This WSL kernel has no FUSE. Map the drive in Windows instead (File Explorer › This PC › Map network drive, letter Z:),"
+        echo "then in WSL: sudo mkdir -p /mnt/z && sudo mount -t drvfs Z: /mnt/z"
+        echo "Or update WSL from Windows (wsl --update, then wsl --shutdown) and run this script again."
+    else
+        echo "Install a kernel with FUSE (or the fuse3 package) and run this script again."
+    fi
+    exit 1
+fi
+
 # Lets a normal user mount the drive (the question davfs2 asks when it is installed)
 echo "davfs2 davfs2/suid_file boolean true" | debconf-set-selections
 apt-get update
@@ -54,25 +73,6 @@ MOUNT=${MOUNT:-/mnt/talixio}
 MOUNT=${MOUNT%/}
 if [[ "$MOUNT" =~ [[:space:]] ]]; then
     echo "The mount point cannot contain spaces."
-    exit 1
-fi
-
-# davfs2 needs FUSE in the kernel
-if [ ! -e /dev/fuse ]; then
-    modprobe fuse 2>/dev/null || true
-    if [ ! -e /dev/fuse ] && grep -qw fuse /proc/filesystems; then
-        mknod -m 666 /dev/fuse c 10 229
-    fi
-fi
-if [ ! -e /dev/fuse ]; then
-    echo "This Linux has no FUSE, which davfs2 needs to mount a drive."
-    if grep -qi microsoft /proc/version; then
-        echo "On WSL: map the drive in Windows (File Explorer › This PC › Map network drive, letter Z:),"
-        echo "then in WSL: sudo mkdir -p /mnt/z && sudo mount -t drvfs Z: /mnt/z"
-        echo "Or update WSL from Windows (wsl --update) and run this script again."
-    else
-        echo "Install a kernel with FUSE (or the fuse3 package) and run this script again."
-    fi
     exit 1
 fi
 
