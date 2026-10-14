@@ -3,6 +3,28 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.26 (2026-10-14)
+Security release, second part: the Low findings of the code review, and some tidying.
+- **Shared to the app** (Android share sheet): a share belongs to the browser that sent it (its own cookie), so a
+  link to someone else's share opens nothing; each browser keeps its last 5, and at most 50 wait in all.
+- **Approvals**: a bare "yes" / "no" answers only a request raised in the same channel (or by a schedule or job);
+  "yes 12" still works from anywhere.
+- **Two-step sign-in**: turning it on asks for your password.
+- **Web app**: cannot be framed by another site (`frame-ancestors`, `X-Frame-Options`), sign-out is POST only,
+  a conversation is marked read only by the app itself, and cookies are `Secure` whenever the public address is
+  https. Server errors show a reference (the details stay in the log); Telegram does the same.
+- **Files shown in the page** only when their content matches their type (images, PDF, audio, plain text);
+  anything else downloads. PDFs keep the browser's viewer, which cannot run sandboxed.
+- **Links in answers**: `intent://` opens an Android app by its package only, nothing else.
+- **Connector sign-in (OAuth)**: the addresses a server hands out stay on its own host or on a public one.
+- **Claude Code (subscription)**: reads only the images of the turn; web pages are read with Talixio's
+  `fetch_url`, which refuses local addresses, instead of Claude Code's WebFetch.
+- **Google, Microsoft and Spotify sign-in** use `TALIXIO_PUBLIC_URL` for the return address when it is set.
+- **File names**: one rule everywhere (uploads, renames, WebDAV): "Facture (Mars) & co.pdf" stays as is. New files
+  are stored on disk by number.
+- Deployment notes on the fleet agent's Docker socket, AppArmor and image tags (deploy/docker/README.md).
+- Tidying: exceptions in their own files, unused code removed.
+
 ## 0.28.25 (2026-10-14)
 Security release: the High and Medium findings of the code review.
 - **Shares**: a folder holding a Secret space can no longer be shared, and every opening checks each file again

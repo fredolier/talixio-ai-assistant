@@ -786,6 +786,3 @@ final class Board
         return trim($out);
     }
 }
-
-/** Someone else changed the record since it was loaded. */
-final class Conflict extends \RuntimeException {}

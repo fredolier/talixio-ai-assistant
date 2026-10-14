@@ -55,8 +55,7 @@ final class Telegram
                 $files = $media ? [$this->download($media, isset($m['photo']) ? 'photo.jpg' : ($m['voice'] ?? null ? 'voice.ogg' : 'file'))] : [];
                 $this->send($chat, $this->app->agent()->incoming('telegram', $text, $files));
             } catch (\Throwable $e) {
-                Log::error("telegram: {$e->getMessage()}");
-                $this->send($chat, "I couldn't process that: {$e->getMessage()}");
+                $this->send($chat, "I couldn't process that: " . Web::internalError($e, 'telegram')); // logged there; no file paths or SQL sent out
             }
         }
     }

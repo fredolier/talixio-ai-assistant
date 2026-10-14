@@ -65,7 +65,7 @@ final class Faq
             foreach ($pages as [$folder, $name, $text]) {
                 $key = "$folder/$name"; $sha = sha1($text);
                 [$id, $was] = $known[$key] ?? [0, ''];
-                $same = array_map('intval', $st->q('SELECT id FROM files WHERE folder = ? AND name = ? ORDER BY id', [$folder, Files::cleanName($name)])->fetchAll(\PDO::FETCH_COLUMN));
+                $same = array_map('intval', $st->q('SELECT id FROM files WHERE folder = ? AND name = ? ORDER BY id', [$folder, Library::cleanName($name)])->fetchAll(\PDO::FETCH_COLUMN));
                 if (!in_array((int)$id, $same, true)) [$id, $was] = [$same ? max($same) : 0, ''];
                 foreach ($same as $other) if ($other !== (int)$id) { $lib->purgeFile($other); $n++; } // copies left by an older version
                 $f = $id ? $files->get((int)$id) : null;

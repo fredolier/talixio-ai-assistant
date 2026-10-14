@@ -433,6 +433,7 @@
                 <div id="totp-qr" class="qr"></div>
                 <p class="small">Key: <code id="totp-secret"></code> · <a id="totp-link" href="#">Open in an authenticator app</a></p>
                 <label for="totp-code">2. Type the code it shows</label><input id="totp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required>
+                <label for="totp-pw">Password</label><input id="totp-pw" type="password" autocomplete="current-password" required>
                 <div class="row"><button class="btn primary" type="submit">Confirm and turn on</button><span id="totp-state" class="muted small"></span></div>
               </form>
               <form id="totp-disable" hidden>

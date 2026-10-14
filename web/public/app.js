@@ -31,6 +31,8 @@ function toast(text) {
 }
 const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+const INTENT_HREF = /^intent:\/\/#Intent;package=[a-z]\w*(?:\.[a-z]\w*)+;S\.browser_fallback_url=https%3A%2F%2Fplay\.google\.com%2F[\w%.-]*;end$/i;
+const INTENT_MD = new RegExp(String.raw`\[([^\]]+)\]\((${INTENT_HREF.source.slice(1, -1)})\)`, 'gi');
 const CITE_SVG = '<svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 12h6M9 16h6"/></svg>';
 // Safe Markdown: escapes everything first, then adds formatting (headings, lists with nesting and
 // checkboxes, tables, quotes, rules, code, links, citations, phone buttons).
@@ -51,7 +53,8 @@ function md(src) {
     .replace(/\[([^\]]+)\]\(\/files\/(\d+)(?:#p(\d+))?\)/g, (_, t, id, pg) => keep(`<a href="#" class="cite" data-file="${id}"${pg ? ` data-page="${pg}"` : ''} title="Open the document${pg ? ' at page ' + pg : ''}">${CITE_SVG}${fmt(t)}</a>`))
     .replace(/\[([^\]]+)\]\((#library(?:\/[^\s)"]*)?)\)/g, (_, t, h) => keep(`<a href="${h}" class="cite folder">${FOLDER_SVG}${fmt(t)}</a>`)) // a library folder ("where is…?")
     // buttons that open an app on the phone (phone_action, Spotify): custom schemes only from this list
-    .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|intent|deezer|tg|sgnl|uber|homeassistant):[^\s)"]+)\)/g, (_, t, h) => link(h, 'action', t.replace(/^▶\s*/, '')))
+    .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|deezer|tg|sgnl|uber|homeassistant):[^\s)"]+)\)/g, (_, t, h) => link(h, 'action', t.replace(/^▶\s*/, '')))
+    .replace(INTENT_MD, (_, t, h) => link(h, 'action', t.replace(/^▶\s*/, ''))) // Android intents: only "open this app, or its Play Store page"
     .replace(/\[([^\]]+)\]\((\?connector=[^\s)"]+)\)/g, (_, t, h) => link(h, 'action connector', t.replace(/^▶\s*/, ''))) // "▶ Install" from the connector list
     .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, (_, t, h) => link(h, 'action', t, true))
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, (_, t, h) => link(h, '', t, true))
@@ -1137,7 +1140,7 @@ function htmlToMd(root) {
       case 'A': {
         const href = n.classList.contains('cite') ? `/files/${n.dataset.file}${n.dataset.page ? '#p' + n.dataset.page : ''}` : n.getAttribute('href') || '';
         const text = inline(n).trim() || href;
-        if (!/^(https?:|\/files\/|tel:|sms:|mailto:|geo:|spotify:|intent:|deezer:|tg:|sgnl:|uber:|homeassistant:)/.test(href)) return text;
+        if (!/^(https?:|\/files\/|tel:|sms:|mailto:|geo:|spotify:|deezer:|tg:|sgnl:|uber:|homeassistant:)/.test(href) && !INTENT_HREF.test(href)) return text;
         return `[${n.classList.contains('action') ? '▶ ' : ''}${text.replace(/[[\]]/g, '')}](${href.replace(/ /g, '%20').replace(/\)/g, '%29')})`;
       }
       case 'SPAN': return n.classList.contains('check') ? '' : inline(n);
@@ -2393,7 +2396,7 @@ $('#totp-setup').onclick = async () => {
 };
 $('#totp-enable').onsubmit = async e => {
   e.preventDefault();
-  try { await post('api/security/totp/enable', { code: $('#totp-code').value }); $('#totp-code').value = ''; showTotp(true); toast('Two-step sign-in is on.'); }
+  try { await post('api/security/totp/enable', { code: $('#totp-code').value, password: $('#totp-pw').value }); $('#totp-code').value = $('#totp-pw').value = ''; showTotp(true); toast('Two-step sign-in is on.'); }
   catch (err) { $('#totp-state').textContent = err.message; }
 };
 $('#totp-disable').onsubmit = async e => {

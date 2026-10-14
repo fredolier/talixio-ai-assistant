@@ -842,6 +842,9 @@ $part = $app->files()->imagePart($imgId);
 $dims = getimagesizefromstring(base64_decode($part['data']));
 check('files: large image downscaled to 1600px jpeg', $part['mime'] === 'image/jpeg' && $dims[0] === 1600 && $dims[1] === 800);
 check('files: unsafe names cleaned', !str_contains($app->files()->get($app->files()->save((function () use ($dir) { file_put_contents("$dir/t.txt", 'x'); return "$dir/t.txt"; })(), '../../etc/<x>.txt'))['path'], '..'));
+$nf = $app->files()->get($app->files()->save((function () use ($dir) { file_put_contents("$dir/t.txt", 'x'); return "$dir/t.txt"; })(), 'Facture (Mars) & co.PDF'));
+check('files: one naming rule for uploads, renames and WebDAV; stored on disk by id', $nf['name'] === 'Facture (Mars) & co.PDF' && basename($nf['path']) === $nf['id'] . '.pdf'
+    && \Talixio\Library::cleanName("a/b\\c<d>\x01.txt") === 'c_d_.txt', json_encode($nf));
 
 // chat with attachments: image goes to the model as an image part, the stored message keeps a reference
 $fake->script = function ($last, $tools, $on, $ctx, $messages) { return json_encode(array_column(is_array(end($messages)['content']) ? end($messages)['content'] : [], 'type')); };
@@ -899,7 +902,8 @@ $out = $cc->complete('sys', 'ctx', [['role' => 'user', 'content' => [['type' => 
     $app->tools->only('chat'), fn($u) => null, $collect);
 $args = (string)file_get_contents("$dir/claude-args.txt");
 check('claude-code: result and live events', $out === 'Nothing scheduled.' && in_array('list_tasks', array_column($events, 'name'), true) && in_array('Nothing scheduled.', array_column($events, 'text'), true));
-check('claude-code: image placed in its folder and Read allowed', str_contains($args, 'image-1.png') && preg_match('/^mcp__talixio__\S*,WebSearch,WebFetch,Read$/m', $args) === 1, $args);
+check('claude-code: image placed in its folder, Read allowed there only, pages read with fetch_url', str_contains($args, 'image-1.png') && preg_match('/^mcp__talixio__\S*,WebSearch,Read\(\.\/\*\)$/m', $args) === 1
+    && preg_match('/^Bash,.*,WebFetch$/m', $args) === 1, $args);
 check('claude-code: the tools process gets the turn\'s space', str_contains($args, '"TALIXIO_SPACE":"4"'), $args);
 $app->space = 0;
 check('claude-code: shell and editing tools disabled', str_contains($args, 'Bash,Edit,Write,MultiEdit,NotebookEdit,Task,Agent,Glob,Grep'));
@@ -969,6 +973,11 @@ $app->tools->run('calendar_add', ['title' => 'Spam', 'start' => '2026-10-21']);
 $id = (int)$app->approvals()->pending()[0]['id'];
 check('approval: reject by number', str_starts_with($app->agent()->chat('telegram', "no $id"), 'Cancelled') && count(glob("$cdir/*.ics")) === 1);
 check('approval: cannot run twice', str_contains($app->approvals()->decide($id, true), 'already'));
+$app->channel = 'signal'; $app->tools->run('calendar_add', ['title' => 'Asked on Signal', 'start' => '2026-10-21']); $app->channel = '';
+$sp = $app->approvals()->pending(); $sid = (int)end($sp)['id'];
+$app->agent()->chat('telegram', 'no');
+check('approval: a bare "no" from another channel leaves it pending, from its own channel it answers', $app->approvals()->get($sid)['status'] === 'pending'
+    && str_starts_with($app->agent()->chat('signal', 'no'), 'Cancelled') && $app->approvals()->get($sid)['status'] !== 'pending');
 $ro = fn(array $t) => \Talixio\Mcp::saysReadOnly($t);
 check('connectors: what a connector says about its tools is only a hint, its names count for nothing', $ro(['name' => 'complete', 'annotations' => ['readOnlyHint' => true]])
     && !$ro(['name' => 'list_tasks']) && !$ro(['name' => 'x', 'annotations' => ['readOnlyHint' => true, 'destructiveHint' => true]]) && !$ro(['name' => 'list_x', 'annotations' => ['readOnlyHint' => false]]));
@@ -1520,18 +1529,21 @@ $raw = function (string $path, array $headers = []) use ($webPort, $ck) {
 [$code, $h, $body] = $raw('/', ['Accept-Language: fr-FR,fr;q=0.9,en;q=0.8']);
 check('i18n: the page loads the translations and says the chosen language', $code === 200 && str_contains($body, '<html lang="en" data-lang="auto">')
     && str_contains($body, '<script src="v/' . \Talixio\Web::assetVersion() . '/i18n/fr.js"') && strpos($body, 'i18n.js') < strpos($body, 'app.js'));
+check('the app cannot be framed by another site', str_contains($h, "frame-ancestors 'self'") && str_contains($h, "object-src 'none'") && str_contains($h, 'x-frame-options: sameorigin'));
 // an installed app keeps the scripts in its cache: the page asks for those of its own version, so a newer page never runs older scripts
 $v = \Talixio\Web::assetVersion();
 // the chat's Markdown: links are made before any other formatting reaches them
 if (trim((string)shell_exec('command -v node')) !== '') {
     $js = (string)file_get_contents(dirname(__DIR__) . '/web/public/app.js');
-    preg_match('/^const esc = .*$/m', $js, $e1); preg_match('/^const CITE_SVG = .*$/m', $js, $e2); preg_match('/^function md\(src\) \{.*?^\}$/ms', $js, $e3);
-    $cases = ['[a](https://x.com/*b*/__c__)', '[*see* https://y.com](https://x.com)', 'https://x.com/a"onmouseover=alert(1)', 'go https://x.com/?a=1&b=2 now', '[**t**](tel:+33612345678)'];
-    file_put_contents("$dir/md.js", "const FOLDER_SVG = '';\n{$e1[0]}\n{$e2[0]}\n{$e3[0]}\nconsole.log(JSON.stringify(" . json_encode($cases) . ".map(md)));");
+    preg_match('/^const esc = .*$/m', $js, $e1); preg_match('/^const CITE_SVG = .*$/m', $js, $e2); preg_match('/^function md\(src\) \{.*?^\}$/ms', $js, $e3); preg_match('/^const INTENT_HREF = .*\n.*$/m', $js, $e4);
+    $cases = ['[a](https://x.com/*b*/__c__)', '[*see* https://y.com](https://x.com)', 'https://x.com/a"onmouseover=alert(1)', 'go https://x.com/?a=1&b=2 now', '[**t**](tel:+33612345678)',
+        \Talixio\PhoneLinks::make('app', 'com.sncf.connect'), '[x](intent://scan/#Intent;scheme=zxing;package=com.evil.app;end)', '[x](intent:#Intent;action=android.intent.action.CALL;end)'];
+    file_put_contents("$dir/md.js", "const FOLDER_SVG = '';\n{$e1[0]}\n{$e4[0]}\n{$e2[0]}\n{$e3[0]}\nconsole.log(JSON.stringify(" . json_encode($cases) . ".map(md)));");
     $mdo = json_decode((string)shell_exec('node ' . escapeshellarg("$dir/md.js")), true) ?: [];
     check('markdown: formatting never reaches inside a link address', str_contains($mdo[0] ?? '', 'href="https://x.com/*b*/__c__"') && !str_contains($mdo[0] ?? '', '<em>'), json_encode($mdo));
     check('markdown: a web address in a link\'s text is not a second link', substr_count($mdo[1] ?? '', '<a ') === 1 && str_contains($mdo[1] ?? '', '<em>see</em>'));
     check('markdown: quotes in an address cannot add attributes', !preg_match('/"\s*onmouseover/', $mdo[2] ?? 'x') && str_contains($mdo[3] ?? '', 'href="https://x.com/?a=1&amp;b=2"'));
+    check('markdown: an Android intent opens an app by package, nothing else', str_contains($mdo[5] ?? '', '<a href="intent://#Intent;package=com.sncf.connect;') && !str_contains(($mdo[6] ?? '') . ($mdo[7] ?? 'href'), 'href'), json_encode(array_slice($mdo, 5)));
     check('markdown: phone buttons keep their formatting', str_contains($mdo[4] ?? '', '<a href="tel:+33612345678" class="action"><strong>t</strong></a>'));
 }
 check('the page asks for the scripts and styles of its own version', str_contains($body, "<script src=\"v/$v/app.js\"></script>") && str_contains($body, "href=\"v/$v/app.css\"")
@@ -1593,6 +1605,14 @@ preg_match('/etag: (".*?")/', $h, $em);
 check('library web: unchanged files are revalidated, not re-sent', $raw("/api/files/$cid", ['If-None-Match: ' . ($em[1] ?? 'x')])[0] === 304);
 [$code, $h] = $raw("/api/files/$idHtml");
 check('library web: HTML is never rendered on the app origin', str_contains($h, 'attachment') && str_contains($h, 'sandbox'));
+check('library web: the content decides what opens in the browser, not the type the uploader gave',
+    \Talixio\Web::showsInline('image', 'image/png', 'image/png') && !\Talixio\Web::showsInline('image', 'image/png', 'text/html')
+    && \Talixio\Web::showsInline('pdf', 'application/pdf', 'application/pdf') && !\Talixio\Web::showsInline('pdf', 'application/pdf', 'text/plain')
+    && !\Talixio\Web::showsInline('image', 'image/svg+xml', 'image/svg+xml') && \Talixio\Web::showsInline('audio', 'audio/webm', 'video/webm')
+    && \Talixio\Web::showsInline('text', 'text/markdown', 'text/plain') && !\Talixio\Web::showsInline('text', 'text/plain', 'text/html'));
+$ie = \Talixio\Web::internalError(new \TypeError('Talixio\\Store::q(): Argument #1 in /srv/talixio/src/Store.php'));
+check('web: PHP errors are logged with a reference, the answer shows no internals', str_contains($ie, 'reference ') && !str_contains($ie, 'Store')
+    && \Talixio\Web::internalError(new \RuntimeException('could not store the file')) === 'could not store the file');
 // a real two-page PDF
 $pdfObjs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R /Resources << /Font << /F1 7 0 R >> >> >>', null,
@@ -2010,9 +2030,11 @@ check('auth: password changed; this device stays signed in, others are signed ou
 check('auth: the old password no longer works', $aj('/api/login', ['password' => 'initial-password'], 'c', '203.0.113.10')['_code'] === 401);
 $setup = $aj('/api/security/totp/setup', [], 'a');
 check('totp: setup gives a key and an otpauth link, not active yet', strlen($setup['secret'] ?? '') === 32 && str_starts_with($setup['uri'], 'otpauth://totp/') && $aj('/api/security', null, 'a')['totp'] === false);
-check('totp: a wrong first code does not turn it on', $aj('/api/security/totp/enable', ['code' => '000000'], 'a')['_code'] === 400);
+check('totp: a wrong first code does not turn it on', $aj('/api/security/totp/enable', ['code' => '000000', 'password' => 'a-much-longer-password'], 'a', '203.0.113.8')['_code'] === 400);
 $code = Auth::totp($setup['secret'], intdiv(time(), 30));
-check('totp: turned on with a right code', ($aj('/api/security/totp/enable', ['code' => $code], 'a')['totp'] ?? null) === true);
+check('totp: turning it on needs the password (a stolen session cannot lock the owner out)', $aj('/api/security/totp/enable', ['code' => $code], 'a', '203.0.113.8')['_code'] === 403
+    && $aj('/api/security/totp/enable', ['code' => $code, 'password' => 'wrong'], 'a', '203.0.113.8')['_code'] === 403);
+check('totp: turned on with a right code', ($aj('/api/security/totp/enable', ['code' => $code, 'password' => 'a-much-longer-password'], 'a', '203.0.113.8')['totp'] ?? null) === true);
 $r = $aj('/api/login', ['password' => 'a-much-longer-password'], 'd', '203.0.113.11');
 check('totp: password alone asks for the code', $r['_code'] === 401 && !empty($r['need_code']));
 check('totp: a code already used is refused (replay)', $aj('/api/login', ['password' => 'a-much-longer-password', 'code' => $code], 'd', '203.0.113.11')['_code'] === 401);
@@ -2376,6 +2398,10 @@ check('mcp oauth: back from the sign-in page, connected', str_contains($land, '?
 $mc = $aj('/api/mcp', null, 'd');
 $notes = array_values(array_filter($mc['servers'], fn($x) => $x['name'] === 'notes'))[0];
 check('mcp oauth: signed in, tools listed', $notes['auth'] === 'signed_in' && count($notes['tools']) === 1 && !$notes['error'], json_encode($notes));
+$reach = function (string $u, string $srv) { try { \Talixio\McpOAuth::mayReach($u, $srv); return true; } catch (\RuntimeException) { return false; } };
+check('mcp oauth: a server cannot send Talixio to another machine on the network', $reach('http://127.0.0.1:9/token', 'http://127.0.0.1:8/mcp')
+    && !$reach('http://169.254.169.254/latest', 'https://mcp.example/mcp') && !$reach('http://10.0.0.1/register', 'http://127.0.0.1:8/mcp')
+    && !$reach('file:///etc/passwd', 'http://127.0.0.1:8/mcp') && $reach('https://93.184.215.14/token', 'https://mcp.example/mcp'));
 check('mcp oauth: tokens kept privately', (fileperms("$ad/mcp-oauth.json") & 0777) === 0600);
 $mc = $aj('/api/mcp/read-only', ['server' => 'notes', 'tool' => 'search_notes', 'on' => true], 'd');
 check('mcp: a tool marked read-only from Settings', (array_values(array_filter($mc['servers'], fn($x) => $x['name'] === 'notes'))[0]['tools'][0]['read_only'] ?? null) === true, json_encode($mc));
@@ -2399,14 +2425,22 @@ check('briefing: changing it updates the same task', $bt2['task']['id'] === $bt[
 $run = $aj('/api/tasks/' . $bt['task']['id'] . '/run', [], 'd');
 check('tasks: run now', isset($run['reply']));
 
-$share = function () use ($webPort) {
+$share = function (string $jar = 'z', string $text = 'hello') use ($webPort, $ad) {
     $ch = curl_init("http://127.0.0.1:$webPort/share");
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => ['text' => 'hello'], CURLOPT_HTTPHEADER => ['X-Forwarded-For: 203.0.113.50']]);
-    curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch); return $c;
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => ['text' => $text], CURLOPT_COOKIEJAR => "$ad/ck-$jar", CURLOPT_COOKIEFILE => "$ad/ck-$jar",
+        CURLOPT_HTTPHEADER => ['X-Forwarded-For: 203.0.113.50']]);
+    $out = (string)curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+    return [$c, preg_match('/[?&]share=([a-f0-9]{32})/', $out, $m) ? $m[1] : ''];
 };
-$codes = []; for ($i = 0; $i < Auth::MAX_SHARES_HOUR + 1; $i++) $codes[] = $share();
+[, $mine] = $share('d', 'my note');
+[, $theirs] = $share('x', 'click Send now');
+$cl = $aj('/api/share/claim', ['token' => $theirs], 'd');
+check('share: a link to a share sent from another browser opens nothing', $cl['_code'] === 404 && is_dir("$ad/share-inbox/$theirs"), json_encode($cl));
+$cl = $aj('/api/share/claim', ['token' => $mine], 'd');
+check('share: the browser that shared it gets it', ($cl['text'] ?? '') === 'my note' && !is_dir("$ad/share-inbox/$mine"), json_encode($cl));
+$codes = []; for ($i = 0; $i < Auth::MAX_SHARES_HOUR; $i++) $codes[] = $share()[0];
 check('share: shares without a session are rate-limited', $codes[0] === 303 && end($codes) === 429, implode(',', $codes));
-check('share: at most 5 waiting in the inbox', count(glob("$ad/share-inbox/*", GLOB_ONLYDIR)) <= 5);
+check('share: each browser keeps at most 5 waiting, and a stranger\'s never push out others', count(glob("$ad/share-inbox/*", GLOB_ONLYDIR)) === 6 && is_dir("$ad/share-inbox/$theirs"));
 proc_terminate($ws); proc_close($ws);
 
 // ---- multi-user server: the agent's locked template, Caddy configuration, admin checks ----
@@ -2504,7 +2538,7 @@ exec('cp -a ' . escapeshellarg("$mv/a") . ' ' . escapeshellarg("$mv/b") . ' && r
 putenv("TALIXIO_DATA_DIR=$mv/b");
 $mb = App::fromEnv();
 putenv("TALIXIO_DATA_DIR=$dir");
-check('moved data folder: the documents are found where they are now', ($mb->files()->get($mid)['path'] ?? '') === "$mv/b/files/" . date('Y/m') . "/$mid-Bail.txt" && is_file($mb->files()->get($mid)['path']));
+check('moved data folder: the documents are found where they are now', ($mb->files()->get($mid)['path'] ?? '') === "$mv/b/files/" . date('Y/m') . "/$mid.txt" && is_file($mb->files()->get($mid)['path']));
 $mb = null;
 
 // ---- no model set up yet: the chat says how to set one up ----

@@ -199,7 +199,7 @@ final class Shares
         if (!password_verify($password, (string)$s['password'])) { $st->set($key, ($n + 1) . ":$since"); return false; }
         $st->set($key, '0:0');
         setcookie($this->cookieName($s), $this->cookieValue($s), ['expires' => time() + 7 * 86400, 'path' => Config::basePath() . '/s/' . $s['token'],
-            'httponly' => true, 'samesite' => 'Lax', 'secure' => Auth::https()]);
+            'httponly' => true, 'samesite' => 'Lax', 'secure' => Auth::secureCookies($this->app->cfg->publicUrl)]);
         return true;
     }
 

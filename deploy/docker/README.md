@@ -118,6 +118,12 @@ a certificate for each person at their first visit, and only for people that exi
 - Claude Code (subscription) in an assistant: the person runs `claude setup-token` on their own
   computer and pastes the token in their Settings.
 - You, as administrator of the server, can technically read the volumes: tell the people.
+- Trade-offs to know: the fleet agent holds the Docker socket (it creates the assistants' containers
+  with their volumes, which a socket proxy would have to allow anyway, so the agent is as powerful as
+  root: it listens only on the internal `control` network, behind its token). On Ubuntu the
+  assistants run without an AppArmor profile so their sandboxes can mount (turn it off in Settings →
+  Sandboxes if you don't need the shell or the browser). The Caddy and Ollama images follow their
+  tags: pin them by digest in `compose.yml` if you want updates only when you choose.
 - Commands: `docker compose -f deploy/docker/compose.yml ps`, `docker logs -f talixio-<person>`,
   `docker exec talixio-<person> php /opt/talixio/bin/talixio doctor`.
 

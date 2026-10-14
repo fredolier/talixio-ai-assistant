@@ -375,7 +375,6 @@ final class Config
         return $this->escalate === 'on' || $this->provider === 'sovereign';
     }
 
-    public function openaiCompatible(): bool { return in_array($this->provider, ['openai', 'gemini', 'sovereign'], true); }
     /** The European provider has an address and, when it needs one, a key. */
     public function sovereignReady(): bool { return $this->sovereignUrl !== '' && ($this->sovereignKey !== '' || !Sovereign::info($this->sovereign)['key']); }
 }

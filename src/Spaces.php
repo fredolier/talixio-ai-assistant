@@ -154,16 +154,6 @@ final class Spaces
         else $this->app->store->q('UPDATE spaces SET last_read = ? WHERE id = ?', [$max, $id]);
     }
 
-    /** The space whose library folder contains this folder (deepest match), or null. */
-    public function forFolder(string $folder): ?array
-    {
-        $best = null;
-        foreach ($this->app->store->q("SELECT * FROM spaces WHERE folder != '' AND archived = 0")->fetchAll() as $s) {
-            if (($folder === $s['folder'] || str_starts_with($folder, $s['folder'] . '/')) && (!$best || strlen($s['folder']) > strlen($best['folder']))) $best = $s;
-        }
-        return $best;
-    }
-
     /** Which space a chat channel (Telegram, Signal, email, terminal) writes to; changed with "/space name". */
     public function forChannel(string $channel): int
     {

@@ -5,6 +5,7 @@ namespace Talixio;
 /**
  * Actions with outside effects (sending an email, adding to your calendar, submitting a web form)
  * wait for your approval: buttons in the web app, or "yes 12" / "no 12" in any chat channel.
+ * A bare "yes" answers only when one request is pending from that same channel (or from an unattended run).
  */
 final class Approvals
 {
@@ -37,8 +38,8 @@ final class Approvals
     private function create(string $tool, array $args, string $summary, string $mode): int
     {
         $st = $this->app->store;
-        $st->q('INSERT INTO approvals(tool, args, summary, status, created, mode, space) VALUES(?,?,?,?,?,?,?)',
-            [$tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $summary, 'pending', time(), $mode, $this->app->space]);
+        $st->q('INSERT INTO approvals(tool, args, summary, status, created, mode, space, channel) VALUES(?,?,?,?,?,?,?,?)',
+            [$tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $summary, 'pending', time(), $mode, $this->app->space, $this->app->channel]);
         $id = (int)$st->db->lastInsertId();
         try {
             $this->app->notifier()->notify('Approval needed', "$summary\n\nApprove in the app, or reply \"yes $id\" (or \"no $id\").", $this->app->space);

@@ -31,15 +31,28 @@ final class McpOAuth
     public function account(string $server): string { return (string)($this->get($server)['tokens']['signed_in_at'] ?? ''); }
 
     /** Where the authorization server sends the browser back (must be the same at registration and sign-in). */
-    public static function redirectUri(): string { return preg_replace('#/api/google/callback$#', '/api/mcp/oauth/callback', Google::redirectUri()); }
+    public static function redirectUri(string $publicUrl = ''): string { return preg_replace('#/api/google/callback$#', '/api/mcp/oauth/callback', Google::redirectUri($publicUrl)); }
 
-    private static function getJson(string $url): ?array
+    private static function getJson(string $url, string $serverUrl): ?array
     {
         try {
+            self::mayReach($url, $serverUrl);
             [$code, $body] = Http::request('GET', $url, ['Accept: application/json', 'MCP-Protocol-Version: ' . Mcp::PROTOCOL], null, 20);
         } catch (\Throwable) { return null; }
         $d = json_decode($body, true);
         return $code === 200 && is_array($d) ? $d : null;
+    }
+
+    /**
+     * The addresses a server hands out (its metadata, sign-in and token endpoints) stay on the connector's own host
+     * or on a public one: a remote server cannot point Talixio at your router or another service on your network.
+     */
+    public static function mayReach(string $url, string $serverUrl): void
+    {
+        $p = parse_url($url);
+        if (!in_array(strtolower($p['scheme'] ?? ''), ['http', 'https'], true) || empty($p['host'])) throw new \RuntimeException('This server gave an address that is not http(s).');
+        if (strcasecmp($p['host'], (string)parse_url($serverUrl, PHP_URL_HOST)) === 0) return;
+        Http::publicIp($p['host']); // throws for private and local addresses
     }
 
     /** "https://host/a/b" → ["https://host", "/a/b"] */
@@ -56,16 +69,17 @@ final class McpOAuth
         [$origin, $path] = self::split($serverUrl);
         $prm = null;
         foreach (array_filter([$hint, "$origin/.well-known/oauth-protected-resource$path", "$origin/.well-known/oauth-protected-resource"]) as $u) {
-            if ($prm = self::getJson($u)) break;
+            if ($prm = self::getJson($u, $serverUrl)) break;
         }
         $issuer = (string)($prm['authorization_servers'][0] ?? $origin); // older servers: the MCP server's origin is the authorization server
         [$iOrigin, $iPath] = self::split($issuer);
         $as = null;
         foreach (["$iOrigin/.well-known/oauth-authorization-server$iPath", "$iOrigin/.well-known/openid-configuration$iPath", "$issuer/.well-known/openid-configuration"] as $u) {
-            if ($as = self::getJson($u)) break;
+            if ($as = self::getJson($u, $serverUrl)) break;
         }
         $as ??= ['authorization_endpoint' => "$iOrigin/authorize", 'token_endpoint' => "$iOrigin/token", 'registration_endpoint' => "$iOrigin/register"];
         if (empty($as['authorization_endpoint']) || empty($as['token_endpoint'])) throw new \RuntimeException('This server does not say where to sign in.');
+        foreach (['token_endpoint', 'registration_endpoint'] as $k) if (!empty($as[$k])) self::mayReach((string)$as[$k], $serverUrl); // Talixio posts to these itself
         if (isset($as['code_challenge_methods_supported']) && !in_array('S256', (array)$as['code_challenge_methods_supported'], true)) throw new \RuntimeException('This server does not support secure sign-in (PKCE S256).');
         return ['resource' => (string)($prm['resource'] ?? $serverUrl), 'scopes' => (array)($prm['scopes_supported'] ?? $as['scopes_supported'] ?? []),
             'authorization_endpoint' => (string)$as['authorization_endpoint'], 'token_endpoint' => (string)$as['token_endpoint'],
@@ -76,7 +90,7 @@ final class McpOAuth
     public function start(string $server, array $cfg, ?string $hint = null): string
     {
         if (empty($cfg['url'])) throw new \InvalidArgumentException('Only remote connectors (url) sign in.');
-        $redirect = self::redirectUri();
+        $redirect = self::redirectUri($this->app->cfg->publicUrl);
         $e = $this->get($server);
         $meta = $this->discover((string)$cfg['url'], $hint);
         $o = (array)($cfg['oauth'] ?? []);

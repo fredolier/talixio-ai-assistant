@@ -30,7 +30,7 @@ final class Microsoft
     }
 
     /** Where Microsoft sends the user back; must be listed in the app registration exactly like this. */
-    public static function redirectUri(): string { return preg_replace('#/api/google/callback$#', '/api/microsoft/callback', Google::redirectUri()); }
+    public static function redirectUri(string $publicUrl = ''): string { return preg_replace('#/api/google/callback$#', '/api/microsoft/callback', Google::redirectUri($publicUrl)); }
 
     private function login(string $what): string
     {

@@ -46,6 +46,7 @@ final class Store
         $this->addColumn('messages', 'meta', 'TEXT');
         $this->addColumn('messages', 'files', 'TEXT');
         $this->addColumn('approvals', 'mode', "TEXT NOT NULL DEFAULT 'deferred'");
+        $this->addColumn('approvals', 'channel', "TEXT NOT NULL DEFAULT ''");
         $this->addColumn('files', 'folder', "TEXT NOT NULL DEFAULT '/Inbox'");
         if ($this->addColumn('files', 'status', "TEXT NOT NULL DEFAULT 'pending'")) { // pending | processing | ready | failed
             $this->db->exec("UPDATE files SET status = 'ready'"); // files from before the library: never re-read (no surprise transcription costs)

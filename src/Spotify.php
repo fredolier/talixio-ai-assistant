@@ -28,7 +28,7 @@ final class Spotify
         rename($tmp, $this->file());
     }
 
-    public static function redirectUri(): string { return preg_replace('#/api/google/callback$#', '/api/spotify/callback', Google::redirectUri()); }
+    public static function redirectUri(string $publicUrl = ''): string { return preg_replace('#/api/google/callback$#', '/api/spotify/callback', Google::redirectUri($publicUrl)); }
 
     public function authUrl(string $redirect): string
     {
@@ -273,9 +273,4 @@ final class Spotify
             ['query' => ['type' => 'string'], 'playlist' => ['type' => 'string']], [],
             fn(array $a) => $this->save(trim((string)($a['query'] ?? '')), trim((string)($a['playlist'] ?? ''))));
     }
-}
-
-final class SpotifyError extends \RuntimeException
-{
-    public function __construct(string $message, public readonly string $kind, int $code = 0) { parent::__construct($message, $code); }
 }

@@ -13,6 +13,8 @@ final class App
     public static bool $inWorker = false;
     /** The space the current conversation turn belongs to (0 = General). */
     public int $space = 0;
+    /** The channel of the conversation being answered: approvals it raises are answered by a bare "yes" there only. */
+    public string $channel = '';
     /** Told to the model with the next tool result (e.g. a background job nearing its cost cap). */
     public string $notice = '';
     /** The background job this process is running (its tool steps are kept so it can be continued). */

@@ -34,7 +34,8 @@ final class Files
         if ($mime === '' || $mime === 'application/octet-stream') {
             $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($tmp) ?: 'application/octet-stream';
         }
-        $name = self::cleanName($name);
+        $name = Library::cleanName($name);
+        if ($name === '' || $name === '.' || $name === '..') $name = 'file';
         $dir = $c->filesDir() . '/' . date('Y/m');
         if (!is_dir($dir)) mkdir($dir, 0750, true);
         $kind = self::kind($mime, $name);
@@ -43,18 +44,12 @@ final class Files
         $st->q('INSERT INTO files(name, mime, kind, size, path, created, folder, status) VALUES(?,?,?,?,?,?,?,?)',
             [$name, $mime, $kind, filesize($tmp), '', time(), $folder, $kind === 'other' ? 'ready' : 'pending']);
         $id = (int)$st->db->lastInsertId();
-        $path = "$dir/$id-$name";
+        $path = "$dir/$id" . (preg_match('/\.([A-Za-z0-9]{1,10})$/', $name, $x) ? '.' . strtolower($x[1]) : ''); // the name lives in the database
         if (!@rename($tmp, $path) && !copy($tmp, $path)) throw new \RuntimeException('could not store the file');
         chmod($path, 0640);
         $duration = $kind === 'audio' ? self::duration($path) : null;
         $st->q('UPDATE files SET path=?, duration=? WHERE id=?', [$path, $duration, $id]);
         return $id;
-    }
-
-    /** The name a file is stored under. */
-    public static function cleanName(string $name): string
-    {
-        return mb_substr(preg_replace('/[^\p{L}\p{N}._ -]+/u', '_', basename($name)) ?: 'file', 0, 120);
     }
 
     /** New content for a file (moved from $tmp): read and indexed again in the background, same id, folder and name. */

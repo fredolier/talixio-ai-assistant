@@ -421,8 +421,7 @@ final class Dav
             $id = (int)$src[1]['id'];
             if ($copy) {
                 $tmp = tempnam(sys_get_temp_dir(), 'dav'); copy($src[1]['path'], $tmp);
-                $id = $this->app->files()->save($tmp, Library::cleanName($toName), (string)$src[1]['mime'], $toFolder);
-                $lib->renameFile($id, $toName);
+                $id = $this->app->files()->save($tmp, $toName, (string)$src[1]['mime'], $toFolder);
             } else {
                 if ((string)$src[1]['folder'] !== $toFolder) $lib->moveFile($id, $toFolder);
                 if ((string)$src[1]['name'] !== $toName) $lib->renameFile($id, $toName);
@@ -462,8 +461,7 @@ final class Dav
             $folder = Library::normalize(dirname($path));
             if (!$this->hidden($folder) && !Library::readonly($folder) && $this->app->library()->exists($folder)) {
                 $tmp = tempnam(sys_get_temp_dir(), 'dav');
-                $id = $this->app->files()->save($tmp, Library::cleanName(basename($path)), '', $folder);
-                $this->app->library()->renameFile($id, basename($path));
+                $id = $this->app->files()->save($tmp, basename($path), '', $folder);
                 $created = true;
             }
         }

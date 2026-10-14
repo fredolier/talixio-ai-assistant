@@ -28,8 +28,10 @@ final class Google
     }
 
     /** Where Google sends the user back; must be listed in the OAuth client exactly like this. */
-    public static function redirectUri(): string
+    /** $publicUrl (TALIXIO_PUBLIC_URL) wins over the address of the request, which a client could name. */
+    public static function redirectUri(string $publicUrl = ''): string
     {
+        if ($publicUrl !== '') return rtrim($publicUrl, '/') . '/api/google/callback';
         return (Auth::https() ? 'https' : 'http') . '://' . (Auth::host() ?: 'localhost') . Config::basePath() . '/api/google/callback';
     }
 

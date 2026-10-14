@@ -20,7 +20,8 @@ final class Web
             header('Cache-Control: no-cache');
             header('Content-Type: text/html; charset=utf-8');
             // previews of documents run in sandboxed srcdoc frames that inherit this policy: no inline scripts, web pictures and styles allowed
-            header("Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:");
+            header("Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
+            header('X-Frame-Options: SAMEORIGIN'); // no other site can frame the app and trick a click (older browsers read this one)
             $html = (string)file_get_contents(dirname(__DIR__) . '/web/public/app.html');
             $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '">', $html, 1); // the interface language (i18n.js)
             if ($this->app->cfg->lang === 'auto') I18n::remember($this->app, (string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
@@ -68,16 +69,27 @@ final class Web
         } catch (\InvalidArgumentException $e) {
             $this->json(['error' => $e->getMessage()], 400);
         } catch (\Throwable $e) {
-            Log::error("web: {$e->getMessage()}");
-            $this->json(['error' => $e->getMessage()], 500);
+            $this->json(['error' => self::internalError($e)], 500);
         }
+    }
+
+    /**
+     * The message for a failed request. The app's own errors say what went wrong; PHP and database errors
+     * (file paths, SQL, class names) stay in the log, and the answer gives a reference to find them.
+     */
+    public static function internalError(\Throwable $e, string $where = 'web'): string
+    {
+        $ref = bin2hex(random_bytes(4));
+        Log::error("$where [$ref]: " . get_class($e) . ": {$e->getMessage()} at " . basename($e->getFile()) . ':' . $e->getLine());
+        return $e instanceof \Error || $e instanceof \PDOException || $e instanceof \JsonException
+            ? "Something went wrong on the server (reference $ref, in the log)." : $e->getMessage();
     }
 
     private function route(string $m, string $path, array $b): array
     {
         $s = $this->app->store;
         return match (true) {
-            $path === '/api/logout' => $this->logout(),
+            $path === '/api/logout' && $m === 'POST' => $this->logout(),
             $path === '/api/status' => $this->status(),
             $path === '/api/claude-login/start' && $m === 'POST' => (new ClaudeLogin($this->app))->start(),
             $path === '/api/claude-login/code' && $m === 'POST' => (new ClaudeLogin($this->app))->finish((string)($b['code'] ?? '')),
@@ -88,7 +100,7 @@ final class Web
             $path === '/api/messages' => (function () use ($s) {
                 $space = (int)($_GET['space'] ?? 0);
                 $list = isset($_GET['before']) ? $s->messagesBefore((int)$_GET['before'], 100, $space) : $s->messagesAfter((int)($_GET['after'] ?? 0), 200, $space);
-                if (!empty($_GET['read'])) $this->app->spaces()->markRead($space); // the user is looking at this conversation
+                if (!empty($_GET['read']) && ($_SERVER['HTTP_X_TALIXIO'] ?? '') === '1') $this->app->spaces()->markRead($space); // the user is looking at this conversation (the app's own request, not a link)
                 return ['messages' => $list, 'first_id' => (int)$s->q('SELECT COALESCE(MIN(id),0) FROM messages WHERE space = ?', [$space])->fetchColumn(),
                     'unread' => array_sum(array_map(fn($x) => $x['id'] !== $space ? $x['unread'] : 0, $this->app->spaces()->all()))];
             })(),
@@ -144,13 +156,13 @@ final class Web
                 return ['reply' => $reply, 'space' => (int)$t['space']];
             })(),
             $path === '/api/google' => $this->googleState(),
-            $path === '/api/google/connect' && $m === 'POST' => ['url' => $this->app->google()->authUrl(Google::redirectUri())],
+            $path === '/api/google/connect' && $m === 'POST' => ['url' => $this->app->google()->authUrl(Google::redirectUri($this->app->cfg->publicUrl))],
             $path === '/api/google/disconnect' && $m === 'POST' => (function () { $this->app->google()->disconnect(); return $this->googleState(); })(),
             $path === '/api/microsoft' => $this->microsoftState(),
-            $path === '/api/microsoft/connect' && $m === 'POST' => ['url' => $this->app->microsoft()->authUrl(Microsoft::redirectUri())],
+            $path === '/api/microsoft/connect' && $m === 'POST' => ['url' => $this->app->microsoft()->authUrl(Microsoft::redirectUri($this->app->cfg->publicUrl))],
             $path === '/api/microsoft/disconnect' && $m === 'POST' => (function () { $this->app->microsoft()->disconnect(); return $this->microsoftState(); })(),
             $path === '/api/spotify' => $this->spotifyState(),
-            $path === '/api/spotify/connect' && $m === 'POST' => ['url' => $this->app->spotify()->authUrl(Spotify::redirectUri())],
+            $path === '/api/spotify/connect' && $m === 'POST' => ['url' => $this->app->spotify()->authUrl(Spotify::redirectUri($this->app->cfg->publicUrl))],
             $path === '/api/spotify/disconnect' && $m === 'POST' => (function () { $this->app->spotify()->disconnect(); return $this->spotifyState(); })(),
             $path === '/api/meaning' && $m === 'GET' => (new Meaning($this->app))->status(),
             $path === '/api/meaning/choose' && $m === 'POST' => (new Meaning($this->app))->choose((string)($b['preset'] ?? '')),
@@ -321,7 +333,7 @@ final class Web
     {
         $g = $this->app->google(); $t = $g->tokens(); $cals = [];
         if ($g->connected()) { try { $cals = array_column($g->calendars(), 'name'); } catch (\Throwable $e) { $err = $e->getMessage(); } }
-        return ['configured' => $g->configured(), 'connected' => $g->connected(), 'email' => $t['email'] ?? '', 'calendars' => $cals, 'error' => $err ?? null, 'redirect' => Google::redirectUri()];
+        return ['configured' => $g->configured(), 'connected' => $g->connected(), 'email' => $t['email'] ?? '', 'calendars' => $cals, 'error' => $err ?? null, 'redirect' => Google::redirectUri($this->app->cfg->publicUrl)];
     }
 
     /** Google sends the user back here after consent (the one-time state proves it was started from the app). */
@@ -341,7 +353,7 @@ final class Web
     private function microsoftState(): array
     {
         $ms = $this->app->microsoft(); $t = $ms->tokens();
-        return ['configured' => $ms->configured(), 'connected' => $ms->connected(), 'email' => $t['email'] ?? '', 'redirect' => Microsoft::redirectUri()];
+        return ['configured' => $ms->configured(), 'connected' => $ms->connected(), 'email' => $t['email'] ?? '', 'redirect' => Microsoft::redirectUri($this->app->cfg->publicUrl)];
     }
 
     /** Microsoft sends the user back here after sign-in (the one-time state proves it was started from the app). */
@@ -419,7 +431,7 @@ final class Web
         };
     }
 
-    private function baseUrl(): string { return preg_replace('#/api/google/callback$#', '', Google::redirectUri()); }
+    private function baseUrl(): string { return preg_replace('#/api/google/callback$#', '', Google::redirectUri($this->app->cfg->publicUrl)); }
 
     /** The private calendar link of the tasks shown in the calendar (the token in the address is the password). */
     private function tasksIcs(string $token): void
@@ -454,7 +466,7 @@ final class Web
         $sp = $this->app->spotify(); $t = $sp->tokens(); $devices = [];
         if ($sp->connected()) { try { $devices = array_column($sp->devices(), 'name'); } catch (\Throwable $e) { $err = $e->getMessage(); } }
         return ['configured' => $sp->configured(), 'connected' => $sp->connected(), 'name' => $t['name'] ?? '', 'premium' => $t['premium'] ?? null,
-            'devices' => $devices, 'error' => $err ?? null, 'redirect' => Spotify::redirectUri()];
+            'devices' => $devices, 'error' => $err ?? null, 'redirect' => Spotify::redirectUri($this->app->cfg->publicUrl)];
     }
 
     /** Spotify sends the user back here after consent (the one-time state proves it was started from the app). */
@@ -547,7 +559,7 @@ final class Web
         // the session cookie is not always sent with a share (it comes from another app): without it,
         // shares are small and rate-limited, so nobody can fill the disk by posting here
         $signedIn = false;
-        if (isset($_COOKIE['talixio'])) { $this->startSession(); $signedIn = !empty($_SESSION['ok']) && ($_SESSION['gen'] ?? '') === $this->auth()->generation(); session_write_close(); }
+        if (isset($_COOKIE[self::cookie('talixio')])) { $this->startSession(); $signedIn = !empty($_SESSION['ok']) && ($_SESSION['gen'] ?? '') === $this->auth()->generation(); session_write_close(); }
         $ip = Auth::clientIp();
         if (!$signedIn) {
             if ($this->auth()->count("share:$ip", 3600) >= Auth::MAX_SHARES_HOUR) {
@@ -558,12 +570,26 @@ final class Web
             }
             $this->auth()->hit("share:$ip");
         }
+        // a share belongs to the browser that sent it (a cookie of its own): a link to someone else's share
+        // opens nothing, so nobody can pre-fill your message box by sending you a link
+        $device = (string)($_COOKIE[self::cookie('talixio_share')] ?? '');
+        if (!preg_match('/^[a-f0-9]{32}$/', $device)) $device = bin2hex(random_bytes(16));
+        setcookie(self::cookie('talixio_share'), $device, ['expires' => time() + 365 * 86400, 'path' => Config::basePath() . '/', 'httponly' => true, 'samesite' => 'Lax',
+            'secure' => Auth::secureCookies($this->app->cfg->publicUrl)]);
+        $owner = hash('sha256', $device);
         $maxBytes = $signedIn ? 200_000_000 : 25_000_000;
         $inbox = $this->app->cfg->dataDir . '/share-inbox';
         if (!is_dir($inbox)) mkdir($inbox, 0700, true);
         foreach (glob("$inbox/*", GLOB_ONLYDIR) ?: [] as $d) if (filemtime($d) < time() - 3600) exec('rm -rf ' . escapeshellarg($d));
-        $pending = glob("$inbox/*", GLOB_ONLYDIR) ?: [];
+        // each browser keeps its last 5 shares; a stranger's shares never push out yours
+        $pending = array_filter(glob("$inbox/*", GLOB_ONLYDIR) ?: [], fn($d) => (json_decode((string)@file_get_contents("$d/meta.json"), true)['owner'] ?? '') === $owner);
         if (count($pending) >= 5) { usort($pending, fn($a, $b) => filemtime($a) <=> filemtime($b)); exec('rm -rf ' . escapeshellarg($pending[0])); }
+        if (!$signedIn && count(glob("$inbox/*", GLOB_ONLYDIR) ?: []) >= 50) {
+            http_response_code(429);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo 'Too many shares are waiting. Open the app and attach the file there.';
+            return;
+        }
         $token = bin2hex(random_bytes(16));
         $dir = "$inbox/$token"; mkdir($dir, 0700);
         $text = trim(implode("\n", array_filter([trim((string)($_POST['title'] ?? '')), trim((string)($_POST['text'] ?? '')), trim((string)($_POST['url'] ?? ''))], 'strlen')));
@@ -579,7 +605,7 @@ final class Web
                 if (move_uploaded_file($tmps[$i], "$dir/$n")) $files[] = ['name' => (string)$name, 'type' => (string)($types[$i] ?? '')];
             }
         }
-        file_put_contents("$dir/meta.json", json_encode(['text' => mb_substr($text, 0, 20000), 'files' => $files, 'skipped' => $skipped, 'max_mb' => intdiv($maxBytes, 1_000_000)]));
+        file_put_contents("$dir/meta.json", json_encode(['owner' => $owner, 'text' => mb_substr($text, 0, 20000), 'files' => $files, 'skipped' => $skipped, 'max_mb' => intdiv($maxBytes, 1_000_000)]));
         header('Location: ' . Config::basePath() . '/?share=' . $token . '#chat', true, 303);
     }
 
@@ -589,7 +615,9 @@ final class Web
         if (!preg_match('/^[a-f0-9]{32}$/', $token)) $this->fail(400, 'bad share');
         $dir = $this->app->cfg->dataDir . "/share-inbox/$token";
         $meta = json_decode((string)@file_get_contents("$dir/meta.json"), true);
-        if (!is_array($meta)) $this->fail(404, 'This share has expired. Share it again.');
+        // the browser that shared it: anyone else gets the same answer as for an expired share
+        if (!is_array($meta) || !hash_equals((string)($meta['owner'] ?? ''), hash('sha256', (string)($_COOKIE[self::cookie('talixio_share')] ?? ''))))
+            $this->fail(404, 'This share has expired. Share it again.');
         $out = [];
         foreach ($meta['files'] as $i => $f) {
             if (!is_file("$dir/$i")) continue;
@@ -687,6 +715,7 @@ final class Web
         if ($action === 'enable') {
             $secret = $st->get('totp_pending');
             if ($secret === '') $this->fail(400, 'Start the setup again.');
+            $this->checkSecret((string)($b['password'] ?? '')); // a stolen session cannot lock the owner out with its own phone
             if (!$auth->checkCode($secret, (string)($b['code'] ?? ''))) $this->fail(400, 'Wrong code. Check the time on your phone and try the next code.');
             Settings::setTotp($dir, $secret);
             $st->set('totp_pending', '');
@@ -896,12 +925,27 @@ final class Web
         $f = $this->app->files()->get($id);
         if (!$f || !is_file($f['path'])) $this->fail(404, 'not found');
         $mime = $f['mime'];
-        $safe = !str_contains($mime, 'svg') && !str_contains($mime, 'html') && !str_contains($mime, 'xml');
-        $inline = !$download && $safe && (in_array($f['kind'], ['image', 'pdf', 'audio'], true) || ($f['kind'] === 'text' && preg_match('#^text/(plain|markdown|csv)#', $mime)));
+        $inline = !$download && self::showsInline($f['kind'], $mime, (string)(new \finfo(FILEINFO_MIME_TYPE))->file($f['path']));
         $type = $inline ? ($f['kind'] === 'text' ? preg_replace('/;.*/', '', $mime) . '; charset=utf-8' : $mime) : 'application/octet-stream';
         // PDFs need the browser's own viewer, which a sandboxed response blocks; they still get no scripts or network access
         $this->sendPath($f['path'], $type, self::disposition($inline ? 'inline' : 'attachment', $f['name']),
             $f['kind'] === 'pdf' && $inline ? "default-src 'none'; object-src 'self'" : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox");
+    }
+
+    /**
+     * Shown in the browser only when the type the uploader gave and the content itself agree: an "image" or
+     * "PDF" that is really a web page or an SVG goes out as a download.
+     */
+    public static function showsInline(string $kind, string $mime, string $real): bool
+    {
+        if (preg_match('/svg|html|xml/', $mime . ' ' . $real)) return false;
+        return match ($kind) {
+            'image' => str_starts_with($mime, 'image/') && str_starts_with($real, 'image/'),
+            'pdf' => $real === 'application/pdf',
+            'audio' => (bool)preg_match('#^(audio|video)/#', $mime) && (bool)preg_match('#^(audio/|video/|application/ogg$)#', $real),
+            'text' => (bool)preg_match('#^text/(plain|markdown|csv)#', $mime) && (bool)preg_match('#^(text/(plain|csv)|application/(csv|json)|inode/x-empty)$#', $real),
+            default => false,
+        };
     }
 
     /** A readable page for documents (Markdown, HTML, Office, CSV, email...); media open natively. */
@@ -1144,15 +1188,22 @@ final class Web
         return ['ok' => true];
     }
 
+    /** A cookie name of this instance: several instances under one address (fleet path mode) don't share cookies. */
+    private static function cookie(string $name): string
+    {
+        $base = Config::basePath();
+        return $base === '' ? $name : $name . '_' . substr(sha1($base), 0, 8);
+    }
+
     private function startSession(): void
     {
         $dir = $this->app->cfg->dataDir . '/sessions';
         if (!is_dir($dir)) mkdir($dir, 0700, true);
         session_save_path($dir);
         $base = Config::basePath();
-        session_name($base === '' ? 'talixio' : 'talixio_' . substr(sha1($base), 0, 8)); // instances under one address keep separate sessions
+        session_name(self::cookie('talixio')); // instances under one address keep separate sessions
         session_set_cookie_params(['lifetime' => 60 * 60 * 24 * 30, 'httponly' => true, 'samesite' => 'Strict', 'path' => $base . '/',
-            'secure' => Auth::https()]);
+            'secure' => Auth::secureCookies($this->app->cfg->publicUrl)]);
         ini_set('session.gc_maxlifetime', (string)(60 * 60 * 24 * 30));
         session_start();
     }

@@ -5,8 +5,9 @@ namespace Talixio;
 /**
  * Uses the official Claude Code CLI in headless mode (`claude -p`), so a Claude Pro/Max
  * subscription can power the assistant. Talixio's tools are exposed through `talixio mcp`
- * (only the ones in the given toolset are allowed); Claude Code's WebSearch/WebFetch are
- * allowed when search is on, and Read only inside a private temporary folder holding the
+ * (only the ones in the given toolset are allowed); Claude Code's WebSearch is allowed when
+ * search is on (pages are read with Talixio's fetch_url, which refuses local addresses, never
+ * with Claude Code's WebFetch), and Read only inside a private temporary folder holding the
  * images attached to this turn. Shell, file editing and Claude Code's own sub-agents stay
  * off: Talixio runs its own sub-agents with budgets.
  */
@@ -28,10 +29,10 @@ final class ClaudeCodeProvider implements Provider
             $sys = trim("$system\n\n$context") . ($transcript !== '' ? "\n\n# Conversation so far\n\n$transcript" : '');
 
             $allowed = array_map(fn($n) => "mcp__talixio__$n", $tools->names());
-            if ($this->webSearch && $tools->allowsWeb()) array_push($allowed, 'WebSearch', 'WebFetch');
-            if (glob("$work/*")) $allowed[] = 'Read';
+            if ($this->webSearch && $tools->allowsWeb()) $allowed[] = 'WebSearch'; // pages are read with Talixio's fetch_url, which refuses local addresses
+            if (glob("$work/*")) $allowed[] = 'Read(./*)'; // the images of this turn, nothing else on the machine
             $cmd = [$this->bin, '-p', '--output-format', 'stream-json', '--verbose', '--max-turns', (string)$this->tier->maxSteps,
-                '--disallowedTools', 'Bash,Edit,Write,MultiEdit,NotebookEdit,Task,Agent,Glob,Grep',
+                '--disallowedTools', 'Bash,Edit,Write,MultiEdit,NotebookEdit,Task,Agent,Glob,Grep,WebFetch',
                 '--append-system-prompt', $sys];
             if ($tools->names()) {
                 file_put_contents("$work/.mcp.json", json_encode(['mcpServers' => ['talixio' => ['command' => PHP_BINARY, 'args' => [$this->talixioBin, 'mcp'], 'env' => $tools->env()]]], JSON_UNESCAPED_SLASHES));

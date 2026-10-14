@@ -268,5 +268,3 @@ final class AdminWeb
         $this->fail(404, 'not found');
     }
 }
-
-final class AdminError extends \RuntimeException {}

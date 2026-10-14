@@ -62,6 +62,9 @@ final class Auth
             || self::trustedProxy((string)($_SERVER['REMOTE_ADDR'] ?? '')) && ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
     }
 
+    /** Cookies only travel over https when the request came that way, or the app's public address is https (a proxy that forgot X-Forwarded-Proto). */
+    public static function secureCookies(string $publicUrl): bool { return self::https() || str_starts_with($publicUrl, 'https://'); }
+
     // --- password ---
     public function hasPassword(): bool { return $this->hash() !== '' || $this->app->cfg->webPassword !== ''; }
 

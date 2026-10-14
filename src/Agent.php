@@ -281,7 +281,9 @@ final class Agent
         // "yes 12" / "non" answers a pending approval request directly, without a model call (not by email: a From line is easy to forge)
         if (!$files && $channel !== 'email' && ($ans = Approvals::parseReply($text)) !== null) {
             $pending = $this->app->approvals()->pending();
-            $id = $ans[1] ?? (count($pending) === 1 ? (int)$pending[0]['id'] : null);
+            // a bare "yes" never approves what another conversation asked; what ran unattended (schedules, jobs) is answered from wherever its notice went
+            $here = array_values(array_filter($pending, fn($a) => in_array($a['channel'], [$channel, '', 'schedule', 'job', 'heartbeat'], true)));
+            $id = $ans[1] ?? (count($here) === 1 ? (int)$here[0]['id'] : null);
             if ($pending && $id !== null) {
                 $store->addMessage('user', $channel, $text, null, [], $space);
                 return $this->app->approvals()->decide($id, $ans[0], $channel);
@@ -330,8 +332,8 @@ final class Agent
         if ($sf !== '') foreach ($files as $fid) { // attachments sent in a space are filed in its folder
             if (($this->app->files()->get((int)$fid)['folder'] ?? '') === Library::INBOX) $this->app->library()->moveFile((int)$fid, $sf);
         }
-        $previousSpace = $this->app->space;
-        $this->app->space = $space; // tools (library search, schedules, notes...) work within this space
+        [$previousSpace, $previousChannel] = [$this->app->space, $this->app->channel];
+        $this->app->space = $space; $this->app->channel = $channel; // tools (library search, schedules, notes...) work within this space
         Privacy::begin(); // what this answer sends out, shown under it
         if ($onEvent) Privacy::$onEvent = $onEvent;
         try {
@@ -401,7 +403,7 @@ final class Agent
             if (isset($meta['model'])) $this->maybeLearn($prompt, $reply, $toolsBefore);
             return $reply;
         } finally {
-            $this->app->space = $previousSpace;
+            $this->app->space = $previousSpace; $this->app->channel = $previousChannel;
             Privacy::$trace = null; Privacy::$onEvent = null; Privacy::$taint = 0; Privacy::trustAgain();
             flock($lock, LOCK_UN);
             fclose($lock);
