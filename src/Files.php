@@ -25,22 +25,33 @@ final class Files
         };
     }
 
-    /** Store a file (moved from $tmp) in a library folder. Returns the new file id. */
-    public function save(string $tmp, string $name, string $mime = '', string $folder = '/Inbox'): int
+    public const VERSIONS_MAX = 20; // earlier contents kept per file (and each for Library::TRASH_DAYS days)
+
+    /**
+     * Store a file (moved from $tmp) in a library folder. Returns its id. A name is never used twice in a folder:
+     * with $replace, a file of that name gets the new content (same id and links; what it held becomes a version),
+     * otherwise the new file is named "name (2).ext".
+     */
+    public function save(string $tmp, string $name, string $mime = '', string $folder = '/Inbox', bool $replace = false): int
     {
         $folder = Library::normalize($folder);
         Library::guard($folder);
         $c = $this->app->cfg;
+        $name = Library::cleanName($name);
+        if ($name === '' || $name === '.' || $name === '..') $name = 'file';
+        $lib = $this->app->library();
+        if (($same = $lib->taken($folder, $name)) !== null) {
+            if ($replace) { $this->replace($same, $tmp, $mime); return $same; }
+            $name = $lib->freeName($folder, $name);
+        }
         if ($mime === '' || $mime === 'application/octet-stream') {
             $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($tmp) ?: 'application/octet-stream';
         }
-        $name = Library::cleanName($name);
-        if ($name === '' || $name === '.' || $name === '..') $name = 'file';
         $dir = $c->filesDir() . '/' . date('Y/m');
         if (!is_dir($dir)) mkdir($dir, 0750, true);
         $kind = self::kind($mime, $name);
         $st = $this->app->store;
-        $this->app->library()->ensureFolder($folder);
+        $lib->ensureFolder($folder);
         $st->q('INSERT INTO files(name, mime, kind, size, path, created, folder, status) VALUES(?,?,?,?,?,?,?,?)',
             [$name, $mime, $kind, filesize($tmp), '', time(), $folder, $kind === 'other' ? 'ready' : 'pending']);
         $id = (int)$st->db->lastInsertId();
@@ -52,28 +63,105 @@ final class Files
         return $id;
     }
 
-    /** New content for a file (moved from $tmp): read and indexed again in the background, same id, folder and name. */
-    public function replace(int $id, string $tmp): array
+    /**
+     * New content for a file (moved from $tmp): read and indexed again in the background, same id, folder and name.
+     * What it held is kept as a version (none when the content is the same). $quiet: a burst of saves (a note being
+     * edited) keeps only the content from before the burst.
+     */
+    public function replace(int $id, string $tmp, string $mime = '', bool $quiet = false): array
     {
         $f = $this->get($id) ?? throw new \InvalidArgumentException("no file $id");
         Library::guard((string)$f['folder']);
-        if (!@rename($tmp, $f['path']) && !copy($tmp, $f['path'])) throw new \RuntimeException('could not store the file');
-        @chmod($f['path'], 0640);
-        clearstatcache(true, $f['path']);
-        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($f['path']) ?: $f['mime'];
+        $path = (string)$f['path'];
+        if (is_file($path) && filesize($path) === filesize($tmp) && sha1_file($path) === sha1_file($tmp)) { @unlink($tmp); return $f; } // nothing new
+        if (is_file($path) && !($quiet && $this->recentVersion($id))) $this->keepVersion($f);
+        if (!@rename($tmp, $path) && !copy($tmp, $path)) throw new \RuntimeException('could not store the file');
+        @chmod($path, 0640);
+        clearstatcache(true, $path);
+        if ($mime === '' || $mime === 'application/octet-stream') $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($path) ?: $f['mime'];
         if ($mime === 'application/octet-stream' || $mime === 'text/plain' || $mime === 'application/x-empty') $mime = $f['mime']; // a guess no better than the one kept
         $kind = self::kind($mime, (string)$f['name']);
         $this->app->store->deleteDocs(['file', 'transcript'], $id);
-        $this->app->store->q('UPDATE files SET size = ?, mime = ?, kind = ?, text = NULL, status = ?, duration = ? WHERE id = ?',
-            [filesize($f['path']), $mime, $kind, $kind === 'other' ? 'ready' : 'pending', $kind === 'audio' ? self::duration($f['path']) : null, $id]);
+        $this->app->store->q('UPDATE files SET size = ?, mime = ?, kind = ?, text = NULL, status = ?, duration = ?, created = ? WHERE id = ?',
+            [filesize($path), $mime, $kind, $kind === 'other' ? 'ready' : 'pending', $kind === 'audio' ? self::duration($path) : null, time(), $id]);
         $this->dropPreviews($id);
         return $this->get($id);
     }
 
-    /** A file; one in the trash only with $trashed (otherwise it is as if it were gone). */
+    private function recentVersion(int $id): bool
+    {
+        return (bool)$this->app->store->q('SELECT 1 FROM file_versions WHERE file_id = ? AND replaced > ?', [$id, time() - 600])->fetch();
+    }
+
+    /** The content of $f (or of $from, a file whose rows go away) kept as a version of $f. */
+    public function keepVersion(array $f, ?array $from = null): void
+    {
+        $src = $from ?? $f;
+        $path = (string)$src['path'];
+        if ($path === '' || !is_file($path)) return;
+        $dir = $this->app->cfg->filesDir() . '/versions';
+        if (!is_dir($dir)) mkdir($dir, 0750, true);
+        $ext = preg_match('/\.([A-Za-z0-9]{1,10})$/', $path, $x) ? '.' . strtolower($x[1]) : '';
+        $dest = "$dir/{$f['id']}-" . time() . '-' . bin2hex(random_bytes(4)) . $ext;
+        $created = (int)(@filemtime($path) ?: $src['created']);
+        if ($from === null ? !copy($path, $dest) : (!@rename($path, $dest) && !copy($path, $dest))) return;
+        @chmod($dest, 0640);
+        $this->app->store->q('INSERT INTO file_versions(file_id, path, size, mime, created, replaced) VALUES(?,?,?,?,?,?)',
+            [(int)$f['id'], $dest, filesize($dest), (string)$src['mime'], $created, time()]);
+        $old = $this->app->store->q('SELECT id FROM file_versions WHERE file_id = ? ORDER BY replaced DESC, id DESC LIMIT -1 OFFSET ?', [(int)$f['id'], self::VERSIONS_MAX])->fetchAll();
+        foreach ($old as $v) $this->dropVersion((int)$v['id']);
+    }
+
+    /** Earlier contents of a file, newest first. */
+    public function versions(int $id): array
+    {
+        return array_map(fn($v) => ['id' => (int)$v['id'], 'size' => (int)$v['size'], 'mime' => $v['mime'], 'created' => (int)$v['created'], 'replaced' => (int)$v['replaced']],
+            $this->app->store->q('SELECT * FROM file_versions WHERE file_id = ? ORDER BY replaced DESC, id DESC', [$id])->fetchAll());
+    }
+
+    public function version(int $id, int $vid): ?array
+    {
+        return $this->app->store->q('SELECT * FROM file_versions WHERE id = ? AND file_id = ?', [$vid, $id])->fetch() ?: null;
+    }
+
+    /** Back to an earlier content; the current one becomes a version in turn. */
+    public function restoreVersion(int $id, int $vid): array
+    {
+        $v = $this->version($id, $vid) ?? throw new \InvalidArgumentException('This version is no longer kept.');
+        if (!is_file($v['path'])) { $this->dropVersion($vid); throw new \InvalidArgumentException('This version is missing on the server.'); }
+        $tmp = tempnam(sys_get_temp_dir(), 'ver');
+        copy($v['path'], $tmp);
+        try { $f = $this->replace($id, $tmp, (string)$v['mime']); }
+        finally { if (is_file($tmp)) @unlink($tmp); }
+        $this->dropVersion($vid);
+        return $f;
+    }
+
+    public function dropVersion(int $vid): void
+    {
+        $v = $this->app->store->q('SELECT path FROM file_versions WHERE id = ?', [$vid])->fetch();
+        if (!$v) return;
+        if (is_file($v['path'])) @unlink($v['path']);
+        $this->app->store->q('DELETE FROM file_versions WHERE id = ?', [$vid]);
+    }
+
+    /** Forget versions: of one file, or those replaced before $before. Returns how many. */
+    public function purgeVersions(?int $fileId = null, ?int $before = null): int
+    {
+        $rows = $fileId !== null ? $this->app->store->q('SELECT id FROM file_versions WHERE file_id = ?', [$fileId])->fetchAll()
+            : $this->app->store->q('SELECT id FROM file_versions WHERE replaced < ?', [$before ?? PHP_INT_MAX])->fetchAll();
+        foreach ($rows as $r) $this->dropVersion((int)$r['id']);
+        return count($rows);
+    }
+
+    /** A file; one in the trash only with $trashed (otherwise it is as if it were gone). The id of a file merged into another leads to that one. */
     public function get(int $id, bool $trashed = false): ?array
     {
-        return $this->app->store->q('SELECT * FROM files WHERE id=?' . ($trashed ? '' : ' AND deleted_at IS NULL'), [$id])->fetch() ?: null;
+        $f = $this->app->store->q('SELECT * FROM files WHERE id=?' . ($trashed ? '' : ' AND deleted_at IS NULL'), [$id])->fetch() ?: null;
+        if ($f === null && !$trashed && ($to = $this->app->store->q('SELECT file_id FROM file_aliases WHERE id = ? AND id NOT IN (SELECT id FROM files)', [$id])->fetchColumn())) {
+            $f = $this->app->store->q('SELECT * FROM files WHERE id = ? AND deleted_at IS NULL', [(int)$to])->fetch() ?: null;
+        }
+        return $f;
     }
 
     public static function duration(string $path): ?float

@@ -825,13 +825,14 @@ function renderPending() {
   inputPlaceholder();
   saveDraft();
 }
-function uploadFile(file, name, folder) {
+function uploadFile(file, name, folder, replace = false, out = {}) {
   return new Promise((resolve, reject) => {
     const fd = new FormData(); fd.append('file', file, name || file.name);
     if (folder) fd.append('folder', folder);
+    if (replace) fd.append('replace', '1'); // the library: a name already there gets this as its new content (a version is kept)
     const xhr = new XMLHttpRequest();
     xhr.open('POST', 'api/files'); xhr.setRequestHeader('X-Talixio', '1');
-    xhr.onload = () => { try { const d = JSON.parse(xhr.responseText); xhr.status < 300 ? resolve(d.file) : reject(new Error(d.error || 'Upload failed')); } catch { reject(new Error(`Upload failed (HTTP ${xhr.status})`)); } };
+    xhr.onload = () => { try { const d = JSON.parse(xhr.responseText); out.replaced = !!d.replaced; xhr.status < 300 ? resolve(d.file) : reject(new Error(d.error || 'Upload failed')); } catch { reject(new Error(`Upload failed (HTTP ${xhr.status})`)); } };
     xhr.onerror = () => reject(new Error('Upload failed: network error'));
     xhr.send(fd);
   });
@@ -2997,7 +2998,7 @@ function dropTarget(el, path) {
   el.addEventListener('drop', async e => {
     e.preventDefault(); e.stopPropagation(); el.classList.remove('drop'); $('#lib-main').classList.remove('drag');
     const id = e.dataTransfer.getData('text/x-talixio-file');
-    if (id) { try { await post(`api/files/${id}/move`, { folder: path }); toast('Moved to ' + path); loadLibrary(); } catch (err) { toast(err.message); } return; }
+    if (id) { try { if (await withReplace(r => post(`api/files/${id}/move`, { folder: path, ...r }))) { toast('Moved to ' + path); loadLibrary(); } } catch (err) { toast(err.message); } return; }
     libUpload([...(e.dataTransfer.files || [])], path);
   });
 }
@@ -3005,12 +3006,14 @@ function dropTarget(el, path) {
 async function libUpload(files, folder = lib.folder) {
   if (!files.length) return;
   const target = folder === '/' ? '/Inbox' : folder;
-  let ok = 0;
+  let ok = 0, replaced = 0, lastReplaced = '';
   for (const [i, f] of files.entries()) {
     $('#lib-stats').textContent = `Uploading ${i + 1} of ${files.length}: ${f.name}…`;
-    try { await uploadFile(f, f.name, target); ok++; } catch (e) { toast(`${f.name}: ${e.message}`); }
+    const r = {};
+    try { await uploadFile(f, f.name, target, true, r); ok++; if (r.replaced) { replaced++; lastReplaced = f.name; } } catch (e) { toast(`${f.name}: ${e.message}`); }
   }
-  if (ok) toast(`${ok} file${ok > 1 ? 's' : ''} added to ${target}`);
+  if (ok === 1 && replaced) toast(t('{name} was replaced; the earlier version is kept in Versions', { name: lastReplaced }));
+  else if (ok) toast(`${ok} file${ok > 1 ? 's' : ''} added to ${target}` + (replaced ? ' · ' + t('{n} replaced (earlier versions kept)', { n: replaced }) : ''));
   loadLibrary().catch(e => toast(e.message));
 }
 
@@ -3084,6 +3087,7 @@ async function openFile(id, opts = {}) {
   if (rendered) html += `<iframe id="viewer-frame" class="doc-frame" data-pane="view" title="${esc(f.name)}" sandbox="${FRAME_SANDBOX}" referrerpolicy="no-referrer"></iframe>`;
   const wysiwyg = editable && /\.(md|markdown)$/i.test(f.name);
   if (editable) html += `<div id="viewer-edit-box" class="viewer-edit" data-pane="edit" ${rendered ? 'hidden' : ''}>${wysiwyg ? '<div id="viewer-rte"></div>' : `<textarea id="viewer-editor" class="editor" spellcheck="true" aria-label="Content">${esc(d.text)}</textarea>`}<div class="row"><button id="viewer-save" class="btn primary" type="button">Save</button><span id="viewer-state" class="muted small"></span><span class="spacer"></span>${wysiwyg ? '<button id="viewer-src" class="btn small ghost" type="button" aria-pressed="false" title="Edit the Markdown source">Markdown</button>' : ''}<button id="viewer-full" class="btn small ghost" type="button" aria-pressed="false" title="Full screen (Esc to leave)">Full screen</button></div></div>`;
+  html += '<details id="viewer-versions" class="versions" hidden></details>';
   if (hasText) html += `<pre class="extracted" data-pane="text" hidden>${esc(d.text)}${d.truncated ? '\n…' : ''}</pre>`;
   if (!rendered) {
     if (f.status === 'pending' || f.status === 'processing') html += '<p class="muted">Reading this file… it will be searchable in a moment.</p>';
@@ -3109,6 +3113,7 @@ async function openFile(id, opts = {}) {
   }
   body.classList.toggle('framed', rendered);
   if (rendered) fillPreview($('#viewer-frame'), f.id);
+  showVersions(f, ro);
   const more = $('#pdf-more');
   if (more) more.onclick = () => {
     const from = +more.dataset.next, to = Math.min(d.pages, from + 9);
@@ -3684,8 +3689,48 @@ let mdMenuOpen = false;
 window.addEventListener('keydown', e => { mdMenuOpen = e.key === 'Escape' && !!$(MD_MENUS); }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#viewer').hidden && !mdMenuOpen) $('#viewer').classList.contains('full') ? fullViewer(false) : closeViewer(); });
 $('#viewer-form-cancel').onclick = () => { $('#viewer-form').hidden = true; };
-$('#viewer-rename').onclick = () => viewerForm(lib.file.name, async v => { const { file } = await post(`api/files/${lib.file.id}/rename`, { name: v }); await loadLibrary(); openFile(file.id); });
-$('#viewer-move').onclick = () => viewerForm(lib.file.folder, async v => { const { file } = await post(`api/files/${lib.file.id}/move`, { folder: v }); toast('Moved to ' + file.folder); await loadLibrary(); openFile(file.id); }, true);
+$('#viewer-rename').onclick = () => viewerForm(lib.file.name, async v => { const d = await withReplace(r => post(`api/files/${lib.file.id}/rename`, { name: v, ...r })); if (!d) return; await loadLibrary(); openFile(d.file.id); });
+$('#viewer-move').onclick = () => viewerForm(lib.file.folder, async v => { const d = await withReplace(r => post(`api/files/${lib.file.id}/move`, { folder: v, ...r })); if (!d) return; toast('Moved to ' + d.file.folder); await loadLibrary(); openFile(d.file.id); }, true);
+/**
+ * A rename or move onto a name already used there: the server says so (409), the user chooses.
+ * Replace: that file gets this content (what it held becomes a version). Keep both: this one is named "name (2)".
+ * Resolves to the answer, or null when the user cancels.
+ */
+async function withReplace(send) {
+  try { return await send({}); } catch (e) {
+    if (e.status !== 409 || !e.data?.conflict) throw e;
+    const choice = await chooseReplace();
+    return choice === null ? null : send({ replace: choice });
+  }
+}
+function chooseReplace() {
+  return new Promise(resolve => {
+    const d = document.createElement('dialog'); d.className = 'dialog'; d.setAttribute('aria-labelledby', 'rp-title');
+    d.innerHTML = `<h3 id="rp-title">${esc(t('Replace or keep both?'))}</h3><p>${esc(t('Another file there already has this name.'))}</p>`
+      + `<p class="muted small">${esc(t('Replace: that file gets this content, and what it held stays available in its Versions for 30 days. Keep both: this one gets a number, like “name (2)”.'))}</p>`
+      + `<div class="row"><button class="btn primary" data-c="1" type="button">${esc(t('Replace'))}</button><button class="btn" data-c="0" type="button">${esc(t('Keep both'))}</button><span class="spacer"></span><button class="btn ghost" data-c="" type="button">${esc(t('Cancel'))}</button></div>`;
+    let answer = null;
+    d.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { answer = b.dataset.c === '' ? null : b.dataset.c === '1'; d.close(); });
+    d.addEventListener('close', () => { d.remove(); resolve(answer); });
+    document.body.append(d); d.showModal();
+  });
+}
+/** Earlier contents of the file open in the viewer, kept 30 days: download one, or bring it back. */
+async function showVersions(f, ro) {
+  const box = $('#viewer-versions'); if (!box) return;
+  let list;
+  try { ({ versions: list } = await api(`api/files/${f.id}/versions`)); } catch { return; }
+  if (lib.file?.id !== f.id || !list.length) return;
+  box.hidden = false;
+  box.innerHTML = `<summary>${esc(t('Versions'))} (${list.length})</summary><p class="muted small">${esc(t('Earlier contents of this file, kept 30 days after it was replaced.'))}</p>`
+    + list.map(v => `<div class="version-row"><span>${esc(new Date(v.created * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))} · ${fmtSize(v.size)}</span><span class="spacer"></span>`
+      + `<a class="btn small ghost" href="api/files/${f.id}/versions/${v.id}/file" download>${esc(t('Download'))}</a>`
+      + (ro ? '' : `<button class="btn small" data-v="${v.id}" type="button">${esc(t('Restore'))}</button>`) + '</div>').join('');
+  box.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => {
+    try { await post(`api/files/${f.id}/versions/${b.dataset.v}/restore`); toast(t('Version restored; the content it replaced is now a version too')); await loadLibrary(); openFile(f.id); }
+    catch (e) { toast(e.message); }
+  });
+}
 $('#viewer-reindex').onclick = async () => { try { await post(`api/files/${lib.file.id}/reindex`); toast('It will be read again in a moment'); await loadLibrary(); openFile(lib.file.id); } catch (e) { toast(e.message); } };
 $('#viewer-delete').onclick = async () => {
   const b = $('#viewer-delete');

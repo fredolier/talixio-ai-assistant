@@ -30,7 +30,8 @@
   - a deleted file or folder goes to the library's trash (30 days).
 - Folders of **Secret** spaces do not appear. The FAQ is read-only.
 - System files (`.DS_Store`, `._…`, `Thumbs.db`, `desktop.ini`…) are kept aside, outside the library.
-- Two files with the same name in a folder: the most recent keeps its name, the others show as "name (#id).ext".
+- Saving a file under a name already there replaces it; what it held is kept in its *Versions* (see Library).
+  Two files with the same name from before 0.28.29, until they are merged: the most recent keeps its name, the others show as "name (#id).ext".
 - Ten different wrong passwords from the same address block it for 15 minutes; the right password still gets in.
   A device retrying an old saved password counts once. When an address is blocked, Settings › Network drive says
   so, with **Unblock now**; creating a new drive password also unblocks every address.

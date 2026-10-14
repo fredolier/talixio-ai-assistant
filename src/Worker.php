@@ -30,6 +30,10 @@ final class Worker
                 "3. Tasks (board_list with all_spaces): overdue, due today and in the next 3 days, blocked ones; then the next routines and reminders (list_tasks)."]);
             $this->app->store->set('briefing_tasks', '1');
         }
+        if ($this->app->store->get('fix.merge_duplicates') === '') { // once: a name used twice in a folder becomes one file with versions
+            try { $this->app->library()->mergeDuplicates(); } catch (\Throwable $e) { Log::warn("merging duplicates: {$e->getMessage()}"); }
+            $this->app->store->set('fix.merge_duplicates', '1');
+        }
         if ($this->app->store->get('pages_indexed') === '') { // once: PDFs indexed by page, so answers can cite pages
             foreach ($this->app->store->q("SELECT id FROM files WHERE status = 'ready' AND deleted_at IS NULL AND (kind = 'pdf' OR (kind = 'office' AND name LIKE '%.pptx'))")->fetchAll() as $r) {
                 try { $this->app->files()->index((int)$r['id']); } catch (\Throwable $e) { Log::warn("reindex {$r['id']}: {$e->getMessage()}"); }

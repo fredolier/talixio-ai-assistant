@@ -99,7 +99,7 @@ final class Shell
         $tmp = tempnam(sys_get_temp_dir(), 'shell');
         copy($real, $tmp);
         $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($real) ?: 'application/octet-stream';
-        $id = $this->app->files()->save($tmp, $name !== '' ? $name : basename($real), $mime, $folder !== '' ? $folder : (($sf = $this->app->space ? (string)($this->app->spaces()->get($this->app->space)['folder'] ?? '') : '') !== '' ? $sf : Library::INBOX));
+        $id = $this->app->files()->save($tmp, $name !== '' ? $name : basename($real), $mime, $folder !== '' ? $folder : (($sf = $this->app->space ? (string)($this->app->spaces()->get($this->app->space)['folder'] ?? '') : '') !== '' ? $sf : Library::INBOX), true);
         return $this->app->files()->get($id);
     }
 

@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.29 (2026-10-14)
+
+- One name per folder, with versions: saving a file under a name already used in its folder (an upload in the library, the assistant saving a note again, the network drive, the shell) now replaces that file in place, with the same id, links and shares. What it held is kept as a version for 30 days, at most 20 per file.
+- The open file has a *Versions* section: the date and size of each earlier content, *Download*, and *Restore* (the current content becomes a version in turn). The assistant can list and restore versions too (`kb_versions`).
+- *Rename* and *Move* (also by drag and drop) onto a name already used there ask: *Replace* (that file gets this content; its old content becomes a version) or *Keep both* (named "name (2)"). The assistant's `kb_move` keeps both unless asked to replace. Chat attachments keep both.
+- Files that already had the same name in a folder are merged once at startup: the newest is kept and the older ones become its versions. Their old links lead to the file that was kept.
+- A file restored from the trash onto a name taken meanwhile gets a number instead of a duplicate name.
+
 ## 0.28.28 (2026-10-14)
 
 - Notes in other formats: the assistant's `kb_save_note` keeps a `.html`, `.csv`, `.json`, `.xml` or `.txt` name and saves that format, instead of adding `.md` (`page.html.md`). An HTML newsletter now shows as HTML in the library and opens as a web page.

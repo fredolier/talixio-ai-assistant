@@ -1286,7 +1286,7 @@ check('library: kb_search tool cites paths and file ids', str_contains($out, "/A
 check('library: the assistant is told about the library', str_contains($fake->calls[0]['system'], 'kb_search') && in_array('kb_save_note', $fake->calls[0]['tools']));
 check('library: kb_list shows the tree and a folder', str_contains($la->tools->run('kb_list', []), '/Admin/Logement (3 files)') && str_contains($la->tools->run('kb_list', ['folder' => '/Clients/Bob']), "#$idXlsx ventes.xlsx (office"));
 $r = $la->tools->run('kb_move', ['id' => $idCsv, 'folder' => '/Admin/Budget', 'name' => 'depenses-octobre.csv']);
-check('library: kb_move files an attachment', $r === '/Admin/Budget/depenses-octobre.csv' || $r === 'moved to /Admin/Budget/depenses-octobre.csv', $r);
+check('library: kb_move files an attachment', $r === "moved to /Admin/Budget/depenses-octobre.csv (file #$idCsv)", $r);
 $lib->moveFolder('/Admin', '/Perso/Admin');
 check('library: moving a folder moves subfolders, files and search labels', $lf->get($idEml)['folder'] === '/Perso/Admin/Logement'
     && $la->store->q("SELECT label FROM docs WHERE kind = 'file' AND ref = ?", [$idEml])->fetchColumn() === "/Perso/Admin/Logement/devis.eml #$idEml"
@@ -1725,7 +1725,7 @@ check('dav: PUT over a file replaces its content (same file, read again)', $dav(
 check('dav: system clutter is kept aside, not in the library', $dav('PUT', '/Perso/%C3%89t%C3%A9%202026/._devis.txt', $dpw, 'x')[0] === 201
     && $dav('GET', '/Perso/%C3%89t%C3%A9%202026/._devis.txt', $dpw) === [200, 'x'] && (int)$la->store->q("SELECT COUNT(*) FROM files WHERE name LIKE '%devis.txt'")->fetchColumn() === 0
     && !in_array('/dav/Perso/Été 2026/._devis.txt', $hrefs($dav('PROPFIND', '/Perso/%C3%89t%C3%A9%202026/', $dpw, '', ['Depth: 1'])[1]), true));
-$old = $lf->save(tap_tmp('newer'), 'x.txt', 'text/plain', '/Perso/Été 2026'); $lib->renameFile($old, 'devis n°_1.txt'); // same name, added in the app
+$old = $lf->save(tap_tmp('newer'), 'x.txt', 'text/plain', '/Perso/Été 2026'); $la->store->q('UPDATE files SET name = ? WHERE id = ?', ['devis n°_1.txt', $old]); // same name, from before names were unique in a folder
 [$c, $x] = $dav('PROPFIND', '/Perso/%C3%89t%C3%A9%202026/', $dpw, '', ['Depth: 1']);
 check('dav: two files with the same name both show (the newest under its name)', in_array('/dav/Perso/Été 2026/devis n°_1.txt', $hrefs($x), true) && in_array("/dav/Perso/Été 2026/devis n°_1 (#$dvid).txt", $hrefs($x), true)
     && $dav('GET', '/Perso/%C3%89t%C3%A9%202026/devis%20n%C2%B0_1.txt', $dpw) === [200, 'newer'] && $dav('GET', "/Perso/%C3%89t%C3%A9%202026/devis%20n%C2%B0_1%20(%23$dvid).txt", $dpw) === [200, 'Devis toiture v2'], $x);

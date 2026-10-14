@@ -995,3 +995,4 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 #eu-tiers{overflow-x:auto}
 .space-item.gen-tier{justify-content:space-between;cursor:default}
 .space-item.gen-tier:hover{background:transparent}
+.versions{margin-top:14px;border-top:1px solid var(--line);padding-top:8px}.versions summary{cursor:pointer;font-weight:600}.version-row{display:flex;align-items:center;gap:8px;padding:4px 0;flex-wrap:wrap}

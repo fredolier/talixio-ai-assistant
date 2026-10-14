@@ -30,7 +30,8 @@
   - un fichier ou dossier supprimé va dans la corbeille de la bibliothèque (30 jours).
 - Les dossiers des espaces **Secret** n'apparaissent pas. La FAQ est en lecture seule.
 - Les fichiers techniques des systèmes (`.DS_Store`, `._…`, `Thumbs.db`, `desktop.ini`…) sont gardés à part, hors de la bibliothèque.
-- Deux fichiers du même nom dans un dossier : le plus récent garde son nom, les autres s'affichent « nom (#id).ext ».
+- Enregistrer un fichier sous un nom déjà présent le remplace ; l'ancien contenu reste dans ses *Versions* (voir Bibliothèque).
+  Deux fichiers du même nom d'avant la 0.28.29, tant qu'ils ne sont pas fusionnés : le plus récent garde son nom, les autres s'affichent « nom (#id).ext ».
 - Dix mauvais mots de passe différents depuis une même adresse la bloquent 15 minutes ; le bon mot de passe passe
   toujours. Un appareil qui réessaie un ancien mot de passe enregistré ne compte qu'une fois. Quand une adresse est
   bloquée, Réglages › Lecteur réseau l'indique, avec **Débloquer maintenant** ; créer un nouveau mot de passe du

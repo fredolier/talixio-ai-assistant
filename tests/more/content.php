@@ -513,7 +513,8 @@ if (Files::officeBinary()) {
 // zips
 $fa->library()->ensureFolder('/Projects/Empty');
 $z1 = $files->save(tap_tmp('one'), 'plan.txt', 'text/plain', '/Projects/A');
-$z2 = $files->save(tap_tmp('two'), 'Plan.txt', 'text/plain', '/Projects/A');
+$z2 = $files->save(tap_tmp('two'), 'Plan2.txt', 'text/plain', '/Projects/A');
+$fa->store->q("UPDATE files SET name = 'Plan.txt' WHERE id = ?", [$z2]); // a clash from before names were unique in a folder
 $z3 = $files->save(tap_tmp('three'), 'lost.txt', 'text/plain', '/Projects/A');
 $fa->store->q('UPDATE files SET path = ? WHERE id = ?', ["$d/fl/lost-file", $z3]);
 $zipPath = $files->zipFolder('/Projects');

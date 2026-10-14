@@ -54,6 +54,7 @@ final class Web
             if (preg_match('#^/api/files/(\d+)(?:/file/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1], !empty($_GET['download'])); return; }
             if (preg_match('#^/api/files/(\d+)/view(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveView((int)$fm[1]); return; }
             if (preg_match('#^/api/files/(\d+)/pdf(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveOfficePdf((int)$fm[1]); return; }
+            if (preg_match('#^/api/files/(\d+)/versions/(\d+)/file$#', $path, $fm) && $method === 'GET') { $this->serveVersion((int)$fm[1], (int)$fm[2]); return; }
             if (preg_match('#^/api/files/(\d+)/(thumb|page/(\d+))$#', $path, $fm) && $method === 'GET') { $this->servePreview((int)$fm[1], (int)($fm[3] ?? 0)); return; }
             if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/')); return; }
             if ($path === '/api/privacy/journal.csv' && $method === 'GET') { $this->privacyCsv(); return; }
@@ -296,6 +297,8 @@ final class Web
             (bool)preg_match('#^/api/files/(\d+)/text$#', $path, $mm) => $this->fileText((int)$mm[1]),
             (bool)preg_match('#^/api/files/(\d+)/preview$#', $path, $mm) => $this->filePreview((int)$mm[1]),
             (bool)preg_match('#^/api/files/(\d+)/(move|rename|delete|reindex)$#', $path, $mm) && $m === 'POST' => $this->fileAction((int)$mm[1], $mm[2], $b),
+            (bool)preg_match('#^/api/files/(\d+)/versions$#', $path, $mm) => ['versions' => $this->app->files()->versions((int)($this->app->files()->get((int)$mm[1]) ?? $this->fail(404, 'not found'))['id'])],
+            (bool)preg_match('#^/api/files/(\d+)/versions/(\d+)/restore$#', $path, $mm) && $m === 'POST' => ['file' => $this->fileInfo($this->app->files()->restoreVersion((int)$mm[1], (int)$mm[2]))],
             (bool)preg_match('#^/api/files/(\d+)/as-script$#', $path, $mm) && $m === 'POST' => $this->fileAsScript((int)$mm[1]),
             (bool)preg_match('#^/api/files/(\d+)/file-it$#', $path, $mm) && $m === 'POST' => ['file' => $this->fileInfo((new Filing($this->app))->apply((int)$mm[1],
                 isset($b['folder']) ? (string)$b['folder'] : null, isset($b['name']) ? (string)$b['name'] : null))],
@@ -860,8 +863,11 @@ final class Web
             $err = $f['error'] ?? -1;
             $this->fail(400, $err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE ? 'File too large.' : 'Upload failed.');
         }
-        $id = $this->app->files()->save($f['tmp_name'], (string)$f['name'], (string)($f['type'] ?? ''), (string)($_POST['folder'] ?? Library::INBOX));
-        return ['file' => $this->fileInfo($this->app->files()->get($id))];
+        // from the library, a name already in the folder: that file gets the new content (the earlier one stays as a version); chat attachments keep both
+        $folder = (string)($_POST['folder'] ?? Library::INBOX); $replace = !empty($_POST['replace']);
+        $replaced = $replace && $this->app->library()->taken(Library::normalize($folder), Library::cleanName((string)$f['name'])) !== null;
+        $id = $this->app->files()->save($f['tmp_name'], (string)$f['name'], (string)($f['type'] ?? ''), $folder, $replace);
+        return ['file' => $this->fileInfo($this->app->files()->get($id)), 'replaced' => $replaced];
     }
 
     private function fileInfo(array $f): array
@@ -907,8 +913,9 @@ final class Web
     {
         $lib = $this->app->library();
         return match ($action) {
-            'move' => ['file' => $this->fileInfo($lib->moveFile($id, (string)($b['folder'] ?? '')))],
-            'rename' => ['file' => $this->fileInfo($lib->renameFile($id, (string)($b['name'] ?? '')))],
+            // a name already taken there: the app asks (409), then sends replace true (that file gets this content) or false (keep both)
+            'move' => ['file' => $this->fileInfo($lib->moveFile($id, (string)($b['folder'] ?? ''), isset($b['replace']) ? (bool)$b['replace'] : null))],
+            'rename' => ['file' => $this->fileInfo($lib->renameFile($id, (string)($b['name'] ?? ''), isset($b['replace']) ? (bool)$b['replace'] : null))],
             'delete' => (function () use ($lib, $id) { $lib->deleteFile($id); return ['ok' => true]; })(),
             'reindex' => (function () use ($id) {
                 $this->app->store->q("UPDATE files SET status = 'pending', text = NULL WHERE id = ? AND status != 'processing'", [$id]);
@@ -931,6 +938,16 @@ final class Web
         // PDFs need the browser's own viewer, which a sandboxed response blocks; they still get no scripts or network access
         $this->sendPath($f['path'], $type, self::disposition($inline ? 'inline' : 'attachment', $f['name']),
             $f['kind'] === 'pdf' && $inline ? "default-src 'none'; object-src 'self'" : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox");
+    }
+
+    /** An earlier content of a file: always downloaded, under the file's name with the date it was saved. */
+    private function serveVersion(int $id, int $vid): void
+    {
+        $f = $this->app->files()->get($id) ?? $this->fail(404, 'not found');
+        $v = $this->app->files()->version((int)$f['id'], $vid);
+        if (!$v || !is_file($v['path'])) $this->fail(404, 'This version is no longer kept.');
+        $name = preg_match('/^(.+?)(\.[A-Za-z0-9]{1,10})$/', (string)$f['name'], $m) ? $m[1] . ' ' . date('Y-m-d H.i', (int)$v['created']) . $m[2] : $f['name'] . ' ' . date('Y-m-d H.i', (int)$v['created']);
+        $this->sendPath($v['path'], 'application/octet-stream', self::disposition('attachment', $name), "default-src 'none'; sandbox");
     }
 
     /**

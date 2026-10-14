@@ -62,6 +62,11 @@ final class Store
             CREATE INDEX IF NOT EXISTS files_folder ON files(folder);");
         $this->addColumn('files', 'deleted_at', 'INTEGER');   // in the trash since (Library::trash)
         $this->addColumn('files', 'deleted_with', 'TEXT');    // the folder deleted with it ('' = deleted on its own)
+        // earlier contents of a file, kept Library::TRASH_DAYS days when it is replaced (Files::replace); ids of files merged into another
+        $this->db->exec('CREATE TABLE IF NOT EXISTS file_versions(id INTEGER PRIMARY KEY, file_id INTEGER NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL,
+                mime TEXT NOT NULL, created INTEGER NOT NULL, replaced INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS file_versions_file ON file_versions(file_id);
+            CREATE TABLE IF NOT EXISTS file_aliases(id INTEGER PRIMARY KEY, file_id INTEGER NOT NULL);');
         // spaces: separate threads (0 = General), each with a library folder, instructions and notes
         $this->db->exec("CREATE TABLE IF NOT EXISTS spaces(id INTEGER PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, folder TEXT NOT NULL DEFAULT '',
             instructions TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', tier TEXT NOT NULL DEFAULT 'standard', color TEXT NOT NULL DEFAULT '',

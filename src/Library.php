@@ -167,23 +167,42 @@ final class Library
         return count($ids);
     }
 
-    public function moveFile(int $id, string $folder): array
+    /**
+     * Move a file. When its name is taken there: $replace true gives that file this content (see replaceWith),
+     * false keeps both ("name (2).ext"), null asks (Conflict).
+     */
+    public function moveFile(int $id, string $folder, ?bool $replace = false): array
     {
         $f = $this->app->files()->get($id) ?? throw new \InvalidArgumentException("no file $id");
         $folder = self::normalize($folder);
         self::guard((string)$f['folder'], $folder);
+        if ($folder === $f['folder']) return $f;
+        $name = (string)$f['name'];
+        if (($other = $this->taken($folder, $name, (int)$f['id'])) !== null) {
+            if ($replace === null) throw new Conflict("$folder already has a file named $name.");
+            if ($replace) return $this->replaceWith($other, (int)$f['id']);
+            $name = $this->freeName($folder, $name);
+            $this->app->store->q('UPDATE files SET name = ? WHERE id = ?', [$name, $id]);
+            $f['name'] = $name;
+        }
         $this->ensureFolder($folder);
         $this->app->store->q('UPDATE files SET folder = ? WHERE id = ?', [$folder, $id]);
         $this->relabel(['folder' => $folder] + $f);
         return $this->app->files()->get($id);
     }
 
-    public function renameFile(int $id, string $name): array
+    /** Rename a file; a name taken in its folder: as for moveFile. */
+    public function renameFile(int $id, string $name, ?bool $replace = false): array
     {
         $f = $this->app->files()->get($id) ?? throw new \InvalidArgumentException("no file $id");
         self::guard((string)$f['folder']);
         $name = self::cleanName($name);
         if ($name === '' || $name === '.' || $name === '..') throw new \InvalidArgumentException('invalid name');
+        if (($other = $this->taken((string)$f['folder'], $name, (int)$f['id'])) !== null) {
+            if ($replace === null) throw new Conflict("{$f['folder']} already has a file named $name.");
+            if ($replace) return $this->replaceWith($other, (int)$f['id']);
+            $name = $this->freeName((string)$f['folder'], $name);
+        }
         $this->app->store->q('UPDATE files SET name = ? WHERE id = ?', [$name, $id]);
         if ($f['kind'] === 'text' && strtolower(pathinfo($name, PATHINFO_EXTENSION)) !== strtolower(pathinfo((string)$f['name'], PATHINFO_EXTENSION))) {
             // a text file follows its new extension: page.md renamed page.html is shown as a web page, no longer as a note
@@ -192,6 +211,79 @@ final class Library
         }
         $this->relabel(['name' => $name] + $f);
         return $this->app->files()->get($id);
+    }
+
+    /** The file named $name in $folder (in any case), other than $except. */
+    public function taken(string $folder, string $name, int $except = 0): ?int
+    {
+        $id = $this->app->store->q('SELECT id FROM files WHERE folder = ? AND name = ? COLLATE NOCASE AND id != ? AND deleted_at IS NULL ORDER BY id LIMIT 1',
+            [self::normalize($folder), $name, $except])->fetchColumn();
+        return $id === false ? null : (int)$id;
+    }
+
+    /** $name, or "name (2).ext", "name (3).ext"… : the first one free in $folder. */
+    public function freeName(string $folder, string $name, int $except = 0): string
+    {
+        if ($this->taken($folder, $name, $except) === null) return $name;
+        $ext = preg_match('/^(.+?)(\.[A-Za-z0-9]{1,10})$/', $name, $m) ? $m[2] : '';
+        $base = preg_replace('/ \(\d+\)$/', '', $ext !== '' ? $m[1] : $name);
+        for ($n = 2; ; $n++) if ($this->taken($folder, $cand = "$base ($n)$ext", $except) === null) return $cand;
+    }
+
+    /**
+     * $target takes the content of $source (what it held becomes a version), and $source goes: its id, shares
+     * and links now lead to $target. Unless $keep (a copy): then $source stays as it is.
+     */
+    public function replaceWith(int $target, int $source, bool $keep = false): array
+    {
+        $files = $this->app->files();
+        $t = $files->get($target) ?? throw new \InvalidArgumentException("no file $target");
+        $s = $files->get($source) ?? throw new \InvalidArgumentException("no file $source");
+        self::guard((string)$t['folder']);
+        if (!$keep) self::guard((string)$s['folder']);
+        $tmp = tempnam(sys_get_temp_dir(), 'rep');
+        if (!is_file($s['path']) || !copy($s['path'], $tmp)) throw new \RuntimeException('could not read the file');
+        try { $files->replace($target, $tmp, (string)$s['mime']); }
+        finally { if (is_file($tmp)) @unlink($tmp); }
+        if ($s['note']) $this->app->store->q('UPDATE files SET note = 1 WHERE id = ?', [$target]);
+        if (!$keep) $this->absorb($target, $s);
+        return $files->get($target);
+    }
+
+    /** The row of $s goes, and its id leads to $target from now on (links in messages, shares, tasks…). */
+    private function absorb(int $target, array $s): void
+    {
+        $st = $this->app->store; $id = (int)$s['id'];
+        $st->deleteDocs(['file', 'transcript'], $id);
+        $st->q('DELETE FROM files WHERE id = ?', [$id]);
+        if (is_file((string)$s['path'])) @unlink($s['path']);
+        $this->app->files()->dropPreviews($id);
+        foreach ($this->app->files()->versions($id) as $v) $st->q('UPDATE file_versions SET file_id = ? WHERE id = ?', [$target, $v['id']]);
+        $st->q('INSERT OR REPLACE INTO file_aliases(id, file_id) VALUES(?, ?)', [$id, $target]);
+        $st->q('UPDATE file_aliases SET file_id = ? WHERE file_id = ?', [$target, $id]);
+        $st->q('UPDATE shares SET file_id = ? WHERE file_id = ?', [$target, $id]);
+    }
+
+    /**
+     * Once: files with the same name in the same folder (before 0.28.29 a name could be used twice) become one,
+     * the newest; the others are kept as its versions. Read-only folders (the FAQ) look after themselves.
+     */
+    public function mergeDuplicates(): int
+    {
+        $st = $this->app->store; $files = $this->app->files(); $n = 0;
+        $groups = $st->q('SELECT folder, name COLLATE NOCASE AS n FROM files WHERE deleted_at IS NULL GROUP BY folder, name COLLATE NOCASE HAVING COUNT(*) > 1')->fetchAll();
+        foreach ($groups as $g) {
+            if (self::readonly((string)$g['folder'])) continue;
+            $rows = $st->q('SELECT * FROM files WHERE folder = ? AND name = ? COLLATE NOCASE AND deleted_at IS NULL ORDER BY created DESC, id DESC', [$g['folder'], $g['n']])->fetchAll();
+            $keep = array_shift($rows);
+            foreach (array_reverse($rows) as $old) { // oldest first, so the newest version is the last one kept
+                $files->keepVersion($keep, $old);
+                $this->absorb((int)$keep['id'], $old);
+                $n++;
+            }
+        }
+        if ($n) Log::info("library: $n files with a name already used in their folder became versions");
+        return $n;
     }
 
     /** Text files the assistant writes: the extension decides the format; Markdown (or plain text) is a note, editable in the app. */
@@ -229,6 +321,7 @@ final class Library
         $this->app->store->q('DELETE FROM files WHERE id = ?', [$id]);
         if ($f['path'] !== '' && is_file($f['path'])) @unlink($f['path']);
         $this->app->files()->dropPreviews($id);
+        $this->app->files()->purgeVersions($id);
     }
 
     /**
@@ -266,7 +359,9 @@ final class Library
             if (!$f || $f['deleted_at'] === null) continue;
             self::guard((string)$f['folder']);
             $this->ensureFolder((string)$f['folder']);
-            $this->app->store->q('UPDATE files SET deleted_at = NULL, deleted_with = NULL WHERE id = ?', [$i]);
+            $name = $this->freeName((string)$f['folder'], (string)$f['name'], $i); // its name taken since: keep both
+            $this->app->store->q('UPDATE files SET deleted_at = NULL, deleted_with = NULL, name = ? WHERE id = ?', [$name, $i]);
+            if ($name !== $f['name']) $this->relabel(['name' => $name] + $f);
             if ($f['status'] === 'ready') $this->app->files()->index($i); // searchable again, from the text kept (nothing read again)
             $done[] = $i;
         }
@@ -280,6 +375,8 @@ final class Library
         $ids = $this->app->store->q('SELECT id FROM files WHERE deleted_at IS NOT NULL AND deleted_at <= ?', [$days === null ? PHP_INT_MAX : time() - $days * 86400])->fetchAll();
         foreach ($ids as $r) $this->purgeFile((int)$r['id']);
         if ($ids) Log::info('library trash: ' . count($ids) . ' files deleted for good');
+        $v = $this->app->files()->purgeVersions(null, $days === null ? PHP_INT_MAX : time() - $days * 86400);
+        if ($v) Log::info("library: $v earlier versions deleted for good");
         return count($ids);
     }
 
@@ -291,15 +388,17 @@ final class Library
             $f = $files->get($id) ?? throw new \InvalidArgumentException("no file $id");
             self::guard((string)$f['folder']);
             if (!$f['note'] && $f['kind'] !== 'text') throw new \InvalidArgumentException('only notes and text files can be edited');
-            file_put_contents($f['path'], $content);
-            $this->app->store->q("UPDATE files SET size = ?, text = NULL, status = 'pending' WHERE id = ?", [strlen($content), $id]);
-            if ($name !== '' && $name !== $f['name']) $this->renameFile($id, $name);
+            $tmp = tempnam(sys_get_temp_dir(), 'note');
+            file_put_contents($tmp, $content);
+            try { $files->replace($id, $tmp, (string)$f['mime'], true); } // the earlier text kept as a version
+            finally { if (is_file($tmp)) @unlink($tmp); }
+            if ($name !== '' && $name !== $f['name']) $id = (int)$this->renameFile($id, $name)['id'];
         } else {
             $name = trim($name) !== '' ? trim($name) : 'Note ' . date('Y-m-d H.i');
             if (!isset(self::TEXT_TYPES[strtolower(pathinfo($name, PATHINFO_EXTENSION))])) $name .= '.md';
             $tmp = tempnam(sys_get_temp_dir(), 'note');
             file_put_contents($tmp, $content);
-            $id = $files->save($tmp, $name, self::textMime($name), $folder);
+            $id = $files->save($tmp, $name, self::textMime($name), $folder, true); // same name: a new version of that file
             if (self::isNoteName($name)) $this->app->store->q('UPDATE files SET note = 1 WHERE id = ?', [$id]);
         }
         $files->text($id); // small: index right away

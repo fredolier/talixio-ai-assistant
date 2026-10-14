@@ -30,6 +30,19 @@
   Il cite le document et la page ; un clic l'ouvre à cette page.
 - *Demander à propos de ce dossier* lance une question sur ses documents.
 
+## Un nom par dossier, les versions
+- Un nom n'est utilisé qu'une fois par dossier (majuscules comprises). Envoyer un fichier sous un nom déjà présent,
+  l'assistant qui enregistre de nouveau une note, ou un enregistrement depuis le lecteur réseau **remplace** ce fichier :
+  même fichier, mêmes liens et partages, avec le nouveau contenu.
+- L'ancien contenu est gardé comme **version** : la section *Versions* du fichier ouvert les liste (date, taille),
+  avec *Télécharger* et *Restaurer* (le contenu actuel devient à son tour une version). Les versions sont gardées
+  **30 jours**, 20 au plus par fichier. L'assistant peut aussi les lister et les restaurer (« remets la version d'hier du plan »).
+- *Renommer* ou *Déplacer* vers un nom déjà pris demande : **Remplacer** (ce fichier prend ce contenu, l'ancien devient
+  une version) ou **Garder les deux** (celui-ci s'appelle « nom (2) »).
+- Les pièces jointes du chat gardent les deux (« image.png », « image (2).png »).
+- Les fichiers qui portaient le même nom dans un dossier avant la version 0.28.29 ont été fusionnés une fois :
+  le plus récent est gardé, les autres sont ses versions.
+
 ## Supprimer, la corbeille
 - *Supprimer* (sur un fichier ouvert, ou sur un dossier avec ses fichiers) met à la **corbeille**, pas
   à la poubelle définitive. Ce qui y est sort des recherches, de l'assistant et des liens de partage.

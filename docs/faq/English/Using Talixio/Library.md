@@ -30,6 +30,19 @@
   It cites the document and the page; a click opens it at that page.
 - *Ask about this folder* starts a question about its documents.
 
+## One name per folder, versions
+- A name is used only once in a folder (capitals aside). Uploading a file under a name already there,
+  the assistant saving a note again, or saving from the network drive **replaces** that file: same file,
+  same links and shares, with the new content.
+- What it held is kept as a **version**: the *Versions* section of the open file lists them (date, size),
+  with *Download* and *Restore* (the current content becomes a version in turn). Versions are kept **30 days**,
+  at most 20 per file. The assistant can list and restore them too ("bring back yesterday's version of the plan").
+- *Rename* or *Move* onto a name already used there asks: **Replace** (that file gets this content, its old
+  content becomes a version) or **Keep both** (this one is named "name (2)").
+- Attachments from the chat keep both ("image.png", "image (2).png").
+- Files that had the same name in a folder before version 0.28.29 were merged once: the newest is kept,
+  the others are its versions.
+
 ## Deleting, the trash
 - *Delete* (on an open file, or on a folder with its files) moves it to the **trash**; it is not
   deleted for good. What is in the trash leaves the searches, the assistant and the share links.

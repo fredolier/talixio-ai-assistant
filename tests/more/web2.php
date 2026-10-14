@@ -270,6 +270,20 @@ $r = $web("/api/files/$mv/move", ['folder' => '/Projects']);
 check('web2 files: move', ($r['file']['folder'] ?? '') === '/Projects');
 $r = $web("/api/files/$mv/rename", ['name' => 'moved.txt']);
 check('web2 files: rename', ($r['file']['name'] ?? '') === 'moved.txt');
+$tw = $save('moved.txt', 'second'); // saved elsewhere, then brought next to the first
+$r = $web("/api/files/$tw/move", ['folder' => '/Projects']);
+check('web2 versions: a move onto a taken name asks (409)', $r['_code'] === 409 && !empty($r['conflict']), $r['_raw']);
+$r = $web("/api/files/$tw/move", ['folder' => '/Projects', 'replace' => true]);
+check('web2 versions: replace keeps the first file, with a version', ($r['file']['id'] ?? 0) === $mv, $r['_raw']);
+$vs = $web("/api/files/$mv/versions")['versions'] ?? [];
+check('web2 versions: listed', count($vs) === 1, json_encode($vs));
+$r = $w2raw("/api/files/$mv/versions/{$vs[0]['id']}/file");
+check('web2 versions: downloaded as an attachment', $r['code'] === 200 && $r['body'] === 'm' && str_contains($r['h']['content-disposition'] ?? '', 'attachment'), $r['body']);
+check('web2 versions: an unknown version is a 404', $w2raw("/api/files/$mv/versions/999999/file")['code'] === 404);
+$r = $web("/api/files/$mv/versions/{$vs[0]['id']}/restore", []);
+check('web2 versions: restore', ($r['file']['id'] ?? 0) === $mv && count($web("/api/files/$mv/versions")['versions'] ?? []) === 1, $r['_raw']);
+$r = $w2raw('/api/files', 'POST', ['file' => new CURLFile($tmpU, 'text/plain', 'moved.txt'), 'folder' => '/Projects', 'replace' => '1']);
+check('web2 versions: an upload with replace updates the file of that name', ($j = json_decode($r['body'], true))['replaced'] === true && $j['file']['id'] === $mv, $r['body']);
 $r = $web("/api/files/$mv/reindex", []);
 check('web2 files: reindex puts it back in the queue', ($r['file']['status'] ?? '') === 'pending');
 check('web2 files: reindex of an unknown file is a 404', $web('/api/files/999999/reindex', [])['_code'] === 404);
@@ -499,7 +513,9 @@ check('web2 dav: MOVE missing clutter is a 404', $dav('MOVE', '/Inbox/._none', n
 check('web2 dav: DELETE clutter', $dav('DELETE', '/Inbox/.DS_Store')['code'] === 204 && $dav('GET', '/Inbox/.DS_Store')['code'] === 404);
 // same names
 $a1 = $save('dup.txt', 'one', '/Projects'); $a2 = $save('dup.txt', 'two', '/Projects');
-$n1 = $save('README', 'r1', '/Projects'); $save('README', 'r2', '/Projects');
+$n1 = $save('README', 'r1', '/Projects'); $n2 = $save('README', 'r2', '/Projects');
+// a name is used once per folder now (the second is "dup (2).txt"); duplicates from before 0.28.29, not merged yet, still show numbered
+$app->store->q("UPDATE files SET name = 'dup.txt' WHERE id = ?", [$a2]); $app->store->q("UPDATE files SET name = 'README' WHERE id = ?", [$n2]);
 $r = $dav('PROPFIND', '/Projects', null, ['Depth: 1']);
 check('web2 dav: same names show numbered', $r['code'] === 207 && str_contains($r['body'], "dup (#$a1).txt") && str_contains($r['body'], "README (#$n1)"), substr($r['body'], 0, 300));
 check('web2 dav: GET a numbered name', $dav('GET', '/Projects/' . rawurlencode("dup (#$a1).txt"))['body'] === 'one' && $dav('GET', '/Projects/dup.txt')['body'] === 'two');

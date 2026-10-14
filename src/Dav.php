@@ -414,6 +414,11 @@ final class Dav
         if (!$copy) Library::guard($src[0] === 'file' ? (string)$src[1]['folder'] : $src[1]);
         if ($existing) {
             if ($existing[0] === 'file' && $src[0] === 'file' && (int)$existing[1]['id'] === (int)$src[1]['id']) $existing = null; // same file: a change of case, say
+            elseif ($existing[0] === 'file' && $src[0] === 'file') { // what editors do to save (write a temporary file, move it over): a new version
+                $lib->replaceWith((int)$existing[1]['id'], (int)$src[1]['id'], $copy);
+                $this->send(204, '');
+                return;
+            }
             elseif ($existing[0] === 'file') $lib->deleteFile((int)$existing[1]['id']);
             else $lib->deleteFolder($existing[1], true);
         }

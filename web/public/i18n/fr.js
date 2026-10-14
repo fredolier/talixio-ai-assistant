@@ -2319,5 +2319,15 @@ window.I18N.fr = {
 "sandboxed": "bac à sable",
 "With one address, every assistant and this admin page share one web origin: someone who can run code in their own assistant could reach the others' sessions. Choose <b>Subdomains</b> unless everyone on this server trusts each other.": "Avec une seule adresse, tous les assistants et cette page d'administration partagent la même origine web : quelqu'un qui peut exécuter du code dans son propre assistant pourrait atteindre les sessions des autres. Choisissez <b>Sous-domaines</b> sauf si tout le monde sur ce serveur se fait confiance.",
 "Something went wrong on the server (reference {ref}, in the log).": "Une erreur s'est produite sur le serveur (référence {ref}, dans le journal).",
-"This server gave an address that is not http(s).": "Ce serveur a donné une adresse qui n'est pas en http(s)."
+"This server gave an address that is not http(s).": "Ce serveur a donné une adresse qui n'est pas en http(s).",
+"{name} was replaced; the earlier version is kept in Versions": "{name} a été remplacé ; la version précédente reste dans Versions",
+"{n} replaced (earlier versions kept)": "{n} remplacé(s) (versions précédentes conservées)",
+"Replace or keep both?": "Remplacer ou garder les deux ?",
+"Another file there already has this name.": "Un autre fichier porte déjà ce nom à cet endroit.",
+"Replace: that file gets this content, and what it held stays available in its Versions for 30 days. Keep both: this one gets a number, like “name (2)”.": "Remplacer : ce fichier prend ce contenu, et l’ancien reste disponible 30 jours dans ses Versions. Garder les deux : celui-ci reçoit un numéro, comme « nom (2) ».",
+"Replace": "Remplacer",
+"Keep both": "Garder les deux",
+"Versions": "Versions",
+"Earlier contents of this file, kept 30 days after it was replaced.": "Contenus précédents de ce fichier, conservés 30 jours après leur remplacement.",
+"Version restored; the content it replaced is now a version too": "Version restaurée ; le contenu remplacé devient à son tour une version"
 };

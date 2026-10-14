@@ -28,7 +28,7 @@ final class Tools
         'calendar' => [['calendar_', 'contact_find'], '/agenda|calend|rdv|rendez|réunion|meeting|invit|visio|dispo|créneau|slot|planning|demain|tomorrow|aujourd|today|ce soir|tonight|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|semaine|week|\b\d{1,2} ?h\d*\b|\b\d{1,2}:\d\d|événement|event|déjeuner|lunch|dîner|dinner|anniversaire|birthday|vacances|holiday|congé/iu', 'see and create calendar events, invite people'],
         'contacts' => [['contact_'], '/contact|téléphone|phone|numéro|number|adresse|address|qui est|who is/iu', 'find and save contacts'],
         'tasks' => [['board_'], '/tâche|task|todo|to-do|à faire|kanban|tableau|board|carte|card|ticket|projet|project|priorit|backlog|deadline|échéance|estim|temps passé|time spent|\b[A-Z]{2,6}-\d+\b/u', 'the task board: list, create, update, prioritize, log time'],
-        'library' => [['kb_', 'share_', 'file_'], '/document|\bdoc|fichier|file|dossier|folder|biblioth|library|note|rapport|report|pdf|partag|share|lien|link|class|range|déplace|move|corbeille|trash|inbox|enregistr|save|sauvegard|word|excel|tableur|slides?\b/iu', 'file, move, save and share documents in the library'],
+        'library' => [['kb_', 'share_', 'file_'], '/document|\bdoc|fichier|file|dossier|folder|biblioth|library|note|rapport|report|pdf|partag|share|lien|link|class|range|déplace|move|corbeille|trash|version|inbox|enregistr|save|sauvegard|word|excel|tableur|slides?\b/iu', 'file, move, save and share documents in the library'],
         'browser' => [['browser_'], '/site|page|navig|browser|clique|click|formulaire|form\b|connecte|log ?in|réserv|book|https?:\/\/|www\.|\.(com|fr|eu|net|org)\b|command|order|achète|buy|livr|deliver|panier|cart|(regarde|cherche|vérifie|check|look|search)\w* (sur|on)\b|uber|deliveroo|amazon|airbnb|doctolib|leboncoin|sncf|vinted/iu', 'a web browser that clicks and types on pages'],
         'schedule' => [['schedule_task', 'cancel_task', 'routine_'], '/rappel|remind|chaque|tous les|toutes les|every|daily|quotidien|hebdo|weekly|mensuel|monthly|routine|programm|planifi|schedul|automati|plus tard|later|\bdans \d|\bin \d/iu', 'reminders and recurring routines'],
         'jobs' => [['delegate', 'list_jobs', 'continue_job', 'cancel_job', 'archive_job', 'schedule_job'], '/job|recherch|research|cherche|enquête|compar|analys|étude|study|arrière-plan|background|rapport|report|veille|approfondi|trouve|find|liste d|list of/iu', 'background jobs: long research and reports'],
@@ -127,19 +127,36 @@ final class Tools
             ['folder' => ['type' => 'string']], [], fn(array $a) => $this->kbList($a['folder'] ?? null));
         $this->register('kb_save_note',
             "Save a note in the user's library (it becomes searchable), e.g. meeting notes, a summary of research, a checklist. Markdown by default; "
-            . "a name ending in .html, .csv, .json, .xml or .txt saves that format instead (a newsletter or web page: name it page.html, full HTML in content). Give id to update an existing file, keeping its name unless you give a new one.",
+            . "a name ending in .html, .csv, .json, .xml or .txt saves that format instead (a newsletter or web page: name it page.html, full HTML in content). Give id to update an existing file, keeping its name unless you give a new one. "
+            . "A name already used in the folder updates that file (its earlier content stays available in kb_versions).",
             ['folder' => ['type' => 'string'], 'name' => ['type' => 'string'], 'content' => ['type' => 'string'], 'id' => ['type' => 'integer']], ['content'],
             function (array $a) {
                 $f = $this->app->library()->saveNote((string)($a['folder'] ?? ($this->spaceFolder() !== '' ? $this->spaceFolder() . '/Notes' : Library::NOTES)), (string)($a['name'] ?? ''), $a['content'], isset($a['id']) ? (int)$a['id'] : null);
                 return 'saved ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']})";
             });
-        $this->register('kb_move', "File a document in the user's library: move it to a folder (created if needed), optionally renaming it. Use to tidy attachments out of /Inbox when the user asks.",
-            ['id' => ['type' => 'integer'], 'folder' => ['type' => 'string'], 'name' => ['type' => 'string']], ['id', 'folder'],
+        $this->register('kb_move', "File a document in the user's library: move it to a folder (created if needed), optionally renaming it. Use to tidy attachments out of /Inbox when the user asks. "
+            . "If the name is already used there, both are kept (\"name (2)\"); replace true instead makes this the new content of that file (its earlier content becomes a version).",
+            ['id' => ['type' => 'integer'], 'folder' => ['type' => 'string'], 'name' => ['type' => 'string'], 'replace' => ['type' => 'boolean']], ['id', 'folder'],
             function (array $a) {
-                $lib = $this->app->library();
-                $f = $lib->moveFile((int)$a['id'], $a['folder']);
-                if (!empty($a['name'])) $f = $lib->renameFile((int)$a['id'], $a['name']);
-                return 'moved to ' . Library::join($f['folder'], $f['name']);
+                $lib = $this->app->library(); $replace = !empty($a['replace']);
+                $f = $lib->moveFile((int)$a['id'], $a['folder'], empty($a['name']) && $replace);
+                if (!empty($a['name'])) $f = $lib->renameFile((int)$f['id'], $a['name'], $replace);
+                return 'moved to ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']})";
+            });
+        $this->register('kb_versions', "Earlier contents of a library file, kept " . Library::TRASH_DAYS . " days when it was replaced (saved again under the same name, edited, uploaded again). "
+            . "action 'list' shows them (version id, date, size); 'restore' brings one back (the current content becomes a version in turn).",
+            ['id' => ['type' => 'integer'], 'action' => ['type' => 'string', 'enum' => ['list', 'restore']], 'version' => ['type' => 'integer']], ['id'],
+            function (array $a) {
+                $files = $this->app->files();
+                $f = $files->get((int)$a['id']) ?? throw new \InvalidArgumentException("no file {$a['id']}");
+                if (($a['action'] ?? 'list') === 'restore') {
+                    $f = $files->restoreVersion((int)$f['id'], (int)($a['version'] ?? 0));
+                    return 'restored: ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']}) has that content again; the one it had is now a version";
+                }
+                $v = $files->versions((int)$f['id']);
+                if (!$v) return Library::join($f['folder'], $f['name']) . ' has no earlier versions.';
+                return Library::join($f['folder'], $f['name']) . " (file #{$f['id']}), earlier versions, newest first:\n"
+                    . implode("\n", array_map(fn($x) => "- version {$x['id']}: " . date('Y-m-d H:i', $x['created']) . ', ' . number_format($x['size'] / 1024, 1) . ' KB', $v));
             });
         $this->register('kb_trash', "The library's trash: files and folders the user deleted, kept " . Library::TRASH_DAYS . " days. action 'list' shows them; 'restore' puts one back where it was: "
             . "a file by id, or a deleted folder by folder (its path) and deleted_at (from the list). Use when the user looks for a document they deleted.",
