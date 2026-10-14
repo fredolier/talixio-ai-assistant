@@ -25,6 +25,8 @@
     une fois son client WebDAV, dans PowerShell en administrateur :
     `Start-Service WebClient; Set-Service WebClient -StartupType Automatic`. Le client de Windows refuse par défaut
     les fichiers de plus de 50 Mo. Après un redémarrage de WSL : `sudo mount /mnt/talixio`.
+    **Dans un conteneur Docker**, le démarrer avec `--device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined`,
+    ou monter le lecteur sur l'hôte et le partager avec `-v /mnt/talixio:/mnt/talixio`.
 - Un sous-dossier peut s'ouvrir directement : ajouter son chemin à l'adresse, par exemple `https://…/dav/Clients/`
   (espaces et accents encodés sur macOS et Linux : `Mon%20dossier`). L'orthographe doit être exacte, majuscules
   comprises. Le mot de passe du lecteur ouvre toujours tout le lecteur.

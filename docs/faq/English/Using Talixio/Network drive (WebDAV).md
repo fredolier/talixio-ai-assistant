@@ -24,6 +24,8 @@
     drvfs: no FUSE needed. If Windows says the network name cannot be found, start its WebDAV client once, in
     PowerShell as administrator: `Start-Service WebClient; Set-Service WebClient -StartupType Automatic`.
     Windows' client refuses files over 50 MB by default. After a restart of WSL: `sudo mount /mnt/talixio`.
+    **In a Docker container**, start it with `--device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined`,
+    or mount the drive on the host and share it with `-v /mnt/talixio:/mnt/talixio`.
 - A subfolder can be opened directly: add its path to the address, for example `https://…/dav/Clients/`
   (spaces and accents encoded on macOS and Linux: `My%20Folder`). The spelling must be exact, capital letters
   included. The drive password still opens the whole drive.

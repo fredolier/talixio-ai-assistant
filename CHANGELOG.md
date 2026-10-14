@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.31 (2026-10-14)
+
+- Linux drive script: inside a Docker container, where the kernel has FUSE but `/dev/fuse` is not handed over,
+  it now says so and gives the options to start the container with (`--device /dev/fuse --cap-add SYS_ADMIN`),
+  or to mount the drive on the host and share it with `-v`. Before, it took the WSL path for Windows.
+
 ## 0.28.30 (2026-10-14)
 
 - Linux drive script: on WSL without FUSE ("can't open fuse device"), `mount-webdav-linux.sh` no longer stops

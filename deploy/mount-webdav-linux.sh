@@ -29,6 +29,19 @@ encode_url() (
 echo "=== Talixio network drive (WebDAV) with davfs2 ==="
 
 # davfs2 needs FUSE in the kernel: checked first, before installing or asking anything
+# In a container the kernel usually has FUSE but Docker does not hand the device over: say how to start it
+if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then
+    if ! { [ -e /dev/fuse ] && { : <>/dev/fuse; } 2>/dev/null; }; then
+        echo "This runs in a container, which has no access to /dev/fuse (davfs2 needs it)."
+        if grep -qw fuse /proc/filesystems; then
+            echo "The kernel has FUSE: start the container with"
+            echo "    --device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined"
+            echo "(docker compose: devices: [/dev/fuse], cap_add: [SYS_ADMIN], security_opt: [apparmor:unconfined])"
+        fi
+        echo "Or mount the drive on the host (run this script there) and share it: -v /mnt/talixio:/mnt/talixio"
+        exit 1
+    fi
+fi
 if [ ! -e /dev/fuse ]; then
     modprobe fuse 2>/dev/null || true
     if [ ! -e /dev/fuse ] && grep -qw fuse /proc/filesystems; then
