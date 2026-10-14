@@ -170,7 +170,7 @@ final class ConnectorPackage
         return ['file' => $fileId, 'file_name' => $f['name'], 'name' => $name, 'runtime' => $runtime, 'entry' => $entry,
             'deps' => is_array($pkg) && !empty($pkg['dependencies']) && !in_array('node_modules/', array_map(fn($n) => substr($n, 0, 13), $files), true),
             'build' => is_array($pkg) && !$entry && !empty($pkg['scripts']['build']),
-            'env' => array_keys($env), 'values' => $current ? array_map(fn($v) => preg_match('/PASS|SECRET|TOKEN|KEY/i', (string)$v) ? '' : (string)$v, (array)($current['env'] ?? [])) : [],
+            'env' => array_keys($env), 'values' => $current ? array_combine(array_keys($cur = (array)($current['env'] ?? [])), array_map(fn($k, $v) => preg_match('/PASS|SECRET|TOKEN|KEY/i', "$k") ? '' : (string)$v, array_keys($cur), $cur)) : [], // secrets stay on the server
             'installed' => (bool)$current, 'files' => count($files)];
     }
 
