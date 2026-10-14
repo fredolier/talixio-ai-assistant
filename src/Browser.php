@@ -5,7 +5,8 @@ namespace Talixio;
 /**
  * Headless Chromium driven over the DevTools protocol. One browser per process, started on first use
  * and closed at the end of each assistant run. Every request the page makes (including redirects,
- * scripts and images) is checked: private and local network addresses are refused.
+ * scripts and images) is checked, and all traffic goes through BrowserProxy, which resolves names itself:
+ * private and local network addresses are refused, whatever DNS answers later.
  */
 final class Browser
 {
@@ -22,6 +23,9 @@ final class Browser
     /** @var resource|null */
     private $profileLock = null;
     private array $hostCheck = [];
+    /** @var resource|null */
+    private $proxy = null;
+    private array $proxyPipes = [];
 
     private function __construct(private App $app) {}
 
@@ -44,6 +48,7 @@ final class Browser
         if (!$b) return;
         try { $b->ws->send(json_encode(['id' => ++$b->id, 'method' => 'Browser.close'])); } catch (\Throwable) {}
         if (is_resource($b->proc)) { usleep(200000); @proc_terminate($b->proc); @proc_close($b->proc); }
+        if (is_resource($b->proxy)) { foreach ($b->proxyPipes as $p) @fclose($p); @proc_terminate($b->proxy); @proc_close($b->proxy); }
         if ($b->profileLock) { flock($b->profileLock, LOCK_UN); fclose($b->profileLock); }
         if ($b->tempProfile) exec('rm -rf ' . escapeshellarg($b->profile));
     }
@@ -80,10 +85,12 @@ final class Browser
             mkdir($this->profile, 0700); $this->tempProfile = true;
         }
         @unlink($this->profile . '/DevToolsActivePort');
+        $net = $c->browserAllowPrivate ? [] : ['--proxy-server=http://127.0.0.1:' . $this->startProxy(), '--proxy-bypass-list=<-loopback>',
+            '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'];
         foreach ([false, true] as $noSandbox) {
             $args = [$bin, '--headless=new', '--remote-debugging-port=0', '--user-data-dir=' . $this->profile, '--no-first-run', '--no-default-browser-check',
                 '--disable-gpu', '--disable-dev-shm-usage', '--disable-extensions', '--disable-background-networking', '--disable-sync', '--mute-audio',
-                '--window-size=1280,900', '--lang=' . ($c->browserLang ?: 'en-US'), 'about:blank'];
+                '--window-size=1280,900', '--lang=' . ($c->browserLang ?: 'en-US'), ...$net, 'about:blank'];
             if ($noSandbox || $c->browserNoSandbox) array_splice($args, 1, 0, ['--no-sandbox']);
             $this->proc = proc_open($args, [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', $this->profile . '/stderr.log', 'w']], $pipes);
             for ($i = 0; $i < 100; $i++) {
@@ -103,6 +110,15 @@ final class Browser
         $this->call('Page.enable');
         $this->call('Runtime.enable');
         $this->call('Fetch.enable', ['patterns' => [['urlPattern' => '*', 'requestStage' => 'Request']]]);
+    }
+
+    /** Starts the filtering proxy (BrowserProxy) and returns its port; it ends with this process. */
+    private function startProxy(): int
+    {
+        $this->proxy = proc_open([PHP_BINARY, dirname(__DIR__) . '/bin/talixio', 'browser-proxy'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $this->profile . '/proxy.log', 'a']], $this->proxyPipes);
+        $port = (int)fgets($this->proxyPipes[1]);
+        if ($port <= 0) throw new \RuntimeException('browser: the network filter did not start: ' . mb_substr(trim((string)@file_get_contents($this->profile . '/proxy.log')), -300));
+        return $port;
     }
 
     /** Send a DevTools command and wait for its result, handling request checks meanwhile. */

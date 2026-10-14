@@ -30,6 +30,13 @@ final class Privacy
     public static bool $allowOnce = false;
     /** The strictest level of what the current work has read (index in LEVELS). */
     public static int $taint = 0;
+    /** Set once the current work has read untrusted content (an email, a web page, a connector's result): from then on,
+     *  lasting changes and requests to addresses not found in that content wait for the user's approval (Tools::run). */
+    public static bool $untrusted = false;
+    /** Set when that content came from the user's own data (emails, connectors), not only the public web. */
+    public static bool $privateRead = false;
+    /** @var array<string,true> the web addresses found in that content: opening one of them leaks nothing new */
+    public static array $links = [];
     /** The current answer's trace: what went out, what stayed here, which documents, what was blocked. */
     public static ?array $trace = null;
     /** Told about each request as it leaves (live pills in the app). */
@@ -151,9 +158,12 @@ final class Privacy
         try { return $fn(); } finally { self::$allowOnce = $before; }
     }
 
+    /** A new piece of work: nothing untrusted read yet. */
+    public static function trustAgain(): void { self::$untrusted = false; self::$privateRead = false; self::$links = []; }
+
     // ---- the trace of one answer ----
 
-    public static function begin(): void { self::$taint = 0; self::$trace = ['out' => [], 'local' => [], 'docs' => [], 'blocked' => []]; }
+    public static function begin(): void { self::$taint = 0; self::trustAgain(); self::$trace = ['out' => [], 'local' => [], 'docs' => [], 'blocked' => []]; }
 
     /** The trace collected since begin(), for the answer's meta (null when nothing was recorded). */
     public static function end(): ?array
@@ -326,7 +336,9 @@ final class Privacy
     public function toolGate(string $name, array $args): ?string
     {
         if (self::$allowOnce) return null;
-        $outside = in_array($name, self::OUTSIDE_TOOLS, true) || str_starts_with($name, 'mcp_');
+        // with internet in the sandbox, a command can send anything it reads: it is an outside tool too
+        $outside = in_array($name, self::OUTSIDE_TOOLS, true) || str_starts_with($name, 'mcp_')
+            || in_array($name, ['shell_run', 'script_run'], true) && $this->app->cfg->shellNetwork;
         if (!$outside) return null;
         $level = $this->effective();
         if ($level === 'internal') return null;
@@ -334,6 +346,8 @@ final class Privacy
             $name === 'web_search' => 'Web search: "' . mb_substr((string)($args['query'] ?? ''), 0, 200) . '"',
             $name === 'fetch_url' || $name === 'browser_open' => 'Open the web page ' . mb_substr((string)($args['url'] ?? ''), 0, 300),
             str_starts_with($name, 'mcp_') => "Use the connector tool $name",
+            $name === 'shell_run' => 'Run in the sandbox with internet: ' . mb_substr((string)($args['command'] ?? ''), 0, 300),
+            $name === 'script_run' => 'Run the script "' . mb_substr((string)($args['name'] ?? ''), 0, 100) . '" in the sandbox with internet',
             default => 'Use the web browser (' . str_replace('browser_', '', $name) . ')',
         };
         self::blocked($what);

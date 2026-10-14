@@ -17,8 +17,13 @@ trap 'rm -f "$0"' EXIT
 CONF=/etc/talixio/install.conf
 DATA=/var/lib/talixio
 APP=/opt/talixio
-STATUS="$DATA/update-status.json"
-LOG="$DATA/update.log"
+# root's own folder: the data folder belongs to the app's user, who could plant links there for root to write through
+STATE=/var/lib/talixio-update
+STATUS="$STATE/status.json"
+LOG="$STATE/update.log"
+install -d -o root -g root -m 755 "$STATE"
+[ -L "$STATE" ] && { echo "$STATE is a link: refusing" >&2; exit 1; }
+rm -f "$DATA/update-status.json" "$DATA/update.log" 2>/dev/null || true   # left by older versions
 [ -f "$CONF" ] || { echo "no $CONF: install with install.sh first" >&2; exit 1; }
 # shellcheck disable=SC1090
 . "$CONF"   # SRC OWNER BRANCH ARGS
@@ -39,7 +44,7 @@ status() {
     if ($latest !== "") { $s["latest"] = $latest; $s["commits"] = $list; $s["behind"] = count($list); $s["checked_at"] = time(); }
     $s["log"] = mb_substr((string)@file_get_contents($log), -6000);
     $s["can_rollback"] = is_dir($app . ".prev");
-    file_put_contents("$f.tmp", json_encode($s, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)); rename("$f.tmp", $f); chmod($f, 0644);
+    @unlink("$f.tmp"); file_put_contents("$f.tmp", json_encode($s, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)); chmod("$f.tmp", 0644); rename("$f.tmp", $f);
   ' "$STATUS" "$state" "$msg" "${CURRENT:-}" "${LATEST:-}" "$LOG" "${COMMITS:-}" "$APP"
 }
 

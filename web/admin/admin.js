@@ -212,9 +212,9 @@ $('#new-btn').onclick = async () => {
 $('#transfer-btn').onclick = async () => {
   const v = await ask('Bring an assistant from another server', { ok: 'Copy', html: `<p>On the old server, in that assistant: <b>Settings → Move to another server → Create a transfer code</b>.
     Everything comes: conversations, memory, skills, library, tasks, settings and keys, password.</p>
-    <p class="muted small">A test copy stays paused (no channels, no routines) so that the two never answer the same messages; copy again as often as you like,
-    an existing identifier gets the fresh copy. The final copy pauses the old one instead.</p>`, fields: [
-    { id: 'source', label: 'Address of the old assistant', placeholder: 'https://old.example.com/fred', attrs: ' type="url" required' },
+    <p class="muted small">A test copy stays paused (no channels, no routines) so that the two never answer the same messages; copy again as often as you like
+    (a new code each time), an existing identifier gets the fresh copy. The final copy pauses the old one instead.</p>`, fields: [
+    { id: 'source', label: 'Address of the old assistant', placeholder: 'https://old.example.com/fred', attrs: ' type="url" pattern="https://.+" required' },
     { id: 'code', label: 'Transfer code', placeholder: 'tx-…', attrs: ' required pattern="tx-[0-9a-f]{40}"' },
     { id: 'id', label: 'Identifier here (lower case, e.g. fred)', placeholder: 'fred', attrs: ' pattern="[a-z][a-z0-9-]{1,29}" required' },
     { id: 'name', label: 'Name', placeholder: 'Frédéric' },

@@ -24,7 +24,6 @@ final class Web
             $html = (string)file_get_contents(dirname(__DIR__) . '/web/public/app.html');
             $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '">', $html, 1); // the interface language (i18n.js)
             if ($this->app->cfg->lang === 'auto') I18n::remember($this->app, (string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
-            Shares::remember($this->app); // the address for links sent outside
             // the scripts' address carries the version (v/<version>/app.js, served by router.php): a page always gets the
             // scripts of its own version, never older ones from an installed app's cache, even an older service worker's
             $html = preg_replace('/(<script src="|<link rel="stylesheet" href=")((?:i18n\/)?[a-z0-9]+\.(?:js|css))"/', '$1v/' . self::assetVersion() . '/$2"', $html);
@@ -47,6 +46,7 @@ final class Web
             if ($path === '/api/login' && $method === 'POST') { $this->login((string)($body['password'] ?? ''), (string)($body['code'] ?? '')); return; }
             if (empty($_SESSION['ok']) || ($_SESSION['gen'] ?? '') !== $this->auth()->generation()) $this->fail(401, 'Please sign in.');
             session_write_close(); // don't hold the session lock during long model calls
+            if ($method === 'GET') Shares::remember($this->app); // the address for links sent outside: only as seen by the signed-in user, never by a stranger's Host header
             if ($path === '/api/chat' && $method === 'POST' && !empty($body['stream'])) { $this->chatStream($body); return; }
             if ($path === '/api/files' && $method === 'POST') { $this->json($this->upload()); return; }
             // the file name at the end of the URL keeps its extension in the address bar, tabs and "save as"
@@ -163,6 +163,7 @@ final class Web
             $path === '/api/connectors/install' && $m === 'GET' => (new ConnectorPackage($this->app))->status(),
             $path === '/api/mcp' && $m === 'GET' => $this->connectors(),
             $path === '/api/mcp' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcp()->saveRaw((string)($b['raw'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
+            $path === '/api/mcp/read-only' && $m === 'POST' => (function () use ($b) { $this->app->mcp()->setReadOnly((string)($b['server'] ?? ''), (string)($b['tool'] ?? ''), !empty($b['on'])); return $this->connectors(); })(),
             $path === '/api/mcp/oauth/start' && $m === 'POST' => (function () use ($b) {
                 $name = (string)($b['server'] ?? '');
                 $cfg = $this->app->mcp()->servers()[$name] ?? $this->fail(404, 'no such connector');
@@ -305,11 +306,13 @@ final class Web
         foreach ($mcp->servers() as $name => $srv) {
             $c = $cache[$name] ?? null;
             $signed = isset($srv['url']) && $this->app->mcpOAuth()->signedIn($name);
-            $out[] = ['name' => $name, 'kind' => isset($srv['url']) ? 'remote' : 'local', 'trust' => ($srv['trust'] ?? '') === 'all' ? 'all' : 'read',
+            $reads = array_map('strval', (array)($srv['read_only'] ?? []));
+            try { $box = isset($srv['url']) ? null : Mcp::sandboxed($srv); } catch (\RuntimeException) { $box = false; }
+            $out[] = ['name' => $name, 'kind' => isset($srv['url']) ? 'remote' : 'local', 'trust' => ($srv['trust'] ?? '') === 'all' ? 'all' : 'read', 'sandbox' => $box,
                 'auth' => $signed ? 'signed_in' : (!empty($c['auth']) || !empty($srv['oauth']) ? 'needed' : null), 'signed_in_at' => $signed ? $this->app->mcpOAuth()->account($name) : null,
                 'error' => $c['error'] ?? ($c ? null : 'not checked yet'), 'at' => $c['at'] ?? null,
                 'tools' => array_map(fn($t) => ['name' => Mcp::toolName($name, (string)$t['name']), 'title' => (string)($t['title'] ?? $t['name']),
-                    'read_only' => Mcp::readOnly($t)], $c['tools'] ?? [])];
+                    'tool' => (string)$t['name'], 'read_only' => in_array((string)$t['name'], $reads, true), 'says_read_only' => Mcp::saysReadOnly($t)], $c['tools'] ?? [])];
         }
         return ['raw' => $mcp->raw(), 'servers' => $out, 'shell' => ['mode' => $this->app->cfg->shell, 'installed' => Shell::binary() !== null]];
     }
@@ -520,7 +523,6 @@ final class Web
     {
         header('Content-Type: text/javascript; charset=utf-8');
         header('Cache-Control: no-cache');
-        header('Service-Worker-Allowed: /');
         echo str_replace('__VERSION__', self::assetVersion(), (string)file_get_contents(dirname(__DIR__) . '/web/sw.template.js'));
     }
 
@@ -940,11 +942,11 @@ final class Web
         $this->sendPath($p, 'image/jpeg', 'inline', "default-src 'none'; sandbox");
     }
 
-    private function serveZip(string $folder): void
+    private function serveZip(string $folder, ?array $only = null): void
     {
         set_time_limit(0);
         $folder = Library::normalize($folder);
-        try { $tmp = $this->app->files()->zipFolder($folder); }
+        try { $tmp = $this->app->files()->zipFolder($folder, $only); }
         catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
         $name = ($folder === '/' ? 'Library' : basename($folder)) . '-' . date('Y-m-d') . '.zip';
         try { $this->sendPath($tmp, 'application/zip', self::disposition('attachment', $name), "default-src 'none'; sandbox", false); }
@@ -980,7 +982,7 @@ final class Web
             if ($action === 'zip') {
                 if (!$s['download'] || $s['folder'] === null) { $this->shareHtml(403, $lang, $tr('Not allowed'), '<p>' . htmlspecialchars($tr('This link is for viewing only.')) . '</p>'); return; }
                 $shares->logAccess($s, 'zip');
-                $this->serveZip((string)$s['folder']);
+                $this->serveZip((string)$s['folder'], array_keys($files));
                 return;
             }
             $f = $files[$fileId] ?? null;
@@ -1150,7 +1152,7 @@ final class Web
         $base = Config::basePath();
         session_name($base === '' ? 'talixio' : 'talixio_' . substr(sha1($base), 0, 8)); // instances under one address keep separate sessions
         session_set_cookie_params(['lifetime' => 60 * 60 * 24 * 30, 'httponly' => true, 'samesite' => 'Strict', 'path' => $base . '/',
-            'secure' => ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https' || !empty($_SERVER['HTTPS'])]);
+            'secure' => Auth::https()]);
         ini_set('session.gc_maxlifetime', (string)(60 * 60 * 24 * 30));
         session_start();
     }

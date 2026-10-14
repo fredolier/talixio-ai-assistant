@@ -12,6 +12,9 @@ final class Config
         return $p === '' || !preg_match('#^[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$#', $p) ? '' : '/' . $p;
     }
 
+    /** One of several assistants on a shared server (the Docker stack): its owner is not the server's administrator. */
+    public static function inFleet(): bool { return (string)getenv('TALIXIO_INSTANCE') !== ''; }
+
     public string $provider = 'anthropic';      // anthropic | openai | gemini | sovereign | claude-code | echo
     public string $sovereign = 'ovhcloud';        // the European provider (Sovereign::SERVICES)
     public string $sovereignKey = '';
@@ -96,6 +99,8 @@ final class Config
     public string $emailTo = '';
     /** @var string[] */ public array $emailAllowed = [];
     public bool $emailRequireAuth = true;
+    /** The name your mail server signs its Authentication-Results with (e.g. mx.example.net): others are ignored. */
+    public string $emailAuthServ = '';
     public string $imapHost = '';
     public int $imapPort = 993;
     public string $imapUser = '';
@@ -289,6 +294,7 @@ final class Config
         $c->emailTo = $e('TALIXIO_EMAIL_TO');
         $c->emailAllowed = $list($e('TALIXIO_EMAIL_ALLOWED', $c->emailTo));
         $c->emailRequireAuth = $e('TALIXIO_EMAIL_REQUIRE_AUTH', '1') !== '0';
+        $c->emailAuthServ = $e('TALIXIO_EMAIL_AUTHSERV_ID');
         $c->imapHost = $e('TALIXIO_IMAP_HOST');
         $c->imapPort = (int)$e('TALIXIO_IMAP_PORT', '993');
         $c->imapUser = $e('TALIXIO_IMAP_USER', $c->smtpUser);

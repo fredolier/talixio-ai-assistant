@@ -39,20 +39,23 @@ function md(src) {
   const keep = html => { blocks.push(html); return `\u0000${blocks.length - 1}\u0000`; };
   let s = esc(String(src).replace(/\r\n?/g, '\n').replace(/\t/g, '    '))
     .replace(/^ {0,3}```[\w+-]*\n([\s\S]*?)\n? {0,3}```[ ]*$/gm, (_, code) => '\n' + keep(`<pre><code>${code}</code></pre>`) + '\n');
-  const inline = t => t
-    .replace(/`([^`\n]+)`/g, (_, c) => keep(`<code>${c}</code>`))
-    .replace(/\\(&gt;|&amp;|[\\`*_\[\]()#+\-.!|~])/g, (_, c) => keep(c)) // \* is a plain star
+  // links are made first and kept aside: the formatting after them never reaches inside an address or a tag
+  const fmt = t => t
     .replace(/\*\*([^*\n]+?)\*\*|__([^_\n]+?)__/g, (_, a, b) => `<strong>${a ?? b}</strong>`)
     .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>')
-    .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
-    .replace(/\[([^\]]+)\]\(\/files\/(\d+)(?:#p(\d+))?\)/g, (_, t, id, pg) => `<a href="#" class="cite" data-file="${id}"${pg ? ` data-page="${pg}"` : ''} title="Open the document${pg ? ' at page ' + pg : ''}">${CITE_SVG}${t}</a>`)
-    .replace(/\[([^\]]+)\]\((#library(?:\/[^\s)]*)?)\)/g, (_, t, h) => `<a href="${h}" class="cite folder">${FOLDER_SVG}${t}</a>`) // a library folder ("where is…?")
+    .replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+  const link = (href, cls, t, blank) => keep(`<a href="${href}"${cls ? ` class="${cls}"` : ''}${blank ? ' target="_blank" rel="noopener"' : ''}>${fmt(t)}</a>`);
+  const inline = t => fmt(t
+    .replace(/`([^`\n]+)`/g, (_, c) => keep(`<code>${c}</code>`))
+    .replace(/\\(&gt;|&amp;|[\\`*_\[\]()#+\-.!|~])/g, (_, c) => keep(c)) // \* is a plain star
+    .replace(/\[([^\]]+)\]\(\/files\/(\d+)(?:#p(\d+))?\)/g, (_, t, id, pg) => keep(`<a href="#" class="cite" data-file="${id}"${pg ? ` data-page="${pg}"` : ''} title="Open the document${pg ? ' at page ' + pg : ''}">${CITE_SVG}${fmt(t)}</a>`))
+    .replace(/\[([^\]]+)\]\((#library(?:\/[^\s)"]*)?)\)/g, (_, t, h) => keep(`<a href="${h}" class="cite folder">${FOLDER_SVG}${fmt(t)}</a>`)) // a library folder ("where is…?")
     // buttons that open an app on the phone (phone_action, Spotify): custom schemes only from this list
-    .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|intent|deezer|tg|sgnl|uber|homeassistant):[^\s)]+)\)/g, (_, t, h) => `<a href="${h}" class="action">${t.replace(/^▶\s*/, '')}</a>`)
-    .replace(/\[([^\]]+)\]\((\?connector=[^\s)]+)\)/g, (_, t, h) => `<a href="${h}" class="action connector">${t.replace(/^▶\s*/, '')}</a>`) // "▶ Install" from the connector list
-    .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" class="action" target="_blank" rel="noopener">$1</a>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+    .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|intent|deezer|tg|sgnl|uber|homeassistant):[^\s)"]+)\)/g, (_, t, h) => link(h, 'action', t.replace(/^▶\s*/, '')))
+    .replace(/\[([^\]]+)\]\((\?connector=[^\s)"]+)\)/g, (_, t, h) => link(h, 'action connector', t.replace(/^▶\s*/, ''))) // "▶ Install" from the connector list
+    .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, (_, t, h) => link(h, 'action', t, true))
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, (_, t, h) => link(h, '', t, true))
+    .replace(/(^|[\s(])(https?:\/\/[^\s<)"\u0000]+)/g, (_, pre, h) => pre + link(h, '', h, true)));
   const lines = s.split('\n'), n = lines.length, out = [];
   const LIST = /^( *)([-*+•]|\d{1,3}[.)])\s+(.*)$/, HR = /^ {0,3}([-*_])( *\1){2,} *$/, HEAD = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
   const SEP = /^ *\|? *:?-{2,}:? *(\| *:?-{2,}:? *)*\|? *$/, QUOTE = /^ {0,3}&gt; ?/;
@@ -2204,12 +2207,15 @@ function showConnectors(d) {
   state.setAcc = { ...state.setAcc, mcp: ok }; setAccounts();
   $('#mcp-badge').textContent = d.servers.length ? `· ${ok}/${d.servers.length} connected` : '· none';
   $('#mcp-servers').innerHTML = d.servers.map(x => `<div class="mcp-server ${x.error && x.auth !== 'needed' ? 'bad' : ''}">
-      <div class="row"><b>${esc(x.name)}</b><span class="chip">${x.kind}</span>${x.trust === 'all' ? '<span class="chip">trusted: no approval</span>' : ''}
+      <div class="row"><b>${esc(x.name)}</b><span class="chip">${x.kind}</span>${x.sandbox ? `<span class="chip">${esc(t('sandboxed'))}</span>` : ''}${x.trust === 'all' ? '<span class="chip">trusted: no approval</span>' : ''}
         <span class="muted small">${x.error ? '' : x.tools.length + ' tool(s)'}${x.at ? ' · checked ' + fmtTime(x.at) : ''}</span>
         ${x.auth === 'signed_in' ? `<span class="spacer"></span><span class="muted small">signed in ${esc(x.signed_in_at || '')}</span><button type="button" class="btn small ghost" data-signout="${esc(x.name)}">Sign out</button>`
           : x.auth === 'needed' ? `<span class="spacer"></span><button type="button" class="btn small primary" data-signin="${esc(x.name)}">Sign in</button>` : ''}</div>
-      ${x.auth === 'needed' ? `<p class="small">This service asks you to sign in with your account: press <b>Sign in</b>, accept, and you come back here.</p>` : x.error ? `<p class="error small">${esc(x.error)}</p>` : `<div class="tools">${x.tools.map(t => `<span class="chip" title="${esc(t.name)}">${esc(t.title)}${t.read_only ? '' : ' ✋'}</span>`).join('')}</div>`}
-    </div>`).join('') + (d.servers.some(x => x.tools.some(t => !t.read_only)) ? '<p class="muted small">✋ asks for your approval before running.</p>' : '');
+      ${x.auth === 'needed' ? `<p class="small">This service asks you to sign in with your account: press <b>Sign in</b>, accept, and you come back here.</p>` : x.error ? `<p class="error small">${esc(x.error)}</p>` : `<div class="tools">${x.tools.map(tl => `<button type="button" class="chip" data-server="${esc(x.name)}" data-tool="${esc(tl.tool)}" data-on="${tl.read_only ? '' : '1'}"
+          title="${esc(tl.name + (tl.says_read_only ? ' · ' + t('the connector says it only reads') : ''))}">${esc(tl.title)}${tl.read_only || x.trust === 'all' ? '' : ' ✋'}${tl.says_read_only && !tl.read_only ? ' ?' : ''}</button>`).join('')}</div>`}
+      ${x.sandbox === false && x.kind === 'local' ? `<p class="muted small">${esc(t('Runs without the sandbox: it can read everything this server can.'))}</p>` : ''}
+    </div>`).join('') + (d.servers.some(x => x.tools.length) ? `<p class="muted small">${esc(t('✋ asks for your approval before running. Click a tool that only reads to let it run without asking (and in background tasks); ? marks the ones the connector says only read.'))}</p>` : '');
+  $('#mcp-servers').querySelectorAll('[data-tool]').forEach(b => b.onclick = () => mcpAction('api/mcp/read-only', { server: b.dataset.server, tool: b.dataset.tool, on: !!b.dataset.on }));
   $('#mcp-servers').querySelectorAll('[data-signin]').forEach(b => b.onclick = async () => {
     b.disabled = true; $('#mcp-state').textContent = 'Opening the sign-in page…';
     try { location.href = (await post('api/mcp/oauth/start', { server: b.dataset.signin })).url; } catch (e) { $('#mcp-state').textContent = e.message; b.disabled = false; }

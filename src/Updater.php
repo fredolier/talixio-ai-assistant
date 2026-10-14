@@ -14,7 +14,14 @@ final class Updater
     private function appDir(): string { return dirname(__DIR__); }
 
     public function version(): array { return Version::get(); }
-    public function status(): array { return json_decode((string)@file_get_contents($this->app->cfg->dataDir . '/update-status.json'), true) ?: ['state' => 'unknown']; }
+    /** Root writes the status in its own folder (never in the data folder, which this user owns: a link there could make root overwrite any file). */
+    public const STATE_DIR = '/var/lib/talixio-update';
+
+    public function status(): array
+    {
+        $f = is_file(self::STATE_DIR . '/status.json') ? self::STATE_DIR . '/status.json' : $this->app->cfg->dataDir . '/update-status.json';
+        return json_decode((string)@file_get_contents($f), true) ?: ['state' => 'unknown'];
+    }
 
     /** $what: check | update | rollback */
     public function request(string $what): void

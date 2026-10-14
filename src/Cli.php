@@ -9,16 +9,17 @@ final class Cli
         $cmd = $argv[1] ?? 'help';
         if (in_array($cmd, ['version', '--version', '-v'], true)) { echo 'Talixio ' . Version::get()['label'] . "\n"; return 0; }
         try {
-            if ($cmd === 'transfer-pull') { // talixio transfer-pull <old address> <code> [--final] [--url <new address>]; services stopped
+            if ($cmd === 'transfer-pull') { // talixio transfer-pull <old address> <code> [--final] [--url <new address>] [--allow-http]; services stopped
                 $args = array_slice($argv, 2);
                 $final = in_array('--final', $args, true);
                 $i = array_search('--url', $args, true);
                 $url = $i !== false ? (string)($args[$i + 1] ?? '') : '';
                 $pos = array_values(array_filter($args, fn($a, $k) => $a[0] !== '-' && ($i === false || $k !== $i + 1), ARRAY_FILTER_USE_BOTH));
-                if (count($pos) < 2) { fwrite(STDERR, "usage: talixio transfer-pull <old address> <transfer code> [--final] [--url <this assistant's new address>]\n"); return 2; }
-                echo Transfer::pull(Config::fromEnv()->dataDir, $pos[0], $pos[1], $final, $url, fn($m) => print("$m\n")), "\n";
+                if (count($pos) < 2) { fwrite(STDERR, "usage: talixio transfer-pull <old address> <transfer code> [--final] [--url <this assistant's new address>] [--allow-http]\n"); return 2; }
+                echo Transfer::pull(Config::fromEnv()->dataDir, $pos[0], $pos[1], $final, $url, fn($m) => print("$m\n"), in_array('--allow-http', $args, true)), "\n";
                 return 0;
             }
+            if ($cmd === 'browser-proxy') { BrowserProxy::run(); return 0; } // started by the browser: its only way out
             if ($cmd === 'claude-login') { ClaudeLogin::run(Config::fromEnv()); return 0; } // started by the web app (Sign in with Claude)
             $app = App::fromEnv();
             switch ($cmd) {

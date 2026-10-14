@@ -80,8 +80,8 @@ final class Email
         $from = strtolower(Smtp::address(Mime::decodeHeader($h['from'] ?? '')));
         if (!in_array($from, $c->emailAllowed, true)) { Log::warn("email: ignored sender $from (not in TALIXIO_EMAIL_ALLOWED)"); return false; }
         if (isset($h['auto-submitted']) && strtolower($h['auto-submitted']) !== 'no') return false; // never answer robots or ourselves
-        if ($c->emailRequireAuth && !self::authenticated($h['authentication-results'] ?? '', $from)) {
-            Log::warn("email: ignored $from: no SPF/DKIM/DMARC pass in Authentication-Results (set TALIXIO_EMAIL_REQUIRE_AUTH=0 if your server doesn't add it)");
+        if ($c->emailRequireAuth && !self::authenticated($h['authentication-results'] ?? '', $from, $c->emailAuthServ)) {
+            Log::warn("email: ignored $from: no DMARC or DKIM pass in Authentication-Results (set TALIXIO_EMAIL_REQUIRE_AUTH=0 if your server doesn't add it)");
             return false;
         }
         $subject = trim(Mime::decodeHeader($h['subject'] ?? ''));
@@ -96,16 +96,22 @@ final class Email
         return true;
     }
 
-    /** True if Authentication-Results reports a pass for the sender's domain. */
-    public static function authenticated(string $results, string $from): bool
+    /**
+     * True if the receiving server vouches for the sender's domain: DMARC pass, or a DKIM signature of that domain.
+     * Only the topmost Authentication-Results counts (the one our own server added; the sender can write any below
+     * it), and only from $authserv when set. SPF alone is not enough: it checks the envelope, not the From line.
+     */
+    public static function authenticated(string $results, string $from, string $authserv = ''): bool
     {
         $domain = substr(strrchr($from, '@') ?: '', 1);
+        $results = strtolower(trim(strtok($results, "\n") ?: ''));
         if ($domain === '' || $results === '') return false;
-        foreach (preg_split('/[;\n]/', strtolower($results)) as $r) {
+        $parts = explode(';', $results);
+        if ($authserv !== '' && trim(strtok($parts[0], " \t") ?: '') !== strtolower($authserv)) return false;
+        foreach (array_slice($parts, 1) as $r) {
             $r = trim($r);
             if (preg_match('/^dmarc=pass\b.*header\.from=([^\s;]+)/', $r, $m) && self::sameDomain($m[1], $domain)) return true;
             if (preg_match('/^dkim=pass\b.*header\.(?:d|i)=@?([^\s;]+)/', $r, $m) && self::sameDomain($m[1], $domain)) return true;
-            if (preg_match('/^spf=pass\b.*smtp\.mailfrom=(?:[^@\s;]*@)?([^\s;]+)/', $r, $m) && self::sameDomain($m[1], $domain)) return true;
         }
         return false;
     }

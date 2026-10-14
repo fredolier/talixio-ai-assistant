@@ -124,12 +124,43 @@ final class Http
         );
         if (!$ips) throw new \RuntimeException("cannot resolve $host");
         foreach ($ips as $ip) {
-            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)
-                || str_starts_with($ip, '100.64.') || str_starts_with(strtolower($ip), 'fe80') || str_starts_with(strtolower($ip), 'fc') || str_starts_with(strtolower($ip), 'fd')) {
-                throw new \RuntimeException("blocked non-public address for $host");
-            }
+            if (!self::isPublic($ip)) throw new \RuntimeException("blocked non-public address for $host");
         }
         return $ips[0];
+    }
+
+    /** Non-routable, private, shared (CGNAT), benchmark and site-local ranges are never public; an IPv4 address embedded
+     *  in IPv6 (mapped, compatible, NAT64, 6to4, Teredo) is judged as itself. */
+    public static function isPublic(string $ip): bool
+    {
+        $bin = @inet_pton($ip);
+        if ($bin === false) return false;
+        if (strlen($bin) === 16) {
+            $v4 = match (true) {
+                str_starts_with($bin, str_repeat("\0", 10) . "\xff\xff"), str_starts_with($bin, str_repeat("\0", 12)) => substr($bin, 12),
+                str_starts_with($bin, "\x00\x64\xff\x9b" . str_repeat("\0", 8)) => substr($bin, 12),
+                str_starts_with($bin, "\x20\x02") => substr($bin, 2, 4),
+                str_starts_with($bin, "\x20\x01\x00\x00") => ~substr($bin, 12),
+                default => null,
+            };
+            if ($v4 !== null) return self::isPublic((string)inet_ntop($v4));
+            foreach (['fe80::/10', 'fec0::/10', 'fc00::/7', '2001:db8::/32', '64:ff9b:1::/48', 'ff00::/8'] as $net) if (self::inNet($bin, $net)) return false;
+        } else {
+            foreach (['0.0.0.0/8', '100.64.0.0/10', '198.18.0.0/15', '192.0.0.0/24', '224.0.0.0/4'] as $net) if (self::inNet($bin, $net)) return false;
+        }
+        return (bool)filter_var(inet_ntop($bin), FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+    }
+
+    private static function inNet(string $bin, string $cidr): bool
+    {
+        [$net, $bits] = explode('/', $cidr);
+        $n = inet_pton($net);
+        if (strlen($n) !== strlen($bin)) return false;
+        $bytes = intdiv((int)$bits, 8); $rest = (int)$bits % 8;
+        if (substr($bin, 0, $bytes) !== substr($n, 0, $bytes)) return false;
+        if ($rest === 0) return true;
+        $mask = (0xff << (8 - $rest)) & 0xff;
+        return (ord($bin[$bytes]) & $mask) === (ord($n[$bytes]) & $mask);
     }
 
     private static function resolveUrl(string $base, string $loc): string

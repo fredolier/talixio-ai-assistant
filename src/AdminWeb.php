@@ -105,7 +105,7 @@ final class AdminWeb
         session_save_path($dir);
         session_name('talixio_admin');
         session_set_cookie_params(['lifetime' => 0, 'path' => Config::basePath() . '/', 'httponly' => true, 'samesite' => 'Strict',
-            'secure' => ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https' || !empty($_SERVER['HTTPS'])]);
+            'secure' => Auth::https()]);
         ini_set('session.gc_maxlifetime', '43200');
         session_start();
     }

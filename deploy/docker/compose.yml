@@ -78,6 +78,7 @@ services:
       TALIXIO_AGENT_TOKEN: ${AGENT_TOKEN}
       TALIXIO_ADMIN_DIR: /admin-data
       TALIXIO_BASE_PATH: admin
+      TALIXIO_TRUSTED_PROXIES: private   # only Caddy reaches it
     volumes: [admin-data:/admin-data]
     networks: [control]
     healthcheck: { test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/icon.svg"], interval: 30s }

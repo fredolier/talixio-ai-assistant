@@ -140,7 +140,7 @@ final class Fleet
     public function spec(string $id, array $s, ?string $image = null): array
     {
         $i = $s['instances'][$id]; $set = $s['settings'];
-        $env = ['TALIXIO_BASE_PATH=' . ($set['mode'] === 'path' ? $id : ''), 'TALIXIO_INSTANCE=' . $id, 'TZ=' . ($i['timezone'] ?? 'Europe/Paris'), 'TALIXIO_TIMEZONE=' . ($i['timezone'] ?? 'Europe/Paris')];
+        $env = ['TALIXIO_BASE_PATH=' . ($set['mode'] === 'path' ? $id : ''), 'TALIXIO_INSTANCE=' . $id, 'TZ=' . ($i['timezone'] ?? 'Europe/Paris'), 'TALIXIO_TIMEZONE=' . ($i['timezone'] ?? 'Europe/Paris'), 'TALIXIO_TRUSTED_PROXIES=private']; // only Caddy reaches it, on the private network
         if (!empty($i['password_hash'])) $env[] = 'TALIXIO_INIT_PASSWORD_HASH=' . $i['password_hash']; // written once into the volume, then the person's own
         if (!empty($i['reset'])) $env[] = 'TALIXIO_RESET=' . $i['reset'];                                // a new password or 2-step reset, applied once
         if ($set['ollama']) array_push($env, 'TALIXIO_EMBEDDINGS=ollama', 'TALIXIO_EMBEDDINGS_MODEL=' . $set['ollama_model'], 'TALIXIO_OLLAMA_URL=http://' . self::CADDY . ':11434');

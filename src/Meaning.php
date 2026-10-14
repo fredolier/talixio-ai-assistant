@@ -12,7 +12,7 @@ final class Meaning
     public function __construct(private App $app) {}
 
     /** In the Docker stack: Ollama is shared, its models are downloaded from the admin page. */
-    public static function shared(): bool { return getenv('TALIXIO_INSTANCE') !== false && getenv('TALIXIO_INSTANCE') !== ''; }
+    public static function shared(): bool { return Config::inFleet(); }
 
     public function status(): array
     {

@@ -278,8 +278,8 @@ final class Agent
             $spaces->setForChannel($channel, (int)$to['id']);
             return I18n::t($this->app, 'Now in the space "{name}". "/space general" to come back.', ['name' => $to['name']]);
         }
-        // "yes 12" / "non" answers a pending approval request directly, without a model call
-        if (!$files && ($ans = Approvals::parseReply($text)) !== null) {
+        // "yes 12" / "non" answers a pending approval request directly, without a model call (not by email: a From line is easy to forge)
+        if (!$files && $channel !== 'email' && ($ans = Approvals::parseReply($text)) !== null) {
             $pending = $this->app->approvals()->pending();
             $id = $ans[1] ?? (count($pending) === 1 ? (int)$pending[0]['id'] : null);
             if ($pending && $id !== null) {
@@ -402,7 +402,7 @@ final class Agent
             return $reply;
         } finally {
             $this->app->space = $previousSpace;
-            Privacy::$trace = null; Privacy::$onEvent = null; Privacy::$taint = 0;
+            Privacy::$trace = null; Privacy::$onEvent = null; Privacy::$taint = 0; Privacy::trustAgain();
             flock($lock, LOCK_UN);
             fclose($lock);
         }
@@ -480,6 +480,7 @@ final class Agent
         else $history[] = ['role' => 'user', 'content' => $check];
         $before = (int)$store->q('SELECT COALESCE(MAX(id),0) FROM tool_log')->fetchColumn();
         $tools = fn() => array_column($store->q('SELECT tool FROM tool_log WHERE id > ? ORDER BY id', [$before])->fetchAll(), 'tool');
+        Privacy::trustAgain();
         try {
             [$reply, $meta] = $this->run('heartbeat', 'fast', 'heartbeat', $history);
         } catch (Abort $e) {

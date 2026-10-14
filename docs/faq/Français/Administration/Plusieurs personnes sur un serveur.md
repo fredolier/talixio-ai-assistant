@@ -33,6 +33,10 @@ s'il a été arrêté par manque de mémoire. Dans ce cas, augmentez sa limite (
 
 ## Adresses
 `https://<domaine>/<personne>/` par défaut, ou `https://<personne>.<domaine>/` (il faut alors un DNS en joker).
+Avec une seule adresse, tous les assistants et la page d'administration partagent la même origine web : le
+navigateur ne les sépare pas, et quelqu'un qui peut exécuter du code dans son propre assistant pourrait
+atteindre la session d'une autre personne. Choisissez les **sous-domaines** sauf si tout le monde sur le
+serveur se fait confiance. Sur un serveur partagé, les connecteurs locaux tournent toujours dans le bac à sable.
 
 ## Bon à savoir
 - Chaque assistant est limité (1 Go et 1,5 processeur par défaut) ; Ollama prend jusqu'à 1,5 Go et la moitié des processeurs ; décoché dans les réglages de l'admin, il est arrêté.

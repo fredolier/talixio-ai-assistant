@@ -30,9 +30,7 @@ final class Google
     /** Where Google sends the user back; must be listed in the OAuth client exactly like this. */
     public static function redirectUri(): string
     {
-        $https = ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https' || !empty($_SERVER['HTTPS']);
-        $host = (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? 'localhost');
-        return ($https ? 'https' : 'http') . '://' . preg_replace('/[^A-Za-z0-9.:\[\]-]/', '', $host) . Config::basePath() . '/api/google/callback';
+        return (Auth::https() ? 'https' : 'http') . '://' . (Auth::host() ?: 'localhost') . Config::basePath() . '/api/google/callback';
     }
 
     /** Start: the address of Google's consent page (a one-time state guards the way back). */

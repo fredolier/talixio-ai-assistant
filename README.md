@@ -152,14 +152,17 @@ processing agreement for your own use.
 The web app is password protected (`TALIXIO_WEB_PASSWORD`, generated at install; sessions last 30
 days). At the first sign-in the password is replaced by a hash in `data/settings.json` (the one in
 `talixio.env` is then ignored and can be removed). After 5 wrong passwords in 15 minutes (or 20 in a
-day) an address is blocked for a while and you get a notification; behind a reverse proxy on a private
-address, the client address comes from `X-Forwarded-For`. **Two-step sign-in** (Settings → *Two-step
+day) an address is blocked for a while and you get a notification. The client address and https come from
+`X-Forwarded-For` / `X-Forwarded-Proto` only when the request comes from a trusted proxy:
+`TALIXIO_TRUSTED_PROXIES` (default `loopback`, a proxy on this machine; also `private`, or addresses
+and ranges such as `10.0.0.5, 192.168.1.0/24`). **Two-step sign-in** (Settings → *Two-step
 sign-in*) adds a 6-digit code from an authenticator app. Changing the password signs out other devices.
 Forgot the password: `sudo talixio password`. Lost the phone: `sudo talixio totp off`.
 Shares from other apps (Android share sheet) arriving without a session are limited to 25 MB and
 10 per hour. Chat channels only answer allowlisted senders.
 If your reverse proxy is on another machine, the hop between it and the VM is plain HTTP: bind to
-the VM's private IP (or `0.0.0.0:8080`) and firewall port 8080 to the proxy only.
+the VM's private IP (or `0.0.0.0:8080`), firewall port 8080 to the proxy only, and set
+`TALIXIO_TRUSTED_PROXIES` to the proxy's address in `/etc/talixio/talixio.env`.
 
 ### Install the app (computer and phone)
 Talixio is an installable web app (PWA): its own window and icon, opens instantly (also offline),
@@ -192,8 +195,10 @@ TALIXIO_IMAP_HOST=imap.yourprovider.com    # optional: to chat by email
 - **Notifications** need only SMTP and `TALIXIO_EMAIL_TO`.
 - **Chat by email**: with IMAP set, it checks the mailbox every minute and answers emails from
   `TALIXIO_EMAIL_ALLOWED` (default: your address) in the same thread as the web app. It only trusts
-  mail your provider verified (SPF/DKIM/DMARC in `Authentication-Results`), so forged senders are
-  ignored; set `TALIXIO_EMAIL_REQUIRE_AUTH=0` only if your provider doesn't add that header.
+  mail your provider verified (a DMARC pass, or a DKIM signature of your domain, in the topmost
+  `Authentication-Results`), so forged senders are ignored. Set `TALIXIO_EMAIL_AUTHSERV_ID` to your
+  provider's server name (the first word of that header) to trust no other. Approval requests are never
+  answered by email. Set `TALIXIO_EMAIL_REQUIRE_AUTH=0` only if your provider doesn't add that header.
 - Microsoft 365 mostly disables password login for SMTP/IMAP; it would need OAuth (not supported yet).
 - `sudo talixio doctor` tests the SMTP and IMAP logins.
 
@@ -368,8 +373,10 @@ content-free.
   Linear, Atlassian...; Talixio registers itself, you accept on their page and come back; tokens
   are kept in `data/mcp-oauth.json` and renewed. A service without automatic registration needs
   `"oauth": {"client_id": "…", "client_secret": "…"}` and the redirect URI
-  `<your address>/api/mcp/oauth/callback`). Their tools join the assistant's; tools not marked read-only wait for your approval
-  unless the server has `"trust": "all"`. Background jobs only get the read-only ones.
+  `<your address>/api/mcp/oauth/callback`). Their tools join the assistant's; each waits for your approval until you mark it read-only
+  in Settings (`"read_only": [...]`; what the server claims is only a hint) or the server has `"trust": "all"`.
+  Background jobs only get the read-only ones. Local servers run in the bubblewrap sandbox when it is
+  installed (`"sandbox": false` lets one out, except on a shared Docker server).
   Your own local server installs without SSH: *Install a connector…* takes the address of a public
   GitHub repository (`https://github.com/owner/repo`, or `…/tree/main/folder`) or a `.zip` of its folder
   from the library; Talixio unpacks it in `data/connectors/<name>`, installs its Node dependencies and

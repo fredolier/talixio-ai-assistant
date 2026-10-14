@@ -311,7 +311,7 @@ final class Tools
                 }, function (array $a) {
                     [$start] = self::calendarTimes($a);
                     return "Add to calendar: \"{$a['title']}\", {$a['start']}" . (!empty($a['end']) ? " to {$a['end']}" : '') . (!empty($a['location']) ? " at {$a['location']}" : '')
-                        . Calendar::describe(Calendar::options($a, $start));
+                        . Calendar::describe(Calendar::options($a, $start)) . (!empty($a['description']) ? "\n\n{$a['description']}" : '');
                 });
         }
         if ($app->mailbox()->enabled()) {
@@ -329,7 +329,7 @@ final class Tools
                 ['to' => ['type' => 'string'], 'subject' => ['type' => 'string'], 'body' => ['type' => 'string'], 'reply_to_uid' => ['type' => 'integer'], 'cc' => ['type' => 'string']], ['body'],
                 fn(array $a) => $this->app->mailbox()->send((string)($a['to'] ?? ''), (string)($a['subject'] ?? ''), $a['body'], (int)($a['reply_to_uid'] ?? 0), (string)($a['cc'] ?? '')),
                 fn(array $a) => 'Send email' . (!empty($a['to']) ? " to {$a['to']}" : '') . (!empty($a['reply_to_uid']) ? " (reply to email uid {$a['reply_to_uid']})" : '')
-                    . (!empty($a['subject']) ? ": \"{$a['subject']}\"" : '') . "\n\n" . mb_substr($a['body'], 0, 1500));
+                    . (!empty($a['cc']) ? ", cc {$a['cc']}" : '') . (!empty($a['subject']) ? ": \"{$a['subject']}\"" : '') . "\n\n" . $a['body']);
         }
 
         if ($app->browserAvailable()) {
@@ -652,13 +652,39 @@ final class Tools
             $this->app->store->logTool($name, $args, $gate, $this->app->jobId);
             return $gate;
         }
-        if (isset($this->tools[$name]) && $this->needsApproval($name)) {
-            try { $out = $this->app->approvals()->request($name, $args, ($this->approval[$name])($args)); }
+        $guard = isset($this->tools[$name]) && !$this->needsApproval($name) ? $this->afterUntrusted($name, $args) : null;
+        if (isset($this->tools[$name]) && ($this->needsApproval($name) || $guard !== null)) {
+            try { $out = $this->app->approvals()->request($name, $args, $guard ?? ($this->approval[$name])($args)); }
             catch (\Throwable $e) { $out = 'error: ' . $e->getMessage(); }
             $this->app->store->logTool($name, $args, $out, $this->app->jobId);
             return $out;
         }
         return $this->execute($name, $args);
+    }
+
+    /** Tools whose results are written by others: emails, web pages, search results, connectors. */
+    public static function untrustedSource(string $name): bool
+    {
+        return str_starts_with($name, 'mcp_') || str_starts_with($name, 'browser_') || in_array($name, ['mail_list', 'mail_read', 'mail_triage', 'fetch_url', 'web_search'], true);
+    }
+
+    /**
+     * Once the work has read untrusted content, text planted in it must not act on its own: lasting changes
+     * (memory, skills, routines, filing) and requests to a web address that wasn't in that content (which could carry
+     * the user's data out in the address) wait for the user. Returns the approval summary, or null to run now.
+     */
+    private function afterUntrusted(string $name, array $args): ?string
+    {
+        if (!Privacy::$untrusted) return null;
+        $why = "\n\n(Asked after reading content written by others: an email, a web page or a connector's result.)";
+        $show = fn(array $a) => mb_substr(json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), 0, 3000);
+        if (in_array($name, ['fetch_url', 'browser_open'], true)) {
+            $url = trim((string)($args['url'] ?? ''));
+            return isset(Privacy::$links[$url]) || isset(Privacy::$links[rtrim($url, '/')]) ? null : ($name === 'fetch_url' ? 'Fetch' : 'Open') . " the web address $url$why";
+        }
+        $lasting = ['memory_append', 'memory_replace', 'skill_save', 'skill_delete', 'schedule_task', 'kb_move'];
+        if (in_array($name, $lasting, true) || ($name === 'space_notes' && ($args['action'] ?? 'read') !== 'read')) return "Run $name: " . $show($args) . $why;
+        return null;
     }
 
     /** Runs a tool for real (after approval, or for tools that don't need one). */
@@ -671,6 +697,12 @@ final class Tools
             catch (\Throwable $e) { $out = 'error: ' . $e->getMessage(); } // errors go back to the model
         }
         $this->app->store->logTool($name, $args, $out, $this->app->jobId);
+        if (self::untrustedSource($name) && !str_starts_with($out, 'error:')) { // a refused or failed call read nothing
+            Privacy::$untrusted = true;
+            if (str_starts_with($name, 'mcp_') || str_starts_with($name, 'mail_')) Privacy::$privateRead = true;
+            preg_match_all('#https?://[^\s<>"\'`)\]]+#i', $out, $m);
+            foreach ($m[0] as $u) Privacy::$links[rtrim($u, '.,;:!?')] = true;
+        }
         if ($this->app->notice !== '') { $out .= "\n\n" . $this->app->notice; $this->app->notice = ''; }
         return $out;
     }
@@ -680,7 +712,7 @@ final class Tools
     {
         $i = Browser::get($this->app)->inspect($ref);
         $submits = $enter ? $i['inForm'] : $i['submits'];
-        if (!$submits || ($i['method'] !== 'post' && !$i['password'])) return $act();
+        if (!$submits || ($i['method'] !== 'post' && !$i['password'] && !Privacy::$privateRead)) return $act(); // a GET form can carry emails or connector data out too
         $summary = "Submit a form on the web: \"{$i['label']}\"" . ($i['action'] ? " → {$i['action']}" : '') . ($i['fields'] ? "\nFields: " . implode(', ', array_slice($i['fields'], 0, 12)) : '');
         if (in_array('browser_submit', $this->app->cfg->autoApprove, true)) return $act();
         if (App::$inWorker) { // the worker must stay free to receive the user's answer

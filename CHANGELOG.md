@@ -3,6 +3,34 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.25 (2026-10-14)
+Security release: the High and Medium findings of the code review.
+- **Shares**: a folder holding a Secret space can no longer be shared, and every opening checks each file again
+  (a file moved into a Secret space disappears from links; Confidential needs a password and an end date).
+- **Chat by email**: only mail your provider verified is trusted (DMARC pass or your domain's DKIM in the topmost
+  `Authentication-Results`); `TALIXIO_EMAIL_AUTHSERV_ID` names the only server to believe.
+- **Behind a proxy**: `X-Forwarded-For` / `X-Forwarded-Proto` count only from `TALIXIO_TRUSTED_PROXIES` (default
+  `loopback`), and a global lockout stops password guessing spread over many addresses.
+- **Updates**: the root script keeps its state in `/var/lib/talixio-update`, never in the app's data folder.
+- **Sandbox with internet**: shell commands and scripts count as going outside (approval in Confidential spaces,
+  never in Secret ones).
+- **Chat links**: link text and addresses in Markdown are escaped, so a crafted link in a reply can no longer
+  inject markup or scripts into the page.
+- **Approvals** show the whole email (with cc) or event description, not the first lines.
+- **Address checks** (web fetches, webhooks, connectors) block IPv4-mapped and NAT64 forms of private addresses.
+- **Browser**: all its traffic goes through a small proxy that resolves each host itself and refuses private
+  addresses, so DNS rebinding and WebSockets no longer reach the local network.
+- **After reading untrusted content** (an email, a web page, a connector's result), lasting changes (memory,
+  skills, routines, filing) and fetches of addresses not found in that content wait for your approval. Known limit:
+  the page's own links still open without asking, so a form on it submitted by GET is not stopped.
+- **Connectors**: every tool asks for approval until you mark it read-only (click it in Settings → Connectors; a ?
+  shows what the connector claims, which is only a hint). Local connectors run in a sandbox (bubblewrap) that
+  sees only their own folder; `"sandbox": false` lets one out, except on a shared server.
+- **Transfers**: a code is good for one copy (a test copy and the final one take two codes), and the copy goes
+  over https only (`--allow-http` for a private address on a local network).
+- **Shared servers**: the service worker no longer asks for the whole site, and the admin settings warn that the
+  one-address mode puts everyone on one web origin (subdomains are recommended unless everyone trusts each other).
+
 ## 0.28.24 (2026-10-13)
 - Memory page redesigned like Settings: a side menu (chips on a phone) with one section at a time (Character and
   values, Skills, Scripts, Conversation digest, Memory files), each showing what it holds (beliefs established,

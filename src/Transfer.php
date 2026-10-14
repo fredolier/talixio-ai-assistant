@@ -5,8 +5,9 @@ namespace Talixio;
 /**
  * Moving an assistant to another server, whole: conversations, memory, skills, library, tasks, settings and
  * keys, password. The old server makes a transfer code (Settings → Move to another server); the new one
- * pulls a copy with it (admin page, or `talixio transfer-pull`), as many times as needed. A test copy
- * stays paused (no channels, no routines) so the two never answer the same messages; the final copy
+ * pulls a copy with it (admin page, or `talixio transfer-pull`). A code is good for one copy: a test copy
+ * then the final one take two codes. The copy goes over https only (plain http only to a private address,
+ * with `--allow-http`): the archive holds the keys and the password. A test copy stays paused (no channels, no routines) so the two never answer the same messages; the final copy
  * pauses the old one instead and points it to the new address.
  */
 final class Transfer
@@ -15,7 +16,7 @@ final class Transfer
 
     public function __construct(private App $app) {}
 
-    /** A new code (shown once), valid a day; replaces the previous one. */
+    /** A new code (shown once), valid a day and for one copy; replaces the previous one. */
     public function create(): array
     {
         $code = 'tx-' . bin2hex(random_bytes(20));
@@ -56,6 +57,9 @@ final class Transfer
         $ip = Auth::clientIp();
         if ($auth->lockedFor($ip) > 0) { http_response_code(429); echo 'too many attempts'; return; }
         if (!$this->valid($code)) { $auth->failed($ip); sleep(1); http_response_code(403); echo 'invalid or expired transfer code'; return; }
+        if (!Auth::https() && Http::isPublic($ip)) { http_response_code(403); echo 'a transfer goes over https only'; return; }
+        $saved = $this->app->store->get('transfer_code', '');
+        $this->cancel(); // one copy per code: a second download, even with the code, gets nothing
         $c = $this->app->cfg;
         $tmp = sys_get_temp_dir() . '/talixio-transfer-' . bin2hex(random_bytes(6));
         mkdir($tmp, 0700);
@@ -80,11 +84,11 @@ final class Transfer
         $to = mb_substr(preg_replace('/[^\w.:\/-]/', '', $to), 0, 200);
         $this->app->store->set('transfer_last', json_encode(['ts' => time(), 'ip' => $ip, 'bytes' => $bytes, 'final' => $final, 'ok' => $ok, 'to' => $to]));
         Log::info("transfer: copy of the data sent to $ip ($bytes bytes" . ($final ? ', final' : '') . ($ok ? '' : ', interrupted') . ')');
-        if (!$ok) return;
-        if ($final) { // the new server takes over: this one stops answering and points there
-            $this->app->store->set('paused', json_encode(['reason' => 'moved', 'url' => $to, 'ts' => time()]));
-            $this->cancel();
+        if (!$ok) { // interrupted: the code is still good for one copy, unless a new one was made meanwhile
+            if ($this->app->store->get('transfer_code', '') === '') $this->app->store->set('transfer_code', $saved);
+            return;
         }
+        if ($final) $this->app->store->set('paused', json_encode(['reason' => 'moved', 'url' => $to, 'ts' => time()])); // the new server takes over
         try {
             $this->app->notifier()->notify(I18n::t($this->app, 'Transfer'), $final
                 ? I18n::t($this->app, 'Your assistant was moved to another server ({to}). This one is paused: it no longer answers or runs routines.', ['to' => $to])
@@ -95,13 +99,15 @@ final class Transfer
     /**
      * On the new server, with its services stopped: download the copy into $dataDir/.incoming, check it, then
      * swap (the data that was there is kept in $dataDir/.previous-<date>, the last one only).
-     * $publicUrl: this assistant's new address (links, notifications). Returns a summary line.
+     * $publicUrl: this assistant's new address (links, notifications). $allowHttp: plain http to a private
+     * address (a local network, no certificate). Returns a summary line.
      */
-    public static function pull(string $dataDir, string $source, string $code, bool $final, string $publicUrl = '', ?callable $say = null): string
+    public static function pull(string $dataDir, string $source, string $code, bool $final, string $publicUrl = '', ?callable $say = null, bool $allowHttp = false): string
     {
         $say ??= fn(string $m) => fwrite(STDERR, "$m\n");
         $source = rtrim(trim($source), '/');
-        if (!preg_match('#^https?://[^\s/]+(/[^\s]*)?$#', $source)) throw new \InvalidArgumentException('The source is the old assistant\'s address, e.g. https://assistant.example.com/fred');
+        if (!preg_match('#^https?://([^\s/]+)(/[^\s]*)?$#', $source)) throw new \InvalidArgumentException('The source is the old assistant\'s address, e.g. https://assistant.example.com/fred');
+        self::checkScheme($source, $allowHttp);
         if (!preg_match('/^tx-[0-9a-f]{40}$/', trim($code))) throw new \InvalidArgumentException('The transfer code starts with tx- (Settings → Move to another server, on the old server).');
         $in = "$dataDir/.incoming";
         exec('rm -rf ' . escapeshellarg($in));
@@ -111,6 +117,7 @@ final class Transfer
         $status = 0; $bytes = 0; $last = 0;
         $ch = curl_init("$source/api/transfer/export?" . http_build_query(['final' => $final ? 1 : 0, 'to' => $publicUrl]));
         curl_setopt_array($ch, [CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . trim($code)], CURLOPT_FOLLOWLOCATION => true, CURLOPT_CONNECTTIMEOUT => 20,
+            CURLOPT_REDIR_PROTOCOLS => str_starts_with($source, 'https:') ? CURLPROTO_HTTPS : CURLPROTO_HTTP | CURLPROTO_HTTPS, // never down to http
             CURLOPT_LOW_SPEED_LIMIT => 1, CURLOPT_LOW_SPEED_TIME => 300, CURLOPT_FAILONERROR => false,
             CURLOPT_HEADERFUNCTION => function ($ch, string $h) use (&$status) { if (preg_match('#^HTTP/\S+ (\d+)#', $h, $m)) $status = (int)$m[1]; return strlen($h); },
             CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$status, &$bytes, &$last, $tar, $say) {
@@ -123,7 +130,7 @@ final class Transfer
         $err = curl_error($ch);
         curl_close($ch);
         $tarOk = pclose($tar) === 0;
-        if ($status === 403) throw new \RuntimeException('The old server refused the code: it is wrong, expired (a day), or was replaced by a newer one.');
+        if ($status === 403) throw new \RuntimeException('The old server refused the code: it is wrong, expired (a day), already used for a copy, or was replaced by a newer one.');
         if ($status === 429) throw new \RuntimeException('The old server blocks this address for a while after wrong codes.');
         if ($status !== 200) throw new \RuntimeException("The old server did not answer with a copy (HTTP $status" . ($err ? ", $err" : '') . '). Is the address right, and is it Talixio 0.15 or later?');
         if ($err || !$tarOk) throw new \RuntimeException('The download was interrupted' . ($err ? ": $err" : '') . '. Nothing was changed here; try again.');
@@ -151,5 +158,16 @@ final class Transfer
         rmdir($in);
         return sprintf('Copied: %d messages, %d documents, %d MB.%s', $msgs, $files, $bytes >> 20,
             $final ? ' This is now the assistant; the old server is paused.' : ' This copy is paused (no channels, no routines) until the final transfer, or until you choose "Use this one" in it.');
+    }
+
+    /** https, or plain http to a private address when asked for: the archive holds the keys and the password. */
+    public static function checkScheme(string $source, bool $allowHttp): void
+    {
+        $u = parse_url($source);
+        if (strtolower($u['scheme'] ?? '') === 'https') return;
+        $host = trim((string)($u['host'] ?? ''), '[]');
+        $ips = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : (gethostbynamel($host) ?: []);
+        $private = $ips && !array_filter($ips, [Http::class, 'isPublic']);
+        if (!$allowHttp || !$private) throw new \InvalidArgumentException('The old assistant\'s address must start with https:// (plain http only to a private address, with --allow-http).');
     }
 }

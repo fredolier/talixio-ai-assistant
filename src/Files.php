@@ -425,13 +425,14 @@ final class Files
         return $out;
     }
 
-    /** Zip of a folder and its subfolders, keeping the tree. Returns a temporary file path. */
-    public function zipFolder(string $folder): string
+    /** Zip of a folder and its subfolders, keeping the tree; $only: just these file ids (a shared link's). Returns a temporary file path. */
+    public function zipFolder(string $folder, ?array $only = null): string
     {
         if (!class_exists(\ZipArchive::class)) throw new \RuntimeException('Downloading folders needs php-zip: run sudo ./install.sh again');
         $folder = Library::normalize($folder);
         [$w, $a] = Library::within($folder);
         $rows = $this->app->store->q("SELECT id, name, folder, path, size FROM files WHERE $w AND deleted_at IS NULL ORDER BY folder, name", $a)->fetchAll();
+        if ($only !== null) $rows = array_values(array_filter($rows, fn($r) => in_array((int)$r['id'], $only, true)));
         if (array_sum(array_column($rows, 'size')) > 4_000_000_000) throw new \InvalidArgumentException('This folder is too large to download at once (over 4 GB): download its subfolders.');
         $tmp = tempnam(sys_get_temp_dir(), 'talixio-zip');
         $zip = new \ZipArchive();

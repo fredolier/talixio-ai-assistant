@@ -30,8 +30,8 @@ Everything is done from the app, without an administrator.
 - Just ask: "What tasks do I have open in anki?".
 - The assistant also has **its own task board** (Tasks page). Say "in anki" when it is not
   obvious: otherwise it may use its own board.
-- Tools that change something in anki (create, edit, complete a task) **ask for your
-  approval** in the app. Once you trust it, add `"trust": "all"` to the `anki` entry in
+- Its tools **ask for your approval** in the app until you mark the reading ones (list,
+  search) in Settings → Connectors. Once you trust it, add `"trust": "all"` to the `anki` entry in
   Settings → Connectors → *Configuration*.
 - It also works from the phone, Telegram or Signal: it is the assistant that talks to anki.
 

@@ -42,12 +42,15 @@ Pour un serveur qui n'est pas sur GitHub (ou dans un dépôt privé) :
 - **Mettre à jour** : importez le nouveau `.zip` et réinstallez sous le même nom. Un mot de passe laissé
   vide garde l'ancien.
 - **Supprimer** : retirez son entrée dans *Configuration*, puis *Enregistrer et connecter*.
-- Les outils qui modifient quelque chose **demandent votre validation**, sauf si vous ajoutez
-  `"trust": "all"` à son entrée.
+- Chaque outil **demande votre validation** tant que vous n'en décidez pas autrement : dans Réglages →
+  Connecteurs, cliquez un outil qui ne fait que lire (un `?` marque ceux que le connecteur dit en lecture
+  seule) pour qu'il tourne sans demander, et dans les tâches de fond ; ou ajoutez `"trust": "all"` à son
+  entrée pour faire confiance à tous ses outils.
 - Les réglages (mot de passe compris) sont gardés dans `data/mcp.json`, dans votre assistant : ils font
   partie des sauvegardes et des transferts. Un compte dédié est préférable.
-- Le connecteur tourne dans votre assistant (sous Docker, dans votre conteneur) avec les mêmes droits que
-  lui : n'installez que du code dont vous connaissez l'origine.
+- Le connecteur tourne dans un bac à sable quand bubblewrap est installé (toujours sous Docker) : il voit
+  son propre dossier, les programmes du système et le réseau, pas vos documents, vos e-mails ni vos clés.
+  Il atteint toutefois ce que ses réglages lui donnent : n'installez que du code dont vous connaissez l'origine.
 - Un projet TypeScript qui doit être compilé l'est (`npm run build`) si le paquet n'a pas de fichier prêt.
 - Python : seuls les serveurs sans dépendances à installer sont pris en charge pour l'instant.
 

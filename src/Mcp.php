@@ -8,9 +8,12 @@ namespace Talixio;
  *   {"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_TOKEN": "..."}},
  *                   "notes":  {"url": "https://example.com/mcp", "headers": {"Authorization": "Bearer ..."}, "trust": "all"},
  *                   "notion": {"url": "https://mcp.notion.com/mcp"}}}          (OAuth: "Sign in" in Settings, see McpOAuth)
- * Local servers (command) are started for each call; remote ones (url) use Streamable HTTP. Their tool lists
- * are cached (refreshed by the worker, or from Settings). Tools not marked read-only wait for your approval,
- * unless the server has "trust": "all". Tools are named mcp_<server>_<tool>.
+ * Local servers (command) are started for each call, in the sandbox (bubblewrap) when it is installed: they see the
+ * system programs, their own folder and the files named on their command line, not the rest of the server or its data
+ * ("sandbox": false lets one out, never on a shared server). Remote ones (url) use Streamable HTTP. Tool lists are
+ * cached (refreshed by the worker, or from Settings). Every tool waits for your approval unless you marked it as only
+ * reading ("read_only": ["list_tasks", ...], from Settings) or the server has "trust": "all"; what a server says about
+ * its own tools is only shown as a hint. Tools are named mcp_<server>_<tool>.
  */
 final class Mcp
 {
@@ -87,11 +90,12 @@ final class Mcp
         foreach ($this->cache() as $server => $info) {
             if (!isset($servers[$server])) continue;
             $trustAll = ($servers[$server]['trust'] ?? '') === 'all';
+            $reads = array_map('strval', (array)($servers[$server]['read_only'] ?? []));
             foreach ($info['tools'] ?? [] as $t) {
                 $name = self::toolName($server, (string)$t['name']);
                 $schema = is_array($t['inputSchema'] ?? null) ? $t['inputSchema'] : ['type' => 'object'];
-                $readOnly = self::readOnly($t);
                 $remote = (string)$t['name'];
+                $readOnly = in_array($remote, $reads, true);
                 $tools->register($name, "[$server] " . mb_substr(trim((string)($t['description'] ?? $t['title'] ?? $remote)), 0, 1500),
                     (array)($schema['properties'] ?? []), array_values((array)($schema['required'] ?? [])),
                     fn(array $a) => $this->call($server, $remote, $a),
@@ -101,16 +105,34 @@ final class Mcp
         }
     }
 
-    /**
-     * A tool that only reads: says so (readOnlyHint), or, when the server says nothing, is named like it
-     * (list_tasks, getNotes, search…). Those run without asking; the others wait for the user's approval.
-     */
-    public static function readOnly(array $t): bool
+    /** The server says the tool only reads (readOnlyHint): shown as a hint in Settings, never trusted by itself. */
+    public static function saysReadOnly(array $t): bool
     {
-        $a = is_array($t['annotations'] ?? null) ? $t['annotations'] : [];
-        if (array_key_exists('readOnlyHint', $a)) return (bool)$a['readOnlyHint'];
-        if (!empty($a['destructiveHint'])) return false;
-        return (bool)preg_match('/^(list|get|search|find|read|show|view|count|describe|query|lookup|fetch)(_|-|[A-Z]|$)/', (string)($t['name'] ?? ''));
+        return !empty($t['annotations']['readOnlyHint']) && empty($t['annotations']['destructiveHint']);
+    }
+
+    /** Mark a tool as only reading (runs without asking, offered to background jobs), or not any more. */
+    public function setReadOnly(string $server, string $tool, bool $on): void
+    {
+        $d = json_decode($this->raw(), true);
+        foreach ((array)($d['mcpServers'] ?? []) as $key => $s) {
+            if (preg_replace('/[^a-z0-9]+/', '_', strtolower((string)$key)) !== $server || !is_array($s)) continue;
+            $reads = array_values(array_diff(array_map('strval', (array)($s['read_only'] ?? [])), [$tool]));
+            if ($on) $reads[] = $tool;
+            if ($reads) $d['mcpServers'][$key]['read_only'] = $reads; else unset($d['mcpServers'][$key]['read_only']);
+            $this->saveRaw(json_encode($d));
+            return;
+        }
+        throw new \InvalidArgumentException("no connector $server");
+    }
+
+    /** Runs in the sandbox: always on a shared server, otherwise when bubblewrap is installed, unless "sandbox": false. */
+    public static function sandboxed(array $s): bool
+    {
+        if (isset($s['url'])) return false;
+        $can = Shell::binary() !== null;
+        if (Config::inFleet() && !$can) throw new \RuntimeException('local connectors need the sandbox (bubblewrap) on a shared server');
+        return $can && (Config::inFleet() || ($s['sandbox'] ?? true) !== false);
     }
 
     public static function toolName(string $server, string $tool): string
@@ -170,16 +192,52 @@ final class Mcp
         @unlink($failed);
     }
 
+    /** A local server's own home folder (its caches, its settings), the only place it keeps things besides its own folder. */
+    private function homeOf(array $s): string
+    {
+        $d = $this->app->cfg->dataDir . '/connectors-home/' . ($s['_name'] ?? 'server');
+        if (!is_dir($d)) mkdir($d, 0700, true);
+        return $d;
+    }
+
+    /**
+     * The bubblewrap command line for a local server: system programs read-only, network on (connectors talk to
+     * services), its folder and home writable, the files named on its command line read-only; the rest of the
+     * data folder (keys, mail, documents) out of sight.
+     */
+    public function sandboxArgv(array $cmd, string $cwd, string $home, array $env, bool $browsers = false): array
+    {
+        $a = [Shell::binary(), '--die-with-parent', '--new-session', '--unshare-all', '--share-net',
+            '--ro-bind', '/usr', '/usr', '--ro-bind-try', '/opt', '/opt', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/dev/shm', '--tmpfs', '/tmp'];
+        foreach (['bin', 'lib', 'lib64', 'sbin'] as $l) if (is_link("/$l")) array_push($a, '--symlink', "usr/$l", "/$l");
+        foreach (['/etc/alternatives', '/etc/ssl', '/etc/ca-certificates', '/etc/fonts', '/etc/localtime', '/etc/mime.types', '/etc/passwd', '/etc/group',
+                  '/etc/resolv.conf', '/etc/hosts', '/etc/nsswitch.conf', '/etc/gai.conf', '/etc/php', '/etc/python3'] as $e) array_push($a, '--ro-bind-try', $e, $e);
+        $data = rtrim($this->app->cfg->dataDir, '/') . '/';
+        $writable = array_unique([$home, $cwd]);
+        foreach ($writable as $d) if (!str_starts_with($data, rtrim($d, '/') . '/')) array_push($a, '--bind', $d, $d); // never a folder holding the data folder
+        if ($browsers) array_push($a, '--ro-bind-try', ConnectorPackage::browsers($this->app->cfg->dataDir), ConnectorPackage::browsers($this->app->cfg->dataDir));
+        foreach ($cmd as $part) { // a script given by its path (node /opt/x/server.js): visible, read-only; never something of the data folder
+            if ($part === '' || $part[0] !== '/' || !is_file($part) || str_starts_with($part, $data) || str_starts_with($part, '/usr/')) continue;
+            array_push($a, '--ro-bind', $part, $part);
+        }
+        array_push($a, '--chdir', $cwd, '--clearenv');
+        foreach ($env as $k => $v) array_push($a, '--setenv', (string)$k, (string)$v);
+        return array_merge($a, $cmd);
+    }
+
     private function stdio(array $s, string $method, array|object $params, int $timeout): array
     {
-        $env = ['PATH' => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin', 'HOME' => getenv('HOME') ?: $this->app->cfg->dataDir, 'LANG' => 'C.UTF-8'];
+        $sandbox = self::sandboxed($s);
+        $home = $sandbox ? $this->homeOf($s) : (getenv('HOME') ?: $this->app->cfg->dataDir);
+        $env = ['PATH' => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin', 'HOME' => $home, 'LANG' => 'C.UTF-8'];
         if (isset($s['source']['library_file'])) $env['PLAYWRIGHT_BROWSERS_PATH'] = ConnectorPackage::browsers($this->app->cfg->dataDir);
         foreach ((array)($s['env'] ?? []) as $k => $v) $env[(string)$k] = (string)$v;
         $cmd = array_merge([(string)$s['command']], array_map('strval', (array)($s['args'] ?? [])));
         $err = tempnam(sys_get_temp_dir(), 'mcp');
         $cwd = (string)($s['cwd'] ?? ''); // relative: inside the data folder (connectors installed from the library)
-        $cwd = $cwd === '' ? $this->app->cfg->dataDir : ($cwd[0] === '/' ? $cwd : $this->app->cfg->dataDir . '/' . $cwd);
+        $cwd = $cwd === '' ? ($sandbox ? $home : $this->app->cfg->dataDir) : ($cwd[0] === '/' ? $cwd : $this->app->cfg->dataDir . '/' . $cwd);
         if (isset($s['source']['library_file']) && $method === 'tools/call') $this->browserFor($cwd);
+        if ($sandbox) $cmd = $this->sandboxArgv($cmd, $cwd, $home, $env, isset($s['source']['library_file']));
         $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $err, 'w']], $pipes, $cwd, $env);
         if (!is_resource($proc)) throw new \RuntimeException("could not start {$s['command']}");
         try {

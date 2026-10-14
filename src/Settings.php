@@ -141,7 +141,7 @@ final class Settings
             ]],
             'shell' => ['Sandboxed shell', 'A Linux sandbox for the assistant (bubblewrap, installed with install.sh --with-shell): it runs commands and Python to compute, convert or analyse files. It sees only the system programs and its own work folder, not your server, data or keys.', [
                 ['TALIXIO_SHELL', 'Commands', 'select', '"Ask me" shows each command and waits for your approval (in the app, or "yes N" in a chat).', ['off' => 'off', 'ask' => 'ask me before each command', 'auto' => 'run without asking (sandboxed)']],
-                ['TALIXIO_SHELL_NETWORK', 'Internet access in the sandbox', 'bool', 'To install Python packages (pip) or download data. Off is safer.'],
+                ['TALIXIO_SHELL_NETWORK', 'Internet access in the sandbox', 'bool', 'To install Python packages (pip) or download data. Off is safer: with it on, a command can send out what it reads, so commands count as going outside (approval in Confidential spaces, never in Secret ones).'],
                 ['TALIXIO_SHELL_TIMEOUT', 'Time limit per command (seconds)', 'number', ''],
             ]],
             'learning' => ['Learning', 'What the assistant learns by itself from your history.', [

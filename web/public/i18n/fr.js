@@ -1683,7 +1683,7 @@ window.I18N.fr = {
 "Reading a web page": "Lecture d'une page web",
 "Move to another server": "Déménager vers un autre serveur",
 "Create a transfer code": "Créer un code de transfert",
-"Everything goes: conversations, memory, skills, library, tasks, settings and keys, password. On the new server, the administrator chooses <b>From another server</b> on the admin page (or runs <code>sudo talixio transfer-pull</code>) with this assistant's address and the code. Test copies stay paused there; the final one pauses this assistant. The code works for a day.": "Tout part : conversations, mémoire, compétences, bibliothèque, tâches, réglages et clés, mot de passe. Sur le nouveau serveur, l'administrateur choisit <b>Depuis un autre serveur</b> dans la page d'administration (ou lance <code>sudo talixio transfer-pull</code>) avec l'adresse de cet assistant et le code. Les copies d'essai y restent en pause ; la copie finale met cet assistant en pause. Le code est valable un jour.",
+"Everything goes: conversations, memory, skills, library, tasks, settings and keys, password. On the new server, the administrator chooses <b>From another server</b> on the admin page (or runs <code>sudo talixio transfer-pull</code>) with this assistant's address and the code. Test copies stay paused there; the final one pauses this assistant. Each code works for one copy, within a day.": "Tout part : conversations, mémoire, compétences, bibliothèque, tâches, réglages et clés, mot de passe. Sur le nouveau serveur, l'administrateur choisit <b>Depuis un autre serveur</b> dans la page d'administration (ou lance <code>sudo talixio transfer-pull</code>) avec l'adresse de cet assistant et le code. Les copies d'essai y restent en pause ; la copie finale met cet assistant en pause. Chaque code vaut pour une copie, dans la journée.",
 "Give these two to the new server (the code is shown only now):": "Donnez ces deux informations au nouveau serveur (le code n'est affiché que maintenant) :",
 "Address": "Adresse",
 "Code": "Code",
@@ -1711,7 +1711,7 @@ window.I18N.fr = {
 "Identifier here (lower case, e.g. fred)": "Identifiant ici (minuscules, ex. fred)",
 "<b>Final move</b>: this becomes the assistant, the old one is paused and points here": "<b>Déménagement définitif</b> : celui-ci devient l'assistant, l'ancien est mis en pause et renvoie ici",
 "On the old server, in that assistant: <b>Settings → Move to another server → Create a transfer code</b>. Everything comes: conversations, memory, skills, library, tasks, settings and keys, password.": "Sur l'ancien serveur, dans cet assistant : <b>Réglages → Déménager vers un autre serveur → Créer un code de transfert</b>. Tout vient : conversations, mémoire, compétences, bibliothèque, tâches, réglages et clés, mot de passe.",
-"A test copy stays paused (no channels, no routines) so that the two never answer the same messages; copy again as often as you like, an existing identifier gets the fresh copy. The final copy pauses the old one instead.": "Une copie d'essai reste en pause (ni canaux ni routines) pour que les deux ne répondent jamais aux mêmes messages ; recopiez autant que vous voulez, un identifiant existant reçoit la nouvelle copie. La copie finale met au contraire l'ancien en pause.",
+"A test copy stays paused (no channels, no routines) so that the two never answer the same messages; copy again as often as you like (a new code each time), an existing identifier gets the fresh copy. The final copy pauses the old one instead.": "Une copie d'essai reste en pause (ni canaux ni routines) pour que les deux ne répondent jamais aux mêmes messages ; recopiez autant que vous voulez (un nouveau code à chaque fois), un identifiant existant reçoit la nouvelle copie. La copie finale met au contraire l'ancien en pause.",
 "Server": "Serveur",
 "Well sized": "Bien dimensionné",
 "Tight": "Juste",
@@ -2311,5 +2311,11 @@ window.I18N.fr = {
 "not started": "pas encore commencé",
 "{n} month(s)": "{n} mois",
 "{n} week(s)": "{n} semaine(s)",
-"{n} summary(ies)": "{n} résumé(s)"
+"{n} summary(ies)": "{n} résumé(s)",
+"To install Python packages (pip) or download data. Off is safer: with it on, a command can send out what it reads, so commands count as going outside (approval in Confidential spaces, never in Secret ones).": "Pour installer des paquets Python (pip) ou télécharger des données. Désactivé est plus sûr : activé, une commande peut envoyer ce qu'elle lit, donc les commandes comptent comme une sortie (validation dans les espaces Confidentiels, jamais dans les Secrets).",
+"the connector says it only reads": "le connecteur dit qu'il ne fait que lire",
+"Runs without the sandbox: it can read everything this server can.": "Tourne hors du bac à sable : il peut lire tout ce que ce serveur peut lire.",
+"✋ asks for your approval before running. Click a tool that only reads to let it run without asking (and in background tasks); ? marks the ones the connector says only read.": "✋ demande votre validation avant de s'exécuter. Cliquez un outil qui ne fait que lire pour qu'il tourne sans demander (et dans les tâches de fond) ; ? marque ceux que le connecteur dit en lecture seule.",
+"sandboxed": "bac à sable",
+"With one address, every assistant and this admin page share one web origin: someone who can run code in their own assistant could reach the others' sessions. Choose <b>Subdomains</b> unless everyone on this server trusts each other.": "Avec une seule adresse, tous les assistants et cette page d'administration partagent la même origine web : quelqu'un qui peut exécuter du code dans son propre assistant pourrait atteindre les sessions des autres. Choisissez <b>Sous-domaines</b> sauf si tout le monde sur ce serveur se fait confiance."
 };

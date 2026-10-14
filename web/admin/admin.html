@@ -69,6 +69,7 @@
         <label>Domain<input id="st-domain" placeholder="assistant.example.com"></label>
         <label class="check"><input type="radio" name="mode" value="path"> <span><b>One address</b>: assistant.example.com/<i>person</i>/ (no DNS change)</span></label>
         <label class="check"><input type="radio" name="mode" value="subdomain"> <span><b>Subdomains</b>: <i>person</i>.assistant.example.com (needs a DNS record <code>*.assistant.example.com</code> pointing to this server; certificates come at the first visit)</span></label>
+        <p class="muted small">With one address, every assistant and this admin page share one web origin: someone who can run code in their own assistant could reach the others' sessions. Choose <b>Subdomains</b> unless everyone on this server trusts each other.</p>
         <p class="muted small">Changing these restarts every assistant (a few seconds). People keep their data; their app must be opened at the new address (and installed again on phones).</p>
       </fieldset>
       <fieldset><legend>New assistants get</legend>

@@ -42,12 +42,14 @@ For a server that is not on GitHub (or in a private repository):
 - **Update**: upload the new `.zip` and reinstall under the same name. A password left
   empty keeps the old one.
 - **Remove**: delete its entry in *Configuration*, then *Save and connect*.
-- Tools that change something **ask for your approval**, unless you add
-  `"trust": "all"` to its entry.
+- Every tool **asks for your approval** until you say otherwise: in Settings → Connectors, click a
+  tool that only reads (a `?` marks those the connector says only read) to let it run without asking,
+  and in background tasks; or add `"trust": "all"` to its entry to trust all its tools.
 - The settings (password included) are kept in `data/mcp.json`, in your assistant: they are
   part of backups and transfers. A dedicated account is better.
-- The connector runs inside your assistant (under Docker, in your container) with the same rights as
-  the assistant: only install code whose origin you know.
+- The connector runs in a sandbox when bubblewrap is installed (always under Docker): it sees its own
+  folder, the system programs and the network, not your documents, mail or keys. Still, it can reach
+  what its settings give it: only install code whose origin you know.
 - A TypeScript project that needs building is built (`npm run build`) if the package has no ready-made file.
 - Python: only servers with no dependencies to install are supported for now.
 

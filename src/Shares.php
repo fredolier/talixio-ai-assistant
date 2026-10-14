@@ -37,6 +37,7 @@ final class Shares
         $pw = (string)($o['password'] ?? '');
         if ($pw !== '' && mb_strlen($pw) < 4) throw new \InvalidArgumentException('The password needs at least 4 characters.');
         $level = $this->app->privacy()->folderLevel($folder ?? (string)$f['folder']);
+        if ($folder !== null && $this->secretInside($folder)) throw new \InvalidArgumentException('A Secret space is inside this folder: it cannot be shared outside.');
         if ($level === 'secret') throw new \InvalidArgumentException('This belongs to a Secret space: it cannot be shared outside.');
         if ($level === 'confidential') {
             if ($pw === '') throw new \InvalidArgumentException('This belongs to a Confidential space: a password is required.');
@@ -146,16 +147,38 @@ final class Shares
         return $s;
     }
 
-    /** The files a link opens (one, or the folder's with their subfolders), by id. */
+    /**
+     * The files a link opens (one, or the folder's with their subfolders), by id. Checked at every opening, not
+     * only when the link was made: a file moved since into a Secret space never shows, and one in a Confidential
+     * space only through a link with a password and an end date.
+     */
     public function files(array $s): array
     {
-        if ($s['file_id']) { $f = $this->app->files()->get((int)$s['file_id']); return $f ? [(int)$f['id'] => $f] : []; }
-        [$w, $a] = Library::within((string)$s['folder']);
+        $ids = $s['file_id'] ? [(int)$s['file_id']] : [];
+        if (!$s['file_id']) {
+            [$w, $a] = Library::within((string)$s['folder']);
+            $ids = array_map('intval', array_column($this->app->store->q("SELECT id FROM files WHERE $w ORDER BY folder, name COLLATE NOCASE", $a)->fetchAll(), 'id'));
+        }
+        $privacy = $this->app->privacy();
         $out = [];
-        foreach ($this->app->store->q("SELECT id FROM files WHERE $w ORDER BY folder, name COLLATE NOCASE", $a)->fetchAll() as $r) {
-            if ($f = $this->app->files()->get((int)$r['id'])) $out[(int)$f['id']] = $f;
+        foreach ($ids as $id) {
+            $f = $this->app->files()->get($id);
+            if (!$f) continue;
+            $level = $privacy->folderLevel((string)$f['folder']);
+            if ($level === 'secret' || $level === 'confidential' && ($s['password'] === null || !$s['expires'])) continue;
+            $out[$id] = $f;
         }
         return $out;
+    }
+
+    /** Is a Secret space's folder inside this one (or this one)? */
+    private function secretInside(string $folder): bool
+    {
+        $in = rtrim($folder, '/') . '/';
+        foreach ($this->app->privacy()->strictSpaces() as $sp) {
+            if ($sp['privacy'] === 'secret' && $sp['folder'] !== '' && ($sp['folder'] === $folder || str_starts_with($sp['folder'], $in))) return true;
+        }
+        return false;
     }
 
     /** Does this visitor have the password (a cookie set after typing it)? */
@@ -176,7 +199,7 @@ final class Shares
         if (!password_verify($password, (string)$s['password'])) { $st->set($key, ($n + 1) . ":$since"); return false; }
         $st->set($key, '0:0');
         setcookie($this->cookieName($s), $this->cookieValue($s), ['expires' => time() + 7 * 86400, 'path' => Config::basePath() . '/s/' . $s['token'],
-            'httponly' => true, 'samesite' => 'Lax', 'secure' => ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https' || !empty($_SERVER['HTTPS'])]);
+            'httponly' => true, 'samesite' => 'Lax', 'secure' => Auth::https()]);
         return true;
     }
 
@@ -217,10 +240,9 @@ final class Shares
 
     public static function remember(App $app): void
     {
-        $https = ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https' || !empty($_SERVER['HTTPS']);
-        $host = preg_replace('/[^A-Za-z0-9.:\[\]-]/', '', (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? ''));
+        $host = Auth::host();
         if ($host === '') return;
-        $url = ($https ? 'https' : 'http') . "://$host" . Config::basePath();
+        $url = (Auth::https() ? 'https' : 'http') . "://$host" . Config::basePath();
         if ($app->store->get('public_url') !== $url) $app->store->set('public_url', $url);
     }
 

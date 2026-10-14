@@ -30,8 +30,8 @@ Tout se fait depuis l'app, sans administrateur.
 - Demandez simplement : « Quelles tâches ai-je ouvertes dans anki ? ».
 - L'assistant a aussi **son propre tableau de tâches** (page Tâches). Dites « dans anki » quand ce n'est pas
   évident : sinon il peut utiliser son tableau à lui.
-- Les outils qui modifient quelque chose dans anki (créer, changer, terminer une tâche) **demandent votre
-  validation** dans l'app. Une fois en confiance, ajoutez `"trust": "all"` à l'entrée `anki` dans
+- Ses outils **demandent votre validation** dans l'app tant que vous n'avez pas marqué ceux qui lisent
+  (lister, chercher) dans Réglages → Connecteurs. Une fois en confiance, ajoutez `"trust": "all"` à l'entrée `anki` dans
   Réglages → Connecteurs → *Configuration*.
 - Ça marche aussi depuis le téléphone, Telegram ou Signal : c'est l'assistant qui parle à anki.
 

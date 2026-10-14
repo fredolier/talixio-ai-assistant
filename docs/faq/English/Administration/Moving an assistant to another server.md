@@ -5,8 +5,8 @@ two-step sign-in, Signal registration.
 
 ## 1. On the old server, in the assistant
 Settings → **Move to another server** → *Create a transfer code*. Note the assistant's
-address and the code (`tx-…`): it is shown only once and works for 24 hours (a new code
-replaces the old one; *Cancel it* turns it off). The old server must run version 0.15 or later.
+address and the code (`tx-…`): it is shown only once and works for 24 hours and **one copy**
+(a new code replaces the old one; *Cancel it* turns it off). The old server must run version 0.15 or later.
 
 ## 2. On the new server
 - **Docker**: admin page → People → **From another server**: the address, the code,
@@ -17,8 +17,8 @@ replaces the old one; *Cancel it* turns it off). The old server must run version
 ## Test copy, then final copy
 - A **test copy** arrives **paused**: no Telegram, Signal, email, routines or reminders, so that
   the two assistants never answer the same messages. You can open it and check it. Copy again
-  as many times as needed: each copy replaces the previous one.
-- The **final copy** (*Final move* box, or `--final`): the new assistant is active, and
+  as many times as needed, with a new code each time: each copy replaces the previous one.
+- The **final copy** (a new code, *Final move* box, or `--final`): the new assistant is active, and
   the old one **pauses** itself and shows the new address.
 - A test copy can also become the assistant with *Use this one* (pause the old one first).
 
@@ -29,5 +29,7 @@ replaces the old one; *Cancel it* turns it off). The old server must run version
 - Data that was previously in the destination assistant is kept in `.previous-<date>` (the latest one only).
 
 ## Security
-The code gives access to all the data: only pass it on through a safe channel. After 5 wrong codes,
+The code gives access to all the data: only pass it on through a safe channel. The copy travels over
+**https** only. On a local network without a certificate, the simple install accepts `http://` to a
+private address with `--allow-http`; a public address is always refused over http. After 5 wrong codes,
 the address trying them is blocked for a while, and you are notified of every copy.

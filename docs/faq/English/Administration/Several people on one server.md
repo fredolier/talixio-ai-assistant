@@ -33,6 +33,10 @@ whether it was stopped for lack of memory. If so, raise its limit (Actions → M
 
 ## Addresses
 `https://<domain>/<person>/` by default, or `https://<person>.<domain>/` (this needs a wildcard DNS record).
+With one address, every assistant and the admin page share one web origin, so the browser does not
+keep them apart: someone who can run code in their own assistant could reach another person's session.
+Choose **subdomains** unless everyone on the server trusts each other. Local connectors always run in
+the sandbox on a shared server.
 
 ## Good to know
 - Each assistant is limited (1 GB and 1.5 processors by default); Ollama takes up to 1.5 GB and half the processors; unticked in the admin settings, it is stopped.
