@@ -3,6 +3,24 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.27 (2026-10-14)
+Test coverage release: the test suite now runs 97% of the code's lines and 88% of its branches (was 81% / 69%).
+- **New tests** in `tests/more/`, run by `tests/run.php` after the main suite: `content.php` (previews, privacy,
+  files, Markdown, 123 checks), `fleet.php` (fleet, admin, Claude sign-in, 129), `tools.php` (tools, agent, mind,
+  search, Telegram, 248), `web1.php` and `web2.php` (web API, WebDAV, shares, 154 + 235), `misc.php` (worker, CLI,
+  Spotify, board, European provider, transcription, doctor, browser proxy, config, connector packages, updates, 247).
+  Shared helpers (`check`, `web_app`, `FakeModel`, ports, temp folders) moved to `tests/helpers.php`.
+- **WebDAV on Linux**: `deploy/mount-webdav-linux.sh` checks for FUSE first and explains what to do on WSL.
+- **Fixes found by the new tests**:
+  - Email previews drop the text inside `<script>`, `<style>`, `<head>` and `<title>`, not only the tags.
+  - OpenDocument list items with several paragraphs keep them all.
+  - Front matter with `#` comment lines is read correctly.
+  - The privacy log names a call "Ollama" only when both host and port match.
+  - Fleet transfer progress names the instance and the source server; an update records the previous image only
+    when there was one.
+  - Invalid settings and European provider keys answer 422, so the page shows the field errors.
+  - Connector package inspection blanks secret values by variable name (`*PASS*`, `*SECRET*`, `*TOKEN*`, `*KEY*`).
+
 ## 0.28.26 (2026-10-14)
 Security release, second part: the Low findings of the code review, and some tidying.
 - **Shared to the app** (Android share sheet): a share belongs to the browser that sent it (its own cookie), so a
