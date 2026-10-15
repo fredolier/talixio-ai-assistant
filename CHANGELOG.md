@@ -3,6 +3,16 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.41 (2026-10-15)
+
+- **Real costs from the provider** (Anthropic, OpenAI): with an Admin key (Settings → AI model → Budget, or *Real
+  costs* in an AI account), the assistant reads what the provider really billed each day, every 6 hours, optionally
+  for one workspace or project. Billed days replace the estimates in the budget, today's estimate is corrected from
+  the last 30 days, and no bill is asked for. Activity lists each source with what it billed this month and a *Sync
+  now* button; a refused key says so and keeps the days already read. Usage now records which settings made it, so
+  each source is compared with its own estimates. Admin keys stay on the server, are never sent back to the browser
+  and are removed from Claude Code's environment. Mistral and Gemini keep the estimates and the bills you enter.
+
 ## 0.28.40 (2026-10-15)
 
 - **One sign-in across a person's assistants** (several people on one server): on the admin page, link a person's

@@ -12,6 +12,10 @@ final class I18n
     public const LANGS = ['en', 'fr'];
 
     private const FR = [
+        'Past days use what the provider really billed; today\'s estimates are corrected ×{factor} from the last 30 days.' => 'Les jours passés utilisent ce que le fournisseur a réellement facturé ; les estimations du jour sont corrigées ×{factor} d\'après les 30 derniers jours.',
+        'Real costs read from the provider: {list}.' => 'Coûts réels lus chez le fournisseur : {list}.',
+        '{name} billed ${usd} this month' => '{name} a facturé {usd} $ ce mois-ci',
+        '{name}: not read ({error})' => '{name} : non lu ({error})',
         'Costs are estimated from list prices; no real bill reported yet.' => 'Les coûts sont estimés à partir des prix publics ; aucune facture réelle saisie pour l\'instant.',
         'Estimates are corrected ×{factor}, from the last {n} bills you reported.' => 'Les estimations sont corrigées ×{factor}, d\'après les {n} dernières factures saisies.',
         'Estimates are corrected ×{factor}, from the bill you reported.' => 'Les estimations sont corrigées ×{factor}, d\'après la facture saisie.',

@@ -101,7 +101,12 @@ final class App
     public function agent(): Agent { return new Agent($this); }
     public function jobs(): Jobs { return new Jobs($this); }
     public function recall(): Recall { return new Recall($this->store, $this->embeddings, $this); }
-    public function budget(): Budget { return new Budget($this->store, $this->cfg->budgetDaily, $this->cfg->budgetMonthly, $this->calibration()->factor()); }
+    public function budget(): Budget
+    {
+        $b = $this->billing();
+        return new Budget($this->store, $this->cfg->budgetDaily, $this->cfg->budgetMonthly, $this->calibration()->factor(), fn(int $from, int $to) => $b->adjust($from, $to));
+    }
+    public function billing(): Billing { return new Billing($this); }
     public function calibration(): Calibration { return new Calibration($this); }
     public function pricing(): Pricing { return new Pricing($this->cfg->prices, $this->cfg->localModels() || $this->cfg->provider === 'echo'); }
     public function notifier(): Notifier { return new Notifier($this); }

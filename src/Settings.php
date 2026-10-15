@@ -51,6 +51,10 @@ final class Settings
                 ['TALIXIO_JOB_MAX_USD_LIMIT', 'Highest cap for one job ($)', 'number', 'When you ask for a bigger job ("budget 5 $"), the assistant may raise its cap up to this.'],
                 ['TALIXIO_JOB_EFFORT', 'Effort of background jobs', 'select', 'Default; can be chosen per job. Higher: deeper thinking and more steps (low 15, medium 30, high 60, xhigh 100, max 200), so longer and more expensive.', ['low' => 'low', 'medium' => 'medium', 'high' => 'high', 'xhigh' => 'very high', 'max' => 'max']],
                 ['TALIXIO_PRICES', 'Custom prices', 'text', 'pattern=input/output per million tokens, e.g. sonnet=3/15,gemini-3.8-flash=0.75/3.75'],
+                ['ANTHROPIC_ADMIN_KEY', 'Anthropic Admin key (real costs)', 'secret', 'Optional. An Admin key (sk-ant-admin…, from the Console, Settings → Admin keys) lets Talixio read what Anthropic really billed each day, instead of estimating. It is never used for the model.'],
+                ['ANTHROPIC_WORKSPACE_ID', 'Anthropic workspace', 'text', 'Optional: only count this workspace (wrkspc_…). Empty = the whole organization.'],
+                ['OPENAI_ADMIN_KEY', 'OpenAI Admin key (real costs)', 'secret', 'Optional. An Admin key (platform.openai.com, Organization → Admin keys) lets Talixio read what OpenAI really billed each day.'],
+                ['OPENAI_PROJECT_ID', 'OpenAI project', 'text', 'Optional: only count this project (proj_…). Empty = the whole organization.'],
             ]],
             'notify' => ['Notifications', 'Where the assistant reaches you (reminders, briefings, job results, approvals).', [
                 ['TALIXIO_NOTIFY', 'Channels used', 'multi', 'Only configured channels are used.', ['webpush' => 'App notifications', 'email' => 'Email', 'signal' => 'Signal', 'telegram' => 'Telegram', 'ntfy' => 'ntfy']],
@@ -180,7 +184,7 @@ final class Settings
     public const ADVANCED = [
         'TALIXIO_HISTORY_MESSAGES', 'TALIXIO_HISTORY_TOKENS',
         'TALIXIO_SOVEREIGN_URL', 'TALIXIO_MODEL_FAST', 'TALIXIO_MODEL', 'TALIXIO_MODEL_DEEP', 'TALIXIO_DEEP_THINKING_TOKENS', 'TALIXIO_DEEP_REASONING_EFFORT', 'TALIXIO_ESCALATE', 'TALIXIO_TOOLS',
-        'TALIXIO_MAX_PARALLEL_JOBS', 'TALIXIO_JOB_MAX_USD_LIMIT', 'TALIXIO_JOB_EFFORT', 'TALIXIO_PRICES',
+        'TALIXIO_MAX_PARALLEL_JOBS', 'TALIXIO_JOB_MAX_USD_LIMIT', 'TALIXIO_JOB_EFFORT', 'TALIXIO_PRICES', 'ANTHROPIC_WORKSPACE_ID', 'OPENAI_PROJECT_ID',
         'TALIXIO_NTFY_TOKEN', 'TALIXIO_VAPID_SUBJECT', 'TALIXIO_HEARTBEAT_MINUTES',
         'TALIXIO_SMTP_SECURITY', 'TALIXIO_IMAP_PORT', 'TALIXIO_IMAP_USER', 'TALIXIO_IMAP_PASSWORD', 'TALIXIO_EMAIL_REQUIRE_AUTH',
         'TALIXIO_MAILBOX_IMAP_PORT', 'TALIXIO_MAILBOX_SMTP_HOST', 'TALIXIO_MAILBOX_SMTP_PORT',

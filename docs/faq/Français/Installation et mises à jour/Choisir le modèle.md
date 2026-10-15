@@ -44,4 +44,13 @@ Les espaces sans compte utilisent les réglages principaux.
 - Les coûts affichés sont des estimations à partir des prix publics. Une fois par mois, l'assistant demande ce que
   votre fournisseur a réellement facturé (ou saisissez-le dans Activité → la ligne sous les jauges) : le budget est alors
   corrigé par le rapport entre les vraies factures et les estimations, sur les trois dernières factures.
+- **Coûts réels (Anthropic, OpenAI)** : avec une **clé Admin** (pas une clé API ordinaire : Console Anthropic →
+  Settings → Admin keys, `sk-ant-admin…` ; OpenAI → Organization → Admin keys), l'assistant lit ce que le fournisseur
+  a réellement facturé, toutes les 6 heures. Mettez-la dans Réglages → Modèle d'IA → Budget pour les réglages
+  principaux, ou sous *Coûts réels* dans un compte d'IA. Ajoutez un identifiant d'espace de travail (Anthropic) ou de
+  projet (OpenAI) pour ne compter que cette partie de l'organisation. Les jours passés utilisent alors les vrais
+  montants, l'estimation du jour est corrigée d'après les 30 derniers jours, et aucune facture n'est demandée.
+  Activité montre ce que chaque source a facturé ce mois-ci (*Synchroniser* relit les chiffres). La clé Admin ne sert
+  qu'à lire les coûts, reste sur le serveur et n'est jamais donnée à Claude Code ni aux outils. Mistral et Gemini
+  n'ont pas cette API : ils gardent les estimations et les factures que vous saisissez.
 - Avec Gemini gratuit, Google peut utiliser vos données et les limites sont basses : activez la facturation.

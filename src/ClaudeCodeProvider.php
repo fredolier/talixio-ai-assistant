@@ -87,8 +87,9 @@ final class ClaudeCodeProvider implements Provider
      */
     public function env(): ?array
     {
-        if ($this->token === '') return null;
         $env = getenv();
+        unset($env['ANTHROPIC_ADMIN_KEY'], $env['OPENAI_ADMIN_KEY']); // billing keys stay with the server
+        if ($this->token === '') return $env;
         unset($env['ANTHROPIC_API_KEY'], $env['ANTHROPIC_AUTH_TOKEN']);
         $env['CLAUDE_CODE_OAUTH_TOKEN'] = $this->token;
         return $env;

@@ -116,6 +116,7 @@ final class Store
         $this->addColumn('usage', 'job_id', 'INTEGER');
         $this->addColumn('usage', 'cache_read', 'INTEGER NOT NULL DEFAULT 0');
         $this->addColumn('usage', 'cache_write', 'INTEGER NOT NULL DEFAULT 0');
+        $this->addColumn('usage', 'account', "TEXT NOT NULL DEFAULT ''"); // the AI account billed ('' = the main settings, '-' = another service)
         // the user's 👍/👎 on what routines send (Routines), fed back into their next runs
         $this->db->exec('CREATE TABLE IF NOT EXISTS routine_feedback(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, task INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL,
                 item TEXT NOT NULL, vote INTEGER NOT NULL, note TEXT NOT NULL DEFAULT \'\', message INTEGER);
@@ -332,10 +333,10 @@ final class Store
 
     public function toolLog(int $limit = 100): array { return $this->q('SELECT * FROM tool_log ORDER BY id DESC LIMIT ?', [$limit])->fetchAll(); }
 
-    public function addUsage(array $u, ?float $cost, string $source, string $tier, ?int $jobId): void
+    public function addUsage(array $u, ?float $cost, string $source, string $tier, ?int $jobId, string $account = ''): void
     {
-        $this->q('INSERT INTO usage(ts,model,input_tokens,output_tokens,cache_read,cache_write,cost_usd,source,tier,job_id) VALUES(?,?,?,?,?,?,?,?,?,?)',
-            [time(), $u['model'], $u['in'], $u['out'], $u['cache_read'] ?? 0, $u['cache_write'] ?? 0, $cost, $source, $tier, $jobId]);
+        $this->q('INSERT INTO usage(ts,model,input_tokens,output_tokens,cache_read,cache_write,cost_usd,source,tier,job_id,account) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+            [time(), $u['model'], $u['in'], $u['out'], $u['cache_read'] ?? 0, $u['cache_write'] ?? 0, $cost, $source, $tier, $jobId, $account]);
     }
 
     public function spentSince(int $ts): float
@@ -343,10 +344,11 @@ final class Store
         return (float)$this->q('SELECT COALESCE(SUM(cost_usd),0) FROM usage WHERE ts >= ?', [$ts])->fetchColumn();
     }
 
-    /** Estimated cost from $from (included) to $to (excluded). */
-    public function spentBetween(int $from, int $to): float
+    /** Estimated cost from $from (included) to $to (excluded), of one AI account ('' = the main settings) or of all. */
+    public function spentBetween(int $from, int $to, ?string $account = null): float
     {
-        return (float)$this->q('SELECT COALESCE(SUM(cost_usd),0) FROM usage WHERE ts >= ? AND ts < ?', [$from, $to])->fetchColumn();
+        return (float)($account === null ? $this->q('SELECT COALESCE(SUM(cost_usd),0) FROM usage WHERE ts >= ? AND ts < ?', [$from, $to])
+            : $this->q('SELECT COALESCE(SUM(cost_usd),0) FROM usage WHERE ts >= ? AND ts < ? AND account = ?', [$from, $to, $account]))->fetchColumn();
     }
 
     public function usageByDay(int $days = 30): array

@@ -44,4 +44,12 @@ Spaces without an account use the main settings.
 - The costs shown are estimates based on public prices. Once a month the assistant asks what your provider
   really billed (or enter it under Activity → the line below the meters): the budget is then corrected
   by the ratio between the real bills and the estimates, over the last three bills.
+- **Real costs (Anthropic, OpenAI)**: with an **Admin key** (not a regular API key: Anthropic Console → Settings →
+  Admin keys, `sk-ant-admin…`; OpenAI → Organization → Admin keys), the assistant reads what the provider really
+  billed, every 6 hours. Put it in Settings → AI model → Budget for the main settings, or under *Real costs* in an AI
+  account. Add a workspace id (Anthropic) or project id (OpenAI) to count only that part of the organization.
+  Past days then use the real figures, today's estimate is corrected from the last 30 days, and no bill is asked for.
+  Activity shows what each source billed this month (*Sync now* reads it again). The Admin key only reads costs,
+  stays on the server and is never given to Claude Code or tools. Mistral and Gemini have no such API: they keep the
+  estimates and the bills you enter.
 - With free Gemini, Google may use your data and the limits are low: turn on billing.

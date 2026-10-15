@@ -40,6 +40,11 @@ final class Config
     public string $claudeToken = '';
     /** The AI account this configuration is for ('' = the main settings). */
     public string $account = '';
+    /** Admin keys that read what the provider really billed (Billing); optional, never used for model calls. */
+    public string $anthropicAdminKey = '';
+    public string $anthropicWorkspace = '';
+    public string $openaiAdminKey = '';
+    public string $openaiProject = '';
     public string $dataDir = 'data';
     public string $timezone = 'UTC';
     public string $name = 'Talixio';
@@ -167,6 +172,10 @@ final class Config
                 (int)$e('TALIXIO_DEEP_THINKING_TOKENS', '8000'), self::effort($e('TALIXIO_DEEP_REASONING_EFFORT', in_array($c->provider, ['openai', 'sovereign'], true) ? '' : 'high'))),
         ];
         $c->anthropicKey = $e('ANTHROPIC_API_KEY');
+        $c->anthropicAdminKey = $e('ANTHROPIC_ADMIN_KEY');
+        $c->anthropicWorkspace = $e('ANTHROPIC_WORKSPACE_ID');
+        $c->openaiAdminKey = $e('OPENAI_ADMIN_KEY');
+        $c->openaiProject = $e('OPENAI_PROJECT_ID');
         $c->anthropicBaseUrl = rtrim($e('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'), '/');
         $c->openaiKey = $e('OPENAI_API_KEY');
         $c->openaiBaseUrl = rtrim($e('OPENAI_BASE_URL', 'https://api.openai.com/v1'), '/');

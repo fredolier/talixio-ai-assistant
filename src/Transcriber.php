@@ -79,7 +79,7 @@ final class Transcriber
             ], $key, 900);
             $u = $r['usageMetadata'] ?? [];
             $usage = ['model' => $model, 'in' => (int)($u['promptTokenCount'] ?? 0), 'out' => (int)($u['candidatesTokenCount'] ?? 0) + (int)($u['thoughtsTokenCount'] ?? 0), 'cache_read' => 0, 'cache_write' => 0, 'cost' => null];
-            $this->app->store->addUsage($usage, $this->app->pricing()->cost($usage), 'transcription', 'fast', null);
+            $this->app->store->addUsage($usage, $this->app->pricing()->cost($usage), 'transcription', 'fast', null, '-');
             $text = trim(implode('', array_column($r['candidates'][0]['content']['parts'] ?? [], 'text')));
             if ($text === '') throw new \RuntimeException('Gemini returned no transcript (' . ($r['candidates'][0]['finishReason'] ?? 'unknown reason') . ')');
             return $text;
@@ -186,7 +186,7 @@ final class Transcriber
             }
             $out = trim(implode($meeting ? "\n" : ' ', $lines));
             if ($out === '') throw new \RuntimeException('local transcription: nothing was heard in the recording');
-            $this->app->store->addUsage(['model' => 'whisper.cpp ' . basename($model), 'in' => 0, 'out' => 0, 'cache_read' => 0, 'cache_write' => 0, 'cost' => 0.0], 0.0, 'transcription', 'fast', null);
+            $this->app->store->addUsage(['model' => 'whisper.cpp ' . basename($model), 'in' => 0, 'out' => 0, 'cache_read' => 0, 'cache_write' => 0, 'cost' => 0.0], 0.0, 'transcription', 'fast', null, '-');
             return $out;
         } finally {
             foreach ([$tmp, $wav, "$tmp.json"] as $f) @unlink($f);

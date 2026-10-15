@@ -276,7 +276,7 @@ final class Files
         $tier = $c->tier('fast');
         try {
             $text = $this->app->provider($tier)->complete($instruction, '', [['role' => 'user', 'content' => $parts]], $this->app->tools->only('none'),
-                function (array $u) use ($tier) { $this->app->store->addUsage($u, $this->app->pricing()->cost($u), 'indexing', $tier->name, null); });
+                function (array $u) use ($tier) { $this->app->store->addUsage($u, $this->app->pricing()->cost($u), 'indexing', $tier->name, null, $this->app->cfg->account); });
         } catch (Abort $e) {
             throw $e;
         } catch (\Throwable $e) {

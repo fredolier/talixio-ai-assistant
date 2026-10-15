@@ -327,6 +327,7 @@ final class Privacy
         }
         $level = $this->effective();
         $allowed = self::$allowOnce || $purpose === 'notify' // notifications say nothing at these levels
+            || $purpose === 'billing' // reads the provider's own cost figures, sends no content
             || $level === 'internal'
             || ($level === 'confidential' && in_array($purpose, ['model', 'vision'], true) && $svc['id'] === $this->modelService() && $this->modelBlocked('confidential') === null)
             || ($level === 'confidential' && in_array($purpose, ['embeddings', 'transcription'], true) && self::isSovereign($svc['id'])); // stays in Europe, business terms
@@ -347,7 +348,7 @@ final class Privacy
     private static function label(array $svc, string $purpose): string
     {
         return ['search' => 'Web search', 'web' => 'Reading a web page', 'transcription' => 'Transcription', 'embeddings' => 'Search by meaning',
-            'connector' => 'Connector', 'calendar' => 'Calendar', 'music' => 'Music', 'chat' => 'Chat app', 'model' => 'Model', 'vision' => 'Reading images'][$purpose] ?? ucfirst($purpose);
+            'connector' => 'Connector', 'calendar' => 'Calendar', 'music' => 'Music', 'chat' => 'Chat app', 'model' => 'Model', 'vision' => 'Reading images', 'billing' => 'Reading costs'][$purpose] ?? ucfirst($purpose);
     }
 
     private function log(string $service, string $purpose, int $bytes, string $level, bool $blocked): void

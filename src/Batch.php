@@ -158,7 +158,7 @@ final class Batch
         if (is_array($usage)) {
             $u = ['model' => (string)$r['model'], 'in' => (int)($usage['prompt_tokens'] ?? 0), 'out' => (int)($usage['completion_tokens'] ?? 0), 'cache_read' => 0, 'cache_write' => 0];
             $cost = $this->app->pricing()->cost($u);
-            $this->app->store->addUsage($u, $cost === null ? null : $cost / 2, (string)$r['source'] . ' (batch)', (string)$r['tier'], null); // half price
+            $this->app->store->addUsage($u, $cost === null ? null : $cost / 2, (string)$r['source'] . ' (batch)', (string)$r['tier'], null, $this->app->cfg->account); // half price
         }
         $this->app->store->q("UPDATE batches SET status = 'done', text = ? WHERE key = ?", [$text, $r['key']]);
     }

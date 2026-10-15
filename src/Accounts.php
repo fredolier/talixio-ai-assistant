@@ -52,6 +52,10 @@ final class Accounts
         if (in_array($kind, ['anthropic', 'gemini'], true) && $key === '') throw new \InvalidArgumentException('Paste the API key.');
         if ($kind === 'sovereign' && $key === '' && Sovereign::SERVICES[$service]['key']) throw new \InvalidArgumentException('Paste the API key.');
         if ($kind === 'openai' && $key === '' && ($url === '' || str_contains($url, 'api.openai.com'))) throw new \InvalidArgumentException('Paste the API key.');
+        $admin = trim((string)($d['admin_key'] ?? ''));
+        if ($admin === '' && $same && empty($d['admin_clear'])) $admin = (string)($old['admin_key'] ?? '');
+        $scope = trim(mb_substr((string)($d['billing_scope'] ?? ''), 0, 80));
+        if ($scope !== '' && !preg_match('/^[\w-]+$/', $scope)) throw new \InvalidArgumentException('The workspace or project id is not valid.');
         if ($kind === 'claude-code' && $token === '') throw new \InvalidArgumentException('Paste the token printed by "claude setup-token".');
         $models = [];
         foreach (Tier::NAMES as $t) {
@@ -62,6 +66,7 @@ final class Accounts
         $id ??= $this->newId($name, $all);
         $all[$id] = ['id' => $id, 'name' => $name, 'kind' => $kind, 'service' => $kind === 'sovereign' ? $service : '', 'url' => $url,
             'key' => in_array($kind, ['claude-code'], true) ? '' : $key, 'token' => $kind === 'claude-code' ? $token : '',
+            'admin_key' => in_array($kind, Billing::KINDS, true) ? $admin : '', 'billing_scope' => in_array($kind, Billing::KINDS, true) ? $scope : '',
             'models' => $models, 'paid' => $kind === 'gemini' && !empty($d['paid']), 'created' => $old['created'] ?? time()];
         $this->write($all);
         foreach (['gemini', 'sovereign'] as $k) $this->app->store->set("{$k}_models_$id", ''); // models listed again with the new key
@@ -124,7 +129,7 @@ final class Accounts
 
     private static function public(array $a): array
     {
-        $out = array_diff_key($a, ['key' => 1, 'token' => 1]) + ['has_key' => ($a['key'] ?? '') !== '', 'has_token' => ($a['token'] ?? '') !== ''];
+        $out = array_diff_key($a, ['key' => 1, 'token' => 1, 'admin_key' => 1]) + ['has_key' => ($a['key'] ?? '') !== '', 'has_token' => ($a['token'] ?? '') !== '', 'has_admin_key' => ($a['admin_key'] ?? '') !== ''];
         $out['label'] = match ($a['kind']) {
             'anthropic' => 'Anthropic API', 'claude-code' => 'Claude subscription (Claude Code)', 'openai' => 'OpenAI-compatible',
             'gemini' => 'Google Gemini', 'sovereign' => Sovereign::info((string)$a['service'])['name'], default => $a['kind'],

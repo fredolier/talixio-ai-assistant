@@ -35,7 +35,10 @@ putenv('ANTHROPIC_API_KEY=should-go');
 $p = new ClaudeCodeProvider('claude', new Tier('fast', 'x', 6), false, '', $tok);
 $env = $p->env();
 check('accounts: Claude Code gets the token and no API key', ($env['CLAUDE_CODE_OAUTH_TOKEN'] ?? '') === $tok && !isset($env['ANTHROPIC_API_KEY']));
-check('accounts: without a token Claude Code keeps its own environment', (new ClaudeCodeProvider('claude', new Tier('fast', 'x', 6), false, '', ''))->env() === null);
+putenv('ANTHROPIC_ADMIN_KEY=sk-ant-admin-x');
+$env = (new ClaudeCodeProvider('claude', new Tier('fast', 'x', 6), false, '', ''))->env();
+check('accounts: without a token Claude Code keeps its own environment, without the billing keys', ($env['ANTHROPIC_API_KEY'] ?? '') === 'should-go' && !isset($env['CLAUDE_CODE_OAUTH_TOKEN']) && !isset($env['ANTHROPIC_ADMIN_KEY']));
+putenv('ANTHROPIC_ADMIN_KEY');
 putenv('ANTHROPIC_API_KEY');
 
 // ---- saving: checks, and no secret goes back

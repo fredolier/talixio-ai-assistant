@@ -2654,7 +2654,7 @@ function applyShowIf() {
   euFields();
 }
 /** With a European provider, keys for providers outside Europe are kept but out of sight (they are not used). */
-const FOREIGN = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_API_KEY', 'OPENAI_BASE_URL'];
+const FOREIGN = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'ANTHROPIC_ADMIN_KEY', 'ANTHROPIC_WORKSPACE_ID', 'OPENAI_ADMIN_KEY', 'OPENAI_PROJECT_ID'];
 function euFields() {
   const prov = setFields().find(f => f.key === 'TALIXIO_PROVIDER'), pe = document.querySelector('#view-settings .field[data-key="TALIXIO_PROVIDER"]');
   if (!prov || !pe || !document.getElementById('set-TALIXIO_PROVIDER')) return;
@@ -3255,6 +3255,8 @@ function accEdit(a) {
   $('#acc-url').value = a?.url || '';
   $('#acc-key').value = $('#acc-token').value = '';
   $('#acc-paid').checked = !!a?.paid;
+  $('#acc-admin').value = ''; $('#acc-admin-clear').checked = false; $('#acc-scope').value = a?.billing_scope || '';
+  $('#acc-billing').open = !!a?.has_admin_key;
   for (const k of ['fast', 'standard', 'deep']) $('#acc-m-' + k).value = a?.models?.[k] || '';
   $('#acc-delete').hidden = !a; $('#acc-delete').dataset.confirm = ''; $('#acc-delete').textContent = t('Delete');
   $('#acc-state').textContent = '';
@@ -3270,14 +3272,18 @@ function accKind() {
   $('#acc-url-row').hidden = !(k === 'openai' || k === 'anthropic' || (k === 'sovereign' && (svc?.url === '' || $('#acc-url').value)));
   $('#acc-url').placeholder = k === 'anthropic' ? 'https://api.anthropic.com' : k === 'openai' ? 'https://api.openai.com/v1' : 'https://…/v1';
   $('#acc-paid-row').hidden = k !== 'gemini';
+  $('#acc-billing').hidden = k !== 'anthropic' && k !== 'openai';
+  $('#acc-admin-clear-row').hidden = !(same && a.has_admin_key);
+  $('#acc-admin').placeholder = window.t(same && a.has_admin_key ? 'saved (leave empty to keep it)' : k === 'openai' ? 'sk-admin-…' : 'sk-ant-admin…');
   $('#acc-about').textContent = svc ? window.t(svc.about) + (svc.note ? ' ' + window.t(svc.note) : '') : '';
   $('#acc-key').placeholder = window.t(same && a.has_key ? 'saved (leave empty to keep it)' : k === 'openai' ? 'API key (none for a local server)' : 'API key');
   $('#acc-token').placeholder = window.t(same && a.has_token ? 'saved (leave empty to keep it)' : 'Token from claude setup-token');
 }
 const accBody = () => ({ name: $('#acc-name').value.trim(), kind: $('#acc-kind').value, service: $('#acc-service').value, url: $('#acc-url').value.trim(),
   key: $('#acc-key').value.trim(), token: $('#acc-token').value.trim(), paid: $('#acc-paid').checked,
+  admin_key: $('#acc-admin').value.trim(), admin_clear: $('#acc-admin-clear').checked, billing_scope: $('#acc-scope').value.trim(),
   models: { fast: $('#acc-m-fast').value.trim(), standard: $('#acc-m-standard').value.trim(), deep: $('#acc-m-deep').value.trim() } });
-const accClose = () => { $('#acc-form').hidden = true; $('#acc-add').hidden = false; state.accEditing = null; $('#acc-key').value = $('#acc-token').value = ''; };
+const accClose = () => { $('#acc-form').hidden = true; $('#acc-add').hidden = false; state.accEditing = null; $('#acc-key').value = $('#acc-token').value = $('#acc-admin').value = ''; };
 $('#acc-add').onclick = () => accEdit(null);
 $('#acc-cancel').onclick = accClose;
 $('#acc-kind').onchange = $('#acc-service').onchange = accKind;
@@ -4160,7 +4166,7 @@ function chartHover(chart) {
 
 async function loadActivity() {
   loadHeartbeats().catch(() => {});
-  const { usage, tools, budget, by_tier, by_source, memory, backup, calibration } = await api('api/activity');
+  const { usage, tools, budget, by_tier, by_source, memory, backup, calibration, billing } = await api('api/activity');
   const meter = (label, spent, limit) => {
     const pct = limit > 0 ? Math.min(100, spent / limit * 100) : 0;
     const cls = !limit ? '' : pct >= 100 ? 'blocked' : pct >= 80 ? 'low' : '';
@@ -4170,6 +4176,7 @@ async function loadActivity() {
   $('#budget').innerHTML = meter('Spent today', budget.today, budget.daily_limit) + meter('Spent this month', budget.month, budget.monthly_limit);
   $('#calib-text').textContent = calibration.text;
   if (!$('#bill-month').value) $('#bill-month').value = calibration.last_month;
+  renderBilling(billing);
   $('#bills tbody').innerHTML = calibration.reports.length ? calibration.reports.map(r => `<tr><td>${esc(r.from)} → ${esc(r.to)}</td><td>${r.amount.toFixed(2)} ${esc(r.currency)}</td><td>$${r.estimate.toFixed(2)}</td><td>${r.estimate >= 0.01 ? '×' + (r.usd / r.estimate).toFixed(2) : '–'}</td></tr>`).join('')
     : '<tr><td colspan="4" class="muted">No bill recorded yet.</td></tr>';
   const rows = list => list.length ? list.map(r => `<tr><td>${esc(r.name || '-')}</td><td>${nf.format(r.calls)}</td><td>${ktok(+r.input + +r.output)}</td><td>${r.cost == null ? '?' : money(+r.cost) || '$0'}</td></tr>`).join('')
@@ -4347,6 +4354,20 @@ $('#search-form').onsubmit = e => {
 $('#search-q').addEventListener('input', e => { if (!e.target.value.trim() && !$('#mem-results').hidden) memSearchClear(); });
 $('#search-q').addEventListener('keydown', e => { if (e.key === 'Escape') memSearchClear(); });
 $('#search-clear').onclick = () => memSearchClear();
+/** Real costs read from the providers' billing APIs (Admin keys): one line per source. */
+function renderBilling(b) {
+  const list = b?.sources || [];
+  $('#billing').hidden = !list.length;
+  $('#billing-list').innerHTML = list.map(s => `<li><b class="no-i18n">${esc(s.name)}</b>${s.scope ? ` <span class="muted no-i18n">(${esc(s.scope)})</span>` : ''}: `
+    + (s.synced ? `$${s.month.toFixed(2)} ${esc(t('billed this month'))} · ${esc(t('read'))} ${fmtTime(s.synced)}` : esc(t('not read yet')))
+    + (s.error ? ` · <span class="err">${esc(t('last try failed:'))} <span class="no-i18n">${esc(s.error)}</span></span>` : '') + '</li>').join('');
+}
+$('#billing-sync').onclick = async e => {
+  e.target.disabled = true;
+  try { renderBilling(await post('api/billing/sync', {})); loadActivity(); }
+  catch (err) { toast(err.message); }
+  finally { e.target.disabled = false; }
+};
 $('#bill-form').onsubmit = async e => {
   e.preventDefault();
   try { await post('api/bill', { month: $('#bill-month').value, amount: +$('#bill-amount').value, currency: $('#bill-currency').value }); $('#bill-amount').value = ''; loadActivity(); }

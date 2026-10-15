@@ -1034,7 +1034,8 @@ final class Tools
             $r['name'] ?: '-', $r['calls'], number_format((int)$r['input']), number_format((int)$r['output']),
             $r['cost'] === null ? 'cost unknown' : '$' . number_format((float)$r['cost'], 4)), $rows)) ?: '  nothing yet';
         $today = strtotime('today'); $month = strtotime('first day of this month 00:00');
-        return $this->app->budget()->describe() . ' ' . $this->app->calibration()->describe() . ' The figures below are uncorrected estimates.'
+        $real = $this->app->billing()->describe();
+        return $this->app->budget()->describe() . ' ' . $this->app->calibration()->describe() . ($real !== '' ? " $real" : '') . ' The figures below are uncorrected estimates.'
             . "\n\nToday by tier:\n" . $fmt($s->usageBy('tier', $today))
             . "\nToday by source:\n" . $fmt($s->usageBy('source', $today))
             . "\nThis month by model:\n" . $fmt($s->usageBy('model', $month));

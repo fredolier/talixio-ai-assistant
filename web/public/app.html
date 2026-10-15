@@ -377,6 +377,12 @@
                 <div id="acc-key-row" class="sub"><label for="acc-key">API key</label><input id="acc-key" type="password" autocomplete="off" spellcheck="false"></div>
                 <div id="acc-url-row" class="sub"><label for="acc-url">Address</label><input id="acc-url" type="url" placeholder="https://…/v1" spellcheck="false"></div>
                 <div id="acc-paid-row"><label class="check"><input id="acc-paid" type="checkbox"> This key is on a paid plan (not used for training)</label></div>
+                <details id="acc-billing" class="adv sub"><summary>Real costs (optional)</summary>
+                  <p class="muted small">An Admin key (not the API key) lets Talixio read what the provider really billed each day for this account, instead of estimating. It is never used for the model.</p>
+                  <label for="acc-admin">Admin key</label><input id="acc-admin" type="password" autocomplete="off" spellcheck="false">
+                  <label id="acc-admin-clear-row" class="check" hidden><input id="acc-admin-clear" type="checkbox"> Forget the saved Admin key</label>
+                  <label for="acc-scope">Workspace or project id</label><input id="acc-scope" spellcheck="false" placeholder="wrkspc_… / proj_…">
+                  <p class="muted small">Only count this workspace (Anthropic) or project (OpenAI). Empty = the whole organization.</p></details>
                 <details class="adv sub"><summary>Models (optional)</summary>
                   <p class="muted small">Leave empty for the usual models.</p>
                   <label for="acc-m-fast">fast</label><input id="acc-m-fast" spellcheck="false">
@@ -576,6 +582,8 @@
       <header class="page-head"><h2>Activity</h2><p class="muted">Spending, model usage and every tool the assistant used. Costs are estimates from list prices.</p></header>
       <div id="budget" class="budget"></div>
       <details id="calib" class="calib"><summary class="muted small" id="calib-text"></summary>
+        <div id="billing" class="billing" hidden><ul id="billing-list" class="small"></ul>
+          <button id="billing-sync" class="btn small" type="button">Sync now</button></div>
         <p class="muted small">Enter what your AI provider actually billed (its console shows it). Talixio compares it with its own estimate for the same month and corrects the budget from the last three bills.</p>
         <form id="bill-form" class="row wrap"><input type="month" id="bill-month" required> <input type="number" id="bill-amount" step="0.01" min="0" placeholder="Amount" required>
           <select id="bill-currency"><option>EUR</option><option>USD</option></select> <button class="btn small" type="submit">Record the bill</button></form>

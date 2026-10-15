@@ -218,6 +218,7 @@ final class Web
                 try { return $this->app->calibration()->report((float)($b['amount'] ?? -1), (string)($b['currency'] ?? 'EUR'), (string)($b['month'] ?? '')); }
                 catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
             })(),
+            $path === '/api/billing/sync' && $m === 'POST' => $this->app->billing()->sync(true),
             str_starts_with($path, '/api/board') => $this->board($m, $path, $b),
             $path === '/api/jobs' => $this->jobList(),
             $path === '/api/jobs/archive-finished' && $m === 'POST' => ['count' => $this->app->jobs()->archiveFinished(isset($b['space']) && $b['space'] !== '' ? (int)$b['space'] : null, (string)($b['tag'] ?? ''))],
@@ -818,6 +819,7 @@ final class Web
             'by_model' => $s->usageBy('model', $month), 'budget' => $this->app->budget()->status(), 'tools' => $s->toolLog(100),
             'calibration' => ['text' => $this->app->calibration()->describe(I18n::lang($this->app)), 'reports' => array_reverse($this->app->calibration()->reports()),
                 'last_month' => date('Y-m', strtotime('first day of last month'))],
+            'billing' => $this->app->billing()->status(),
             'memory' => [
                 'messages' => (int)$s->q('SELECT COUNT(*) FROM messages')->fetchColumn(),
                 'summaries' => (int)$s->q('SELECT COUNT(*) FROM summaries')->fetchColumn(),

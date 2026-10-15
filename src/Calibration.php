@@ -27,9 +27,11 @@ final class Calibration
      */
     public function factor(): float
     {
+        $b = $this->app->billing();
+        if ($b->coversMain() && ($f = $b->factor()) !== null) return $f; // read from the provider: better than reported bills
         $r = array_slice(array_filter($this->reports(), fn($x) => $x['estimate'] >= 0.01), -self::LAST);
         $est = array_sum(array_column($r, 'estimate'));
-        return $est > 0 ? max(0.2, min(5.0, array_sum(array_column($r, 'usd')) / $est)) : 1.0;
+        return $est > 0 ? max(0.2, min(5.0, array_sum(array_column($r, 'usd')) / $est)) : ($b->factor() ?? 1.0);
     }
 
     public function toUsd(float $amount, string $currency): float
@@ -67,6 +69,9 @@ final class Calibration
     /** How the correction stands, in one line for the model and the Activity page ($lang: en or fr). */
     public function describe(string $lang = 'en'): string
     {
+        $b = $this->app->billing();
+        if ($b->coversMain() && ($f = $b->factor()) !== null)
+            return I18n::tl($lang, 'Past days use what the provider really billed; today\'s estimates are corrected ×{factor} from the last 30 days.', ['factor' => number_format($f, 2)]);
         $n = min(self::LAST, count(array_filter($this->reports(), fn($x) => $x['estimate'] >= 0.01)));
         if ($n === 0) return I18n::tl($lang, 'Costs are estimated from list prices; no real bill reported yet.');
         return I18n::tl($lang, $n > 1 ? 'Estimates are corrected ×{factor}, from the last {n} bills you reported.' : 'Estimates are corrected ×{factor}, from the bill you reported.',
@@ -80,7 +85,7 @@ final class Calibration
     public function due(?int $now = null): ?string
     {
         $now ??= time();
-        if ((int)date('j', $now) < 3 || in_array($this->app->cfg->provider, ['echo', 'claude-code'], true)) return null;
+        if ((int)date('j', $now) < 3 || in_array($this->app->cfg->provider, ['echo', 'claude-code'], true) || $this->app->billing()->coversMain()) return null;
         $month = date('Y-m', strtotime('first day of last month', $now));
         foreach ($this->reports() as $r) if (substr($r['to'], 0, 7) === $month) return null;
         if ((int)$this->app->store->get('bill_asked', '0') > $now - 7 * 86400) return null;

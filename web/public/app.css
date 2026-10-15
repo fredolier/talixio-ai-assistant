@@ -204,6 +204,7 @@ main{min-width:0;height:100%;overflow:hidden}
 .budget{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px}
 .meter{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
 .calib{margin:10px 0 4px} .calib summary{cursor:pointer} .calib form{margin:8px 0;gap:8px} .calib input[type=number]{width:9em}
+.billing{margin:8px 0;display:flex;flex-direction:column;gap:6px;align-items:flex-start} .billing ul{margin:0;padding-left:1.2em} .billing .err{color:var(--danger)}
 .meter .row{justify-content:space-between} .meter b{font-size:1.3rem;font-variant-numeric:tabular-nums}
 .track{height:8px;border-radius:99px;background:var(--sunk);overflow:hidden}
 .track i{display:block;height:100%;background:var(--accent);border-radius:99px}
