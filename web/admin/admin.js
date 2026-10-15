@@ -139,7 +139,7 @@ function renderPeople() {
   for (const p of list) {
     const el = document.createElement('div'); el.className = 'person';
     el.innerHTML = `<div class="who"><b>${esc(p.name || p.id)}</b> <span class="muted">${esc(p.id)}${p.email ? ' · ' + esc(p.email) : ''}</span><br>
-        <a href="${esc(p.url)}" target="_blank" rel="noopener" class="small">${esc(p.url)}</a></div>
+        <a href="${esc(p.url)}" target="_blank" rel="noopener" class="small">${esc(p.url)}</a>${p.links?.length ? `<br><span class="muted small">${esc(t('One sign-in with'))} <span class="no-i18n">${esc(p.links.map(id => list.find(x => x.id === id)?.name || id).join(', '))}</span></span>` : ''}</div>
       <div class="st"><span class="pill ${healthWords(p)[0]}" title="${esc(p.check_error || '')}">${esc(healthWords(p)[1])}</span>
         <div class="muted small">${esc([p.state === 'running' && p.check_ms != null ? t('checked in {ms} ms', { ms: p.check_ms }) : '', p.restarts ? t('{n} restarts', { n: p.restarts }) : '',
           p.oom && healthWords(p)[0] === 'off' ? t('stopped once for lack of memory') : ''].filter(Boolean).join(' · '))}</div></div>
@@ -147,6 +147,7 @@ function renderPeople() {
       <div class="acts"><select aria-label="Action"><option value="">Actions…</option>
         ${p.state === 'running' ? '<option value="restart">Restart</option><option value="stop">Stop</option>' : '<option value="start">Start</option>'}
         <option value="reset-password">New password (forgotten)</option><option value="reset-totp">Turn off two-step sign-in (lost phone)</option>
+        ${list.length > 1 ? '<option value="links">Their other assistants (one sign-in)…</option>' : ''}
         <option value="limits">Memory and CPU…</option><option value="doctor">Check (doctor)</option><option value="logs">Log</option><option value="backup">Back up now</option>
         <option value="recreate">Rebuild the container</option><option value="remove">Remove…</option></select></div>`;
     el.querySelector('select').onchange = e => { const a = e.target.value; e.target.value = ''; if (a) act(p, a); };
@@ -167,6 +168,13 @@ async function act(p, a) {
     } else if (a === 'limits') {
       const v = await ask(`Limits for ${p.id}`, { fields: [{ id: 'memory_mb', label: 'Memory (MB)', type: 'number', value: p.memory_mb }, { id: 'cpus', label: 'CPUs', type: 'number', value: p.cpus, attrs: ' step="0.25"' }], ok: 'Apply (restarts it)' });
       if (!v) return; await run({ memory_mb: +v.memory_mb, cpus: +v.cpus }); toast('Applied');
+    } else if (a === 'links') {
+      const others = state.instances.filter(x => x.id !== p.id);
+      const v = await ask(t('Assistants {name} opens without signing in again', { name: p.name || p.id }), { ok: 'Apply (restarts them)',
+        html: `<p>${esc(t('For one person with several assistants (work and private, say): signed in to one, they open the others from its menu. Links go both ways.'))}</p>`,
+        fields: others.map(x => ({ id: 'l-' + x.id, type: 'checkbox', value: (p.links || []).includes(x.id), label: `<span class="no-i18n">${esc(x.name || x.id)}</span> <span class="muted no-i18n">${esc(x.id)}</span>` })) });
+      if (!v) return;
+      await run({ links: others.filter(x => v['l-' + x.id]).map(x => x.id) }); toast('Applied');
     } else if (a === 'logs') {
       for (let all = false; ; all = true) { // errors and warnings first; every request line on demand
         const r = await run({ all });

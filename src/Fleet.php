@@ -145,6 +145,13 @@ final class Fleet
         if (!empty($i['reset'])) $env[] = 'TALIXIO_RESET=' . $i['reset'];                                // a new password or 2-step reset, applied once
         if ($set['ollama']) array_push($env, 'TALIXIO_EMBEDDINGS=ollama', 'TALIXIO_EMBEDDINGS_MODEL=' . $set['ollama_model'], 'TALIXIO_OLLAMA_URL=http://' . self::CADDY . ':11434');
         if ($set['google_client_id'] !== '') array_push($env, 'TALIXIO_GOOGLE_CLIENT_ID=' . $set['google_client_id'], 'TALIXIO_GOOGLE_CLIENT_SECRET=' . $set['google_client_secret']);
+        $env[] = 'TALIXIO_INSTANCE_NAME=' . ($i['name'] ?? '');
+        if (!empty($i['links']) && !empty($s['sso_key'])) { // the person's other assistants: one sign-in opens them all (Links)
+            $links = [];
+            foreach ($i['links'] as $to) if (isset($s['instances'][$to]))
+                $links[] = ['id' => $to, 'name' => $s['instances'][$to]['name'] ?: $to, 'url' => $this->url($to, $set), 'key' => self::ssoKey($s, $to)];
+            if ($links) array_push($env, 'TALIXIO_SSO_KEY=' . self::ssoKey($s, $id), 'TALIXIO_LINKS=' . json_encode($links, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        }
         if ($set['eu_provider'] !== '') { // a European AI provider for everyone, unless a person picks another in their Settings
             array_push($env, 'TALIXIO_PROVIDER=sovereign', 'TALIXIO_SOVEREIGN=' . $set['eu_provider'], 'TALIXIO_SOVEREIGN_ONLY=' . ($set['eu_only'] ? '1' : '0'));
             if ($set['eu_key'] !== '') $env[] = 'TALIXIO_SOVEREIGN_KEY=' . $set['eu_key'];
@@ -380,6 +387,44 @@ final class Fleet
         $this->recreate($id);
     }
 
+    /** The key an instance checks its sign-in links with; a new generation (a link removed) makes the old links useless. */
+    public static function ssoKey(array $s, string $id): string
+    {
+        return hash_hmac('sha256', "sso:$id:" . (int)($s['instances'][$id]['sso_gen'] ?? 0), (string)$s['sso_key']);
+    }
+
+    /**
+     * The other assistants this one opens without signing in again (the same person's work and private assistants, say).
+     * Links go both ways. The assistants that gain or lose a link are made again so they read it; one that loses a link
+     * gets a new key, so a link made before cannot open it any more.
+     */
+    public function setLinks(string $id, array $ids): array
+    {
+        $s = $this->state(); $this->need($id);
+        $ids = array_values(array_unique(array_map('strval', $ids)));
+        foreach ($ids as $to) {
+            if ($to === $id) throw new \InvalidArgumentException('an assistant cannot link to itself');
+            if (!isset($s['instances'][$to])) throw new \InvalidArgumentException("no instance $to");
+        }
+        $s['sso_key'] ??= bin2hex(random_bytes(32));
+        $before = $s['instances'][$id]['links'] ?? [];
+        $added = array_values(array_diff($ids, $before)); $removed = array_values(array_diff($before, $ids));
+        if (!$added && !$removed) return $ids;
+        $s['instances'][$id]['links'] = $ids;
+        foreach ($added as $to) $s['instances'][$to]['links'] = array_values(array_unique([...($s['instances'][$to]['links'] ?? []), $id]));
+        foreach ($removed as $to) $s['instances'][$to]['links'] = array_values(array_diff($s['instances'][$to]['links'] ?? [], [$id]));
+        $redo = [$id, ...$added, ...$removed];
+        if ($removed) { // both sides get a new key; whoever still links to them reads the new one
+            foreach ([$id, ...$removed] as $x) {
+                $s['instances'][$x]['sso_gen'] = (int)($s['instances'][$x]['sso_gen'] ?? 0) + 1;
+                array_push($redo, ...($s['instances'][$x]['links'] ?? []));
+            }
+        }
+        $this->save($s);
+        foreach (array_unique($redo) as $x) $this->recreate($x);
+        return $ids;
+    }
+
     /** $deleteData: also the volume (the person's database, library, memory) — not reversible. */
     public function remove(string $id, bool $deleteData = false): void
     {
@@ -389,7 +434,9 @@ final class Fleet
         $this->docker('POST', "/networks/$net/disconnect", ['Container' => self::CADDY, 'Force' => true]);
         $this->docker('DELETE', "/networks/$net");
         if ($deleteData) $this->docker('DELETE', '/volumes/' . self::PREFIX . $id);
-        $s = $this->state(); unset($s['instances'][$id]); $this->save($s);
+        $s = $this->state(); unset($s['instances'][$id]);
+        foreach ($s['instances'] as $x => $i) if (in_array($id, $i['links'] ?? [], true)) $s['instances'][$x]['links'] = array_values(array_diff($i['links'], [$id])); // recreated when next changed
+        $this->save($s);
         $this->reloadCaddy();
     }
 
@@ -414,7 +461,7 @@ final class Fleet
     {
         $s = $this->state(); $out = [];
         foreach ($s['instances'] as $id => $i) {
-            $row = ['id' => $id, 'name' => $i['name'], 'email' => $i['email'], 'memory_mb' => $i['memory_mb'], 'cpus' => $i['cpus'], 'created' => $i['created'], 'url' => $this->url($id, $s['settings']),
+            $row = ['id' => $id, 'name' => $i['name'], 'email' => $i['email'], 'memory_mb' => $i['memory_mb'], 'cpus' => $i['cpus'], 'created' => $i['created'], 'url' => $this->url($id, $s['settings']), 'links' => $i['links'] ?? [],
                 'state' => 'missing', 'health' => '', 'image' => '', 'mem_used_mb' => null, 'last_activity' => null, 'version' => null];
             [$code, $c] = $this->docker('GET', '/containers/' . $this->containerName($id) . '/json');
             if ($code === 200) {

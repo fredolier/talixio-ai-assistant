@@ -121,6 +121,7 @@ final class App
     public function triage(): Triage { return new Triage($this); }
     public function accounts(): Accounts { return new Accounts($this); }
     public function spaces(): Spaces { return new Spaces($this); }
+    public function links(): Links { return new Links($this); }
     public function routines(): Routines { return new Routines($this); }
     public function board(): Board { return $this->board ??= new Board($this); }
     public function google(): Google { return new Google($this); }

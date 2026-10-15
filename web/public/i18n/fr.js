@@ -2462,5 +2462,12 @@ window.I18N.fr = {
 "The provider said no: {a}": "Le fournisseur a refusé : {a}",
 "AI account: {name}": "compte d'IA : {name}",
 "Mistral: background work at half price": "Mistral : travail de fond à moitié prix",
-"Summaries and the assistant's reflection go through Mistral's batch API: half the price, answers within a few hours.": "Les résumés et la réflexion de l'assistant passent par l'API batch de Mistral : moitié prix, réponses en quelques heures."
+"Summaries and the assistant's reflection go through Mistral's batch API: half the price, answers within a few hours.": "Les résumés et la réflexion de l'assistant passent par l'API batch de Mistral : moitié prix, réponses en quelques heures.",
+"Your other assistants": "Vos autres assistants",
+"That assistant is not linked to this one.": "Cet assistant n'est pas relié à celui-ci.",
+"Their other assistants (one sign-in)…": "Ses autres assistants (une seule connexion)…",
+"Assistants {name} opens without signing in again": "Assistants que {name} ouvre sans se reconnecter",
+"Apply (restarts them)": "Appliquer (les redémarre)",
+"For one person with several assistants (work and private, say): signed in to one, they open the others from its menu. Links go both ways.": "Pour une personne qui a plusieurs assistants (pro et perso, par exemple) : connectée à l'un, elle ouvre les autres depuis son menu. Le lien vaut dans les deux sens.",
+"One sign-in with": "Connexion commune avec"
 };

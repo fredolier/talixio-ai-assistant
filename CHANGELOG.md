@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.40 (2026-10-15)
+
+- **One sign-in across a person's assistants** (several people on one server): on the admin page, link a person's
+  assistants (work and private, say) with *Their other assistants (one sign-in)…*. The assistant's name in the app
+  then lists the others and opens them in the same tab, already signed in. The browser carries a ticket signed for
+  that assistant only, valid once for a minute; the assistants never call each other. Links work both ways, and
+  removing one changes the keys so earlier tickets stop working.
+
 ## 0.28.39 (2026-10-15)
 
 - **Spaces are walled off more strictly** (Confidential and Secret):

@@ -38,6 +38,21 @@ keep them apart: someone who can run code in their own assistant could reach ano
 Choose **subdomains** unless everyone on the server trusts each other. Local connectors always run in
 the sandbox on a shared server.
 
+## Several assistants for one person, one sign-in
+A person can have more than one assistant: a work one and a private one, for example, each with its
+own data, keys and provider. Talixio then has two levels: the **assistant** (a separate container,
+nothing shared) and, inside it, its **spaces** (one memory and library, with the rules of their
+confidentiality level).
+- On the admin page: the person's assistant → Actions → *Their other assistants (one sign-in)…*,
+  then tick the assistants it opens. A link works both ways, and the affected assistants restart.
+- In the app, the assistant's name (top left, or in *More* on a phone) lists the others. Choosing
+  one opens it in the same tab, already signed in.
+- The browser carries a ticket signed for that assistant only, valid once and for one minute. The
+  assistants never talk to each other.
+- The sign-in to the first assistant counts: the second one does not ask again for its password or
+  its authenticator code. Each assistant keeps its own password, which still works on its own.
+- Removing a link changes the keys of the assistants concerned: tickets made before no longer work.
+
 ## Good to know
 - Each assistant is limited (1 GB and 1.5 processors by default); Ollama takes up to 1.5 GB and half the processors; unticked in the admin settings, it is stopped.
 - Local transcription (large model) needs 2 GB for the person.

@@ -38,6 +38,22 @@ navigateur ne les sépare pas, et quelqu'un qui peut exécuter du code dans son 
 atteindre la session d'une autre personne. Choisissez les **sous-domaines** sauf si tout le monde sur le
 serveur se fait confiance. Sur un serveur partagé, les connecteurs locaux tournent toujours dans le bac à sable.
 
+## Plusieurs assistants pour une personne, une seule connexion
+Une personne peut avoir plusieurs assistants : un pour le travail et un privé, par exemple, chacun
+avec ses données, ses clés et son fournisseur. Talixio a alors deux niveaux : l'**assistant** (un
+conteneur à part, rien de partagé) et, dedans, ses **espaces** (une mémoire et une bibliothèque,
+avec les règles de leur niveau de confidentialité).
+- Sur la page d'administration : l'assistant de la personne → Actions → *Ses autres assistants
+  (une seule connexion)…*, puis cochez les assistants qu'il ouvre. Un lien vaut dans les deux sens,
+  et les assistants concernés redémarrent.
+- Dans l'application, le nom de l'assistant (en haut à gauche, ou dans *Plus* sur un téléphone)
+  liste les autres. En choisir un l'ouvre dans le même onglet, déjà connecté.
+- Le navigateur transporte un ticket signé pour cet assistant seulement, valable une fois et une
+  minute. Les assistants ne se parlent jamais.
+- La connexion au premier assistant compte : le second ne redemande ni son mot de passe ni son
+  code d'authentification. Chaque assistant garde son propre mot de passe, qui marche toujours seul.
+- Retirer un lien change les clés des assistants concernés : les tickets faits avant ne marchent plus.
+
 ## Bon à savoir
 - Chaque assistant est limité (1 Go et 1,5 processeur par défaut) ; Ollama prend jusqu'à 1,5 Go et la moitié des processeurs ; décoché dans les réglages de l'admin, il est arrêté.
 - La transcription locale (modèle large) a besoin de 2 Go pour la personne.

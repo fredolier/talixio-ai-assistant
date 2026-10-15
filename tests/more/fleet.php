@@ -156,6 +156,27 @@ $lg = $dlog();
 $created = array_values(array_filter($lg, fn($x) => str_starts_with($x['p'], '/containers/create')));
 $spec = json_decode($created[0]['b'] ?? '{}', true);
 check('fleet: limits are clamped and the container made again with them', $si['memory_mb'] === 16384 && $si['cpus'] === 0.25 && ($spec['HostConfig']['Memory'] ?? 0) === 16384 * 1048576 && ($spec['HostConfig']['NanoCpus'] ?? 0) === 250000000, json_encode([$si, $spec['HostConfig'] ?? null]));
+// one sign-in across a person's assistants
+check('fleet: a link to itself or to no one is refused', str_contains($throws(fn() => $f->setLinks('alice', ['alice'])), 'itself') && str_contains($throws(fn() => $f->setLinks('alice', ['zed'])), 'no instance zed'));
+$dlog();
+$f->setLinks('alice', ['dave']);
+$st = $f->state(); $lg = $dlog();
+$envOf = fn(string $id) => $f->spec($id, $f->state())['Env'];
+$linksOf = fn(string $id) => json_decode(substr((string)current(preg_grep('/^TALIXIO_LINKS=/', $envOf($id)) ?: ['TALIXIO_LINKS=[]']), 14), true);
+check('fleet: links go both ways and both containers are made again', $st['instances']['alice']['links'] === ['dave'] && $st['instances']['dave']['links'] === ['alice'] && strlen($st['sso_key']) === 64
+    && $has($lg, 'POST', '#^/containers/create\?name=talixio-alice#') && $has($lg, 'POST', '#^/containers/create\?name=talixio-dave#'), json_encode($lg));
+$la = $linksOf('alice');
+check('fleet: each one carries its own key and the key of the one it opens', ($la[0]['id'] ?? '') === 'dave' && $la[0]['url'] === 'https://localhost/dave/' && $la[0]['key'] === Fleet::ssoKey($st, 'dave')
+    && in_array('TALIXIO_SSO_KEY=' . Fleet::ssoKey($st, 'alice'), $envOf('alice'), true) && $linksOf('dave')[0]['key'] === Fleet::ssoKey($st, 'alice') && in_array('TALIXIO_INSTANCE_NAME=Dave', $envOf('dave'), true));
+check('fleet: the list shows the links', array_column($f->list(), 'links', 'id')['alice'] === ['dave']);
+$dlog(); $f->setLinks('alice', ['dave']);
+check('fleet: the same links change nothing', !$has($dlog(), 'POST', '#^/containers/create#'));
+$oldDave = Fleet::ssoKey($st, 'dave');
+$f->setLinks('dave', []);
+$st = $f->state(); $lg = $dlog();
+check('fleet: removing a link removes both sides and changes both keys', ($st['instances']['alice']['links'] ?? null) === [] && $st['instances']['dave']['links'] === [] && Fleet::ssoKey($st, 'dave') !== $oldDave
+    && !preg_grep('/^TALIXIO_(LINKS|SSO_KEY)=/', $envOf('alice')) && $has($lg, 'POST', '#^/containers/create\?name=talixio-alice#'), json_encode($st['instances']['alice']));
+$f->setLinks('alice', ['dave']);
 $pw = $f->resetPassword('alice');
 $reset = $f->state()['instances']['alice']['reset'];
 check('fleet: a password reset is applied once through the template', strlen($pw) === 20 && str_contains($reset, ':password:') && password_verify($pw, explode(':password:', $reset)[1]));
@@ -231,7 +252,7 @@ check('fleet: what install-stack.sh built is recorded (tag, branch)', $has($lg, 
 // remove
 $dlog(); $f->remove('dave', true); $lg = $dlog();
 check('fleet: remove with its data deletes the container, network and volume', $has($lg, 'DELETE', '#^/containers/talixio-dave#') && $has($lg, 'POST', '#^/networks/talixio-i-dave/disconnect#')
-    && $has($lg, 'DELETE', '#^/networks/talixio-i-dave$#') && $has($lg, 'DELETE', '#^/volumes/talixio-dave$#') && !isset($f->state()['instances']['dave']));
+    && $has($lg, 'DELETE', '#^/networks/talixio-i-dave$#') && $has($lg, 'DELETE', '#^/volumes/talixio-dave$#') && !isset($f->state()['instances']['dave']) && !in_array('dave', $f->state()['instances']['alice']['links'] ?? [], true));
 
 // transfer in
 $tp = []; $prog = function (string $phase, string $msg) use (&$tp) { $tp[] = "$phase|$msg"; };
@@ -504,6 +525,8 @@ check('admin: the logs of an instance', $lgs['text'] === '2026-10-14T08:00:02Z P
 $rules();
 check('admin: simple actions go through', ($a('/api/instances/frank/restart', [])['ok'] ?? false) === true && strlen($a('/api/instances/frank/reset-password', [])['password'] ?? '') === 20
     && ($a('/api/instances/frank/limits', ['memory_mb' => 2048, 'cpus' => 2])['ok'] ?? false) === true);
+$lk = $a('/api/instances/frank/links', ['links' => ['nobody']]);
+check('admin: links to an unknown assistant are refused with the reason', $lk['_code'] === 400 && str_contains($lk['error'], 'no instance nobody'), json_encode($lk));
 $rules([['POST', '#^/containers/talixio-frank/stop#', 500, ['message' => 'daemon error']]]);
 $st5 = $a('/api/instances/frank/stop', []);
 check('admin: an agent failure is a 502 with its reason', $st5['_code'] === 502 && str_contains($st5['error'], 'daemon error'), json_encode($st5));

@@ -4217,11 +4217,35 @@ function route() {
   }
 }
 
+/** The person's other assistants (linked in the admin page): opened signed in, in this tab. */
+function renderAssistants(list = []) {
+  if (JSON.stringify(list) === JSON.stringify(state.assistants || [])) return;
+  state.assistants = list;
+  $('#assistant-btn').hidden = !list.length;
+  const box = $('#more-assistants'); box.hidden = !list.length;
+  box.innerHTML = list.map(a => `<button class="btn" type="button" data-to="${esc(a.id)}">${esc(t('Open'))} <span class="no-i18n">${esc(a.name)}</span></button>`).join('');
+  box.querySelectorAll('[data-to]').forEach(b => b.onclick = () => openAssistant(b.dataset.to));
+}
+async function openAssistant(id) {
+  try { location.href = (await post('api/assistants/go', { to: id })).url; } catch (e) { toast(e.message); }
+}
+$('#assistant-btn').onclick = e => {
+  e.stopPropagation();
+  const menu = $('#assistant-menu'), btn = $('#assistant-btn');
+  if (!menu.hidden) { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); return; }
+  menu.innerHTML = `<button class="space-item current" role="menuitem" type="button" disabled><span class="name no-i18n">${esc(state.status?.name || '')}</span></button>`
+    + (state.assistants || []).map(a => `<button class="space-item" role="menuitem" type="button" data-to="${esc(a.id)}"><span class="name no-i18n">${esc(a.name)}</span></button>`).join('');
+  menu.querySelectorAll('[data-to]').forEach(b => b.onclick = () => { menu.hidden = true; openAssistant(b.dataset.to); });
+  menu.hidden = false; btn.setAttribute('aria-expanded', 'true');
+};
+document.addEventListener('click', e => { if (!e.target.closest('.brand')) { $('#assistant-menu').hidden = true; $('#assistant-btn').setAttribute('aria-expanded', 'false'); } });
+
 async function refreshStatus() {
   try {
     state.statusAt = Date.now();
     const s = state.status = await api('api/status');
     $('#brand-name').textContent = s.name; document.title = s.name;
+    renderAssistants(s.assistants);
     const ch = Object.entries(s.channels).filter(([, on]) => on).map(([k]) => k[0].toUpperCase() + k.slice(1)).join(', ');
     const b = s.budget, lim = b.daily_limit > 0 ? ` · $${b.today.toFixed(2)} of $${b.daily_limit.toFixed(2)} today` : '';
     $('#chat-sub').textContent = `${shortModel(s.model)} · ${ch}${lim}${b.state === 'low' ? ' · budget low' : b.state === 'blocked' ? ' · budget reached' : ''}`;

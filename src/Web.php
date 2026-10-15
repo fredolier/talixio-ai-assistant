@@ -16,6 +16,7 @@ final class Web
         if ($path === '/share' && $method === 'POST') { $this->shareInbox(); return; }
         if (preg_match('#^/cal/tasks-([0-9a-f]{40})\.ics$#', $path, $cm) && $method === 'GET') { $this->tasksIcs($cm[1]); return; } // calendar apps have no session
         if (preg_match('#^/s/([A-Za-z0-9_-]{20,64})(?:/(view|download|thumb|zip)(?:/(\d+))?)?/?$#', $path, $sm)) { $this->sharePage($sm[1], $sm[2] ?? '', (int)($sm[3] ?? 0), $method); return; } // links for people outside
+        if ($path === '/sso' && $method === 'GET') { $this->ssoEnter((string)($_GET['t'] ?? '')); return; } // opened from the person's other assistant
         if ($path === '/' || !str_starts_with($path, '/api/')) {
             header('Cache-Control: no-cache');
             header('Content-Type: text/html; charset=utf-8');
@@ -93,6 +94,8 @@ final class Web
         return match (true) {
             $path === '/api/logout' && $m === 'POST' => $this->logout(),
             $path === '/api/status' => $this->status(),
+            $path === '/api/assistants' && $m === 'GET' => ['current' => $this->app->links()->current(), 'assistants' => $this->app->links()->list()],
+            $path === '/api/assistants/go' && $m === 'POST' => ['url' => $this->app->links()->ticket((string)($b['to'] ?? ''))],
             $path === '/api/claude-login/start' && $m === 'POST' => (new ClaudeLogin($this->app))->start(),
             $path === '/api/claude-login/code' && $m === 'POST' => (new ClaudeLogin($this->app))->finish((string)($b['code'] ?? '')),
             $path === '/api/transfer' => (new Transfer($this->app))->status(),
@@ -516,7 +519,7 @@ final class Web
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store),
-            'model_problem' => $c->modelProblem(), 'claude_code' => ClaudeLogin::installed($c)];
+            'model_problem' => $c->modelProblem(), 'claude_code' => ClaudeLogin::installed($c), 'assistants' => $this->app->links()->list()];
     }
 
     private function channels(): array
@@ -1254,6 +1257,21 @@ final class Web
         $_SESSION['ok'] = true;
         $_SESSION['gen'] = $auth->generation();
         $this->json(['ok' => true]);
+    }
+
+    /** A ticket from the person's other assistant opens a session here (Links); without a valid one, the sign-in page. */
+    private function ssoEnter(string $ticket): void
+    {
+        header('Cache-Control: no-store'); header('Referrer-Policy: no-referrer');
+        $this->startSession();
+        if (($from = $this->app->links()->verify($ticket)) !== null) {
+            session_regenerate_id(true);
+            $_SESSION['ok'] = true;
+            $_SESSION['gen'] = $this->auth()->generation();
+            $_SESSION['sso_from'] = $from;
+        }
+        session_write_close();
+        header('Location: ' . Config::basePath() . '/', true, 303);
     }
 
     /** After a password change: a fresh session id for this device, marked with the new password generation. */
