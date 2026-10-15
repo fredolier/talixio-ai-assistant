@@ -3,6 +3,17 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.34 (2026-10-15)
+
+- Tasks: new **Week** view to plan time. An hour grid shows the week with your timed tasks and calendar events;
+  beside it, "Not planned yet" lists the tasks due this week that have no time. Drag one onto the grid to book a
+  slot (snapped to 30 minutes, sized from its estimate), drag a block to move it, or drop it back on the list to
+  remove the time. Every change can be undone from the message that confirms it.
+- Tasks: the Week view counts booked hours against "Hours a day" (7 by default) and says which days are full.
+- Tasks: on a phone the Week view shows one day or three, with a strip of the week's booked hours. Tap a task,
+  then tap a free slot to place it.
+- Tasks: the Calendar tab is now called **Month**. On a phone the view tabs scroll instead of wrapping.
+
 ## 0.28.33 (2026-10-15)
 
 - Tasks: new **Today** view, now the first tab. It shows overdue tasks (with one-click "Today" and "Tomorrow"),

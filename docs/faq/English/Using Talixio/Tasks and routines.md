@@ -3,7 +3,10 @@
 ## Tasks (one board per space)
 - Columns Ideas / To do / In progress / Blocked / Done; codes per space (MAI-12), priority P1 to P5,
   start and due dates, effort, time spent, labels, description, dependencies (even across spaces).
-- **Calendar** view; a task can appear in Google Calendar, Outlook or through a private iCal link,
+- **Today** view (overdue, today, next up) and one-line quick add: "Call Alex tomorrow 9am #sales 30m p2".
+- **Week** view to plan time: drag a task from "Not planned yet" onto the hour grid to book a slot; booked
+  hours are counted against your hours a day. On a phone: tap a task, then a free slot.
+- **Month** view; a task can appear in Google Calendar, Outlook or through a private iCal link,
   with its times if it has any (see "Calendar and meetings").
 - The day before a due date, a notification lists what is due tomorrow.
 - 30-day trash, history of every change, which can be undone.

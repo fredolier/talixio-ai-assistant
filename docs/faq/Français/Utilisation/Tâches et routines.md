@@ -3,7 +3,11 @@
 ## Tâches (un tableau par espace)
 - Colonnes Idées / À faire / En cours / Bloqué / Fait ; codes par espace (MAI-12), priorité P1 à P5,
   dates de début et d'échéance, charge, temps passé, étiquettes, description, dépendances (même entre espaces).
-- Vue **calendrier** ; une tâche peut apparaître dans Google Agenda, Outlook ou via un lien iCal privé,
+- Vue **Aujourd'hui** (en retard, aujourd'hui, à suivre) et ajout en une ligne : « Appeler Alex demain à 9h #ventes 30m p2 ».
+- Vue **Semaine** pour planifier son temps : glissez une tâche de « Pas encore planifié » sur la grille horaire pour
+  lui réserver un créneau ; les heures réservées sont comparées à vos heures par jour. Sur téléphone : touchez une
+  tâche, puis un créneau libre.
+- Vue **Mois** ; une tâche peut apparaître dans Google Agenda, Outlook ou via un lien iCal privé,
   avec ses heures si elle en a (voir « Agenda et réunions »).
 - La veille d'une échéance, une notification liste ce qui est dû demain.
 - Corbeille de 30 jours, historique de chaque modification, annulable.

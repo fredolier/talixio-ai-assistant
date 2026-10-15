@@ -1315,8 +1315,8 @@ async function loadBoard() {
   if (![...sel.options].some(o => o.value === boardPrefs.space)) boardPrefs.space = '0';
   sel.value = boardPrefs.space;
   sel.onchange = () => { boardPrefs.space = sel.value; boardPrefs.tag = ''; saveBoardPrefs(); loadBoard(); };
-  const mode = ['overall', 'calendar', 'today'].includes(boardPrefs.mode) ? boardPrefs.mode : 'board';
-  document.querySelectorAll('#view-board .seg button').forEach(b => { b.classList.toggle('on', b.dataset.mode === mode); b.setAttribute('aria-selected', b.dataset.mode === mode); b.onclick = () => { boardPrefs.mode = b.dataset.mode; saveBoardPrefs(); loadBoard(); }; });
+  const mode = ['overall', 'calendar', 'today', 'week'].includes(boardPrefs.mode) ? boardPrefs.mode : 'board';
+  document.querySelectorAll('#view-board .seg button[data-mode]').forEach(b => { b.classList.toggle('on', b.dataset.mode === mode); b.setAttribute('aria-selected', b.dataset.mode === mode); b.onclick = () => { boardPrefs.mode = b.dataset.mode; saveBoardPrefs(); loadBoard(); }; });
   $('#board-q').value = boardPrefs.q || '';
   $('#board-q').oninput = () => { clearTimeout(loadBoard.qt); loadBoard.qt = setTimeout(() => { boardPrefs.q = $('#board-q').value.trim(); saveBoardPrefs(); loadBoard(); }, 300); };
   $('#board-new').onclick = () => openCard(null, { space: boardPrefs.space === '' ? state.space : +boardPrefs.space });
@@ -1327,6 +1327,7 @@ async function loadBoard() {
   if (mode === 'overall') await renderOverall(await api('api/board/portfolio')); // arbitration is across all spaces
   else if (mode === 'calendar') await renderCalendar();
   else if (mode === 'today') await renderToday();
+  else if (mode === 'week') await renderWeek();
   else {
     const d = await api(`api/board?${sp}${q}`);
     Object.assign(board, d);
@@ -1339,7 +1340,7 @@ async function loadBoard() {
   $('#board-tags').hidden = mode !== 'board'; sel.hidden = mode === 'overall';
   $('#board-q').hidden = mode !== 'board';
   clearTimeout(loadBoard.t);
-  loadBoard.t = setTimeout(() => { if (location.hash.startsWith('#board') && !$('#card-dialog').open && !$('#move-sheet').open && !document.querySelector('.kcard.dragging, .qadd.typing, .qa-in:focus')) loadBoard().catch(() => {}); }, 30000);
+  loadBoard.t = setTimeout(() => { if (location.hash.startsWith('#board') && !$('#card-dialog').open && !$('#move-sheet').open && !document.querySelector('.dragging, .qadd.typing, .qa-in:focus, #board.picking')) loadBoard().catch(() => {}); }, 30000);
 }
 
 function cardHtml(c, opts = {}) {
@@ -1685,6 +1686,229 @@ async function renderToday() {
   };
   draw([]);
   if (cal.calendar) api(`api/board/calendar?from=${t0}&to=${t0}&events=1${sp ? '&' + sp : ''}`).then(d => { if (root.isConnected && root.className === 'today') draw(d.events); }).catch(() => {});
+}
+
+const hhmm = x => { const m = Math.round(x * 60); return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
+const hnum = s => { const [h, m] = s.split(':').map(Number); return h + (m || 0) / 60; };
+const mondayOf = k => addDays(k, -((new Date(k + 'T12:00:00').getDay() + 6) % 7));
+const wk = { drag: null, pick: null };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && wk.pick && document.querySelector('#board.week')) { wk.pick = null; loadBoard(); } });
+/** The time to book for a card: what is left of its workload (half an hour to 8 hours), else an hour. */
+const bookHours = c => { const left = (c.estimate_hours || 0) - (c.spent_hours || 0); return left > 0 ? Math.min(8, Math.max(0.5, Math.round(left * 4) / 4)) : 1; };
+
+/** Book a time for a card on day k from hour s; its due date moves to that day. s null: no time any more, the date stays. */
+async function bookSlot(c, k, s, dur = bookHours(c)) {
+  const old = { due_date: c.due_date, start_date: c.start_date, start_time: c.start_time, end_time: c.end_time };
+  let body;
+  if (s === null) { if (!c.start_time) return false; body = { start_time: null, end_time: null }; }
+  else {
+    dur = Math.min(dur, 23.75); s = Math.max(0, Math.min(s, 23.75 - dur));
+    body = { due_date: k, start_date: null, start_time: hhmm(s), end_time: hhmm(s + dur) };
+    if (old.due_date === k && !old.start_date && old.start_time === body.start_time && old.end_time === body.end_time) return false;
+  }
+  const { card } = await post(`api/board/${c.id}`, { version: c.version, ...body });
+  const later = s !== null && old.due_date && old.due_date < k && c.status !== 'done';
+  const msg = s === null ? `${c.code}: no time booked` : `${c.code}: ${fmtDay(k)}, ${body.start_time}–${body.end_time}` + (later ? ` (was due ${fmtDay(old.due_date)})` : '');
+  toastAction(msg, 'Undo', async () => { try { await post(`api/board/${c.id}`, { version: card.version, ...old }); toast('Undone'); } catch (e) { toast(e.message); } loadBoard(); });
+  return true;
+}
+
+/** Week: the week as an hour grid, with the tasks not booked yet beside it. Drag one onto the grid (or tap it, then a slot) to book time for it. */
+async function renderWeek() {
+  const t0 = today(), narrow = matchMedia('(max-width: 760px)').matches, H = narrow ? 52 : 48;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(boardPrefs.wday || '')) boardPrefs.wday = t0;
+  const n = narrow ? (boardPrefs.wdays === 3 ? 3 : 1) : 7;
+  const mon = mondayOf(boardPrefs.wday), sun = addDays(mon, 6);
+  const first = narrow ? boardPrefs.wday : mon, last = addDays(first, n - 1);
+  const days = Array.from({ length: n }, (_, i) => addDays(first, i)), week = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
+  const all = boardPrefs.space === '', sp = all ? '' : `&space=${boardPrefs.space}`, to = last > sun ? last : sun;
+  const [pf, cal] = await Promise.all([api(`api/board/portfolio?${sp.slice(1)}`), api(`api/board/calendar?from=${mon}&to=${to}${sp}`)]);
+  board.refs = { ...(board.refs || {}), ...pf.refs };
+  board.cards = pf.cards;
+  const cap = Math.min(24, Math.max(0, +(boardPrefs.cap ?? 7)));
+  const dl = (k, o) => new Date(k + 'T12:00:00').toLocaleDateString(LOCALE, o);
+  const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const weekend = k => new Date(k + 'T12:00:00').getDay() % 6 === 0;
+
+  const root = $('#board'); root.className = 'week' + (wk.pick ? ' picking' : ''); root.innerHTML = '';
+  $('#board-summary').hidden = true;
+  const range = first === last ? dl(first, { weekday: 'long', day: 'numeric', month: 'long' })
+    : new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' }).formatRange(new Date(first + 'T12:00:00'), new Date(last + 'T12:00:00'));
+  const bar = document.createElement('div'); bar.className = 'cal-bar wk-bar';
+  bar.innerHTML = `<button type="button" class="icon-btn" data-w="-1" aria-label="${narrow ? 'Earlier' : 'Previous week'}" title="${narrow ? 'Earlier' : 'Previous week'}">‹</button><button type="button" class="btn small ghost" data-w="0">Today</button><button type="button" class="icon-btn" data-w="1" aria-label="${narrow ? 'Later' : 'Next week'}" title="${narrow ? 'Later' : 'Next week'}">›</button>
+    <b class="no-i18n">${esc(range)}</b><span class="spacer"></span>${narrow ? `<div class="seg" role="group" aria-label="Days shown"><button type="button" data-n="1"${n === 1 ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"'}>Day</button><button type="button" data-n="3"${n === 3 ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"'}>3 days</button></div>` : ''}`;
+  bar.querySelectorAll('[data-w]').forEach(b => b.onclick = () => { const k = +b.dataset.w; boardPrefs.wday = k ? addDays(narrow ? first : mon, k * n) : t0; saveBoardPrefs(); loadBoard(); });
+  bar.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { boardPrefs.wdays = +b.dataset.n; saveBoardPrefs(); loadBoard(); });
+  root.append(bar);
+  const qa = quickAdd({ compact: true, defaults: () => ({ space: all ? state.space : +boardPrefs.space, due_date: days.includes(t0) ? t0 : first }), showSpace: all, onAdded: () => loadBoard().then(() => $('#board .qa-in')?.focus()) });
+  root.append(qa);
+
+  // not booked yet: due by the end of the week (or in progress), then the next undated ones in the overall order
+  const open = pf.cards.filter(c => !c.start_time && !['idea', 'done', 'blocked'].includes(c.status));
+  const dueBy = open.filter(c => (c.due_date && c.due_date <= to) || c.status === 'doing')
+    .sort((a, b) => (a.due_date || '9').localeCompare(b.due_date || '9') || a.priority - b.priority);
+  const undated = open.filter(c => !c.due_date && c.status !== 'doing' && (!c.start_date || c.start_date <= to)).slice(0, 6);
+  const trayH = dueBy.reduce((a, c) => a + bookHours(c), 0);
+  const body = document.createElement('div'); body.className = 'wk-body';
+  const tray = document.createElement('aside'); tray.className = 'wk-tray';
+  const item = c => {
+    const s = spaceOf(c.space), late = c.due_date && c.due_date < t0;
+    const bits = [`<span class="code">${esc(c.code)}</span>`];
+    if (c.due_date) bits.push(`<span class="${late ? 'late' : ''}">${c.due_date === t0 ? 'today' : esc(dl(c.due_date, { weekday: 'short', day: 'numeric' }))}</span>`);
+    bits.push(`<span>${fmtH(bookHours(c))}</span>`);
+    return `<div class="wk-item${wk.pick?.c.id === c.id ? ' on' : ''}" data-id="${c.id}" draggable="true" tabindex="0" style="--sp:${esc(s.color || 'var(--muted)')}" title="${esc(c.code)} ${esc(c.title)}">
+      <div class="wk-it-meta small muted"><i></i>${bits.join('<span aria-hidden="true">·</span>')}<span class="prio p${c.priority}">P${c.priority}</span></div>
+      <div class="wk-it-title no-i18n">${esc(c.title)}</div>
+      <button type="button" class="wk-book" data-book="${c.id}" aria-label="Book a time" title="Book a time">⏱</button></div>`;
+  };
+  tray.innerHTML = `<h3>Not planned yet${dueBy.length ? ` <span class="muted">· ${dueBy.length} · ${fmtH(trayH)}</span>` : ''}</h3>
+    <p class="muted small wk-hint">${coarse() || narrow ? 'Tap a task, then tap a free slot to book time for it.' : 'Drag a task onto the week to book time for it.'}</p>
+    <div class="wk-list">${dueBy.map(item).join('') || `<p class="muted small">Nothing due ${narrow && n < 7 ? 'by then' : 'this week'} is left to plan.</p>`}</div>
+    ${undated.length ? `<h4>No date</h4><div class="wk-list">${undated.map(item).join('')}</div>` : ''}
+    <div class="wk-load"></div>`;
+  body.append(tray);
+  const main = document.createElement('section'); main.className = 'wk-main';
+  body.append(main);
+  root.append(body);
+  const cardsById = new Map([...pf.cards, ...cal.cards].map(c => [c.id, c]));
+
+  const setPick = c => {
+    wk.pick = c && wk.pick?.c.id !== c.id ? { c, dur: bookHours(c) } : null;
+    root.classList.toggle('picking', !!wk.pick);
+    tray.querySelectorAll('.wk-item').forEach(el => el.classList.toggle('on', +el.dataset.id === wk.pick?.c.id));
+    const pb = main.querySelector('.wk-pickbar');
+    pb.hidden = !wk.pick;
+    if (wk.pick) { pb.querySelector('span').textContent = `Tap a free slot to place ${wk.pick.c.code}`; if (narrow) main.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+  };
+  tray.querySelectorAll('.wk-item').forEach(el => {
+    const c = cardsById.get(+el.dataset.id);
+    el.onclick = e => { if (e.target.closest('.wk-book') || coarse() || narrow) setPick(c); else openCard(c.id); };
+    el.onkeydown = e => { if (e.key === 'Enter' && e.target === el) openCard(c.id); if (e.key === ' ' && e.target === el) { e.preventDefault(); setPick(c); } };
+    el.ondragstart = e => { e.dataTransfer.setData('text/plain', String(c.id)); e.dataTransfer.effectAllowed = 'move'; wk.drag = { c, dur: bookHours(c), off: 0 }; el.classList.add('dragging'); };
+    el.ondragend = () => { el.classList.remove('dragging'); wk.drag = null; main.querySelectorAll('.wk-ghost').forEach(g => g.remove()); };
+    bindLongPress(el, () => openMoveSheet(c));
+  });
+  // a booked task dragged back to the tray loses its time
+  tray.ondragover = e => { if (wk.drag?.c.start_time) { e.preventDefault(); tray.classList.add('over'); } };
+  tray.ondragleave = e => { if (!tray.contains(e.relatedTarget)) tray.classList.remove('over'); };
+  tray.ondrop = async e => { e.preventDefault(); tray.classList.remove('over'); const d = wk.drag; wk.drag = null; if (!d) return; try { if (!await bookSlot(d.c, null, null)) return; } catch (err) { toast(err.message); } loadBoard(); };
+
+  const draw = events => {
+    // what fills each day: timed tasks and events, in hours
+    const per = {}, dueOn = {}, allDay = {};
+    const add = (k, it) => (per[k] ||= []).push(it);
+    for (const c of cal.cards) {
+      if (c.start_time && (c.start_date || c.due_date)) {
+        const k = c.start_date || c.due_date, s = hnum(c.start_time);
+        let e = c.end_time && (c.due_date || k) === k ? hnum(c.end_time) : s + 1;
+        if (e <= s) e = s + 0.5;
+        add(k, { s, e, c });
+      } else if (c.due_date) (dueOn[c.due_date] ||= []).push(c);
+    }
+    for (const ev of events || []) {
+      const s = new Date(ev.start * 1000), en = new Date((ev.end || ev.start + 1800) * 1000 - (ev.all_day ? 1000 : 0));
+      for (const d = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 12); isoDay(d) <= isoDay(en); d.setDate(d.getDate() + 1)) {
+        const k = isoDay(d);
+        if (k < mon || k > to) continue;
+        if (ev.all_day) { (allDay[k] ||= []).push(ev); continue; }
+        add(k, { s: isoDay(s) < k ? 0 : s.getHours() + s.getMinutes() / 60, e: isoDay(en) > k ? 24 : Math.max(en.getHours() + en.getMinutes() / 60, 0.25), ev });
+      }
+    }
+    const booked = k => (per[k] || []).reduce((a, it) => a + (it.e - it.s), 0);
+    // the load: booked against what a working week holds
+    const tot = week.reduce((a, k) => a + booked(k), 0), capW = cap * week.filter(k => !weekend(k)).length;
+    const full = week.filter(k => !weekend(k) && cap && booked(k) >= cap);
+    const pct = capW ? Math.min(100, Math.round(tot / capW * 100)) : 0;
+    tray.querySelector('.wk-load').innerHTML = `<div class="wk-load-nums small"><span>Booked this week</span><b class="no-i18n">${+(Math.round(tot * 4) / 4).toFixed(2)}h / ${capW}h</b></div>
+      <div class="td-bar${tot > capW ? ' over' : ''}" role="progressbar" aria-label="Booked this week" aria-valuemin="0" aria-valuemax="${capW}" aria-valuenow="${Math.round(tot * 4) / 4}"><i style="width:${pct}%"></i></div>
+      ${full.map(k => { const b = Math.round(booked(k) * 4) / 4; return `<p class="small ${b > cap ? 'late' : 'warn'}">${b > cap ? `${esc(cap1(dl(k, { weekday: 'long' })))} is over: ${fmtH(b)} of ${fmtH(cap)}.` : `${esc(cap1(dl(k, { weekday: 'long' })))} is full: ${fmtH(b)} of ${fmtH(cap)}.`}</p>`; }).join('')}
+      <label class="small muted wk-cap">Hours a day <input type="number" min="0" max="24" step="0.5" value="${cap}" aria-label="Hours a day"></label>
+      <p class="muted small">Tasks and meetings with a time count.</p>`;
+    const capIn = tray.querySelector('.wk-cap input');
+    capIn.onchange = () => { const v = parseFloat(capIn.value); if (v >= 0 && v <= 24) { boardPrefs.cap = v; saveBoardPrefs(); draw(events); } };
+
+    const timed = days.flatMap(k => per[k] || []);
+    const from = Math.max(0, Math.floor(Math.min(8, ...timed.map(i => i.s)))), end = Math.min(24, Math.ceil(Math.max(18, ...timed.map(i => i.e))));
+    let html = '';
+    if (narrow) html += `<div class="wk-strip">${week.map(k => { const b = booked(k); return `<button type="button" class="${days.includes(k) ? 'on' : ''}${k === t0 ? ' today' : ''}" data-day="${k}"><small>${esc(dl(k, { weekday: 'narrow' }))}</small><b>${+k.slice(8)}</b><span class="${cap && !weekend(k) && b >= cap ? 'full' : ''}">${b ? fmtH(Math.round(b * 2) / 2) : '·'}</span></button>`; }).join('')}</div>`;
+    html += `<div class="wk-pickbar"${wk.pick ? '' : ' hidden'}><span>${wk.pick ? `Tap a free slot to place ${esc(wk.pick.c.code)}` : ''}</span><button type="button" class="btn small ghost">Cancel</button></div>`;
+    html += `<div class="wk-cal" style="--n:${n};--hh:${H}px"><div class="wk-head"><div></div>`;
+    for (const k of days) {
+      const due = (dueOn[k] || []).sort((a, b) => (a.status === 'done') - (b.status === 'done') || a.priority - b.priority);
+      const b = booked(k);
+      html += `<div class="wk-dh${k === t0 ? ' today' : ''}${weekend(k) ? ' weekend' : ''}"><div class="wk-dn"><span>${esc(dl(k, { weekday: 'short' }))}</span><b>${+k.slice(8)}</b>${b ? `<small class="${cap && !weekend(k) && b >= cap ? 'full' : ''}" title="Booked">${fmtH(Math.round(b * 4) / 4)}</small>` : ''}</div>
+        ${due.map(c => `<button type="button" class="wk-due p${c.priority}${c.status === 'done' ? ' done' : ''}${k < t0 && c.status !== 'done' ? ' late' : ''}" data-id="${c.id}" draggable="${c.status !== 'done'}" title="${esc(c.code)} ${esc(c.title)}"><span>Due</span> · <b class="no-i18n">${esc(c.code)}</b></button>`).join('')}
+        ${(allDay[k] || []).map(ev => `<div class="wk-allday no-i18n" title="${esc(ev.title)}">${esc(ev.title)}</div>`).join('')}</div>`;
+    }
+    html += `</div><div class="wk-scroll"><div class="wk-grid" style="height:${(end - from) * H}px"><div class="wk-hours">`;
+    for (let h = from; h < end; h++) html += `<span style="top:${(h - from) * H}px">${String(h).padStart(2, '0')}:00</span>`;
+    html += '</div>';
+    const now = new Date(), nowH = now.getHours() + now.getMinutes() / 60;
+    for (const k of days) {
+      const items = (per[k] || []).sort((a, b) => a.s - b.s || b.e - a.e), lanes = [];
+      for (const it of items) { let l = lanes.findIndex(e => e <= it.s); if (l < 0) { l = lanes.length; lanes.push(0); } lanes[l] = it.e; it.lane = l; }
+      for (const it of items) it.n = Math.max(1, ...items.filter(o => o.s < it.e && o.e > it.s).map(o => o.lane + 1));
+      html += `<div class="wk-col${k === t0 ? ' today' : ''}${weekend(k) ? ' weekend' : ''}" data-day="${k}">`;
+      for (const it of items) {
+        const top = (Math.max(it.s, from) - from) * H + 1, hgt = Math.max(16, (Math.min(it.e, end) - Math.max(it.s, from)) * H - 2), pos = `top:${top}px;height:${hgt}px;left:calc(${it.lane} * 100% / ${it.n} + 2px);width:calc(100% / ${it.n} - 4px)`;
+        const sh = hgt < 40 ? ' short' : '';
+        if (it.ev) html += `<div class="wk-blk ev${sh}" style="${pos}" title="${esc(it.ev.title)}${it.ev.location ? ' · ' + esc(it.ev.location) : ''}"><b class="no-i18n">${esc(it.ev.title)}</b><small><span class="no-i18n">${hhmm(it.s)}</span> · agenda</small></div>`;
+        else { const c = it.c, s = spaceOf(c.space); html += `<div class="wk-blk p${c.priority}${c.status === 'done' ? ' done' : ''}${sh}" data-id="${c.id}" draggable="true" tabindex="0" style="${pos};--sp:${esc(s.color || 'var(--accent)')}" title="${esc(c.code)} ${esc(c.title)} · ${esc(c.start_time)}–${esc(c.end_time || hhmm(it.e))}"><b class="no-i18n">${esc(c.title)}</b><small class="no-i18n">${esc(c.code)} · ${esc(c.start_time)}–${esc(c.end_time || hhmm(it.e))}</small></div>`; }
+      }
+      if (k === t0 && nowH >= from && nowH <= end) html += `<div class="tl-now wk-now" style="top:${(nowH - from) * H}px"></div>`;
+      html += '</div>';
+    }
+    html += '</div></div></div>';
+    main.innerHTML = html;
+    if (!timed.length && !days.some(k => dueOn[k]?.length || allDay[k]?.length)) main.insertAdjacentHTML('beforeend', `<p class="muted small wk-empty">${narrow ? 'Nothing booked yet.' : 'Nothing booked this week yet.'}</p>`);
+
+    main.querySelector('.wk-pickbar button').onclick = () => setPick(null);
+    main.querySelectorAll('.wk-strip [data-day]').forEach(b => b.onclick = () => { boardPrefs.wday = b.dataset.day; saveBoardPrefs(); loadBoard(); });
+    const at = (col, y) => Math.max(from, Math.min(end - 0.5, from + Math.round((y - col.getBoundingClientRect().top) / H * 2) / 2));
+    const ghost = (col, s, dur, code) => {
+      let g = col.querySelector('.wk-ghost'); main.querySelectorAll('.wk-ghost').forEach(x => x !== g && x.remove());
+      if (!g) { g = document.createElement('div'); g.className = 'wk-ghost'; col.append(g); }
+      g.style.top = `${(s - from) * H}px`; g.style.height = `${Math.min(dur, end - s) * H}px`;
+      g.textContent = `${code} · ${hhmm(s)}–${hhmm(Math.min(23.75, s + dur))}`;
+    };
+    main.querySelectorAll('.wk-col').forEach(col => {
+      const k = col.dataset.day;
+      col.ondragover = e => { if (!wk.drag) return; e.preventDefault(); ghost(col, at(col, e.clientY - wk.drag.off * H), wk.drag.dur, wk.drag.c.code); };
+      col.ondragleave = e => { if (!col.contains(e.relatedTarget)) col.querySelector('.wk-ghost')?.remove(); };
+      col.ondrop = async e => {
+        e.preventDefault(); const d = wk.drag; wk.drag = null; if (!d) return;
+        const s = at(col, e.clientY - d.off * H);
+        try { if (!await bookSlot(d.c, k, s, d.dur)) { col.querySelector('.wk-ghost')?.remove(); return; } } catch (err) { toast(err.message); }
+        loadBoard();
+      };
+      col.onmousemove = e => { if (wk.pick && !e.target.closest('.wk-blk')) ghost(col, at(col, e.clientY), wk.pick.dur, wk.pick.c.code); };
+      col.onmouseleave = () => { if (wk.pick) col.querySelector('.wk-ghost')?.remove(); };
+      col.onclick = async e => {
+        if (!wk.pick || e.target.closest('.wk-blk:not(.ev)')) return;
+        const p = wk.pick; setPick(null);
+        try { if (!await bookSlot(p.c, k, at(col, e.clientY), p.dur)) return; } catch (err) { toast(err.message); }
+        loadBoard();
+      };
+    });
+    main.querySelectorAll('.wk-blk[data-id]').forEach(el => {
+      const c = cardsById.get(+el.dataset.id), it = per[c.start_date || c.due_date]?.find(x => x.c === c);
+      el.onclick = e => { if (wk.pick) return; e.stopPropagation(); openCard(c.id); };
+      el.onkeydown = e => { if (e.key === 'Enter') openCard(c.id); };
+      el.ondragstart = e => { e.dataTransfer.setData('text/plain', String(c.id)); e.dataTransfer.effectAllowed = 'move'; wk.drag = { c, dur: it ? it.e - it.s : 1, off: Math.round((e.clientY - el.getBoundingClientRect().top) / H * 2) / 2 }; setTimeout(() => el.classList.add('dragging')); };
+      el.ondragend = () => { el.classList.remove('dragging'); wk.drag = null; main.querySelectorAll('.wk-ghost').forEach(g => g.remove()); };
+      bindLongPress(el, () => openMoveSheet(c));
+    });
+    main.querySelectorAll('.wk-due').forEach(el => {
+      const c = cardsById.get(+el.dataset.id);
+      el.onclick = () => { if (c.status !== 'done' && (coarse() || narrow)) setPick(c); else openCard(c.id); };
+      el.ondragstart = e => { e.dataTransfer.setData('text/plain', String(c.id)); wk.drag = { c, dur: bookHours(c), off: 0 }; };
+      el.ondragend = () => { wk.drag = null; main.querySelectorAll('.wk-ghost').forEach(g => g.remove()); };
+    });
+    const sc = main.querySelector('.wk-scroll'), nowEl = main.querySelector('.wk-now');
+    sc.scrollTop = nowEl ? Math.max(0, nowEl.offsetTop - 2 * H) : Math.max(0, (8 - from) * H);
+  };
+  draw([]);
+  if (cal.calendar) api(`api/board/calendar?from=${mon}&to=${to}&events=1${sp}`).then(d => { if (root.isConnected && root.classList.contains('week')) { draw(d.events); if (d.events_error) toast('Your agenda could not be read: ' + d.events_error); } }).catch(() => {});
 }
 
 /** Long-press (touch) opens a menu; right-click too. The click that follows a long-press is swallowed. */
