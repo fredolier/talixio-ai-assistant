@@ -353,6 +353,38 @@
                 <div id="eu-outside"></div>
               </form>
             </div>
+            <div class="card set-card" id="acc-card">
+              <h4>AI accounts <span id="acc-badge" class="muted small"></span></h4>
+              <p class="muted small">Other providers or subscriptions a space can use instead of the main settings: a client's space on a European provider, another on a second Claude subscription. Each account has its own limits. Choose the account in the space's settings (General: in the space menu).</p>
+              <div id="acc-list"></div>
+              <div class="row"><button id="acc-add" class="btn" type="button">+ Add an account</button></div>
+              <form id="acc-form" class="fields" hidden>
+                <label for="acc-name">Name</label><input id="acc-name" maxlength="60" placeholder="Claude Pro, Mistral for clients…">
+                <label for="acc-kind">Kind</label>
+                <select id="acc-kind">
+                  <option value="sovereign">European provider</option>
+                  <option value="claude-code">Claude subscription (Claude Code)</option>
+                  <option value="anthropic">Anthropic API</option>
+                  <option value="openai">OpenAI-compatible</option>
+                  <option value="gemini">Google Gemini</option>
+                </select>
+                <div id="acc-service-row" class="sub"><label for="acc-service">Provider</label><select id="acc-service"></select><p id="acc-about" class="muted small"></p></div>
+                <div id="acc-token-row" class="sub"><label for="acc-token">Token</label><input id="acc-token" type="password" autocomplete="off" spellcheck="false">
+                  <p class="muted small">On a computer with Claude Code, sign in with the subscription to use, run <code>claude setup-token</code> and paste the token it prints. Each subscription has its own token.</p>
+                  <p id="acc-no-cc" class="bad small" hidden>Claude Code is not installed on this server.</p></div>
+                <div id="acc-key-row" class="sub"><label for="acc-key">API key</label><input id="acc-key" type="password" autocomplete="off" spellcheck="false"></div>
+                <div id="acc-url-row" class="sub"><label for="acc-url">Address</label><input id="acc-url" type="url" placeholder="https://…/v1" spellcheck="false"></div>
+                <div id="acc-paid-row"><label class="check"><input id="acc-paid" type="checkbox"> This key is on a paid plan (not used for training)</label></div>
+                <details class="adv sub"><summary>Models (optional)</summary>
+                  <p class="muted small">Leave empty for the usual models.</p>
+                  <label for="acc-m-fast">fast</label><input id="acc-m-fast" spellcheck="false">
+                  <label for="acc-m-standard">standard</label><input id="acc-m-standard" spellcheck="false">
+                  <label for="acc-m-deep">deep</label><input id="acc-m-deep" spellcheck="false">
+                </details>
+                <div class="row wrap"><button id="acc-test" class="btn" type="button">Test</button><button id="acc-save" class="btn primary" type="submit">Save</button><button id="acc-cancel" class="btn ghost" type="button">Cancel</button><span class="spacer"></span><button id="acc-delete" class="btn ghost danger" type="button" hidden>Delete</button></div>
+                <p id="acc-state" class="muted small"></p>
+              </form>
+            </div>
             <div class="set-groups" data-groups="model"></div>
           </div>
 
@@ -599,6 +631,7 @@
     <label>Confidentiality</label>
     <div id="sp-privacy" class="sp-privacy" role="radiogroup" aria-label="Confidentiality"></div>
     <label for="sp-tier">Model</label><select id="sp-tier"><option value="standard">standard</option><option value="fast">fast</option><option value="deep">deep</option></select>
+    <div id="sp-account-row" class="sub" hidden><label for="sp-account">AI account</label><select id="sp-account"></select></div>
     <label for="sp-instructions">Instructions for this space</label>
     <textarea id="sp-instructions" rows="4" placeholder="Context, tone, language, what to watch for…"></textarea>
     <label for="sp-notes">Notes <span class="muted small">(the assistant keeps them up to date; you can edit)</span></label>

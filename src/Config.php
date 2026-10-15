@@ -35,6 +35,10 @@ final class Config
     public bool $visionIndex = true;             // library: describe images and read scanned PDFs with the fast model
     public string $openaiBaseUrl = 'https://api.openai.com/v1';
     public string $claudeBin = 'claude';
+    /** A second Claude subscription (AI account): the token from `claude setup-token`, given to the CLI instead of the server's login. */
+    public string $claudeToken = '';
+    /** The AI account this configuration is for ('' = the main settings). */
+    public string $account = '';
     public string $dataDir = 'data';
     public string $timezone = 'UTC';
     public string $name = 'Talixio';
@@ -153,12 +157,7 @@ final class Config
         $e = static fn(string $k, string $d = ''): string => ($v = getenv($k)) !== false && $v !== '' ? trim($v) : $d;
         $c = new self();
         $c->provider = strtolower($e('TALIXIO_PROVIDER', 'anthropic'));
-        [$fast, $std, $deep] = match ($c->provider) {
-            'anthropic' => ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
-            'openai' => ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1'],
-            'claude-code' => ['haiku', 'sonnet', 'opus'],
-            default => ['', '', ''], // gemini, sovereign: chosen from the models your key can use (GeminiModels, Sovereign)
-        };
+        [$fast, $std, $deep] = self::defaultModels($c->provider); // gemini, sovereign: chosen from the models your key can use (GeminiModels, Sovereign)
         $std = $e('TALIXIO_MODEL', $std);
         $c->tiers = [
             'fast' => new Tier('fast', $e('TALIXIO_MODEL_FAST', $e('TALIXIO_CHEAP_MODEL', $fast)), 6),
@@ -343,6 +342,64 @@ final class Config
         return $c;
     }
 
+    /** Provider defaults for the three tiers ('' = chosen from the models the key can use). */
+    public static function defaultModels(string $provider): array
+    {
+        return match ($provider) {
+            'anthropic' => ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
+            'openai' => ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1'],
+            'claude-code' => ['haiku', 'sonnet', 'opus'],
+            default => ['', '', ''],
+        };
+    }
+
+    /**
+     * This configuration with the model of an AI account (Accounts): its provider, key, address and models. What is not
+     * the conversation model stays as set: transcription, search by meaning, the European-only rule, budgets.
+     */
+    public function forAccount(array $a): self
+    {
+        $c = clone $this;
+        $kind = (string)$a['kind'];
+        $c->provider = $kind; $c->account = (string)$a['id'];
+        $def = self::defaultModels($kind);
+        $m = fn(string $k, int $i) => trim((string)($a['models'][$k] ?? '')) ?: $def[$i];
+        $deep = $this->tiers['deep'] ?? null;
+        $c->tiers = [
+            'fast' => new Tier('fast', $m('fast', 0), 6),
+            'standard' => new Tier('standard', $m('standard', 1), 12),
+            'deep' => new Tier('deep', $m('deep', 2), 25, $deep ? $deep->thinkingTokens : 8000, in_array($kind, ['openai', 'sovereign'], true) ? '' : 'high'),
+        ];
+        $key = (string)($a['key'] ?? ''); $url = rtrim((string)($a['url'] ?? ''), '/');
+        switch ($kind) {
+            case 'anthropic':
+                $c->anthropicKey = $key; $c->anthropicBaseUrl = $url ?: 'https://api.anthropic.com';
+                break;
+            case 'openai':
+                $c->openaiKey = $key; $c->openaiBaseUrl = $url ?: 'https://api.openai.com/v1';
+                break;
+            case 'gemini':
+                $c->openaiKey = $key; $c->openaiBaseUrl = ($url ?: $this->geminiBaseUrl) . '/openai';
+                $c->geminiPaid = !empty($a['paid']);
+                break;
+            case 'sovereign': // transcription and search by meaning keep the main European settings (Transcriber, Embeddings use mainCfg)
+                $c->sovereign = isset(Sovereign::SERVICES[$a['service'] ?? '']) ? $a['service'] : 'ovhcloud';
+                $c->sovereignKey = $key; $c->sovereignUrl = $url ?: Sovereign::SERVICES[$c->sovereign]['url'];
+                $c->openaiKey = $key; $c->openaiBaseUrl = $c->sovereignUrl;
+                break;
+            case 'claude-code':
+                $c->claudeToken = (string)($a['token'] ?? '');
+                break;
+        }
+        // the model's own web search follows the provider
+        $builtin = in_array($kind, ['anthropic', 'claude-code'], true);
+        if ($c->search === 'builtin' && !$builtin) $c->search = $kind === 'gemini' && $c->geminiKey !== '' ? 'gemini' : 'off';
+        elseif ($c->search === 'off' && $builtin && !$c->sovereignOnly && in_array(strtolower((string)getenv('TALIXIO_SEARCH')), ['', 'auto'], true)) $c->search = 'builtin';
+        return $c;
+    }
+
+    public function __clone() { foreach ($this->tiers as $k => $t) $this->tiers[$k] = clone $t; }
+
     private static function effort(string $v): string { return in_array($v = strtolower($v), Tier::EFFORTS, true) ? $v : ''; }
 
     public function tier(string $name): Tier { return $this->tiers[$name] ?? $this->tiers['standard']; }
@@ -353,11 +410,11 @@ final class Config
         return match ($this->provider) {
             'echo' => null,
             'anthropic' => $this->anthropicKey === '' ? 'no-key' : null,
-            'gemini' => $this->geminiKey === '' ? 'no-key' : null,
+            'gemini' => $this->openaiKey === '' ? 'no-key' : null, // the Gemini key, set as the OpenAI-compatible one
             'sovereign' => $this->sovereignReady() ? null : 'no-key',
             'openai' => $this->openaiKey === '' && str_contains($this->openaiBaseUrl, 'api.openai.com') ? 'no-key' : null, // a local server needs none
             'claude-code' => !ClaudeLogin::installed($this) ? 'no-claude-code'
-                : ((getenv('CLAUDE_CODE_OAUTH_TOKEN') ?: '') === '' && $this->anthropicKey === '' && !is_file((getenv('HOME') ?: '') . '/.claude/.credentials.json') ? 'no-key' : null),
+                : ($this->claudeToken === '' && (getenv('CLAUDE_CODE_OAUTH_TOKEN') ?: '') === '' && $this->anthropicKey === '' && !is_file((getenv('HOME') ?: '') . '/.claude/.credentials.json') ? 'no-key' : null),
             default => null,
         };
     }

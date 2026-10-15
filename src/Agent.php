@@ -333,7 +333,7 @@ final class Agent
             if (($this->app->files()->get((int)$fid)['folder'] ?? '') === Library::INBOX) $this->app->library()->moveFile((int)$fid, $sf);
         }
         [$previousSpace, $previousChannel] = [$this->app->space, $this->app->channel];
-        $this->app->space = $space; $this->app->channel = $channel; // tools (library search, schedules, notes...) work within this space
+        $this->app->setSpace($space); $this->app->channel = $channel; // tools (library search, schedules, notes...) work within this space
         Privacy::begin(); // what this answer sends out, shown under it
         if ($onEvent) Privacy::$onEvent = $onEvent;
         try {
@@ -403,7 +403,7 @@ final class Agent
             if (isset($meta['model'])) $this->maybeLearn($prompt, $reply, $toolsBefore);
             return $reply;
         } finally {
-            $this->app->space = $previousSpace; $this->app->channel = $previousChannel;
+            $this->app->setSpace($previousSpace); $this->app->channel = $previousChannel;
             Privacy::$trace = null; Privacy::$onEvent = null; Privacy::$taint = 0; Privacy::trustAgain();
             flock($lock, LOCK_UN);
             fclose($lock);

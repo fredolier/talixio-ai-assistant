@@ -24,8 +24,13 @@ final class App
     /** Set in tests to replace the configured model. */
     public ?Provider $providerOverride = null;
 
+    /** The main settings; $cfg is the current space's AI account when it has one (setSpace). */
+    public Config $mainCfg;
+    /** @var array<string,Config> */ private array $accountCfg = [];
+
     public function __construct(public Config $cfg)
     {
+        $this->mainCfg = $cfg;
         $this->store = new Store($cfg->dbPath());
         if ($this->store->get('data_dir', '') !== $cfg->dataDir) $this->relocate(); // the data was moved (Docker, another server)
         if ($cfg->provider === 'gemini') GeminiModels::apply($cfg, $this->store);
@@ -53,6 +58,30 @@ final class App
         $st->set('data_dir', $this->cfg->dataDir);
     }
 
+    /** Work within a space: its tools, its confidentiality level and its AI account. */
+    public function setSpace(int $space): void
+    {
+        $this->space = $space;
+        $this->cfg = $this->configFor($space);
+    }
+
+    /** The configuration a space's model calls use: the main settings, or its AI account's. */
+    public function configFor(int $space): Config
+    {
+        $id = $this->spaces()->accountOf($space);
+        if ($id === '') return $this->mainCfg;
+        if (isset($this->accountCfg[$id])) return $this->accountCfg[$id];
+        $a = $this->accounts()->get($id, true);
+        if (!$a) return $this->mainCfg; // deleted meanwhile
+        $c = $this->mainCfg->forAccount($a);
+        if ($c->provider === 'gemini') GeminiModels::apply($c, $this->store, "gemini_models_$id");
+        if ($c->provider === 'sovereign') Sovereign::apply($c, $this->store, "sovereign_models_$id");
+        return $this->accountCfg[$id] = $c;
+    }
+
+    /** Forget the account configurations built so far (an account was changed). */
+    public function accountsChanged(): void { $this->accountCfg = []; $this->cfg = $this->configFor($this->space); }
+
     public static function fromEnv(): self { return new self(Config::fromEnv()); }
 
     public function provider(Tier $tier): Provider
@@ -63,7 +92,7 @@ final class App
             'anthropic' => new AnthropicProvider($c->anthropicKey, $tier, $c->search === 'builtin' && $this->privacy()->effective() === 'internal', $c->anthropicBaseUrl), // the model's own search can't be checked here
             'openai', 'gemini' => new OpenAIProvider($c->openaiKey, $tier, $c->openaiBaseUrl),
             'sovereign' => new OpenAIProvider($c->openaiKey, $tier, $c->openaiBaseUrl, $c->sovereign === 'mistral'), // Mistral refuses stream_options
-            'claude-code' => new ClaudeCodeProvider($c->claudeBin, $tier, $c->search === 'builtin' && $this->privacy()->effective() === 'internal', dirname(__DIR__) . '/bin/talixio'),
+            'claude-code' => new ClaudeCodeProvider($c->claudeBin, $tier, $c->search === 'builtin' && $this->privacy()->effective() === 'internal', dirname(__DIR__) . '/bin/talixio', $c->claudeToken),
             'echo' => new EchoProvider(),
             default => throw new \InvalidArgumentException("unknown TALIXIO_PROVIDER {$c->provider}"),
         };
@@ -90,6 +119,7 @@ final class App
     public function mailbox(): Mailbox { return new Mailbox($this); }
     public function contacts(): Contacts { return new Contacts($this); }
     public function triage(): Triage { return new Triage($this); }
+    public function accounts(): Accounts { return new Accounts($this); }
     public function spaces(): Spaces { return new Spaces($this); }
     public function routines(): Routines { return new Routines($this); }
     public function board(): Board { return $this->board ??= new Board($this); }

@@ -10,11 +10,11 @@ final class Transcriber
 {
     public function __construct(private App $app) {}
 
-    public function enabled(): bool { return $this->app->cfg->transcribe !== 'off'; }
+    public function enabled(): bool { return $this->app->mainCfg->transcribe !== 'off'; }
 
     public function transcribe(array $file, bool $meeting): string
     {
-        $c = $this->app->cfg;
+        $c = $this->app->mainCfg;
         if (!$this->enabled()) throw new \RuntimeException('transcription is off: set GEMINI_API_KEY (or TALIXIO_TRANSCRIBE=openai with an OpenAI key, or local with whisper.cpp)');
         if ($c->transcribe === 'local') { Privacy::local('Transcription (whisper.cpp)'); return $this->local($file['path'], $meeting); }
         $path = $this->compress($file['path']);
@@ -49,14 +49,14 @@ final class Transcriber
 
     private function model(): string
     {
-        $c = $this->app->cfg;
+        $c = $this->app->mainCfg;
         if (str_starts_with($c->transcribeModel, 'gemini')) return $c->transcribeModel; // a whisper.cpp model name left from local transcription is not one
         return $c->provider === 'gemini' && $c->tier('standard')->model !== '' ? $c->tier('standard')->model : GeminiModels::FALLBACK['standard'];
     }
 
     private function gemini(string $path, bool $meeting): string
     {
-        $c = $this->app->cfg;
+        $c = $this->app->mainCfg;
         $mime = str_ends_with($path, '.ogg') ? 'audio/ogg' : ((new \finfo(FILEINFO_MIME_TYPE))->file($path) ?: 'audio/mpeg');
         if ($mime === 'video/webm' || $mime === 'audio/webm') $mime = 'audio/webm';
         $key = ['x-goog-api-key: ' . $c->geminiKey];
@@ -91,7 +91,7 @@ final class Transcriber
     /** Gemini Files API resumable upload for recordings too large to send inline. */
     private function geminiUpload(string $path, string $mime): array
     {
-        $c = $this->app->cfg;
+        $c = $this->app->mainCfg;
         $size = filesize($path);
         $uploadBase = preg_replace('#/(v1\w*)$#', '/upload/$1', $c->geminiBaseUrl);
         [$code, $body, $h] = Http::request('POST', "$uploadBase/files", [
@@ -163,7 +163,7 @@ final class Transcriber
     /** On this server with whisper.cpp: 16 kHz mono WAV in, JSON segments out. Long: about a third to two thirds of the recording's length on 4 cores. */
     private function local(string $path, bool $meeting): string
     {
-        [$bin, $model] = self::whisper($this->app->cfg);
+        [$bin, $model] = self::whisper($this->app->mainCfg);
         if ($bin === '') throw new \RuntimeException('local transcription: whisper.cpp is not installed (' . self::whisperHint() . ')');
         if (!is_file($model)) throw new \RuntimeException("local transcription: model file not found: $model (" . self::whisperHint() . ')');
         $tmp = tempnam(sys_get_temp_dir(), 'talixio-whisper');

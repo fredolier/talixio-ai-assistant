@@ -81,7 +81,8 @@ $postOnly = ['/api/logout', '/api/claude-login/start', '/api/claude-login/code',
     '/api/approvals/5/approve', '/api/push/subscribe', '/api/push/unsubscribe', '/api/notify/test', '/api/jobs/5/cancel', '/api/jobs/5/continue',
     '/api/jobs/5/rerun', '/api/shares/5', '/api/shares/5/revoke', '/api/library/folder', '/api/library/folder/move', '/api/library/folder/delete',
     '/api/library/trash/restore', '/api/library/trash/empty', '/api/library/note', '/api/files/5/move', '/api/files/5/as-script', '/api/files/5/file-it',
-    '/api/files/5/dismiss', '/api/files/5/suggest', '/api/library/file-all', '/api/board/order', '/api/board/undo/5', '/api/board/time/5/delete'];
+    '/api/files/5/dismiss', '/api/files/5/suggest', '/api/library/file-all', '/api/board/order', '/api/board/undo/5', '/api/board/time/5/delete',
+    '/api/spaces/0/account', '/api/accounts/test', '/api/accounts/x', '/api/accounts/x/delete'];
 $bad = [];
 foreach ($postOnly as $p) { $r = $web($p); if ($r['_code'] !== 404 && !str_starts_with($p, '/api/board/')) $bad[] = "$p {$r['_code']}"; elseif (str_starts_with($p, '/api/board/') && $r['_code'] !== 404) $bad[] = "$p {$r['_code']}"; }
 check('web1: GET on an action route is not found', $bad === [], implode(', ', $bad));

@@ -24,6 +24,20 @@ Settings → *AI model*:
 | European provider (OVHcloud, Mistral, Scaleway, Infomaniak) | *Europe only* card (see *Staying in Europe*); provider `sovereign` |
 | Local model (Ollama…) | provider `openai`, address `http://localhost:11434/v1`, model name |
 
+## A different provider per space (AI accounts)
+Settings → *AI model* → **AI accounts** → *+ Add an account*. Each account has a name, a provider and its key or token.
+Then pick the account in the space's settings (*AI account*); for General, in the space menu.
+Spaces without an account use the main settings.
+
+- **Two Claude subscriptions** (e.g. "Pro" and "Provite"): on a computer signed in to each subscription, run
+  `claude setup-token` and paste the token into an account of type *Claude subscription*.
+- **Several European providers**: one account per provider (Mistral for one client, OVHcloud for another…).
+  A space on a European account may hold *confidential* conversations even when the main model is a subscription.
+- Each account has its own limits on the provider's side, so the load is shared between them.
+- *Test* checks the account before saving. Keys and tokens never leave the server; leave the field empty to keep the saved one.
+- Transcription and search by meaning keep the main settings.
+- Deleting an account puts its spaces back on the main settings.
+
 - Three tiers: **fast** (summaries, checks), **standard** (conversation), **deep** (hard reasoning).
 - **Budget**: daily and monthly limits in dollars. Above 80%, it switches to the fast tier;
   at 100%, it stops calling any model.

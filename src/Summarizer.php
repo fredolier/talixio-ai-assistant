@@ -31,10 +31,12 @@ final class Summarizer
     public function compact(int $now, int $minMessages = 16, int $idleSeconds = 1800, bool $force = false, int $space = 0): bool
     {
         $p = $this->app->privacy();
-        if ($p->modelBlocked($p->spaceLevel($space)) !== null) return false; // a secret space with a model outside: kept word for word, never summarised
-        $before = $this->app->space; $this->app->space = $space; // its level applies to the summary request
-        try { return $this->compactSpace($now, $minMessages, $idleSeconds, $force, $space); }
-        finally { $this->app->space = $before; }
+        $before = $this->app->space; $this->app->setSpace($space); // its level and its AI account apply to the summary request
+        try {
+            if ($p->modelBlocked($p->spaceLevel($space)) !== null) return false; // a secret space with a model outside: kept word for word, never summarised
+            return $this->compactSpace($now, $minMessages, $idleSeconds, $force, $space);
+        }
+        finally { $this->app->setSpace($before); }
     }
 
     private function compactSpace(int $now, int $minMessages, int $idleSeconds, bool $force, int $space): bool

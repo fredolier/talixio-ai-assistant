@@ -13,7 +13,7 @@ namespace Talixio;
  */
 final class ClaudeCodeProvider implements Provider
 {
-    public function __construct(private string $bin, private Tier $tier, private bool $webSearch, private string $talixioBin) {}
+    public function __construct(private string $bin, private Tier $tier, private bool $webSearch, private string $talixioBin, private string $token = '') {}
 
     public function complete(string $system, string $context, array $messages, Tools $tools, callable $onUsage, ?callable $onEvent = null): string
     {
@@ -43,7 +43,7 @@ final class ClaudeCodeProvider implements Provider
             if ($this->tier->model !== '') array_push($cmd, '--model', $this->tier->model);
 
             $errFile = "$work/.stderr";
-            $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $errFile, 'w']], $pipes, $work);
+            $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $errFile, 'w']], $pipes, $work, $this->env());
             if (!is_resource($proc)) throw new \RuntimeException("cannot run {$this->bin}");
             fwrite($pipes[0], $prompt);
             fclose($pipes[0]);
@@ -79,6 +79,19 @@ final class ClaudeCodeProvider implements Provider
             foreach (glob("$work/{,.}*", GLOB_BRACE) ?: [] as $f) if (is_file($f)) @unlink($f);
             @rmdir($work);
         }
+    }
+
+    /**
+     * The CLI's environment: as this server's, or with another subscription's token (an AI account), which the CLI uses
+     * instead of its saved login; an API key would win over it, so none is passed then.
+     */
+    public function env(): ?array
+    {
+        if ($this->token === '') return null;
+        $env = getenv();
+        unset($env['ANTHROPIC_API_KEY'], $env['ANTHROPIC_AUTH_TOKEN']);
+        $env['CLAUDE_CODE_OAUTH_TOKEN'] = $this->token;
+        return $env;
     }
 
     /** Text of the new message; attached images are written next to Claude Code and referenced by path. */

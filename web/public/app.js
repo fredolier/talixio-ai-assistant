@@ -394,31 +394,47 @@ $('#space-btn').onclick = async e => {
   e.stopPropagation();
   const menu = $('#space-menu');
   if (!menu.hidden) { menu.hidden = true; $('#space-btn').setAttribute('aria-expanded', 'false'); return; }
-  await loadSpaces();
+  await Promise.all([loadSpaces(), loadAiAccounts()]);
   const active = state.spaces.filter(x => !x.archived), archived = state.spaces.filter(x => x.archived);
   const item = x => `<button class="space-item${x.id === state.space ? ' current' : ''}" role="menuitem" type="button" data-id="${x.id}">
       <i style="background:${x.color || 'var(--muted)'}"></i><span class="name">${esc(x.id ? x.name : 'General')}${x.folder ? ` <span class="folder">${esc(x.folder)}</span>` : ''}</span>${x.unread ? `<span class="badge">${x.unread}</span>` : ''}</button>`;
   menu.innerHTML = active.map(item).join('')
     + '<hr>' + (state.space ? '<button class="space-item" type="button" data-act="edit">Edit this space…</button>'
-      : `<label class="space-item gen-tier">${esc(t('Model for General'))} ${tierSelect(spaceOf(0)?.tier || 'standard', t('Model for General'))}</label>`)
+      : `<label class="space-item gen-tier">${esc(t('Model for General'))} ${tierSelect(spaceOf(0)?.tier || 'standard', t('Model for General'))}</label>`
+        + (state.aiAccounts?.length ? `<label class="space-item gen-tier gen-account">${esc(t('AI account'))} <select class="tier-select" aria-label="${esc(t('AI account'))}">${accountOptions(spaceOf(0)?.account || '')}</select></label>` : ''))
     + '<button class="space-item" type="button" data-act="new">+ New space</button>'
     + (archived.length ? `<details><summary class="muted small" style="padding:6px 10px">Archived (${archived.length})</summary>${archived.map(item).join('')}</details>` : '');
   menu.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { menu.hidden = true; switchSpace(+b.dataset.id); });
   menu.querySelector('[data-act=new]').onclick = () => { menu.hidden = true; openSpaceEditor(null); };
   menu.querySelector('[data-act=edit]')?.addEventListener('click', () => { menu.hidden = true; openSpaceEditor(spaceOf(state.space)); });
   menu.querySelector('.gen-tier')?.addEventListener('click', e => e.stopPropagation());
-  menu.querySelector('.gen-tier select')?.addEventListener('change', async e => {
+  menu.querySelector('.gen-account select')?.addEventListener('change', async e => {
+    try { await post('api/spaces/0/account', { account: e.target.value }); await loadSpaces(); toast(t('General now uses {account}.', { account: accountName(e.target.value) })); }
+    catch (err) { toast(err.message); }
+  });
+  menu.querySelector('.gen-tier:not(.gen-account) select')?.addEventListener('change', async e => {
     try { await post('api/spaces/0/tier', { tier: e.target.value }); await loadSpaces(); toast(t('General now answers with the {tier} model.', { tier: t(e.target.value) })); }
     catch (err) { toast(err.message); }
   });
   menu.hidden = false; $('#space-btn').setAttribute('aria-expanded', 'true');
 };
+/** The AI accounts a space can use (Settings → AI model); quietly empty when they cannot be read. */
+async function loadAiAccounts() {
+  try { state.aiAccounts = (await api('api/accounts')).accounts; } catch { state.aiAccounts ||= []; }
+  return state.aiAccounts;
+}
+const accountName = id => id ? (state.aiAccounts || []).find(a => a.id === id)?.name || id : t('the main settings');
+function accountOptions(current) {
+  return `<option value="">${esc(t('Main settings'))}</option>` + (state.aiAccounts || []).map(a =>
+    `<option class="no-i18n" value="${esc(a.id)}"${a.id === current ? ' selected' : ''}>${esc(a.name)} · ${esc(t(a.label))}</option>`).join('');
+}
 document.addEventListener('click', e => { if (!e.target.closest('.space-head')) { $('#space-menu').hidden = true; $('#space-btn').setAttribute('aria-expanded', 'false'); } });
 
 /** One line of a space's history: "archived 10/10 14:02 (app)". */
 function spaceEvent(e) {
   const what = { created: t('space created'), renamed: t('renamed (was {name})', { name: e.detail || '' }), archived: t('archived'), restored: t('restored'),
-    privacy: t('confidentiality: {level}', { level: t(LEVELS[e.detail]?.label || e.detail || '') }), folder: t('folder: {folder}', { folder: e.detail || '/' }) }[e.what] || e.what;
+    privacy: t('confidentiality: {level}', { level: t(LEVELS[e.detail]?.label || e.detail || '') }), folder: t('folder: {folder}', { folder: e.detail || '/' }),
+    account: t('AI account: {name}', { name: e.detail === 'main settings' ? t('the main settings') : e.detail || '' }) }[e.what] || e.what;
   return `${what} ${new Date(e.ts * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} (${e.by === 'assistant' ? t('by the assistant') : t('in the app')})`;
 }
 
@@ -431,6 +447,9 @@ async function openSpaceEditor(sp, prefill = {}) {
   $('#sp-folder').value = editing ? sp.folder : (prefill.folder || '');
   folderPicker($('#sp-folder'));
   $('#sp-tier').value = editing ? sp.tier : 'standard';
+  await loadAiAccounts();
+  $('#sp-account').innerHTML = accountOptions(editing ? sp.account || '' : '');
+  $('#sp-account-row').hidden = !state.aiAccounts.length && !(editing && sp.account);
   $('#sp-code').value = editing ? (sp.code || '') : '';
   $('#sp-instructions').value = editing ? sp.instructions : '';
   $('#sp-notes').value = editing ? sp.notes : ''; $('#sp-notes').closest('form').querySelector('label[for=sp-notes]').hidden = $('#sp-notes').hidden = !editing;
@@ -455,6 +474,7 @@ async function openSpaceEditor(sp, prefill = {}) {
     e.preventDefault();
     const body = { name: $('#sp-name').value, folder: $('#sp-folder').value, tier: $('#sp-tier').value, color, instructions: $('#sp-instructions').value, code: $('#sp-code').value, privacy: level };
     if (editing) body.notes = $('#sp-notes').value;
+    if (!$('#sp-account-row').hidden) body.account = $('#sp-account').value;
     try {
       const { space } = await post(editing ? `api/spaces/${sp.id}` : 'api/spaces', body);
       d.close(); await loadSpaces(); toast(editing ? 'Space saved.' : `Space “${space.name}” created.`);
@@ -2772,7 +2792,7 @@ async function loadSettings() {
   loadUpdate().catch(() => {});
   loadSecurity();
   loadDav();
-  loadEu();
+  loadEu(); loadAccCard();
   renderAppearance();
   loadConnectors();
   loadGoogle(); loadMicrosoft();
@@ -3210,6 +3230,79 @@ $('#eu-form').onsubmit = async e => {
     refreshStatus().then(setHealth);
   } catch (err) { st.className = 'bad small'; st.textContent = err.message; }
   finally { b.disabled = false; }
+};
+
+// ---- AI accounts: another provider or subscription for some spaces ----
+async function loadAccCard() {
+  let d; try { d = await api('api/accounts'); } catch { return; }
+  if (!state.spaces.length) await loadSpaces();
+  state.acc = d; state.aiAccounts = d.accounts;
+  const sel = $('#acc-service');
+  if (!sel.options.length) sel.innerHTML = d.services.map(s => `<option value="${esc(s.id)}">${esc(window.t(s.name))} (${esc(window.t(s.country))})</option>`).join('');
+  $('#acc-badge').textContent = d.accounts.length ? '· ' + d.accounts.length : '';
+  const spaceName = id => id === 0 ? t('General') : (state.spaces.find(x => x.id === id)?.name || '#' + id);
+  $('#acc-list').innerHTML = d.accounts.map(a => `<div class="acc-row"><span class="acc-name no-i18n">${esc(a.name)}</span><span class="muted small">${esc(t(a.label))}</span>
+    <span class="muted small no-i18n">${a.spaces.length ? esc(t('Used by: {spaces}', { spaces: a.spaces.map(spaceName).join(', ') })) : esc(t('No space uses it yet.'))}</span>
+    <span class="spacer"></span><button class="btn ghost" type="button" data-acc="${esc(a.id)}">${esc(t('Edit'))}</button></div>`).join('');
+  $('#acc-list').querySelectorAll('[data-acc]').forEach(b => b.onclick = () => accEdit(d.accounts.find(a => a.id === b.dataset.acc)));
+}
+function accEdit(a) {
+  state.accEditing = a || null;
+  $('#acc-form').hidden = false; $('#acc-add').hidden = true;
+  $('#acc-name').value = a?.name || '';
+  $('#acc-kind').value = a?.kind || 'sovereign';
+  $('#acc-service').value = a?.service || state.acc.services[0]?.id || '';
+  $('#acc-url').value = a?.url || '';
+  $('#acc-key').value = $('#acc-token').value = '';
+  $('#acc-paid').checked = !!a?.paid;
+  for (const k of ['fast', 'standard', 'deep']) $('#acc-m-' + k).value = a?.models?.[k] || '';
+  $('#acc-delete').hidden = !a; $('#acc-delete').dataset.confirm = ''; $('#acc-delete').textContent = t('Delete');
+  $('#acc-state').textContent = '';
+  accKind(); $('#acc-name').focus();
+}
+function accKind() {
+  const k = $('#acc-kind').value, a = state.accEditing, svc = (state.acc?.services || []).find(x => x.id === $('#acc-service').value);
+  const same = a && a.kind === k && (k !== 'sovereign' || a.service === svc?.id);
+  $('#acc-service-row').hidden = k !== 'sovereign';
+  $('#acc-token-row').hidden = k !== 'claude-code';
+  $('#acc-no-cc').hidden = k !== 'claude-code' || !!state.acc?.claude_code;
+  $('#acc-key-row').hidden = k === 'claude-code';
+  $('#acc-url-row').hidden = !(k === 'openai' || k === 'anthropic' || (k === 'sovereign' && (svc?.url === '' || $('#acc-url').value)));
+  $('#acc-url').placeholder = k === 'anthropic' ? 'https://api.anthropic.com' : k === 'openai' ? 'https://api.openai.com/v1' : 'https://…/v1';
+  $('#acc-paid-row').hidden = k !== 'gemini';
+  $('#acc-about').textContent = svc ? window.t(svc.about) + (svc.note ? ' ' + window.t(svc.note) : '') : '';
+  $('#acc-key').placeholder = window.t(same && a.has_key ? 'saved (leave empty to keep it)' : k === 'openai' ? 'API key (none for a local server)' : 'API key');
+  $('#acc-token').placeholder = window.t(same && a.has_token ? 'saved (leave empty to keep it)' : 'Token from claude setup-token');
+}
+const accBody = () => ({ name: $('#acc-name').value.trim(), kind: $('#acc-kind').value, service: $('#acc-service').value, url: $('#acc-url').value.trim(),
+  key: $('#acc-key').value.trim(), token: $('#acc-token').value.trim(), paid: $('#acc-paid').checked,
+  models: { fast: $('#acc-m-fast').value.trim(), standard: $('#acc-m-standard').value.trim(), deep: $('#acc-m-deep').value.trim() } });
+const accClose = () => { $('#acc-form').hidden = true; $('#acc-add').hidden = false; state.accEditing = null; $('#acc-key').value = $('#acc-token').value = ''; };
+$('#acc-add').onclick = () => accEdit(null);
+$('#acc-cancel').onclick = accClose;
+$('#acc-kind').onchange = $('#acc-service').onchange = accKind;
+$('#acc-test').onclick = async () => {
+  const st = $('#acc-state'); st.className = 'muted small'; st.textContent = window.t('Checking…');
+  try {
+    const r = await post('api/accounts/test', { ...accBody(), id: state.accEditing?.id || '' });
+    st.className = 'ok small';
+    st.textContent = r.test ? window.t('It works: {n} models.').replace('{n}', r.test.models) : t('It works. Fast model: {model}.', { model: r.tiers?.fast || '' });
+  } catch (e) { st.className = 'bad small'; st.textContent = e.message; }
+};
+$('#acc-form').onsubmit = async e => {
+  e.preventDefault();
+  const st = $('#acc-state'), b = $('#acc-save'), id = state.accEditing?.id; b.disabled = true;
+  try {
+    await post(id ? `api/accounts/${encodeURIComponent(id)}` : 'api/accounts', accBody());
+    accClose(); toast(t('Account saved. Choose it in a space\'s settings.')); await loadAccCard();
+  } catch (err) { st.className = 'bad small'; st.textContent = err.message; }
+  finally { b.disabled = false; }
+};
+$('#acc-delete').onclick = async e => {
+  const b = e.currentTarget, a = state.accEditing; if (!a) return;
+  if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Delete it? Its spaces go back to the main settings'); return; }
+  try { await post(`api/accounts/${encodeURIComponent(a.id)}/delete`); accClose(); toast(t('Account deleted.')); await Promise.all([loadAccCard(), loadSpaces()]); }
+  catch (err) { $('#acc-state').className = 'bad small'; $('#acc-state').textContent = err.message; }
 };
 
 // ---- memory ----

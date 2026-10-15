@@ -34,18 +34,18 @@ final class GeminiModels
     }
 
     /** Fill in tier models that aren't set explicitly. */
-    public static function apply(Config $c, Store $store): void
+    public static function apply(Config $c, Store $store, string $cacheKey = 'gemini_models'): void
     {
         $missing = array_filter($c->tiers, fn(Tier $t) => $t->model === '');
         if (!$missing) return;
-        $cached = json_decode($store->get('gemini_models'), true);
+        $cached = json_decode($store->get($cacheKey), true);
         if (!is_array($cached) || ($cached['ts'] ?? 0) < time() - 86400) {
             try {
                 [$code, $body] = Http::request('GET', $c->openaiBaseUrl . '/models', ['Authorization: Bearer ' . $c->openaiKey], null, 15);
                 $ids = array_column(json_decode($body, true)['data'] ?? [], 'id');
                 if ($code >= 400 || !$ids) throw new \RuntimeException("HTTP $code");
                 $cached = ['ts' => time(), 'tiers' => self::choose($ids)];
-                $store->set('gemini_models', json_encode($cached));
+                $store->set($cacheKey, json_encode($cached));
             } catch (\Throwable $e) {
                 Log::warn("gemini: could not list models ({$e->getMessage()}); using " . implode(', ', self::FALLBACK));
                 $cached = ['tiers' => self::FALLBACK];

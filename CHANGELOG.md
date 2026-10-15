@@ -3,6 +3,18 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.37 (2026-10-15)
+
+- **AI accounts per space**: Settings → *AI model* → *AI accounts* holds named accounts (Claude API, Claude subscription
+  with a `claude setup-token` token, OpenAI-compatible, Gemini, European provider). Each space, General included,
+  picks one in its settings (General: in the space menu); the others keep the main settings. Two Claude
+  subscriptions can serve different spaces, and several European providers can be used at once.
+- The privacy checks follow the space's account: a space on a European account may hold confidential work even
+  when the main model is a subscription. *Europe only*, when locked, still blocks non-European accounts.
+- Keys and tokens stay on the server (the app only sees whether one is set); a field left empty keeps the saved one.
+  *Test* tries an account before it is saved. Deleting an account puts its spaces back on the main settings.
+  A change of account is noted in the space's history.
+
 ## 0.28.36 (2026-10-15)
 
 - New **List** view on the Tasks page: a sortable table (code, title, space, priority, due, load, status) grouped

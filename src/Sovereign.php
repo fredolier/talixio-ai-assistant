@@ -72,13 +72,13 @@ final class Sovereign
     }
 
     /** Fill in tier models that aren't set explicitly. */
-    public static function apply(Config $c, Store $store): void
+    public static function apply(Config $c, Store $store, string $cacheKey = 'sovereign_models'): void
     {
         $missing = array_filter($c->tiers, fn(Tier $t) => $t->model === '');
         if (!$missing) return;
         $fb = self::info($c->sovereign)['fallback'];
         $id = $c->sovereign . '|' . $c->sovereignUrl;
-        $cached = json_decode($store->get('sovereign_models'), true);
+        $cached = json_decode($store->get($cacheKey), true);
         if (!is_array($cached) || ($cached['id'] ?? '') !== $id || ($cached['ts'] ?? 0) < time() - 86400 || ($cached['v'] ?? 1) < 2) { // v2: Small for standard on Mistral
             try {
                 if ($c->sovereignUrl === '') throw new \RuntimeException('no address');
@@ -86,7 +86,7 @@ final class Sovereign
                 $ids = array_column(json_decode($body, true)['data'] ?? [], 'id');
                 if ($code >= 400 || !$ids) throw new \RuntimeException("HTTP $code");
                 $cached = ['id' => $id, 'ts' => time(), 'v' => 2, 'tiers' => self::choose($c->sovereign, $ids)];
-                $store->set('sovereign_models', json_encode($cached));
+                $store->set($cacheKey, json_encode($cached));
             } catch (\Throwable $e) {
                 Log::warn("{$c->sovereign}: could not list models ({$e->getMessage()}); using " . implode(', ', $fb));
                 $cached = ['tiers' => $fb];

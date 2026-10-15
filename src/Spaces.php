@@ -16,7 +16,27 @@ final class Spaces
 
     public function general(): array
     {
-        return ['id' => 0, 'name' => 'General', 'slug' => 'general', 'code' => 'GEN', 'folder' => '', 'instructions' => '', 'notes' => '', 'tier' => $this->generalTier(), 'color' => '', 'archived' => 0, 'privacy' => 'internal'];
+        return ['id' => 0, 'name' => 'General', 'slug' => 'general', 'code' => 'GEN', 'folder' => '', 'instructions' => '', 'notes' => '', 'tier' => $this->generalTier(), 'color' => '', 'archived' => 0, 'privacy' => 'internal',
+            'account' => $this->accountOf(0)];
+    }
+
+    /** The AI account a space's model calls use ('' = the main settings). */
+    public function accountOf(int $id): string
+    {
+        $a = $id === 0 ? $this->app->store->get('general_account', '') : (string)($this->app->store->q('SELECT account FROM spaces WHERE id = ?', [$id])->fetchColumn() ?: '');
+        return $a !== '' && $this->app->accounts()->get($a) ? $a : '';
+    }
+
+    public function setGeneralAccount(string $account): array
+    {
+        $this->app->store->set('general_account', $this->checkAccount($account));
+        return $this->general();
+    }
+
+    private function checkAccount(string $account): string
+    {
+        if ($account !== '' && !$this->app->accounts()->get($account)) throw new \InvalidArgumentException('no such AI account');
+        return $account;
     }
 
     /** General has no row: its model tier is kept apart (standard unless changed). */
@@ -83,6 +103,7 @@ final class Spaces
         $fields = ['name' => $name, 'slug' => $slug, 'folder' => $folder, 'instructions' => mb_substr((string)($d['instructions'] ?? ''), 0, 8000),
             'tier' => $tier, 'color' => $color];
         if (array_key_exists('notes', $d)) $fields['notes'] = mb_substr((string)$d['notes'], 0, 20000);
+        if (array_key_exists('account', $d)) $fields['account'] = $this->checkAccount((string)$d['account']);
         if (array_key_exists('archived', $d)) $fields['archived'] = $d['archived'] ? 1 : 0;
         if (array_key_exists('privacy', $d)) {
             if (!in_array($d['privacy'], Privacy::LEVELS, true)) throw new \InvalidArgumentException('privacy: internal, confidential or secret');
@@ -110,6 +131,7 @@ final class Spaces
             if ((int)$before['archived'] !== (int)$after['archived']) $this->note($id, $after['archived'] ? 'archived' : 'restored', $by);
             if (($before['privacy'] ?? 'internal') !== ($after['privacy'] ?? 'internal')) $this->note($id, 'privacy', $by, $after['privacy']);
             if ($before['folder'] !== $after['folder']) $this->note($id, 'folder', $by, $after['folder']);
+            if (($before['account'] ?? '') !== ($after['account'] ?? '')) $this->note($id, 'account', $by, $after['account'] === '' ? 'main settings' : (string)($this->app->accounts()->get($after['account'])['name'] ?? $after['account']));
         }
         return $after;
     }

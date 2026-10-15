@@ -24,6 +24,20 @@ Réglages → *Modèle d'IA* :
 | Fournisseur européen (OVHcloud, Mistral, Scaleway, Infomaniak) | carte *Europe only* (voir *Rester en Europe*) ; fournisseur `sovereign` |
 | Modèle local (Ollama…) | fournisseur `openai`, adresse `http://localhost:11434/v1`, nom du modèle |
 
+## Un fournisseur différent par espace (comptes d'IA)
+Réglages → *Modèle d'IA* → **Comptes d'IA** → *+ Ajouter un compte*. Chaque compte a un nom, un fournisseur et sa clé ou son jeton.
+Choisissez ensuite le compte dans les réglages de l'espace (*Compte d'IA*) ; pour Général, dans le menu des espaces.
+Les espaces sans compte utilisent les réglages principaux.
+
+- **Deux abonnements Claude** (par ex. « Pro » et « Provite ») : sur un ordinateur connecté à chaque abonnement, lancez
+  `claude setup-token` et collez le jeton dans un compte de type *Abonnement Claude*.
+- **Plusieurs fournisseurs européens** : un compte par fournisseur (Mistral pour un client, OVHcloud pour un autre…).
+  Un espace sur un compte européen peut recevoir des conversations *confidentielles* même si le modèle principal est un abonnement.
+- Chaque compte a ses propres limites chez le fournisseur : la charge se répartit entre eux.
+- *Tester* vérifie le compte avant de l'enregistrer. Les clés et jetons ne quittent jamais le serveur ; laissez le champ vide pour garder celui enregistré.
+- La transcription et la recherche par le sens gardent les réglages principaux.
+- Supprimer un compte remet ses espaces sur les réglages principaux.
+
 - Trois niveaux : **rapide** (résumés, vérifications), **standard** (conversation), **approfondi** (raisonnements difficiles).
 - **Budget** : limites par jour et par mois en dollars. Au-delà de 80 %, il passe au niveau rapide ;
   à 100 %, il n'appelle plus de modèle.

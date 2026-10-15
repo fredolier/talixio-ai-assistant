@@ -243,6 +243,9 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .group[open] summary::after{content:'–'}
 .group summary .count{font-size:.78rem;color:var(--muted);margin-left:auto}
 .fields{display:flex;flex-direction:column;gap:12px;margin-top:10px}
+.fields>.sub{display:flex;flex-direction:column;gap:8px}
+.acc-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.acc-row .acc-name{font-weight:600}
 .field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .field .top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .field label{font-size:.88rem;color:var(--ink);font-weight:600}
@@ -1169,6 +1172,7 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 #eu-tiers{overflow-x:auto}
 .space-item.gen-tier{justify-content:space-between;cursor:default}
 .space-item.gen-tier:hover{background:transparent}
+.gen-account .tier-select{max-width:170px}
 .versions{margin-top:14px;border-top:1px solid var(--line);padding-top:8px}.versions summary{cursor:pointer;font-weight:600}.version-row{display:flex;align-items:center;gap:8px;padding:4px 0;flex-wrap:wrap}
 @media (max-width:760px){.board-title .seg{display:flex;max-width:100%;overflow-x:auto;scrollbar-width:none}.board-title .seg::-webkit-scrollbar{display:none}.board-title .seg button{flex:1 0 auto;white-space:nowrap;padding:8px 10px}}
 

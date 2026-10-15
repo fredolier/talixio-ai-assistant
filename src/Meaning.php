@@ -16,7 +16,7 @@ final class Meaning
 
     public function status(): array
     {
-        $c = $this->app->cfg; $st = $this->app->store;
+        $c = $this->app->mainCfg; $st = $this->app->store;
         $ollama = $this->ollama();
         $presets = [];
         foreach (Embeddings::PRESETS as $k => $p) {
@@ -46,7 +46,7 @@ final class Meaning
     /** Ollama: does it answer, which models does it have. */
     public function ollama(): array
     {
-        $url = $this->app->cfg->ollamaUrl;
+        $url = $this->app->mainCfg->ollamaUrl;
         try {
             [$code, $out] = Http::request('GET', "$url/api/tags", [], null, 3);
             if ($code !== 200) return ['up' => false, 'models' => [], 'url' => $url];
@@ -68,7 +68,7 @@ final class Meaning
     public function choose(string $id): array
     {
         $p = Embeddings::PRESETS[$id] ?? throw new \InvalidArgumentException('unknown choice');
-        $c = $this->app->cfg;
+        $c = $this->app->mainCfg;
         if (in_array($p['backend'], ['gemini', 'openai', 'voyage'], true) && ($p['backend'] === 'gemini' ? $c->geminiKey : ($p['backend'] === 'openai' ? $c->openaiKey : $c->voyageKey)) === '')
             throw new \InvalidArgumentException('Add the ' . $p['label'] . ' key first (Settings → AI model, or Web search and memory for Voyage).');
         if ($p['backend'] === 'sovereign' && !$c->sovereignReady()) throw new \InvalidArgumentException('Set up the European provider first (Settings → AI model).');
@@ -89,14 +89,14 @@ final class Meaning
     {
         if (self::shared()) throw new \InvalidArgumentException('On this server the models are downloaded by the administrator (admin page → Settings → Shared memory search).');
         $this->app->store->set('meaning_pull', json_encode(['model' => $model, 'state' => 'running', 'ts' => time()]));
-        Background::start([PHP_BINARY, dirname(__DIR__) . '/bin/talixio', 'embeddings-pull', $model], $this->app->cfg->dataDir . '/embeddings-pull.log');
+        Background::start([PHP_BINARY, dirname(__DIR__) . '/bin/talixio', 'embeddings-pull', $model], $this->app->mainCfg->dataDir . '/embeddings-pull.log');
     }
 
     /** The background download (talixio embeddings-pull MODEL). */
     public function pull(string $model): void
     {
         try {
-            [$code, $out] = Http::request('POST', $this->app->cfg->ollamaUrl . '/api/pull', ['Content-Type: application/json'], json_encode(['model' => $model, 'stream' => false]), 3600);
+            [$code, $out] = Http::request('POST', $this->app->mainCfg->ollamaUrl . '/api/pull', ['Content-Type: application/json'], json_encode(['model' => $model, 'stream' => false]), 3600);
             $d = json_decode($out, true);
             if ($code !== 200 || ($d['status'] ?? '') !== 'success') throw new \RuntimeException($d['error'] ?? "HTTP $code");
             $this->app->store->set('meaning_pull', json_encode(['model' => $model, 'state' => 'done', 'ts' => time()]));
@@ -123,7 +123,7 @@ final class Meaning
         $engine = Recall::vecEngine($this->app->store->path);
         $n = (int)$this->app->store->q('SELECT COUNT(*) FROM embeddings WHERE model = ?', [$emb->model()])->fetchColumn();
         $t = microtime(true); $this->app->recall()->similarities($q); $scan = $ms($t);
-        $r = ['ts' => time(), 'preset' => Embeddings::presetOf($this->app->cfg), 'first_ms' => $first, 'query_ms' => $query, 'passage_ms' => $doc,
+        $r = ['ts' => time(), 'preset' => Embeddings::presetOf($this->app->mainCfg), 'first_ms' => $first, 'query_ms' => $query, 'passage_ms' => $doc,
             'scan_ms' => $scan, 'vectors' => $n, 'engine' => $engine, 'search_ms' => $query + $scan];
         $this->app->store->set('meaning_measure', json_encode($r));
         return $r;

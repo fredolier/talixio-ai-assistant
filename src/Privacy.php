@@ -362,7 +362,7 @@ final class Privacy
     /** Each service data can go to with this configuration, how it treats it, and what would make it safer. */
     public function flows(): array
     {
-        $c = $this->app->cfg; $out = [];
+        $c = $this->app->mainCfg; $out = [];
         $add = function (string $id, string $name, string $what, string $status, string $why, array $fix = [], string $terms = '') use (&$out) {
             $out[] = compact('id', 'name', 'what', 'status', 'why', 'fix', 'terms');
         };

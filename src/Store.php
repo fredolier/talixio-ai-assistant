@@ -107,6 +107,7 @@ final class Store
             CREATE INDEX IF NOT EXISTS share_access_share ON share_access(share_id);");
         // confidentiality: a level per space, and the journal of what went out (Privacy)
         $this->addColumn('spaces', 'privacy', "TEXT NOT NULL DEFAULT 'internal'");
+        $this->addColumn('spaces', 'account', "TEXT NOT NULL DEFAULT ''"); // its AI account (Accounts), '' = the main settings
         $this->db->exec('CREATE TABLE IF NOT EXISTS egress(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, service TEXT NOT NULL, purpose TEXT NOT NULL, bytes INTEGER NOT NULL,
                 space INTEGER NOT NULL DEFAULT 0, level TEXT NOT NULL, blocked INTEGER NOT NULL DEFAULT 0);
             CREATE INDEX IF NOT EXISTS egress_ts ON egress(ts);');

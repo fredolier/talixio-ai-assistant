@@ -8,6 +8,9 @@ final class Jobs
     /** @var array<int,resource> job id => process, owned by the worker */
     private static array $procs = [];
 
+    /** The configuration tune() changed and its tiers before. */
+    private ?array $tuned = null;
+
     public function __construct(private App $app) {}
 
     /** Tool steps a job may take at each effort level. */
@@ -255,9 +258,11 @@ final class Jobs
     /** Runs inside the job process. */
     public function runJob(int $id): void
     {
-        $tiers = $this->app->cfg->tiers;
         $this->app->jobId = $id;
-        try { $this->runJobAs($id); } finally { $this->app->cfg->tiers = $tiers; $this->app->notice = ''; $this->app->jobId = null; }
+        try { $this->runJobAs($id); } finally {
+            if ($this->tuned) $this->tuned[0]->tiers = $this->tuned[1]; // the configuration tuned (the space's AI account or the main one)
+            $this->tuned = null; $this->app->notice = ''; $this->app->jobId = null;
+        }
     }
 
     private function runJobAs(int $id): void
@@ -265,7 +270,7 @@ final class Jobs
         $store = $this->app->store;
         $j = $store->job($id) ?? throw new \RuntimeException("no job $id");
         if ($j['status'] === 'queued') $store->claimJob($id);
-        $this->app->space = (int)$j['space']; // library searches start in the space's folder; its confidentiality level applies
+        $this->app->setSpace((int)$j['space']); // library searches start in the space's folder; its confidentiality level applies
         Privacy::$taint = 0; Privacy::trustAgain();
         $max = (float)$j['max_cost_usd'];
         $effort = $this->tune((string)($j['effort'] ?? ''));
@@ -310,6 +315,7 @@ final class Jobs
     {
         $c = $this->app->cfg;
         $effort = in_array($effort, Tier::EFFORTS, true) ? $effort : $c->jobEffort;
+        $this->tuned ??= [$c, $c->tiers];
         $c->tiers = array_map(fn(Tier $t) => clone $t, $c->tiers);
         foreach ($c->tiers as $t) {
             $t->maxSteps = max($t->maxSteps, self::STEPS[$effort]);
