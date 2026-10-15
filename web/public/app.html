@@ -144,7 +144,7 @@
       <header class="board-head">
         <div class="board-title"><h2>Tasks</h2>
           <select id="board-space" aria-label="Space"></select>
-          <div class="seg" role="tablist" aria-label="View"><button type="button" data-mode="board" role="tab">Board</button><button type="button" data-mode="calendar" role="tab">Calendar</button><button type="button" data-mode="overall" role="tab">Overall order</button></div>
+          <div class="seg" role="tablist" aria-label="View"><button type="button" data-mode="today" role="tab">Today</button><button type="button" data-mode="board" role="tab">Board</button><button type="button" data-mode="calendar" role="tab">Calendar</button><button type="button" data-mode="overall" role="tab">Overall order</button></div>
         </div>
         <div class="board-tools">
           <input id="board-q" type="search" placeholder="Search tasks" aria-label="Search tasks">
@@ -674,6 +674,7 @@
   <div id="shs-list" class="shs-list"></div>
   <div class="row"><span class="spacer"></span><button id="shs-close" class="btn" type="button">Close</button></div>
 </dialog>
+<dialog id="move-sheet" class="dialog msheet" aria-label="Move a task"></dialog>
 <dialog id="board-side" class="dialog">
   <h3 id="bs-title"></h3><div id="bs-list" class="bs-list"></div>
   <div class="row"><span class="spacer"></span><button id="bs-close" class="btn" type="button">Close</button></div>

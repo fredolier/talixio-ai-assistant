@@ -223,9 +223,10 @@ $all = implode('|', array_column($h, 'content'));
 check('history: long older messages shortened, oldest dropped to fit the size', mb_strlen($all) < 12000 && str_contains($all, 'after 4') && (str_contains($all, 'shortened') || !str_contains($all, 'Long pasted')), (string)mb_strlen($all));
 check('history: the latest messages are always kept', count($cs->history(40, $old, 10)) >= 4);
 // older summaries: a past week is merged into one shorter summary, past weeks of a month into a month summary
-$weekAgo = strtotime('monday this week 10:00') - 21 * 86400;
+// 10 days ago: its week is always over (3-day margin) and its month never is (14-day margin), whatever today's date
+$weekAgo = strtotime('today 10:00') - 10 * 86400;
 $cs->addSummary(1, 2, $weekAgo, $weekAgo + 3600, '- dentist on Tuesday');
-$cs->addSummary(3, 4, $weekAgo + 86400, $weekAgo + 90000, '- moved the dentist to Thursday');
+$cs->addSummary(3, 4, $weekAgo + 7200, $weekAgo + 10800, '- moved the dentist to Thursday');
 $monthAgo = strtotime(date('Y-m-05 10:00')) - 100 * 86400;
 $cs->addSummary(5, 6, $monthAgo, $monthAgo + 3600, '- WEEK A', 2);
 $cs->addSummary(7, 8, $monthAgo + 7 * 86400, $monthAgo + 7 * 86400 + 3600, '- WEEK B', 2);

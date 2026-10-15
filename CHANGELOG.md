@@ -3,6 +3,19 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.33 (2026-10-15)
+
+- Tasks: new **Today** view, now the first tab. It shows overdue tasks (with one-click "Today" and "Tomorrow"),
+  today's tasks with a checkbox to mark them done, and the next tasks from your overall order. On a computer an
+  agenda beside it shows today's timed tasks and calendar events, with a line for the current time.
+- Tasks: add a task in one line. "Call Alex tomorrow 9am #sales 30m p2" sets the date, time, space, estimate and
+  priority; chips under the field show what was understood, and a click on a chip keeps that part as text.
+  English and French words both work. The same field replaces "+ Add a task" at the bottom of each board column.
+- Tasks: a **⋯** button on each task (always visible on phones), a long press or a right-click opens a menu to
+  change its status, reschedule it (Today, Tomorrow, Next week, a date, no date), open, duplicate or trash it.
+  On a phone the menu slides up from the bottom. Trashing shows a "Restore" button in the confirmation.
+- Tasks: on touch screens, cards are no longer draggable, so scrolling the board no longer drags a card by mistake.
+
 ## 0.28.32 (2026-10-14)
 
 - Linux drive script: with davfs2 1.7.0 and a recent kernel (WSL2 6.x among them), the drive mounted but every `ls`

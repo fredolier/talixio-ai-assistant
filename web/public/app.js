@@ -1315,7 +1315,7 @@ async function loadBoard() {
   if (![...sel.options].some(o => o.value === boardPrefs.space)) boardPrefs.space = '0';
   sel.value = boardPrefs.space;
   sel.onchange = () => { boardPrefs.space = sel.value; boardPrefs.tag = ''; saveBoardPrefs(); loadBoard(); };
-  const mode = ['overall', 'calendar'].includes(boardPrefs.mode) ? boardPrefs.mode : 'board';
+  const mode = ['overall', 'calendar', 'today'].includes(boardPrefs.mode) ? boardPrefs.mode : 'board';
   document.querySelectorAll('#view-board .seg button').forEach(b => { b.classList.toggle('on', b.dataset.mode === mode); b.setAttribute('aria-selected', b.dataset.mode === mode); b.onclick = () => { boardPrefs.mode = b.dataset.mode; saveBoardPrefs(); loadBoard(); }; });
   $('#board-q').value = boardPrefs.q || '';
   $('#board-q').oninput = () => { clearTimeout(loadBoard.qt); loadBoard.qt = setTimeout(() => { boardPrefs.q = $('#board-q').value.trim(); saveBoardPrefs(); loadBoard(); }, 300); };
@@ -1326,6 +1326,7 @@ async function loadBoard() {
   const q = new URLSearchParams(); if (boardPrefs.tag) q.set('tag', boardPrefs.tag); if (boardPrefs.q) q.set('q', boardPrefs.q);
   if (mode === 'overall') await renderOverall(await api('api/board/portfolio')); // arbitration is across all spaces
   else if (mode === 'calendar') await renderCalendar();
+  else if (mode === 'today') await renderToday();
   else {
     const d = await api(`api/board?${sp}${q}`);
     Object.assign(board, d);
@@ -1338,7 +1339,7 @@ async function loadBoard() {
   $('#board-tags').hidden = mode !== 'board'; sel.hidden = mode === 'overall';
   $('#board-q').hidden = mode !== 'board';
   clearTimeout(loadBoard.t);
-  loadBoard.t = setTimeout(() => { if (location.hash.startsWith('#board') && !$('#card-dialog').open && !document.querySelector('.kcard.dragging, .kquick:focus')) loadBoard().catch(() => {}); }, 30000);
+  loadBoard.t = setTimeout(() => { if (location.hash.startsWith('#board') && !$('#card-dialog').open && !$('#move-sheet').open && !document.querySelector('.kcard.dragging, .qadd.typing, .qa-in:focus')) loadBoard().catch(() => {}); }, 30000);
 }
 
 function cardHtml(c, opts = {}) {
@@ -1366,14 +1367,16 @@ function renderBoard() {
     const col = document.createElement('section');
     col.className = `kcol s-${st}`; col.dataset.status = st;
     col.innerHTML = `<header><b>${label}</b><span class="muted small">${cards.length}${load ? ' · ' + fmtH(load) : ''}</span></header><div class="kcards"></div>`
-      + (all ? '' : `<input class="kquick" placeholder="+ Add a task" aria-label="Add a task to ${esc(label)}" maxlength="200">`);
+
     const list = col.querySelector('.kcards');
     for (const c of cards) {
       const el = document.createElement('article');
-      el.className = `kcard p${c.priority}`; el.dataset.id = c.id; el.draggable = true; el.tabIndex = 0;
-      el.innerHTML = cardHtml(c, { space: all });
+      el.className = `kcard p${c.priority}`; el.dataset.id = c.id; el.draggable = !coarse(); el.tabIndex = 0;
+      el.innerHTML = cardHtml(c, { space: all }) + '<button type="button" class="icon-btn kmore" aria-label="More actions" title="More actions">⋯</button>';
+      el.querySelector('.kmore').onclick = e => { e.stopPropagation(); openMoveSheet(c); };
+      bindLongPress(el, () => openMoveSheet(c));
       el.onclick = () => openCard(c.id);
-      el.onkeydown = e => { if (e.key === 'Enter') openCard(c.id); };
+      el.onkeydown = e => { if (e.key === 'Enter' && e.target === el) openCard(c.id); };
       el.ondragstart = e => { el.classList.add('dragging'); e.dataTransfer.setData('text/plain', String(c.id)); e.dataTransfer.effectAllowed = 'move'; };
       el.ondragend = () => { el.classList.remove('dragging'); document.querySelectorAll('.kdrop').forEach(x => x.remove()); };
       list.append(el);
@@ -1392,12 +1395,8 @@ function renderBoard() {
       try { await post(`api/board/${id}/move`, { status: st, before: b ? +b.dataset.id : null }); } catch (err) { toast(err.message); }
       loadBoard();
     };
-    const quick = col.querySelector('.kquick');
-    if (quick) quick.onkeydown = async e => {
-      if (e.key !== 'Enter' || !quick.value.trim()) return;
-      try { const { card } = await post('api/board', { space: +boardPrefs.space, title: quick.value.trim(), status: st }); quick.value = ''; toast(`${card.code} added`); await loadBoard(); root.querySelector(`.kcol.s-${st} .kquick`)?.focus(); }
-      catch (err) { toast(err.message); }
-    };
+    if (!all) col.append(quickAdd({ compact: true, placeholder: '+ Add a task', label: `Add a task to ${label}`, defaults: () => ({ space: +boardPrefs.space, status: st }),
+      onAdded: () => loadBoard().then(() => root.querySelector(`.kcol.s-${st} .qa-in`)?.focus()) }));
     root.append(col);
   }
   if (!board.cards.length && !boardPrefs.q && !boardPrefs.tag) {
@@ -1445,6 +1444,302 @@ async function renderOverall(d) {
   ranked.forEach((c, i) => root.append(row(c, i)));
   if (rest.length) { root.append(h('Not in the order', `${rest.length} open tasks, by priority and due date`)); rest.forEach(c => root.append(row(c, null))); }
   if (!d.cards.length) root.append(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'No open tasks.' }));
+}
+
+// ---- today, quick add, move sheet ----
+function toastAction(text, label, fn) {
+  toast(text); const t = $('#toast'), b = document.createElement('button');
+  b.type = 'button'; b.className = 'toast-act'; b.textContent = label; b.onclick = () => { t.hidden = true; fn(); };
+  t.append(' ', b); clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.hidden = true), 7000);
+}
+const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const addDays = (k, n) => { const d = new Date(k + 'T12:00:00'); d.setDate(d.getDate() + n); return isoDay(d); };
+const nextMonday = () => { const d = new Date(); d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7)); return isoDay(d); };
+const STATUS_LABEL = () => board.statuses && Object.keys(board.statuses).length ? board.statuses : { idea: 'Ideas', todo: 'To do', doing: 'In progress', blocked: 'Blocked', done: 'Done' };
+const coarse = () => matchMedia('(pointer: coarse)').matches;
+
+/** Move a card to day k (null: no date). A due date shifts, with its start; otherwise the start, or a new due date. */
+async function rescheduleCard(c, k) {
+  const body = { version: c.version };
+  if (k === null) { body.due_date = null; body.start_date = null; body.start_time = null; body.end_time = null; }
+  else if (c.due_date) {
+    if (c.due_date === k) return false;
+    body.due_date = k;
+    if (c.start_date) body.start_date = addDays(c.start_date, Math.round((Date.parse(k) - Date.parse(c.due_date)) / 864e5));
+  } else if (c.start_date) { if (c.start_date === k) return false; body.start_date = k; }
+  else body.due_date = k;
+  await post(`api/board/${c.id}`, body);
+  toast(k === null ? `${c.code}: no date` : `${c.code}: ${c.due_date || !c.start_date ? 'due ' : ''}${fmtDay(k)}`);
+  return true;
+}
+
+/** Read dates, times, workload, priority, #space and #tags out of a quick-add line. skip: kinds the user dismissed. */
+function parseQuick(text, skip = new Set()) {
+  const r = { title: text, chips: [] };
+  const B = '(?<![\\p{L}\\d#@])', E = '(?![\\p{L}\\d])';
+  const take = (re, fn) => { const m = r.title.match(new RegExp(B + re + E, 'iu')); if (!m) return false; if (fn(m) === false) return false; r.title = (r.title.slice(0, m.index) + ' ' + r.title.slice(m.index + m[0].length)); return true; };
+  const t0 = today(), now = new Date();
+  const WD = { sun: 0, sunday: 0, dimanche: 0, mon: 1, monday: 1, lundi: 1, tue: 2, tues: 2, tuesday: 2, mardi: 2, wed: 3, wednesday: 3, mercredi: 3, thu: 4, thur: 4, thurs: 4, thursday: 4, jeudi: 4, fri: 5, friday: 5, vendredi: 5, sat: 6, saturday: 6, samedi: 6 };
+  const MO = { jan: 1, january: 1, janvier: 1, janv: 1, feb: 2, february: 2, fevrier: 2, février: 2, fev: 2, fév: 2, mar: 3, march: 3, mars: 3, apr: 4, april: 4, avril: 4, avr: 4, may: 5, mai: 5, jun: 6, june: 6, juin: 6, jul: 7, july: 7, juillet: 7, juil: 7, aug: 8, august: 8, aout: 8, août: 8, sep: 9, sept: 9, september: 9, septembre: 9, oct: 10, october: 10, octobre: 10, nov: 11, november: 11, novembre: 11, dec: 12, december: 12, decembre: 12, décembre: 12, déc: 12 };
+  const wdRe = Object.keys(WD).sort((a, b) => b.length - a.length).join('|'), moRe = Object.keys(MO).sort((a, b) => b.length - a.length).join('|');
+  const ymd = (y, m, d) => { const t = new Date(y, m - 1, d, 12); return t.getMonth() === m - 1 && t.getDate() === d ? isoDay(t) : null; };
+  const dm = (d, m, y) => { if (y) return ymd(y < 100 ? 2000 + y : y, m, d); const k = ymd(now.getFullYear(), m, d); return k && k < t0 ? ymd(now.getFullYear() + 1, m, d) : k; };
+  if (!skip.has('date')) {
+    const set = k => { if (!k) return false; r.due_date = k; };
+    take("(?:today|tod|aujourd'hui|aujourd’hui)", () => set(t0))
+      || take('(?:après-demain|apres-demain|day after tomorrow)', () => set(addDays(t0, 2)))
+      || take('(?:tomorrow|tmrw?|demain)', () => set(addDays(t0, 1)))
+      || take('(?:in|dans)\\s+(\\d{1,3})\\s*(days?|jours?|weeks?|semaines?|d|j|w)', m => set(addDays(t0, +m[1] * (/^[ws]/i.test(m[2]) ? 7 : 1))))
+      || take('(?:next week|semaine prochaine)', () => set(nextMonday()))
+      || take('(\\d{4})-(\\d{2})-(\\d{2})', m => set(ymd(+m[1], +m[2], +m[3])))
+      || take(`(\\d{1,2})(?:st|nd|rd|th|er)?\\s+(${moRe})\\.?(?:\\s+(\\d{4}))?`, m => set(dm(+m[1], MO[m[2].toLowerCase()], m[3] && +m[3])))
+      || take(`(${moRe})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?`, m => set(dm(+m[2], MO[m[1].toLowerCase()], m[3] && +m[3])))
+      || take('(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?', m => { const us = /^en-US/i.test(navigator.language || ''); return set(dm(+(us ? m[2] : m[1]), +(us ? m[1] : m[2]), m[3] && +m[3])); })
+      || take(`(next\\s+|prochain\\s+)?(${wdRe})\\.?(\\s+prochain)?`, m => {
+        const w = WD[m[2].toLowerCase()];
+        if (m[2].toLowerCase() === 'mon' && /^fr/i.test(LOCALE)) return false; // "mon" is "my" in French
+        return set(m[1] || m[3] ? addDays(nextMonday(), (w + 6) % 7) : addDays(t0, ((w - now.getDay()) + 7) % 7 || 7));
+      });
+  }
+  const hm = (h, m, ap) => { h = +h; m = +(m || 0); if (ap) { ap = ap.toLowerCase(); if (h > 12 || h < 1) return null; if (ap === 'pm' && h < 12) h += 12; if (ap === 'am' && h === 12) h = 0; } return h < 24 && m < 60 ? `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` : null; };
+  if (!skip.has('time')) {
+    const range = (a, b) => { if (!a || !b || b <= a) return false; r.start_time = a; r.end_time = b; };
+    take('(?:(?:at|à|a|@)\\s*)?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?\\s*[-–]\\s*(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)', m => range(hm(m[1], m[2], m[3] || m[6]), hm(m[4], m[5], m[6])))
+      || take('(?:(?:at|à|a|@)\\s*)?(\\d{1,2})(?::|h)(\\d{2})\\s*[-–]\\s*(\\d{1,2})(?::|h)(\\d{2})', m => range(hm(m[1], m[2]), hm(m[3], m[4])))
+      || take('(?:(?:at|à|@)\\s*)?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)', m => { const v = hm(m[1], m[2], m[3]); if (!v) return false; r.start_time = v; })
+      || take('(?:(?:at|à|@)\\s*)?(\\d{1,2}):(\\d{2})', m => { const v = hm(m[1], m[2]); if (!v) return false; r.start_time = v; })
+      || take('(?:at|à|@)\\s*(\\d{1,2})h(\\d{2})?', m => { const v = hm(m[1], m[2]); if (!v) return false; r.start_time = v; })
+      || take('(\\d{1,2})h(\\d{2})', m => { if (+m[1] < 7) return false; const v = hm(m[1], m[2]); if (!v) return false; r.start_time = v; })
+      || take('(?:at|à|@)\\s*(\\d{1,2})(?![:.,h\\d])', m => { const v = hm(m[1], 0); if (!v) return false; r.start_time = v; });
+  }
+  if (!skip.has('estimate')) {
+    take('(\\d{1,2})h(\\d{2})', m => { r.estimate_hours = +m[1] + +m[2] / 60; })
+      || take('(\\d+(?:[.,]\\d+)?)\\s*(h|hrs?|hours?|heures?)', m => { const v = parseFloat(m[1].replace(',', '.')); if (!(v > 0 && v <= 200)) return false; r.estimate_hours = v; })
+      || take('(\\d{1,3})\\s*(m|min|mins|minutes?)', m => { if (!(+m[1] > 0)) return false; r.estimate_hours = Math.round(+m[1] / 60 * 100) / 100; })
+      || take('(\\d+(?:[.,]\\d+)?)\\s*(d|days?|j|jours?)', m => { const v = parseFloat(m[1].replace(',', '.')); if (!(v > 0 && v <= 60)) return false; r.estimate_hours = v * 7; });
+  }
+  if (!skip.has('priority')) take('p([1-5])', m => { r.priority = +m[1]; });
+  // #space or #tag
+  const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  r.tags = [];
+  r.title = r.title.replace(/(^|\s)#([\p{L}\d][\p{L}\d_-]*)/gu, (all, pre, w) => {
+    if (r.space === undefined && !skip.has('space')) {
+      const n = norm(w), live = state.spaces.filter(x => !x.archived);
+      const hit = live.find(x => norm(x.name) === n || norm(x.slug || '') === n) || (n.length >= 3 ? (l => l.length === 1 ? l[0] : null)(live.filter(x => norm(x.name).startsWith(n))) : null);
+      if (hit) { r.space = hit.id; return pre; }
+    }
+    if (skip.has('tags')) return all;
+    r.tags.push(w.toLowerCase()); return pre;
+  });
+  if (r.start_time && !r.due_date && !skip.has('date')) r.due_date = t0;
+  if (r.start_time && !r.end_time && r.estimate_hours && r.estimate_hours < 24) {
+    const [h, m] = r.start_time.split(':').map(Number), e = h * 60 + m + Math.round(r.estimate_hours * 60);
+    if (e < 24 * 60) r.end_time = `${String(Math.floor(e / 60)).padStart(2, '0')}:${String(e % 60).padStart(2, '0')}`;
+  }
+  r.title = r.title.replace(/\s{2,}/g, ' ').trim().replace(/(?:\s+(?:at|on|by|for|le|à|pour|,|-|–))+$/iu, '').replace(/^(?:(?:on|le|,|-|–)\s+)+/iu, '').trim();
+  // chips
+  if (r.due_date) { const d = new Date(r.due_date + 'T12:00:00'); r.chips.push({ kind: 'date', text: d.toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', ...(r.due_date.slice(0, 7) !== t0.slice(0, 7) ? { month: 'short' } : {}) }) + (r.start_time ? ` · ${r.start_time}${r.end_time ? '–' + r.end_time : ''}` : '') }); }
+  else if (r.start_time) r.chips.push({ kind: 'time', text: r.start_time });
+  if (r.start_time && r.due_date) r.chips[r.chips.length - 1].kinds = ['date', 'time'];
+  if (r.estimate_hours) r.chips.push({ kind: 'estimate', text: fmtH(r.estimate_hours) });
+  if (r.priority) r.chips.push({ kind: 'priority', text: `P${r.priority} · ${t(PRIO[r.priority])}` });
+  if (r.space !== undefined) r.chips.push({ kind: 'space', text: spaceOf(r.space).name });
+  if (r.tags.length) r.chips.push({ kind: 'tags', text: r.tags.map(t => '#' + t).join(' ') });
+  return r;
+}
+
+/** A quick-add line with live chips. opts: {defaults: () => ({space, status, due_date}), onAdded(card), placeholder, label} */
+function quickAdd(opts) {
+  const f = document.createElement('form'); f.className = 'qadd' + (opts.compact ? ' compact' : '');
+  f.innerHTML = `<div class="qa-line"><input class="qa-in" maxlength="300" autocomplete="off" enterkeyhint="done" placeholder="${esc(opts.placeholder || 'Add a task: call Alex tomorrow 9am #sales')}" aria-label="${esc(opts.label || 'Add a task')}">
+    <button type="submit" class="qa-go" aria-label="Add" title="Add">+</button></div><div class="qa-chips" aria-live="polite"></div>`;
+  const inp = f.querySelector('.qa-in'), chips = f.querySelector('.qa-chips');
+  let skip = new Set();
+  const paint = () => {
+    const v = inp.value.trim(); f.classList.toggle('typing', !!v);
+    if (!v) { chips.innerHTML = ''; skip = new Set(); return; }
+    const p = parseQuick(v, skip), d = opts.defaults ? opts.defaults() : {};
+    const html = p.chips.map(c => `<button type="button" class="qa-chip" data-k="${(c.kinds || [c.kind]).join(',')}" title="Click to keep this as text"><span class="no-i18n">${esc(c.text)}</span> <span aria-hidden="true">×</span></button>`);
+    if (!p.due_date && d.due_date) html.push(`<span class="qa-chip def">${d.due_date === today() ? 'Today' : esc(fmtDay(d.due_date))}</span>`);
+    if (p.space === undefined && d.space != null && opts.showSpace) html.push(`<span class="qa-chip def no-i18n">${esc(spaceOf(d.space).name)}</span>`);
+    chips.innerHTML = html.join('');
+    chips.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { b.dataset.k.split(',').forEach(k => skip.add(k)); paint(); inp.focus(); });
+  };
+  inp.oninput = paint;
+  inp.onkeydown = e => { if (e.key === 'Escape' && inp.value) { e.preventDefault(); inp.value = ''; paint(); } };
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const v = inp.value.trim(); if (!v || f.classList.contains('busy')) return;
+    const p = parseQuick(v, skip), d = opts.defaults ? opts.defaults() : {};
+    const body = { title: p.title || v, space: p.space ?? d.space ?? state.space };
+    if (d.status) body.status = d.status;
+    for (const k of ['due_date', 'start_time', 'end_time', 'estimate_hours', 'priority']) if (p[k] != null) body[k] = p[k];
+    if (!body.due_date && d.due_date) body.due_date = d.due_date;
+    if (p.tags.length) body.tags = p.tags;
+    f.classList.add('busy');
+    try { const { card } = await post('api/board', body); inp.value = ''; paint(); toast(`${card.code} added`); await opts.onAdded?.(card); }
+    catch (err) { toast(err.message); }
+    finally { f.classList.remove('busy'); }
+  };
+  f.focusInput = () => inp.focus();
+  return f;
+}
+
+/** Today: what is late, what is for today, and what comes next in the overall order; the day's agenda beside it. */
+async function renderToday() {
+  const t0 = today(), sp = boardPrefs.space === '' ? '' : `space=${boardPrefs.space}`;
+  const [pf, cal] = await Promise.all([api(`api/board/portfolio?${sp}`), api(`api/board/calendar?from=${t0}&to=${t0}${sp ? '&' + sp : ''}`)]);
+  board.refs = { ...(board.refs || {}), ...pf.refs };
+  const byId = new Map();
+  for (const c of [...pf.cards, ...cal.cards]) byId.set(c.id, c);
+  const onDay = c => c.due_date === t0 || (c.start_time && (c.start_date || c.due_date) === t0);
+  const overdue = pf.cards.filter(c => c.due_date && c.due_date < t0 && !onDay(c));
+  const todays = [...byId.values()].filter(c => !overdue.includes(c) && (onDay(c) || c.status === 'doing'))
+    .sort((a, b) => (a.status === 'done') - (b.status === 'done') || (a.start_time ? 0 : 1) - (b.start_time ? 0 : 1) || (a.start_time || '').localeCompare(b.start_time || '') || a.priority - b.priority);
+  const shown = new Set([...overdue, ...todays].map(c => c.id));
+  const ranked = pf.cards.some(c => c.global_rank != null);
+  const next = pf.cards.filter(c => !shown.has(c.id) && c.status !== 'idea' && c.status !== 'blocked' && (!c.start_date || c.start_date <= t0)).slice(0, 5);
+  const done = todays.filter(c => c.status === 'done').length;
+  const planned = todays.filter(c => c.status !== 'done').reduce((a, c) => a + Math.max(0, (c.estimate_hours || 0) - (c.spent_hours || 0)), 0);
+  const all = boardPrefs.space === '';
+
+  const root = $('#board'); root.className = 'today'; root.innerHTML = '';
+  $('#board-summary').hidden = true;
+  const now = new Date();
+  const main = document.createElement('div'); main.className = 'td-main';
+  main.innerHTML = `<header class="td-head"><div><div class="muted small">${now.toLocaleDateString(LOCALE, { weekday: 'long' })}</div><h2>${now.toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })}</h2></div>
+    <div class="td-progress"><div class="td-nums small muted"><span>${done} of ${todays.length} done</span>${planned ? `<span>${fmtH(Math.round(planned * 4) / 4)} planned</span>` : ''}</div>
+    <div class="td-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${todays.length}" aria-valuenow="${done}"><i style="width:${todays.length ? Math.round(done / todays.length * 100) : 0}%"></i></div></div></header>`;
+  const qa = quickAdd({ defaults: () => ({ space: all ? state.space : +boardPrefs.space, due_date: t0 }), showSpace: all, onAdded: () => loadBoard().then(() => $('#board .qa-in')?.focus()) });
+  main.append(qa);
+  const meta = c => {
+    const s = spaceOf(c.space), bits = [`<span class="code">${esc(c.code)}</span>`];
+    if (all) bits.push(`<span class="kc-space"><i style="background:${esc(s.color || 'var(--muted)')}"></i>${esc(s.name)}</span>`);
+    if (c.start_time && (c.start_date || c.due_date) === t0) bits.push(`<span>${esc(c.start_time)}${c.end_time ? '–' + esc(c.end_time) : ''}</span>`);
+    else if (c.due_date && c.due_date !== t0) bits.push(`<span class="${dueClass(c)}">${c.due_date < t0 ? `due ${esc(fmtDay(c.due_date))}` : esc(fmtDay(c.due_date))}</span>`);
+    if (c.estimate_hours) bits.push(`<span>${fmtH(c.estimate_hours)}</span>`);
+    if (c.checklist?.total) bits.push(`<span>☑ ${c.checklist.done}/${c.checklist.total}</span>`);
+    if (c.status === 'doing') bits.push(`<span class="td-doing">In progress</span>`);
+    if (c.status === 'blocked') bits.push(`<span class="late">Blocked</span>`);
+    return bits.join('<span aria-hidden="true">·</span>');
+  };
+  const row = (c, extra = '') => {
+    const el = document.createElement('div'); el.className = 'drow' + (c.status === 'done' ? ' done' : ''); el.dataset.id = c.id; el.tabIndex = 0;
+    el.innerHTML = `<button type="button" class="tck" aria-label="${c.status === 'done' ? 'Mark as not done' : 'Mark as done'}" title="${c.status === 'done' ? 'Mark as not done' : 'Mark as done'}"></button>
+      <div class="dr-text"><div class="dr-title no-i18n">${esc(c.title)}</div><div class="dr-meta small muted">${meta(c)}</div></div>${extra}
+      <span class="prio p${c.priority}" title="P${c.priority} · ${PRIO[c.priority]}">P${c.priority}</span><button type="button" class="icon-btn kmore" aria-label="More actions" title="More actions">⋯</button>`;
+    el.querySelector('.tck').onclick = async e => {
+      e.stopPropagation(); el.classList.toggle('done');
+      try { await post(`api/board/${c.id}/move`, { status: c.status === 'done' ? 'todo' : 'done' }); if (c.status !== 'done') toast(`${c.code} done`); } catch (err) { toast(err.message); }
+      loadBoard();
+    };
+    el.querySelectorAll('[data-day]').forEach(b => b.onclick = async e => { e.stopPropagation(); try { await rescheduleCard(c, b.dataset.day); } catch (err) { toast(err.message); } loadBoard(); });
+    el.querySelector('.kmore').onclick = e => { e.stopPropagation(); openMoveSheet(c); };
+    el.onclick = () => openCard(c.id);
+    el.onkeydown = e => { if (e.key === 'Enter' && e.target === el) openCard(c.id); };
+    bindLongPress(el, () => openMoveSheet(c));
+    return el;
+  };
+  const section = (title, cls, cards, extra, empty) => {
+    const s = document.createElement('section'); s.className = 'td-sec ' + cls;
+    s.innerHTML = `<h3>${title}${cards.length ? ` <span class="muted">· ${cards.length}</span>` : ''}</h3>`;
+    cards.forEach(c => s.append(row(c, extra ? extra(c) : '')));
+    if (!cards.length && empty) s.insertAdjacentHTML('beforeend', `<p class="td-empty muted small">${empty}</p>`);
+    main.append(s);
+  };
+  if (overdue.length) section('Overdue', 'late', overdue, () => `<span class="td-pills"><button type="button" class="dpill" data-day="${t0}">Today</button><button type="button" class="dpill" data-day="${addDays(t0, 1)}">Tomorrow</button></span>`);
+  section('Today', '', todays, null, 'Nothing planned for today. Add a task above, or pick one from below.');
+  if (next.length) section(ranked ? 'Next in your overall order' : 'Next up', 'next', next, () => `<span class="td-pills"><button type="button" class="dpill" data-day="${t0}">+ Today</button></span>`);
+  root.append(main);
+
+  // the day's agenda: events and timed tasks
+  const ag = document.createElement('aside'); ag.className = 'td-agenda'; ag.innerHTML = '<h3>Agenda</h3><div class="td-tl"></div>';
+  root.append(ag);
+  const draw = events => {
+    const items = [];
+    for (const e of events || []) { if (e.all_day) { items.push({ all: true, title: e.title, ev: true }); continue; } const s = new Date(e.start * 1000), en = new Date((e.end || e.start + 1800) * 1000); if (isoDay(s) !== t0 && isoDay(en) !== t0) { items.push({ all: true, title: e.title, ev: true }); continue; } items.push({ s: isoDay(s) < t0 ? 0 : s.getHours() + s.getMinutes() / 60, e: isoDay(en) > t0 ? 24 : en.getHours() + en.getMinutes() / 60, title: e.title, sub: e.location || '', ev: true }); }
+    for (const c of todays) {
+      if (!c.start_time || (c.start_date || c.due_date) !== t0) continue;
+      const [h, m] = c.start_time.split(':').map(Number), s = h + m / 60;
+      let e = s + (c.estimate_hours && c.estimate_hours < 12 ? c.estimate_hours : 0.5);
+      if (c.end_time) { const [h2, m2] = c.end_time.split(':').map(Number); e = h2 + m2 / 60; }
+      items.push({ s, e: Math.max(e, s + 0.25), title: `${c.code} ${c.title}`, sub: c.start_time + (c.end_time ? '–' + c.end_time : ''), c });
+    }
+    const tl = ag.querySelector('.td-tl'), timed = items.filter(i => !i.all).sort((a, b) => a.s - b.s || b.e - a.e);
+    const allDay = items.filter(i => i.all);
+    const H = 44, from = Math.floor(Math.min(8, ...timed.map(i => i.s))), to = Math.ceil(Math.max(18, ...timed.map(i => i.e)));
+    const lanes = []; for (const it of timed) { let l = lanes.findIndex(end => end <= it.s); if (l < 0) { l = lanes.length; lanes.push(0); } lanes[l] = it.e; it.lane = l; }
+    // width per overlapping group
+    for (const it of timed) it.n = Math.max(1, ...timed.filter(o => o.s < it.e && o.e > it.s).map(o => o.lane + 1));
+    let html = allDay.map(i => `<div class="tl-all no-i18n">${esc(i.title)}</div>`).join('');
+    html += `<div class="tl-grid" style="height:${(to - from) * H}px">`;
+    for (let h = from; h <= to; h++) html += `<div class="tl-h" style="top:${(h - from) * H}px"><span>${String(h).padStart(2, '0')}:00</span></div>`;
+    for (const it of timed) html += `<div class="tl-it${it.ev ? ' ev' : ''}${it.c ? ` p${it.c.priority}${it.c.status === 'done' ? ' done' : ''}` : ''}"${it.c ? ` data-id="${it.c.id}" tabindex="0"` : ''} style="top:${(it.s - from) * H + 1}px;height:${Math.max(18, (it.e - it.s) * H - 2)}px;left:calc(48px + (100% - 52px) * ${it.lane} / ${it.n});width:calc((100% - 52px) / ${it.n} - 3px)"><b class="no-i18n">${esc(it.title)}</b>${it.sub ? `<small class="no-i18n">${esc(it.sub)}</small>` : ''}</div>`;
+    const n = now.getHours() + now.getMinutes() / 60;
+    if (n >= from && n <= to) html += `<div class="tl-now" style="top:${(n - from) * H}px"></div>`;
+    html += '</div>';
+    if (!timed.length && !allDay.length) html = `<p class="muted small">${cal.calendar ? 'Nothing scheduled today.' : 'Nothing scheduled today. Give a task a time to see it here.'}</p>` + html;
+    tl.innerHTML = html;
+    tl.querySelectorAll('.tl-it[data-id]').forEach(el => { el.onclick = () => openCard(+el.dataset.id); el.onkeydown = e => { if (e.key === 'Enter') openCard(+el.dataset.id); }; });
+    const nowEl = tl.querySelector('.tl-now'); if (nowEl && !matchMedia('(max-width: 760px)').matches) tl.scrollTop = Math.max(0, nowEl.offsetTop - 120);
+  };
+  draw([]);
+  if (cal.calendar) api(`api/board/calendar?from=${t0}&to=${t0}&events=1${sp ? '&' + sp : ''}`).then(d => { if (root.isConnected && root.className === 'today') draw(d.events); }).catch(() => {});
+}
+
+/** Long-press (touch) opens a menu; right-click too. The click that follows a long-press is swallowed. */
+function bindLongPress(el, fn) {
+  let timer = 0, x = 0, y = 0, fired = false;
+  el.addEventListener('contextmenu', e => { if (e.target.closest('input, textarea, a')) return; e.preventDefault(); fired = false; clearTimeout(timer); fn(); });
+  el.addEventListener('touchstart', e => { if (e.touches.length !== 1) return; fired = false; x = e.touches[0].clientX; y = e.touches[0].clientY; clearTimeout(timer); timer = setTimeout(() => { fired = true; navigator.vibrate?.(10); fn(); }, 500); }, { passive: true });
+  el.addEventListener('touchmove', e => { if (Math.hypot(e.touches[0].clientX - x, e.touches[0].clientY - y) > 8) clearTimeout(timer); }, { passive: true });
+  el.addEventListener('touchend', e => { clearTimeout(timer); if (fired) e.preventDefault(); }, { passive: false });
+  el.addEventListener('touchcancel', () => clearTimeout(timer));
+  el.addEventListener('click', e => { if (fired) { fired = false; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+}
+
+/** The move sheet: status, date, and a few actions, reachable without drag and drop. */
+async function openMoveSheet(c) {
+  const dlg = $('#move-sheet'), t0 = today(), labels = STATUS_LABEL();
+  const doing = (board.cards || []).filter(x => x.status === 'doing' && x.space === c.space && x.id !== c.id).length;
+  dlg.innerHTML = `<form method="dialog" class="ms">
+    <div class="ms-grab" aria-hidden="true"></div>
+    <div class="ms-head"><div><span class="muted small no-i18n">${esc(c.code)} · ${esc(spaceOf(c.space).name)}</span><strong class="no-i18n">${esc(c.title)}</strong></div><button type="submit" class="icon-btn" aria-label="Close" title="Close">✕</button></div>
+    <h4>Move to</h4>
+    <div class="ms-st">${Object.entries(labels).map(([k, v]) => `<button type="button" class="ms-opt s-${k}${k === c.status ? ' on' : ''}" data-st="${k}"${k === c.status ? ' aria-current="true"' : ''}><i></i><span>${esc(v)}</span>${k === c.status ? '<em>✓ current</em>' : k === 'doing' && doing >= 3 ? `<em class="warn">${doing} already in progress</em>` : ''}</button>`).join('')}</div>
+    <h4>Reschedule</h4>
+    <div class="ms-dates">${[['Today', t0], ['Tomorrow', addDays(t0, 1)], ['Next week', nextMonday()]].map(([l, k]) => `<button type="button" class="dpill${(c.due_date || c.start_date) === k ? ' on' : ''}" data-day="${k}">${l}</button>`).join('')}
+      <label class="dpill ms-pick">Pick…<input type="date" value="${esc(c.due_date || c.start_date || '')}" aria-label="Pick a date"></label>${c.due_date || c.start_date ? '<button type="button" class="dpill" data-day="">No date</button>' : ''}</div>
+    <div class="ms-acts"><button type="button" class="btn small ghost" data-a="open">Open</button><button type="button" class="btn small ghost" data-a="dup">Duplicate</button><span class="spacer"></span><button type="button" class="btn small ghost danger" data-a="trash">Trash</button></div>
+  </form>`;
+  const done = () => { dlg.close(); loadBoard(); };
+  dlg.querySelectorAll('[data-st]').forEach(b => b.onclick = async () => {
+    if (b.dataset.st === c.status) return dlg.close();
+    try { await post(`api/board/${c.id}/move`, { status: b.dataset.st }); toast(`${c.code}: ${labels[b.dataset.st]}`); } catch (e) { toast(e.message); }
+    done();
+  });
+  const day = async k => { try { await rescheduleCard(c, k); } catch (e) { toast(e.message); } done(); };
+  dlg.querySelectorAll('[data-day]').forEach(b => b.onclick = () => day(b.dataset.day || null));
+  const pick = dlg.querySelector('.ms-pick input');
+  pick.onchange = () => { if (/^\d{4}-\d{2}-\d{2}$/.test(pick.value)) day(pick.value); };
+  dlg.querySelector('.ms-pick').onclick = e => { if (e.target === pick) return; e.preventDefault(); try { pick.showPicker(); } catch { pick.focus(); } };
+  dlg.querySelector('[data-a=open]').onclick = () => { dlg.close(); openCard(c.id); };
+  dlg.querySelector('[data-a=dup]').onclick = async () => {
+    try {
+      const { card: f } = await api(`api/board/${c.id}`);
+      const body = { space: f.space, title: `${f.title} ${t('(copy)')}`, body: f.body, priority: f.priority, tags: f.tags, status: f.status === 'done' ? 'todo' : f.status };
+      for (const k of ['estimate_hours', 'start_date', 'due_date', 'start_time', 'end_time']) if (f[k] != null && f[k] !== '') body[k] = f[k];
+      const { card } = await post('api/board', body); toast(`${card.code} added`);
+    } catch (e) { toast(e.message); }
+    done();
+  };
+  dlg.querySelector('[data-a=trash]').onclick = async () => {
+    try { await post(`api/board/${c.id}/delete`); toastAction(`${c.code} moved to the trash`, 'Restore', async () => { try { await post(`api/board/${c.id}/restore`); toast('Restored'); loadBoard(); } catch (e) { toast(e.message); } }); } catch (e) { toast(e.message); }
+    done();
+  };
+  dlg.onclick = e => { if (e.target === dlg) dlg.close(); };
+  dlg.showModal();
+  dlg.querySelector('.ms-opt.on, .ms-opt')?.focus();
 }
 
 let cardRte = null;
@@ -1651,11 +1946,7 @@ async function renderCalendar() {
       cell.ondrop = async e => {
         e.preventDefault(); cell.classList.remove('over');
         const id = +e.dataTransfer.getData('text/plain'); const c = d.cards.find(x => x.id === id); if (!c) return;
-        if (!c.due_date) { if (c.start_date !== k) { try { await post(`api/board/${id}`, { start_date: k, version: c.version }); toast(`${c.code}: ${fmtDay(k)}`); } catch (err) { toast(err.message); } loadBoard(); } return; }
-        if (c.due_date === k) return;
-        const shift = (Date.parse(k) - Date.parse(c.due_date)) / 864e5; const body = { due_date: k, version: c.version };
-        if (c.start_date) { const s = new Date(c.start_date + 'T12:00:00'); s.setDate(s.getDate() + shift); body.start_date = iso(s); }
-        try { await post(`api/board/${id}`, body); toast(`${c.code}: due ${fmtDay(k)}`); } catch (err) { toast(err.message); }
+        try { if (!await rescheduleCard(c, k)) return; } catch (err) { toast(err.message); }
         loadBoard();
       };
       cell.onclick = e => { if (e.target === cell || e.target.classList.contains('cal-num')) openCard(null, { space: boardPrefs.space === '' ? state.space : +boardPrefs.space, due_date: k }); };
