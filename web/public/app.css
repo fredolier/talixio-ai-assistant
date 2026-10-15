@@ -620,9 +620,13 @@ ul.plain{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;g
 .board-head{display:flex;flex-direction:column;gap:10px}
 .board-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .board-title h2{margin-right:4px}
-.board-head select,.board-tools input{font:inherit;font-size:.88rem;padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.board-head select,.board-tools input,.bfilters input{font:inherit;font-size:.88rem;padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
 .board-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.board-tools input[type=search]{flex:1 1 200px;max-width:320px}
+.bfilters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bfilters #board-q{flex:1 1 220px;max-width:340px;min-width:0}
+.bf-tag input{width:130px}
+.bf-top{display:flex;gap:6px;flex-wrap:nowrap;overflow:hidden;min-width:0;max-width:100%}
+.bf-top .tag{white-space:nowrap}
 .board-tools .btn.primary{margin-left:auto}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
 .seg button{font:inherit;font-size:.85rem;padding:6px 12px;border:0;background:none;color:var(--muted);cursor:pointer}
@@ -658,7 +662,7 @@ ul.plain{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;g
 .kb.soon{color:var(--warn);font-weight:600} .kb.late{color:var(--danger);font-weight:600} .kb.ok{color:var(--accent)} .kb.wait{color:var(--warn)}
 .kc-tags{display:flex;gap:4px;flex-wrap:wrap} .kc-tags span{font-size:.68rem;color:var(--muted);background:var(--sunk);border-radius:5px;padding:0 5px}
 .kdrop{height:3px;border-radius:2px;background:var(--accent);margin:-2px 0}
-@media (max-width:760px){.kcol{flex-basis:84vw;max-height:none}.board{scroll-snap-type:x mandatory}.board-tools .btn.primary{margin-left:0}}
+@media (max-width:760px){.bfilters #board-q{flex-basis:100%;max-width:none}.bf-tag{flex:1 1 0;min-width:0;display:flex}.bf-tag input{flex:1;width:100%;min-width:0;box-sizing:border-box}.bf-top{flex-basis:100%;overflow-x:auto;scrollbar-width:none}.kcol{flex-basis:84vw;max-height:none}.board{scroll-snap-type:x mandatory}.board-tools .btn.primary{margin-left:0}}
 /* overall order */
 .overall{display:flex;flex-direction:column;gap:8px;max-width:860px}
 .ohead{display:flex;flex-direction:column;gap:2px;margin-top:10px}

@@ -9,6 +9,11 @@
 - **List** view: a sortable table grouped by due date, status, space or priority, with quick views (This week,
   Critical & high, Waiting, No date). Tick several tasks to change their status, date, priority, space or tags at
   once, or to move them to the trash. Keyboard: arrows or j/k, x to select, Enter to open, Esc to clear.
+- **Filters** above every view (Today, Board, List, Week, Month): a search on the words of the title,
+  description, code or tags (accents ignored), one tag (type a few letters to pick among all of them; the five
+  most used are one click away), and a priority floor (P1 only, P2 and above…). *Clear filters* resets them, and
+  the count says how many tasks are shown. The Board can also be sorted by priority, due date or title instead
+  of your manual order. Agenda events only show when they match the words and no tag or priority is chosen.
 - The task editor opens as a side panel on a computer and full screen on a phone.
 - **Week** view to plan time: drag a task from "Not planned yet" onto the hour grid to book a slot; booked
   hours are counted against your hours a day. On a phone: tap a task, then a free slot.

@@ -2488,5 +2488,20 @@ window.I18N.fr = {
 "OpenAI Admin key (real costs)": "Clé Admin OpenAI (coûts réels)",
 "Optional. An Admin key (platform.openai.com, Organization → Admin keys) lets Talixio read what OpenAI really billed each day.": "Facultatif. Une clé Admin (platform.openai.com, Organization → Admin keys) permet à Talixio de lire ce qu'OpenAI a réellement facturé chaque jour.",
 "OpenAI project": "Projet OpenAI",
-"Optional: only count this project (proj_…). Empty = the whole organization.": "Facultatif : ne compter que ce projet (proj_…). Vide = toute l'organisation."
+"Optional: only count this project (proj_…). Empty = the whole organization.": "Facultatif : ne compter que ce projet (proj_…). Vide = toute l'organisation.",
+"# Tag": "# Étiquette",
+"# Other tag": "# Autre étiquette",
+"Filter by tag": "Filtrer par étiquette",
+"Any priority": "Toutes priorités",
+"P2 and above": "P2 et plus",
+"P3 and above": "P3 et plus",
+"P4 and above": "P4 et plus",
+"Sort cards": "Trier les cartes",
+"Manual order": "Ordre manuel",
+"By priority": "Par priorité",
+"By due date": "Par échéance",
+"By title": "Par titre",
+"Clear filters": "Effacer les filtres",
+"{a} of {b} tasks": "{a} tâches sur {b}",
+"Remove this filter": "Retirer ce filtre"
 };

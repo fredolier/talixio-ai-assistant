@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.42 (2026-10-15)
+
+- **Task filters, reworked**: the endless row of tags is replaced by one filter bar shared by the Today, Board,
+  List, Week and Month views: a text search (title, description, code, tags; accents ignored), a tag picker (type
+  to choose among all tags, the five most used as chips, the chosen one shown with ✕), a priority floor, and on the
+  Board a sort by priority, due date or title. A count shows how many tasks match, and *Clear filters* resets them.
+  The List's own priority filter moved into this bar. Agenda events are hidden while a tag or priority is chosen.
+
 ## 0.28.41 (2026-10-15)
 
 - **Real costs from the provider** (Anthropic, OpenAI): with an Admin key (Settings → AI model → Budget, or *Real

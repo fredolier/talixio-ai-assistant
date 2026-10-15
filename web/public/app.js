@@ -1338,31 +1338,86 @@ async function loadBoard() {
   sel.onchange = () => { boardPrefs.space = sel.value; boardPrefs.tag = ''; saveBoardPrefs(); loadBoard(); };
   const mode = ['overall', 'calendar', 'today', 'week', 'list'].includes(boardPrefs.mode) ? boardPrefs.mode : 'board';
   document.querySelectorAll('#view-board .seg button[data-mode]').forEach(b => { b.classList.toggle('on', b.dataset.mode === mode); b.setAttribute('aria-selected', b.dataset.mode === mode); b.onclick = () => { boardPrefs.mode = b.dataset.mode; saveBoardPrefs(); loadBoard(); }; });
-  $('#board-q').value = boardPrefs.q || '';
-  $('#board-q').oninput = () => { clearTimeout(loadBoard.qt); loadBoard.qt = setTimeout(() => { boardPrefs.q = $('#board-q').value.trim(); saveBoardPrefs(); loadBoard(); }, 300); };
+  bindBoardFilters(mode);
   $('#board-new').onclick = () => openCard(null, { space: boardPrefs.space === '' ? state.space : +boardPrefs.space });
   $('#board-trash').onclick = showBoardTrash;
   $('#board-changes').onclick = showBoardChanges;
-  const sp = boardPrefs.space === '' ? '' : `space=${boardPrefs.space}&`;
-  const q = new URLSearchParams(); if (boardPrefs.tag) q.set('tag', boardPrefs.tag); if (boardPrefs.q) q.set('q', boardPrefs.q);
+  const sp = boardPrefs.space === '' ? '' : `space=${boardPrefs.space}`;
   if (mode === 'overall') await renderOverall(await api('api/board/portfolio')); // arbitration is across all spaces
   else if (mode === 'calendar') await renderCalendar();
   else if (mode === 'today') await renderToday();
   else if (mode === 'week') await renderWeek();
   else {
-    const d = await api(`api/board?${sp}${q}`);
+    const d = await api(`api/board?${sp}`);
     Object.assign(board, d);
-    const names = Object.keys(d.tags || {});
-    if (boardPrefs.tag && !names.includes(boardPrefs.tag)) names.unshift(boardPrefs.tag);
-    $('#board-tags').innerHTML = names.map(t => `<button type="button" class="tag${t === boardPrefs.tag ? ' on' : ''}" data-tag="${esc(t)}">#${esc(t)} <small>${d.tags[t] || 0}</small></button>`).join('');
-    $('#board-tags').querySelectorAll('.tag').forEach(b => b.onclick = () => { boardPrefs.tag = boardPrefs.tag === b.dataset.tag ? '' : b.dataset.tag; saveBoardPrefs(); loadBoard(); });
+    boardTags(d.tags || {});
     mode === 'list' ? renderTaskList() : renderBoard();
   }
   if (mode !== 'list') { listSel.clear(); $('#list-bulk')?.remove(); }
-  $('#board-tags').hidden = !['board', 'list'].includes(mode); sel.hidden = mode === 'overall';
-  $('#board-q').hidden = !['board', 'list'].includes(mode);
+  sel.hidden = mode === 'overall';
   clearTimeout(loadBoard.t);
   loadBoard.t = setTimeout(() => { if (location.hash.startsWith('#board') && !listSel.size && !$('#card-dialog').open && !$('#move-sheet').open && !document.querySelector('.dragging, .qadd.typing, .qa-in:focus, #board.picking')) loadBoard().catch(() => {}); }, 30000);
+}
+
+/* Filters shared by the Today, Board, List, Week and Month views: words, one tag, a priority floor; the board can also be sorted. */
+const boardFiltered = () => !!(boardPrefs.q || boardPrefs.tag || boardPrefs.prio);
+function cardMatches(c) {
+  const P = boardPrefs;
+  if (P.tag && !(c.tags || []).includes(P.tag)) return false;
+  if (P.prio && c.priority > +P.prio) return false;
+  if (P.q) {
+    const hay = fold([c.code, c.title, c.body, c.location, ...(c.tags || []).map(x => '#' + x)].join(' '));
+    if (!fold(P.q).split(/\s+/).filter(Boolean).every(w => hay.includes(w))) return false;
+  }
+  return true;
+}
+/** Agenda events have no tag or priority: they show only while those filters are off, and must match the words. */
+function eventMatches(e) {
+  if (boardPrefs.tag || boardPrefs.prio) return false;
+  const hay = fold(`${e.title} ${e.location || ''}`);
+  return fold(boardPrefs.q).split(/\s+/).filter(Boolean).every(w => hay.includes(w));
+}
+/** Keeps the cards that pass the filters, and says how many were left out. */
+function filterCards(cards) {
+  const shown = cards.filter(cardMatches);
+  const cnt = $('#board-count');
+  cnt.textContent = boardFiltered() ? t('{a} of {b} tasks', { a: shown.length, b: cards.length }) : '';
+  return shown;
+}
+function sortCards(cards) {
+  const k = boardPrefs.bsort, due = c => (c.due_date || c.start_date || '9999') + (c.start_time || '99');
+  if (k === 'prio') return [...cards].sort((a, b) => a.priority - b.priority || due(a).localeCompare(due(b)));
+  if (k === 'due') return [...cards].sort((a, b) => due(a).localeCompare(due(b)) || a.priority - b.priority);
+  if (k === 'title') return [...cards].sort((a, b) => a.title.localeCompare(b.title, LOCALE));
+  return cards;
+}
+/** Tag picker: type to find among all the tags (most used first), plus the few most used as one-click chips. */
+function boardTags(counts) {
+  const names = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+  $('#board-tag-list').innerHTML = names.map(x => `<option value="${esc(x)}">${counts[x]}</option>`).join('');
+  boardTags.known = new Set(names);
+  const top = $('#board-tag-top');
+  top.innerHTML = boardPrefs.tag ? `<button type="button" class="tag on" data-tag="" title="Remove this filter">#<span class="no-i18n">${esc(boardPrefs.tag)}</span> ✕</button>`
+    : names.slice(0, 5).map(x => `<button type="button" class="tag" data-tag="${esc(x)}">#<span class="no-i18n">${esc(x)}</span> <small>${counts[x]}</small></button>`).join('');
+  top.querySelectorAll('[data-tag]').forEach(b => b.onclick = () => setBoardTag(b.dataset.tag));
+}
+const tagCounts = cards => { const n = {}; for (const c of cards) for (const x of c.tags || []) n[x] = (n[x] || 0) + 1; return n; };
+function setBoardTag(tag) { boardPrefs.tag = String(tag || '').replace(/^#+/, '').trim().toLowerCase(); $('#board-tag').value = ''; saveBoardPrefs(); loadBoard(); }
+function bindBoardFilters(mode) {
+  const P = boardPrefs, q = $('#board-q'), tag = $('#board-tag'), prio = $('#board-prio'), sort = $('#board-sort');
+  if (P.lprio && !P.prio) { P.prio = P.lprio; } delete P.lprio; // the list's own priority filter moved here
+  $('#board-filters').hidden = mode === 'overall';
+  sort.hidden = mode !== 'board';
+  if (document.activeElement !== q) q.value = P.q || '';
+  q.oninput = () => { clearTimeout(loadBoard.qt); loadBoard.qt = setTimeout(() => { P.q = q.value.trim(); saveBoardPrefs(); loadBoard(); }, 250); };
+  tag.placeholder = P.tag ? t('# Other tag') : t('# Tag');
+  tag.oninput = () => { const v = tag.value.replace(/^#+/, '').trim().toLowerCase(); if (boardTags.known?.has(v)) setBoardTag(v); };
+  tag.onkeydown = e => { if (e.key === 'Enter' && tag.value.trim()) { e.preventDefault(); setBoardTag(tag.value); } else if (e.key === 'Escape') tag.value = ''; };
+  prio.value = P.prio || ''; prio.onchange = () => { P.prio = prio.value; saveBoardPrefs(); loadBoard(); };
+  sort.value = P.bsort || ''; sort.onchange = () => { P.bsort = sort.value; saveBoardPrefs(); loadBoard(); };
+  $('#board-clear').hidden = !boardFiltered();
+  $('#board-clear').onclick = () => { P.q = ''; P.tag = ''; P.prio = ''; q.value = ''; saveBoardPrefs(); loadBoard(); };
+  $('#board-count').textContent = '';
 }
 
 function cardHtml(c, opts = {}) {
@@ -1383,14 +1438,14 @@ function cardHtml(c, opts = {}) {
 function renderBoard() {
   const root = $('#board'); root.className = 'board'; root.innerHTML = '';
   $('#board-summary').hidden = true;
-  const all = boardPrefs.space === '';
+  const all = boardPrefs.space === '', shown = sortCards(filterCards(board.cards));
   if (all && board.cards.length) {
     // one row per space, so each space's work stays readable side by side
     root.className = 'board lanes';
-    const ids = [...new Set(board.cards.map(c => c.space))].sort((x, y) => state.spaces.findIndex(s => s.id === x) - state.spaces.findIndex(s => s.id === y));
+    const ids = [...new Set(shown.map(c => c.space))].sort((x, y) => state.spaces.findIndex(s => s.id === x) - state.spaces.findIndex(s => s.id === y));
     const hidden = new Set(boardPrefs.lanesHidden || []);
     for (const sid of ids) {
-      const sp = spaceOf(sid), cards = board.cards.filter(c => c.space === sid);
+      const sp = spaceOf(sid), cards = shown.filter(c => c.space === sid);
       const open = cards.filter(c => c.status !== 'done'), load = open.reduce((a, c) => a + Math.max(0, (c.estimate_hours || 0) - (c.spent_hours || 0)), 0);
       const lane = document.createElement('section'); lane.className = 'klane' + (hidden.has(sid) ? ' folded' : ''); lane.dataset.space = sid;
       lane.innerHTML = `<button type="button" class="klane-h" title="Fold or unfold this space" aria-expanded="${!hidden.has(sid)}"><span class="chev" aria-hidden="true">▾</span><i style="background:${esc(sp.color || 'var(--muted)')}"></i><b class="no-i18n">${esc(sp.name)}</b><span class="muted small">${t('{a} open', { a: open.length })}${load ? ' · ' + fmtH(Math.round(load * 4) / 4) : ''}</span></button><div class="klane-row"></div>`;
@@ -1399,10 +1454,11 @@ function renderBoard() {
       for (const [st, label] of Object.entries(board.statuses)) row.append(boardCol(st, label, cards.filter(c => c.status === st), sid, root));
       root.append(lane);
     }
+    if (!ids.length) root.append(Object.assign(document.createElement('p'), { className: 'muted', textContent: t('No task matches these filters.') }));
     return;
   }
-  for (const [st, label] of Object.entries(board.statuses)) root.append(boardCol(st, label, board.cards.filter(c => c.status === st), all ? null : +boardPrefs.space, root));
-  if (!board.cards.length && !boardPrefs.q && !boardPrefs.tag) {
+  for (const [st, label] of Object.entries(board.statuses)) root.append(boardCol(st, label, shown.filter(c => c.status === st), all ? null : +boardPrefs.space, root));
+  if (!board.cards.length) {
     $('#board-summary').hidden = false;
     $('#board-summary').innerHTML = '<p class="muted small">No tasks yet. Add one in a column, or ask in the chat: <q>add a task: repaint the kitchen before December, about 2 days</q>.</p>';
   }
@@ -1470,9 +1526,8 @@ function renderTaskList() {
   P.lview = LIST_VIEWS[P.lview] ? P.lview : 'all'; P.lsort ||= 'due'; P.lgroup ||= 'due';
   const t0 = today(), week = addDays(t0, 6);
   const known = new Set(board.cards.map(c => c.id)); [...listSel].forEach(id => known.has(id) || listSel.delete(id));
-  let cards = board.cards.filter(c => {
+  let cards = filterCards(board.cards).filter(c => {
     if (P.lstatus === 'open' || !P.lstatus) { if (c.status === 'done') return false; } else if (P.lstatus !== 'any' && c.status !== P.lstatus) return false;
-    if (P.lprio && c.priority !== +P.lprio) return false;
     const d = c.due_date || c.start_date;
     return P.lview === 'week' ? c.status !== 'done' && d && d <= week
       : P.lview === 'urgent' ? c.priority <= 2 && c.status !== 'done'
@@ -1491,7 +1546,6 @@ function renderTaskList() {
   bar.innerHTML = `<div class="tl-views" role="group" aria-label="Quick views">${Object.entries(LIST_VIEWS).map(([k, v]) => `<button type="button" class="fchip${P.lview === k ? ' on' : ''}" data-v="${k}" aria-pressed="${P.lview === k}">${v}</button>`).join('')}</div>
     <div class="tl-filters">
       <label>Status <select data-f="lstatus"><option value="open">Not done</option><option value="any">All</option>${st.map(k => `<option value="${k}">${board.statuses[k]}</option>`).join('')}</select></label>
-      <label>Priority <select data-f="lprio"><option value="">All</option>${Object.entries(PRIO).map(([k, v]) => `<option value="${k}">P${k} · ${v}</option>`).join('')}</select></label>
       <label>Group by <select data-f="lgroup"><option value="due">Due date</option><option value="status">Status</option><option value="space">Space</option><option value="prio">Priority</option><option value="none">Nothing</option></select></label>
     </div>`;
   bar.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { P.lview = b.dataset.v; saveBoardPrefs(); renderTaskList(); });
@@ -1793,6 +1847,7 @@ async function renderToday() {
   const t0 = today(), sp = boardPrefs.space === '' ? '' : `space=${boardPrefs.space}`;
   const [pf, cal] = await Promise.all([api(`api/board/portfolio?${sp}`), api(`api/board/calendar?from=${t0}&to=${t0}${sp ? '&' + sp : ''}`)]);
   board.refs = { ...(board.refs || {}), ...pf.refs };
+  boardTags(tagCounts(pf.cards)); pf.cards = filterCards(pf.cards); cal.cards = cal.cards.filter(cardMatches);
   const byId = new Map();
   for (const c of [...pf.cards, ...cal.cards]) byId.set(c.id, c);
   const onDay = c => c.due_date === t0 || (c.start_time && (c.start_date || c.due_date) === t0);
@@ -1887,7 +1942,7 @@ async function renderToday() {
     const nowEl = tl.querySelector('.tl-now'); if (nowEl && !matchMedia('(max-width: 760px)').matches) tl.scrollTop = Math.max(0, nowEl.offsetTop - 120);
   };
   draw([]);
-  if (cal.calendar) api(`api/board/calendar?from=${t0}&to=${t0}&events=1${sp ? '&' + sp : ''}`).then(d => { if (root.isConnected && root.className === 'today') draw(d.events); }).catch(() => {});
+  if (cal.calendar) api(`api/board/calendar?from=${t0}&to=${t0}&events=1${sp ? '&' + sp : ''}`).then(d => { if (root.isConnected && root.className === 'today') draw(boardFiltered() ? (d.events || []).filter(eventMatches) : d.events); }).catch(() => {});
 }
 
 const hhmm = x => { const m = Math.round(x * 60); return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
@@ -1926,6 +1981,7 @@ async function renderWeek() {
   const all = boardPrefs.space === '', sp = all ? '' : `&space=${boardPrefs.space}`, to = last > sun ? last : sun;
   const [pf, cal] = await Promise.all([api(`api/board/portfolio?${sp.slice(1)}`), api(`api/board/calendar?from=${mon}&to=${to}${sp}`)]);
   board.refs = { ...(board.refs || {}), ...pf.refs };
+  boardTags(tagCounts(pf.cards)); pf.cards = filterCards(pf.cards); cal.cards = cal.cards.filter(cardMatches);
   board.cards = pf.cards;
   const cap = Math.min(24, Math.max(0, +(boardPrefs.cap ?? 7)));
   const dl = (k, o) => new Date(k + 'T12:00:00').toLocaleDateString(LOCALE, o);
@@ -2110,7 +2166,7 @@ async function renderWeek() {
     sc.scrollTop = nowEl ? Math.max(0, nowEl.offsetTop - 2 * H) : Math.max(0, (8 - from) * H);
   };
   draw([]);
-  if (cal.calendar) api(`api/board/calendar?from=${mon}&to=${to}&events=1${sp}`).then(d => { if (root.isConnected && root.classList.contains('week')) { draw(d.events); if (d.events_error) toast('Your agenda could not be read: ' + d.events_error); } }).catch(() => {});
+  if (cal.calendar) api(`api/board/calendar?from=${mon}&to=${to}&events=1${sp}`).then(d => { if (root.isConnected && root.classList.contains('week')) { draw(boardFiltered() ? (d.events || []).filter(eventMatches) : d.events); if (d.events_error) toast('Your agenda could not be read: ' + d.events_error); } }).catch(() => {});
 }
 
 /** Long-press (touch) opens a menu; right-click too. The click that follows a long-press is swallowed. */
@@ -2313,6 +2369,7 @@ async function renderCalendar() {
   const sp = boardPrefs.space === '' ? '' : `&space=${boardPrefs.space}`;
   const d = await api(`api/board/calendar?from=${iso(gridStart)}&to=${iso(gridEnd)}${sp}${boardPrefs.agenda ? '&events=1' : ''}`);
   board.refs = board.refs || {};
+  boardTags(tagCounts(d.cards)); d.cards = filterCards(d.cards); if (boardFiltered()) d.events = (d.events || []).filter(eventMatches);
   const root = $('#board'); root.className = 'calendar'; root.innerHTML = '';
   $('#board-summary').hidden = true;
   const bar = document.createElement('div'); bar.className = 'cal-bar';

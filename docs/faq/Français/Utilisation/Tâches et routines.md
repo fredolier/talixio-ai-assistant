@@ -10,6 +10,13 @@
   semaine, Critique et élevée, En attente, Sans date). Cochez plusieurs tâches pour changer d'un coup leur statut,
   leur date, leur priorité, leur espace ou leurs étiquettes, ou les mettre à la corbeille. Clavier : flèches ou j/k,
   x pour sélectionner, Entrée pour ouvrir, Échap pour vider la sélection.
+- **Filtres** au-dessus de chaque vue (Aujourd'hui, Tableau, Liste, Semaine, Mois) : une recherche sur les mots du
+  titre, de la description, du code ou des étiquettes (sans tenir compte des accents), une étiquette (tapez quelques
+  lettres pour la choisir parmi toutes ; les cinq plus utilisées sont à un clic), et une priorité minimale (P1
+  seulement, P2 et plus…). *Effacer les filtres* les remet à zéro, et un compteur indique combien de tâches sont
+  affichées. Le Tableau peut aussi être trié par priorité, échéance ou titre au lieu de votre ordre manuel. Les
+  événements de l'agenda ne s'affichent que s'ils contiennent les mots cherchés et qu'aucune étiquette ni priorité
+  n'est choisie.
 - L'éditeur de tâche s'ouvre en panneau latéral sur ordinateur et en plein écran sur téléphone.
 - Vue **Semaine** pour planifier son temps : glissez une tâche de « Pas encore planifié » sur la grille horaire pour
   lui réserver un créneau ; les heures réservées sont comparées à vos heures par jour. Sur téléphone : touchez une

@@ -150,12 +150,19 @@
           <div class="seg" role="tablist" aria-label="View"><button type="button" data-mode="today" role="tab">Today</button><button type="button" data-mode="board" role="tab">Board</button><button type="button" data-mode="list" role="tab">List</button><button type="button" data-mode="week" role="tab">Week</button><button type="button" data-mode="calendar" role="tab">Month</button><button type="button" data-mode="overall" role="tab">Overall order</button></div>
         </div>
         <div class="board-tools">
-          <input id="board-q" type="search" placeholder="Search tasks" aria-label="Search tasks">
           <button id="board-new" class="btn primary small" type="button">+ New task</button>
           <button id="board-changes" class="btn small ghost" type="button" title="What changed recently, and who did it">Changes</button>
           <button id="board-trash" class="btn small ghost" type="button">Trash</button>
         </div>
-        <div id="board-tags" class="tagbar"></div>
+        <div id="board-filters" class="bfilters" role="search">
+          <input id="board-q" type="search" placeholder="Search tasks" aria-label="Search tasks">
+          <span class="bf-tag"><input id="board-tag" type="search" list="board-tag-list" placeholder="# Tag" aria-label="Filter by tag" autocomplete="off"><datalist id="board-tag-list"></datalist></span>
+          <select id="board-prio" aria-label="Priority"><option value="">Any priority</option><option value="1">P1 · Critical</option><option value="2">P2 and above</option><option value="3">P3 and above</option><option value="4">P4 and above</option></select>
+          <select id="board-sort" aria-label="Sort cards"><option value="">Manual order</option><option value="prio">By priority</option><option value="due">By due date</option><option value="title">By title</option></select>
+          <span id="board-tag-top" class="bf-top"></span>
+          <button id="board-clear" class="btn small ghost" type="button" hidden>Clear filters</button>
+          <span id="board-count" class="muted small" aria-live="polite"></span>
+        </div>
       </header>
       <div id="board-summary" class="board-summary" hidden></div>
       <div id="board" class="board"></div>
