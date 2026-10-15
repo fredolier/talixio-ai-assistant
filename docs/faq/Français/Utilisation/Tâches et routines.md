@@ -4,6 +4,13 @@
 - Colonnes Idées / À faire / En cours / Bloqué / Fait ; codes par espace (MAI-12), priorité P1 à P5,
   dates de début et d'échéance, charge, temps passé, étiquettes, description, dépendances (même entre espaces).
 - Vue **Aujourd'hui** (en retard, aujourd'hui, à suivre) et ajout en une ligne : « Appeler Alex demain à 9h #ventes 30m p2 ».
+- **Tableau** avec *Tous les espaces* : une rangée par espace, que l'on peut replier ; glissez une carte dans la
+  rangée d'un autre espace pour l'y déplacer.
+- Vue **Liste** : un tableau triable, groupé par échéance, statut, espace ou priorité, avec des vues rapides (Cette
+  semaine, Critique et élevée, En attente, Sans date). Cochez plusieurs tâches pour changer d'un coup leur statut,
+  leur date, leur priorité, leur espace ou leurs étiquettes, ou les mettre à la corbeille. Clavier : flèches ou j/k,
+  x pour sélectionner, Entrée pour ouvrir, Échap pour vider la sélection.
+- L'éditeur de tâche s'ouvre en panneau latéral sur ordinateur et en plein écran sur téléphone.
 - Vue **Semaine** pour planifier son temps : glissez une tâche de « Pas encore planifié » sur la grille horaire pour
   lui réserver un créneau ; les heures réservées sont comparées à vos heures par jour. Sur téléphone : touchez une
   tâche, puis un créneau libre.

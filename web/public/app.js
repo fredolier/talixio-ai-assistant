@@ -1316,7 +1316,7 @@ async function loadBoard() {
   if (![...sel.options].some(o => o.value === boardPrefs.space)) boardPrefs.space = '0';
   sel.value = boardPrefs.space;
   sel.onchange = () => { boardPrefs.space = sel.value; boardPrefs.tag = ''; saveBoardPrefs(); loadBoard(); };
-  const mode = ['overall', 'calendar', 'today', 'week'].includes(boardPrefs.mode) ? boardPrefs.mode : 'board';
+  const mode = ['overall', 'calendar', 'today', 'week', 'list'].includes(boardPrefs.mode) ? boardPrefs.mode : 'board';
   document.querySelectorAll('#view-board .seg button[data-mode]').forEach(b => { b.classList.toggle('on', b.dataset.mode === mode); b.setAttribute('aria-selected', b.dataset.mode === mode); b.onclick = () => { boardPrefs.mode = b.dataset.mode; saveBoardPrefs(); loadBoard(); }; });
   $('#board-q').value = boardPrefs.q || '';
   $('#board-q').oninput = () => { clearTimeout(loadBoard.qt); loadBoard.qt = setTimeout(() => { boardPrefs.q = $('#board-q').value.trim(); saveBoardPrefs(); loadBoard(); }, 300); };
@@ -1336,12 +1336,13 @@ async function loadBoard() {
     if (boardPrefs.tag && !names.includes(boardPrefs.tag)) names.unshift(boardPrefs.tag);
     $('#board-tags').innerHTML = names.map(t => `<button type="button" class="tag${t === boardPrefs.tag ? ' on' : ''}" data-tag="${esc(t)}">#${esc(t)} <small>${d.tags[t] || 0}</small></button>`).join('');
     $('#board-tags').querySelectorAll('.tag').forEach(b => b.onclick = () => { boardPrefs.tag = boardPrefs.tag === b.dataset.tag ? '' : b.dataset.tag; saveBoardPrefs(); loadBoard(); });
-    renderBoard();
+    mode === 'list' ? renderTaskList() : renderBoard();
   }
-  $('#board-tags').hidden = mode !== 'board'; sel.hidden = mode === 'overall';
-  $('#board-q').hidden = mode !== 'board';
+  if (mode !== 'list') { listSel.clear(); $('#list-bulk')?.remove(); }
+  $('#board-tags').hidden = !['board', 'list'].includes(mode); sel.hidden = mode === 'overall';
+  $('#board-q').hidden = !['board', 'list'].includes(mode);
   clearTimeout(loadBoard.t);
-  loadBoard.t = setTimeout(() => { if (location.hash.startsWith('#board') && !$('#card-dialog').open && !$('#move-sheet').open && !document.querySelector('.dragging, .qadd.typing, .qa-in:focus, #board.picking')) loadBoard().catch(() => {}); }, 30000);
+  loadBoard.t = setTimeout(() => { if (location.hash.startsWith('#board') && !listSel.size && !$('#card-dialog').open && !$('#move-sheet').open && !document.querySelector('.dragging, .qadd.typing, .qa-in:focus, #board.picking')) loadBoard().catch(() => {}); }, 30000);
 }
 
 function cardHtml(c, opts = {}) {
@@ -1363,49 +1364,229 @@ function renderBoard() {
   const root = $('#board'); root.className = 'board'; root.innerHTML = '';
   $('#board-summary').hidden = true;
   const all = boardPrefs.space === '';
-  for (const [st, label] of Object.entries(board.statuses)) {
-    const cards = board.cards.filter(c => c.status === st);
-    const load = cards.reduce((a, c) => a + (c.estimate_hours || 0), 0);
-    const col = document.createElement('section');
-    col.className = `kcol s-${st}`; col.dataset.status = st;
-    col.innerHTML = `<header><b>${label}</b><span class="muted small">${cards.length}${load ? ' · ' + fmtH(load) : ''}</span></header><div class="kcards"></div>`
-
-    const list = col.querySelector('.kcards');
-    for (const c of cards) {
-      const el = document.createElement('article');
-      el.className = `kcard p${c.priority}`; el.dataset.id = c.id; el.draggable = !coarse(); el.tabIndex = 0;
-      el.innerHTML = cardHtml(c, { space: all }) + '<button type="button" class="icon-btn kmore" aria-label="More actions" title="More actions">⋯</button>';
-      el.querySelector('.kmore').onclick = e => { e.stopPropagation(); openMoveSheet(c); };
-      bindLongPress(el, () => openMoveSheet(c));
-      el.onclick = () => openCard(c.id);
-      el.onkeydown = e => { if (e.key === 'Enter' && e.target === el) openCard(c.id); };
-      el.ondragstart = e => { el.classList.add('dragging'); e.dataTransfer.setData('text/plain', String(c.id)); e.dataTransfer.effectAllowed = 'move'; };
-      el.ondragend = () => { el.classList.remove('dragging'); document.querySelectorAll('.kdrop').forEach(x => x.remove()); };
-      list.append(el);
+  if (all && board.cards.length) {
+    // one row per space, so each space's work stays readable side by side
+    root.className = 'board lanes';
+    const ids = [...new Set(board.cards.map(c => c.space))].sort((x, y) => state.spaces.findIndex(s => s.id === x) - state.spaces.findIndex(s => s.id === y));
+    const hidden = new Set(boardPrefs.lanesHidden || []);
+    for (const sid of ids) {
+      const sp = spaceOf(sid), cards = board.cards.filter(c => c.space === sid);
+      const open = cards.filter(c => c.status !== 'done'), load = open.reduce((a, c) => a + Math.max(0, (c.estimate_hours || 0) - (c.spent_hours || 0)), 0);
+      const lane = document.createElement('section'); lane.className = 'klane' + (hidden.has(sid) ? ' folded' : ''); lane.dataset.space = sid;
+      lane.innerHTML = `<button type="button" class="klane-h" title="Fold or unfold this space" aria-expanded="${!hidden.has(sid)}"><span class="chev" aria-hidden="true">▾</span><i style="background:${esc(sp.color || 'var(--muted)')}"></i><b class="no-i18n">${esc(sp.name)}</b><span class="muted small">${t('{a} open', { a: open.length })}${load ? ' · ' + fmtH(Math.round(load * 4) / 4) : ''}</span></button><div class="klane-row"></div>`;
+      lane.querySelector('.klane-h').onclick = () => { hidden.has(sid) ? hidden.delete(sid) : hidden.add(sid); boardPrefs.lanesHidden = [...hidden]; saveBoardPrefs(); lane.classList.toggle('folded'); lane.querySelector('.klane-h').setAttribute('aria-expanded', !hidden.has(sid)); };
+      const row = lane.querySelector('.klane-row');
+      for (const [st, label] of Object.entries(board.statuses)) row.append(boardCol(st, label, cards.filter(c => c.status === st), sid, root));
+      root.append(lane);
     }
-    if (!cards.length) list.innerHTML = `<p class="kempty muted small">${st === 'idea' ? 'Ideas for later' : st === 'blocked' ? 'Nothing blocked' : st === 'done' ? 'Done in the last 2 weeks' : 'Nothing here'}</p>`;
-    // drag and drop between and within columns
-    const marker = () => { let m = col.querySelector('.kdrop'); if (!m) { m = document.createElement('div'); m.className = 'kdrop'; } return m; };
-    const beforeEl = y => [...list.querySelectorAll('.kcard:not(.dragging)')].find(k => { const r = k.getBoundingClientRect(); return y < r.top + r.height / 2; });
-    col.ondragover = e => { e.preventDefault(); const b = beforeEl(e.clientY); const m = marker(); document.querySelectorAll('.kdrop').forEach(x => x !== m && x.remove()); b ? list.insertBefore(m, b) : list.append(m); };
-    col.ondragleave = e => { if (!col.contains(e.relatedTarget)) col.querySelector('.kdrop')?.remove(); };
-    col.ondrop = async e => {
-      e.preventDefault();
-      const id = +e.dataTransfer.getData('text/plain'); const b = beforeEl(e.clientY);
-      col.querySelector('.kdrop')?.remove();
-      if (!id) return;
-      try { await post(`api/board/${id}/move`, { status: st, before: b ? +b.dataset.id : null }); } catch (err) { toast(err.message); }
-      loadBoard();
-    };
-    if (!all) col.append(quickAdd({ compact: true, placeholder: '+ Add a task', label: `Add a task to ${label}`, defaults: () => ({ space: +boardPrefs.space, status: st }),
-      onAdded: () => loadBoard().then(() => root.querySelector(`.kcol.s-${st} .qa-in`)?.focus()) }));
-    root.append(col);
+    return;
   }
+  for (const [st, label] of Object.entries(board.statuses)) root.append(boardCol(st, label, board.cards.filter(c => c.status === st), all ? null : +boardPrefs.space, root));
   if (!board.cards.length && !boardPrefs.q && !boardPrefs.tag) {
     $('#board-summary').hidden = false;
     $('#board-summary').innerHTML = '<p class="muted small">No tasks yet. Add one in a column, or ask in the chat: <q>add a task: repaint the kitchen before December, about 2 days</q>.</p>';
   }
 }
+
+/** One status column of the board (of one space's row when all spaces are shown). space: where tasks added or dropped here go. */
+function boardCol(st, label, cards, space, root) {
+  const load = cards.reduce((a, c) => a + (c.estimate_hours || 0), 0);
+  const col = document.createElement('section');
+  col.className = `kcol s-${st}`; col.dataset.status = st;
+  col.innerHTML = `<header><b>${label}</b><span class="muted small">${cards.length}${load ? ' · ' + fmtH(load) : ''}</span></header><div class="kcards"></div>`;
+  const list = col.querySelector('.kcards');
+  for (const c of cards) {
+    const el = document.createElement('article');
+    el.className = `kcard p${c.priority}`; el.dataset.id = c.id; el.dataset.space = c.space; el.draggable = !coarse(); el.tabIndex = 0;
+    el.innerHTML = cardHtml(c, { space: space == null }) + '<button type="button" class="icon-btn kmore" aria-label="More actions" title="More actions">⋯</button>';
+    el.querySelector('.kmore').onclick = e => { e.stopPropagation(); openMoveSheet(c); };
+    bindLongPress(el, () => openMoveSheet(c));
+    el.onclick = () => openCard(c.id);
+    el.onkeydown = e => { if (e.key === 'Enter' && e.target === el) openCard(c.id); };
+    el.ondragstart = e => { el.classList.add('dragging'); e.dataTransfer.setData('text/plain', String(c.id)); e.dataTransfer.effectAllowed = 'move'; };
+    el.ondragend = () => { el.classList.remove('dragging'); document.querySelectorAll('.kdrop').forEach(x => x.remove()); };
+    list.append(el);
+  }
+  if (!cards.length) list.innerHTML = `<p class="kempty muted small">${st === 'idea' ? 'Ideas for later' : st === 'blocked' ? 'Nothing blocked' : st === 'done' ? 'Done in the last 2 weeks' : 'Nothing here'}</p>`;
+  // drag and drop between and within columns (and between the rows of spaces)
+  const marker = () => { let m = col.querySelector('.kdrop'); if (!m) { m = document.createElement('div'); m.className = 'kdrop'; } return m; };
+  const beforeEl = y => [...list.querySelectorAll('.kcard:not(.dragging)')].find(k => { const r = k.getBoundingClientRect(); return y < r.top + r.height / 2; });
+  col.ondragover = e => { e.preventDefault(); const b = beforeEl(e.clientY); const m = marker(); document.querySelectorAll('.kdrop').forEach(x => x !== m && x.remove()); b ? list.insertBefore(m, b) : list.append(m); };
+  col.ondragleave = e => { if (!col.contains(e.relatedTarget)) col.querySelector('.kdrop')?.remove(); };
+  col.ondrop = async e => {
+    e.preventDefault();
+    const id = +e.dataTransfer.getData('text/plain'); const b = beforeEl(e.clientY);
+    col.querySelector('.kdrop')?.remove();
+    if (!id) return;
+    const c = board.cards.find(x => x.id === id);
+    try {
+      if (c && space != null && c.space !== space) { const r = await post(`api/board/${id}`, { space, version: c.version }); toast(t('{a} moved to {b}: now {c}', { a: c.code, b: spaceOf(space).name, c: r.card.code })); }
+      await post(`api/board/${id}/move`, { status: st, before: b ? +b.dataset.id : null });
+    } catch (err) { toast(err.message); }
+    loadBoard();
+  };
+  if (space != null) col.append(quickAdd({ compact: true, placeholder: '+ Add a task', label: `Add a task to ${label}`, defaults: () => ({ space, status: st }),
+    onAdded: () => loadBoard().then(() => root.querySelector(`${root.classList.contains('lanes') ? `.klane[data-space="${space}"] ` : ''}.kcol.s-${st} .qa-in`)?.focus()) }));
+  return col;
+}
+
+/** List: every task as a row, with quick views, filters, grouping, and changes to several tasks at once. */
+const listSel = new Set();
+const LIST_VIEWS = { all: 'All', week: 'This week', urgent: 'Critical & high', waiting: 'Waiting', nodate: 'No date' };
+const LIST_SORT = { code: 'Code', title: 'Title', space: 'Space', prio: 'Prio', due: 'Due', load: 'Load', status: 'Status' };
+function listWaits(c) { return c.status === 'blocked' || c.depends_on.some(d => board.refs[d] && board.refs[d].status !== 'done' && !board.refs[d].deleted_at); }
+function listDueGroup(c) {
+  if (c.status === 'done') return 'Done';
+  const d = c.due_date || c.start_date, t0 = today();
+  if (!d) return 'No date';
+  if (d < t0) return 'Overdue';
+  if (d === t0) return 'Today';
+  return d <= addDays(t0, 6) ? 'Next 7 days' : 'Later';
+}
+function renderTaskList() {
+  const root = $('#board'); root.className = 'tlist'; root.innerHTML = '';
+  $('#board-summary').hidden = true;
+  const P = boardPrefs, all = P.space === '';
+  P.lview = LIST_VIEWS[P.lview] ? P.lview : 'all'; P.lsort ||= 'due'; P.lgroup ||= 'due';
+  const t0 = today(), week = addDays(t0, 6);
+  const known = new Set(board.cards.map(c => c.id)); [...listSel].forEach(id => known.has(id) || listSel.delete(id));
+  let cards = board.cards.filter(c => {
+    if (P.lstatus === 'open' || !P.lstatus) { if (c.status === 'done') return false; } else if (P.lstatus !== 'any' && c.status !== P.lstatus) return false;
+    if (P.lprio && c.priority !== +P.lprio) return false;
+    const d = c.due_date || c.start_date;
+    return P.lview === 'week' ? c.status !== 'done' && d && d <= week
+      : P.lview === 'urgent' ? c.priority <= 2 && c.status !== 'done'
+      : P.lview === 'waiting' ? c.status !== 'done' && listWaits(c)
+      : P.lview === 'nodate' ? !d && c.status !== 'done' : true;
+  });
+  const st = Object.keys(board.statuses), dir = P.ldesc ? -1 : 1;
+  const key = {
+    code: c => c.code, title: c => c.title.toLowerCase(), space: c => spaceOf(c.space).name.toLowerCase(), prio: c => c.priority,
+    due: c => (c.due_date || c.start_date || '9999') + (c.start_time || '99'), load: c => c.estimate_hours ?? 1e9, status: c => st.indexOf(c.status),
+  }[P.lsort] || (c => c.code);
+  cards.sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : a.priority - b.priority || a.id - b.id) * dir; });
+
+  // toolbar: quick views, filters, grouping
+  const bar = document.createElement('div'); bar.className = 'tl-bar';
+  bar.innerHTML = `<div class="tl-views" role="group" aria-label="Quick views">${Object.entries(LIST_VIEWS).map(([k, v]) => `<button type="button" class="fchip${P.lview === k ? ' on' : ''}" data-v="${k}" aria-pressed="${P.lview === k}">${v}</button>`).join('')}</div>
+    <div class="tl-filters">
+      <label>Status <select data-f="lstatus"><option value="open">Not done</option><option value="any">All</option>${st.map(k => `<option value="${k}">${board.statuses[k]}</option>`).join('')}</select></label>
+      <label>Priority <select data-f="lprio"><option value="">All</option>${Object.entries(PRIO).map(([k, v]) => `<option value="${k}">P${k} · ${v}</option>`).join('')}</select></label>
+      <label>Group by <select data-f="lgroup"><option value="due">Due date</option><option value="status">Status</option><option value="space">Space</option><option value="prio">Priority</option><option value="none">Nothing</option></select></label>
+    </div>`;
+  bar.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { P.lview = b.dataset.v; saveBoardPrefs(); renderTaskList(); });
+  bar.querySelectorAll('select[data-f]').forEach(x => { x.value = P[x.dataset.f] || x.options[0].value; x.onchange = () => { P[x.dataset.f] = x.value; saveBoardPrefs(); renderTaskList(); }; });
+  root.append(bar);
+  root.append(quickAdd({ placeholder: 'Add a task: call Alex tomorrow 9am #sales', showSpace: all, defaults: () => ({ space: all ? state.space : +P.space }), onAdded: () => loadBoard().then(() => root.querySelector('.qa-in')?.focus()) }));
+
+  const head = document.createElement('div'); head.className = 'tl-row tl-head' + (all ? '' : ' one');
+  const allOn = cards.length && cards.every(c => listSel.has(c.id));
+  head.innerHTML = `<span><input type="checkbox" aria-label="Select all shown"${allOn ? ' checked' : ''}></span>` + Object.entries(LIST_SORT).filter(([k]) => all || k !== 'space')
+    .map(([k, v]) => `<button type="button" class="tl-sort c-${k}${P.lsort === k ? ' on' : ''}" data-s="${k}" aria-sort="${P.lsort === k ? (P.ldesc ? 'descending' : 'ascending') : 'none'}"><span>${v}</span>${P.lsort === k ? (P.ldesc ? ' ↓' : ' ↑') : ''}</button>`).join('');
+  head.querySelector('input').onchange = e => { cards.forEach(c => e.target.checked ? listSel.add(c.id) : listSel.delete(c.id)); renderTaskList(); };
+  head.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { if (P.lsort === b.dataset.s) P.ldesc = !P.ldesc; else { P.lsort = b.dataset.s; P.ldesc = false; } saveBoardPrefs(); renderTaskList(); });
+  const table = document.createElement('div'); table.className = 'tl-table'; table.setAttribute('role', 'list');
+  table.append(head);
+
+  const row = c => {
+    const sp = spaceOf(c.space), el = document.createElement('div');
+    el.className = `tl-row p${c.priority}${listSel.has(c.id) ? ' sel' : ''}${c.status === 'done' ? ' done' : ''}${all ? '' : ' one'}`; el.dataset.id = c.id; el.tabIndex = 0; el.setAttribute('role', 'listitem');
+    const waits = listWaits(c), due = c.due_date || c.start_date;
+    el.innerHTML = `<span><input type="checkbox" aria-label="Select ${esc(c.code)}"${listSel.has(c.id) ? ' checked' : ''}></span>
+      <span class="c-code code">${esc(c.code)}</span>
+      <span class="c-title"><b class="no-i18n">${esc(c.title)}</b>${waits && c.status !== 'blocked' ? `<span class="kb wait" title="Waits for another task">${BICON.lock}</span>` : ''}${c.tags.map(x => `<small class="no-i18n">#${esc(x)}</small>`).join('')}</span>
+      ${all ? `<span class="c-space"><i style="background:${esc(sp.color || 'var(--muted)')}"></i><span class="no-i18n">${esc(sp.name)}</span></span>` : ''}
+      <span class="c-prio"><span class="prio p${c.priority}" title="${PRIO[c.priority]}">P${c.priority}</span></span>
+      <span class="c-due ${dueClass(c)}">${due ? fmtDay(due) + (c.start_time ? ' ' + esc(c.start_time) : '') : '<span class="muted">—</span>'}</span>
+      <span class="c-load">${c.estimate_hours != null || c.spent_hours ? (c.spent_hours ? fmtH(c.spent_hours) + '/' : '') + (fmtH(c.estimate_hours) || '?') : ''}</span>
+      <span class="c-status"><select aria-label="Status of ${esc(c.code)}">${st.map(k => `<option value="${k}"${k === c.status ? ' selected' : ''}>${board.statuses[k]}</option>`).join('')}</select></span>`;
+    const box = el.querySelector('input');
+    box.onclick = e => e.stopPropagation();
+    box.onchange = () => { box.checked ? listSel.add(c.id) : listSel.delete(c.id); el.classList.toggle('sel', box.checked); listBulk(); };
+    const sel = el.querySelector('select');
+    sel.onclick = e => e.stopPropagation();
+    sel.onchange = async () => { try { await post(`api/board/${c.id}/move`, { status: sel.value }); } catch (e) { toast(e.message); } loadBoard(); };
+    el.onclick = () => openCard(c.id);
+    el.onkeydown = e => {
+      if (e.target !== el) return;
+      if (e.key === 'Enter') openCard(c.id);
+      else if (e.key === 'x' || e.key === ' ') { e.preventDefault(); box.click(); box.onchange(); }
+      else if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); el.nextElementSibling?.focus?.(); }
+      else if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); el.previousElementSibling?.matches('.tl-row:not(.tl-head)') && el.previousElementSibling.focus(); }
+    };
+    return el;
+  };
+  const groupOf = {
+    due: listDueGroup, status: c => board.statuses[c.status], space: c => spaceOf(c.space).name, prio: c => `P${c.priority} · ${PRIO[c.priority]}`, none: () => '',
+  }[P.lgroup] || (() => '');
+  const order = P.lgroup === 'due' ? ['Overdue', 'Today', 'Next 7 days', 'Later', 'No date', 'Done'] : null;
+  const groups = new Map();
+  for (const c of cards) { const g = groupOf(c); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(c); }
+  const names = order ? order.filter(g => groups.has(g)) : P.lgroup === 'status' ? st.map(k => board.statuses[k]).filter(g => groups.has(g)) : P.lgroup === 'prio' ? [...groups.keys()].sort() : [...groups.keys()];
+  for (const g of names) {
+    const list = groups.get(g);
+    if (g) {
+      const h = document.createElement('div'); h.className = 'tl-group' + (g === 'Overdue' ? ' late' : '');
+      const load = list.reduce((a, c) => a + Math.max(0, (c.estimate_hours || 0) - (c.spent_hours || 0)), 0);
+      h.innerHTML = `<b${P.lgroup === 'space' ? ' class="no-i18n"' : ''}>${esc(g)}</b><span class="muted small">${list.length}${load ? ' · ' + fmtH(Math.round(load * 4) / 4) : ''}</span>`;
+      table.append(h);
+    }
+    list.forEach(c => table.append(row(c)));
+  }
+  root.append(table);
+  if (!cards.length) root.append(Object.assign(document.createElement('p'), { className: 'muted tl-empty', textContent: board.cards.length ? t('No task matches these filters.') : t('No tasks yet.') }));
+  listBulk();
+}
+
+/** The bar of actions on the selected rows of the list. */
+function listBulk() {
+  let bar = $('#list-bulk');
+  if (!listSel.size) { bar?.remove(); return; }
+  const P = boardPrefs;
+  if (!bar) {
+    bar = document.createElement('div'); bar.id = 'list-bulk'; bar.className = 'tl-bulk'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Selected tasks');
+    $('#view-board').append(bar);
+  }
+  bar.innerHTML = `<b class="tl-n"></b>
+    <select data-b="status" aria-label="Set status"><option value="">Set status…</option>${Object.entries(board.statuses).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+    <label class="tl-date"><span>Reschedule</span> <input type="date" data-b="due" aria-label="New due date"></label>
+    <select data-b="priority" aria-label="Priority"><option value="">Priority…</option>${Object.entries(PRIO).map(([k, v]) => `<option value="${k}">P${k} · ${v}</option>`).join('')}</select>
+    <select data-b="space" aria-label="Move to space"><option value="">Move to space…</option>${state.spaces.filter(x => !x.archived).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select>
+    <form class="tl-tag"><input data-b="tag" placeholder="Add a tag" aria-label="Add a tag" autocomplete="off" size="9"><button class="btn small" type="submit">Add</button></form>
+    <button type="button" class="btn small ghost danger" data-b="trash">Move to trash</button>
+    <button type="button" class="icon-btn" data-b="clear" aria-label="Clear the selection" title="Clear the selection (Esc)">✕</button>`;
+  bar.querySelector('.tl-n').textContent = t('{a} selected', { a: listSel.size });
+  const run = async (label, fn) => {
+    const ids = [...listSel]; let ok = 0, err = '';
+    bar.classList.add('busy');
+    for (const id of ids) { const c = board.cards.find(x => x.id === id); if (!c) continue; try { await fn(c); ok++; } catch (e) { err = `${c.code}: ${e.message}`; } }
+    bar.classList.remove('busy');
+    if (err) toast(err); else toast(t(label, { a: ok }));
+    return ids;
+  };
+  const upd = body => c => post(`api/board/${c.id}`, { ...body, version: c.version });
+  const done = () => { listSel.clear(); loadBoard(); };
+  bar.querySelector('[data-b=status]').onchange = async e => { const v = e.target.value; if (!v) return; await run('{a} task(s) updated', c => post(`api/board/${c.id}/move`, { status: v })); done(); };
+  bar.querySelector('[data-b=priority]').onchange = async e => { const v = +e.target.value; if (!v) return; await run('{a} task(s) updated', upd({ priority: v })); done(); };
+  bar.querySelector('[data-b=space]').onchange = async e => { const v = e.target.value; if (v === '') return; await run('{a} task(s) moved', upd({ space: +v })); done(); };
+  bar.querySelector('[data-b=due]').onchange = async e => {
+    const v = e.target.value; if (!v) return;
+    await run('{a} task(s) rescheduled', c => upd({ due_date: v, ...(c.start_date && c.start_date > v ? { start_date: v } : {}) })(c)); done();
+  };
+  bar.querySelector('.tl-tag').onsubmit = async e => {
+    e.preventDefault(); const v = bar.querySelector('[data-b=tag]').value.trim().replace(/^#/, ''); if (!v) return;
+    await run('{a} task(s) updated', c => c.tags.includes(v) ? Promise.resolve() : upd({ tags: [...c.tags, v].join(', ') })(c)); done();
+  };
+  bar.querySelector('[data-b=trash]').onclick = async () => {
+    const ids = await run('{a} task(s) moved to the trash', c => post(`api/board/${c.id}/delete`));
+    listSel.clear(); loadBoard();
+    toastAction(t('{a} task(s) moved to the trash', { a: ids.length }), 'Undo', async () => { for (const id of ids) { try { await post(`api/board/${id}/restore`); } catch {} } loadBoard(); });
+  };
+  bar.querySelector('[data-b=clear]').onclick = () => { listSel.clear(); renderTaskList(); };
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && listSel.size && !document.querySelector('dialog[open]') && location.hash.startsWith('#board')) { listSel.clear(); if (boardPrefs.mode === 'list') renderTaskList(); else $('#list-bulk')?.remove(); }
+});
 
 /** General's view: every open task, in the overall order you set; workload per space. */
 async function renderOverall(d) {

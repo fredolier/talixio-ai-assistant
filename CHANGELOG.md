@@ -3,6 +3,19 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.36 (2026-10-15)
+
+- New **List** view on the Tasks page: a sortable table (code, title, space, priority, due, load, status) grouped
+  by due date (Overdue, Today, Next 7 days, Later, No date), status, space or priority. Quick views (*This week*,
+  *Critical & high*, *Waiting*, *No date*), status and priority filters, and a quick-add field. Change a status
+  right in the row; keyboard: arrows or j/k to move, x or space to select, Enter to open.
+- **Bulk actions**: tick several tasks to set their status, reschedule them, change their priority, move them to
+  another space, add a tag or move them to the trash (with *Undo*). Esc clears the selection.
+- The task editor opens as a **side panel** on wide screens and as a full-screen sheet on phones, with its title
+  and Save button always in view.
+- Board with *All spaces*: one **row per space**, each with its open count and hours left; click a space's name to
+  fold it (remembered on this device). Dragging a card into another space's row moves it there.
+
 ## 0.28.35 (2026-10-15)
 
 - New **Notifications** page: every notification the assistant sends (reminders, scheduled tasks, job reports,

@@ -1557,6 +1557,21 @@ if (trim((string)shell_exec('command -v node')) !== '') {
     check('markdown: an Android intent opens an app by package, nothing else', str_contains($mdo[5] ?? '', '<a href="intent://#Intent;package=com.sncf.connect;') && !str_contains(($mdo[6] ?? '') . ($mdo[7] ?? 'href'), 'href'), json_encode(array_slice($mdo, 5)));
     check('markdown: phone buttons keep their formatting', str_contains($mdo[4] ?? '', '<a href="tel:+33612345678" class="action"><strong>t</strong></a>'));
 }
+// the task list: due-date groups and the "waiting" view
+if (trim((string)shell_exec('command -v node')) !== '') {
+    $js = (string)file_get_contents(dirname(__DIR__) . '/web/public/app.js');
+    $grab = fn(string $re) => preg_match($re, $js, $m) ? $m[0] : '';
+    $src = implode("\n", [$grab('/^const today = .*$/m'), $grab('/^const isoDay = .*$/m'), $grab('/^const addDays = .*$/m'), $grab('/^function listWaits\(c\) .*$/m'), $grab('/^function listDueGroup\(c\) \{.*?^\}$/ms')]);
+    file_put_contents("$dir/tl.js", "let board = { refs: { 7: { status: 'todo' }, 8: { status: 'done' }, 9: { status: 'todo', deleted_at: 'x' } } };\n$src\nconst t0 = today();\n"
+        . "console.log(JSON.stringify([listDueGroup({ status: 'done', due_date: t0 }), listDueGroup({ status: 'todo' }), listDueGroup({ status: 'todo', due_date: addDays(t0, -1) }),"
+        . " listDueGroup({ status: 'todo', due_date: t0 }), listDueGroup({ status: 'todo', start_date: addDays(t0, 6) }), listDueGroup({ status: 'todo', due_date: addDays(t0, 7) }),"
+        . " listWaits({ status: 'blocked', depends_on: [] }), listWaits({ status: 'todo', depends_on: [7] }), listWaits({ status: 'todo', depends_on: [8, 9, 99] })]));");
+    $tlo = json_decode((string)shell_exec('node ' . escapeshellarg("$dir/tl.js")), true) ?: [];
+    check('task list: due dates fall into overdue, today, next 7 days, later, no date and done',
+        $tlo === ['Done', 'No date', 'Overdue', 'Today', 'Next 7 days', 'Later', true, true, false], json_encode($tlo));
+}
+$appHtml = (string)file_get_contents(__DIR__ . '/../web/public/app.html');
+check('task list: the tasks page has a List tab next to the board', str_contains($appHtml, 'data-mode="list"') && strpos($appHtml, 'data-mode="board"') < strpos($appHtml, 'data-mode="list"'));
 check('the page asks for the scripts and styles of its own version', str_contains($body, "<script src=\"v/$v/app.js\"></script>") && str_contains($body, "href=\"v/$v/app.css\"")
     && str_contains($body, "<script src=\"v/$v/i18n.js\"></script>") && !str_contains($body, "v/$v/manifest"));
 [$code, $h, $js] = $raw("/v/$v/i18n/fr.js");

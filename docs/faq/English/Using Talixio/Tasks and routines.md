@@ -4,6 +4,12 @@
 - Columns Ideas / To do / In progress / Blocked / Done; codes per space (MAI-12), priority P1 to P5,
   start and due dates, effort, time spent, labels, description, dependencies (even across spaces).
 - **Today** view (overdue, today, next up) and one-line quick add: "Call Alex tomorrow 9am #sales 30m p2".
+- **Board** with *All spaces*: one row per space, which you can fold; drag a card into another space's row to
+  move it there.
+- **List** view: a sortable table grouped by due date, status, space or priority, with quick views (This week,
+  Critical & high, Waiting, No date). Tick several tasks to change their status, date, priority, space or tags at
+  once, or to move them to the trash. Keyboard: arrows or j/k, x to select, Enter to open, Esc to clear.
+- The task editor opens as a side panel on a computer and full screen on a phone.
 - **Week** view to plan time: drag a task from "Not planned yet" onto the hour grid to book a slot; booked
   hours are counted against your hours a day. On a phone: tap a task, then a free slot.
 - **Month** view; a task can appear in Google Calendar, Outlook or through a private iCal link,
