@@ -36,6 +36,14 @@ One click on *Switch everything to Europe* sets:
 - **search by meaning** (unless it already runs on this server, with Ollama). Changing the model
   re-indexes the memory in the background.
 
+## Half price for background work (Mistral)
+With Mistral, summaries of past conversations and the assistant's own reflection go through Mistral's
+**batch API**: half the price, the answer comes back within a few hours (usually minutes). The worker
+collects it and finishes the job. *Compact now* and *Think it over now* still answer at once.
+A batch that fails is made again directly; when the budget runs low, calls are made directly too.
+Turn it off with **Mistral: background work at half price** in Settings (`TALIXIO_MISTRAL_BATCH=0`).
+In Activity, these calls show as *summary (batch)* or *mind (batch)*, at half the estimated cost.
+
 ## The lock
 With the lock (`TALIXIO_SOVEREIGN_ONLY=1`), anything without a European equivalent is **turned off** instead
 of going elsewhere:

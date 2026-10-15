@@ -19,6 +19,7 @@ final class Config
     public string $sovereign = 'ovhcloud';        // the European provider (Sovereign::SERVICES)
     public string $sovereignKey = '';
     public string $sovereignUrl = '';
+    public bool $mistralBatch = true;            // Mistral: background calls through the batch API (half price)
     public bool $sovereignOnly = false;          // never send anything to an AI or search service outside Europe
     public string $escalate = 'auto';            // auto | on | off: a stronger model takes over for scheduling, retries and after a failed tool
     public string $tools = 'auto';               // auto | all | focused: send only the tools a message seems to need
@@ -180,6 +181,7 @@ final class Config
         $c->sovereignKey = $e('TALIXIO_SOVEREIGN_KEY');
         $c->sovereignUrl = rtrim($e('TALIXIO_SOVEREIGN_URL', Sovereign::SERVICES[$c->sovereign]['url']), '/');
         $c->sovereignOnly = $e('TALIXIO_SOVEREIGN_ONLY', '0') === '1';
+        $c->mistralBatch = $e('TALIXIO_MISTRAL_BATCH', '1') === '1';
         $c->tools = in_array($t = $e('TALIXIO_TOOLS', 'auto'), ['auto', 'all', 'focused'], true) ? $t : 'auto';
         $c->escalate = in_array($t = $e('TALIXIO_ESCALATE', 'auto'), ['auto', 'on', 'off'], true) ? $t : 'auto';
         if ($c->provider === 'sovereign') { // a European provider through its OpenAI-compatible endpoint

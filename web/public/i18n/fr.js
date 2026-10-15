@@ -2460,5 +2460,7 @@ window.I18N.fr = {
 "no such AI account": "compte d'IA introuvable",
 "Paste the key first.": "Collez d'abord la clé.",
 "The provider said no: {a}": "Le fournisseur a refusé : {a}",
-"AI account: {name}": "compte d'IA : {name}"
+"AI account: {name}": "compte d'IA : {name}",
+"Mistral: background work at half price": "Mistral : travail de fond à moitié prix",
+"Summaries and the assistant's reflection go through Mistral's batch API: half the price, answers within a few hours.": "Les résumés et la réflexion de l'assistant passent par l'API batch de Mistral : moitié prix, réponses en quelques heures."
 };

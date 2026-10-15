@@ -27,6 +27,7 @@ final class Settings
                 ['TALIXIO_SOVEREIGN_KEY', 'European provider API key', 'secret', 'See "Europe only" above for where to get one.'],
                 ['TALIXIO_SOVEREIGN_URL', 'European provider address', 'url', 'Empty = the provider\'s usual address. Infomaniak: the address from your AI Tools dashboard.'],
                 ['TALIXIO_SOVEREIGN_ONLY', 'Europe only', 'bool', 'Never send anything to an AI or search service outside Europe: what has no European option is turned off.'],
+                ['TALIXIO_MISTRAL_BATCH', 'Mistral: background work at half price', 'bool', 'Summaries and the assistant\'s reflection go through Mistral\'s batch API: half the price, answers within a few hours.'],
                 ['ANTHROPIC_API_KEY', 'Claude API key', 'secret', 'console.anthropic.com'],
                 ['CLAUDE_CODE_OAUTH_TOKEN', 'Claude Code token', 'secret', 'From "claude setup-token" (see the README).'],
                 ['GEMINI_API_KEY', 'Gemini API key', 'secret', 'aistudio.google.com/apikey. Also used for transcription, memory search and web search.'],
@@ -206,7 +207,7 @@ final class Settings
         'TALIXIO_APPROVAL_WAIT_SECONDS' => '600', 'TALIXIO_LEARN' => '1', 'TALIXIO_MIND' => '1', 'TALIXIO_GEMINI_PAID' => '0', 'TALIXIO_NOTIFY_NEUTRAL' => '0', 'TALIXIO_LEARN_MIN_STEPS' => '4', 'TALIXIO_BACKUP_KEEP' => '7',
         'TALIXIO_BACKUP_FILES' => '1', 'TALIXIO_AUTO_UPDATE' => '0', 'TALIXIO_CLAUDE_BIN' => 'claude', 'TALIXIO_SIGNAL_CLI' => 'signal-cli',
         'TALIXIO_RECALL_MIN_SIMILARITY' => '0.5', 'TALIXIO_SHELL' => 'off', 'TALIXIO_AUTO_FILE' => 'suggest', 'TALIXIO_MAIL_TRIAGE' => '1', 'TALIXIO_SHELL_NETWORK' => '0', 'TALIXIO_SHELL_TIMEOUT' => '120', 'TALIXIO_DEEP_REASONING_EFFORT' => '',
-        'TALIXIO_SOVEREIGN' => 'ovhcloud', 'TALIXIO_SOVEREIGN_ONLY' => '0', 'TALIXIO_TOOLS' => 'auto', 'TALIXIO_ESCALATE' => 'auto',
+        'TALIXIO_SOVEREIGN' => 'ovhcloud', 'TALIXIO_SOVEREIGN_ONLY' => '0', 'TALIXIO_MISTRAL_BATCH' => '1', 'TALIXIO_TOOLS' => 'auto', 'TALIXIO_ESCALATE' => 'auto',
     ];
 
     /** @return array<string,array> key => field */

@@ -298,7 +298,7 @@ final class Jobs
             }
             if ($j['kind'] === 'reflect') { $this->reflect($j, $guard); return; }
             [$text, $meta] = $this->app->agent()->run('job', $j['tier'], 'job', [['role' => 'user', 'content' => $task]], $brief, 'job', $id, $guard);
-            if ($j['kind'] === 'meeting') $store->addDoc('summary', $id, 'meeting summary: ' . $j['title'], $text);
+            if ($j['kind'] === 'meeting') $store->addDoc('summary', $id, 'meeting summary: ' . $j['title'], $text, null, (int)($j['space'] ?? 0)); // its space's level applies
             $store->updateJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);
             if (trim((string)$text) !== '') $this->saveReport($store->job($id), $text);
         } catch (Abort $e) {
@@ -342,13 +342,14 @@ final class Jobs
 
     /**
      * Keep the full report in the library, so nothing is lost when the chat relays it in short: in the folder asked for,
-     * next to the recording for a meeting, else in the Inbox. A failure here doesn't fail the job.
+     * next to the recording for a meeting, else in its space's folder or the Inbox. A failure here doesn't fail the job.
      */
     private function saveReport(array $j, string $text): void
     {
         try {
             $folder = (string)($j['folder'] ?? '');
             if ($folder === '' && $j['kind'] === 'meeting' && $j['file_id'] !== null) $folder = (string)($this->app->files()->get((int)$j['file_id'])['folder'] ?? '');
+            if ($folder === '' && (int)($j['space'] ?? 0) > 0) $folder = (string)($this->app->spaces()->get((int)$j['space'])['folder'] ?? ''); // stays at its space's level
             if ($folder === '') $folder = Library::INBOX;
             $this->app->library()->ensureFolder($folder);
             $title = trim(preg_replace('#[/\\\\:*?"<>|\x00-\x1f]+#', ' ', (string)$j['title']));

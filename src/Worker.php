@@ -6,6 +6,7 @@ namespace Talixio;
 final class Worker
 {
     private int $lastSummary = 0;
+    private int $lastBatch = 0;
     private int $lastEmail = 0;
     private int $lastSignal = 0;
     private int $lastMcp = 0;
@@ -93,6 +94,10 @@ final class Worker
             $this->lastSummary = $now;
             $this->guard('summary', fn() => (new Summarizer($app))->maybeRun($now));
             $this->guard('mind', fn() => $app->mind()->tick($now));
+        }
+        if ($now - $this->lastBatch >= 60) { // answers of the Mistral batches (summaries, the Mind)
+            $this->lastBatch = $now;
+            $this->guard('batch', fn() => (new Batch($app))->poll($now));
         }
         if (!$paused && $now - $this->lastSignal >= 5 && $app->signal()->enabled()) {
             $this->lastSignal = $now;

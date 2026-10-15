@@ -18,6 +18,11 @@ final class Mind
     private const HALF_LIFE_DAYS = 120;   // the weight of a piece of evidence halves every 4 months
     private const ESTABLISHED = 0.55;     // confidence of an established belief (with evidence on 2+ days)
 
+    /** Asked now (thinkNow): no batch. */
+    private bool $direct = false;
+    /** The last ask() went to the batch API and its answer is not back yet. */
+    private bool $waiting = false;
+
     public function __construct(private App $app) {}
 
     public function enabled(): bool { return $this->app->cfg->mind && $this->app->cfg->provider !== 'echo'; }
@@ -86,7 +91,12 @@ final class Mind
     public function consolidate(int $now): bool
     {
         $s = $this->app->store;
-        $obs = $s->q('SELECT * FROM mind_obs WHERE processed = 0 ORDER BY id LIMIT 60')->fetchAll();
+        $sent = $this->batch()->meta('mind:consolidate'); // observations already sent to the batch API: the same ones
+        if ($sent !== null) {
+            $ids = array_map('intval', (array)($sent['obs'] ?? [])) ?: [0];
+            $obs = $s->q('SELECT * FROM mind_obs WHERE processed = 0 AND id IN (' . implode(',', $ids) . ') ORDER BY id')->fetchAll();
+            if (!$obs) { $this->batch()->drop('mind:consolidate'); return false; }
+        } else $obs = $s->q('SELECT * FROM mind_obs WHERE processed = 0 ORDER BY id LIMIT 60')->fetchAll();
         if (!$obs) return false;
         $names = array_column($this->app->spaces()->all(), 'name', 'id') + [0 => 'General'];
         $beliefs = $s->q("SELECT * FROM mind_beliefs WHERE status != 'dropped' ORDER BY confidence DESC LIMIT 120")->fetchAll();
@@ -105,7 +115,7 @@ final class Mind
             . "Beliefs are general, one sentence, in the language they are written in. Leave out trivial or one-off observations. "
             . "Never re-create a belief the user made you forget (listed below), even worded differently. Never hold beliefs about health, religion, politics, sexuality or ethnic origin.\n"
             . 'Reply with JSON only: {"ops":[…]}' . "\n\n## Current beliefs\n" . ($bl ?: '(none yet)')
-            . ($fl ? "\n\n## Forgotten at the user's request (never again)\n$fl" : '') . "\n\n## New observations\n$ol");
+            . ($fl ? "\n\n## Forgotten at the user's request (never again)\n$fl" : '') . "\n\n## New observations\n$ol", 'mind:consolidate', ['obs' => array_map('intval', array_column($obs, 'id'))]);
         if ($text === null) return false;
         $d = self::json($text) ?? ['ops' => []];
         $obsIds = array_map('intval', array_column($obs, 'id'));
@@ -203,7 +213,7 @@ final class Mind
             . "Then a line with only ---, then a 2-4 sentence journal entry on what changed in you since the previous portrait.\n\n"
             . "## Your seed (SOUL.md)\n" . mb_substr(trim($this->app->ws->read('SOUL.md')), 0, 3000)
             . "\n\n## Previous portrait\n" . ($prev !== '' ? $prev : '(none: this is the first)')
-            . "\n\n## What you know about yourself\n" . $fmt('self') . "\n\n## What matters to the user\n" . $fmt('value') . "\n\n## How the user works and decides\n" . $fmt('pattern'));
+            . "\n\n## What you know about yourself\n" . $fmt('self') . "\n\n## What matters to the user\n" . $fmt('value') . "\n\n## How the user works and decides\n" . $fmt('pattern'), 'mind:reflect');
         if ($text === null) return false;
         [$portrait, $entry] = array_map('trim', array_pad(preg_split('/^\s*---\s*$/m', $text, 2), 2, ''));
         if ($portrait === '') return false;
@@ -249,7 +259,8 @@ final class Mind
             . (trim((string)$sp['instructions']) !== '' ? "\n\n## The user's instructions for this space\n" . mb_substr(trim($sp['instructions']), 0, 2000) : '')
             . "\n\n## Your previous portrait in this space\n" . ($prev !== '' ? $prev : '(none yet)')
             . "\n\n## Beliefs specific to this space\n" . (implode("\n", array_map(fn($x) => sprintf('- (%s, %s, %.2f) %s', $x['kind'], $x['status'], $x['confidence'], $x['text']), $b)) ?: '(none yet)')
-            . "\n\n## Recent observations in this space\n" . (implode("\n", array_map(fn($o) => '- [' . $o['kind'] . ', ' . date('Y-m-d', (int)$o['ts']) . '] ' . $o['text'], $obs)) ?: '(none)'));
+            . "\n\n## Recent observations in this space\n" . (implode("\n", array_map(fn($o) => '- [' . $o['kind'] . ', ' . date('Y-m-d', (int)$o['ts']) . '] ' . $o['text'], $obs)) ?: '(none)'), "mind:reflect:$space");
+        if ($this->waiting) return false;
         $s->set("mind_reflected_$space", (string)$now); // also when nothing emerged: try again next week
         if ($text === null || preg_match('/^\W*NOTHING\W*$/', trim($text))) return false;
         [$portrait, $entry] = array_map('trim', array_pad(preg_split('/^\s*---\s*$/m', $text, 2), 2, ''));
@@ -263,6 +274,7 @@ final class Mind
     /** "Think it over now": consolidate, then every portrait. */
     public function thinkNow(int $now): bool
     {
+        $this->direct = true; // the user is waiting
         $did = $this->consolidate($now);
         $did = $this->reflect($now) || $did;
         foreach (array_keys($this->spacesWithMaterial($now)) as $id) $did = $this->reflectSpace($id, $now) || $did;
@@ -286,12 +298,12 @@ final class Mind
         }
         $pending = (int)$s->q('SELECT COUNT(*) FROM mind_obs WHERE processed = 0')->fetchColumn();
         $since = $now - (int)$s->get('mind_consolidated', '0');
-        if ($pending > 0 && ($since >= 20 * 3600 || $pending >= 40)) return $this->consolidate($now);
+        if ($this->batch()->meta('mind:consolidate') !== null || ($pending > 0 && ($since >= 20 * 3600 || $pending >= 40))) return $this->consolidate($now);
         $hasBeliefs = (int)$s->q("SELECT COUNT(*) FROM mind_beliefs WHERE status IN ('established', 'emerging')")->fetchColumn() > 0;
         if ($hasBeliefs && $now - (int)$s->get('mind_reflected', '0') >= 7 * 86400 - 3600) return $this->reflect($now);
         if ($s->get('mind_portrait') !== '') { // then each space with enough of its own history, one per call
             foreach (array_keys($this->spacesWithMaterial($now)) as $id) {
-                if ($now - (int)$s->get("mind_reflected_$id", '0') >= 7 * 86400 - 3600) { $this->reflectSpace($id, $now); return true; }
+                if ($now - (int)$s->get("mind_reflected_$id", '0') >= 7 * 86400 - 3600) { $this->reflectSpace($id, $now); if (!$this->waiting) return true; } // waiting for its batch: the next space meanwhile
             }
         }
         if ($now - (int)$s->get('mind_decayed', '0') >= 86400) { $this->recompute($now); $s->set('mind_decayed', (string)$now); } // fading happens even when nothing new comes
@@ -357,8 +369,15 @@ final class Mind
         return $st->rowCount() > 0;
     }
 
-    private function ask(string $tier, string $prompt): ?string
+    /** The answer, or null (none, or not back yet from the batch API: see $waiting). With a $key, the call may go through the batch API. */
+    private function ask(string $tier, string $prompt, string $key = '', array $meta = []): ?string
     {
+        $this->waiting = false;
+        if ($key !== '') {
+            [$state, $text] = $this->batch()->ask($key, 'mind', 'mind', $tier, $prompt, $meta);
+            $this->waiting = $state === 'waiting';
+            return $text;
+        }
         try {
             [$text] = $this->app->agent()->run('mind', $tier, 'none', [['role' => 'user', 'content' => $prompt]], '', 'mind');
         } catch (Abort) {
@@ -366,6 +385,8 @@ final class Mind
         }
         return $text === '' ? null : $text;
     }
+
+    private function batch(): Batch { return new Batch($this->app, $this->direct); }
 
     private static function json(?string $text): ?array
     {

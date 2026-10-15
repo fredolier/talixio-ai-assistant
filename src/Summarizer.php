@@ -10,13 +10,15 @@ namespace Talixio;
  *   and a past month's weeks into one even shorter month summary (level 3).
  * The unmerged summaries form the digest the assistant reads before every answer (digest()).
  * Nothing is deleted: messages and every summary stay searchable with search_memory.
+ * On a Mistral account the requests go through its batch API at half the price (Batch): the summary
+ * comes on a later call, within hours. $direct (the user asked for it now) answers at once.
  */
 final class Summarizer
 {
     public const KEEP_RECENT = 10;   // never summarised while they are the latest messages
     public const DIGEST_CHARS = 9000;
 
-    public function __construct(private App $app) {}
+    public function __construct(private App $app, private bool $direct = false) {}
 
     /** One step of compaction per call (the worker calls it every few minutes). Returns true if it did something. */
     public function maybeRun(int $now, int $minMessages = 16, int $idleSeconds = 1800): bool
@@ -45,17 +47,20 @@ final class Summarizer
         $from = (int)$store->get(Store::summarizedKey($space), '0');
         $last = $store->q('SELECT id, ts FROM messages WHERE space = ? ORDER BY id DESC LIMIT 1', [$space])->fetch();
         if (!$last) return false;
-        $cut = (int)($store->q('SELECT id FROM messages WHERE space = ? ORDER BY id DESC LIMIT 1 OFFSET ?', [$space, self::KEEP_RECENT])->fetchColumn() ?: 0);
+        $key = "compact:$space:$from";
+        $sent = $this->batch($force)->meta($key); // a stretch already sent to the batch API: the same messages
+        $cut = $sent !== null ? (int)($sent['to'] ?? 0) : (int)($store->q('SELECT id FROM messages WHERE space = ? ORDER BY id DESC LIMIT 1 OFFSET ?', [$space, self::KEEP_RECENT])->fetchColumn() ?: 0);
         $idle = (int)$last['ts'] <= $now - $idleSeconds;
         $rows = $store->q('SELECT * FROM messages WHERE space = ? AND id > ? AND id <= ? ORDER BY id LIMIT 120', [$space, $from, $cut])->fetchAll();
-        if (!$rows || (!$force && count($rows) < $minMessages && !($idle && count($rows) >= 4))) return false;
+        if (!$rows) { if ($sent !== null) $this->batch($force)->drop($key); return false; }
+        if ($sent === null && !$force && count($rows) < $minMessages && !($idle && count($rows) >= 4)) return false;
         $transcript = '';
         foreach ($rows as $r) {
             $transcript .= sprintf("[%s] %s (%s): %s\n", date('D Y-m-d H:i', (int)$r['ts']), $r['role'], $r['channel'], mb_substr($r['content'], 0, 1500));
         }
-        $text = $this->ask("Summarise this stretch of conversation for the assistant's memory. Keep facts about the user, decisions, commitments and promises (with dates), "
+        $text = $this->ask($force, $key, ['to' => (int)end($rows)['id']], "Summarise this stretch of conversation for the assistant's memory. Keep facts about the user, decisions, commitments and promises (with dates), "
             . "things to follow up, and useful results (with links). Skip small talk. Max 200 words, bullet points.\n\n$transcript");
-        if ($text === null) return false;
+        if ($text === null || $text === false) return false; // false: waiting for the batch
         $store->addSummary((int)$rows[0]['id'], (int)end($rows)['id'], (int)$rows[0]['ts'], (int)end($rows)['ts'], $text, 1, $space);
         $store->set(Store::summarizedKey($space), (string)end($rows)['id']);
         $mind = $this->app->mind(); // the same stretch, read again for what it says about the user and the assistant
@@ -75,17 +80,26 @@ final class Summarizer
                 $groups[$s['space'] . ':' . $start][] = $s;
             }
             foreach ($groups as $items) {
+                $space = (int)$items[0]['space'];
                 $start = self::period($period, (int)$items[0]['ts_from'])[0];
+                $ids = array_map(fn($s) => (int)$s['id'], $items);
+                $key = "merge:$space:$level:$start";
+                if (($sent = $this->batch()->meta($key)) !== null && ($sent['ids'] ?? []) !== $ids) $this->batch()->drop($key); // the week changed since: asked again
                 $label = $period === 'week' ? 'the week of ' . date('D j M Y', $start) : date('F Y', $start);
                 $notes = implode("\n\n", array_map(fn($s) => '(' . date('D j M', (int)$s['ts_from']) . ")\n" . $s['text'], $items));
-                $text = $this->ask("These are notes from the assistant's conversations with the user during $label. Condense them into one summary of at most "
+                $p = $this->app->privacy();
+                $before = $this->app->space; $this->app->setSpace($space); // the space's level and AI account, as for its level-1 summaries
+                try {
+                    if ($p->modelBlocked($p->spaceLevel($space)) !== null) continue;
+                    $text = $this->ask(false, $key, ['ids' => $ids], "These are notes from the assistant's conversations with the user during $label. Condense them into one summary of at most "
                     . ($period === 'week' ? '150' : '120') . " words, bullet points. Keep what may still matter later: decisions, commitments and deadlines (with dates), "
                     . "facts about the user and their projects, open follow-ups, results worth finding again. Drop what is finished and no longer matters, and small talk."
                     . "\n\n$notes");
+                } finally { $this->app->setSpace($before); }
+                if ($text === false) continue; // waiting for the batch: the next group meanwhile
                 if ($text === null) return false;
-                $id = $store->addSummary((int)$items[0]['from_id'], (int)end($items)['to_id'], (int)$items[0]['ts_from'], (int)end($items)['ts_to'], $text, $level + 1, (int)$items[0]['space']);
-                $in = implode(',', array_map(fn($s) => (int)$s['id'], $items));
-                $store->q("UPDATE summaries SET merged_into = ? WHERE id IN ($in)", [$id]);
+                $id = $store->addSummary((int)$items[0]['from_id'], (int)end($items)['to_id'], (int)$items[0]['ts_from'], (int)end($items)['ts_to'], $text, $level + 1, $space);
+                $store->q('UPDATE summaries SET merged_into = ? WHERE id IN (' . implode(',', $ids) . ')', [$id]);
                 return true;
             }
         }
@@ -117,13 +131,12 @@ final class Summarizer
         $start = strtotime(date('Y-m-01 00:00', $ts)); return [$start, strtotime('+1 month', $start)];
     }
 
-    private function ask(string $prompt): ?string
+    /** The summary, null when there is none, false while the batch runs. */
+    private function ask(bool $force, string $key, array $meta, string $prompt): string|false|null
     {
-        try {
-            [$text] = $this->app->agent()->run('summary', 'fast', 'none', [['role' => 'user', 'content' => $prompt]], '', 'summary');
-        } catch (Abort) {
-            return null;
-        }
-        return $text === '' ? null : $text;
+        [$state, $text] = $this->batch($force)->ask($key, 'summary', 'summary', 'fast', $prompt, $meta);
+        return $state === 'waiting' ? false : $text;
     }
+
+    private function batch(bool $force = false): Batch { return new Batch($this->app, $this->direct || $force); }
 }

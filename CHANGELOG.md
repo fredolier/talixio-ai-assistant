@@ -3,6 +3,16 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.38 (2026-10-15)
+
+- **Mistral batch API**: with a Mistral account (main settings or a space's AI account), summaries and the assistant's
+  reflection go through Mistral's batch API at half the price; the worker collects the answers. *Compact now* and
+  *Think it over now* still answer at once; a failed batch, or a budget running low, falls back to a direct call.
+  Setting: *Mistral: background work at half price* (`TALIXIO_MISTRAL_BATCH`, on by default).
+- Spaces are kept apart better: merging old summaries now runs in each summary's own space (its AI account and its
+  privacy level), meeting summaries are filed in the meeting's space, and a job's report goes to its space's folder
+  instead of the Inbox.
+
 ## 0.28.37 (2026-10-15)
 
 - **AI accounts per space**: Settings → *AI model* → *AI accounts* holds named accounts (Claude API, Claude subscription

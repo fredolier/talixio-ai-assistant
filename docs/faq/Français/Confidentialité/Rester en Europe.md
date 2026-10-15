@@ -36,6 +36,15 @@ Un clic sur *Utiliser ce fournisseur* règle :
 - **la recherche par le sens** (sauf si elle est déjà sur ce serveur, avec Ollama). Changer de modèle
   réindexe la mémoire en arrière-plan.
 
+## Moitié prix pour le travail de fond (Mistral)
+Avec Mistral, les résumés des anciennes conversations et la réflexion de l'assistant passent par l'**API
+batch** de Mistral : moitié prix, la réponse revient en quelques heures au plus (souvent quelques minutes).
+Le worker la récupère et termine le travail. *Compacter maintenant* et *Y réfléchir maintenant* répondent
+toujours tout de suite. Un batch qui échoue est refait directement ; quand le budget est presque épuisé,
+les appels sont aussi directs. Pour le couper : **Mistral: background work at half price** dans les Réglages
+(`TALIXIO_MISTRAL_BATCH=0`). Dans Activité, ces appels apparaissent comme *summary (batch)* ou *mind (batch)*,
+à la moitié du coût estimé.
+
 ## Le verrou
 Avec le verrou (`TALIXIO_SOVEREIGN_ONLY=1`), ce qui n'a pas d'équivalent européen est **coupé** au lieu
 de partir ailleurs :

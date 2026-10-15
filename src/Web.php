@@ -204,7 +204,7 @@ final class Web
             $path === '/api/memory/digest' && $m === 'GET' => $this->digest(),
             $path === '/api/memory/compact' && $m === 'POST' => (function () {
                 set_time_limit(0);
-                $sum = new Summarizer($this->app);
+                $sum = new Summarizer($this->app, true); // asked now: no batch
                 $did = $sum->compact(time(), 1, 0, true);
                 while ($sum->merge(time())) $did = true;
                 return ['done' => $did] + $this->digest();
