@@ -351,6 +351,12 @@ final class Jobs
             if ($folder === '' && $j['kind'] === 'meeting' && $j['file_id'] !== null) $folder = (string)($this->app->files()->get((int)$j['file_id'])['folder'] ?? '');
             if ($folder === '' && (int)($j['space'] ?? 0) > 0) $folder = (string)($this->app->spaces()->get((int)$j['space'])['folder'] ?? ''); // stays at its space's level
             if ($folder === '') $folder = Library::INBOX;
+            $p = $this->app->privacy(); $level = $p->effective();
+            if ($p->writeDown($folder, $level) !== null) { // what it read stays at its level: its space's folder, or the chat only
+                $own = (int)($j['space'] ?? 0) > 0 ? (string)($this->app->spaces()->get((int)$j['space'])['folder'] ?? '') : '';
+                if ($own === '' || $p->writeDown($own, $level) !== null) { Log::warn("job {$j['id']}: report not saved in the library: " . $p->writeDown($folder, $level)); return; }
+                $folder = $own;
+            }
             $this->app->library()->ensureFolder($folder);
             $title = trim(preg_replace('#[/\\\\:*?"<>|\x00-\x1f]+#', ' ', (string)$j['title']));
             $name = ($j['kind'] === 'meeting' ? '' : 'Job - ') . mb_substr($title, 0, 60) . ' - ' . date('Y-m-d H.i');

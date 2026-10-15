@@ -9,6 +9,8 @@ Un espace est une conversation séparée pour un sujet : un client, la maison, l
 - Telegram, Signal et l'e-mail écrivent dans *Général* ; `/space Maison` les fait passer dans un autre espace.
 - Chaque espace a un **niveau de confidentialité** (Interne, Confidentiel, Secret) : le bouclier à côté
   de son nom. Voir *Confidentialité / Niveaux de confidentialité*.
+- Avec un compte IA par espace, un espace Confidentiel ou Secret est cloisonné : les modèles des
+  autres espaces ne le lisent pas, et rien n'en sort vers un endroit moins protégé.
 - Supprimer un espace garde ses documents dans la bibliothèque (voir plus bas).
 
 ## Archiver, restaurer, historique

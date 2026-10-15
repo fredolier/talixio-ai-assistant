@@ -293,7 +293,7 @@ final class Web
             (bool)preg_match('#^/api/shares/(\d+)/log$#', $path, $mm) => ['log' => $this->app->shares()->accessLog((int)$mm[1])],
             $path === '/api/library/tree' => ['tree' => $this->app->library()->tree(), 'stats' => $this->app->library()->stats()],
             // mode=quick: keywords only, at once; then the full search (with meaning) completes it. more: a full search would add something
-            $path === '/api/library/search' => ['results' => $this->app->library()->search((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/'), 30, ($_GET['mode'] ?? '') !== 'quick'),
+            $path === '/api/library/search' => ['results' => Privacy::forPerson(fn() => $this->app->library()->search((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/'), 30, ($_GET['mode'] ?? '') !== 'quick')),
                 'names' => $this->app->library()->find((string)($_GET['q'] ?? ''), 20, (string)($_GET['folder'] ?? '/')),
                 'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
             $path === '/api/library/folder' && $m === 'POST' => ['folder' => $this->app->library()->createFolder((string)($b['path'] ?? ''))],
@@ -320,7 +320,7 @@ final class Web
                 return ['filed' => $n];
             })(),
             $path === '/api/search' => ['results' => array_map(fn($h) => array_intersect_key($h, array_flip(['kind', 'ref', 'ts', 'label', 'text', 'keyword', 'sim'])),
-                $this->app->recall()->search((string)($_GET['q'] ?? ''), 20, PHP_INT_MAX, null, null, null, ($_GET['mode'] ?? '') !== 'quick')),
+                Privacy::forPerson(fn() => $this->app->recall()->search((string)($_GET['q'] ?? ''), 20, PHP_INT_MAX, null, null, null, ($_GET['mode'] ?? '') !== 'quick'))),
                 'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
             default => $this->fail(404, 'not found'),
         };
@@ -759,7 +759,7 @@ final class Web
         }
         if (count($out) < 40) {
             try {
-                foreach ($this->app->recall()->search($q, 20, PHP_INT_MAX, ['message'], null, $space, $meaning) as $h) {
+                foreach (Privacy::forPerson(fn() => $this->app->recall()->search($q, 20, PHP_INT_MAX, ['message'], null, $space, $meaning)) as $h) {
                     $id = (int)$h['ref'];
                     if (isset($out[$id]) || !($r = $s->q('SELECT id, role, channel, content, ts FROM messages WHERE id = ?', [$id])->fetch())) continue;
                     $out[$id] = ['id' => $id, 'role' => $r['role'], 'channel' => $r['channel'], 'ts' => (int)$r['ts'], 'snippet' => self::snippet($r['content'], $q), 'exact' => false];

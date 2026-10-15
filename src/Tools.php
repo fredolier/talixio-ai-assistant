@@ -64,18 +64,24 @@ final class Tools
         $this->register('memory_append',
             'Append text to a memory file. USER.md = facts about the user; MEMORY.md = notes, decisions; HEARTBEAT.md = your periodic checklist; SOUL.md = your persona.',
             ['file' => $file, 'text' => ['type' => 'string']], ['file', 'text'],
-            function (array $a) { $ws = $this->app->ws; $ws->write($a['file'], rtrim($ws->read($a['file'])) . "\n" . trim($a['text']) . "\n"); return 'appended'; });
+            function (array $a) {
+                if (($no = $this->sharedWrite('memory files')) !== null) return $no;
+                $ws = $this->app->ws; $ws->write($a['file'], rtrim($ws->read($a['file'])) . "\n" . trim($a['text']) . "\n"); return 'appended';
+            });
         $this->register('mind_observe', 'Note something that says a lot about the user or about how you should be, for your own learning (it becomes part of your character once confirmed over time). '
             . 'kind: value (what matters to them), pattern (how they decide or work), self (about your behaviour: what they liked or corrected). One general sentence. strength: 1 hint, 2 clear, 3 explicit.',
             ['kind' => ['type' => 'string', 'enum' => Mind::KINDS], 'text' => ['type' => 'string'], 'strength' => ['type' => 'integer']], ['kind', 'text'],
             function (array $a) {
                 if (!$this->app->cfg->mind) return 'learning is off';
+                $p = $this->app->privacy(); // kept with its space: a Confidential or Secret space learns apart; what a General turn read there doesn't go into the general character
+                if (Privacy::rank($p->effective()) > Privacy::rank($p->spaceLevel($this->app->space))) return 'not noted: this answer read ' . ucfirst($p->effective()) . ' content, and what is learned here is used in every space';
                 $this->app->mind()->addObservation((string)$a['kind'], (string)$a['text'], (int)($a['strength'] ?? 2), $this->app->space, 'noted');
                 return 'noted';
             });
         $this->register('memory_replace', 'Replace exact text in a memory file (empty new_text deletes it). Use to correct or remove outdated facts.',
             ['file' => $file, 'old_text' => ['type' => 'string'], 'new_text' => ['type' => 'string']], ['file', 'old_text', 'new_text'],
             function (array $a) {
+                if (($no = $this->sharedWrite('memory files')) !== null) return $no;
                 $c = $this->app->ws->read($a['file']);
                 if ($a['old_text'] === '' || !str_contains($c, $a['old_text'])) return 'error: old_text not found';
                 $this->app->ws->write($a['file'], str_replace($a['old_text'], $a['new_text'], $c));
@@ -120,6 +126,8 @@ final class Tools
             ['routine' => ['type' => 'string'], 'item' => ['type' => 'string'], 'vote' => ['type' => 'string', 'enum' => ['up', 'down']], 'note' => ['type' => 'string']], ['routine', 'item', 'vote'],
             function (array $a) {
                 $r = trim((string)$a['routine']);
+                $t = ctype_digit($r) ? $this->app->store->task((int)$r) : $this->app->store->q('SELECT * FROM tasks WHERE title = ? COLLATE NOCASE ORDER BY id LIMIT 1', [$r])->fetch();
+                if ($t && !$this->visibleSpace((int)$t['space'])) return 'error: no such routine';
                 $this->app->routines()->vote(ctype_digit($r) ? (int)$r : 0, (string)$a['item'], $a['vote'] === 'down' ? -1 : 1, (string)($a['note'] ?? ''), null, ctype_digit($r) ? '' : $r);
                 return 'noted: its next runs will take it into account';
             });
@@ -131,7 +139,10 @@ final class Tools
             . "A name already used in the folder updates that file (its earlier content stays available in kb_versions).",
             ['folder' => ['type' => 'string'], 'name' => ['type' => 'string'], 'content' => ['type' => 'string'], 'id' => ['type' => 'integer']], ['content'],
             function (array $a) {
-                $f = $this->app->library()->saveNote((string)($a['folder'] ?? ($this->spaceFolder() !== '' ? $this->spaceFolder() . '/Notes' : Library::NOTES)), (string)($a['name'] ?? ''), $a['content'], isset($a['id']) ? (int)$a['id'] : null);
+                $folder = Library::normalize((string)($a['folder'] ?? ($this->spaceFolder() !== '' ? $this->spaceFolder() . '/Notes' : Library::NOTES)));
+                if (isset($a['id'])) $folder = $this->readableFile((int)$a['id'])['folder'];
+                $this->noWriteDown($folder, $this->app->privacy()->effective());
+                $f = $this->app->library()->saveNote($folder, (string)($a['name'] ?? ''), $a['content'], isset($a['id']) ? (int)$a['id'] : null);
                 return 'saved ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']})";
             });
         $this->register('kb_move', "File a document in the user's library: move it to a folder (created if needed), optionally renaming it. Use to tidy attachments out of /Inbox when the user asks. "
@@ -139,6 +150,8 @@ final class Tools
             ['id' => ['type' => 'integer'], 'folder' => ['type' => 'string'], 'name' => ['type' => 'string'], 'replace' => ['type' => 'boolean']], ['id', 'folder'],
             function (array $a) {
                 $lib = $this->app->library(); $replace = !empty($a['replace']);
+                $src = $this->readableFile((int)$a['id']);
+                $this->noWriteDown(Library::normalize((string)$a['folder']), $this->app->privacy()->folderLevel($src['folder']));
                 $f = $lib->moveFile((int)$a['id'], $a['folder'], empty($a['name']) && $replace);
                 if (!empty($a['name'])) $f = $lib->renameFile((int)$f['id'], $a['name'], $replace);
                 return 'moved to ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']})";
@@ -148,7 +161,7 @@ final class Tools
             ['id' => ['type' => 'integer'], 'action' => ['type' => 'string', 'enum' => ['list', 'restore']], 'version' => ['type' => 'integer']], ['id'],
             function (array $a) {
                 $files = $this->app->files();
-                $f = $files->get((int)$a['id']) ?? throw new \InvalidArgumentException("no file {$a['id']}");
+                $f = $this->readableFile((int)$a['id']);
                 if (($a['action'] ?? 'list') === 'restore') {
                     $f = $files->restoreVersion((int)$f['id'], (int)($a['version'] ?? 0));
                     return 'restored: ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']}) has that content again; the one it had is now a version";
@@ -164,10 +177,12 @@ final class Tools
             function (array $a) {
                 $lib = $this->app->library();
                 if (($a['action'] ?? 'list') === 'restore') {
+                    if (!empty($a['id'])) { $t = $this->app->files()->get((int)$a['id'], true); if (!$t || !$this->canRead((string)$t['folder'])) throw new \InvalidArgumentException('Nothing to restore: it is no longer in the trash.'); }
+                    elseif (!$this->canRead((string)($a['folder'] ?? ''))) throw new \InvalidArgumentException('Nothing to restore: it is no longer in the trash.');
                     $r = $lib->restore(!empty($a['id']) ? (int)$a['id'] : null, (string)($a['folder'] ?? ''), (int)($a['deleted_at'] ?? 0));
                     return "restored {$r['restored']} file" . ($r['restored'] > 1 ? 's' : '') . " to {$r['folder']}";
                 }
-                $items = $lib->trash();
+                $items = array_filter($lib->trash(), fn($i) => $this->canRead($i['type'] === 'file' ? (string)$i['folder'] : (string)$i['path']));
                 if (!$items) return 'the trash is empty';
                 return implode("\n", array_map(fn($i) => $i['type'] === 'file'
                     ? "- file #{$i['id']} " . Library::join($i['folder'], $i['name']) . ', deleted ' . date('Y-m-d H:i', $i['deleted_at']) . ', kept until ' . date('Y-m-d', $i['until'])
@@ -218,7 +233,7 @@ final class Tools
             ['id' => ['type' => 'integer'], 'offset' => ['type' => 'integer']], ['id'],
             function (array $a) {
                 $f = $this->app->files()->get((int)$a['id']) ?? throw new \RuntimeException('no such file');
-                if (!$this->app->privacy()->readable([['folder' => $f['folder']]])) return 'error: this file belongs to a Secret space: it can only be read there.';
+                if (!$this->app->privacy()->readable([['folder' => $f['folder']]])) return 'error: this file belongs to a ' . ucfirst($this->app->privacy()->folderLevel($f['folder'])) . ' space that this model may not read: open it in that space.';
                 $text = Files::withPageMarks($this->app->files()->text((int)$a['id']));
                 $off = max(0, (int)($a['offset'] ?? 0));
                 $chunk = mb_substr($text, $off, 30000);
@@ -238,14 +253,17 @@ final class Tools
             ['query' => ['type' => 'string']], ['query'], fn(array $a) => $this->app->contacts()->format($this->app->contacts()->search((string)$a['query'], 10)));
         $this->register('contact_save', "Create or update a contact. Give note to add one fact learned about the person (dated automatically), e.g. \"prefers calls in the morning\", \"daughter Léa, 8\".",
             ['name' => ['type' => 'string'], 'email' => ['type' => 'string'], 'phone' => ['type' => 'string'], 'org' => ['type' => 'string'], 'note' => ['type' => 'string'], 'id' => ['type' => 'integer']], [],
-            function (array $a) { $c = $this->app->contacts()->save($a); return "saved contact #{$c['id']} {$c['name']}"; });
+            function (array $a) {
+                if (($no = $this->sharedWrite('contacts')) !== null) return $no;
+                $c = $this->app->contacts()->save($a); return "saved contact #{$c['id']} {$c['name']}";
+            });
 
         $this->register('skill_read', 'Read one of your skills (learned procedures, listed in your instructions) before doing a task it covers.',
             ['name' => ['type' => 'string']], ['name'], fn(array $a) => $this->app->skills()->read($a['name']));
         $this->register('skill_save',
             'Save or update a skill: a reusable procedure for a recurring task (steps, which tools and sources, the user\'s preferences, pitfalls). description says WHEN to use it. Keep it short and concrete. Saving under an existing name replaces it.',
             ['name' => ['type' => 'string'], 'description' => ['type' => 'string'], 'content' => ['type' => 'string']], ['name', 'description', 'content'],
-            fn(array $a) => $this->app->skills()->save($a['name'], $a['description'], $a['content']));
+            fn(array $a) => $this->sharedWrite('skills') ?? $this->app->skills()->save($a['name'], $a['description'], $a['content']));
         $this->register('skill_delete', 'Delete a skill that is wrong or no longer useful.', ['name' => ['type' => 'string']], ['name'],
             fn(array $a) => $this->app->skills()->delete($a['name']) ? 'deleted' : 'error: no such skill');
 
@@ -255,7 +273,7 @@ final class Tools
             ['title', 'prompt'], fn(array $a) => $this->schedule($a));
         $this->register('list_tasks', 'List routines (scheduled prompts). The to-do tasks are on the board: board_list.', [], [], fn() => $this->listTasks());
         $this->register('cancel_task', 'Delete a scheduled task by id.', ['id' => ['type' => 'integer']], ['id'],
-            fn(array $a) => $this->app->store->deleteTask((int)$a['id']) ? 'deleted' : 'error: no such task');
+            fn(array $a) => $this->visibleItem('task', (int)$a['id']) && $this->app->store->deleteTask((int)$a['id']) ? 'deleted' : 'error: no such task');
 
         $this->register('delegate',
             "Start a background sub-agent for work that takes several searches or steps (research, comparisons, planning, summarising long pages). You get control back immediately; when it finishes, its report is posted in the chat and you will relay it. Split independent parts into separate jobs to run them in parallel (max {$cfg->maxParallelJobs} at a time). The sub-agent can search the web, read pages and read memory, but cannot message the user or change memory or schedules. Write self-contained instructions: it does not see this conversation. tier: fast (simple lookups), standard (default), deep (hard reasoning; most expensive). effort: how thorough (deeper thinking, more steps: low 15, medium 30, high 60, xhigh 100, max 200; default {$cfg->jobEffort}); use high or more for long, complex work. Each job is capped at \${$cfg->jobMaxUsd} unless you set max_usd (up to \${$cfg->jobMaxUsdLimit}): raise it when the user gives a budget or the work is clearly big.",
@@ -273,12 +291,15 @@ final class Tools
                 if (!empty($a['all_finished'])) return sprintf('%d job(s) archived', $this->app->jobs()->archiveFinished($this->app->space));
                 $ids = array_map('intval', (array)($a['ids'] ?? []));
                 if (!$ids) return 'error: give ids or all_finished';
+                $ids = array_values(array_filter($ids, fn($id) => $this->visibleItem('job', $id)));
+                if (!$ids) return 'error: no such job';
                 foreach ($ids as $id) $this->app->jobs()->archive($id, ($a['archived'] ?? true) !== false);
                 return sprintf('%d job(s) %s', count($ids), ($a['archived'] ?? true) !== false ? 'archived' : 'back in the list');
             });
         $this->register('schedule_job', "Make a routine that runs a finished research job again on a schedule (same instructions, model, effort, cap and report folder), e.g. a weekly watch. `when`: the schedule in plain words, local time ({$cfg->timezone}), e.g. 'every monday at 8:00', 'on the 1st of every month at 9:00', 'tomorrow at 7:00'. Each run's report comes in the chat and is saved in the library.",
             ['id' => ['type' => 'integer'], 'when' => ['type' => 'string', 'description' => 'the schedule in plain words']], ['id'],
             function (array $a) {
+                if (!$this->visibleItem('job', (int)$a['id'])) return 'error: no such job';
                 try {
                     $t = $this->app->jobs()->schedule((int)$a['id'], (string)($a['cron'] ?? ''), (string)($a['at'] ?? ''), (string)($a['when'] ?? ''));
                 } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
@@ -288,12 +309,13 @@ final class Tools
         $this->register('continue_job', "Carry on a background job from where it stopped (cost cap reached, or the user wants it to go further): a new job that starts from the earlier run's steps and findings. Only when the user asks. max_usd: its cost cap (default: the same as before; up to \${$cfg->jobMaxUsdLimit}); effort: optional; note: what the user wants added or changed.",
             ['id' => ['type' => 'integer'], 'max_usd' => ['type' => 'number'], 'effort' => ['type' => 'string', 'enum' => Tier::EFFORTS], 'note' => ['type' => 'string']], ['id'],
             function (array $a) {
+                if (!$this->visibleItem('job', (int)$a['id'])) return 'error: no such job';
                 $id = $this->app->jobs()->continue((int)$a['id'], is_numeric($a['max_usd'] ?? null) ? (float)$a['max_usd'] : null, in_array($a['effort'] ?? '', Tier::EFFORTS, true) ? $a['effort'] : '', (string)($a['note'] ?? ''));
                 $j = $this->app->store->job($id);
                 return sprintf('job #%d queued: continues #%d (cap $%.2f, effort %s). The report will be posted in the chat when done.', $id, (int)$a['id'], $j['max_cost_usd'], $j['effort'] ?: $this->app->cfg->jobEffort);
             });
         $this->register('cancel_job', 'Cancel a queued or running background job.', ['id' => ['type' => 'integer']], ['id'],
-            fn(array $a) => $this->app->jobs()->cancel((int)$a['id']) ? 'cancelled' : 'error: job not found or already finished');
+            fn(array $a) => $this->visibleItem('job', (int)$a['id']) && $this->app->jobs()->cancel((int)$a['id']) ? 'cancelled' : 'error: job not found or already finished');
         $this->register('usage_report', 'Your spending: budget status, cost and tokens by tier and by source (chat, schedules, jobs...) today and this month.',
             [], [], fn() => $this->usageReport());
         $this->register('usage_bill', "Record what the AI provider really billed (the figure the user read in the provider's console), to correct your cost estimates. Default period: last month.",
@@ -636,21 +658,73 @@ final class Tools
         return $copy;
     }
 
+    /**
+     * Memory files, skills and contacts are read in every space: nothing from a Confidential or Secret space (or from
+     * content of that level read in this answer) is written there. Null: it may be; else what the model is told.
+     */
+    private function sharedWrite(string $what): ?string
+    {
+        $level = $this->app->privacy()->effective();
+        if ($level === 'internal') return null;
+        Privacy::blocked("Write to the $what");
+        return "error: not saved: this answer is at the " . ucfirst($level) . " level (its space, or what it read), and the $what are read in every space. "
+            . ($this->app->space ? 'Keep it in the notes of this space (space_notes) instead.' : 'Tell the user it was not kept, and why.');
+    }
+
+    /** Whether the work may see or act on what belongs to this space (its jobs, routines, details): the current one, or one whose level this model may read. */
+    private function visibleSpace(int $space): bool
+    {
+        $p = $this->app->privacy();
+        return $space === $this->app->space || $p->mayRead($p->spaceLevel($space), $space);
+    }
+
+    /** A task or job that exists and that the work may act on (the same answer as a missing one otherwise). */
+    private function visibleItem(string $kind, int $id): bool
+    {
+        $row = $kind === 'task' ? $this->app->store->task($id) : $this->app->store->job($id);
+        return $row !== null && $this->visibleSpace((int)$row['space']);
+    }
+
+    /** Whether the work may see this library folder (and what is in it): not a Secret space's from elsewhere, nor above what this model may read. */
+    private function canRead(string $folder): bool
+    {
+        $p = $this->app->privacy();
+        return $p->mayRead($p->folderLevel($folder), null, $folder);
+    }
+
+    /** A file the work may read, else an error (the same as for a file that does not exist when it is a Secret space's). */
+    private function readableFile(int $id): array
+    {
+        $f = $this->app->files()->get($id);
+        if (!$f || $this->app->privacy()->hidden($this->app->privacy()->folderLevel((string)$f['folder']), null, (string)$f['folder'])) throw new \InvalidArgumentException("no file $id");
+        if (!$this->canRead((string)$f['folder'])) throw new \InvalidArgumentException("file $id belongs to a " . ucfirst($this->app->privacy()->folderLevel((string)$f['folder'])) . ' space that this model may not read');
+        return $f;
+    }
+
+    /** Nothing goes down a level: see Privacy::writeDown. */
+    private function noWriteDown(string $folder, string $level): void
+    {
+        if (($why = $this->app->privacy()->writeDown($folder, $level)) !== null) throw new \InvalidArgumentException("not done: $why");
+    }
+
     private function kbList(?string $folder): string
     {
         $lib = $this->app->library();
         if ($folder === null || $folder === '') {
-            $tree = $lib->tree();
+            $tree = array_filter($lib->tree(), fn($t) => $this->canRead((string)$t['path']));
             return $tree ? implode("\n", array_map(fn($t) => str_repeat('  ', $t['depth'] - 1) . "{$t['path']} ({$t['total']} files)", $tree)) : 'the library is empty';
         }
+        if (!$this->canRead(Library::normalize($folder))) return 'error: ' . Library::normalize($folder) . ' belongs to a space this model may not read';
         $l = $lib->list($folder);
-        $lines = array_map(fn($t) => "[folder] {$t['path']} ({$t['total']} files)", $l['folders']);
+        $lines = array_map(fn($t) => "[folder] {$t['path']} ({$t['total']} files)", array_filter($l['folders'], fn($t) => $this->canRead((string)$t['path'])));
         foreach ($l['files'] as $f) $lines[] = "#{$f['id']} {$f['name']} ({$f['kind']}, " . max(1, (int)round($f['size'] / 1024)) . ' KB, ' . date('Y-m-d', $f['created']) . ($f['status'] !== 'ready' ? ", {$f['status']}" : '') . ')';
         return $lines ? "{$l['folder']}:\n" . implode("\n", $lines) : "{$l['folder']} is empty";
     }
 
     public function names(): array { return array_keys($this->tools); }
-    public function allowsWeb(): bool { return isset($this->tools['fetch_url']); }
+    /** Whether the provider's own web search may be offered: it runs at the provider, out of Talixio's sight and its gate,
+     *  so not once the work is above Internal (its space, or what it read); Talixio's web_search and fetch_url still ask or refuse. */
+    public function allowsWeb(): bool { return isset($this->tools['fetch_url']) && $this->app->privacy()->effective() === 'internal'; }
     public function schemas(): array { return array_map(fn($t) => $t[0], array_values($this->shown === null ? $this->tools : array_intersect_key($this->tools, $this->shown))); }
 
     public function needsApproval(string $name): bool
@@ -793,9 +867,10 @@ final class Tools
         $sp = $this->app->spaces();
         $when = fn(int $ts) => date('Y-m-d H:i', $ts);
         if ($a['action'] === 'list') {
+            $open = fn($s) => $this->visibleSpace((int)$s['id']); // a Secret space's folder and activity are seen only from inside it
             return implode("\n", array_map(fn($s) => '- ' . ($s['id'] ? $s['name'] : 'General') . ($s['id'] === $this->app->space ? ' (current)' : '')
                 . ($s['archived'] ? ' [archived' . (($h = array_values(array_filter($s['history'], fn($e) => $e['what'] === 'archived'))[0] ?? null) ? ' ' . $when($h['ts']) . ' from the ' . $h['by'] : '') . ']' : '')
-                . ' · ' . ($s['privacy'] ?? 'internal') . ($s['folder'] ? " · folder {$s['folder']}" : '') . ($s['last_ts'] ? ' · last message ' . $when($s['last_ts']) : ''), $sp->all(true)));
+                . ' · ' . ($s['privacy'] ?? 'internal') . ($s['folder'] && $open($s) ? " · folder {$s['folder']}" : '') . ($s['last_ts'] && $open($s) ? ' · last message ' . $when($s['last_ts']) : ''), $sp->all(true)));
         }
         $s = $sp->find((string)($a['space'] ?? ''));
         if (!$s || !$s['id']) return 'error: no such space (give its name; General has no history)';
@@ -921,7 +996,7 @@ final class Tools
     {
         $rows = array_map(fn($t) => sprintf('#%d %s | %s | %s tier | next: %s%s', $t['id'], $t['title'],
             $t['cron'] ? "cron {$t['cron']}" : 'once', $t['tier'], $t['next_run'] ? date('Y-m-d H:i', (int)$t['next_run']) : '-',
-            $t['enabled'] ? '' : ' (paused)'), $this->app->store->tasks());
+            $t['enabled'] ? '' : ' (paused)'), array_filter($this->app->store->tasks(), fn($t) => $this->visibleSpace((int)$t['space'])));
         return $rows ? implode("\n", $rows) : 'no tasks';
     }
 
@@ -946,7 +1021,7 @@ final class Tools
         };
         $rows = array_map(fn($j) => sprintf('#%d %s | %s | %s | $%.3f of $%.2f', $j['id'], $j['title'], $j['tier'], $j['status'], $j['cost_usd'], $j['max_cost_usd'])
             . ($all ? ' | space ' . ($names[$j['space']] ?? $j['space']) : '') . ($j['tags'] !== '' ? ' | tags: ' . implode(', ', Store::tagList($j['tags'])) : '') . $report($j),
-            $this->app->store->jobs(15, $all ? null : $this->app->space, $tag, $archived, $search));
+            array_filter($this->app->store->jobs(15, $all ? null : $this->app->space, $tag, $archived, $search), fn($j) => $this->visibleSpace((int)$j['space'])));
         $tags = array_keys($this->app->store->jobTags());
         return ($rows ? implode("\n", $rows) : 'no ' . ($archived ? 'archived ' : '') . 'jobs' . ($tag !== '' ? " tagged \"$tag\"" : '') . ($search !== '' ? " matching \"$search\"" : '') . ($all ? '' : ' in this space'))
             . ($tags ? "\nTags in use: " . implode(', ', array_slice($tags, 0, 30)) : '');

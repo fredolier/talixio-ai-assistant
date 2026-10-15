@@ -108,13 +108,47 @@ final class Privacy
         return $folder === null || $cur['folder'] === '' || !($folder === $cur['folder'] || str_starts_with($folder, rtrim($cur['folder'], '/') . '/'));
     }
 
+    /**
+     * Whether content of this level may be brought into the current work: not hidden (secret, other space), and the model
+     * doing the work may see it (a General model under consumer terms never reads a Confidential space's documents, even
+     * when it runs its tools elsewhere). A person searching in the app only gets the first check.
+     */
+    public function mayRead(string $level, ?int $space = null, ?string $folder = null): bool
+    {
+        if ($this->hidden($level, $space, $folder)) return false;
+        return $level === 'internal' || self::$person || in_array($this->modelBlocked($level), [null, 'sovereign-only'], true);
+    }
+
+    /** True while the app serves a person's own search (not a model's). */
+    public static bool $person = false;
+
+    public static function forPerson(callable $fn): mixed
+    {
+        $was = self::$person; self::$person = true;
+        try { return $fn(); } finally { self::$person = $was; }
+    }
+
+    /**
+     * Why content of this level may not be written into this library folder (null: it may). Nothing goes down: what comes
+     * from a Confidential space (or a turn that read Confidential content) is not saved where a less protected model
+     * could read it, and nothing is written into a Secret space from outside it.
+     */
+    public function writeDown(string $folder, string $level): ?string
+    {
+        $dest = $this->folderLevel($folder);
+        if ($this->hidden($dest, null, $folder)) return "$folder belongs to a Secret space: nothing is written there from elsewhere";
+        if (self::rank($dest) < self::rank($level)) return "this comes from " . ucfirst($level) . " content and $folder is " . ($dest === 'internal' ? 'not protected' : ucfirst($dest))
+            . ': it stays at its level (save it in the folder of a space at least as protected)';
+        return null;
+    }
+
     /** Library hits ({folder, name?, snippet?}) the current work may read; the rest of the work follows their level. */
     public function readable(array $hits): array
     {
         $out = [];
         foreach ($hits as $h) {
             $lvl = $this->folderLevel((string)$h['folder']);
-            if ($this->hidden($lvl, null, (string)$h['folder'])) continue;
+            if (!$this->mayRead($lvl, null, (string)$h['folder'])) continue;
             if (isset($h['name'])) self::doc((string)$h['name'], mb_strlen((string)($h['snippet'] ?? '')), $lvl); else self::raise($lvl);
             $out[] = $h;
         }

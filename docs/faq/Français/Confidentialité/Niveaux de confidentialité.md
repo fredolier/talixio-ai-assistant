@@ -24,6 +24,21 @@ il faut un modèle installé sur le serveur.
 ## La « contamination »
 Si une question posée dans Général lit un document confidentiel, la suite de la réponse suit les règles Confidentiel.
 
+## Ce qui reste à son niveau
+- **Lecture** : un modèle qui n'a pas droit à un niveau ne lit pas les fichiers, notes ou mémoire
+  de ce niveau, même depuis Général (vous les retrouvez vous-même avec la recherche).
+- **Écriture** : ce qui vient d'un espace Confidentiel ou Secret n'est enregistré que dans un
+  dossier au moins aussi protégé (le dossier de son espace). Il n'est pas copié dans la mémoire
+  commune, les contacts ou les compétences, que tous les espaces lisent ; il va dans les notes de
+  l'espace. Le rapport d'un job suit la même règle.
+- **Apprentissage** : ce que l'assistant apprend sur vous dans un espace Confidentiel ou Secret
+  reste dans cet espace.
+- **Autres espaces** : les routines et jobs d'un espace que le modèle n'a pas le droit de lire ne
+  sont ni listés ni modifiables depuis ailleurs ; le dossier d'un espace Secret n'est pas montré
+  en dehors de lui.
+- **Recherche web** : la recherche web propre au fournisseur est coupée dès que le travail dépasse
+  Interne ; celle de Talixio demande votre validation (Confidentiel) ou est refusée (Secret).
+
 ## Sous chaque réponse
 Des pastilles disent où la réponse est allée (« Anthropic · 3 documents », « 3 en local », « 1 bloqué ») ;
 touchez-les pour le détail. Elles s'affichent aussi en direct pendant que l'assistant écrit.

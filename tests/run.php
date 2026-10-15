@@ -896,7 +896,8 @@ proc_terminate($llm); proc_close($llm);
 // claude-code: stream-json events, images written next to it, Read allowed only then
 putenv("TALIXIO_FAKE_CLAUDE_ARGS=$dir/claude-args.txt");
 $events = [];
-$app->space = 4;
+$app->space = 4; $s4 = $app->spaces()->get(4);
+if (($s4['privacy'] ?? 'internal') !== 'internal') $app->spaces()->save(['privacy' => 'internal'] + $s4, 4); // a stricter space has no provider web search (checked below)
 $cc = new \Talixio\ClaudeCodeProvider(__DIR__ . '/fakes/claude', new \Talixio\Tier('standard', 'sonnet', 5), true, dirname(__DIR__) . '/bin/talixio');
 $out = $cc->complete('sys', 'ctx', [['role' => 'user', 'content' => [['type' => 'text', 'text' => 'what is this?'], ['type' => 'image', 'mime' => 'image/png', 'data' => base64_encode('PNG')]]]],
     $app->tools->only('chat'), fn($u) => null, $collect);
@@ -905,6 +906,11 @@ check('claude-code: result and live events', $out === 'Nothing scheduled.' && in
 check('claude-code: image placed in its folder, Read allowed there only, pages read with fetch_url', str_contains($args, 'image-1.png') && preg_match('/^mcp__talixio__\S*,WebSearch,Read\(\.\/\*\)$/m', $args) === 1
     && preg_match('/^Bash,.*,WebFetch$/m', $args) === 1, $args);
 check('claude-code: the tools process gets the turn\'s space', str_contains($args, '"TALIXIO_SPACE":"4"'), $args);
+if ($s4 && ($s4['privacy'] ?? 'internal') !== 'internal') {
+    $app->spaces()->save($s4, 4);
+    $cc->complete('sys', '', [['role' => 'user', 'content' => 'hi']], $app->tools->only('chat'), fn($u) => null);
+    check('claude-code: no provider web search in a ' . $s4['privacy'] . ' space', !str_contains((string)file_get_contents("$dir/claude-args.txt"), 'WebSearch'));
+}
 $app->space = 0;
 check('claude-code: shell and editing tools disabled', str_contains($args, 'Bash,Edit,Write,MultiEdit,NotebookEdit,Task,Agent,Glob,Grep'));
 $cc->complete('sys', '', [['role' => 'user', 'content' => 'hi']], $app->tools->only('none'), fn($u) => null);
@@ -1462,8 +1468,10 @@ $la->store->addMessage('user', 'web', 'the vault code is zanzibar', null, [], (i
 $la->space = 0;
 $fromGeneral = $la->recall()->search('zanzibar', 8, PHP_INT_MAX, null, null, null);
 $la->space = (int)$sec['id'];
-$fromInside = $la->recall()->search('zanzibar', 8, PHP_INT_MAX, null, null, (int)$sec['id']);
+$fromInside = Privacy::forPerson(fn() => $la->recall()->search('zanzibar', 8, PHP_INT_MAX, null, null, (int)$sec['id'])); // the person; a cloud model may not read it even there
+$forModel = $la->recall()->search('zanzibar', 8, PHP_INT_MAX, null, null, (int)$sec['id']);
 check('privacy: a Secret space is not searched from elsewhere', $fromGeneral === [] && count($fromInside) === 1);
+check('privacy: nor by a model outside the server, even inside it', $forModel === []);
 $la->space = 0; Privacy::$taint = 0;
 $secId = $la->files()->save($mk('s', 'plans du coffre'), 'plans.txt', 'text/plain', '/Clients/Secret Co');
 check('privacy: a Secret file is not read from elsewhere', str_contains($la->tools->run('file_read', ['id' => $secId]), 'Secret space'));

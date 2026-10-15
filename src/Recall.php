@@ -65,7 +65,7 @@ final class Recall
             $p = $this->app->privacy(); $kept = [];
             foreach ($hits as $id => $h) {
                 $lvl = $p->docLevel($h);
-                if ($p->hidden($lvl, in_array($h['kind'], ['message', 'summary'], true) ? (int)$h['space'] : null, null)) continue;
+                if (!$p->mayRead($lvl, in_array($h['kind'], ['message', 'summary'], true) ? (int)$h['space'] : null, null)) continue;
                 $kept[$id] = $h + ['level' => $lvl];
                 if (count($kept) >= $limit) break;
             }

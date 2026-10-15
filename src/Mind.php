@@ -87,19 +87,66 @@ final class Mind
 
     // ---- level 2: consolidate ----
 
-    /** Fold new observations into beliefs, then recompute every belief's confidence. Returns true if it did something. */
+    /**
+     * The Confidential and Secret spaces each learn apart: what is seen there is folded, by that space's own model, into
+     * beliefs of that space only, and never reaches the general portrait or another space. [space id => privacy level].
+     */
+    private function walled(): array { return array_column($this->app->privacy()->strictSpaces(), 'privacy', 'id'); }
+
+    /** Run $fn as the space (its model and level); null when that space's model may not take its level (nothing is sent). */
+    private function in(int $space, callable $fn): mixed
+    {
+        $was = $this->app->space;
+        $this->app->setSpace($space);
+        try {
+            $p = $this->app->privacy();
+            if ($space && $p->modelBlocked($p->spaceLevel($space)) !== null) return null;
+            return $fn();
+        } finally { $this->app->setSpace($was); }
+    }
+
+    /** Groups with observations waiting: 0 for the general one, else a walled space's id => how many. */
+    public function pendingGroups(): array
+    {
+        $walled = $this->walled(); $out = [];
+        foreach ($this->app->store->q('SELECT space, COUNT(*) AS n FROM mind_obs WHERE processed = 0 GROUP BY space')->fetchAll() as $r) {
+            $g = isset($walled[(int)$r['space']]) ? (int)$r['space'] : 0;
+            $out[$g] = ($out[$g] ?? 0) + (int)$r['n'];
+        }
+        return $out;
+    }
+
+    private static function batchKey(int $group): string { return $group ? "mind:consolidate:$group" : 'mind:consolidate'; }
+
+    /** Fold new observations into beliefs, then recompute every belief's confidence. One group per call (one sent to the batch API first). Returns true if it did something. */
     public function consolidate(int $now): bool
     {
+        $groups = array_keys($this->pendingGroups());
+        foreach ($groups as $g) if ($this->batch()->meta(self::batchKey($g)) !== null) return (bool)($g ? $this->in($g, fn() => $this->consolidateGroup($g, $now)) : $this->consolidateGroup(0, $now));
+        foreach ($groups as $g) {
+            $did = $g ? $this->in($g, fn() => $this->consolidateGroup($g, $now)) : $this->consolidateGroup(0, $now);
+            if ($did !== null) return (bool)$did;
+        }
+        return false;
+    }
+
+    private function consolidateGroup(int $group, int $now): bool
+    {
         $s = $this->app->store;
-        $sent = $this->batch()->meta('mind:consolidate'); // observations already sent to the batch API: the same ones
+        $walled = array_keys($this->walled());
+        $notWalled = $walled ? ' AND space NOT IN (' . implode(',', array_map('intval', $walled)) . ')' : '';
+        $mine = $group ? ' AND space = ' . $group : $notWalled;
+        $key = self::batchKey($group);
+        $sent = $this->batch()->meta($key); // observations already sent to the batch API: the same ones
         if ($sent !== null) {
             $ids = array_map('intval', (array)($sent['obs'] ?? [])) ?: [0];
-            $obs = $s->q('SELECT * FROM mind_obs WHERE processed = 0 AND id IN (' . implode(',', $ids) . ') ORDER BY id')->fetchAll();
-            if (!$obs) { $this->batch()->drop('mind:consolidate'); return false; }
-        } else $obs = $s->q('SELECT * FROM mind_obs WHERE processed = 0 ORDER BY id LIMIT 60')->fetchAll();
+            $obs = $s->q('SELECT * FROM mind_obs WHERE processed = 0 AND id IN (' . implode(',', $ids) . ")$mine ORDER BY id")->fetchAll();
+            if (!$obs) { $this->batch()->drop($key); return false; }
+        } else $obs = $s->q("SELECT * FROM mind_obs WHERE processed = 0$mine ORDER BY id LIMIT 60")->fetchAll();
         if (!$obs) return false;
         $names = array_column($this->app->spaces()->all(), 'name', 'id') + [0 => 'General'];
-        $beliefs = $s->q("SELECT * FROM mind_beliefs WHERE status != 'dropped' ORDER BY confidence DESC LIMIT 120")->fetchAll();
+        // a walled space sees the general beliefs and its own; the general group never sees a walled space's
+        $beliefs = $s->q("SELECT * FROM mind_beliefs WHERE status != 'dropped'" . ($group ? " AND space IN (0, $group)" : $notWalled) . ' ORDER BY confidence DESC LIMIT 120')->fetchAll();
         $active = array_filter($beliefs, fn($b) => $b['status'] !== 'forgotten');
         $forgotten = array_filter($beliefs, fn($b) => $b['status'] === 'forgotten');
         $bl = implode("\n", array_map(fn($b) => sprintf('B%d [%s, %s, confidence %.2f] %s', $b['id'], $b['kind'], $b['space'] ? ($names[$b['space']] ?? 'General') : 'global', $b['confidence'], $b['text']), $active));
@@ -109,17 +156,20 @@ final class Mind
             . "Fold the new observations into the beliefs:\n"
             . '- {"op":"support","belief":ID,"obs":[IDs]} when observations confirm a belief (prefer this to creating a near-duplicate);' . "\n"
             . '- {"op":"contradict","belief":ID,"obs":[IDs]} when they go against it;' . "\n"
-            . '- {"op":"new","kind":"value|pattern|self","scope":"global" or a space name,"text":"…","obs":[IDs]} for something not covered yet (scope a space only when it is specific to it);' . "\n"
+            . ($group ? '- {"op":"new","kind":"value|pattern|self","text":"…","obs":[IDs]} for something not covered yet (it stays in this space: what is learned here is not taken elsewhere);' . "\n"
+                : '- {"op":"new","kind":"value|pattern|self","scope":"global" or a space name,"text":"…","obs":[IDs]} for something not covered yet (scope a space only when it is specific to it);' . "\n")
             . '- {"op":"rewrite","belief":ID,"text":"…"} to sharpen a belief the evidence refines;' . "\n"
             . '- {"op":"merge","beliefs":[IDs],"text":"…"} for beliefs that say the same thing.' . "\n"
             . "Beliefs are general, one sentence, in the language they are written in. Leave out trivial or one-off observations. "
             . "Never re-create a belief the user made you forget (listed below), even worded differently. Never hold beliefs about health, religion, politics, sexuality or ethnic origin.\n"
             . 'Reply with JSON only: {"ops":[…]}' . "\n\n## Current beliefs\n" . ($bl ?: '(none yet)')
-            . ($fl ? "\n\n## Forgotten at the user's request (never again)\n$fl" : '') . "\n\n## New observations\n$ol", 'mind:consolidate', ['obs' => array_map('intval', array_column($obs, 'id'))]);
+            . ($fl ? "\n\n## Forgotten at the user's request (never again)\n$fl" : '') . "\n\n## New observations\n$ol", $key, ['obs' => array_map('intval', array_column($obs, 'id'))]);
         if ($text === null) return false;
         $d = self::json($text) ?? ['ops' => []];
         $obsIds = array_map('intval', array_column($obs, 'id'));
         $ids = array_map('intval', array_column($active, 'id'));
+        // in a walled space only its own beliefs are reworded (a general one may be confirmed or contradicted, not rewritten from there)
+        $own = $group ? array_map('intval', array_column(array_filter($active, fn($b) => (int)$b['space'] === $group), 'id')) : $ids;
         $spaceIds = array_flip(array_map('mb_strtolower', $names));
         $changes = [];
         $link = function (int $belief, array $o, int $polarity) use ($s, $obsIds) {
@@ -131,19 +181,19 @@ final class Mind
                 case 'support': if (in_array($b, $ids, true)) $link($b, (array)($op['obs'] ?? []), 1); break;
                 case 'contradict': if (in_array($b, $ids, true)) { $link($b, (array)($op['obs'] ?? []), -1); $changes[$b] = 'contradicted'; } break;
                 case 'rewrite':
-                    if (in_array($b, $ids, true) && trim((string)($op['text'] ?? '')) !== '') $s->q('UPDATE mind_beliefs SET text = ? WHERE id = ?', [mb_substr(trim($op['text']), 0, 300), $b]);
+                    if (in_array($b, $own, true) && trim((string)($op['text'] ?? '')) !== '') $s->q('UPDATE mind_beliefs SET text = ? WHERE id = ?', [mb_substr(trim($op['text']), 0, 300), $b]);
                     break;
                 case 'new':
                     $kind = (string)($op['kind'] ?? '');
                     $o = array_intersect(array_map('intval', (array)($op['obs'] ?? [])), $obsIds);
                     if (!in_array($kind, self::KINDS, true) || trim((string)($op['text'] ?? '')) === '' || !$o) break;
                     $sc = mb_strtolower(trim((string)($op['scope'] ?? 'global')));
-                    $s->q('INSERT INTO mind_beliefs(kind, space, text, created) VALUES(?,?,?,?)', [$kind, $sc === 'global' ? 0 : (int)($spaceIds[$sc] ?? 0), mb_substr(trim($op['text']), 0, 300), $now]);
+                    $s->q('INSERT INTO mind_beliefs(kind, space, text, created) VALUES(?,?,?,?)', [$kind, $group ?: ($sc === 'global' ? 0 : (int)($spaceIds[$sc] ?? 0)), mb_substr(trim($op['text']), 0, 300), $now]);
                     $nid = (int)$s->db->lastInsertId();
-                    $link($nid, $o, 1); $ids[] = $nid; $changes[$nid] = 'new';
+                    $link($nid, $o, 1); $ids[] = $nid; $own[] = $nid; $changes[$nid] = 'new';
                     break;
                 case 'merge':
-                    $m = array_values(array_intersect(array_map('intval', (array)($op['beliefs'] ?? [])), $ids));
+                    $m = array_values(array_intersect(array_map('intval', (array)($op['beliefs'] ?? [])), $own));
                     if (count($m) < 2 || trim((string)($op['text'] ?? '')) === '') break;
                     $keep = array_shift($m);
                     $s->q('UPDATE mind_beliefs SET text = ? WHERE id = ?', [mb_substr(trim($op['text']), 0, 300), $keep]);
@@ -200,7 +250,9 @@ final class Mind
     public function reflect(int $now): bool
     {
         $s = $this->app->store;
-        $b = $s->q("SELECT kind, text, confidence, status, space FROM mind_beliefs WHERE status IN ('established', 'emerging') ORDER BY space = 0 DESC, confidence DESC LIMIT 60")->fetchAll();
+        $walled = array_map('intval', array_keys($this->walled())); // the general portrait is seen everywhere: nothing learned in a walled space goes into it
+        $b = $s->q("SELECT kind, text, confidence, status, space FROM mind_beliefs WHERE status IN ('established', 'emerging')" . ($walled ? ' AND space NOT IN (' . implode(',', $walled) . ')' : '')
+            . ' ORDER BY space = 0 DESC, confidence DESC LIMIT 60')->fetchAll();
         if (!$b) return false;
         $names = array_column($this->app->spaces()->all(), 'name', 'id');
         $fmt = fn(string $k) => implode("\n", array_map(fn($x) => sprintf('- (%s, %.2f%s) %s', $x['status'], $x['confidence'], $x['space'] ? ', only in the space ' . ($names[$x['space']] ?? '?') : '', $x['text']),
@@ -242,6 +294,11 @@ final class Mind
      * from what happened in that space, the space's instructions and its general portrait. Returns false when nothing particular emerges.
      */
     public function reflectSpace(int $space, int $now): bool
+    {
+        return (bool)$this->in($space, fn() => $this->reflectIn($space, $now));
+    }
+
+    private function reflectIn(int $space, int $now): bool
     {
         $s = $this->app->store;
         $sp = $this->app->spaces()->get($space);
@@ -292,13 +349,14 @@ final class Mind
             $after = (int)$s->get('mind_bootstrap', '0');
             $rows = $s->q('SELECT * FROM summaries WHERE id > ? AND merged_into IS NULL ORDER BY id LIMIT 12', [$after])->fetchAll();
             if (!$rows) { $s->set('mind_bootstrap', 'done'); return false; }
-            foreach (array_reduce($rows, function ($g, $r) { $g[(int)$r['space']][] = $r; return $g; }, []) as $group) $this->observeSummaries($group);
+            foreach (array_reduce($rows, function ($g, $r) { $g[(int)$r['space']][] = $r; return $g; }, []) as $sp => $group) $this->in((int)$sp, fn() => $this->observeSummaries($group)); // each read by its own space's model
             $s->set('mind_bootstrap', (string)end($rows)['id']);
             return true;
         }
-        $pending = (int)$s->q('SELECT COUNT(*) FROM mind_obs WHERE processed = 0')->fetchColumn();
+        $groups = $this->pendingGroups(); $pending = array_sum($groups);
         $since = $now - (int)$s->get('mind_consolidated', '0');
-        if ($this->batch()->meta('mind:consolidate') !== null || ($pending > 0 && ($since >= 20 * 3600 || $pending >= 40))) return $this->consolidate($now);
+        $sent = array_filter(array_keys($groups), fn($g) => $this->batch()->meta(self::batchKey($g)) !== null);
+        if ($sent || ($pending > 0 && ($since >= 20 * 3600 || $pending >= 40))) { if ($this->consolidate($now)) return true; }
         $hasBeliefs = (int)$s->q("SELECT COUNT(*) FROM mind_beliefs WHERE status IN ('established', 'emerging')")->fetchColumn() > 0;
         if ($hasBeliefs && $now - (int)$s->get('mind_reflected', '0') >= 7 * 86400 - 3600) return $this->reflect($now);
         if ($s->get('mind_portrait') !== '') { // then each space with enough of its own history, one per call

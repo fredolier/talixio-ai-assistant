@@ -3,6 +3,19 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.39 (2026-10-15)
+
+- **Spaces are walled off more strictly** (Confidential and Secret):
+  - a model reads a level's files, notes and memory only if it may take that level, also from General and inside
+    the space itself (your own searches still find everything);
+  - nothing goes down a level: notes, moves and job reports from a stricter space stay in a folder at least as
+    protected, and the shared memory, contacts and skills refuse it (the space's notes take it instead);
+  - the assistant's learning (Mind) consolidates each Confidential or Secret space on its own, with that space's
+    AI account, and keeps what it learns there;
+  - routines and jobs of a space the model may not read are not listed and cannot be cancelled, continued or
+    archived from elsewhere; a Secret space's folder and activity are not shown outside it;
+  - the provider's own web search is off once the work is above Internal; the heartbeat starts each check fresh.
+
 ## 0.28.38 (2026-10-15)
 
 - **Mistral batch API**: with a Mistral account (main settings or a space's AI account), summaries and the assistant's

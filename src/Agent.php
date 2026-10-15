@@ -482,7 +482,7 @@ final class Agent
         else $history[] = ['role' => 'user', 'content' => $check];
         $before = (int)$store->q('SELECT COALESCE(MAX(id),0) FROM tool_log')->fetchColumn();
         $tools = fn() => array_column($store->q('SELECT tool FROM tool_log WHERE id > ? ORDER BY id', [$before])->fetchAll(), 'tool');
-        Privacy::trustAgain();
+        Privacy::$taint = 0; Privacy::trustAgain(); // a fresh check: what an earlier piece of work read does not carry over
         try {
             [$reply, $meta] = $this->run('heartbeat', 'fast', 'heartbeat', $history);
         } catch (Abort $e) {

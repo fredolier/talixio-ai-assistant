@@ -9,6 +9,8 @@ A space is a separate conversation for one topic: a client, the house, health…
 - Telegram, Signal and email write to *General*; `/space Home` moves them to another space.
 - Each space has a **confidentiality level** (Internal, Confidential, Secret): the shield next
   to its name. See *Privacy / Confidentiality levels*.
+- With one AI account per space, a Confidential or Secret space is walled off: other spaces'
+  models do not read it, and nothing from it is written to a less protected place.
 - Deleting a space keeps its documents in the library (see below).
 
 ## Archive, restore, history
