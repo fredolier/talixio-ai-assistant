@@ -167,6 +167,12 @@ check('web1: an app failure keeps its own message (not a log reference)', $ps['_
 check('web1: push unsubscribe', ($web('/api/push/unsubscribe', ['endpoint' => 'https://push.acme.example/abc'])['ok'] ?? false) === true);
 $nt = $web('/api/notify/test', []);
 check('web1: test notification with no channel', $nt['_code'] === 200 && is_array($nt['results']), json_encode($nt));
+$nl = $web('/api/notifications');
+check('web1: the test notification is in the inbox, unread', ($nl['unread'] ?? 0) >= 1 && array_key_exists('read_at', $nl['notifications'][0] ?? []) && $nl['notifications'][0]['read_at'] === null && ($web('/api/status')['notifications_unread'] ?? 0) === $nl['unread'], json_encode($nl));
+$nr = $web('/api/notifications/read', ['id' => $nl['notifications'][0]['id']]);
+check('web1: one notification read', ($nr['marked'] ?? 0) === 1 && $nr['unread'] === $nl['unread'] - 1, json_encode($nr));
+check('web1: all read', ($web('/api/notifications/read', [])['unread'] ?? 1) === 0);
+check('web1: notifications cleared', ($web('/api/notifications/clear', [])['ok'] ?? false) === true && $web('/api/notifications')['notifications'] === []);
 
 // ---- jobs that do not exist ----
 foreach (['cancel' => [], 'continue' => ['max_usd' => 2, 'effort' => 'low'], 'rerun' => ['tier' => 'fast', 'max_usd' => '1']] as $a => $body) {

@@ -26,18 +26,19 @@ final class Notifier
         $c = $this->app->cfg;
         $results = [];
         $sp = $this->app->spaces()->get($space) ?? $this->app->spaces()->general();
+        $url = '#chat/' . $sp['slug']; // relative to the app (it may live under a prefix)
+        $unread = $this->record($title, $text, $space, $url);
         if ($c->notifyNeutral || $this->app->privacy()->spaceLevel($space) !== 'internal') { // the content stays in the app
             $title = $c->name;
             $text = I18n::t($this->app, 'New message in {space}', ['space' => $space ? $sp['name'] : 'General']);
         }
         if ($space) $title = "{$sp['name']} · $title";
-        $url = '#chat/' . $sp['slug']; // relative to the app (it may live under a prefix)
         $plain = $space && !str_contains($text, $sp['name']) ? "[{$sp['name']}] $text" : $text; // chat apps: say which space it comes from
         foreach ($this->channels() as $ch => $state) {
             if (!in_array($ch, $c->notify, true) || $state !== 'on') { $results[$ch] = in_array($ch, $c->notify, true) ? $state : 'off (TALIXIO_NOTIFY)'; continue; }
             try {
                 Privacy::as('notify', fn() => match ($ch) {
-                    'webpush' => $this->app->webPush()->notify($title, $text, $url),
+                    'webpush' => $this->app->webPush()->notify($title, $text, $url, $unread),
                     'ntfy' => $this->ntfy($title, $text),
                     'telegram' => (new Telegram($c, null))->send($c->telegramAllowed[0], $plain),
                     'email' => $this->app->email()->notify($title, $text, $space ? $sp : null, $url),
@@ -53,6 +54,38 @@ final class Notifier
         }
         return $results;
     }
+
+    /** The in-app inbox keeps every notification, with its full text (it stays in the app); a secret space's only says where to look. Returns the unread count. */
+    private function record(string $title, string $text, int $space, string $url): int
+    {
+        try {
+            if ($space && $this->app->privacy()->spaceLevel($space) === 'secret') $text = I18n::t($this->app, 'New message in {space}', ['space' => $this->app->spaces()->get($space)['name'] ?? '']);
+            $this->app->store->q('INSERT INTO notifications(title, body, url, space, created) VALUES (?, ?, ?, ?, ?)', [mb_substr($title, 0, 300), mb_substr($text, 0, 4000), $url, $space, time()]);
+            $this->app->store->q('DELETE FROM notifications WHERE created < ? OR id <= (SELECT id FROM notifications ORDER BY id DESC LIMIT 1 OFFSET 200)', [time() - 60 * 86400]);
+        } catch (\Throwable $e) {
+            Log::warn("notification inbox: {$e->getMessage()}");
+        }
+        return $this->unread();
+    }
+
+    /** @return list<array{id:int,title:string,body:string,url:string,space:int,created:int,read_at:?int}> newest first */
+    public function inbox(int $limit = 200): array
+    {
+        return array_map(fn($r) => ['id' => (int)$r['id'], 'title' => $r['title'], 'body' => $r['body'], 'url' => $r['url'], 'space' => (int)$r['space'],
+            'created' => (int)$r['created'], 'read_at' => $r['read_at'] === null ? null : (int)$r['read_at']],
+            $this->app->store->q('SELECT * FROM notifications ORDER BY id DESC LIMIT ?', [$limit])->fetchAll());
+    }
+
+    public function unread(): int { return (int)$this->app->store->q('SELECT COUNT(*) FROM notifications WHERE read_at IS NULL')->fetchColumn(); }
+
+    /** Marks one notification read, or all of them ($id null). */
+    public function markRead(?int $id = null): int
+    {
+        return $id === null ? $this->app->store->q('UPDATE notifications SET read_at = ? WHERE read_at IS NULL', [time()])->rowCount()
+            : $this->app->store->q('UPDATE notifications SET read_at = ? WHERE id = ? AND read_at IS NULL', [time(), $id])->rowCount();
+    }
+
+    public function clear(): int { return $this->app->store->q('DELETE FROM notifications')->rowCount(); }
 
     private function ntfy(string $title, string $text): void
     {

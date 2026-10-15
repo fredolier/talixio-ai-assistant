@@ -42,6 +42,7 @@
     <a href="#chat" data-view="chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></svg><span>Chat</span></a>
     <a href="#board" data-view="board"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/><path d="M5.5 8h1.5M11 8h2M17 8h1.5M11 12h2"/></svg><span>Tasks</span></a>
     <a href="#library" data-view="library"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Library</span></a>
+    <a href="#notifications" data-view="notifications" class="secondary"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Notifications</span><b id="notif-count" class="rail-badge" hidden></b></a>
     <a href="#tasks" data-view="tasks" class="secondary"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Routines</span></a>
     <a href="#mail" data-view="mail" class="secondary"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>Mail</span></a>
     <a href="#people" data-view="people" class="secondary"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg><span>People</span></a>
@@ -50,7 +51,7 @@
     <a href="#settings" data-view="settings" class="secondary"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
     <a href="#privacy" data-view="privacy" class="secondary"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></svg><span>Privacy</span></a>
     <a href="#activity" data-view="activity" class="secondary"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Activity</span></a>
-    <button id="more-btn" class="more" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>More</span></button>
+    <button id="more-btn" class="more" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>More</span><b id="more-count" class="rail-badge" hidden></b></button>
     <div class="rail-foot">
       <button id="install-btn" class="btn small primary" type="button" hidden>Install app</button>
       <div id="status" class="status" title="Background worker"><i></i><span>…</span></div>
@@ -531,6 +532,12 @@
       <div class="row wrap"><a class="btn" href="api/privacy/journal.csv" download>Export the journal (CSV)</a><a class="btn" href="api/privacy/register" download>Record of processing (GDPR)</a></div>
     </section>
 
+    <section id="view-notifications" class="view page" hidden>
+      <header class="page-head"><h2>Notifications</h2><p class="muted">What the assistant sent to your phone and other channels: reminders, scheduled tasks, job reports and approvals.</p></header>
+      <div class="notif-bar"><button id="notif-all-read" class="btn small" type="button">Mark all read</button><button id="notif-clear" class="btn small ghost" type="button">Clear</button></div>
+      <ul id="notif-list" class="notif-list"></ul>
+      <p id="notif-empty" class="muted empty" hidden>No notifications yet.</p>
+    </section>
     <section id="view-activity" class="view page" hidden>
       <header class="page-head"><h2>Activity</h2><p class="muted">Spending, model usage and every tool the assistant used. Costs are estimates from list prices.</p></header>
       <div id="budget" class="budget"></div>
@@ -719,6 +726,7 @@
 <datalist id="folder-list"></datalist>
 <div id="more-sheet" class="sheet" hidden>
   <div class="sheet-card more-card" role="dialog" aria-label="More">
+    <a href="#notifications" data-view="notifications">Notifications <b id="more-notif-count" class="badge" hidden></b></a>
     <a href="#tasks" data-view="tasks">Routines</a>
     <a href="#mail" data-view="mail">Mail to handle</a>
     <a href="#people" data-view="people">People</a>

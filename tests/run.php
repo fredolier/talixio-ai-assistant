@@ -707,6 +707,25 @@ $nsp = $app->spaces()->save(['name' => 'Maison']);
 $c->notify = ['signal'];
 $app->notifier()->notify('Job finished', 'Report ready', (int)$nsp['id']);
 check('notifier: says which space a message comes from', str_contains((string)@file_get_contents("$dir/sent.log"), '[Maison] Report ready'));
+$ib = $app->notifier()->inbox();
+check('notifier: the app keeps every notification, newest first, unread', count($ib) >= 2 && $ib[0]['title'] === 'Job finished' && $ib[0]['body'] === 'Report ready'
+    && $ib[0]['space'] === (int)$nsp['id'] && $ib[0]['url'] === '#chat/' . $nsp['slug'] && $ib[0]['read_at'] === null && $ib[1]['title'] === 'Reminder', json_encode(array_slice($ib, 0, 2)));
+$u0 = $app->notifier()->unread();
+check('notifier: one read, then all', $app->notifier()->markRead($ib[0]['id']) === 1 && $app->notifier()->markRead($ib[0]['id']) === 0 && $app->notifier()->unread() === $u0 - 1
+    && $app->notifier()->markRead() === $u0 - 1 && $app->notifier()->unread() === 0);
+$sec = $app->spaces()->save(['name' => 'Vault', 'privacy' => 'secret']);
+$c->notify = [];
+$app->notifier()->notify('Secret thing', 'The code is 1234', (int)$sec['id']);
+$ib = $app->notifier()->inbox(1);
+check('notifier: a secret space keeps only where to look', !str_contains($ib[0]['body'], '1234') && str_contains($ib[0]['body'], 'Vault'), json_encode($ib));
+$app->store->q('UPDATE notifications SET created = ?', [time() - 61 * 86400]);
+$app->notifier()->notify('Fresh', 'New one');
+check('notifier: old notifications go after 60 days', count($app->notifier()->inbox()) === 1);
+for ($i = 0; $i < 205; $i++) $app->notifier()->notify("n$i", 'x');
+check('notifier: the inbox keeps the last 200', count($app->notifier()->inbox(500)) === 200 && $app->notifier()->inbox(1)[0]['title'] === 'n204');
+check('notifier: clear', $app->notifier()->clear() === 200 && $app->notifier()->unread() === 0);
+$app->spaces()->save(['archived' => 1] + $sec, (int)$sec['id']);
+$c->notify = ['signal'];
 $app->spaces()->save(['archived' => 1] + $nsp, (int)$nsp['id']);
 $st0 = $tools->run('spaces', ['action' => 'list']);
 check('spaces tool: lists archived spaces, with when and from where', (bool)preg_match('/Maison.*\[archived \d{4}-\d\d-\d\d \d\d:\d\d from the app\]/', $st0), $st0);

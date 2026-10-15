@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.35 (2026-10-15)
+
+- New **Notifications** page: every notification the assistant sends (reminders, scheduled tasks, job reports,
+  approvals, alerts) is kept in the app with its full text, newest first. A red number in the menu (on phones, on
+  *More*) shows the unread ones; tap one to open its conversation and mark it read, or *Mark all read*, or *Clear*.
+  The last 200 are kept, for 60 days; a Secret space's notifications only say where to look.
+- The number on the app icon now counts unread notifications plus approvals waiting, and goes away once you
+  have read them; opening the page also removes them from the lock screen.
+
 ## 0.28.34 (2026-10-15)
 
 - Tasks: new **Week** view to plan time. An hour grid shows the week with your timed tasks and calendar events;

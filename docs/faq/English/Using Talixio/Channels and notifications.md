@@ -4,6 +4,13 @@
 **Channels** page → *Turn on for this device* (on iPhone: first add it to the Home Screen and
 open it from there). One device at a time; no extra service. *Send a test notification* to check.
 
+## Reading your notifications in the app
+Everything the assistant sends (reminders, scheduled tasks, job reports, approvals, alerts) is also kept in
+the app: **Notifications** in the menu (on a phone: *More* → *Notifications*). A red number shows how many
+are unread; the app icon counts them too, with the approvals waiting. Tap one to open its conversation and
+mark it read, or *Mark all read*. Opening the page also clears them from the phone's lock screen.
+The last 200 are kept, for 60 days. In a Secret space, the list only says where to look.
+
 ## Telegram
 Create a bot with @BotFather, put its token in Settings → Telegram, then message the bot: it replies
 with your id, which you add to the *Allowed chat ids* list.

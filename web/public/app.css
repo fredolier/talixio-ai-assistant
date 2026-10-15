@@ -1171,3 +1171,23 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .space-item.gen-tier:hover{background:transparent}
 .versions{margin-top:14px;border-top:1px solid var(--line);padding-top:8px}.versions summary{cursor:pointer;font-weight:600}.version-row{display:flex;align-items:center;gap:8px;padding:4px 0;flex-wrap:wrap}
 @media (max-width:760px){.board-title .seg{display:flex;max-width:100%;overflow-x:auto;scrollbar-width:none}.board-title .seg::-webkit-scrollbar{display:none}.board-title .seg button{flex:1 0 auto;white-space:nowrap;padding:8px 10px}}
+
+/* notifications */
+.rail a{position:relative}
+.rail-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger);color:#fff;font-size:.7rem;font-weight:700;display:inline-grid;place-items:center;line-height:1}
+.shell.collapsed .rail a .rail-badge,.rail .more .rail-badge{position:absolute;top:2px;right:2px;margin:0;min-width:16px;height:16px;font-size:.62rem;padding:0 4px}
+.rail .more{position:relative}
+.more-card .badge{margin-left:6px;vertical-align:1px}
+.notif-bar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;max-width:760px}
+.notif-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-width:760px}
+.notif a{display:block;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);text-decoration:none}
+.notif a:hover{border-color:var(--accent)}
+.notif.unread a{border-left:3px solid var(--accent);background:var(--accent-soft)}
+.notif-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.notif-head b{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.notif:not(.unread) .notif-head b{font-weight:500}
+.notif-head time{color:var(--muted);font-size:.8rem;white-space:nowrap}
+.notif-space{display:inline-flex;align-items:center;gap:5px;font-size:.78rem;color:var(--muted)}
+.notif-space i{width:8px;height:8px;border-radius:50%}
+.notif-body{margin-top:4px;color:var(--muted);font-size:.9rem;max-height:9.5em;overflow:hidden;overflow-wrap:anywhere}
+.notif-body p{margin:0 0 4px}

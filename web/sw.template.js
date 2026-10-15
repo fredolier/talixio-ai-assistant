@@ -40,7 +40,7 @@ self.addEventListener('push', e => {
     self.registration.showNotification(d.title || 'Talixio', {
       body: d.body || '', icon: ROOT + 'icons/icon-192.png', badge: ROOT + 'icons/badge-96.png', data: { url: d.url || '#chat' }, tag: 'talixio', renotify: true,
     }),
-    self.navigator?.setAppBadge ? self.navigator.setAppBadge().catch(() => {}) : null,
+    self.navigator?.setAppBadge ? (Number.isInteger(d.unread) ? (d.unread > 0 ? self.navigator.setAppBadge(d.unread) : self.navigator.clearAppBadge()) : self.navigator.setAppBadge()).catch(() => {}) : null,
   ]));
 });
 

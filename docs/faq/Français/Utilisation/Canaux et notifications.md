@@ -4,6 +4,14 @@
 Page **Canaux** → *Activer pour cet appareil* (sur iPhone : d'abord l'ajouter à l'écran d'accueil et
 l'ouvrir depuis là). Un appareil à la fois ; aucun service supplémentaire. *Envoyer une notification de test* pour vérifier.
 
+## Lire ses notifications dans l'app
+Tout ce que l'assistant envoie (rappels, tâches planifiées, rapports de travaux, validations, alertes) est aussi
+gardé dans l'app : **Notifications** dans le menu (sur téléphone : *Plus* → *Notifications*). Un nombre rouge
+indique combien sont non lues ; l'icône de l'app les compte aussi, avec les validations en attente. Touchez-en
+une pour ouvrir sa conversation et la marquer comme lue, ou *Tout marquer comme lu*. Ouvrir la page les retire
+aussi de l'écran verrouillé du téléphone. Les 200 dernières sont gardées, pendant 60 jours. Dans un espace
+Secret, la liste dit seulement où regarder.
+
 ## Telegram
 Créez un bot avec @BotFather, mettez son jeton dans Réglages → Telegram, écrivez au bot : il répond
 avec votre identifiant, à mettre dans la liste des identifiants autorisés.

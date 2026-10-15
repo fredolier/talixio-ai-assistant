@@ -255,6 +255,9 @@ final class Web
                 return ['ok' => true];
             })(),
             (bool)preg_match('#^/api/scripts/([\w-]+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->scripts()->delete($mm[1])],
+            $path === '/api/notifications' => ['notifications' => $this->app->notifier()->inbox(), 'unread' => $this->app->notifier()->unread()],
+            $path === '/api/notifications/read' && $m === 'POST' => ['ok' => true, 'marked' => $this->app->notifier()->markRead(isset($b['id']) ? (int)$b['id'] : null), 'unread' => $this->app->notifier()->unread()],
+            $path === '/api/notifications/clear' && $m === 'POST' => ['ok' => true, 'removed' => $this->app->notifier()->clear()],
             $path === '/api/approvals' => ['approvals' => array_map(fn($a) => $a + ['args_decoded' => json_decode($a['args'], true)], $this->app->approvals()->pending())],
             (bool)preg_match('#^/api/approvals/(\d+)/(approve|reject)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) {
                 $before = $this->app->store->maxMessageId();
@@ -502,7 +505,7 @@ final class Web
             'tiers' => array_map(fn(Tier $t) => $t->label(), $c->tiers), 'budget' => $this->app->budget()->status(),
             'embeddings' => $c->embeddings, 'max_parallel_jobs' => $c->maxParallelJobs, 'job_max_usd' => $c->jobMaxUsd, 'job_max_usd_limit' => $c->jobMaxUsdLimit, 'job_effort' => $c->jobEffort,
             'version' => Version::get()['number'], 'version_label' => Version::get()['label'],
-            'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()),
+            'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()), 'notifications_unread' => $this->app->notifier()->unread(),
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store),

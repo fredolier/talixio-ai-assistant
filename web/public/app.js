@@ -317,6 +317,7 @@ function notifyBrowser(m) {
 
 async function poll() {
   if (!state.sending && state.status?.pending_approvals !== undefined) loadApprovals();
+  if (!document.hidden && Date.now() - (state.statusAt || 0) > 30000) refreshStatus(); // new notifications, worker state
   if (state.sending || document.hidden && !('Notification' in window && Notification.permission === 'granted')) return;
   try {
     const looking = !document.hidden && location.hash.split('/')[0] !== '#' && $('#view-chat').hidden === false;
@@ -795,7 +796,7 @@ async function loadApprovals() {
   let list = [];
   try { list = (await api('api/approvals')).approvals; } catch { return; }
   const box = $('#approvals'); box.hidden = !list.length; box.innerHTML = '';
-  setBadge(list.length);
+  state.pendingApprovals = list.length; setBadge();
   for (const a of list) {
     const el = document.createElement('div'); el.className = 'approval';
     el.innerHTML = `<span class="label">Needs your approval · #${a.id}</span>
@@ -3921,7 +3922,7 @@ async function loadActivity() {
 }
 
 // ---- shell ----
-const VIEWS = { chat: null, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity, privacy: loadPrivacy };
+const VIEWS = { chat: null, notifications: loadNotifications, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity, privacy: loadPrivacy };
 function route() {
   const fm = location.hash.match(/^#file\/(\d+)(?:\/p(\d+))?$/); // a document link from a mail
   if (fm) { openCited(+fm[1], +fm[2] || 0); return; }
@@ -3929,7 +3930,7 @@ function route() {
   const v = (h in VIEWS) ? h : 'chat';
   for (const k of Object.keys(VIEWS)) $('#view-' + k).hidden = k !== v;
   document.querySelectorAll('.rail a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
-  $('#more-btn').classList.toggle('active', ['jobs', 'activity', 'settings', 'mail', 'people', 'tasks', 'privacy'].includes(v));
+  $('#more-btn').classList.toggle('active', ['notifications', 'jobs', 'activity', 'settings', 'mail', 'people', 'tasks', 'privacy'].includes(v));
   $('#more-sheet').hidden = true;
   if (v !== 'library') closeViewer();
   if (v !== 'board') { clearTimeout(loadBoard.t); }
@@ -3944,6 +3945,7 @@ function route() {
 
 async function refreshStatus() {
   try {
+    state.statusAt = Date.now();
     const s = state.status = await api('api/status');
     $('#brand-name').textContent = s.name; document.title = s.name;
     const ch = Object.entries(s.channels).filter(([, on]) => on).map(([k]) => k[0].toUpperCase() + k.slice(1)).join(', ');
@@ -3953,6 +3955,7 @@ async function refreshStatus() {
     st.querySelector('span').textContent = s.worker_online ? 'Running' : 'Worker offline';
     st.title = s.worker_online ? 'Background worker is running: schedules and chat apps work.' : 'Background worker is not running: schedules and Telegram are paused. Check: systemctl status talixio-worker';
     for (const el of [$('#app-version'), $('#more-version')]) { el.textContent = 'Talixio ' + s.version; el.title = s.version_label; }
+    if (s.notifications_unread !== state.notifUnread) { state.notifUnread = s.notifications_unread; setBadge(); if (!$('#view-notifications').hidden) loadNotifications(); }
     $('#setup-model').hidden = !s.model_problem;
     $('#setup-claude').hidden = !s.claude_code;
     if (JSON.stringify(s.paused || null) !== $('#paused').dataset.p) { $('#paused').dataset.p = JSON.stringify(s.paused || null); renderPaused(s.paused); }
@@ -4330,11 +4333,37 @@ window.addEventListener('online', () => { onlineState(); poll(); refreshStatus()
 window.addEventListener('offline', onlineState);
 if (!navigator.onLine) onlineState();
 
-/** Badge on the app icon: pending approvals. */
-function setBadge(n) {
+/** Badges: unread notifications in the menu; on the app icon, those plus the approvals waiting. */
+function setBadge() {
+  const u = state.notifUnread || 0, n = u + (state.pendingApprovals || 0);
+  for (const id of ['#notif-count', '#more-count', '#more-notif-count']) { const b = $(id); b.textContent = u > 99 ? '99+' : u; b.hidden = !u; }
   if (!('setAppBadge' in navigator)) return;
   (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
 }
+
+// ---- notifications: everything sent to the phone and the other channels, kept in the app ----
+async function loadNotifications() {
+  const d = await api('api/notifications');
+  state.notifUnread = d.unread; setBadge();
+  navigator.serviceWorker?.getRegistration().then(r => r?.getNotifications()).then(ns => (ns || []).forEach(n => n.close())).catch(() => {}); // seen here: off the lock screen
+  const list = $('#notif-list'); list.innerHTML = '';
+  $('#notif-empty').hidden = d.notifications.length > 0;
+  $('#notif-all-read').disabled = !d.unread; $('#notif-clear').hidden = !d.notifications.length;
+  for (const n of d.notifications) {
+    const sp = n.space ? state.spaces.find(x => x.id === n.space) : null;
+    const li = document.createElement('li'); li.className = 'notif' + (n.read_at ? '' : ' unread');
+    li.innerHTML = `<a href="${esc(n.url)}"><div class="notif-head">${sp ? `<span class="notif-space no-i18n"><i style="background:${esc(sp.color || 'var(--muted)')}"></i>${esc(sp.name)}</span>` : ''}<b class="no-i18n">${esc(n.title)}</b><time datetime="${new Date(n.created * 1000).toISOString()}">${fmtTime(n.created)}</time></div><div class="notif-body md no-i18n">${md(n.body)}</div></a>`;
+    li.querySelector('a').addEventListener('click', () => { if (!n.read_at) post('api/notifications/read', { id: n.id }).then(r => { state.notifUnread = r.unread; setBadge(); }).catch(() => {}); });
+    list.append(li);
+  }
+}
+$('#notif-all-read').onclick = async () => { try { const r = await post('api/notifications/read'); state.notifUnread = r.unread; await loadNotifications(); } catch (e) { toast(e.message); } };
+$('#notif-clear').onclick = async () => {
+  const b = $('#notif-clear');
+  if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Clear all?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Clear'; }, 4000); return; }
+  delete b.dataset.sure; b.textContent = 'Clear';
+  try { await post('api/notifications/clear'); state.notifUnread = 0; await loadNotifications(); } catch (e) { toast(e.message); }
+};
 
 /** Shared from another app, or launched from a shortcut. */
 async function handleLaunch() {

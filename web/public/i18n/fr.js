@@ -2383,5 +2383,11 @@ window.I18N.fr = {
 "{a}: {b}, {c} (was due {d})": "{a} : {b}, {c} (échéance initiale {d})",
 "Nothing booked this week yet.": "Rien de réservé cette semaine pour l'instant.",
 "Nothing booked yet.": "Rien de réservé pour l'instant.",
-"agenda": "agenda"
+"agenda": "agenda",
+"Notifications": "Notifications",
+"What the assistant sent to your phone and other channels: reminders, scheduled tasks, job reports and approvals.": "Ce que l'assistant a envoyé sur votre téléphone et vos autres canaux : rappels, tâches planifiées, rapports de travaux et validations.",
+"Mark all read": "Tout marquer comme lu",
+"Clear": "Effacer",
+"Clear all?": "Tout effacer ?",
+"No notifications yet.": "Aucune notification pour l'instant."
 };
