@@ -637,6 +637,18 @@
     <div class="row wrap"><button id="conn-go" class="btn primary" type="submit">Install</button><button id="conn-close" class="btn" type="button">Close</button></div>
   </form>
 </dialog>
+<dialog id="move-dialog" class="dialog">
+  <form id="move-form" method="dialog" class="fields">
+    <h3 id="move-title">Move a space</h3>
+    <p class="muted small">Everything goes with it: the conversation, tasks and time spent, routines and jobs, instructions and notes, what the assistant learned, and its library folder. It is then removed here (its folder goes to the trash). Its tasks leave your calendar here.</p>
+    <div id="move-to-row"><label for="move-to">To</label><select id="move-to"></select></div>
+    <p id="move-help" class="muted small" hidden>Download the package, then in the other assistant open the space menu → Import a space…. Once it is there, remove it here.</p>
+    <p id="move-state" class="small" role="status"></p>
+    <div class="row wrap"><button id="move-go" class="btn primary" type="submit">Move</button><button id="move-open" class="btn primary" type="button" hidden>Open it there</button><button id="move-download" class="btn" type="button">Download the package</button>
+      <button id="move-remove" class="btn ghost danger" type="button" hidden>Remove it here</button><span class="spacer"></span><button id="move-close" class="btn" type="button">Cancel</button></div>
+  </form>
+</dialog>
+<input id="space-import" type="file" accept=".zip,application/zip" hidden>
 <dialog id="space-dialog" class="dialog">
   <form id="space-form" method="dialog" class="fields">
     <h3 id="space-dialog-title">New space</h3>
@@ -655,7 +667,7 @@
     <textarea id="sp-notes" rows="4"></textarea>
     <p id="sp-history" class="muted small" hidden></p>
     <div class="row wrap"><button class="btn primary" type="submit">Save</button><button id="sp-cancel" class="btn" type="button">Cancel</button>
-      <span class="spacer"></span><button id="sp-archive" class="btn ghost" type="button">Archive</button><button id="sp-delete" class="btn ghost danger" type="button">Delete</button></div>
+      <span class="spacer"></span><button id="sp-move" class="btn ghost" type="button">Move…</button><button id="sp-archive" class="btn ghost" type="button">Archive</button><button id="sp-delete" class="btn ghost danger" type="button">Delete</button></div>
   </form>
 </dialog>
 <dialog id="card-dialog" class="dialog card-dialog" aria-labelledby="cd-title" tabindex="-1">

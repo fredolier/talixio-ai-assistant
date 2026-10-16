@@ -3,6 +3,17 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.43 (2026-10-16)
+
+- **Move a space to another assistant**: space card → *Move…*, pick one of your linked assistants. The browser
+  carries the whole space there (conversation and summaries, instructions, notes, settings, tasks with their
+  dependencies, history and time, routines and jobs, what the assistant learned, the library folder and the
+  documents it points to), then removes it here: the folder goes to the trash, calendar entries are withdrawn, chat
+  apps go back to *General*. Name, task code or folder already taken there get a free one; renumbered tasks keep
+  their old codes. The AI account and its keys never travel. Without a link (or to another server): *Download the
+  package*, *Import a space…* from the space menu on the other side, then *Remove it here*. The transfer uses a
+  one-time ticket valid 10 minutes, accepted only from a linked assistant's page; a sign-in ticket cannot be used for it.
+
 ## 0.28.42 (2026-10-15)
 
 - **Task filters, reworked**: the endless row of tags is replaced by one filter bar shared by the Today, Board,

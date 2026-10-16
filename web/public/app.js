@@ -403,9 +403,11 @@ $('#space-btn').onclick = async e => {
       : `<label class="space-item gen-tier">${esc(t('Model for General'))} ${tierSelect(spaceOf(0)?.tier || 'standard', t('Model for General'))}</label>`
         + (state.aiAccounts?.length ? `<label class="space-item gen-tier gen-account">${esc(t('AI account'))} <select class="tier-select" aria-label="${esc(t('AI account'))}">${accountOptions(spaceOf(0)?.account || '')}</select></label>` : ''))
     + '<button class="space-item" type="button" data-act="new">+ New space</button>'
+    + '<button class="space-item" type="button" data-act="import">Import a space…</button>'
     + (archived.length ? `<details><summary class="muted small" style="padding:6px 10px">Archived (${archived.length})</summary>${archived.map(item).join('')}</details>` : '');
   menu.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { menu.hidden = true; switchSpace(+b.dataset.id); });
   menu.querySelector('[data-act=new]').onclick = () => { menu.hidden = true; openSpaceEditor(null); };
+  menu.querySelector('[data-act=import]').onclick = () => { menu.hidden = true; $('#space-import').value = ''; $('#space-import').click(); };
   menu.querySelector('[data-act=edit]')?.addEventListener('click', () => { menu.hidden = true; openSpaceEditor(spaceOf(state.space)); });
   menu.querySelector('.gen-tier')?.addEventListener('click', e => e.stopPropagation());
   menu.querySelector('.gen-account select')?.addEventListener('change', async e => {
@@ -434,7 +436,8 @@ document.addEventListener('click', e => { if (!e.target.closest('.space-head')) 
 function spaceEvent(e) {
   const what = { created: t('space created'), renamed: t('renamed (was {name})', { name: e.detail || '' }), archived: t('archived'), restored: t('restored'),
     privacy: t('confidentiality: {level}', { level: t(LEVELS[e.detail]?.label || e.detail || '') }), folder: t('folder: {folder}', { folder: e.detail || '/' }),
-    account: t('AI account: {name}', { name: e.detail === 'main settings' ? t('the main settings') : e.detail || '' }) }[e.what] || e.what;
+    account: t('AI account: {name}', { name: e.detail === 'main settings' ? t('the main settings') : e.detail || '' }),
+    moved: t('moved from {name}', { name: e.detail || '' }) }[e.what] || e.what;
   return `${what} ${new Date(e.ts * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} (${e.by === 'assistant' ? t('by the assistant') : t('in the app')})`;
 }
 
@@ -463,7 +466,8 @@ async function openSpaceEditor(sp, prefill = {}) {
     $('#sp-privacy').querySelectorAll('[data-l]').forEach(b => b.onclick = () => { level = b.dataset.l; paintLevel(); });
   };
   paintLevel();
-  $('#sp-archive').hidden = $('#sp-delete').hidden = !editing;
+  $('#sp-archive').hidden = $('#sp-delete').hidden = $('#sp-move').hidden = !editing;
+  $('#sp-move').onclick = () => { d.close(); openMoveDialog(sp); };
   $('#sp-archive').textContent = editing && sp.archived ? t('Restore') : t('Archive'); $('#sp-archive').dataset.confirm = '';
   const hist = editing ? (sp.history || []) : [];
   $('#sp-history').hidden = !hist.length;
@@ -497,6 +501,91 @@ async function openSpaceEditor(sp, prefill = {}) {
   d.showModal();
   if (prefill.privacy) $('#sp-privacy').scrollIntoView({ block: 'center' }); else $('#sp-name').focus();
 }
+
+/** A space's package (.zip): everything about it, for another assistant. */
+async function spacePackage(id) {
+  const res = await fetch(`api/spaces/${id}/export`, { credentials: 'same-origin', headers: { 'X-Talixio': '1' } });
+  if (res.status === 401) { showLogin(); throw new Error(t('Please sign in.')); }
+  if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(t(data.error || `Request failed (${res.status})`)); }
+  const name = (res.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)/)?.[1] || `space-${id}.zip`;
+  return { blob: await res.blob(), name };
+}
+function saveBlob({ blob, name }) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+/** Move a space to another of the person's assistants (sent from this page), or by a downloaded package. */
+function openMoveDialog(sp) {
+  const d = $('#move-dialog'), list = state.assistants || [];
+  let pkg = null, done = false;
+  const say = (msg, bad = false) => { $('#move-state').textContent = msg; $('#move-state').classList.toggle('danger', bad); };
+  $('#move-title').textContent = t('Move “{name}”', { name: sp.name });
+  $('#move-to').innerHTML = list.map(a => `<option class="no-i18n" value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
+  $('#move-to-row').hidden = $('#move-go').hidden = !list.length;
+  $('#move-help').hidden = !!list.length;
+  $('#move-open').hidden = $('#move-remove').hidden = true; $('#move-download').hidden = false; $('#move-go').disabled = false;
+  $('#move-remove').dataset.confirm = ''; $('#move-remove').textContent = t('Remove it here');
+  $('#move-close').textContent = t('Cancel');
+  say('');
+  const pack = async () => pkg ||= await spacePackage(sp.id);
+  const finished = async () => {
+    done = true;
+    $('#move-go').hidden = $('#move-download').hidden = $('#move-remove').hidden = true; $('#move-to-row').hidden = true;
+    $('#move-close').textContent = t('Close');
+    await loadSpaces(); if (state.space === sp.id) await switchSpace(0);
+  };
+  $('#move-download').onclick = async () => {
+    try { say(t('Packing the space…')); saveBlob(await pack()); say(t('Downloaded. Import it in the other assistant, then remove it here.')); $('#move-remove').hidden = false; }
+    catch (err) { say(err.message, true); }
+  };
+  $('#move-remove').onclick = async e => {
+    const b = e.currentTarget;
+    if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Is it in the other assistant? Remove it here'); return; }
+    try { await post(`api/spaces/${sp.id}/moved`); await finished(); say(t('Removed here. Its folder is in the trash.')); }
+    catch (err) { say(err.message, true); }
+  };
+  $('#move-form').onsubmit = async e => {
+    e.preventDefault();
+    const to = $('#move-to').value, name = list.find(a => a.id === to)?.name || to;
+    $('#move-go').disabled = true;
+    let got;
+    try {
+      say(t('Packing the space…')); await pack();
+      say(t('Sending it to {name}…', { name }));
+      const tk = await post(`api/spaces/${sp.id}/move-ticket`, { to });
+      let res;
+      try { res = await fetch(tk.url + '?t=' + encodeURIComponent(tk.t), { method: 'POST', headers: { 'X-Talixio': '1', 'Content-Type': 'application/zip' }, body: pkg.blob }); }
+      catch { throw new Error(t('{name} could not be reached from this page. Download the package and import it there instead.', { name })); }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(t(data.error || `Request failed (${res.status})`));
+      got = data.space;
+    } catch (err) { say(err.message, true); $('#move-go').disabled = false; $('#move-download').hidden = false; return; }
+    try { await post(`api/spaces/${sp.id}/moved`); }
+    catch (err) { await loadSpaces(); say(t('It is now in {name}, but could not be removed here: {error}. Delete it here yourself.', { name, error: err.message }), true); $('#move-go').hidden = true; return; }
+    await finished();
+    const m = got.moved || {};
+    say(t('Moved to {name} as “{space}”: {messages} messages, {tasks} tasks, {files} documents.', { name, space: got.name, messages: m.messages || 0, tasks: m.tasks || 0, files: m.files || 0 })
+      + (m.code_changed ? ' ' + t('Its task code is now {code} (the old codes still work there).', { code: got.code }) : '')
+      + (m.folder_changed ? ' ' + t('Its folder is {folder}.', { folder: got.folder }) : ''));
+    $('#move-open').hidden = false; $('#move-open').onclick = () => openAssistant(to);
+  };
+  $('#move-close').onclick = () => d.close();
+  d.onclose = () => { if (!done) pkg = null; };
+  d.showModal();
+}
+$('#space-import').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  toast(t('Importing {name}…', { name: f.name }));
+  try {
+    const res = await fetch('api/spaces/import', { method: 'POST', credentials: 'same-origin', headers: { 'X-Talixio': '1', 'Content-Type': 'application/zip' }, body: f });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) { showLogin(); return; }
+    if (!res.ok) throw new Error(t(data.error || `Request failed (${res.status})`));
+    await loadSpaces(); location.hash = '#chat'; await switchSpace(data.space.id);
+    toast(t('Space “{name}” imported: {messages} messages, {tasks} tasks, {files} documents.', { name: data.space.name, messages: data.space.moved?.messages || 0, tasks: data.space.moved?.tasks || 0, files: data.space.moved?.files || 0 }));
+  } catch (err) { toast(err.message); }
+};
 
 // ---- confidentiality: what leaves the server ----
 const SHIELD_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></svg>';

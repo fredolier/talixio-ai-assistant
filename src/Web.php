@@ -21,7 +21,8 @@ final class Web
             header('Cache-Control: no-cache');
             header('Content-Type: text/html; charset=utf-8');
             // previews of documents run in sandboxed srcdoc frames that inherit this policy: no inline scripts, web pictures and styles allowed
-            header("Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
+            $connect = Links::origins() ? "; connect-src 'self' " . implode(' ', Links::origins()) : ''; // a space moved to another assistant goes there from this page
+            header("Content-Security-Policy: default-src 'self'$connect; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
             header('X-Frame-Options: SAMEORIGIN'); // no other site can frame the app and trick a click (older browsers read this one)
             $html = (string)file_get_contents(dirname(__DIR__) . '/web/public/app.html');
             $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '">', $html, 1); // the interface language (i18n.js)
@@ -36,6 +37,7 @@ final class Web
             (new Transfer($this->app))->export((string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? '')), !empty($_GET['final']), (string)($_GET['to'] ?? ''));
             return;
         }
+        if ($path === '/api/spaces/receive') { $this->receiveSpace($method); return; } // a space moved from another assistant: its ticket, no session here
         if ($path === '/api/google/callback' && $method === 'GET') { $this->googleCallback(); return; } // Google's redirect carries no session cookie (SameSite)
         if ($path === '/api/microsoft/callback' && $method === 'GET') { $this->microsoftCallback(); return; }
         if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
@@ -44,13 +46,16 @@ final class Web
         $this->startSession();
         try {
             if ($method === 'POST' && ($_SERVER['HTTP_X_TALIXIO'] ?? '') !== '1') $this->fail(403, 'missing request header');
-            $body = json_decode((string)file_get_contents('php://input'), true) ?: [];
+            $package = $path === '/api/spaces/import' && $method === 'POST'; // a .zip, read as a stream below
+            $body = $package ? [] : (json_decode((string)file_get_contents('php://input'), true) ?: []);
             if ($path === '/api/login' && $method === 'POST') { $this->login((string)($body['password'] ?? ''), (string)($body['code'] ?? '')); return; }
             if (empty($_SESSION['ok']) || ($_SESSION['gen'] ?? '') !== $this->auth()->generation()) $this->fail(401, 'Please sign in.');
             session_write_close(); // don't hold the session lock during long model calls
             if ($method === 'GET') Shares::remember($this->app); // the address for links sent outside: only as seen by the signed-in user, never by a stranger's Host header
             if ($path === '/api/chat' && $method === 'POST' && !empty($body['stream'])) { $this->chatStream($body); return; }
             if ($path === '/api/files' && $method === 'POST') { $this->json($this->upload()); return; }
+            if ($package) { $this->json(['space' => $this->importSpace('file')]); return; }
+            if (preg_match('#^/api/spaces/(\d+)/export$#', $path, $fm) && $method === 'GET') { $this->exportSpace((int)$fm[1]); return; }
             // the file name at the end of the URL keeps its extension in the address bar, tabs and "save as"
             if (preg_match('#^/api/files/(\d+)(?:/file/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1], !empty($_GET['download'])); return; }
             if (preg_match('#^/api/files/(\d+)/view(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveView((int)$fm[1]); return; }
@@ -123,6 +128,9 @@ final class Web
             (bool)preg_match('#^/api/accounts/([a-z0-9-]+)$#', $path, $mm) && $m === 'POST' => ['account' => $this->app->accounts()->save($b, $mm[1])],
             (bool)preg_match('#^/api/accounts/([a-z0-9-]+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->accounts()->delete($mm[1]); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/spaces/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->spaces()->delete((int)$mm[1]); return ['ok' => true]; })(),
+            (bool)preg_match('#^/api/spaces/(\d+)/move-ticket$#', $path, $mm) && $m === 'POST' => $this->app->spaces()->get((int)$mm[1]) && (int)$mm[1] ? $this->app->links()->importTicket((string)($b['to'] ?? ''))
+                : throw new \InvalidArgumentException('no such space'),
+            (bool)preg_match('#^/api/spaces/(\d+)/moved$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { (new SpaceMove($this->app))->remove((int)$mm[1]); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/spaces/(\d+)/read$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->spaces()->markRead((int)$mm[1]); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/messages/(\d+)/undo$#', $path, $mm) && $m === 'POST' => $this->undoTurn((int)$mm[1]),
             $path === '/api/chat/stop' && $m === 'POST' => (function () use ($s) { $s->set('chat_stop', (string)microtime(true)); return ['ok' => true]; })(),
@@ -1274,6 +1282,54 @@ final class Web
         }
         session_write_close();
         header('Location: ' . Config::basePath() . '/', true, 303);
+    }
+
+    // ---- moving a space to another assistant (SpaceMove) ----
+
+    private function exportSpace(int $id): void
+    {
+        set_time_limit(0);
+        try { $tmp = (new SpaceMove($this->app))->export($id); }
+        catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+        $name = 'space-' . Spaces::slug((string)$this->app->spaces()->get($id)['name']) . '-' . date('Y-m-d') . '.zip';
+        try { self::sendPath($tmp, 'application/zip', self::disposition('attachment', $name), "default-src 'none'; sandbox", false); }
+        finally { @unlink($tmp); }
+    }
+
+    /** The request's body (a space package) into a temp file, never whole in memory. */
+    private function importSpace(string $by): array
+    {
+        set_time_limit(0);
+        $tmp = tempnam(sys_get_temp_dir(), 'tlxin');
+        try {
+            $in = fopen('php://input', 'rb'); $out = fopen($tmp, 'wb');
+            $n = stream_copy_to_stream($in, $out);
+            fclose($in); fclose($out);
+            if (!$n) throw new \InvalidArgumentException('This is not a space package (.zip).');
+            return (new SpaceMove($this->app))->import($tmp, $by);
+        } finally { @unlink($tmp); }
+    }
+
+    /** POST /api/spaces/receive?t=: the browser hands over a space from a linked assistant (its page is another origin). */
+    private function receiveSpace(string $method): void
+    {
+        $origin = strtolower(rtrim((string)($_SERVER['HTTP_ORIGIN'] ?? ''), '/'));
+        if ($origin !== '' && in_array($origin, Links::origins(), true)) {
+            header("Access-Control-Allow-Origin: $origin"); header('Vary: Origin');
+            header('Access-Control-Allow-Methods: POST'); header('Access-Control-Allow-Headers: X-Talixio, Content-Type'); header('Access-Control-Max-Age: 600');
+        }
+        if ($method === 'OPTIONS') { http_response_code(204); return; }
+        ob_start();
+        try {
+            if ($method !== 'POST' || ($_SERVER['HTTP_X_TALIXIO'] ?? '') !== '1') $this->fail(405, 'not here');
+            $from = $this->app->links()->verify((string)($_GET['t'] ?? ''), 'import');
+            if ($from === null) $this->fail(403, 'This transfer has expired or was already used. Try again from the other assistant.');
+            $this->json(['space' => $this->importSpace('app')]);
+        } catch (\InvalidArgumentException $e) {
+            $this->json(['error' => $e->getMessage()], 400);
+        } catch (\Throwable $e) {
+            $this->json(['error' => self::internalError($e)], 500);
+        }
     }
 
     /** After a password change: a fresh session id for this device, marked with the new password generation. */
