@@ -2869,12 +2869,37 @@ function renderGroups(groups) {
     if (g.id === 'search') { const m = document.createElement('div'); m.className = 'meaning'; m.id = 'meaning'; el.querySelector('.fields').prepend(m); loadMeaning(m).catch(e => { m.textContent = e.message; }); }
     if (g.id === 'calendar') el.querySelector('.fields').before($('#google-card'), $('#microsoft-card'));
     if (g.id === 'spotify') el.querySelector('.fields').before($('#spotify-card'));
+    for (const [gid, key] of [['email', 'TALIXIO_SMTP_AUTH'], ['mailbox', 'TALIXIO_MAILBOX_AUTH']]) {
+      const f = g.id === gid && el.querySelector(`.field[data-key="${key}"]`);
+      if (f) { f.after(msMailRow(gid)); f.querySelector('select')?.addEventListener('change', showMsMail); }
+    }
     box.append(el);
   }
   const page = $('#view-settings');
   page.oninput = page.onchange = e => { if (e.target.closest('.set-groups')) setDirty(); };
-  setDirty(); setAccounts();
+  setDirty(); setAccounts(); showMsMail();
   if ($('#set-search').value) setSearch();
+}
+/** "Connect with Microsoft" under a mail group's Sign-in choice: Outlook / Microsoft 365 mail needs OAuth (XOAUTH2), not a password. */
+function msMailRow(purpose) {
+  const r = document.createElement('div'); r.className = 'row wrap ms-mail'; r.dataset.purpose = purpose; r.hidden = true;
+  r.innerHTML = `<button class="btn primary" type="button" data-act="connect">Connect with Microsoft</button>
+    <button class="btn ghost danger" type="button" data-act="disconnect" hidden>Disconnect</button><span class="muted small"></span>`;
+  r.querySelector('[data-act=connect]').onclick = async () => { try { location.href = (await post('api/microsoft/connect', { purpose })).url; } catch (e) { toast(e.message); } };
+  r.querySelector('[data-act=disconnect]').onclick = async () => { try { showMicrosoft(await post('api/microsoft/disconnect', { purpose })); toast('Microsoft account disconnected.'); } catch (e) { toast(e.message); } };
+  return r;
+}
+function showMsMail() {
+  const g = state.microsoft;
+  document.querySelectorAll('.ms-mail').forEach(r => {
+    const sel = r.previousElementSibling?.querySelector('select'), m = g?.mail?.[r.dataset.purpose] || {};
+    r.hidden = sel?.value !== 'microsoft';
+    const c = r.querySelector('[data-act=connect]'), note = r.querySelector('span');
+    c.hidden = !!m.connected; r.querySelector('[data-act=disconnect]').hidden = !m.connected;
+    c.disabled = g ? !g.configured : false;
+    note.innerHTML = m.connected ? `Connected as <span class="no-i18n">${esc(m.email || '?')}</span>. Leave the password empty.`
+      : g && !g.configured ? 'First set up the Microsoft app under Calendar → Outlook / Microsoft 365 (steps 1 to 5).' : 'Save, then connect the mailbox\'s Microsoft account.';
+  });
 }
 async function saveSettings(reset = []) {
   const changes = {};
@@ -3055,6 +3080,7 @@ $('#google-disconnect').onclick = async () => { try { showGoogle(await post('api
 // ---- Outlook (Microsoft Graph) ----
 function showMicrosoft(g) {
   state.setAcc = { ...state.setAcc, outlook: !!g.connected }; setAccounts();
+  state.microsoft = g; showMsMail();
   $('#microsoft-badge').textContent = g.connected ? `· connected${g.email ? ' as ' + g.email : ''}` : g.configured ? '· not connected' : '· not set up';
   $('#microsoft-redirect').textContent = g.redirect;
   $('#microsoft-status').innerHTML = g.connected ? '<p class="small">Reads your Outlook calendar; adds events to it after your approval.</p>' : '';
@@ -4370,24 +4396,40 @@ function route() {
   }
 }
 
-/** The person's other assistants (linked in the admin page): opened signed in, in this tab. */
-function renderAssistants(list = []) {
+/** An assistant's badge: the initials of its identifier ("fred-pro" → FP) on a colour of its own, the same everywhere. */
+function avatarOf(id) {
+  const letters = String(id || '?').split(/[-_.\s]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
+  let h = 0; for (const ch of String(id)) h = (h * 31 + ch.codePointAt(0)) % 360;
+  return { letters, hue: h };
+}
+const avatarHtml = id => { const a = avatarOf(id); return `<span class="avatar no-i18n" style="--h:${a.hue}" aria-hidden="true">${esc(a.letters)}</span>`; };
+const whoHtml = a => `<span class="who"><span class="name no-i18n">${esc(a.name)}</span><span class="aid no-i18n">${esc(a.id)}</span></span>`;
+/** The person's other assistants (linked in the admin page): opened signed in, in this tab. The badge shows which one this is. */
+function renderAssistants(list = [], me = {}) {
+  const mark = $('#brand-mark');
+  if (me.id) {
+    const a = avatarOf(me.id); mark.classList.add('avatar'); mark.style.setProperty('--h', a.hue); mark.textContent = a.letters;
+    mark.title = `${me.name} (${me.id})`;
+  }
+  mark.disabled = !list.length;
+  if (list.length) mark.title = `${me.name || state.status?.name || ''}${me.id ? ` (${me.id})` : ''} · ${t('Switch assistant')}`;
   if (JSON.stringify(list) === JSON.stringify(state.assistants || [])) return;
   state.assistants = list;
   $('#assistant-btn').hidden = !list.length;
   const box = $('#more-assistants'); box.hidden = !list.length;
-  box.innerHTML = list.map(a => `<button class="btn" type="button" data-to="${esc(a.id)}">${esc(t('Open'))} <span class="no-i18n">${esc(a.name)}</span></button>`).join('');
+  box.innerHTML = list.map(a => `<button class="btn" type="button" data-to="${esc(a.id)}">${avatarHtml(a.id)}<span>${esc(t('Open'))} <span class="no-i18n">${esc(a.name)}</span> <span class="muted small no-i18n">${esc(a.id)}</span></span></button>`).join('');
   box.querySelectorAll('[data-to]').forEach(b => b.onclick = () => openAssistant(b.dataset.to));
 }
 async function openAssistant(id) {
   try { location.href = (await post('api/assistants/go', { to: id })).url; } catch (e) { toast(e.message); }
 }
-$('#assistant-btn').onclick = e => {
+$('#assistant-btn').onclick = $('#brand-mark').onclick = e => {
   e.stopPropagation();
   const menu = $('#assistant-menu'), btn = $('#assistant-btn');
   if (!menu.hidden) { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); return; }
-  menu.innerHTML = `<button class="space-item current" role="menuitem" type="button" disabled><span class="name no-i18n">${esc(state.status?.name || '')}</span></button>`
-    + (state.assistants || []).map(a => `<button class="space-item" role="menuitem" type="button" data-to="${esc(a.id)}"><span class="name no-i18n">${esc(a.name)}</span></button>`).join('');
+  const me = state.status?.assistant || {}, cur = { id: me.id || '', name: me.name || state.status?.name || '' };
+  menu.innerHTML = `<button class="space-item current" role="menuitem" type="button" aria-current="true" disabled>${cur.id ? avatarHtml(cur.id) : ''}${whoHtml(cur)}</button>`
+    + (state.assistants || []).map(a => `<button class="space-item" role="menuitem" type="button" data-to="${esc(a.id)}">${avatarHtml(a.id)}${whoHtml(a)}</button>`).join('');
   menu.querySelectorAll('[data-to]').forEach(b => b.onclick = () => { menu.hidden = true; openAssistant(b.dataset.to); });
   menu.hidden = false; btn.setAttribute('aria-expanded', 'true');
 };
@@ -4398,7 +4440,7 @@ async function refreshStatus() {
     state.statusAt = Date.now();
     const s = state.status = await api('api/status');
     $('#brand-name').textContent = s.name; document.title = s.name;
-    renderAssistants(s.assistants);
+    renderAssistants(s.assistants, s.assistant);
     const ch = Object.entries(s.channels).filter(([, on]) => on).map(([k]) => k[0].toUpperCase() + k.slice(1)).join(', ');
     const b = s.budget, lim = b.daily_limit > 0 ? ` · $${b.today.toFixed(2)} of $${b.daily_limit.toFixed(2)} today` : '';
     $('#chat-sub').textContent = `${shortModel(s.model)} · ${ch}${lim}${b.state === 'low' ? ' · budget low' : b.state === 'blocked' ? ' · budget reached' : ''}`;
@@ -4843,8 +4885,13 @@ async function handleLaunch() {
   if (params.has('microsoft')) {
     const g = params.get('microsoft');
     history.replaceState(null, '', './#settings');
-    toast(g === 'connected' ? 'Outlook connected.' : g);
-    if (g === 'connected') setTimeout(() => { showSection('accounts'); $('#microsoft-card').scrollIntoView({ block: 'center' }); }, 600);
+    const forMail = params.get('for');
+    toast(g !== 'connected' ? g : forMail ? 'Microsoft account connected for mail.' : 'Outlook connected.');
+    if (g === 'connected') setTimeout(() => {
+      const group = state.setGroups?.find(x => x.id === forMail);
+      showSection(group ? group.section : 'accounts');
+      (document.querySelector(`.ms-mail[data-purpose="${forMail}"]`) || $('#microsoft-card')).scrollIntoView({ block: 'center' });
+    }, 600);
   }
   if (params.has('mcp')) {
     const g = params.get('mcp');

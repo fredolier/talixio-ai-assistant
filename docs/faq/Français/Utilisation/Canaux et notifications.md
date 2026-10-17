@@ -31,6 +31,18 @@ l'espace et sa couleur, les titres, listes, tableaux et liens du message, et un 
 Pour que les liens et le bouton fonctionnent, l'app doit connaître son adresse : l'ouvrir une fois dans le navigateur suffit
 (ou Réglages → adresse publique). Les e-mails envoyés en votre nom depuis votre boîte restent sobres, sans ce cadre.
 
+## Boîtes Outlook / Microsoft 365
+Microsoft supprime les mots de passe pour SMTP et IMAP (smtp.office365.com, outlook.office365.com) ; beaucoup
+d'organisations les refusent déjà (« 535 5.7.3 Authentication unsuccessful » ou « 5.7.30 »). Connectez-vous
+plutôt avec le compte Microsoft :
+1. Configurez l'application Microsoft sous Réglages → *Calendrier* → *Outlook / Microsoft 365* (étapes 1 à 5),
+   et ajoutez les autorisations déléguées *SMTP.Send* et *IMAP.AccessAsUser.All*.
+2. Dans les réglages e-mail (ceux de l'assistant, ou de votre boîte), *Connexion* → *Compte Microsoft 365 (OAuth)*, enregistrez.
+3. Appuyez sur *Se connecter avec Microsoft* et connectez-vous avec le compte de cette boîte. Laissez le mot de passe vide.
+L'adresse de l'assistant, votre boîte et le calendrier ont chacun leur propre connexion.
+Dans le centre d'administration Microsoft 365, *SMTP authentifié* doit rester activé pour la boîte
+(Utilisateurs → l'utilisateur → Courrier → Gérer les applications de messagerie), même avec cette connexion.
+
 ## ntfy
 Une autre façon de recevoir les notifications : Réglages → *ntfy*, avec un sujet long et aléatoire.
 

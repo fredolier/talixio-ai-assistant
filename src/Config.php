@@ -105,6 +105,7 @@ final class Config
     public string $smtpSecurity = 'auto';       // auto | starttls | tls | none
     public string $smtpUser = '';
     public string $smtpPassword = '';
+    public string $smtpAuth = 'password';       // password | microsoft (OAuth, SMTP and IMAP)
     public string $emailFrom = '';
     public string $emailTo = '';
     /** @var string[] */ public array $emailAllowed = [];
@@ -130,6 +131,7 @@ final class Config
     public string $mailboxSmtpSecurity = 'auto';
     public string $mailboxUser = '';
     public string $mailboxPassword = '';
+    public string $mailboxAuth = 'password';    // password | microsoft
     public string $mailboxFrom = '';
     public string $mailboxDrafts = 'Drafts';
     public string $mailboxSent = 'Sent';
@@ -300,6 +302,7 @@ final class Config
         $c->smtpSecurity = strtolower($e('TALIXIO_SMTP_SECURITY', 'auto'));
         $c->smtpUser = $e('TALIXIO_SMTP_USER');
         $c->smtpPassword = $e('TALIXIO_SMTP_PASSWORD');
+        $c->smtpAuth = strtolower($e('TALIXIO_SMTP_AUTH', 'password'));
         $c->emailFrom = $e('TALIXIO_EMAIL_FROM', $c->smtpUser);
         $c->emailTo = $e('TALIXIO_EMAIL_TO');
         $c->emailAllowed = $list($e('TALIXIO_EMAIL_ALLOWED', $c->emailTo));
@@ -324,6 +327,7 @@ final class Config
         $c->mailboxSmtpSecurity = strtolower($e('TALIXIO_MAILBOX_SMTP_SECURITY', 'auto'));
         $c->mailboxUser = $e('TALIXIO_MAILBOX_USER');
         $c->mailboxPassword = $e('TALIXIO_MAILBOX_PASSWORD');
+        $c->mailboxAuth = strtolower($e('TALIXIO_MAILBOX_AUTH', 'password'));
         $c->mailboxFrom = $e('TALIXIO_MAILBOX_FROM', $c->mailboxUser);
         $c->mailboxDrafts = $e('TALIXIO_MAILBOX_DRAFTS', 'Drafts');
         $c->mailboxSent = $e('TALIXIO_MAILBOX_SENT', 'Sent');

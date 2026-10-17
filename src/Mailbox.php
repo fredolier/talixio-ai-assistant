@@ -12,10 +12,19 @@ final class Mailbox
 
     public function enabled(): bool { return $this->app->cfg->mailboxImapHost !== ''; }
 
-    private function imap(): Imap
+    /** Signed in with the password or the connected Microsoft account. */
+    public function imap(): Imap
     {
         $c = $this->app->cfg;
-        return new Imap($c->mailboxImapHost, $c->mailboxImapPort, $c->mailboxUser, $c->mailboxPassword, 'INBOX', $c->mailboxImapSecurity);
+        [$user, $token] = Microsoft::mailLogin($this->app, 'mailbox', $c->mailboxUser) ?? [$c->mailboxUser, null];
+        return new Imap($c->mailboxImapHost, $c->mailboxImapPort, $user, $c->mailboxPassword, 'INBOX', $c->mailboxImapSecurity, $token);
+    }
+
+    private function smtp(): Smtp
+    {
+        $c = $this->app->cfg;
+        [$user, $token] = Microsoft::mailLogin($this->app, 'mailbox', $c->mailboxUser) ?? [$c->mailboxUser, null];
+        return new Smtp($c->mailboxSmtpHost, $c->mailboxSmtpPort, $c->mailboxSmtpSecurity, $user, $c->mailboxPassword, $token);
     }
 
     /** Recent messages matching simple criteria. */
@@ -118,7 +127,7 @@ final class Mailbox
         [$to, $subject, $headers] = $this->compose($to, $subject, $body, $replyTo);
         $c = $this->app->cfg;
         if ($cc !== '') $headers['Cc'] = $cc;
-        $smtp = new Smtp($c->mailboxSmtpHost, $c->mailboxSmtpPort, $c->mailboxSmtpSecurity, $c->mailboxUser, $c->mailboxPassword);
+        $smtp = $this->smtp();
         $id = $smtp->send($c->mailboxFrom, $to, $subject, $body, $headers, $cc !== '' ? array_map('trim', explode(',', $cc)) : []);
         try {
             $this->imap()->append($this->folder('\\Sent', $c->mailboxSent), Smtp::build($c->mailboxFrom, $to, $subject, $body, $id, $headers), '\\Seen');
@@ -135,7 +144,7 @@ final class Mailbox
     {
         $c = $this->app->cfg;
         $headers = ['Auto-Submitted' => null, 'To' => implode(', ', $to)];
-        $smtp = new Smtp($c->mailboxSmtpHost, $c->mailboxSmtpPort, $c->mailboxSmtpSecurity, $c->mailboxUser, $c->mailboxPassword);
+        $smtp = $this->smtp();
         $id = $smtp->send($c->mailboxFrom, $to[0], $subject, $body, $headers, array_slice($to, 1), null, $parts);
         try {
             $this->imap()->append($this->folder('\\Sent', $c->mailboxSent), Smtp::build($c->mailboxFrom, $to[0], $subject, $body, $id, $headers, null, $parts), '\\Seen');

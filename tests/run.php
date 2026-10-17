@@ -2233,6 +2233,33 @@ $done = $ga->approvals()->decide((int)$ga->approvals()->pending()[0]['id'], true
 $ml = $mlog(); $ins = end($ml['inserted']); $mid = 'm' . count($ml['inserted']);
 check('outlook: recurring event with guests, the days left out deleted', ($ins['recurrence']['pattern']['daysOfWeek'] ?? []) === ['monday'] && ($ins['recurrence']['range']['endDate'] ?? '') === '2026-12-24'
     && count($ins['attendees'] ?? []) === 2 && array_values(array_filter(array_column($ml['deleted'] ?? [], 'id'), fn($i) => str_contains($i, '-'))) === ["$mid-20261102", "$mid-20261207"] && str_contains($done, 'Outlook'), $done . json_encode($ml['deleted'] ?? null) . json_encode($ins));
+// Outlook mail: its own connection, then XOAUTH2 instead of the password for SMTP and IMAP
+$url = $ga->microsoft('email')->authUrl('https://assistant.example/api/microsoft/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+$m0 = $ga->microsoft();
+check('outlook mail: sign-in for SMTP and IMAP kept apart from the calendar', str_contains($q['scope'], 'SMTP.Send') && str_contains($q['scope'], 'IMAP.AccessAsUser.All') && !str_contains($q['scope'], 'Calendars')
+    && $m0->finish('good-code', $q['state']) === 'fred@outlook.com' && $m0->finished === 'email' && (fileperms("$ad/microsoft-email.json") & 0777) === 0600
+    && $ga->microsoft()->tokens()['access_token'] === 'mt-2' && !$ga->microsoft('mailbox')->connected());
+$state = $aj('/api/microsoft', null, 'd');
+check('outlook mail: status for the app per mailbox, no tokens', $state['mail']['email']['connected'] && $state['mail']['email']['email'] === 'fred@outlook.com' && !$state['mail']['mailbox']['connected'] && !str_contains(json_encode($state), 'mt-1'), json_encode($state));
+check('outlook mail: password sign-in unless Microsoft is chosen', \Talixio\Microsoft::mailLogin($ga, 'email', 'x') === null);
+$ga->cfg->smtpAuth = 'microsoft'; $ga->cfg->smtpUser = ''; $ga->cfg->smtpPassword = 'old'; $ga->cfg->smtpHost = '127.0.0.1'; $ga->cfg->smtpSecurity = 'none';
+$port = $freePort(); $log = "$dir/smtp-oauth.log";
+$proc = $spawn('smtp.php', [(string)$port, $log]); $waitPort($port);
+$ga->cfg->smtpPort = $port; $ga->email()->smtp()->check(); proc_close($proc);
+$t = (string)@file_get_contents($log);
+check('outlook mail: SMTP signs in with XOAUTH2 as the connected account', str_contains($t, 'AUTH XOAUTH2 ' . base64_encode("user=fred@outlook.com\x01auth=Bearer mt-1\x01\x01")) && !str_contains($t, 'AUTH PLAIN'), $t);
+$port = $freePort(); $proc = $spawn('smtp.php', [(string)$port, $log]); $waitPort($port);
+try { (new Smtp('127.0.0.1', $port, 'none', 'fred@outlook.com', '', fn() => 'bad-token'))->check(); $err = ''; } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+proc_close($proc);
+check('outlook mail: a refused token gives the server\'s error, not the token', str_contains($err, '535 5.7.3') && !str_contains($err, 'bad-token'), $err);
+$idir = "$dir/imap-oauth"; @mkdir($idir);
+$port = $freePort(); $proc = $spawn('imap.php', [(string)$port, $idir]); $waitPort($port);
+$ga->cfg->imapHost = '127.0.0.1'; $ga->cfg->imapPort = $port; $ga->cfg->imapUser = 'bot@outlook.com'; $ga->cfg->imapSecurity = 'none';
+$n = count($ga->email()->imap()->fetchUnseen(0));
+try { (new Imap('127.0.0.1', $port, 'bot@outlook.com', '', 'INBOX', 'none', fn() => 'bad-token'))->fetchUnseen(0); $err = ''; } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+proc_terminate($proc); proc_close($proc);
+check('outlook mail: IMAP signs in with AUTHENTICATE XOAUTH2, a refusal reported', $n === 0 && str_contains((string)@file_get_contents("$idir/auth.log"), "user=bot@outlook.com\x01auth=Bearer mt-1") && str_contains($err, 'AUTHENTICATE failed') && !str_contains($err, 'bad-token'), $err);
+$ga->microsoft('email')->disconnect();
 $ga->microsoft()->disconnect();
 check('outlook: disconnect forgets the tokens', !$ga->microsoft()->connected() && !is_file("$ad/microsoft.json"));
 putenv('TALIXIO_MICROSOFT_LOGIN_BASE'); putenv('TALIXIO_MICROSOFT_API_BASE');

@@ -30,6 +30,18 @@ the space and its color, the message's headings, lists, tables and links, and a 
 For the links and the button to work, the app must know its address: opening it once in the browser is enough
 (or Settings → *Public address*). Emails sent on your behalf from your mailbox stay plain, without this frame.
 
+## Outlook / Microsoft 365 mailboxes
+Microsoft is turning off passwords for SMTP and IMAP (smtp.office365.com, outlook.office365.com); many
+tenants already refuse them ("535 5.7.3 Authentication unsuccessful" or "5.7.30"). Sign in with the
+Microsoft account instead:
+1. Set up the Microsoft app under Settings → *Calendar* → *Outlook / Microsoft 365* (steps 1 to 5), and
+   add the delegated permissions *SMTP.Send* and *IMAP.AccessAsUser.All*.
+2. In the email settings (the assistant's, or your mailbox's), *Sign-in* → *Microsoft 365 account (OAuth)*, save.
+3. Press *Connect with Microsoft* and sign in with that mailbox's account. Leave the password empty.
+The assistant's address, your mailbox and the calendar each have their own connection.
+In the Microsoft 365 admin center, *Authenticated SMTP* must stay enabled for the mailbox
+(Users → the user → Mail → Manage email apps), even with this sign-in.
+
 ## ntfy
 Another way to receive notifications: Settings → *Notifications* → *ntfy address*, with a long, random topic.
 

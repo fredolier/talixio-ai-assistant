@@ -9,9 +9,10 @@ final class Imap
     private $s;
     private int $tag = 0;
 
-    /** @param string $security auto (993 = TLS, 143 = STARTTLS) | tls | starttls | none (local testing only) */
+    /** @param string $security auto (993 = TLS, 143 = STARTTLS) | tls | starttls | none (local testing only)
+     *  @param ?\Closure $token gives an OAuth access token: then AUTHENTICATE XOAUTH2 instead of LOGIN (Microsoft 365) */
     public function __construct(private string $host, private int $port, private string $user, private string $pass,
-                                private string $folder = 'INBOX', private string $security = 'auto') {}
+                                private string $folder = 'INBOX', private string $security = 'auto', private ?\Closure $token = null) {}
 
     /** @return array<int,string> uid => raw RFC 822 message */
     public function fetchUnseen(int $max = 10): array
@@ -142,7 +143,8 @@ final class Imap
             $this->cmd('STARTTLS');
             if (!stream_socket_enable_crypto($s, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT)) throw new \RuntimeException('IMAP STARTTLS failed');
         }
-        $this->cmd('LOGIN ' . self::quote($this->user) . ' ' . self::quote($this->pass), 'LOGIN');
+        if ($this->token) $this->cmd('AUTHENTICATE XOAUTH2 ' . Smtp::xoauth2($this->user, ($this->token)()), 'AUTHENTICATE');
+        else $this->cmd('LOGIN ' . self::quote($this->user) . ' ' . self::quote($this->pass), 'LOGIN');
     }
 
     private function close(): void
@@ -159,6 +161,7 @@ final class Imap
         $resp = '';
         while (($line = fgets($this->s, 65536)) !== false) {
             $resp .= $line;
+            if ($shown === 'AUTHENTICATE' && str_starts_with($line, '+')) { fwrite($this->s, "\r\n"); continue; } // refused: an error in base64, then the tagged NO
             if (preg_match('/\{(\d+)\}\r\n$/', $line, $m)) { // literal: read exactly n bytes
                 $need = (int)$m[1];
                 while ($need > 0 && !feof($this->s)) { $chunk = fread($this->s, min($need, 65536)); $resp .= $chunk; $need -= strlen($chunk); }

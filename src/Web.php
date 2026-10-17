@@ -179,8 +179,8 @@ final class Web
             $path === '/api/google/connect' && $m === 'POST' => ['url' => $this->app->google()->authUrl(Google::redirectUri($this->app->cfg->publicUrl))],
             $path === '/api/google/disconnect' && $m === 'POST' => (function () { $this->app->google()->disconnect(); return $this->googleState(); })(),
             $path === '/api/microsoft' => $this->microsoftState(),
-            $path === '/api/microsoft/connect' && $m === 'POST' => ['url' => $this->app->microsoft()->authUrl(Microsoft::redirectUri($this->app->cfg->publicUrl))],
-            $path === '/api/microsoft/disconnect' && $m === 'POST' => (function () { $this->app->microsoft()->disconnect(); return $this->microsoftState(); })(),
+            $path === '/api/microsoft/connect' && $m === 'POST' => ['url' => $this->app->microsoft((string)($b['purpose'] ?? ''))->authUrl(Microsoft::redirectUri($this->app->cfg->publicUrl))],
+            $path === '/api/microsoft/disconnect' && $m === 'POST' => (function () use ($b) { $this->app->microsoft((string)($b['purpose'] ?? ''))->disconnect(); return $this->microsoftState(); })(),
             $path === '/api/spotify' => $this->spotifyState(),
             $path === '/api/spotify/connect' && $m === 'POST' => ['url' => $this->app->spotify()->authUrl(Spotify::redirectUri($this->app->cfg->publicUrl))],
             $path === '/api/spotify/disconnect' && $m === 'POST' => (function () { $this->app->spotify()->disconnect(); return $this->spotifyState(); })(),
@@ -379,21 +379,23 @@ final class Web
     private function microsoftState(): array
     {
         $ms = $this->app->microsoft(); $t = $ms->tokens();
-        return ['configured' => $ms->configured(), 'connected' => $ms->connected(), 'email' => $t['email'] ?? '', 'redirect' => Microsoft::redirectUri($this->app->cfg->publicUrl)];
+        $mail = [];
+        foreach (['email', 'mailbox'] as $p) { $x = $this->app->microsoft($p); $mail[$p] = ['connected' => $x->connected(), 'email' => $x->tokens()['email'] ?? '']; }
+        return ['configured' => $ms->configured(), 'connected' => $ms->connected(), 'email' => $t['email'] ?? '', 'redirect' => Microsoft::redirectUri($this->app->cfg->publicUrl), 'mail' => $mail];
     }
 
     /** Microsoft sends the user back here after sign-in (the one-time state proves it was started from the app). */
     private function microsoftCallback(): void
     {
-        $msg = 'connected';
+        $msg = 'connected'; $ms = $this->app->microsoft();
         try {
             if (isset($_GET['error'])) throw new \RuntimeException('Microsoft: ' . strtok((string)($_GET['error_description'] ?? $_GET['error']), "\r\n"));
-            $this->app->microsoft()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+            $ms->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
         } catch (\Throwable $e) {
             Log::warn("microsoft: {$e->getMessage()}");
             $msg = $e->getMessage();
         }
-        header('Location: ' . Config::basePath() . '/?microsoft=' . rawurlencode($msg) . '#settings', true, 303);
+        header('Location: ' . Config::basePath() . '/?microsoft=' . rawurlencode($msg) . ($ms->finished !== '' ? '&for=' . $ms->finished : '') . '#settings', true, 303);
     }
 
     /** Tasks board. The app acts as "you" and may change any space's cards. */
@@ -528,7 +530,7 @@ final class Web
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store),
-            'model_problem' => $c->modelProblem(), 'claude_code' => ClaudeLogin::installed($c), 'assistants' => $this->app->links()->list()];
+            'model_problem' => $c->modelProblem(), 'claude_code' => ClaudeLogin::installed($c), 'assistants' => $this->app->links()->list(), 'assistant' => $this->app->links()->current()];
     }
 
     private function channels(): array

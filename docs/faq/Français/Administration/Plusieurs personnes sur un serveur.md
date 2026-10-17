@@ -47,7 +47,11 @@ avec les règles de leur niveau de confidentialité).
   (une seule connexion)…*, puis cochez les assistants qu'il ouvre. Un lien vaut dans les deux sens,
   et les assistants concernés redémarrent.
 - Dans l'application, le nom de l'assistant (en haut à gauche, ou dans *Plus* sur un téléphone)
-  liste les autres. En choisir un l'ouvre dans le même onglet, déjà connecté.
+  liste les autres. En choisir un l'ouvre dans le même onglet, déjà connecté. Menu replié, la
+  pastille ronde en haut ouvre la même liste.
+- Chaque assistant a une pastille colorée avec ses initiales, tirées de son identifiant (`alex-acme`
+  → AA) : mêmes couleur et lettres sur tous les assistants, pour voir d'un coup d'œil où vous êtes.
+  La liste montre le nom et l'identifiant de chaque assistant, l'actuel en premier.
 - Le navigateur transporte un ticket signé pour cet assistant seulement, valable une fois et une
   minute. Les assistants ne se parlent jamais.
 - La connexion au premier assistant compte : le second ne redemande ni son mot de passe ni son

@@ -11,6 +11,11 @@ for ($conn = 0; $conn < 30; $conn++) {
         [$tag, $cmd] = explode(' ', trim($line), 2) + [1 => ''];
         $up = strtoupper($cmd);
         if (str_starts_with($up, 'LOGIN')) fwrite($c, "$tag OK logged in\r\n");
+        elseif (str_starts_with($up, 'AUTHENTICATE XOAUTH2 ')) {
+            file_put_contents("$dir/auth.log", base64_decode(substr($cmd, 20)) . "\n", FILE_APPEND);
+            if (str_contains(base64_decode(substr($cmd, 20)), 'Bearer bad')) { fwrite($c, "+ eyJzdGF0dXMiOiI0MDEifQ==\r\n"); fgets($c); fwrite($c, "$tag NO AUTHENTICATE failed\r\n"); }
+            else fwrite($c, "$tag OK authenticated\r\n");
+        }
         elseif (str_starts_with($up, 'SELECT') || str_starts_with($up, 'EXAMINE')) fwrite($c, "* " . count($files) . " EXISTS\r\n$tag OK selected\r\n");
         elseif (str_starts_with($up, 'UID SEARCH')) { file_put_contents("$dir/search.log", $cmd . "\n", FILE_APPEND); fwrite($c, "* SEARCH " . implode(' ', $files ? range(1, count($files)) : []) . "\r\n$tag OK done\r\n"); }
         elseif (preg_match('/^UID FETCH (\d+)/', $up, $m)) {

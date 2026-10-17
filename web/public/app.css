@@ -452,13 +452,24 @@ tr:last-child td{border-bottom:0}
 .shell.collapsed{grid-template-columns:64px 1fr}
 .shell.collapsed .rail{padding:18px 8px;align-items:center}
 .shell.collapsed .brand{flex-direction:column;padding:0 0 14px;gap:12px}
-.shell.collapsed .brand span,.shell.collapsed .rail a span,.shell.collapsed #logout span,.shell.collapsed .status span,.shell.collapsed #install-btn{display:none}
+.shell.collapsed .brand>span,.shell.collapsed .rail a span,.shell.collapsed #logout span,.shell.collapsed .status span,.shell.collapsed #install-btn{display:none}
 .shell.collapsed .rail-toggle{margin:0}
 .assistant-btn{border:0;background:transparent;color:var(--muted);padding:3px;border-radius:6px;cursor:pointer;display:grid;place-items:center;flex:none}
 .assistant-btn:hover,.assistant-btn[aria-expanded=true]{background:var(--sunk);color:var(--ink)}
 .assistant-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2}
 .assistant-menu{top:calc(100% - 8px);width:240px;font-family:var(--sans);font-size:.95rem;font-weight:400}
 .shell.collapsed .assistant-btn{display:none}
+.shell.collapsed .assistant-menu{top:0;left:calc(100% + 10px)}
+button.mark{border:0;padding:0;flex:none;cursor:pointer;display:grid;place-items:center}
+button.mark:disabled{cursor:default}
+.avatar{display:inline-grid;place-items:center;flex:none;width:28px;height:28px;border-radius:9px;background:hsl(var(--h,250) 52% 44%);color:#fff;font:600 .78rem/1 var(--sans);letter-spacing:.03em}
+.mark.avatar{width:28px;height:28px}
+.mark.avatar:not(:disabled):hover{box-shadow:0 0 0 3px var(--accent-soft)}
+.assistant-menu .avatar{width:26px;height:26px;border-radius:8px;font-size:.7rem}
+.assistant-menu .who{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.assistant-menu .aid{color:var(--muted);font-size:.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.assistant-menu .space-item.current{cursor:default}
+.more-assistants .btn{display:flex;align-items:center;gap:10px;text-align:left}
 .more-assistants{display:flex;flex-direction:column;gap:6px;padding-bottom:10px;border-bottom:1px solid var(--line)}
 .shell.collapsed .rail-toggle svg{transform:scaleX(-1)}
 .shell.collapsed .rail a{justify-content:center;width:44px;height:40px;padding:0}

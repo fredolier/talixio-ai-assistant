@@ -46,7 +46,11 @@ confidentiality level).
 - On the admin page: the person's assistant → Actions → *Their other assistants (one sign-in)…*,
   then tick the assistants it opens. A link works both ways, and the affected assistants restart.
 - In the app, the assistant's name (top left, or in *More* on a phone) lists the others. Choosing
-  one opens it in the same tab, already signed in.
+  one opens it in the same tab, already signed in. With the menu folded, the round badge at the top
+  opens the same list.
+- Each assistant has a coloured badge with its initials, taken from its id (`alex-acme` → AA): the
+  same colour and letters on every assistant, so you can tell at a glance which one you are in.
+  The list shows each assistant's name and id, the current one first.
 - The browser carries a ticket signed for that assistant only, valid once and for one minute. The
   assistants never talk to each other.
 - The sign-in to the first assistant counts: the second one does not ask again for its password or

@@ -6,19 +6,37 @@ namespace Talixio;
  * Outlook / Microsoft 365 calendar through Microsoft Graph (your own app, registered in Microsoft Entra):
  * reads your main calendar, adds events to it after your approval and keeps the tasks shown in the calendar there.
  * Tokens are kept in data/microsoft.json (private); "Disconnect" deletes them.
+ * The same app also signs in to a mailbox for SMTP and IMAP (OAuth, where Microsoft no longer takes passwords):
+ * one connection per purpose, 'email' (the assistant's own) and 'mailbox' (yours), in data/microsoft-<purpose>.json.
  */
 final class Microsoft
 {
     public const SCOPES = 'offline_access openid email User.Read Calendars.ReadWrite';
+    public const MAIL_SCOPES = 'offline_access openid email https://outlook.office.com/SMTP.Send https://outlook.office.com/IMAP.AccessAsUser.All';
+    public const PURPOSES = ['', 'email', 'mailbox'];
     /** Marks the events made for tasks (a named property of the event, invisible in Outlook). */
     private const TASK_PROP = 'String {00020329-0000-0000-C000-000000000046} Name talixioTask';
 
-    public function __construct(private App $app) {}
+    /** $purpose: '' for the calendar, or the mail connection ('email', 'mailbox'). */
+    public function __construct(private App $app, private string $purpose = '')
+    {
+        if (!in_array($purpose, self::PURPOSES, true)) throw new \InvalidArgumentException('Unknown Microsoft connection');
+    }
+
+    private function scopes(): string { return $this->purpose === '' ? self::SCOPES : self::MAIL_SCOPES; }
+
+    /** SMTP/IMAP sign-in for $purpose when its settings ask for the Microsoft account: the user and a token source. */
+    public static function mailLogin(App $app, string $purpose, string $user): ?array
+    {
+        if (($purpose === 'email' ? $app->cfg->smtpAuth : $app->cfg->mailboxAuth) !== 'microsoft') return null;
+        $ms = new self($app, $purpose);
+        return [$user !== '' ? $user : (string)($ms->tokens()['email'] ?? ''), fn() => $ms->accessToken()];
+    }
 
     public function configured(): bool { return $this->app->cfg->microsoftClientId !== '' && $this->app->cfg->microsoftClientSecret !== ''; }
     public function connected(): bool { return $this->configured() && ($this->tokens()['refresh_token'] ?? '') !== ''; }
 
-    private function file(): string { return $this->app->cfg->dataDir . '/microsoft.json'; }
+    private function file(): string { return $this->app->cfg->dataDir . ($this->purpose === '' ? '/microsoft.json' : "/microsoft-{$this->purpose}.json"); }
     public function tokens(): array { return json_decode((string)@file_get_contents($this->file()), true) ?: []; }
 
     private function saveTokens(array $t): void
@@ -43,18 +61,29 @@ final class Microsoft
     {
         if (!$this->configured()) throw new \InvalidArgumentException('Fill in the Microsoft application ID and secret first (Settings → Calendar).');
         $state = bin2hex(random_bytes(16));
-        $this->app->store->set('microsoft_state', json_encode(['state' => $state, 'ts' => time(), 'redirect' => $redirect]));
+        $this->app->store->set('microsoft_state', json_encode(['state' => $state, 'ts' => time(), 'redirect' => $redirect, 'purpose' => $this->purpose]));
         return $this->login('authorize') . '?' . http_build_query(['client_id' => $this->app->cfg->microsoftClientId, 'redirect_uri' => $redirect,
-            'response_type' => 'code', 'response_mode' => 'query', 'scope' => self::SCOPES, 'prompt' => 'select_account', 'state' => $state]);
+            'response_type' => 'code', 'response_mode' => 'query', 'scope' => $this->scopes(), 'prompt' => 'select_account', 'state' => $state]);
     }
 
-    /** Back from Microsoft: check the state, trade the code for tokens. */
+    /** The connection the last sign-in was started for (set by finish()). */
+    public string $finished = '';
+
+    /** Back from Microsoft: check the state, trade the code for tokens (kept for the connection the sign-in was started for). */
     public function finish(string $code, string $state): string
     {
         $saved = json_decode($this->app->store->get('microsoft_state'), true);
         $this->app->store->set('microsoft_state', '');
         if (!is_array($saved) || !hash_equals((string)$saved['state'], $state) || $saved['ts'] < time() - 900) throw new \InvalidArgumentException('This sign-in link expired. Press "Connect" again.');
-        $t = $this->token(['grant_type' => 'authorization_code', 'code' => $code, 'redirect_uri' => $saved['redirect'], 'scope' => self::SCOPES]);
+        $for = in_array($saved['purpose'] ?? '', self::PURPOSES, true) ? (string)($saved['purpose'] ?? '') : '';
+        if ($for !== $this->purpose) { $other = new self($this->app, $for); $email = $other->finishWith($code, $saved['redirect']); $this->finished = $for; return $email; }
+        $this->finished = $for;
+        return $this->finishWith($code, $saved['redirect']);
+    }
+
+    private function finishWith(string $code, string $redirect): string
+    {
+        $t = $this->token(['grant_type' => 'authorization_code', 'code' => $code, 'redirect_uri' => $redirect, 'scope' => $this->scopes()]);
         if (empty($t['refresh_token'])) throw new \RuntimeException('Microsoft gave no lasting access: check that the app asks for offline_access, then connect again.');
         $email = '';
         if (!empty($t['id_token']) && count($p = explode('.', $t['id_token'])) === 3) {
@@ -75,18 +104,19 @@ final class Microsoft
             http_build_query($params + ['client_id' => $this->app->cfg->microsoftClientId, 'client_secret' => $this->app->cfg->microsoftClientSecret]), 30);
         $d = json_decode($body, true) ?: [];
         if ($code >= 400) {
-            if (($d['error'] ?? '') === 'invalid_grant') throw new \RuntimeException('Outlook access was revoked or expired (or the app secret expired): connect Outlook again in Settings.');
+            if (($d['error'] ?? '') === 'invalid_grant') throw new \RuntimeException($this->purpose === '' ? 'Outlook access was revoked or expired (or the app secret expired): connect Outlook again in Settings.'
+                : 'Microsoft mail access was revoked or expired (or the app secret expired): connect the mailbox again in Settings.');
             throw new \RuntimeException('Microsoft sign-in failed: ' . strtok((string)($d['error_description'] ?? $d['error'] ?? "HTTP $code"), "\r\n"));
         }
         return $d;
     }
 
-    private function accessToken(): string
+    public function accessToken(): string
     {
         $t = $this->tokens();
-        if (empty($t['refresh_token'])) throw new \RuntimeException('Outlook is not connected');
+        if (empty($t['refresh_token'])) throw new \RuntimeException($this->purpose === '' ? 'Outlook is not connected' : 'The Microsoft account is not connected: press "Connect with Microsoft" under its Sign-in setting.');
         if (($t['access_token'] ?? '') !== '' && ($t['expires'] ?? 0) > time()) return $t['access_token'];
-        $n = $this->token(['grant_type' => 'refresh_token', 'refresh_token' => $t['refresh_token'], 'scope' => self::SCOPES]);
+        $n = $this->token(['grant_type' => 'refresh_token', 'refresh_token' => $t['refresh_token'], 'scope' => $this->scopes()]);
         $t['access_token'] = $n['access_token'];
         $t['expires'] = time() + (int)($n['expires_in'] ?? 3000) - 60;
         if (!empty($n['refresh_token'])) $t['refresh_token'] = $n['refresh_token']; // Microsoft rolls it

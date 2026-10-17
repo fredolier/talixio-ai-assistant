@@ -3,6 +3,17 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.45 (2026-10-17)
+
+- Outlook / Microsoft 365 email: the assistant's address and your mailbox can sign in with the Microsoft
+  account (OAuth, XOAUTH2 for SMTP and IMAP) instead of a password, which Microsoft is turning off. Email
+  settings → *Sign-in* → *Microsoft 365 account (OAuth)*, save, then *Connect with Microsoft*. Uses the
+  app set up for the calendar, with the extra permissions *SMTP.Send* and *IMAP.AccessAsUser.All*; each
+  mailbox has its own connection, separate from the calendar's.
+- Assistant switcher: each assistant has a coloured badge with its initials (from its id), shown at the
+  top of the menu. With the menu folded, the badge opens the switcher. The list shows the current
+  assistant first, with each one's name and id.
+
 ## 0.28.44 (2026-10-17)
 
 - Fix: "Sign in with Claude" hung after pasting the code, then said Claude did not answer in time. Claude Code

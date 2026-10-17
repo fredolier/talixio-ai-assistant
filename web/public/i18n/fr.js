@@ -2533,5 +2533,20 @@ window.I18N.fr = {
 "This is not a space package.": "Ce n'est pas un paquet d'espace.",
 "This package comes from a newer Talixio: update this assistant first.": "Ce paquet vient d'un Talixio plus récent : mettez d'abord cet assistant à jour.",
 "This space package is damaged.": "Ce paquet d'espace est endommagé.",
-"This transfer has expired or was already used. Try again from the other assistant.": "Ce transfert a expiré ou a déjà été utilisé. Réessayez depuis l'autre assistant."
+"This transfer has expired or was already used. Try again from the other assistant.": "Ce transfert a expiré ou a déjà été utilisé. Réessayez depuis l'autre assistant.",
+"Sign-in": "Connexion",
+"Microsoft 365 account (OAuth)": "Compte Microsoft 365 (OAuth)",
+"Outlook / Microsoft 365 (smtp.office365.com, outlook.office365.com) no longer takes passwords: choose Microsoft, save, then press \"Connect with Microsoft\". Uses the app set up under Calendar.": "Outlook / Microsoft 365 (smtp.office365.com, outlook.office365.com) n'accepte plus les mots de passe : choisissez Microsoft, enregistrez, puis appuyez sur « Se connecter avec Microsoft ». Utilise l'application configurée sous Calendrier.",
+"Outlook / Microsoft 365: choose Microsoft, save, then press \"Connect with Microsoft\". Uses the app set up under Calendar.": "Outlook / Microsoft 365 : choisissez Microsoft, enregistrez, puis appuyez sur « Se connecter avec Microsoft ». Utilise l'application configurée sous Calendrier.",
+"Connect with Microsoft": "Se connecter avec Microsoft",
+"Connected as <span class=\"no-i18n\">{a}</span>. Leave the password empty.": "Connecté en tant que <span class=\"no-i18n\">{a}</span>. Laissez le mot de passe vide.",
+"First set up the Microsoft app under Calendar → Outlook / Microsoft 365 (steps 1 to 5).": "Configurez d'abord l'application Microsoft sous Calendrier → Outlook / Microsoft 365 (étapes 1 à 5).",
+"Save, then connect the mailbox's Microsoft account.": "Enregistrez, puis connectez le compte Microsoft de la boîte mail.",
+"Microsoft account disconnected.": "Compte Microsoft déconnecté.",
+"Microsoft account connected for mail.": "Compte Microsoft connecté pour les e-mails.",
+"Switch assistant": "Changer d'assistant",
+"<b>API permissions</b> → Add a permission → Microsoft Graph → Delegated: <i>Calendars.ReadWrite</i>, <i>offline_access</i>, <i>User.Read</i>. To send and read mail with it (Sign-in: Microsoft in the email settings), also <i>SMTP.Send</i> and <i>IMAP.AccessAsUser.All</i>.": "<b>Autorisations des API</b> → Ajouter une autorisation → Microsoft Graph → Déléguées : <i>Calendars.ReadWrite</i>, <i>offline_access</i>, <i>User.Read</i>. Pour envoyer et lire des e-mails avec (Connexion : Microsoft dans les réglages e-mail), ajoutez aussi <i>SMTP.Send</i> et <i>IMAP.AccessAsUser.All</i>.",
+"The Microsoft account is not connected: press \"Connect with Microsoft\" under its Sign-in setting.": "Le compte Microsoft n'est pas connecté : appuyez sur « Se connecter avec Microsoft » sous son réglage Connexion.",
+"Microsoft mail access was revoked or expired (or the app secret expired): connect the mailbox again in Settings.": "L'accès aux e-mails Microsoft a été révoqué ou a expiré (ou le secret de l'application a expiré) : reconnectez la boîte mail dans les Réglages.",
+"Open {a}": "Ouvrir {a}"
 };

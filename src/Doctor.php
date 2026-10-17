@@ -53,14 +53,14 @@ final class Doctor
             [$bin, $model] = Transcriber::whisper($c);
             $this->line($bin !== '' && is_file($model), 'transcription: local, ' . ($bin === '' ? 'whisper.cpp not installed (' . Transcriber::whisperHint() . ')' : (is_file($model) ? basename($model) : "model missing: $model (" . Transcriber::whisperHint() . ')')));
         } elseif ($c->transcribe !== 'off') $this->info("transcription: {$c->transcribe}");
-        if ($app->email()->canSend()) $this->attempt("SMTP {$c->smtpHost}:{$c->smtpPort}", fn() => (new Smtp($c->smtpHost, $c->smtpPort, $c->smtpSecurity, $c->smtpUser, $c->smtpPassword))->check() ?? 'login OK');
+        if ($app->email()->canSend()) $this->attempt("SMTP {$c->smtpHost}:{$c->smtpPort}", fn() => $app->email()->smtp()->check() ?? 'login OK');
         if ($c->imapHost !== '') {
-            $this->attempt("IMAP {$c->imapHost}:{$c->imapPort}", fn() => (new Imap($c->imapHost, $c->imapPort, $c->imapUser, $c->imapPassword, $c->imapFolder, $c->imapSecurity))->fetchUnseen(0) === [] ? 'login OK' : '');
+            $this->attempt("IMAP {$c->imapHost}:{$c->imapPort}", fn() => $app->email()->imap()->fetchUnseen(0) === [] ? 'login OK' : '');
             $this->line($c->emailAllowed !== [], 'allowed senders: ' . (implode(', ', $c->emailAllowed) ?: 'none'));
         }
         if ($app->calendar()->enabled()) $this->attempt('calendar', fn() => count($app->calendar()->events(strtotime('today'), strtotime('today') + 7 * 86400))
             . ' event(s) in the next 7 days' . ($app->calendar()->canWrite() ? ' (CalDAV: can add events)' : ' (read-only)'));
-        if ($app->mailbox()->enabled()) $this->attempt('your mailbox', fn() => count((new Imap($c->mailboxImapHost, $c->mailboxImapPort, $c->mailboxUser, $c->mailboxPassword, 'INBOX', $c->mailboxImapSecurity))->folders()) . ' folders');
+        if ($app->mailbox()->enabled()) $this->attempt('your mailbox', fn() => count($app->mailbox()->imap()->folders()) . ' folders');
         if ($c->browser !== 'off') {
             $bin = Browser::findBinary($c->chromeBin);
             $bin ? $this->line(true, "browser: $bin") : $this->info('browser: not installed (optional: install.sh --with-browser)');

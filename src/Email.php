@@ -14,10 +14,19 @@ final class Email
     public function canSend(): bool { return $this->app->cfg->smtpHost !== '' && $this->app->cfg->emailFrom !== ''; }
     public function canReceive(): bool { return $this->app->cfg->imapHost !== '' && $this->app->cfg->emailAllowed !== []; }
 
-    private function smtp(): Smtp
+    /** The assistant's own mail servers, signed in with the password or the connected Microsoft account. */
+    public function smtp(): Smtp
     {
         $c = $this->app->cfg;
-        return new Smtp($c->smtpHost, $c->smtpPort, $c->smtpSecurity, $c->smtpUser, $c->smtpPassword);
+        [$user, $token] = Microsoft::mailLogin($this->app, 'email', $c->smtpUser) ?? [$c->smtpUser, null];
+        return new Smtp($c->smtpHost, $c->smtpPort, $c->smtpSecurity, $user, $c->smtpPassword, $token);
+    }
+
+    public function imap(): Imap
+    {
+        $c = $this->app->cfg;
+        [$user, $token] = Microsoft::mailLogin($this->app, 'email', $c->imapUser) ?? [$c->imapUser, null];
+        return new Imap($c->imapHost, $c->imapPort, $user, $c->imapPassword, $c->imapFolder, $c->imapSecurity, $token);
     }
 
     /** $page: MailTemplate::page options (title, space, color, url); the mail is framed as the assistant's. */
@@ -57,7 +66,7 @@ final class Email
     {
         if (!$this->canReceive() || !$this->canSend()) return 0;
         $c = $this->app->cfg;
-        $imap ??= new Imap($c->imapHost, $c->imapPort, $c->imapUser, $c->imapPassword, $c->imapFolder, $c->imapSecurity);
+        $imap ??= $this->imap();
         $raw = $imap->fetchUnseen();
         $answered = 0;
         foreach ($raw as $uid => $msg) {

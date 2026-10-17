@@ -2,13 +2,14 @@
 declare(strict_types=1);
 namespace Talixio;
 
-/** Minimal SMTP client: implicit TLS (465) or STARTTLS (587/25), AUTH PLAIN/LOGIN. */
+/** Minimal SMTP client: implicit TLS (465) or STARTTLS (587/25), AUTH PLAIN/LOGIN, or XOAUTH2 with a token (Microsoft 365). */
 final class Smtp
 {
     /** @var resource */
     private $s;
 
-    public function __construct(private string $host, private int $port, private string $security, private string $user, private string $pass) {}
+    /** @param ?\Closure $token gives an OAuth access token: then XOAUTH2 instead of the password */
+    public function __construct(private string $host, private int $port, private string $security, private string $user, private string $pass, private ?\Closure $token = null) {}
 
     /**
      * @param array<string,string> $headers extra headers (In-Reply-To, References...)
@@ -93,7 +94,10 @@ final class Smtp
             if (!stream_socket_enable_crypto($s, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT)) throw new \RuntimeException('STARTTLS failed');
             $ehlo = $this->cmd('EHLO ' . (gethostname() ?: 'talixio'), 250);
         }
-        if ($this->user !== '') {
+        if ($this->token) {
+            $r = $this->cmd('AUTH XOAUTH2 ' . self::xoauth2($this->user, ($this->token)()), [235, 334]);
+            if (str_starts_with($r, '334')) $this->cmd('', 235); // refused: the server explains in base64, then answers the empty line with the error
+        } elseif ($this->user !== '') {
             if (preg_match('/AUTH[ =][^\r\n]*PLAIN/i', $ehlo)) {
                 $this->cmd('AUTH PLAIN ' . base64_encode("\0{$this->user}\0{$this->pass}"), 235);
             } else {
@@ -103,6 +107,9 @@ final class Smtp
             }
         }
     }
+
+    /** The SASL XOAUTH2 initial response (RFC-less, as Google and Microsoft define it). */
+    public static function xoauth2(string $user, string $token): string { return base64_encode("user=$user\x01auth=Bearer $token\x01\x01"); }
 
     private function write(string $line): void { fwrite($this->s, $line . "\r\n"); }
 

@@ -15,7 +15,9 @@ while (($line = fgets($c)) !== false) {
     $cmd = strtoupper(substr(trim($line), 0, 4));
     match (true) {
         $cmd === 'EHLO' => $w("250-fake\r\n250-AUTH PLAIN LOGIN\r\n250 OK"),
+        $cmd === 'AUTH' && str_contains(base64_decode((string)substr(trim($line), 13)), 'Bearer bad') => $w('334 eyJzdGF0dXMiOiI0MDEifQ=='), // XOAUTH2 refused
         $cmd === 'AUTH' => $w('235 ok'),
+        trim($line) === '' => $w('535 5.7.3 Authentication unsuccessful'),
         $cmd === 'MAIL', $cmd === 'RCPT' => $w('250 ok'),
         $cmd === 'DATA' => ($inData = true) && $w('354 go'),
         $cmd === 'QUIT' => $w('221 bye'),
