@@ -219,7 +219,7 @@ final class Config
         $c->dataDir = rtrim($e('TALIXIO_DATA_DIR', 'data'), '/');
         if (!str_starts_with($c->dataDir, '/')) $c->dataDir = getcwd() . '/' . $c->dataDir; // child processes run elsewhere
         $c->timezone = $e('TALIXIO_TIMEZONE', 'UTC');
-        $c->name = $e('TALIXIO_NAME', 'Talixio');
+        $c->name = $e('TALIXIO_INSTANCE_NAME', $e('TALIXIO_NAME', 'Talixio')); // on a shared server, the admin page names it
         $c->historyMessages = max(6, (int)$e('TALIXIO_HISTORY_MESSAGES', '40'));
         $c->historyTokens = max(2000, (int)$e('TALIXIO_HISTORY_TOKENS', '12000'));
         $c->googleClientId = trim($e('TALIXIO_GOOGLE_CLIENT_ID'));

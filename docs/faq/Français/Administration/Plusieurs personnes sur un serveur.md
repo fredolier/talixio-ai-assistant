@@ -52,6 +52,11 @@ avec les règles de leur niveau de confidentialité).
 - Chaque assistant a une pastille colorée avec ses initiales, tirées de son identifiant (`alex-acme`
   → AA) : mêmes couleur et lettres sur tous les assistants, pour voir d'un coup d'œil où vous êtes.
   La liste montre le nom et l'identifiant de chaque assistant, l'actuel en premier.
+- Les noms de cette liste viennent de la page d'administration, et sont aussi le nom propre de
+  chaque assistant (dans les e-mails et les notifications) : son *Nom* dans les Réglages l'affiche, en
+  lecture seule. Pour en changer un, choisissez **Nom et e-mail…** dans son menu *Actions* sur la
+  page d'administration (`Alex — Travail`, `Alex — Perso`) : cet assistant et ceux qui lui sont liés
+  redémarrent, quelques secondes chacun, pour afficher le nouveau nom.
 - Le navigateur transporte un ticket signé pour cet assistant seulement, valable une fois et une
   minute. Les assistants ne se parlent jamais.
 - La connexion au premier assistant compte : le second ne redemande ni son mot de passe ni son

@@ -51,6 +51,10 @@ confidentiality level).
 - Each assistant has a coloured badge with its initials, taken from its id (`alex-acme` → AA): the
   same colour and letters on every assistant, so you can tell at a glance which one you are in.
   The list shows each assistant's name and id, the current one first.
+- The names in that list come from the admin page, and are also each assistant's own name (in
+  emails and notifications): its *Name* in Settings shows it, read-only. To change one, choose **Name and email…** in its *Actions* menu on the admin page
+  (`Alex — Work`, `Alex — Private`): that assistant and the ones linked to it restart, a few
+  seconds each, to show the new name.
 - The browser carries a ticket signed for that assistant only, valid once and for one minute. The
   assistants never talk to each other.
 - The sign-in to the first assistant counts: the second one does not ask again for its password or

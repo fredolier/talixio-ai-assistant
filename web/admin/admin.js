@@ -146,7 +146,7 @@ function renderPeople() {
       <div class="small"><div>${p.mem_used_mb != null ? p.mem_used_mb + ' MB' : '—'} <span class="muted">/ ${p.memory_mb} MB · ${p.cpus} CPU</span></div><div class="muted">${p.last_activity ? 'active ' + ago(p.last_activity) : (p.state === 'running' ? 'not used for hours' : '')}</div></div>
       <div class="acts"><select aria-label="Action"><option value="">Actions…</option>
         ${p.state === 'running' ? '<option value="restart">Restart</option><option value="stop">Stop</option>' : '<option value="start">Start</option>'}
-        <option value="reset-password">New password (forgotten)</option><option value="reset-totp">Turn off two-step sign-in (lost phone)</option>
+        <option value="rename">Name and email…</option><option value="reset-password">New password (forgotten)</option><option value="reset-totp">Turn off two-step sign-in (lost phone)</option>
         ${list.length > 1 ? '<option value="links">Their other assistants (one sign-in)…</option>' : ''}
         <option value="limits">Memory and CPU…</option><option value="doctor">Check (doctor)</option><option value="logs">Log</option><option value="backup">Back up now</option>
         <option value="recreate">Rebuild the container</option><option value="remove">Remove…</option></select></div>`;
@@ -165,6 +165,11 @@ async function act(p, a) {
     } else if (a === 'reset-totp') {
       if (!await ask('Turn off two-step sign-in?', { html: '<p>For a lost phone: they sign in with their password only, then turn it on again in Settings.</p>', ok: 'Turn it off' })) return;
       await run(); toast('Two-step sign-in is off for ' + p.id);
+    } else if (a === 'rename') {
+      const v = await ask(t('Name and email of {id}', { id: p.id }), { ok: 'Apply (restarts it)',
+        html: `<p>${esc(t('The name shows in their assistant switcher and on this page. Their linked assistants restart too, to show the new name.'))}</p>`,
+        fields: [{ id: 'name', label: 'Name', value: p.name || '', placeholder: 'Alex — Work' }, { id: 'email', label: 'Email (for you)', type: 'email', value: p.email || '' }] });
+      if (!v) return; await run({ name: v.name, email: v.email }); toast('Applied');
     } else if (a === 'limits') {
       const v = await ask(`Limits for ${p.id}`, { fields: [{ id: 'memory_mb', label: 'Memory (MB)', type: 'number', value: p.memory_mb }, { id: 'cpus', label: 'CPUs', type: 'number', value: p.cpus, attrs: ' step="0.25"' }], ok: 'Apply (restarts it)' });
       if (!v) return; await run({ memory_mb: +v.memory_mb, cpus: +v.cpus }); toast('Applied');

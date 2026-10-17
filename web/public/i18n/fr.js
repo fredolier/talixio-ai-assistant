@@ -2550,5 +2550,9 @@ window.I18N.fr = {
 "Microsoft mail access was revoked or expired (or the app secret expired): connect the mailbox again in Settings.": "L'accès aux e-mails Microsoft a été révoqué ou a expiré (ou le secret de l'application a expiré) : reconnectez la boîte mail dans les Réglages.",
 "Open {a}": "Ouvrir {a}",
 "Servers set to Microsoft 365's. Save to apply.": "Serveurs réglés sur ceux de Microsoft 365. Enregistrez pour appliquer.",
-"Microsoft sign-in only works with Microsoft 365's servers (smtp.office365.com, outlook.office365.com), not {a}: change the server in the email settings.": "La connexion Microsoft ne fonctionne qu'avec les serveurs de Microsoft 365 (smtp.office365.com, outlook.office365.com), pas {a} : changez le serveur dans les réglages e-mail."
+"Microsoft sign-in only works with Microsoft 365's servers (smtp.office365.com, outlook.office365.com), not {a}: change the server in the email settings.": "La connexion Microsoft ne fonctionne qu'avec les serveurs de Microsoft 365 (smtp.office365.com, outlook.office365.com), pas {a} : changez le serveur dans les réglages e-mail.",
+"Name and email…": "Nom et e-mail…",
+"Name and email of {a}": "Nom et e-mail de {a}",
+"The name shows in their assistant switcher and on this page. Their linked assistants restart too, to show the new name.": "Le nom s'affiche dans leur sélecteur d'assistants et sur cette page. Leurs assistants liés redémarrent aussi, pour afficher le nouveau nom.",
+"Set on the admin page (Actions → Name and email…), so every linked assistant shows the same name.": "Défini sur la page d'administration (Actions → Nom et e-mail…), pour que tous les assistants liés affichent le même nom."
 };

@@ -177,6 +177,15 @@ $st = $f->state(); $lg = $dlog();
 check('fleet: removing a link removes both sides and changes both keys', ($st['instances']['alice']['links'] ?? null) === [] && $st['instances']['dave']['links'] === [] && Fleet::ssoKey($st, 'dave') !== $oldDave
     && !preg_grep('/^TALIXIO_(LINKS|SSO_KEY)=/', $envOf('alice')) && $has($lg, 'POST', '#^/containers/create\?name=talixio-alice#'), json_encode($st['instances']['alice']));
 $f->setLinks('alice', ['dave']);
+$dlog(); $f->rename('dave', '  Dave — Work ', 'dave@acme.example');
+$st = $f->state(); $lg = $dlog();
+check('fleet: a new name is saved and both linked containers carry it', $st['instances']['dave']['name'] === 'Dave — Work' && $st['instances']['dave']['email'] === 'dave@acme.example'
+    && in_array('TALIXIO_INSTANCE_NAME=Dave — Work', $envOf('dave'), true) && $linksOf('alice')[0]['name'] === 'Dave — Work'
+    && $has($lg, 'POST', '#^/containers/create\?name=talixio-dave#') && $has($lg, 'POST', '#^/containers/create\?name=talixio-alice#'), json_encode($lg));
+$f->rename('dave', 'Dave — Work', 'd@acme.example');
+check('fleet: a new email alone or the same name restarts nothing', !$has($dlog(), 'POST', '#^/containers/create#') && $f->state()['instances']['dave']['email'] === 'd@acme.example');
+$f->rename('dave', 'Dave', '');
+$dlog();
 $pw = $f->resetPassword('alice');
 $reset = $f->state()['instances']['alice']['reset'];
 check('fleet: a password reset is applied once through the template', strlen($pw) === 20 && str_contains($reset, ':password:') && password_verify($pw, explode(':password:', $reset)[1]));
@@ -523,6 +532,9 @@ $rules([['GET', '#^/containers/talixio-frank/logs#', 200, 'frames' => ["2026-10-
 $lgs = $a('/api/instances/frank/logs', ['all' => true]);
 check('admin: the logs of an instance', $lgs['text'] === '2026-10-14T08:00:02Z PHP Warning: odd', json_encode($lgs));
 $rules();
+$rn = $a('/api/instances/frank/rename', ['name' => 'Frank — Private', 'email' => 'frank@acme.example']);
+check('admin: an assistant is renamed through the agent', ($rn['ok'] ?? false) === true && $a('/api/state')['instances'][0]['name'] === 'Frank — Private', json_encode($rn));
+$a('/api/instances/frank/rename', ['name' => 'Frank', 'email' => 'frank@acme.example']);
 check('admin: simple actions go through', ($a('/api/instances/frank/restart', [])['ok'] ?? false) === true && strlen($a('/api/instances/frank/reset-password', [])['password'] ?? '') === 20
     && ($a('/api/instances/frank/limits', ['memory_mb' => 2048, 'cpus' => 2])['ok'] ?? false) === true);
 $lk = $a('/api/instances/frank/links', ['links' => ['nobody']]);

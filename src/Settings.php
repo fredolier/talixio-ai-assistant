@@ -259,9 +259,11 @@ final class Settings
             foreach ($fields as $f) {
                 [$key, $label, $type] = $f;
                 $value = (string)(getenv($key) !== false ? getenv($key) : '');
+                $locked = $key === 'TALIXIO_NAME' && ($admin = (string)getenv('TALIXIO_INSTANCE_NAME')) !== '';
+                if ($locked) { $value = $admin; $f[3] = 'Set on the admin page (Actions → Name and email…), so every linked assistant shows the same name.'; }
                 $source = array_key_exists($key, $over) ? 'app' : ((self::$original[$key] ?? getenv($key)) ? 'file' : 'default');
                 $items[] = ['key' => $key, 'label' => $label, 'type' => $type, 'help' => $f[3] ?? '', 'options' => $f[4] ?? null, 'default' => self::DEFAULTS[$key] ?? '',
-                    'value' => $type === 'secret' ? '' : $value, 'set' => $value !== '', 'source' => $source, 'advanced' => in_array($key, self::ADVANCED, true),
+                    'value' => $type === 'secret' ? '' : $value, 'set' => $value !== '', 'source' => $source, 'advanced' => in_array($key, self::ADVANCED, true), 'locked' => $locked,
                     'hint' => $type === 'secret' && $value !== '' ? '•••• ' . (mb_strlen($value) > 12 ? mb_substr($value, -4) : '') : ''];
             }
             $groups[] = ['id' => $g, 'title' => $title, 'intro' => $intro, 'section' => self::SECTIONS[$g] ?? 'system', 'fields' => $items];
@@ -280,6 +282,7 @@ final class Settings
         $errors = [];
         foreach ($changes as $k => $v) {
             if (!isset($fields[$k])) { $errors[$k] = 'unknown setting'; continue; }
+            if ($k === 'TALIXIO_NAME' && (string)getenv('TALIXIO_INSTANCE_NAME') !== '') { $errors[$k] = 'set on the admin page'; continue; }
             $f = $fields[$k];
             $v = is_array($v) ? implode(',', array_map('strval', $v)) : trim((string)$v);
             if ($f['type'] === 'secret' && $v === '') continue;

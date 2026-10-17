@@ -367,6 +367,19 @@ final class Fleet
         $this->recreate($id);
     }
 
+    /** A new name or email; its container and its linked assistants' are made again (they carry the name). */
+    public function rename(string $id, string $name, string $email): void
+    {
+        $s = $this->state(); $this->need($id);
+        $name = mb_substr(trim($name), 0, 80); $email = mb_substr(trim($email), 0, 200);
+        $i = $s['instances'][$id];
+        if (($i['name'] ?? '') === $name && ($i['email'] ?? '') === $email) return;
+        $s['instances'][$id]['name'] = $name; $s['instances'][$id]['email'] = $email;
+        $this->save($s);
+        if (($i['name'] ?? '') === $name) return; // the email is only for the admin page
+        foreach ([$id, ...($i['links'] ?? [])] as $x) if (isset($s['instances'][$x])) $this->recreate($x);
+    }
+
     /** Forgotten password: a new one (shown once); every device signs in again. */
     public function resetPassword(string $id): string
     {

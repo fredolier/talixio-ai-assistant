@@ -1210,6 +1210,12 @@ check('settings: every group has a section of the page, advanced keys exist', !a
 check('settings: source shown', $byKey['TALIXIO_NAME']['source'] === 'app' && $byKey['TALIXIO_SMTP_PASSWORD']['source'] === 'file');
 \Talixio\Settings::save($sd, [], ['TALIXIO_NAME']);
 check('settings: reset goes back to the file value in the same process', \Talixio\Config::fromEnv()->name === 'FromFile');
+putenv('TALIXIO_INSTANCE_NAME=Alex — Work');
+$byKey = array_column(array_merge(...array_column(\Talixio\Settings::describe($sd), 'fields')), null, 'key');
+check('settings: on a shared server the admin page names the assistant, and the Name is read-only', \Talixio\Config::fromEnv()->name === 'Alex — Work'
+    && $byKey['TALIXIO_NAME']['locked'] && $byKey['TALIXIO_NAME']['value'] === 'Alex — Work' && str_contains($byKey['TALIXIO_NAME']['help'], 'admin page')
+    && \Talixio\Settings::save($sd, ['TALIXIO_NAME' => 'Other']) === ['TALIXIO_NAME' => 'set on the admin page'] && !$byKey['TALIXIO_TIMEZONE']['locked']);
+putenv('TALIXIO_INSTANCE_NAME');
 check('settings: file is private', (fileperms(\Talixio\Settings::file($sd)) & 0777) === 0600);
 \Talixio\Settings::save($sd, [], ['TALIXIO_BUDGET_DAILY_USD', 'TALIXIO_NOTIFY', 'TALIXIO_EMAIL_REQUIRE_AUTH']);
 putenv('TALIXIO_NAME'); putenv('TALIXIO_SMTP_PASSWORD'); putenv("TALIXIO_DATA_DIR=$dir");

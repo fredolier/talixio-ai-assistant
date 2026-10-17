@@ -3,6 +3,16 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.47 (2026-10-17)
+
+- Admin page: a new **Name and email…** action renames an assistant. The name is the one shown in the
+  assistant switcher (it comes from the admin page, not from the assistant's own Settings) and was only
+  set at creation until now. The assistant and the ones linked to it are made again to carry the new name;
+  changing only the email restarts nothing.
+- One name per assistant: on a shared server, the name set on the admin page is also the assistant's own
+  name (top left, emails, notifications, two-step sign-in label). Its *Name* in Settings shows it read-only,
+  with where to change it.
+
 ## 0.28.46 (2026-10-17)
 
 - Microsoft sign-in for email: choosing *Microsoft 365 account (OAuth)* now also sets the servers to Microsoft's

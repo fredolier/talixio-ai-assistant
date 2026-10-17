@@ -217,11 +217,12 @@ final class AdminWeb
             $this->json($r);
             return;
         }
-        if (preg_match('#^/api/instances/([a-z0-9-]+)/(start|stop|restart|recreate|reset-password|reset-totp|doctor|logs|backup|limits|links|remove)$#', $path, $mm) && $m === 'POST') {
+        if (preg_match('#^/api/instances/([a-z0-9-]+)/(start|stop|restart|recreate|reset-password|reset-totp|doctor|logs|backup|limits|links|rename|remove)$#', $path, $mm) && $m === 'POST') {
             [, $id, $act] = $mm;
             if ($act === 'remove' && ($b['confirm'] ?? '') !== $id) $this->fail(400, "Type the identifier ($id) to confirm.");
-            $r = $this->agent('POST', "/instances/$id/$act", array_intersect_key($b, array_flip(['memory_mb', 'cpus', 'delete_data', 'all', 'links'])), 1000);
+            $r = $this->agent('POST', "/instances/$id/$act", array_intersect_key($b, array_flip(['memory_mb', 'cpus', 'delete_data', 'all', 'links', 'name', 'email'])), 1000);
             $this->audit("instance $act", ['id' => $id] + ($act === 'remove' ? ['delete_data' => !empty($b['delete_data'])] : []) + ($act === 'limits' ? array_intersect_key($b, array_flip(['memory_mb', 'cpus'])) : [])
+                + ($act === 'rename' ? ['name' => mb_substr(trim((string)($b['name'] ?? '')), 0, 80)] : [])
                 + ($act === 'links' ? ['links' => array_values(array_map('strval', (array)($b['links'] ?? [])))] : []));
             $this->json($r);
             return;
