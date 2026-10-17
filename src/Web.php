@@ -380,8 +380,8 @@ final class Web
     {
         $ms = $this->app->microsoft(); $t = $ms->tokens();
         $mail = [];
-        foreach (['email', 'mailbox'] as $p) { $x = $this->app->microsoft($p); $mail[$p] = ['connected' => $x->connected(), 'email' => $x->tokens()['email'] ?? '']; }
-        return ['configured' => $ms->configured(), 'connected' => $ms->connected(), 'email' => $t['email'] ?? '', 'redirect' => Microsoft::redirectUri($this->app->cfg->publicUrl), 'mail' => $mail];
+        foreach (['email', 'mailbox'] as $p) { $x = $this->app->microsoft($p); $mail[$p] = ['connected' => $x->connected(), 'email' => $x->tokens()['email'] ?? '', 'error' => $x->lastError()]; }
+        return ['configured' => $ms->configured(), 'connected' => $ms->connected(), 'email' => $t['email'] ?? '', 'redirect' => Microsoft::redirectUri($this->app->cfg->publicUrl), 'error' => $ms->lastError(), 'mail' => $mail];
     }
 
     /** Microsoft sends the user back here after sign-in (the one-time state proves it was started from the app). */
@@ -389,11 +389,11 @@ final class Web
     {
         $msg = 'connected'; $ms = $this->app->microsoft();
         try {
-            if (isset($_GET['error'])) throw new \RuntimeException('Microsoft: ' . strtok((string)($_GET['error_description'] ?? $_GET['error']), "\r\n"));
-            $ms->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+            $ms->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''), (string)($_GET['error_description'] ?? $_GET['error'] ?? ''));
         } catch (\Throwable $e) {
             Log::warn("microsoft: {$e->getMessage()}");
             $msg = $e->getMessage();
+            $this->app->microsoft($ms->finished)->failed($msg); // kept under the button: the message after the redirect is easy to miss
         }
         header('Location: ' . Config::basePath() . '/?microsoft=' . rawurlencode($msg) . ($ms->finished !== '' ? '&for=' . $ms->finished : '') . '#settings', true, 303);
     }

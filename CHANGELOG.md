@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.49 (2026-10-17)
+
+- Microsoft sign-in (Outlook calendar, the assistant's email, your mailbox): when it fails, the reason now
+  stays under the *Connect with Microsoft* button until a sign-in works. Before, it only showed for a few
+  seconds after Microsoft sent you back, so the page looked as if nothing had happened.
+
 ## 0.28.48 (2026-10-17)
 
 - Channels: a channel's last error shows its time and message on separate lines, so the message is

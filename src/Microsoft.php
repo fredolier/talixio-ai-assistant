@@ -75,17 +75,23 @@ final class Microsoft
     /** The connection the last sign-in was started for (set by finish()). */
     public string $finished = '';
 
-    /** Back from Microsoft: check the state, trade the code for tokens (kept for the connection the sign-in was started for). */
-    public function finish(string $code, string $state): string
+    /** Back from Microsoft: check the state, trade the code for tokens (kept for the connection the sign-in was started for).
+     *  $error: what Microsoft sent back instead of a code. */
+    public function finish(string $code, string $state, string $error = ''): string
     {
         $saved = json_decode($this->app->store->get('microsoft_state'), true);
         $this->app->store->set('microsoft_state', '');
+        $for = is_array($saved) && in_array($saved['purpose'] ?? '', self::PURPOSES, true) ? (string)$saved['purpose'] : '';
+        $this->finished = $for; // the failure is shown with that connection too
+        if ($error !== '') throw new \RuntimeException('Microsoft: ' . strtok($error, "\r\n"));
         if (!is_array($saved) || !hash_equals((string)$saved['state'], $state) || $saved['ts'] < time() - 900) throw new \InvalidArgumentException('This sign-in link expired. Press "Connect" again.');
-        $for = in_array($saved['purpose'] ?? '', self::PURPOSES, true) ? (string)($saved['purpose'] ?? '') : '';
-        if ($for !== $this->purpose) { $other = new self($this->app, $for); $email = $other->finishWith($code, $saved['redirect']); $this->finished = $for; return $email; }
-        $this->finished = $for;
-        return $this->finishWith($code, $saved['redirect']);
+        return ($for === $this->purpose ? $this : new self($this->app, $for))->finishWith($code, $saved['redirect']);
     }
+
+    private function errorKey(): string { return 'microsoft_error' . ($this->purpose === '' ? '' : "_{$this->purpose}"); }
+    /** Why the last sign-in failed ("Y-m-d H:i message"), until one succeeds. */
+    public function lastError(): string { return (string)$this->app->store->get($this->errorKey()); }
+    public function failed(string $message): void { $this->app->store->set($this->errorKey(), date('Y-m-d H:i') . ' ' . $message); }
 
     private function finishWith(string $code, string $redirect): string
     {
@@ -98,11 +104,12 @@ final class Microsoft
         }
         $this->saveTokens(['refresh_token' => $t['refresh_token'], 'access_token' => $t['access_token'] ?? '', 'expires' => time() + (int)($t['expires_in'] ?? 3000) - 60,
             'email' => $email, 'connected' => time()]);
+        $this->app->store->set($this->errorKey(), '');
         return $email;
     }
 
     /** Microsoft has no revocation call for a single token: forgetting it is enough (remove the app at myapps.microsoft.com to revoke). */
-    public function disconnect(): void { @unlink($this->file()); }
+    public function disconnect(): void { @unlink($this->file()); $this->app->store->set($this->errorKey(), ''); }
 
     private function token(array $params): array
     {

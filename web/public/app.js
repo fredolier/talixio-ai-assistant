@@ -2589,8 +2589,8 @@ async function disablePush() {
   if (sub) { await post('api/push/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe(); }
 }
 // "2026-10-17 13:35 message": the message on its own line, so it is translated like any other text
-const lastError = e => { const m = String(e).match(/^(\d{4}-\d\d-\d\d \d\d:\d\d) ([\s\S]*)$/);
-  return `<p class="err">Last error${m ? ` (${esc(m[1])})` : ''}:</p><p class="err">${esc(m ? m[2] : e)}</p>`; };
+const lastError = (e, what = 'Last error') => { const m = String(e).match(/^(\d{4}-\d\d-\d\d \d\d:\d\d) ([\s\S]*)$/);
+  return `<p class="err">${what}${m ? ` (${esc(m[1])})` : ''}:</p><p class="err">${esc(m ? m[2] : e)}</p>`; };
 async function loadChannels() {
   const { channels, notify_on } = await api('api/channels');
   const mySub = await pushSubscription().catch(() => null);
@@ -2887,7 +2887,7 @@ function renderGroups(groups) {
 function msMailRow(purpose) {
   const r = document.createElement('div'); r.className = 'row wrap ms-mail'; r.dataset.purpose = purpose; r.hidden = true;
   r.innerHTML = `<button class="btn primary" type="button" data-act="connect">Connect with Microsoft</button>
-    <button class="btn ghost danger" type="button" data-act="disconnect" hidden>Disconnect</button><span class="muted small"></span>`;
+    <button class="btn ghost danger" type="button" data-act="disconnect" hidden>Disconnect</button><span class="muted small"></span><div class="ms-error small"></div>`;
   r.querySelector('[data-act=connect]').onclick = async () => { try { location.href = (await post('api/microsoft/connect', { purpose })).url; } catch (e) { toast(e.message); } };
   r.querySelector('[data-act=disconnect]').onclick = async () => { try { showMicrosoft(await post('api/microsoft/disconnect', { purpose })); toast('Microsoft account disconnected.'); } catch (e) { toast(e.message); } };
   return r;
@@ -2914,6 +2914,7 @@ function showMsMail() {
     c.disabled = g ? !g.configured : false;
     note.innerHTML = m.connected ? `Connected as <span class="no-i18n">${esc(m.email || '?')}</span>. Leave the password empty.`
       : g && !g.configured ? 'First set up the Microsoft app under Calendar → Outlook / Microsoft 365 (steps 1 to 5).' : 'Save, then connect the mailbox\'s Microsoft account.';
+    r.querySelector('.ms-error').innerHTML = !m.connected && m.error ? lastError(m.error, 'Last sign-in failed') : '';
   });
 }
 async function saveSettings(reset = []) {
@@ -3098,7 +3099,7 @@ function showMicrosoft(g) {
   state.microsoft = g; showMsMail();
   $('#microsoft-badge').textContent = g.connected ? `· connected${g.email ? ' as ' + g.email : ''}` : g.configured ? '· not connected' : '· not set up';
   $('#microsoft-redirect').textContent = g.redirect;
-  $('#microsoft-status').innerHTML = g.connected ? '<p class="small">Reads your Outlook calendar; adds events to it after your approval.</p>' : '';
+  $('#microsoft-status').innerHTML = g.connected ? '<p class="small">Reads your Outlook calendar; adds events to it after your approval.</p>' : g.error ? lastError(g.error, 'Last sign-in failed') : '';
   $('#microsoft-steps').hidden = g.connected;
   $('#microsoft-connect').hidden = g.connected; $('#microsoft-disconnect').hidden = !g.connected;
   $('#microsoft-connect').disabled = !g.configured; $('#microsoft-connect').title = g.configured ? '' : 'Fill in the application ID and secret first (step 5)';

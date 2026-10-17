@@ -2247,6 +2247,14 @@ check('outlook mail: sign-in for SMTP and IMAP kept apart from the calendar', st
     && $ga->microsoft()->tokens()['access_token'] === 'mt-2' && !$ga->microsoft('mailbox')->connected());
 $state = $aj('/api/microsoft', null, 'd');
 check('outlook mail: status for the app per mailbox, no tokens', $state['mail']['email']['connected'] && $state['mail']['email']['email'] === 'fred@outlook.com' && !$state['mail']['mailbox']['connected'] && !str_contains(json_encode($state), 'mt-1'), json_encode($state));
+$url = $ga->microsoft('email')->authUrl('https://assistant.example/api/microsoft/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+$ch = curl_init("http://127.0.0.1:$webPort/api/microsoft/callback?state={$q['state']}&error=invalid_client&error_description=" . rawurlencode("AADSTS7000215: Invalid client secret.\r\nTrace: 1")); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]); $h = (string)curl_exec($ch); curl_close($ch);
+$state = $aj('/api/microsoft', null, 'd');
+check('outlook mail: a failed sign-in is kept under its button, not only in a passing message', str_contains($h, '&for=email#settings')
+    && preg_match('/^\d{4}-\d\d-\d\d \d\d:\d\d Microsoft: AADSTS7000215: Invalid client secret\.$/', $state['mail']['email']['error']) && $state['mail']['mailbox']['error'] === '' && str_contains($state['error'], 'expired'), $h . json_encode($state));
+$url = $ga->microsoft('email')->authUrl('https://assistant.example/api/microsoft/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+$ga->microsoft()->finish('good-code', $q['state']);
+check('outlook mail: a sign-in that works clears the failure', $ga->microsoft('email')->lastError() === '' && $ga->microsoft('email')->connected());
 check('outlook mail: password sign-in unless Microsoft is chosen', \Talixio\Microsoft::mailLogin($ga, 'email', 'x', 'prologia.lan') === null);
 $ga->cfg->smtpAuth = 'microsoft'; $ga->cfg->smtpHost = 'mail.example.lan';
 try { $ga->email()->smtp(); $err = ''; } catch (\RuntimeException $e) { $err = $e->getMessage(); }

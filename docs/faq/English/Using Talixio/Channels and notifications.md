@@ -40,6 +40,8 @@ Microsoft account instead:
    change to Microsoft's (smtp.office365.com, outlook.office365.com); save. The account's token is only ever
    sent to Microsoft's servers.
 3. Press *Connect with Microsoft* and sign in with that mailbox's account. Leave the password empty.
+   Back in Settings it reads *Connected as …*. If the button is still there, the reason the sign-in failed
+   shows under it (a wrong or expired app secret, a permission not granted…).
 The assistant's address, your mailbox and the calendar each have their own connection.
 In the Microsoft 365 admin center, *Authenticated SMTP* must stay enabled for the mailbox
 (Users → the user → Mail → Manage email apps), even with this sign-in.

@@ -2561,5 +2561,7 @@ window.I18N.fr = {
 "Set ({a}). Type to replace.": "Défini ({a}). Tapez pour remplacer.",
 "From {a} · notifications to {b}": "De {a} · notifications à {b}",
 "From {a} · notifications to {b} · answers {c}": "De {a} · notifications à {b} · répond à {c}",
-"From {a} · answers {b}": "De {a} · répond à {b}"
+"From {a} · answers {b}": "De {a} · répond à {b}",
+"Last sign-in failed ({a}):": "Dernière connexion échouée ({a}) :",
+"Last sign-in failed:": "Dernière connexion échouée :"
 };

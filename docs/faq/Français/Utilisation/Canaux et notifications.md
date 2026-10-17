@@ -41,6 +41,8 @@ plutôt avec le compte Microsoft :
    passent à ceux de Microsoft (smtp.office365.com, outlook.office365.com) ; enregistrez. Le jeton du compte n'est
    envoyé qu'aux serveurs de Microsoft.
 3. Appuyez sur *Se connecter avec Microsoft* et connectez-vous avec le compte de cette boîte. Laissez le mot de passe vide.
+   De retour dans les Réglages, vous lisez *Connecté en tant que …*. Si le bouton est toujours là, la raison
+   de l'échec s'affiche dessous (secret de l'application faux ou expiré, autorisation non accordée…).
 L'adresse de l'assistant, votre boîte et le calendrier ont chacun leur propre connexion.
 Dans le centre d'administration Microsoft 365, *SMTP authentifié* doit rester activé pour la boîte
 (Utilisateurs → l'utilisateur → Courrier → Gérer les applications de messagerie), même avec cette connexion.

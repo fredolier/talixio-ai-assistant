@@ -1303,3 +1303,5 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 @keyframes cd-in{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
 @keyframes cd-up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.card-dialog{animation:none!important}}
+.ms-mail .ms-error{flex-basis:100%}
+.ms-error:empty{display:none}
