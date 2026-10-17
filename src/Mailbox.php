@@ -16,14 +16,14 @@ final class Mailbox
     public function imap(): Imap
     {
         $c = $this->app->cfg;
-        [$user, $token] = Microsoft::mailLogin($this->app, 'mailbox', $c->mailboxUser) ?? [$c->mailboxUser, null];
+        [$user, $token] = Microsoft::mailLogin($this->app, 'mailbox', $c->mailboxUser, $c->mailboxImapHost) ?? [$c->mailboxUser, null];
         return new Imap($c->mailboxImapHost, $c->mailboxImapPort, $user, $c->mailboxPassword, 'INBOX', $c->mailboxImapSecurity, $token);
     }
 
     private function smtp(): Smtp
     {
         $c = $this->app->cfg;
-        [$user, $token] = Microsoft::mailLogin($this->app, 'mailbox', $c->mailboxUser) ?? [$c->mailboxUser, null];
+        [$user, $token] = Microsoft::mailLogin($this->app, 'mailbox', $c->mailboxUser, $c->mailboxSmtpHost) ?? [$c->mailboxUser, null];
         return new Smtp($c->mailboxSmtpHost, $c->mailboxSmtpPort, $c->mailboxSmtpSecurity, $user, $c->mailboxPassword, $token);
     }
 

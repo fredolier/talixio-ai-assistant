@@ -36,7 +36,9 @@ tenants already refuse them ("535 5.7.3 Authentication unsuccessful" or "5.7.30"
 Microsoft account instead:
 1. Set up the Microsoft app under Settings → *Calendar* → *Outlook / Microsoft 365* (steps 1 to 5), and
    add the delegated permissions *SMTP.Send* and *IMAP.AccessAsUser.All*.
-2. In the email settings (the assistant's, or your mailbox's), *Sign-in* → *Microsoft 365 account (OAuth)*, save.
+2. In the email settings (the assistant's, or your mailbox's), *Sign-in* → *Microsoft 365 account (OAuth)*: the servers
+   change to Microsoft's (smtp.office365.com, outlook.office365.com); save. The account's token is only ever
+   sent to Microsoft's servers.
 3. Press *Connect with Microsoft* and sign in with that mailbox's account. Leave the password empty.
 The assistant's address, your mailbox and the calendar each have their own connection.
 In the Microsoft 365 admin center, *Authenticated SMTP* must stay enabled for the mailbox

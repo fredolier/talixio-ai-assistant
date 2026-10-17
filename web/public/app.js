@@ -2871,7 +2871,7 @@ function renderGroups(groups) {
     if (g.id === 'spotify') el.querySelector('.fields').before($('#spotify-card'));
     for (const [gid, key] of [['email', 'TALIXIO_SMTP_AUTH'], ['mailbox', 'TALIXIO_MAILBOX_AUTH']]) {
       const f = g.id === gid && el.querySelector(`.field[data-key="${key}"]`);
-      if (f) { f.after(msMailRow(gid)); f.querySelector('select')?.addEventListener('change', showMsMail); }
+      if (f) { f.after(msMailRow(gid)); f.querySelector('select')?.addEventListener('change', e => { if (e.target.value === 'microsoft') msServers(gid); showMsMail(); }); }
     }
     box.append(el);
   }
@@ -2888,6 +2888,18 @@ function msMailRow(purpose) {
   r.querySelector('[data-act=connect]').onclick = async () => { try { location.href = (await post('api/microsoft/connect', { purpose })).url; } catch (e) { toast(e.message); } };
   r.querySelector('[data-act=disconnect]').onclick = async () => { try { showMicrosoft(await post('api/microsoft/disconnect', { purpose })); toast('Microsoft account disconnected.'); } catch (e) { toast(e.message); } };
   return r;
+}
+// A Microsoft token only works with (and is only sent to) Microsoft's servers: choosing Microsoft fills them in.
+function msServers(purpose) {
+  const set = (k, v, ifSet) => { const el = document.getElementById('set-' + k); if (el && (!ifSet || el.value.trim())) el.value = v; };
+  if (purpose === 'email') {
+    set('TALIXIO_SMTP_HOST', 'smtp.office365.com'); set('TALIXIO_SMTP_PORT', '587'); set('TALIXIO_SMTP_SECURITY', 'starttls');
+    set('TALIXIO_IMAP_HOST', 'outlook.office365.com', true); set('TALIXIO_IMAP_PORT', '993');
+  } else {
+    set('TALIXIO_MAILBOX_IMAP_HOST', 'outlook.office365.com'); set('TALIXIO_MAILBOX_IMAP_PORT', '993');
+    set('TALIXIO_MAILBOX_SMTP_HOST', 'smtp.office365.com'); set('TALIXIO_MAILBOX_SMTP_PORT', '587');
+  }
+  setDirty(); toast('Servers set to Microsoft 365\'s. Save to apply.');
 }
 function showMsMail() {
   const g = state.microsoft;

@@ -26,9 +26,15 @@ final class Microsoft
     private function scopes(): string { return $this->purpose === '' ? self::SCOPES : self::MAIL_SCOPES; }
 
     /** SMTP/IMAP sign-in for $purpose when its settings ask for the Microsoft account: the user and a token source. */
-    public static function mailLogin(App $app, string $purpose, string $user): ?array
+    /** @var string[] servers a mail token may be sent to (and their subdomains) */
+    public static array $mailHosts = ['office365.com', 'outlook.com'];
+
+    public static function mailLogin(App $app, string $purpose, string $user, string $host): ?array
     {
         if (($purpose === 'email' ? $app->cfg->smtpAuth : $app->cfg->mailboxAuth) !== 'microsoft') return null;
+        $host = strtolower(rtrim($host, '.'));
+        if (!array_filter(self::$mailHosts, fn($h) => $host === $h || str_ends_with($host, ".$h"))) // never hand the account's token to another server
+            throw new \RuntimeException("Microsoft sign-in only works with Microsoft 365's servers (smtp.office365.com, outlook.office365.com), not $host: change the server in the email settings.");
         $ms = new self($app, $purpose);
         return [$user !== '' ? $user : (string)($ms->tokens()['email'] ?? ''), fn() => $ms->accessToken()];
     }

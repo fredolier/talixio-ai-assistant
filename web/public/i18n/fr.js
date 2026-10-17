@@ -2548,5 +2548,7 @@ window.I18N.fr = {
 "<b>API permissions</b> → Add a permission → Microsoft Graph → Delegated: <i>Calendars.ReadWrite</i>, <i>offline_access</i>, <i>User.Read</i>. To send and read mail with it (Sign-in: Microsoft in the email settings), also <i>SMTP.Send</i> and <i>IMAP.AccessAsUser.All</i>.": "<b>Autorisations des API</b> → Ajouter une autorisation → Microsoft Graph → Déléguées : <i>Calendars.ReadWrite</i>, <i>offline_access</i>, <i>User.Read</i>. Pour envoyer et lire des e-mails avec (Connexion : Microsoft dans les réglages e-mail), ajoutez aussi <i>SMTP.Send</i> et <i>IMAP.AccessAsUser.All</i>.",
 "The Microsoft account is not connected: press \"Connect with Microsoft\" under its Sign-in setting.": "Le compte Microsoft n'est pas connecté : appuyez sur « Se connecter avec Microsoft » sous son réglage Connexion.",
 "Microsoft mail access was revoked or expired (or the app secret expired): connect the mailbox again in Settings.": "L'accès aux e-mails Microsoft a été révoqué ou a expiré (ou le secret de l'application a expiré) : reconnectez la boîte mail dans les Réglages.",
-"Open {a}": "Ouvrir {a}"
+"Open {a}": "Ouvrir {a}",
+"Servers set to Microsoft 365's. Save to apply.": "Serveurs réglés sur ceux de Microsoft 365. Enregistrez pour appliquer.",
+"Microsoft sign-in only works with Microsoft 365's servers (smtp.office365.com, outlook.office365.com), not {a}: change the server in the email settings.": "La connexion Microsoft ne fonctionne qu'avec les serveurs de Microsoft 365 (smtp.office365.com, outlook.office365.com), pas {a} : changez le serveur dans les réglages e-mail."
 };

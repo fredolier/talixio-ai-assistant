@@ -2241,7 +2241,12 @@ check('outlook mail: sign-in for SMTP and IMAP kept apart from the calendar', st
     && $ga->microsoft()->tokens()['access_token'] === 'mt-2' && !$ga->microsoft('mailbox')->connected());
 $state = $aj('/api/microsoft', null, 'd');
 check('outlook mail: status for the app per mailbox, no tokens', $state['mail']['email']['connected'] && $state['mail']['email']['email'] === 'fred@outlook.com' && !$state['mail']['mailbox']['connected'] && !str_contains(json_encode($state), 'mt-1'), json_encode($state));
-check('outlook mail: password sign-in unless Microsoft is chosen', \Talixio\Microsoft::mailLogin($ga, 'email', 'x') === null);
+check('outlook mail: password sign-in unless Microsoft is chosen', \Talixio\Microsoft::mailLogin($ga, 'email', 'x', 'prologia.lan') === null);
+$ga->cfg->smtpAuth = 'microsoft'; $ga->cfg->smtpHost = 'mail.example.lan';
+try { $ga->email()->smtp(); $err = ''; } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+check('outlook mail: the token is never sent to a server other than Microsoft\'s', str_contains($err, 'not mail.example.lan') && \Talixio\Microsoft::mailLogin($ga, 'email', '', 'SMTP.Office365.com') !== null
+    && \Talixio\Microsoft::mailLogin($ga, 'email', '', 'outlook.office365.com.') !== null, $err);
+\Talixio\Microsoft::$mailHosts[] = '127.0.0.1'; // the fake servers below
 $ga->cfg->smtpAuth = 'microsoft'; $ga->cfg->smtpUser = ''; $ga->cfg->smtpPassword = 'old'; $ga->cfg->smtpHost = '127.0.0.1'; $ga->cfg->smtpSecurity = 'none';
 $port = $freePort(); $log = "$dir/smtp-oauth.log";
 $proc = $spawn('smtp.php', [(string)$port, $log]); $waitPort($port);
@@ -2261,6 +2266,7 @@ proc_terminate($proc); proc_close($proc);
 check('outlook mail: IMAP signs in with AUTHENTICATE XOAUTH2, a refusal reported', $n === 0 && str_contains((string)@file_get_contents("$idir/auth.log"), "user=bot@outlook.com\x01auth=Bearer mt-1") && str_contains($err, 'AUTHENTICATE failed') && !str_contains($err, 'bad-token'), $err);
 $ga->microsoft('email')->disconnect();
 $ga->microsoft()->disconnect();
+array_pop(\Talixio\Microsoft::$mailHosts);
 check('outlook: disconnect forgets the tokens', !$ga->microsoft()->connected() && !is_file("$ad/microsoft.json"));
 putenv('TALIXIO_MICROSOFT_LOGIN_BASE'); putenv('TALIXIO_MICROSOFT_API_BASE');
 proc_terminate($ms); proc_close($ms);

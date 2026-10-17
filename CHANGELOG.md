@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.46 (2026-10-17)
+
+- Microsoft sign-in for email: choosing *Microsoft 365 account (OAuth)* now also sets the servers to Microsoft's
+  (smtp.office365.com port 587 STARTTLS, outlook.office365.com port 993). Before, the old servers were kept,
+  so the mail still went to the previous server. The account's token is now only ever sent to Microsoft's
+  servers: with another server, sending stops with a message saying which server to change.
+
 ## 0.28.45 (2026-10-17)
 
 - Outlook / Microsoft 365 email: the assistant's address and your mailbox can sign in with the Microsoft

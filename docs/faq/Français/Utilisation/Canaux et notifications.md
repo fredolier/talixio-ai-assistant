@@ -37,7 +37,9 @@ d'organisations les refusent déjà (« 535 5.7.3 Authentication unsuccessful »
 plutôt avec le compte Microsoft :
 1. Configurez l'application Microsoft sous Réglages → *Calendrier* → *Outlook / Microsoft 365* (étapes 1 à 5),
    et ajoutez les autorisations déléguées *SMTP.Send* et *IMAP.AccessAsUser.All*.
-2. Dans les réglages e-mail (ceux de l'assistant, ou de votre boîte), *Connexion* → *Compte Microsoft 365 (OAuth)*, enregistrez.
+2. Dans les réglages e-mail (ceux de l'assistant, ou de votre boîte), *Connexion* → *Compte Microsoft 365 (OAuth)* : les serveurs
+   passent à ceux de Microsoft (smtp.office365.com, outlook.office365.com) ; enregistrez. Le jeton du compte n'est
+   envoyé qu'aux serveurs de Microsoft.
 3. Appuyez sur *Se connecter avec Microsoft* et connectez-vous avec le compte de cette boîte. Laissez le mot de passe vide.
 L'adresse de l'assistant, votre boîte et le calendrier ont chacun leur propre connexion.
 Dans le centre d'administration Microsoft 365, *SMTP authentifié* doit rester activé pour la boîte
