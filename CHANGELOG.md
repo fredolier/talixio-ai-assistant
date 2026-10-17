@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.52 (2026-10-17)
+
+- Server update: once the new version of the admin agent runs, it restarts every assistant whose settings that version
+  writes differently. Before, the previous version restarted them, so a fix in what each assistant is given (like
+  0.28.51's full list of linked assistants) only showed after a later update.
+
 ## 0.28.51 (2026-10-17)
 
 - Assistant switcher: an assistant now lists all of the person's assistants, also the ones linked only through

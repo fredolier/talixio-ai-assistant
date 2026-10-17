@@ -5,6 +5,7 @@ declare(strict_types=1);
 //   php fleetctl.php adopt <id> [name]    an existing installation, already copied into the volume talixio-<id>
 //   php fleetctl.php create <id> [name]   a new person (prints the address and first password)
 //   php fleetctl.php reload               rewrite the Caddyfile and reload Caddy
+//   php fleetctl.php sync                 remake the containers this code would make differently (after an update)
 //   php fleetctl.php installed <branch>  record the image install-stack.sh just built (shown in the admin page)
 //   php fleetctl.php list
 require __DIR__ . '/../../src/autoload.php';
@@ -21,9 +22,10 @@ try {
         case 'adopt': echo json_encode($fleet->adopt($id, $name)), "\n"; break;
         case 'create': $r = $fleet->create($id, $name); echo "Address: {$r['url']}\nPassword: {$r['password']}\n"; break;
         case 'reload': $fleet->reloadCaddy(); echo "Caddy reloaded\n"; break;
+        case 'sync': foreach ($fleet->sync() as $i) echo "$i made again\n"; break;
         case 'installed': $fleet->installed($id); break;
         case 'list': foreach ($fleet->list() as $i) echo "{$i['id']}\t{$i['state']}\t{$i['url']}\n"; break;
-        default: fwrite(STDERR, "usage: fleetctl.php init|adopt|create|reload|installed|list\n"); exit(2);
+        default: fwrite(STDERR, "usage: fleetctl.php init|adopt|create|reload|sync|installed|list\n"); exit(2);
     }
 } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . "\n");

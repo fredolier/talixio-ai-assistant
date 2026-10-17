@@ -159,7 +159,7 @@ final class Fleet
         }
         $secOpt = ['no-new-privileges', 'seccomp=' . (string)file_get_contents(dirname(__DIR__) . '/deploy/docker/seccomp-sandbox.json')];
         if ($set['apparmor_unconfined']) $secOpt[] = 'apparmor=unconfined'; // Ubuntu: Docker's profile forbids the sandboxes' mounts (seccomp and no privileges still apply)
-        return [
+        $spec = [
             'Image' => $image ?? $s['image']['current'],
             'Hostname' => $id,
             'Env' => $env,
@@ -183,6 +183,25 @@ final class Fleet
                 'NetworkMode' => self::PREFIX . 'i-' . $id,
             ],
         ];
+        $spec['Labels']['talixio.spec'] = substr(sha1(json_encode($spec, JSON_UNESCAPED_SLASHES)), 0, 16); // sync() remakes a container made from another spec
+        return $spec;
+    }
+
+    /**
+     * Remake every container made from another spec than this code's: an update moves the instances while the previous
+     * agent's code still runs, so what the new code puts in a container (its linked assistants, say) appears only now.
+     * @return string[] the instances made again
+     */
+    public function sync(): array
+    {
+        $s = $this->state(); $done = [];
+        foreach (array_keys($s['instances']) as $id) {
+            [$code, $c] = $this->docker('GET', '/containers/' . $this->containerName($id) . '/json');
+            if ($code !== 200 || !is_array($c)) continue; // not made yet, or Docker answers later: nothing to compare
+            if (($c['Config']['Labels']['talixio.spec'] ?? '') === $this->spec($id, $s)['Labels']['talixio.spec']) continue;
+            $this->recreate($id); $done[] = $id;
+        }
+        return $done;
     }
 
     // ---------- Docker Engine API (unix socket) ----------
@@ -790,6 +809,7 @@ final class Fleet
                 if ($ok) {
                     // the routes (Caddyfile) of the new version, written by its own code
                     try { $this->exec($agent, ['php', '/opt/talixio/deploy/docker/fleetctl.php', 'reload'], 60); } catch (\Throwable $e) { error_log('caddy reload: ' . $e->getMessage()); }
+                    try { $this->exec($agent, ['php', '/opt/talixio/deploy/docker/fleetctl.php', 'sync'], 900); } catch (\Throwable $e) { error_log('sync: ' . $e->getMessage()); } // what the new code puts in each container
                     $this->docker('DELETE', "/containers/$agent-old", null, ['force' => 'true']);
                     return; // ends this process too
                 }
