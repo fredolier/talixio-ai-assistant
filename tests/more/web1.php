@@ -48,6 +48,8 @@ $g = $raw('/api/google/callback?code=x&state=forged');
 check('web1: Google callback with a forged state does not connect', $g['code'] === 303 && !str_contains($g['h']['location'] ?? '', 'google=connected'), json_encode($g['h']));
 $m = $raw('/api/microsoft/callback?error=x&error_description=' . rawurlencode("User cancelled\r\nTrace: 123"));
 check('web1: Microsoft refusal keeps only the first line', str_contains($m['h']['location'] ?? '', 'microsoft=Microsoft%3A%20User%20cancelled#settings'), json_encode($m['h']));
+$m = $raw('/api/microsoft/callback?error=invalid_request&error_description=' . rawurlencode("AADSTS50194: Application 'x' is not configured as a multi-tenant application."));
+check('web1: a single-organisation Microsoft app is pointed to the directory setting', str_contains(rawurldecode($m['h']['location'] ?? ''), 'Microsoft directory'), json_encode($m['h']));
 $m = $raw('/api/microsoft/callback?code=x&state=forged');
 check('web1: Microsoft callback with a forged state does not connect', $m['code'] === 303 && !str_contains($m['h']['location'] ?? '', 'microsoft=connected'));
 $s = $raw('/api/spotify/callback?error=denied');

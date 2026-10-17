@@ -83,7 +83,9 @@ final class Microsoft
         $this->app->store->set('microsoft_state', '');
         $for = is_array($saved) && in_array($saved['purpose'] ?? '', self::PURPOSES, true) ? (string)$saved['purpose'] : '';
         $this->finished = $for; // the failure is shown with that connection too
-        if ($error !== '') throw new \RuntimeException('Microsoft: ' . strtok($error, "\r\n"));
+        if ($error !== '') throw new \RuntimeException(str_contains($error, 'AADSTS50194') // an app for one organisation only
+            ? 'Your Microsoft app accepts only your organisation: put its Directory (tenant) ID in Settings → Calendar → Microsoft directory, save, then connect again.'
+            : 'Microsoft: ' . strtok($error, "\r\n"));
         if (!is_array($saved) || !hash_equals((string)$saved['state'], $state) || $saved['ts'] < time() - 900) throw new \InvalidArgumentException('This sign-in link expired. Press "Connect" again.');
         return ($for === $this->purpose ? $this : new self($this->app, $for))->finishWith($code, $saved['redirect']);
     }

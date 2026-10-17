@@ -2563,5 +2563,6 @@ window.I18N.fr = {
 "From {a} · notifications to {b} · answers {c}": "De {a} · notifications à {b} · répond à {c}",
 "From {a} · answers {b}": "De {a} · répond à {b}",
 "Last sign-in failed ({a}):": "Dernière connexion échouée ({a}) :",
-"Last sign-in failed:": "Dernière connexion échouée :"
+"Last sign-in failed:": "Dernière connexion échouée :",
+"Your Microsoft app accepts only your organisation: put its Directory (tenant) ID in Settings → Calendar → Microsoft directory, save, then connect again.": "Votre application Microsoft n'accepte que votre organisation : mettez son ID d'annuaire (locataire) dans Réglages → Calendrier → Annuaire Microsoft, enregistrez, puis reconnectez-vous."
 };

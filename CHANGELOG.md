@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.50 (2026-10-17)
+
+- Microsoft sign-in: when the Microsoft app accepts only your organisation (Microsoft's error AADSTS50194),
+  the message now says to put its Directory (tenant) ID in Settings → Calendar → Microsoft directory.
+
 ## 0.28.49 (2026-10-17)
 
 - Microsoft sign-in (Outlook calendar, the assistant's email, your mailbox): when it fails, the reason now
