@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.53 (2026-10-17)
+
+- Installed app: on a server where a person's assistants share one address (`/alex-work/`, `/alex-private/`),
+  switching to another assistant now stays in the app's window. Before, the app showed it as an outside page,
+  with an address bar and a close button taking up space.
+
 ## 0.28.52 (2026-10-17)
 
 - Server update: once the new version of the admin agent runs, it restarts every assistant whose settings that version

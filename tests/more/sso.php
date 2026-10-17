@@ -65,4 +65,14 @@ check('sso web: go returns a ticket address for the other', str_starts_with($go[
 check('sso web: go refuses an unknown assistant', $web('/api/assistants/go', ['to' => 'zed'], 'y')['_code'] === 400);
 check('sso web: go needs a session', $web('/api/assistants/go', ['to' => 'work'], 'z')['_code'] === 401);
 
+// ---- the installed app: assistants under one address keep switching inside its window
+$mf = $web('/manifest.json', null, 'y');
+check('sso web: a root assistant keeps its own scope', ($mf['scope'] ?? '') === './', $mf['_raw'] ?? '');
+$web2 = web_app(test_dir('sso-web-path'), ['TALIXIO_WEB_PASSWORD' => 'pw', 'TALIXIO_BASE_PATH' => 'home', 'TALIXIO_INSTANCE' => 'home', 'TALIXIO_SSO_KEY' => $kb, 'TALIXIO_LINKS' => $links]);
+$mf2 = $web2('/manifest.json');
+check('sso web: linked assistants under a path widen the app to the whole address', ($mf2['scope'] ?? '') === '/' && ($mf2['id'] ?? '') === './'
+    && ($mf2['start_url'] ?? '') === './?source=app#chat' && str_contains($mf2['_headers']['content-type'] ?? '', 'manifest+json'), $mf2['_raw'] ?? '');
+$web3 = web_app(test_dir('sso-web-alone'), ['TALIXIO_WEB_PASSWORD' => 'pw', 'TALIXIO_BASE_PATH' => 'solo']);
+check('sso web: an assistant under a path with no links keeps its own scope', ($web3('/manifest.json')['scope'] ?? '') === './');
+
 foreach ($keep as $k => $v) putenv($v === false ? $k : "$k=$v");

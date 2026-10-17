@@ -50,6 +50,10 @@ confidentiality level).
 - In the app, the assistant's name (top left, or in *More* on a phone) lists the others. Choosing
   one opens it in the same tab, already signed in. With the menu folded, the round badge at the top
   opens the same list.
+- In the installed app, switching stays in the app's window when the assistants share one address
+  (`assistant.example.com/alex-work/`, `…/alex-private/`). If a bar with the address and a ✕
+  still appears, close the app and open it again once, so it picks up the change. With one address
+  per assistant (`alex-work.example.com`), the browser always shows that bar: install each one.
 - Each assistant has a coloured badge with its initials, taken from its id (`alex-acme` → AA): the
   same colour and letters on every assistant, so you can tell at a glance which one you are in.
   The list shows each assistant's name and id, the current one first.

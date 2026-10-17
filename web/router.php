@@ -9,6 +9,16 @@ if (preg_match('#^/v/[0-9a-f]{12}/((?:i18n/)?[a-z0-9]+\.(js|css))$#', $path, $m)
     readfile(__DIR__ . '/public/' . $m[1]);
     return true;
 }
+// assistants under one address (/fred-work/, /fred-pia/) linked together: the installed app covers the whole address, so
+// switching to another one stays in the app's window instead of showing it as an outside page with an address bar
+if ($path === '/manifest.json' && trim((string)getenv('TALIXIO_BASE_PATH'), '/') !== '' && json_decode((string)getenv('TALIXIO_LINKS'), true)) {
+    $m = json_decode((string)file_get_contents(__DIR__ . '/public/manifest.json'), true);
+    $m['scope'] = '/';
+    header('Content-Type: application/manifest+json');
+    header('Cache-Control: no-cache');
+    echo json_encode($m, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    return true;
+}
 if ($path !== '/' && is_file(__DIR__ . '/public' . $path) && !str_contains($path, '..')) {
     return false; // static asset, served by the built-in server
 }

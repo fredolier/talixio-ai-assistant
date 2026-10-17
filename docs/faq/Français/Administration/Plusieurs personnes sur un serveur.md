@@ -50,6 +50,11 @@ avec les règles de leur niveau de confidentialité).
 - Dans l'application, le nom de l'assistant (en haut à gauche, ou dans *Plus* sur un téléphone)
   liste les autres. En choisir un l'ouvre dans le même onglet, déjà connecté. Menu replié, la
   pastille ronde en haut ouvre la même liste.
+- Dans l'application installée, changer d'assistant reste dans la fenêtre de l'application quand
+  les assistants partagent une adresse (`assistant.example.com/alex-travail/`, `…/alex-perso/`). Si une
+  barre avec l'adresse et une ✕ apparaît encore, fermez l'application et rouvrez-la une fois pour
+  qu'elle prenne le changement. Avec une adresse par assistant (`alex-travail.example.com`), le
+  navigateur montre toujours cette barre : installez chacun.
 - Chaque assistant a une pastille colorée avec ses initiales, tirées de son identifiant (`alex-acme`
   → AA) : mêmes couleur et lettres sur tous les assistants, pour voir d'un coup d'œil où vous êtes.
   La liste montre le nom et l'identifiant de chaque assistant, l'actuel en premier.
