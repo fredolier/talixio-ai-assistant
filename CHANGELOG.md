@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.44 (2026-10-17)
+
+- Fix: "Sign in with Claude" hung after pasting the code, then said Claude did not answer in time. Claude Code
+  takes a long burst of typed input as a paste, so the Enter sent with the code was pasted instead of pressed and
+  the code was never submitted. The code is now typed first and Enter pressed on its own a moment later (and once
+  more if nothing happens). A test fake Claude Code now behaves the same way.
+
 ## 0.28.43 (2026-10-16)
 
 - **Move a space to another assistant**: space card → *Move…*, pick one of your linked assistants. The browser

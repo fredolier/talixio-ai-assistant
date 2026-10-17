@@ -597,8 +597,14 @@ $cbin = "$d/claude-bin";
 @mkdir($cbin);
 $fakeClaude = fn(string $after) => "#!/bin/sh\nprintf 'Browser did not open? Use the url below to sign in:\\n\\n\\033[1mhttps://claude.ai/oauth/authorize?code=true&client_id=demo&state=xyz\\033[0m\\n\\nPaste code here if prompted > '\nread code\n$after";
 file_put_contents("$cbin/claude-ok", $fakeClaude("if [ \"\$code\" = good-code ]; then printf '\\nLong-lived token created:\\n\\033[32msk-ant-oat01-DemoToken_abcdefghijklmnopqrstuvwxyz\\033[0m\\n'; else printf '\\nOAuth error: Invalid code. Press Enter to retry.\\n'; fi\nsleep 3\n"));
+// like the real one: raw terminal, and an Enter arriving in the same burst as the code is part of a paste, not a key press
+file_put_contents("$cbin/claude-paste", "#!" . PHP_BINARY . "\n<?php\nshell_exec('stty -icanon -echo min 1');\n"
+    . "echo \"Browser did not open? Use the url below to sign in:\\n\\nhttps://claude.ai/oauth/authorize?code=true&client_id=demo&state=xyz\\n\\nPaste code here if prompted > \";\n"
+    . "\$code = '';\nwhile (true) {\n  \$in = fread(STDIN, 8192);\n  if (\$in === '' || \$in === false) exit(1);\n"
+    . "  if (\$in === \"\\r\" || \$in === \"\\n\") break;\n  \$code .= str_replace([\"\\r\", \"\\n\"], '', \$in);\n  echo str_repeat('*', strlen(\$in));\n}\n"
+    . "echo \$code === 'good-code' ? \"\\nLong-lived token created:\\nsk-ant-oat01-PasteToken_abcdefghijklmnopqrstuvwxyz\\n\" : \"\\nOAuth error: Invalid code. Press Enter to retry.\\n\";\nsleep(3);\n");
 file_put_contents("$cbin/claude-die", "#!/bin/sh\necho 'Error: \\033[31mnot available\\033[0m in this region'\nexit 1\n");
-chmod("$cbin/claude-ok", 0755); chmod("$cbin/claude-die", 0755);
+chmod("$cbin/claude-ok", 0755); chmod("$cbin/claude-die", 0755); chmod("$cbin/claude-paste", 0755);
 $cd = "$d/claude-data";
 @mkdir("$cd/claude-login", 0700, true);
 putenv("TALIXIO_DATA_DIR=$cd"); putenv('TALIXIO_PROVIDER=echo');
@@ -613,6 +619,10 @@ check('claude: the terminal gets the code and the token is kept', $cstate()['sta
 file_put_contents("$cd/claude-login/code", 'used-code');
 ClaudeLogin::run($cfgWith("$cbin/claude-ok"));
 check('claude: a refused code says so', $cstate()['state'] === 'error' && $cstate()['message'] === 'Claude refused the code (OAuth error: Invalid code.). Start again and paste the whole code.', json_encode($cstate()));
+file_put_contents("$cd/claude-login/code", 'good-code');
+ClaudeLogin::run($cfgWith("$cbin/claude-paste"));
+check('claude: Enter is pressed apart from the pasted code', $cstate()['state'] === 'done' && (string)@file_get_contents("$cd/claude-login/token") === 'sk-ant-oat01-PasteToken_abcdefghijklmnopqrstuvwxyz', json_encode($cstate()));
+@unlink("$cd/claude-login/token"); @unlink("$cd/claude-login/state.json"); // as start() does
 ClaudeLogin::run($cfgWith("$cbin/claude-die"));
 check('claude: Claude Code stopping early is reported with what it said', $cstate()['state'] === 'error' && str_contains($cstate()['message'], 'Claude Code stopped: Error: not available in this region'), json_encode($cstate()));
 // from the web app: start, then the code

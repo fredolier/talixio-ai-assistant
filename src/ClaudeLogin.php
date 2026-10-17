@@ -89,7 +89,7 @@ final class ClaudeLogin
         $p = proc_open(['script', '-qfec', $cmd, '/dev/null'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $c->dataDir, $env);
         if (!is_resource($p)) { self::setState($dir, ['state' => 'error', 'message' => 'could not start Claude Code']); return; }
         stream_set_blocking($pipes[1], false); stream_set_blocking($pipes[2], false);
-        $buf = ''; $mark = 0; $until = time() + self::TIMEOUT; $sent = false; $url = '';
+        $buf = ''; $mark = 0; $until = time() + self::TIMEOUT; $sent = false; $url = ''; $enterAt = 0.0; $enters = 0; $seen = 0;
         $plain = fn(string $s) => preg_replace('/\x1b\][^\x07]*\x07|\x1b\[[0-9;?<>=]*[A-Za-z~]|\x1b[78()=>][0-9A-B]?/', '', $s);
         try {
             while (time() < $until) {
@@ -103,10 +103,19 @@ final class ClaudeLogin
                     $code = trim((string)file_get_contents("$dir/code"));
                     @unlink("$dir/code");
                     $mark = strlen($buf);
-                    fwrite($pipes[0], $code . "\r"); fflush($pipes[0]);
-                    $sent = true;
+                    // Claude Code takes a long burst of input as a paste: an Enter in the same burst is pasted, not
+                    // pressed. So the code first, then Enter on its own a moment later.
+                    fwrite($pipes[0], $code); fflush($pipes[0]);
+                    $sent = true; $enterAt = microtime(true) + 0.6;
                     self::setState($dir, ['state' => 'exchanging']);
                 }
+                if ($enterAt && microtime(true) >= $enterAt) {
+                    fwrite($pipes[0], "\r"); fflush($pipes[0]);
+                    $enters++; $seen = strlen($buf);
+                    // nothing on screen after it: press it once more
+                    $enterAt = $enters < 2 ? microtime(true) + 6 : 0.0;
+                }
+                if ($enterAt && $enters && strlen($buf) > $seen) $enterAt = 0.0;
                 $after = $plain(substr($buf, $mark));
                 if ($sent && preg_match('/sk-ant-oat\d+-[A-Za-z0-9_\-]{20,}/', $after, $m)) {
                     file_put_contents("$dir/token", $m[0]); chmod("$dir/token", 0600);
