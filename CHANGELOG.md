@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.51 (2026-10-17)
+
+- Assistant switcher: an assistant now lists all of the person's assistants, also the ones linked only through
+  another (Work and PIA each linked to Private: Work now shows PIA too). Update the server so they restart with it.
+
 ## 0.28.50 (2026-10-17)
 
 - Microsoft sign-in: when the Microsoft app accepts only your organisation (Microsoft's error AADSTS50194),

@@ -148,7 +148,7 @@ final class Fleet
         $env[] = 'TALIXIO_INSTANCE_NAME=' . ($i['name'] ?? '');
         if (!empty($i['links']) && !empty($s['sso_key'])) { // the person's other assistants: one sign-in opens them all (Links)
             $links = [];
-            foreach ($i['links'] as $to) if (isset($s['instances'][$to]))
+            foreach (self::group($s, $id) as $to)
                 $links[] = ['id' => $to, 'name' => $s['instances'][$to]['name'] ?: $to, 'url' => $this->url($to, $set), 'key' => self::ssoKey($s, $to)];
             if ($links) array_push($env, 'TALIXIO_SSO_KEY=' . self::ssoKey($s, $id), 'TALIXIO_LINKS=' . json_encode($links, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         }
@@ -377,7 +377,7 @@ final class Fleet
         $s['instances'][$id]['name'] = $name; $s['instances'][$id]['email'] = $email;
         $this->save($s);
         if (($i['name'] ?? '') === $name) return; // the email is only for the admin page
-        foreach ([$id, ...($i['links'] ?? [])] as $x) if (isset($s['instances'][$x])) $this->recreate($x);
+        foreach ([$id, ...self::group($s, $id)] as $x) $this->recreate($x);
     }
 
     /** Forgotten password: a new one (shown once); every device signs in again. */
@@ -406,10 +406,20 @@ final class Fleet
         return hash_hmac('sha256', "sso:$id:" . (int)($s['instances'][$id]['sso_gen'] ?? 0), (string)$s['sso_key']);
     }
 
+    /** The assistants $id opens: those linked to it, and the ones linked to them (a person's work, private… assistants, linked in any order). */
+    public static function group(array $s, string $id): array
+    {
+        $seen = [$id => true]; $todo = [$id];
+        while ($todo) foreach ($s['instances'][array_shift($todo)]['links'] ?? [] as $to)
+            if (!isset($seen[$to]) && isset($s['instances'][$to])) { $seen[$to] = true; $todo[] = $to; }
+        unset($seen[$id]);
+        return array_map('strval', array_keys($seen));
+    }
+
     /**
      * The other assistants this one opens without signing in again (the same person's work and private assistants, say).
-     * Links go both ways. The assistants that gain or lose a link are made again so they read it; one that loses a link
-     * gets a new key, so a link made before cannot open it any more.
+     * Links go both ways, and through the others (group): A–B and B–C let A open C. Every assistant whose group changes is
+     * made again so it reads it; one that loses a link gets a new key, so a link made before cannot open it any more.
      */
     public function setLinks(string $id, array $ids): array
     {
@@ -423,16 +433,13 @@ final class Fleet
         $before = $s['instances'][$id]['links'] ?? [];
         $added = array_values(array_diff($ids, $before)); $removed = array_values(array_diff($before, $ids));
         if (!$added && !$removed) return $ids;
+        $old = $s;
         $s['instances'][$id]['links'] = $ids;
         foreach ($added as $to) $s['instances'][$to]['links'] = array_values(array_unique([...($s['instances'][$to]['links'] ?? []), $id]));
         foreach ($removed as $to) $s['instances'][$to]['links'] = array_values(array_diff($s['instances'][$to]['links'] ?? [], [$id]));
-        $redo = [$id, ...$added, ...$removed];
-        if ($removed) { // both sides get a new key; whoever still links to them reads the new one
-            foreach ([$id, ...$removed] as $x) {
-                $s['instances'][$x]['sso_gen'] = (int)($s['instances'][$x]['sso_gen'] ?? 0) + 1;
-                array_push($redo, ...($s['instances'][$x]['links'] ?? []));
-            }
-        }
+        $redo = [];
+        foreach ([$id, ...$added, ...$removed] as $x) array_push($redo, $x, ...self::group($old, $x), ...self::group($s, $x));
+        if ($removed) foreach ([$id, ...$removed] as $x) $s['instances'][$x]['sso_gen'] = (int)($s['instances'][$x]['sso_gen'] ?? 0) + 1; // both sides get a new key
         $this->save($s);
         foreach (array_unique($redo) as $x) $this->recreate($x);
         return $ids;

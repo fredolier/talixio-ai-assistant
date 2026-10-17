@@ -45,7 +45,8 @@ conteneur à part, rien de partagé) et, dedans, ses **espaces** (une mémoire e
 avec les règles de leur niveau de confidentialité).
 - Sur la page d'administration : l'assistant de la personne → Actions → *Ses autres assistants
   (une seule connexion)…*, puis cochez les assistants qu'il ouvre. Un lien vaut dans les deux sens,
-  et les assistants concernés redémarrent.
+  et les assistants concernés redémarrent. Les liens se suivent aussi : reliez *Travail* et *PIA* à
+  *Privé*, et *Travail* ouvre aussi *PIA* ; chaque assistant liste donc tous les autres de la personne.
 - Dans l'application, le nom de l'assistant (en haut à gauche, ou dans *Plus* sur un téléphone)
   liste les autres. En choisir un l'ouvre dans le même onglet, déjà connecté. Menu replié, la
   pastille ronde en haut ouvre la même liste.

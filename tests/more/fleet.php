@@ -185,6 +185,10 @@ check('fleet: a new name is saved and both linked containers carry it', $st['ins
 $f->rename('dave', 'Dave — Work', 'd@acme.example');
 check('fleet: a new email alone or the same name restarts nothing', !$has($dlog(), 'POST', '#^/containers/create#') && $f->state()['instances']['dave']['email'] === 'd@acme.example');
 $f->rename('dave', 'Dave', '');
+$g = $f->state(); $g['instances']['erin'] = ['name' => 'Erin — Private', 'links' => ['dave']] + $g['instances']['dave']; $g['instances']['dave']['links'][] = 'erin';
+$ids = fn(string $id) => array_column(json_decode(substr((string)current(preg_grep('/^TALIXIO_LINKS=/', $f->spec($id, $g)['Env'])), 14), true), 'name', 'id');
+check('fleet: linked through another, an assistant opens the whole group (A–B, B–C: A opens C)', Fleet::group($g, 'alice') === ['dave', 'erin'] && Fleet::group($g, 'erin') === ['dave', 'alice']
+    && $ids('alice') === ['dave' => 'Dave', 'erin' => 'Erin — Private'] && $ids('erin') === ['dave' => 'Dave', 'alice' => 'Alice Martin'] && Fleet::group($g, 'nobody') === [], json_encode($ids('alice')));
 $dlog();
 $pw = $f->resetPassword('alice');
 $reset = $f->state()['instances']['alice']['reset'];

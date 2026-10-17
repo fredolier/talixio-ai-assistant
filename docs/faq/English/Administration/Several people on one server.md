@@ -45,6 +45,8 @@ nothing shared) and, inside it, its **spaces** (one memory and library, with the
 confidentiality level).
 - On the admin page: the person's assistant → Actions → *Their other assistants (one sign-in)…*,
   then tick the assistants it opens. A link works both ways, and the affected assistants restart.
+  Links also pass through: link *Work* and *PIA* to *Private*, and *Work* opens *PIA* too, so every
+  assistant lists all of the person's others.
 - In the app, the assistant's name (top left, or in *More* on a phone) lists the others. Choosing
   one opens it in the same tab, already signed in. With the menu folded, the round badge at the top
   opens the same list.
