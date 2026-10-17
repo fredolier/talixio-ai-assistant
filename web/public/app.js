@@ -2588,6 +2588,9 @@ async function disablePush() {
   const sub = await pushSubscription();
   if (sub) { await post('api/push/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe(); }
 }
+// "2026-10-17 13:35 message": the message on its own line, so it is translated like any other text
+const lastError = e => { const m = String(e).match(/^(\d{4}-\d\d-\d\d \d\d:\d\d) ([\s\S]*)$/);
+  return `<p class="err">Last error${m ? ` (${esc(m[1])})` : ''}:</p><p class="err">${esc(m ? m[2] : e)}</p>`; };
 async function loadChannels() {
   const { channels, notify_on } = await api('api/channels');
   const mySub = await pushSubscription().catch(() => null);
@@ -2598,7 +2601,7 @@ async function loadChannels() {
     const uses = [c.chat ? 'chat' : null, notify_on.includes(c.id) ? 'notifications' : null].filter(Boolean).join(' + ');
     el.innerHTML = `<h3>${esc(c.name)} <span class="pill ${on ? 'on' : partial ? 'partial' : 'off'}">${esc(c.state)}</span>${uses && (on || partial) ? `<span class="chip">${uses}</span>` : ''}</h3>
       <div class="actions"></div>
-      <p>${esc(c.detail)}</p>${c.error ? `<p class="err">Last error: ${esc(c.error)}</p>` : ''}`;
+      <p>${esc(c.detail)}</p>${c.error ? lastError(c.error) : ''}`;
     if (c.id === 'webpush') {
       const b = document.createElement('button'); b.className = 'btn small' + (mySub ? '' : ' primary'); b.type = 'button';
       b.textContent = mySub ? 'Turn off on this device' : 'Turn on for this device';
@@ -4451,7 +4454,7 @@ async function refreshStatus() {
   try {
     state.statusAt = Date.now();
     const s = state.status = await api('api/status');
-    $('#brand-name').textContent = s.name; document.title = s.name;
+    const bn = $('#brand-name'); bn.textContent = bn.title = s.name; bn.classList.toggle('long', s.name.length > 14); document.title = s.name;
     renderAssistants(s.assistants, s.assistant);
     const ch = Object.entries(s.channels).filter(([, on]) => on).map(([k]) => k[0].toUpperCase() + k.slice(1)).join(', ');
     const b = s.budget, lim = b.daily_limit > 0 ? ` · $${b.today.toFixed(2)} of $${b.daily_limit.toFixed(2)} today` : '';
@@ -4534,7 +4537,9 @@ $('#test-notify').onclick = async () => {
   $('#test-result').textContent = 'Sending…';
   try {
     const { results } = await post('api/notify/test');
-    $('#test-result').textContent = Object.entries(results).filter(([, r]) => r === 'sent' || r.startsWith('error')).map(([k, r]) => `${k}: ${r}`).join(' · ') || 'No notification channel is set up yet.';
+    const shown = Object.entries(results).filter(([, r]) => r === 'sent' || r.startsWith('error'));
+    $('#test-result').innerHTML = shown.length ? shown.map(([k, r]) => `<div><span class="no-i18n">${esc(k)}:</span> <span>${esc(r === 'sent' ? 'sent' : r.replace(/^error: /, ''))}</span></div>`).join('')
+      : esc('No notification channel is set up yet.');
     loadChannels();
   } catch (e) { $('#test-result').textContent = e.message; }
 };

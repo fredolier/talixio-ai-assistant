@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.48 (2026-10-17)
+
+- Channels: a channel's last error shows its time and message on separate lines, so the message is
+  translated; the test notification lists one line per channel. More French for the email channel's
+  details and the "Set (…). Type to replace." placeholder.
+- The assistant's name at the top of the menu was cut after its first word ("Frédéric" for
+  "Frédéric OLIER - PIA"): a long name now wraps over two lines in a smaller size, and its full text shows on hover.
+
 ## 0.28.47 (2026-10-17)
 
 - Admin page: a new **Name and email…** action renames an assistant. The name is the one shown in the

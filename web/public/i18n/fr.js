@@ -2554,5 +2554,12 @@ window.I18N.fr = {
 "Name and email…": "Nom et e-mail…",
 "Name and email of {a}": "Nom et e-mail de {a}",
 "The name shows in their assistant switcher and on this page. Their linked assistants restart too, to show the new name.": "Le nom s'affiche dans leur sélecteur d'assistants et sur cette page. Leurs assistants liés redémarrent aussi, pour afficher le nouveau nom.",
-"Set on the admin page (Actions → Name and email…), so every linked assistant shows the same name.": "Défini sur la page d'administration (Actions → Nom et e-mail…), pour que tous les assistants liés affichent le même nom."
+"Set on the admin page (Actions → Name and email…), so every linked assistant shows the same name.": "Défini sur la page d'administration (Actions → Nom et e-mail…), pour que tous les assistants liés affichent le même nom.",
+"Last error ({a}):": "Dernière erreur ({a}) :",
+"Last error:": "Dernière erreur :",
+"sent": "envoyée",
+"Set ({a}). Type to replace.": "Défini ({a}). Tapez pour remplacer.",
+"From {a} · notifications to {b}": "De {a} · notifications à {b}",
+"From {a} · notifications to {b} · answers {c}": "De {a} · notifications à {b} · répond à {c}",
+"From {a} · answers {b}": "De {a} · répond à {b}"
 };
