@@ -377,6 +377,7 @@ final class Privacy
         if (!$outside) return null;
         $level = $this->effective();
         if ($level === 'internal') return null;
+        if ($level === 'confidential' && $this->trusted($name, $args)) return null; // the user allowed this site (or search) for good
         $what = match (true) {
             $name === 'web_search' => 'Web search: "' . mb_substr((string)($args['query'] ?? ''), 0, 200) . '"',
             $name === 'fetch_url' || $name === 'browser_open' => 'Open the web page ' . mb_substr((string)($args['url'] ?? ''), 0, 300),
@@ -390,6 +391,14 @@ final class Privacy
         if (App::$inWorker || $this->app->jobId) return "error: blocked: this is a Confidential space and outside access needs the user's approval, which can't be awaited here ($what). Answer with what is on the server only.";
         return $this->app->approvals()->request($name, $args, "$what (from a Confidential space)")
             . ' The user may approve it once; meanwhile answer with what is on the server only, and say that the web was not used.';
+    }
+
+    /** A page on a site the user trusts, or a search once they allowed it from Confidential spaces. */
+    public function trusted(string $name, array $args): bool
+    {
+        $c = $this->app->cfg;
+        return in_array($name, ['fetch_url', 'browser_open'], true) && $c->trustedSite((string)($args['url'] ?? ''))
+            || $name === 'web_search' && $c->webSearchTrusted;
     }
 
     // ---- the Privacy page ----

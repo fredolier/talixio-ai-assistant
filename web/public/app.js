@@ -901,6 +901,7 @@ function restoreDraft() {
 }
 
 // ---- approvals ----
+const siteOf = url => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } };
 async function loadApprovals() {
   let list = [];
   try { list = (await api('api/approvals')).approvals; } catch { return; }
@@ -908,12 +909,14 @@ async function loadApprovals() {
   state.pendingApprovals = list.length; setBadge();
   for (const a of list) {
     const el = document.createElement('div'); el.className = 'approval';
+    const site = ['fetch_url', 'browser_open'].includes(a.tool) ? siteOf(a.args_decoded?.url || '') : '';
+    const always = site ? t('Always allow {site}', {site}) : a.tool === 'web_search' ? t('Always allow web search') : '';
     el.innerHTML = `<span class="label">Needs your approval · #${a.id}</span>
-      <div class="actions"><button class="btn small" data-d="reject" type="button">Reject</button><button class="btn small primary" data-d="approve" type="button">Approve</button></div>
+      <div class="actions"><button class="btn small" data-d="reject" type="button">Reject</button>${always ? `<button class="btn small" data-d="always" type="button">${esc(always)}</button>` : ''}<button class="btn small primary" data-d="approve" type="button">Approve</button></div>
       <div class="what">${esc(a.summary)}</div>`;
     el.querySelectorAll('button').forEach(b => b.onclick = async () => {
       el.querySelectorAll('button').forEach(x => x.disabled = true);
-      try { const r = await post(`api/approvals/${a.id}/${b.dataset.d}`); appendMessages(r.messages); toast(b.dataset.d === 'approve' ? 'Approved' : 'Rejected'); }
+      try { const r = await post(`api/approvals/${a.id}/${b.dataset.d}`); appendMessages(r.messages); toast(b.dataset.d === 'reject' ? 'Rejected' : 'Approved'); }
       catch (e) { toast(e.message); }
       loadApprovals();
     });

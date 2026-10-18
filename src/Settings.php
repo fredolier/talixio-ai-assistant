@@ -144,6 +144,8 @@ final class Settings
                 ['TALIXIO_BROWSER_ALLOW_PRIVATE', 'Allow local network addresses', 'bool', 'Not recommended: a web page could reach your devices.'],
                 ['TALIXIO_BROWSER_NO_SANDBOX', 'Disable Chromium\'s sandbox', 'bool', 'Only if Chromium won\'t start otherwise.'],
                 ['TALIXIO_APPROVAL_WAIT_SECONDS', 'Wait for an approval (seconds)', 'number', 'For a web form being filled in.'],
+                ['TALIXIO_WEB_TRUSTED', 'Trusted websites', 'list', 'Opened without asking, also from Confidential spaces and routines (never from Secret ones). Subdomains included, e.g. lemonde.fr, gouv.fr.'],
+                ['TALIXIO_WEB_SEARCH_TRUSTED', 'Web search from Confidential spaces without asking', 'bool', 'The search words go to your search service. Never from Secret spaces.'],
                 ['TALIXIO_AUTO_APPROVE', 'Actions without approval', 'multi', 'Not recommended: you won\'t be asked for these any more.', ['calendar_add' => 'Add to calendar', 'mail_send' => 'Send email as you', 'browser_submit' => 'Submit a web form']],
             ]],
             'shell' => ['Sandboxed shell', 'A Linux sandbox for the assistant (bubblewrap, installed with install.sh --with-shell): it runs commands and Python to compute, convert or analyse files. It sees only the system programs and its own work folder, not your server, data or keys.', [

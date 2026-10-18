@@ -36,6 +36,11 @@ If a question asked in General reads a confidential document, the rest of the an
   cannot be changed from elsewhere; a Secret space's folder is not shown outside it.
 - **Web search**: the provider's own web search is turned off as soon as the work is above
   Internal; Talixio's web search asks for your approval (Confidential) or is refused (Secret).
+- **Trusted websites**: sites listed in Settings → Browser and approvals → Trusted websites (subdomains
+  included) open without asking, also from Confidential spaces, routines and after reading an email. The
+  "Always allow" button on an approval adds the site for you; for a web search it turns on "Web search from
+  Confidential spaces without asking". Secret spaces still never reach the web. While approvals are
+  waiting, you get one notice, not one email per request.
 
 ## Under each answer
 Badges show where the answer went ("Anthropic · 3 documents", "3 local", "1 blocked");

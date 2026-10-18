@@ -278,9 +278,9 @@ final class Web
             $path === '/api/notifications/read' && $m === 'POST' => ['ok' => true, 'marked' => $this->app->notifier()->markRead(isset($b['id']) ? (int)$b['id'] : null), 'unread' => $this->app->notifier()->unread()],
             $path === '/api/notifications/clear' && $m === 'POST' => ['ok' => true, 'removed' => $this->app->notifier()->clear()],
             $path === '/api/approvals' => ['approvals' => array_map(fn($a) => $a + ['args_decoded' => json_decode($a['args'], true)], $this->app->approvals()->pending())],
-            (bool)preg_match('#^/api/approvals/(\d+)/(approve|reject)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) {
+            (bool)preg_match('#^/api/approvals/(\d+)/(approve|reject|always)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) {
                 $before = $this->app->store->maxMessageId();
-                $msg = $this->app->approvals()->decide((int)$mm[1], $mm[2] === 'approve', 'web');
+                $msg = $mm[2] === 'always' ? $this->app->approvals()->always((int)$mm[1]) : $this->app->approvals()->decide((int)$mm[1], $mm[2] === 'approve', 'web');
                 return ['message' => $msg, 'messages' => $this->app->store->messagesAfter($before)];
             })(),
             $path === '/api/push/key' => ['key' => $this->app->webPush()->publicKey()],

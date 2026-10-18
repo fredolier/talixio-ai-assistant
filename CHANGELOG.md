@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.57 (2026-10-18)
+
+- Trusted websites: sites in Settings → Browser and approvals open without asking (subdomains included), also from
+  Confidential spaces, routines and after outside content; an "Always allow" button on approvals adds the site (or
+  allows web search from Confidential spaces). Secret spaces stay offline. Approvals now send one notice per batch
+  instead of one email each.
+
 ## 0.28.56 (2026-10-18)
 
 - Routing benchmark on outside cases: 2,100 documents and questions from three public datasets, labelled by their

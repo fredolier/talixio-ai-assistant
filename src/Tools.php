@@ -772,7 +772,7 @@ final class Tools
         $show = fn(array $a) => mb_substr(json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), 0, 3000);
         if (in_array($name, ['fetch_url', 'browser_open'], true)) {
             $url = trim((string)($args['url'] ?? ''));
-            return isset(Privacy::$links[$url]) || isset(Privacy::$links[rtrim($url, '/')]) ? null : ($name === 'fetch_url' ? 'Fetch' : 'Open') . " the web address $url$why";
+            return isset(Privacy::$links[$url]) || isset(Privacy::$links[rtrim($url, '/')]) || $this->app->cfg->trustedSite($url) ? null : ($name === 'fetch_url' ? 'Fetch' : 'Open') . " the web address $url$why";
         }
         $lasting = ['memory_append', 'memory_replace', 'skill_save', 'skill_delete', 'schedule_task', 'kb_move'];
         if (in_array($name, $lasting, true) || ($name === 'space_notes' && ($args['action'] ?? 'read') !== 'read')) return "Run $name: " . $show($args) . $why;

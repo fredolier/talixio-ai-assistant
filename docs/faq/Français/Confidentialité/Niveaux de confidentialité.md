@@ -38,6 +38,12 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
   en dehors de lui.
 - **Recherche web** : la recherche web propre au fournisseur est coupée dès que le travail dépasse
   Interne ; celle de Talixio demande votre validation (Confidentiel) ou est refusée (Secret).
+- **Sites web de confiance** : les sites listés dans Réglages → Navigateur et validations → Sites web de
+  confiance (sous-domaines inclus) s'ouvrent sans demander, y compris depuis un espace Confidentiel, une
+  routine ou après la lecture d'un e-mail. Le bouton « Toujours autoriser » d'une validation ajoute le site
+  pour vous ; pour une recherche web, il active « Recherche web depuis les espaces Confidentiels sans
+  demander ». Les espaces Secrets n'accèdent jamais au web. Tant que des validations attendent, vous recevez
+  une seule notification, pas un e-mail par demande.
 
 ## Sous chaque réponse
 Des pastilles disent où la réponse est allée (« Anthropic · 3 documents », « 3 en local », « 1 bloqué ») ;

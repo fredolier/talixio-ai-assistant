@@ -1040,6 +1040,9 @@ Talixio\Privacy::$links['https://acme.example/report'] = true;
 check('untrusted: an address found in that content opens without asking, reading stays free',
     !str_contains($app->tools->run('fetch_url', ['url' => 'https://acme.example/report']), 'Waiting for the user') && !str_contains($app->tools->run('space_notes', ['action' => 'read']), 'Waiting for the user')
     && count($app->approvals()->pending()) === $pendingNow && Talixio\Privacy::$privateRead);
+$app->cfg->webTrusted = ['acme.example'];
+check('untrusted: a trusted site opens without asking', !str_contains($app->tools->run('fetch_url', ['url' => 'https://docs.acme.example/other']), 'Waiting for the user') && count($app->approvals()->pending()) === $pendingNow);
+$app->cfg->webTrusted = [];
 foreach ($app->approvals()->pending() as $p) $app->approvals()->decide((int)$p['id'], false);
 Talixio\Privacy::begin();
 check('untrusted: a new answer starts clean', $app->tools->run('memory_append', ['file' => 'USER.md', 'text' => '- Likes tea']) === 'appended' && !Talixio\Privacy::$untrusted);
@@ -1463,6 +1466,27 @@ $la->space = (int)$sec['id'];
 check('privacy: the sandbox is an outside tool once it has internet', $pv->toolGate('shell_run', ['command' => 'ls']) === null
     && (function () use ($la, $pv) { $la->cfg->shellNetwork = true; $g = $pv->toolGate('shell_run', ['command' => 'curl x']); $la->cfg->shellNetwork = false; return str_contains((string)$g, 'Secret space'); })());
 check('privacy: secret: outside tools never run', str_starts_with((string)$pv->toolGate('fetch_url', ['url' => 'https://example.org']), 'error: blocked: this is a Secret space'));
+// trusted websites: opened without asking from Confidential spaces and after outside content, never from Secret ones
+$la->cfg->webTrusted = ['lemonde.fr'];
+check('privacy: a trusted site matches itself and its subdomains only', $la->cfg->trustedSite('https://www.lemonde.fr/a') && $la->cfg->trustedSite('https://abonnes.lemonde.fr/')
+    && !$la->cfg->trustedSite('https://evil-lemonde.fr/') && !$la->cfg->trustedSite('https://lemonde.fr.evil.example/') && !$la->cfg->trustedSite('file:///etc/passwd'));
+check('privacy: secret: even a trusted site is blocked', str_starts_with((string)$pv->toolGate('fetch_url', ['url' => 'https://www.lemonde.fr/']), 'error: blocked'));
+$la->space = (int)$conf['id'];
+$n0 = count($la->approvals()->pending());
+check('privacy: confidential: a trusted site opens without asking, others still ask', $pv->toolGate('fetch_url', ['url' => 'https://www.lemonde.fr/eco']) === null
+    && $pv->toolGate('web_search', ['query' => 'x']) !== null && count($la->approvals()->pending()) === $n0 + 1);
+foreach ($la->approvals()->pending() as $p0) $la->approvals()->decide((int)$p0['id'], false);
+$nn = fn() => (int)$la->store->q("SELECT COUNT(*) FROM notifications WHERE title = 'Approval needed'")->fetchColumn();
+$n1 = $nn(); $pv->toolGate('web_search', ['query' => 'a']); $pv->toolGate('web_search', ['query' => 'b']); $pv->toolGate('web_search', ['query' => 'c']);
+check('approvals: one notice per batch of waiting requests, not one email each', $nn() === $n1 + 1);
+foreach ($la->approvals()->pending() as $p0) $la->approvals()->decide((int)$p0['id'], false);
+$g = $pv->toolGate('fetch_url', ['url' => 'http://127.0.0.1:9/x']);
+$ap = $la->approvals()->pending(); $ap = end($ap);
+$la->approvals()->always((int)$ap['id']);
+check('privacy: "always allow" trusts the site for good', in_array('127.0.0.1', $la->cfg->webTrusted, true) && str_contains((string)@file_get_contents(\Talixio\Settings::file($la->cfg->dataDir)), '127.0.0.1')
+    && $pv->toolGate('fetch_url', ['url' => 'http://127.0.0.1:9/y']) === null);
+$la->cfg->webTrusted = [];
+$la->space = (int)$sec['id'];
 // reading something stricter makes the rest of the work stricter
 $la->space = 0; Privacy::begin();
 Privacy::doc('Contrat.pdf', 1200, $pv->folderLevel('/Clients/Dupont'));

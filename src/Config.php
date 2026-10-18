@@ -13,6 +13,22 @@ final class Config
     }
 
     /** One of several assistants on a shared server (the Docker stack): its owner is not the server's administrator. */
+    /** 'https://www.lemonde.fr/x' or 'lemonde.fr' -> 'lemonde.fr'. */
+    public static function siteOf(string $url): string
+    {
+        $h = strtolower((string)(parse_url(str_contains($url, '://') ? $url : "https://$url", PHP_URL_HOST) ?? ''));
+        return preg_replace('/^www\./', '', rtrim($h, '.'));
+    }
+
+    /** Whether a web address is on a trusted site (the site itself or one of its subdomains). */
+    public function trustedSite(string $url): bool
+    {
+        $h = self::siteOf($url);
+        if ($h === '') return false;
+        foreach ($this->webTrusted as $t) if ($h === $t || str_ends_with($h, ".$t")) return true;
+        return false;
+    }
+
     public static function inFleet(): bool { return (string)getenv('TALIXIO_INSTANCE') !== ''; }
 
     public string $provider = 'anthropic';      // anthropic | openai | gemini | sovereign | claude-code | echo
@@ -136,6 +152,8 @@ final class Config
     public string $mailboxDrafts = 'Drafts';
     public string $mailboxSent = 'Sent';
     /** @var string[] tools that run without asking (default: none) */ public array $autoApprove = [];
+    /** @var string[] sites opened without asking (subdomains included) */ public array $webTrusted = [];
+    public bool $webSearchTrusted = false;
     public string $signalCli = 'signal-cli';
     public string $browser = 'auto';             // auto (on if Chromium/Chrome is installed) | off
     public string $chromeBin = '';
@@ -332,6 +350,8 @@ final class Config
         $c->mailboxDrafts = $e('TALIXIO_MAILBOX_DRAFTS', 'Drafts');
         $c->mailboxSent = $e('TALIXIO_MAILBOX_SENT', 'Sent');
         $c->autoApprove = $list($e('TALIXIO_AUTO_APPROVE'));
+        $c->webTrusted = array_values(array_filter(array_map(fn($h) => self::siteOf($h), $list($e('TALIXIO_WEB_TRUSTED'))), 'strlen'));
+        $c->webSearchTrusted = $e('TALIXIO_WEB_SEARCH_TRUSTED', '0') === '1';
         $c->signalCli = $e('TALIXIO_SIGNAL_CLI', 'signal-cli');
         $c->browser = strtolower($e('TALIXIO_BROWSER', 'auto'));
         $c->chromeBin = $e('TALIXIO_CHROME_BIN');

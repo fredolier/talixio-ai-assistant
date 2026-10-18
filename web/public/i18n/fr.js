@@ -2564,5 +2564,11 @@ window.I18N.fr = {
 "From {a} · answers {b}": "De {a} · répond à {b}",
 "Last sign-in failed ({a}):": "Dernière connexion échouée ({a}) :",
 "Last sign-in failed:": "Dernière connexion échouée :",
-"Your Microsoft app accepts only your organisation: put its Directory (tenant) ID in Settings → Calendar → Microsoft directory, save, then connect again.": "Votre application Microsoft n'accepte que votre organisation : mettez son ID d'annuaire (locataire) dans Réglages → Calendrier → Annuaire Microsoft, enregistrez, puis reconnectez-vous."
+"Your Microsoft app accepts only your organisation: put its Directory (tenant) ID in Settings → Calendar → Microsoft directory, save, then connect again.": "Votre application Microsoft n'accepte que votre organisation : mettez son ID d'annuaire (locataire) dans Réglages → Calendrier → Annuaire Microsoft, enregistrez, puis reconnectez-vous.",
+"Always allow {site}": "Toujours autoriser {site}",
+"Always allow web search": "Toujours autoriser la recherche web",
+"Trusted websites": "Sites web de confiance",
+"Opened without asking, also from Confidential spaces and routines (never from Secret ones). Subdomains included, e.g. lemonde.fr, gouv.fr.": "Ouverts sans demander, y compris depuis les espaces Confidentiels et les routines (jamais depuis les espaces Secrets). Sous-domaines inclus, par ex. lemonde.fr, gouv.fr.",
+"Web search from Confidential spaces without asking": "Recherche web depuis les espaces Confidentiels sans demander",
+"The search words go to your search service. Never from Secret spaces.": "Les mots recherchés partent vers votre service de recherche. Jamais depuis les espaces Secrets."
 };

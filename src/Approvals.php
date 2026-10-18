@@ -41,6 +41,9 @@ final class Approvals
         $st->q('INSERT INTO approvals(tool, args, summary, status, created, mode, space, channel) VALUES(?,?,?,?,?,?,?,?)',
             [$tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $summary, 'pending', time(), $mode, $this->app->space, $this->app->channel]);
         $id = (int)$st->db->lastInsertId();
+        // one notice per batch: no new email or message while an earlier request (last 30 minutes) still waits
+        $waiting = (int)$st->q("SELECT COUNT(*) FROM approvals WHERE status='pending' AND id < ? AND created > ?", [$id, time() - 1800])->fetchColumn();
+        if ($waiting) return $id;
         try {
             $this->app->notifier()->notify('Approval needed', "$summary\n\nApprove in the app, or reply \"yes $id\" (or \"no $id\").", $this->app->space);
         } catch (\Throwable $e) {
@@ -83,6 +86,24 @@ final class Approvals
         // kept whole in the conversation (the assistant reads it when asked about it); data shown as a block
         $st->addMessage('assistant', 'approval', $head . "\n\n" . self::block($result, 20000), null, [], (int)$a['space']);
         return $head . "\n\n" . mb_substr($result, 0, 600) . (mb_strlen($result) > 600 ? ' […]' : ''); // a chat app gets the start
+    }
+
+    /** "Always allow": trust the site of a page request (or web search from Confidential spaces) for good, then approve. */
+    public function always(int $id, string $channel = 'web'): string
+    {
+        $a = $this->get($id);
+        $args = json_decode((string)($a['args'] ?? ''), true) ?: [];
+        if ($a && $a['status'] === 'pending') {
+            $c = $this->app->cfg;
+            if (in_array($a['tool'], ['fetch_url', 'browser_open'], true) && ($site = Config::siteOf((string)($args['url'] ?? ''))) !== '') {
+                $c->webTrusted = array_values(array_unique([...$c->webTrusted, $site]));
+                Settings::save($c->dataDir, ['TALIXIO_WEB_TRUSTED' => implode(',', $c->webTrusted)]);
+            } elseif ($a['tool'] === 'web_search') {
+                $c->webSearchTrusted = true;
+                Settings::save($c->dataDir, ['TALIXIO_WEB_SEARCH_TRUSTED' => '1']);
+            }
+        }
+        return $this->decide($id, true, $channel);
     }
 
     /** A tool's result for the conversation: JSON indented in a code block, other text as is; very long ones cut. */
