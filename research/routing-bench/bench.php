@@ -16,7 +16,7 @@ function rules(array $c): array
     $l = [$c['space']];
     if (preg_match('/\b(password|mot de passe|recovery code|api key|sk-[a-z0-9-]{8,})\b.*\S|\bsk-[A-Za-z0-9-]{8,}/i', $t) && preg_match('/\b(is|:|est)\s*\S{6,}|\bsk-[A-Za-z0-9-]{8,}/i', $t)) $l[] = 'secret';
     if (preg_match('/\b(medical|médical|diagnos|patent|brevet)/i', $t)) $l[] = 'secret';
-    if (preg_match('/\bIBAN\b|\bFR\d{2}( ?\d{4}){5}|salary|salaire|sick leave|burn-out|warning letter|lay off|licenci|acquisition|divorce|strictly confidential/i', $t)) $l[] = 'confidential';
+    if (preg_match('/\bIBAN\b|\bFR\d{2}( ?\d{4}){5}|salary|salaire|offer letter|job offer|lettre d.offre|pay rise|augmentation|bonus|sick leave|burn-out|warning letter|lay off|licenci|acquisition|divorce|strictly confidential/i', $t)) $l[] = 'confidential';
     if (preg_match('/\binvoice\b|facture|internal memo|not yet announced|@?\b[a-z0-9-]+\.example\b/i', $t)) $l[] = 'business';
     $n = str_word_count($t);
     $tier = preg_match('/\b(compare|plan|prove|analy[sz]e|recommend|every|roadmap)\b/i', $t) || $n > 60 ? 'deep' : ($n < 18 ? 'fast' : 'std');
@@ -38,6 +38,8 @@ function router(array $c, bool $split): array
         CURLOPT_POSTFIELDS => json_encode(['model' => getenv('BENCH_MODEL'), 'temperature' => 0, 'response_format' => ['type' => 'json_object'],
             'messages' => [['role' => 'system', 'content' => $sys], ['role' => 'user', 'content' => $user]]])]);
     $raw = curl_exec($ch);
+    static $warned = false;
+    if (!$warned && (curl_errno($ch) || curl_getinfo($ch, CURLINFO_RESPONSE_CODE) >= 400)) { $warned = true; fwrite(STDERR, 'router error: ' . (curl_error($ch) ?: substr((string) $raw, 0, 300)) . "\n"); }
     $ms = (int) ((microtime(true) - $t0) * 1000);
     $r = json_decode((string) $raw, true);
     $txt = $r['choices'][0]['message']['content'] ?? '';

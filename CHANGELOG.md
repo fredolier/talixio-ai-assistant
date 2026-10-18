@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.55 (2026-10-18)
+
+- Routing benchmark: the rules now treat offer letters, pay rises and bonuses as confidential, and the router
+  prints its first error instead of failing silently.
+
 ## 0.28.54 (2026-10-18)
 
 - New `research/routing-bench`: a small benchmark that tests how requests would get their trust label, tier and
