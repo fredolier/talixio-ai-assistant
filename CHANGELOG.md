@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.54 (2026-10-18)
+
+- New `research/routing-bench`: a small benchmark that tests how requests would get their trust label, tier and
+  split into steps, before that routing goes into the app. It has 32 synthetic cases and scores leaks (label too
+  low), labels set too high, tier and split. It runs with pattern rules only, or with any OpenAI-compatible router model.
+
 ## 0.28.53 (2026-10-17)
 
 - Installed app: on a server where a person's assistants share one address (`/alex-work/`, `/alex-private/`),
