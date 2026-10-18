@@ -30,3 +30,23 @@ Any OpenAI-compatible endpoint works (Ollama `http://localhost:11434/v1`, Scalew
 3. Label exact / too high (too high costs money and causes needless refusals), tier right, split cases handled, unreadable answers, latency p50/p95, tokens.
 
 The pattern rules were written next to these cases, so their score is optimistic. Add new cases without looking at the rules before trusting a comparison.
+
+## Outside cases (`fetch.php`, `external.php`)
+
+To avoid grading against our own judgment, `fetch.php` pulls 2,100 cases written and annotated by others:
+
+| Source | Licence | What | Label |
+|---|---|---|---|
+| gretelai/synthetic_pii_finance_multilingual | Apache-2.0 | finance documents, 7 languages | from their PII spans |
+| nvidia/Nemotron-PII | CC BY 4.0 | documents from 50+ domains (health, HR, banking…) | from their PII spans |
+| databricks/databricks-dolly-15k | CC BY-SA 3.0 | questions written by people | public |
+
+Each document is sent as an attachment to a short ask ("Summarise this document."). Span types map to levels through a fixed table in `fetch.php`, written before any run: credentials, PINs, CVVs and health identifiers are secret; bank and card numbers, ID numbers, date of birth and the GDPR special categories are confidential; any other span is business; a document with no span is business (Dolly: public). The space is public, so nothing comes from the floor.
+
+The split is stratified 70 / 30 and seeded. A naive Bayes classifier is tuned by 5-fold cross-validation on the dev split only (threshold: the largest one keeping leaks at or under 1 %, or the lowest tried). Every strategy is scored once on the locked test split. The data is not committed (third-party licences, synthetic personal data).
+
+```
+php fetch.php
+php external.php
+BENCH_URL=… BENCH_MODEL=… BENCH_KEY=… php external.php router [max cases]
+```

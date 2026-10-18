@@ -61,7 +61,7 @@ function score(string $name, array $cases, callable $f): array
         if ($d < 0) { $m['leak']++; $fails[] = "LEAK {$c['id']}: {$p['label']} < {$c['label']}"; }
         elseif ($d > 0) { $m['over']++; $fails[] = "over {$c['id']}: {$p['label']} > {$c['label']}"; }
         else $m['exact']++;
-        if ($p['tier'] === $c['tier']) $m['tier']++;
+        if ($p['tier'] === ($c['tier'] ?? null)) $m['tier']++;
         if (!empty($p['bad'])) $m['bad']++;
         if (isset($p['ms'])) $m['ms'][] = $p['ms'];
         $m['tokens'] += $p['tokens'] ?? 0;
@@ -82,11 +82,14 @@ function score(string $name, array $cases, callable $f): array
     $pct = fn($q) => $m['ms'] ? $m['ms'][(int) floor(($q / 100) * (count($m['ms']) - 1))] . ' ms' : '-';
     printf("\n== %s (%d cases)\n", $name, $n);
     printf("  leaks (label too low)  %d   <- must be 0\n  step leaks             %d   <- must be 0\n", $m['leak'], $m['stepLeak']);
-    printf("  label exact            %d%%\n  label too high         %d%%\n  tier right             %d%%\n", 100 * $m['exact'] / $n, 100 * $m['over'] / $n, 100 * $m['tier'] / $n);
+    printf("  label exact            %d%%\n  label too high         %d%%\n  tier right             %s\n", 100 * $m['exact'] / $n, 100 * $m['over'] / $n, isset($cases[0]['tier']) ? (int) (100 * $m['tier'] / $n) . '%' : 'n/a');
     printf("  split cases handled    %d / %d\n  unreadable answers     %d\n  latency p50 / p95      %s / %s\n  tokens                 %d\n", $m['splitOk'], $m['splitCases'], $m['bad'], $pct(50), $pct(95), $m['tokens']);
-    foreach ($fails as $x) echo "    $x\n";
+    foreach (array_slice($fails, 0, 25) as $x) echo "    $x\n";
+    if (count($fails) > 25) echo '    … ' . (count($fails) - 25) . " more\n";
     return $m;
 }
+
+if (realpath($argv[0]) !== __FILE__) return; // included by external.php
 
 $mode = $argv[1] ?? 'rules';
 $file = $argv[2] ?? __DIR__ . '/cases.jsonl';

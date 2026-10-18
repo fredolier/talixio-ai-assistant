@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.56 (2026-10-18)
+
+- Routing benchmark on outside cases: 2,100 documents and questions from three public datasets, labelled by their
+  own PII annotations, with a locked test split, a cross-validated naive Bayes baseline and the router.
+
 ## 0.28.55 (2026-10-18)
 
 - Routing benchmark: the rules now treat offer letters, pay rises and bonuses as confidential, and the router
