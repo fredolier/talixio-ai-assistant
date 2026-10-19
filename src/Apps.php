@@ -123,7 +123,7 @@ final class Apps
                 $c['file'] = (int)($s['file'] ?? 0);
                 if ($c['file'] <= 0) throw new \InvalidArgumentException("source $name: file is a library file id");
             } elseif ($type === 'script') {
-                $c['script'] = (string)($s['script'] ?? '');
+                $c['script'] = preg_replace('/\.py$/', '', (string)($s['script'] ?? ''));
                 if ($c['script'] === '') throw new \InvalidArgumentException("source $name: script is the name of a saved script");
                 $c['args'] = array_map('strval', array_slice((array)($s['args'] ?? []), 0, 20));
             }

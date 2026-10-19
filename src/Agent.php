@@ -248,6 +248,14 @@ final class Agent
     }
 
     /** Two answers that say the same thing (a model repeating itself). */
+    /** The answer says an app was made or saved (the caller checks the tool log for a real app_save). */
+    public static function claimsApp(string $reply): bool
+    {
+        if (preg_match("/(*UCP)\\b(n['’]a pas|n['’]ont pas|pas été|pas pu|not been|wasn't|couldn't|could not|failed|échou\\w*|erreur|error)\\b/iu", $reply)) return false;
+        $done = '(créée?s?|created|saved|built|enregistrée?s?|ajoutée?s?|added)';
+        return (bool)preg_match("/(*UCP)\\b(app|appli\\w*|application|tableau de bord|dashboard)\\b[^\\n]{0,80}\\b$done\\b|\\b$done\\b[^\\n]{0,40}\\b(app|appli\\w*)\\b/iu", $reply);
+    }
+
     public static function sameAnswer(string $a, string $b): bool
     {
         $n = fn($s) => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $s)));
@@ -370,6 +378,15 @@ final class Agent
                     if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Asking a stronger model…']);
                     [$reply, $meta] = $this->run($channel, $up, 'chat', $history, ($extra !== '' ? "$extra\n\n" : '')
                         . "Your last answer only restated a plan. The user wants it done: do it now with your tools (the actions needing approval ask for it themselves), or say plainly what you cannot do and why.",
+                        'main', null, null, $onEvent);
+                }
+                // says it built an app, but no app_save succeeded this turn: once, a stronger model does it for real
+                if (self::claimsApp($reply) && !$store->q("SELECT 1 FROM tool_log WHERE id > ? AND tool = 'app_save' AND result LIKE 'saved app%'", [$toolsBefore])->fetchColumn()) {
+                    Log::warn("agent: {$meta['model']} said it made an app without saving one");
+                    if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Asking a stronger model…']);
+                    [$reply, $meta] = $this->run($channel, $up ?? $meta['tier'], 'chat', $history, ($extra !== '' ? "$extra\n\n" : '')
+                        . "Your last answer said an app was created, but no app_save call succeeded: nothing was saved. Call app_save now (fix what its error says), "
+                        . "and only then give the user the link it returns; if it keeps failing, give them the error.",
                         'main', null, null, $onEvent);
                 }
                 // a tool failed and stayed failed this turn: the next turn in this space goes to the stronger model

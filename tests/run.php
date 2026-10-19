@@ -1476,6 +1476,11 @@ $sa1 = $la->apps()->save(['name' => 'Vault chart', 'html' => '<div></div>', 'scr
 $werr = ''; try { $la->apps()->data((int)$sa1['id'], 'q'); } catch (\RuntimeException $e) { $werr = $e->getMessage(); }
 $la->space = 0;
 check('apps: a Secret space app never reaches the web and is hidden from other spaces', $werr !== '' && !in_array('Vault chart', array_column($la->apps()->list(), 'name'), true), $werr);
+$r = $la->tools->run('app_save', ['name' => 'CAC', 'html' => '<div></div>', 'script' => "await talixio.data('q')", 'sources' => json_encode([['name' => 'q', 'type' => 'script', 'script' => 'nope-scraper.py']])]);
+check('apps: sources sent as JSON text are read; a missing script is refused, saying nothing was saved', str_contains($r, 'NOT saved') && str_contains($r, 'nope-scraper'), $r);
+check('apps: an answer claiming an app it did not save is caught, not a proposal or a failure',
+    \Talixio\Agent::claimsApp('✅ App "Suivi CAC 40" créée !') && \Talixio\Agent::claimsApp('Tableau de bord ajouté au menu Apps') && \Talixio\Agent::claimsApp('I built the app')
+    && !\Talixio\Agent::claimsApp('Voulez-vous que je crée une app ?') && !\Talixio\Agent::claimsApp('Je peux enregistrer cette app') && !\Talixio\Agent::claimsApp('L’app n’a pas été créée.'));
 check('apps: asking for an app or a dashboard calls for the app tools', (bool)preg_match(\Talixio\Tools::GROUPS['apps'][1], 'build me a dashboard') && (bool)preg_match(\Talixio\Tools::GROUPS['apps'][1], 'crée une appli') && !preg_match(\Talixio\Tools::GROUPS['apps'][1], 'Bonjour, quoi de neuf ?') && in_array('app_save', $la->tools->names(), true));
 $ga->library()->saveNote('/Graph', 'facture.md', "Facture Acme, payée\n", (int)$g2['id']);
 $gn = $ga->graph()->tick(time());
@@ -3032,6 +3037,12 @@ check('stuck model: "oui" to a plan is answered by at least the standard tier', 
     && !\Talixio\Agent::isGoAhead('ouistiti') && \Talixio\Agent::isGoAhead('fais sans') && \Talixio\Agent::isGoAhead('Tant pis !')
     && \Talixio\Agent::sameAnswer("Pour créer la réunion récurrente, il me faut les adresses e-mail valides de Cédric et de Paul (elles sont indispensables pour envoyer les invitations). Pouvez-vous me les fournir ?", "Pour créer la réunion récurrente avec Cédric et Paul, j'ai besoin des adresses e-mail valides de Cédric et de Paul afin de pouvoir envoyer les invitations. Pourriez-vous me les fournir ?")
     && !\Talixio\Agent::sameAnswer('Voici vos tâches de la semaine : MAI-2 et MAI-3, rien de bloquant.', 'La réunion est créée tous les lundis de 11h à 11h30, invitations envoyées.') && !\Talixio\Agent::isGoAhead("Oui mais d'abord dis-moi qui est invité à la réunion de lundi prochain"), json_encode($stall));
+$claim = []; $fake->script = function ($last, $tools, $on, $ctx) use ($usage, &$claim) {
+    $usage($on); preg_match('/\((\w+) tier/', $ctx, $m); $claim[] = $m[1];
+    return str_contains($ctx, 'no app_save call succeeded') ? 'The app could not be saved: error X.' : '✅ App "Suivi CAC 40" créée ! À approuver dans Apps.';
+};
+$r = $gag->chat('web', 'Fais-moi une app du CAC 40', 'fast');
+check('made-up app: an answer saying an app was created without app_save goes once to a stronger tier', $r === 'The app could not be saved: error X.' && $claim === ['fast', 'standard'], json_encode([$claim, $r]));
 
 exec('rm -rf ' . escapeshellarg($dir));
 // the more focused files, each also runnable alone

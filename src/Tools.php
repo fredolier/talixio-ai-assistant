@@ -163,9 +163,15 @@ final class Tools
             ['id' => ['type' => 'integer'], 'name' => ['type' => 'string'], 'description' => ['type' => 'string'], 'icon' => ['type' => 'string', 'description' => 'one emoji'],
              'html' => ['type' => 'string'], 'script' => ['type' => 'string'], 'sources' => ['type' => 'array', 'items' => ['type' => 'object']]], ['name', 'html', 'script'],
             function (array $a) {
+                if (is_string($a['sources'] ?? null)) $a['sources'] = json_decode($a['sources'], true) ?: []; // some models send the list as JSON text
+                foreach ((array)($a['sources'] ?? []) as $src) {
+                    $src = (array)$src;
+                    if (($src['type'] ?? '') === 'script' && $this->app->scripts()->read(preg_replace('/\.py$/', '', (string)($src['script'] ?? ''))) === null)
+                        return "error: the app was NOT saved: no saved script named \"" . ($src['script'] ?? '') . "\" (your scripts are listed under \"Your scripts\"; save it first with script_save)";
+                }
                 try {
                     $x = $this->app->apps()->save($a, 'assistant', isset($a['id']) ? (int)$a['id'] : null);
-                } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
+                } catch (\InvalidArgumentException $e) { return 'error: the app was NOT saved: ' . $e->getMessage() . '. Fix it and call app_save again.'; }
                 return "saved app #{$x['id']} \"{$x['name']}\"; it waits for the user's approval in the Apps menu: [{$x['name']}](#apps/{$x['id']})";
             });
         $this->register('routine_feedback',

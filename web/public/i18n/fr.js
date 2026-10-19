@@ -2595,5 +2595,7 @@ window.I18N.fr = {
 "Change the app “{a}” (#{b}): ": "Modifie l'app « {a} » (n°{b}) : ",
 "Delete the app “{a}”?": "Supprimer l'app « {a} » ?",
 "Stock prices": "Cours de bourse",
-"Tasks at a glance": "Les tâches en un coup d'œil"
+"Tasks at a glance": "Les tâches en un coup d'œil",
+"Daily closing prices of a share over the last month (data from stooq.com).": "Cours de clôture quotidiens d'une action sur le dernier mois (données stooq.com).",
+"This space's open tasks by status and priority, and what is due soon.": "Les tâches ouvertes de cet espace par statut et priorité, et ce qui arrive à échéance."
 };
