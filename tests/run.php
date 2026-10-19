@@ -1448,6 +1448,35 @@ $r = $ga->graph()->related('#' . $g2['id']);
 check('graph: a file gives what it is about and the files sharing it', array_column($r['entities'], 'kind') === ['company'] && array_column($r['files'], 'id') === [(int)$g1['id']], json_encode($r));
 check('graph: the assistant gets kb_related', str_contains($ga->tools->run('kb_related', ['query' => 'Acme']), 'offre.md'));
 $ga->store->set('graph_used', '0');
+// apps: built from the kit, sandboxed, no data until approved; Secret spaces stay apart
+check('apps: code with a script tag, a handler, fetch or eval is refused', \Talixio\Apps::checkCode('<script>x</script>', '') !== null && \Talixio\Apps::checkCode('<b onclick="x()">', '') !== null
+    && \Talixio\Apps::checkCode('', 'fetch("https://x")') !== null && \Talixio\Apps::checkCode('', 'eval("1")') !== null && \Talixio\Apps::checkCode('', 'parent.location="x"') !== null && \Talixio\Apps::checkCode('<div id="a" class="card"></div>', "talixio.table('#a', [])") === null);
+$bad = []; foreach ([[['name' => 'q', 'type' => 'web', 'url' => 'http://x.example/a']], [['name' => 'q', 'type' => 'web', 'url' => 'https://{host}/a']], [['name' => 'Q!', 'type' => 'tasks']], [['name' => 'q', 'type' => 'shell']]] as $l) { try { \Talixio\Apps::checkSources($l); } catch (\InvalidArgumentException) { $bad[] = 1; } }
+$okSrc = \Talixio\Apps::checkSources([['name' => 'q', 'type' => 'web', 'url' => 'https://stooq.example/q?s={symbol}', 'format' => 'csv']]);
+check('apps: sources need https, a fixed host, a plain name and a known type', count($bad) === 4 && $okSrc[0]['ttl'] === 30 && $okSrc[0]['format'] === 'csv', json_encode($okSrc));
+check('apps: csv becomes rows', \Talixio\Apps::csv("Date,Close\n2026-01-02,10.5\n2026-01-03,11\n") === [['Date' => '2026-01-02', 'Close' => '10.5'], ['Date' => '2026-01-03', 'Close' => '11']]);
+$la->space = 0;
+$la->board()->create(['title' => 'Write the app tests'], 0);
+$r = $la->tools->run('app_save', ['name' => 'My tasks', 'icon' => '✅', 'html' => '<div id="t"></div>', 'script' => "talixio.table('#t', await talixio.data('tasks'))", 'sources' => [['name' => 'tasks', 'type' => 'tasks']]]);
+preg_match('/#(\d+)/', $r, $m); $aid = (int)($m[1] ?? 0);
+$refused = ''; try { $la->apps()->data($aid, 'tasks'); } catch (\RuntimeException $e) { $refused = $e->getMessage(); }
+check('apps: the assistant saves an app, which waits for approval and gets no data', str_contains($r, '(#apps/' . $aid . ')') && $la->apps()->get($aid)['status'] === 'pending' && $refused !== '', $r . $refused);
+$la->apps()->approve($aid);
+$d = $la->apps()->data($aid, 'tasks');
+check('apps: approved, it reads the tasks of its space', in_array('Write the app tests', array_column($d, 'title'), true), json_encode($d));
+check('apps: a bad save is refused with the reason', str_starts_with($la->tools->run('app_save', ['name' => 'x', 'html' => '<script></script>', 'script' => '']), 'error:'));
+$la->apps()->state($aid, 'prefs', ['symbol' => 'aapl'], true);
+check('apps: its own store keeps a value', $la->apps()->state($aid, 'prefs') === ['symbol' => 'aapl'] && $la->apps()->state($aid, 'none') === null);
+$la->tools->run('app_save', ['id' => $aid, 'name' => 'My tasks', 'html' => '<div id="t"></div>', 'script' => "talixio.message('#t', 'hi')"]);
+check('apps: changed by the assistant, it waits for approval again', $la->apps()->get($aid)['status'] === 'pending' && str_contains($la->tools->run('app_list', []), 'waits for approval'));
+$ex = $la->apps()->save(\Talixio\Apps::EXAMPLES['stocks'], 'you');
+check('apps: an example added by you is approved and has the kit page', $ex['status'] === 'approved' && str_contains($la->apps()->page($ex, 'N0NCE'), 'nonce="N0NCE"') && !str_contains($la->apps()->page($ex, 'N0NCE'), '<script>'));
+$la->space = (int)$sec['id'];
+$sa1 = $la->apps()->save(['name' => 'Vault chart', 'html' => '<div></div>', 'script' => "await talixio.data('q')", 'sources' => [['name' => 'q', 'type' => 'web', 'url' => 'https://example.com/a.json', 'format' => 'json']]], 'you');
+$werr = ''; try { $la->apps()->data((int)$sa1['id'], 'q'); } catch (\RuntimeException $e) { $werr = $e->getMessage(); }
+$la->space = 0;
+check('apps: a Secret space app never reaches the web and is hidden from other spaces', $werr !== '' && !in_array('Vault chart', array_column($la->apps()->list(), 'name'), true), $werr);
+check('apps: asking for an app or a dashboard calls for the app tools', (bool)preg_match(\Talixio\Tools::GROUPS['apps'][1], 'build me a dashboard') && (bool)preg_match(\Talixio\Tools::GROUPS['apps'][1], 'crée une appli') && !preg_match(\Talixio\Tools::GROUPS['apps'][1], 'Bonjour, quoi de neuf ?') && in_array('app_save', $la->tools->names(), true));
 $ga->library()->saveNote('/Graph', 'facture.md', "Facture Acme, payée\n", (int)$g2['id']);
 $gn = $ga->graph()->tick(time());
 check('graph: a changed document is read again', $gn === 1, (string)$gn);

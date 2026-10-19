@@ -38,6 +38,7 @@ final class Tools
         'skills' => [['skill_'], '/compétence|skill|méthode|procédure|apprend|learn|retiens|à l\'avenir|next time|prochaine fois|toujours|always|jamais|never/iu', 'save or delete a skill (a method to reuse)'],
         'spaces' => [['spaces'], '/espace|space/iu', 'the user\'s spaces'],
         'connectors' => [['connector_'], '/\bmcp\b|connect(eu|o)rs?|github|plugin|intégration|integration/iu', 'install a connector (MCP server) from GitHub'],
+        'apps' => [['app_'], '/\bapps?\b|appli|widget|dashboard|tableau de bord|mini.?app|outil visuel|visuali[sz]/iu', 'small apps for the Apps menu (build, list, change)'],
         'usage' => [['usage_'], '/coût|cost|budget|dépens|spent|spend|token|usage|consomm|factur|bill|prix|price|combien|how much/iu', 'what the assistant has spent'],
     ];
 
@@ -133,6 +134,39 @@ final class Tools
                 $out = $r['entities'] ? ['entities: ' . implode('; ', array_map(fn($e) => "{$e['name']} ({$e['kind']})", $r['entities']))] : [];
                 foreach ($r['files'] as $f) $out[] = "- {$f['label']}: {$f['via']}";
                 return implode("\n", $out);
+            });
+        $this->register('app_list',
+            'The small apps of the Apps menu (yours and the examples added): id, name, what it shows, whether it waits for approval. '
+            . 'Asked for app ideas, propose several grounded in what you know of the user (memory, library, tasks, routines, mail habits), '
+            . 'each with what it would show and its data source (a web address, a library file, the tasks, a saved script); build one only once they choose.',
+            [], [], function () {
+                $list = $this->app->apps()->list();
+                if (!$list) return 'no apps yet (examples in the Apps menu: Stock prices, Tasks at a glance)';
+                return implode("\n", array_map(fn($a) => "- #{$a['id']} {$a['icon']} {$a['name']}: {$a['description']}" . ($a['status'] === 'pending' ? ' (waits for approval)' : ''), $list));
+            });
+        $this->register('app_get', 'The code and data sources of an app (to change it with app_save).', ['id' => ['type' => 'integer']], ['id'],
+            function (array $a) {
+                $x = $this->app->apps()->get((int)$a['id']);
+                return $x ? json_encode(array_intersect_key($x, array_flip(['id', 'name', 'description', 'icon', 'html', 'script', 'sources', 'status'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) : "error: no app #{$a['id']}";
+            });
+        $this->register('app_save',
+            'Build (or, with id, replace) a small app shown in the Apps menu of this space. It runs in a sandboxed frame: no network, no cookies, no storage, no eval; '
+            . 'only the kit below. html: the markup of the body (no <script>, no on...= attributes; classes card, row, grid, stats, muted, small are styled; light and dark themes are handled). '
+            . 'script: the JavaScript run once the page is ready, inside an async function (await allowed). Kit: $(sel), $$(sel); '
+            . 'await talixio.data(source, {param: value}) → the data of a declared source; await talixio.load(key) / talixio.save(key, value) → the app\'s own small store (JSON); '
+            . 'talixio.chart(target, {type: "line"|"area"|"bar", labels: [...], series: [{name, values: [numbers]}]}); talixio.table(target, rows, [columns]) (sortable); '
+            . 'talixio.stats(target, [{label, value, note}]); talixio.message(target, text); talixio.el(tag, props, ...children); talixio.num(x, decimals); talixio.csv(text); talixio.date(s). '
+            . 'sources: [{name, type, ...}] — web: {url: "https://host/path?q={param}", format: json|csv|text, ttl: minutes} (fixed host, {param} filled from the app, letters and digits only); '
+            . 'file: {file: library file id, format}; tasks: the space\'s tasks (id, code, title, status, priority, start_date, due_date); script: {script: a saved script name, args: ["{param}"], format}. '
+            . 'Use only sources you checked work (fetch_url the address first). The user approves the app (its sources and code) in the Apps menu before it gets any data; '
+            . 'tell them so, with a link [name](#apps/ID).',
+            ['id' => ['type' => 'integer'], 'name' => ['type' => 'string'], 'description' => ['type' => 'string'], 'icon' => ['type' => 'string', 'description' => 'one emoji'],
+             'html' => ['type' => 'string'], 'script' => ['type' => 'string'], 'sources' => ['type' => 'array', 'items' => ['type' => 'object']]], ['name', 'html', 'script'],
+            function (array $a) {
+                try {
+                    $x = $this->app->apps()->save($a, 'assistant', isset($a['id']) ? (int)$a['id'] : null);
+                } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
+                return "saved app #{$x['id']} \"{$x['name']}\"; it waits for the user's approval in the Apps menu: [{$x['name']}](#apps/{$x['id']})";
             });
         $this->register('routine_feedback',
             "Record the user's opinion on what a routine sent (morning briefing, weekly review, a watch...) when they say they liked it or not (\"stop telling me the weather\", \"the bit on X was great\"): its next runs follow it. routine: its title or id; item: what they rated, in a few words; vote: up or down; note: why, if they said.",

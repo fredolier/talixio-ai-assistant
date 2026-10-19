@@ -4400,7 +4400,75 @@ async function loadActivity() {
 }
 
 // ---- shell ----
-const VIEWS = { chat: null, notifications: loadNotifications, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, memory: loadMemory, settings: loadSettings, activity: loadActivity, privacy: loadPrivacy };
+// Apps: small apps the assistant builds from the kit (appkit.js). Each runs in a sandboxed frame with an opaque origin and
+// no network; it asks this page for data through postMessage, and this page answers only the frame it opened.
+let appFrame = null;
+async function loadApps() {
+  const id = +(location.hash.split('/')[1] || 0);
+  const sp = state.space ?? '';
+  if (id) return openApp(id);
+  appFrame = null;
+  $('#app-open').hidden = true; $('#app-open').innerHTML = '';
+  const { apps, examples } = await api('api/apps?space=' + sp);
+  const box = $('#apps-list'); box.hidden = false;
+  const have = new Set(apps.map(a => a.name));
+  const spaceOf = id => id === 0 ? t('General') : (state.spaces.find(x => x.id === id)?.name || '#' + id);
+  const ex = examples.filter(e => !have.has(e.name));
+  box.innerHTML = (apps.length ? `<div class="apps-grid">${apps.map(a => `<a class="app-card card" href="#apps/${a.id}">
+      <span class="app-icon">${esc(a.icon || '🧩')}</span><b>${esc(a.name)}</b>
+      <span class="muted small">${esc(a.description || '')}</span>
+      <span class="small muted no-i18n">${esc(spaceOf(a.space))}${a.status === 'pending' ? ` · <span class="app-pending">${esc(t('Waiting for approval'))}</span>` : ''}</span></a>`).join('')}</div>`
+    : `<div class="empty"><p>No apps yet. Ask the assistant: “With what you know about me, could you suggest several apps you could build and add to the Apps menu?”</p></div>`)
+    + (ex.length ? `<h3 class="apps-ex-title">Examples</h3><div class="row wrap">${ex.map(e => `<button type="button" class="btn ghost" data-ex="${esc(e.key)}" title="${esc(e.description)}">${esc(e.icon)} ${esc(e.name)}</button>`).join('')}</div>` : '')
+    + `<p class="row wrap"><button type="button" class="btn small" id="apps-ask">Ask the assistant for app ideas</button></p>`;
+  box.querySelectorAll('[data-ex]').forEach(b => b.onclick = async () => {
+    const { app } = await post('api/apps/example?space=' + sp, { key: b.dataset.ex }).catch(e => (toast(e.message), {}));
+    if (app) location.hash = '#apps/' + app.id;
+  });
+  $('#apps-ask').onclick = () => { location.hash = '#chat'; $('#input').value = t('With what you know about me, could you suggest several apps you could build and add to the Apps menu?'); $('#input').focus(); };
+}
+
+async function openApp(id) {
+  const sp = state.space ?? '';
+  const { app } = await api(`api/apps/${id}?space=${sp}`);
+  $('#apps-list').hidden = true;
+  const box = $('#app-open'); box.hidden = false;
+  const pending = app.status === 'pending';
+  const src = s => s.type === 'web' ? s.url : s.type === 'file' ? t('library file #{a}', { a: s.file }) : s.type === 'script' ? t('script {a}', { a: s.script }) : t('the tasks of this space');
+  box.innerHTML = `<div class="row wrap app-bar"><a class="btn small ghost" href="#apps">← Apps</a>
+      <h3 class="no-i18n">${esc(app.icon || '🧩')} ${esc(app.name)}</h3><span class="grow"></span>
+      <button type="button" class="btn small ghost" id="app-edit">Change in the chat</button>
+      <button type="button" class="btn small ghost danger" id="app-del">Delete</button></div>
+    ${pending ? `<div class="card app-review"><p><b>This app waits for your approval.</b> It gets no data until you approve it. It reads:</p>
+      <ul>${(app.sources || []).map(s => `<li class="no-i18n"><code>${esc(s.name)}</code> — ${esc(src(s))}</li>`).join('') || `<li>${esc(t('no data source'))}</li>`}</ul>
+      <details><summary>Show the code</summary><pre class="no-i18n">${esc(app.html)}</pre><pre class="no-i18n">${esc(app.script)}</pre></details>
+      <p><button type="button" class="btn" id="app-approve">Approve</button></p></div>` : ''}
+    <iframe class="app-frame" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer" title="${esc(app.name)}" src="api/apps/${id}/frame?space=${sp}"></iframe>`;
+  appFrame = { id, el: box.querySelector('iframe') };
+  appFrame.el.onload = () => appFrame?.el.contentWindow?.postMessage({ talixio: 1, theme: document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light' }, '*');
+  $('#app-edit').onclick = () => { location.hash = '#chat'; $('#input').value = t('Change the app “{a}” (#{b}): ', { a: app.name, b: id }); $('#input').focus(); };
+  $('#app-del').onclick = async () => {
+    if (!confirm(t('Delete the app “{a}”?', { a: app.name }))) return;
+    await post(`api/apps/${id}/delete?space=${sp}`).catch(e => toast(e.message));
+    location.hash = '#apps';
+  };
+  if (pending) $('#app-approve').onclick = async () => { await post(`api/apps/${id}/approve?space=${sp}`).catch(e => toast(e.message)); openApp(id); };
+}
+
+window.addEventListener('message', async e => {
+  const f = appFrame, m = e.data;
+  if (!f || e.source !== f.el.contentWindow || !m || m.talixio !== 1 || !m.op) return;
+  const reply = r => e.source.postMessage({ talixio: 1, id: m.id, ...r }, '*');
+  const sp = state.space ?? '';
+  try {
+    const body = m.op === 'data' ? { name: String(m.name || ''), params: m.params || {} }
+      : { key: String(m.key || ''), value: m.value ?? null, write: m.op === 'save' };
+    const { result } = await post(`api/apps/${f.id}/${m.op === 'data' ? 'data' : 'state'}?space=${sp}`, body);
+    reply({ result });
+  } catch (err) { reply({ error: err.message }); }
+});
+
+const VIEWS = { chat: null, notifications: loadNotifications, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, apps: loadApps, memory: loadMemory, settings: loadSettings, activity: loadActivity, privacy: loadPrivacy };
 function route() {
   const fm = location.hash.match(/^#file\/(\d+)(?:\/p(\d+))?$/); // a document link from a mail
   if (fm) { openCited(+fm[1], +fm[2] || 0); return; }
@@ -4408,7 +4476,7 @@ function route() {
   const v = (h in VIEWS) ? h : 'chat';
   for (const k of Object.keys(VIEWS)) $('#view-' + k).hidden = k !== v;
   document.querySelectorAll('.rail a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
-  $('#more-btn').classList.toggle('active', ['notifications', 'jobs', 'activity', 'settings', 'mail', 'people', 'tasks', 'privacy'].includes(v));
+  $('#more-btn').classList.toggle('active', ['notifications', 'jobs', 'apps', 'activity', 'settings', 'mail', 'people', 'tasks', 'privacy'].includes(v));
   $('#more-sheet').hidden = true;
   if (v !== 'library') closeViewer();
   if (v !== 'board') { clearTimeout(loadBoard.t); }

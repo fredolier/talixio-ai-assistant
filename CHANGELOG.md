@@ -3,6 +3,9 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.60 (2026-10-19)
+- Apps menu: small apps (charts, tables, trackers) the assistant builds from a vetted kit and runs in a sealed frame with no network; each reads only the sources it declares (a fixed web address, a library file, the space's tasks, a saved script) and gets no data until you approve it. Two examples (Stock prices, Tasks at a glance); ask “With what you know about me, could you suggest several apps…?” for ideas. FAQ: Apps.
+
 ## 0.28.59 (2026-10-19)
 - Optional knowledge graph of the library (Settings → Web search and memory, off by default): the people, companies, projects and places each document mentions are noted in the background by the fast model (capped per day, never for a folder the model may not read), and the new `kb_related` tool gathers everything about a name or what is linked to a file.
 

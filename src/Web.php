@@ -59,6 +59,7 @@ final class Web
             // the file name at the end of the URL keeps its extension in the address bar, tabs and "save as"
             if (preg_match('#^/api/files/(\d+)(?:/file/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveFile((int)$fm[1], !empty($_GET['download'])); return; }
             if (preg_match('#^/api/files/(\d+)/view(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveView((int)$fm[1]); return; }
+            if (preg_match('#^/api/apps/(\d+)/frame$#', $path, $am) && $method === 'GET') { $this->serveApp((int)$am[1]); return; }
             if (preg_match('#^/api/files/(\d+)/pdf(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveOfficePdf((int)$fm[1]); return; }
             if (preg_match('#^/api/files/(\d+)/versions/(\d+)/file$#', $path, $fm) && $method === 'GET') { $this->serveVersion((int)$fm[1], (int)$fm[2]); return; }
             if (preg_match('#^/api/files/(\d+)/(thumb|page/(\d+))$#', $path, $fm) && $method === 'GET') { $this->servePreview((int)$fm[1], (int)($fm[3] ?? 0)); return; }
@@ -228,6 +229,7 @@ final class Web
             })(),
             $path === '/api/billing/sync' && $m === 'POST' => $this->app->billing()->sync(true),
             str_starts_with($path, '/api/board') => $this->board($m, $path, $b),
+            str_starts_with($path, '/api/apps') => $this->apps($m, $path, $b),
             $path === '/api/jobs' => $this->jobList(),
             $path === '/api/jobs/archive-finished' && $m === 'POST' => ['count' => $this->app->jobs()->archiveFinished(isset($b['space']) && $b['space'] !== '' ? (int)$b['space'] : null, (string)($b['tag'] ?? ''))],
             (bool)preg_match('#^/api/jobs/(\d+)/archive$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->archive((int)$mm[1], ($b['archived'] ?? true) !== false)],
@@ -399,6 +401,45 @@ final class Web
     }
 
     /** Tasks board. The app acts as "you" and may change any space's cards. */
+    /** The Apps menu: list, review and approve, the data and store calls the app's frame relays, the examples. */
+    private function apps(string $m, string $path, array $b): array
+    {
+        $ap = $this->app->apps();
+        if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space'];
+        if ($path === '/api/apps' && $m === 'GET') return ['apps' => $ap->list(), 'examples' => array_map(fn($k, $e) => ['key' => $k, 'name' => $e['name'], 'icon' => $e['icon'], 'description' => $e['description']], array_keys(Apps::EXAMPLES), Apps::EXAMPLES)];
+        if ($path === '/api/apps/example' && $m === 'POST') {
+            $e = Apps::EXAMPLES[(string)($b['key'] ?? '')] ?? $this->fail(404, 'no such example');
+            return ['app' => $ap->save($e, 'you')];
+        }
+        if (!preg_match('#^/api/apps/(\d+)(?:/(approve|delete|data|state))?$#', $path, $mm)) $this->fail(404, 'not found');
+        $id = (int)$mm[1]; $op = $mm[2] ?? '';
+        try {
+            return match (true) {
+                $op === '' && $m === 'GET' => ['app' => $ap->get($id) ?? $this->fail(404, 'no such app')],
+                $op === 'approve' && $m === 'POST' => (function () use ($ap, $id) { $ap->approve($id); return ['app' => $ap->get($id)]; })(),
+                $op === 'delete' && $m === 'POST' => ['ok' => $ap->delete($id)],
+                $op === 'data' && $m === 'POST' => ['result' => $ap->data($id, (string)($b['name'] ?? ''), (array)($b['params'] ?? []))],
+                $op === 'state' && $m === 'POST' => ['result' => $ap->state($id, (string)($b['key'] ?? ''), $b['value'] ?? null, !empty($b['write']))],
+                default => $this->fail(405, 'method not allowed'),
+            };
+        } catch (\InvalidArgumentException | \RuntimeException $e) { $this->fail(400, $e->getMessage()); }
+    }
+
+    /** An app of the Apps menu: its own opaque origin, only the kit's and its own scripts, no network, framed by the app only. */
+    private function serveApp(int $id): void
+    {
+        if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space'];
+        $a = $this->app->apps()->get($id) ?? $this->fail(404, 'not found');
+        $nonce = base64_encode(random_bytes(16));
+        while (ob_get_level() > 0) ob_end_clean();
+        header('Content-Type: text/html; charset=utf-8');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, no-store');
+        header("Content-Security-Policy: default-src 'none'; script-src 'nonce-$nonce'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms");
+        header('Referrer-Policy: no-referrer');
+        echo $this->app->apps()->page($a, $nonce);
+    }
+
     private function board(string $m, string $path, array $b): array
     {
         $bd = $this->app->board();
