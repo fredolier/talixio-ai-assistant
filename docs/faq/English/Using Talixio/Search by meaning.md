@@ -36,7 +36,7 @@ On a small processor, indexing a large library can keep the machine busy for hou
 Choose *light* or *very light*, or an online service if confidential spaces can make do with words.
 
 ## Knowledge graph (optional)
-Settings → Search → *Knowledge graph of the library* (off by default). When it is on, the assistant
+Settings → Library → *Web search and memory* → *Knowledge graph of the library* (off by default). When it is on, the assistant
 notes in the background the people, companies, projects and places each document mentions. It can
 then gather **everything about a name** ("everything about Dupont") or **what is linked to a file**,
 on top of the search by words and meaning.

@@ -36,7 +36,7 @@ Sur un petit processeur, l'indexation d'une grande bibliothèque peut occuper la
 Prenez *léger* ou *très léger*, ou un service en ligne si les espaces confidentiels peuvent se contenter des mots.
 
 ## Graphe de connaissances (optionnel)
-Réglages → Recherche → *Graphe de connaissances de la bibliothèque* (désactivé par défaut). Activé,
+Réglages → Recherche web et mémoire → *Graphe de connaissances de la bibliothèque* (désactivé par défaut). Activé,
 l'assistant note en arrière-plan les personnes, sociétés, projets et lieux cités par chaque document.
 Il peut alors rassembler **tout ce qui concerne un nom** (« tout sur Dupont ») ou **ce qui est lié à un
 fichier**, en plus de la recherche par les mots et par le sens.
