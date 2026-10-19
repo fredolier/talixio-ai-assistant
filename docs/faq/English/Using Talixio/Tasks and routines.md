@@ -70,8 +70,9 @@ The **Jobs** page has a search (title, instructions, report) and an **Active / A
 Each finished job shows the link to its report note. The link follows the note even if you
 move or rename it. If the note has been deleted, the job says so. Each finished job also offers:
 - **Archive**: the job leaves the list, without losing anything; you find it under *Archived*.
-  **Archive finished** tidies away all the finished jobs of the current view at once. Jobs finished
-  more than **30 days** ago are archived automatically.
+  **Archive finished** tidies away all the finished jobs of the current view at once. Jobs done without
+  trouble are archived automatically after **2 days** (their report stays in the chat and the library);
+  failed or stopped ones, and jobs you gave a tag to keep them, after **30 days**.
 - **Delete**: erases the job and its steps for good. The report note stays in the library,
   and its costs stay in the usage history. A job run again by a routine cannot
   be deleted: delete the routine first, or archive the job.

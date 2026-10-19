@@ -140,8 +140,19 @@ final class Jobs
         return $n;
     }
 
-    /** Worker, hourly: finished jobs older than ARCHIVE_DAYS go to the archive. */
-    public function autoArchive(int $now): int { return $this->archiveFinished(null, '', $now - self::ARCHIVE_DAYS * 86400); }
+    /** Jobs done without trouble and without tags are put away sooner: their report is in the chat and the library. */
+    public const ARCHIVE_DONE_DAYS = 2;
+
+    /** Worker, hourly: plain done jobs after ARCHIVE_DONE_DAYS, the others (failed, stopped, tagged to keep) after ARCHIVE_DAYS. */
+    public function autoArchive(int $now): int
+    {
+        $n = 0;
+        foreach ($this->app->store->jobs(100000, null, '', false) as $j) {
+            if ($j['status'] !== 'done' || trim((string)($j['tags'] ?? '')) !== '' || (int)($j['finished'] ?: $j['created']) > $now - self::ARCHIVE_DONE_DAYS * 86400) continue;
+            $this->app->store->updateJob((int)$j['id'], ['archived' => 1]); $n++;
+        }
+        return $n + $this->archiveFinished(null, '', $now - self::ARCHIVE_DAYS * 86400);
+    }
 
     /** Delete a finished job and its steps for good. Its report note stays in the library; its costs stay in the usage history. */
     public function delete(int $id): void

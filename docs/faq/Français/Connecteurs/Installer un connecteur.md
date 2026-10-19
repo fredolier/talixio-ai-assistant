@@ -60,5 +60,8 @@ Pour un serveur qui n'est pas sur GitHub (ou dans un dépôt privé) :
 - Pas besoin de redémarrer l'assistant : les nouveaux outils sont là dès le message suivant.
 - La *Configuration* est du JSON strict : pas de commentaires (`//`).
 - Une API web classique (REST) n'est pas un serveur MCP : il faut un serveur MCP qui l'utilise.
+- Un résultat long (une page convertie, un gros export) est enregistré en entier comme fichier dans votre
+  bibliothèque, dans les *Notes* de l'espace ; demandez à l'assistant de le déplacer ou de le renommer où vous
+  voulez. Le fil n'en montre que le début, replié.
 
 Exemples pas à pas : *Connecteurs / anki.talixio.com* (un connecteur à installer) et *Connecteurs / Home Assistant* (un service distant, par son adresse).

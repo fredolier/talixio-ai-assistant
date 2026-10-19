@@ -156,8 +156,39 @@ final class Mcp
             };
         }
         if (!$parts && isset($r['structuredContent'])) $parts[] = json_encode($r['structuredContent'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $text = mb_substr(implode("\n", array_filter($parts, 'strlen')), 0, 40000);
+        $text = implode("\n", array_filter($parts, 'strlen'));
+        if (empty($r['isError']) && mb_strlen($text) > self::LONG && ($saved = $this->saveLong($server, $tool, $text)) !== null) return $saved;
+        $text = mb_substr($text, 0, 40000);
         return (!empty($r['isError']) ? 'error: ' : '') . ($text !== '' ? $text : '(empty result)');
+    }
+
+    /** Results longer than this are saved whole in the library: the model would cut them when copying them into a file. */
+    public const LONG = 12000;
+
+    /** Save a long result as a library file and tell the model where it is, with its start. Null when it can't be saved there. */
+    private function saveLong(string $server, string $tool, string $text): ?string
+    {
+        $head = ltrim(mb_substr($text, 0, 400));
+        $ext = match (true) {
+            (bool)preg_match('/^(<!doctype html|<html)/i', $head) => 'html',
+            (bool)preg_match('/^<\?xml|^<svg/i', $head) => 'xml',
+            json_decode($text) !== null && preg_match('/^[\[{]/', $head) => 'json',
+            default => 'md',
+        };
+        $sp = $this->app->space ? (string)($this->app->spaces()->get($this->app->space)['folder'] ?? '') : '';
+        $folder = Library::normalize($sp !== '' ? "$sp/Notes" : Library::NOTES);
+        if ($this->app->privacy()->writeDown($folder, $this->app->privacy()->effective()) !== null) return null;
+        try {
+            $name = preg_replace('/[^A-Za-z0-9_-]+/', '-', "$server-$tool") . '-' . date('Y-m-d-His') . ".$ext";
+            $f = $this->app->library()->saveNote($folder, $name, $text);
+        } catch (\Throwable $e) {
+            Log::warn("connector result not saved: {$e->getMessage()}");
+            return null;
+        }
+        $n = mb_strlen($text);
+        return "The full result ($n characters) is saved as " . Library::join($f['folder'], $f['name']) . " (file #{$f['id']}). "
+            . "It is complete there: to put it where the user wants, use kb_move with id {$f['id']} (and name, replace true to overwrite a file); never retype or shorten it. "
+            . "Read more with file_read and an offset if needed. Start:\n\n" . mb_substr($text, 0, 3000) . "\n[…]";
     }
 
     /** One JSON-RPC request in a fresh session: initialize, notifications/initialized, then the request. */

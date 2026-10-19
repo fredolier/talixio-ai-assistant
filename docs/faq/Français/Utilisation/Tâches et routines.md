@@ -74,8 +74,9 @@ La page **Jobs** a une recherche (titre, consignes, rapport) et un sélecteur **
 Chaque job terminé affiche le lien vers sa note de rapport. Le lien suit la note même si vous la
 déplacez ou la renommez. Si la note a été supprimée, le job l'indique. Chaque job terminé propose aussi :
 - **Archiver** : le job quitte la liste, sans rien perdre ; vous le retrouvez sous *Archivés*.
-  **Archiver les terminés** range d'un coup tous les jobs terminés de la vue affichée. Les jobs terminés
-  depuis plus de **30 jours** sont archivés d'eux-mêmes.
+  **Archiver les terminés** range d'un coup tous les jobs terminés de la vue affichée. Les jobs réussis
+  sont archivés d'eux-mêmes au bout de **2 jours** (leur rapport reste dans le fil et la bibliothèque) ;
+  ceux en échec ou arrêtés, et ceux auxquels vous avez mis une étiquette pour les garder, au bout de **30 jours**.
 - **Supprimer** : efface le job et ses étapes pour de bon. La note de rapport reste dans la bibliothèque,
   et ses coûts restent dans l'historique de consommation. Un job relancé par une routine ne peut pas
   être supprimé : supprimez d'abord la routine, ou archivez le job.

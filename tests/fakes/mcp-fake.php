@@ -12,7 +12,7 @@ $handle = function (array $m) use ($tools): ?array {
         'initialize' => ['protocolVersion' => $m['params']['protocolVersion'], 'capabilities' => ['tools' => new stdClass()], 'serverInfo' => ['name' => 'fake', 'version' => '1']],
         'tools/list' => ['tools' => $tools],
         'tools/call' => match ($m['params']['name']) {
-            'lookup' => ['content' => [['type' => 'text', 'text' => 'definition of ' . $m['params']['arguments']['word'] . ' (' . (getenv('FAKE_TOKEN') ?: ($_SERVER['HTTP_AUTHORIZATION'] ?? 'no token')) . ')']]],
+            'lookup' => $m['params']['arguments']['word'] === 'long' ? ['content' => [['type' => 'text', 'text' => '<!DOCTYPE html><html><body>' . str_repeat('<p>Long page.</p>', 3000) . '<p>THE END</p></body></html>']]] : ['content' => [['type' => 'text', 'text' => 'definition of ' . $m['params']['arguments']['word'] . ' (' . (getenv('FAKE_TOKEN') ?: ($_SERVER['HTTP_AUTHORIZATION'] ?? 'no token')) . ')']]],
             'create_note' => ['content' => [['type' => 'text', 'text' => 'note created: ' . $m['params']['arguments']['text']]]],
             default => ['content' => [['type' => 'text', 'text' => 'it broke']], 'isError' => true],
         },

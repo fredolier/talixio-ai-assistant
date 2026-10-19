@@ -281,7 +281,11 @@ check('list_jobs archived option', str_contains($tools->run('list_jobs', ['all' 
 $jb->archive($fid, false);
 $old = $s->addJob('Old one', 'x', 'fast', 1.0);
 $s->updateJob($old, ['status' => 'done', 'finished' => time() - 40 * 86400]);
-check('auto-archive takes only old finished jobs', $jb->autoArchive(time()) === 1 && (int)$s->job($old)['archived'] === 1 && (int)$s->job($fid)['archived'] === 0);
+$plain = $s->addJob('Plain one', 'x', 'fast', 1.0); $s->updateJob($plain, ['status' => 'done', 'finished' => time() - 3 * 86400]);
+$kept = $s->addJob('Tagged one', 'x', 'fast', 1.0); $s->updateJob($kept, ['status' => 'done', 'finished' => time() - 3 * 86400, 'tags' => 'keep']);
+$bad = $s->addJob('Failed one', 'x', 'fast', 1.0); $s->updateJob($bad, ['status' => 'failed', 'finished' => time() - 3 * 86400]);
+check('auto-archive: old finished jobs, and plain done ones after 2 days (tagged or failed ones stay)', $jb->autoArchive(time()) === 2 && (int)$s->job($old)['archived'] === 1 && (int)$s->job($plain)['archived'] === 1
+    && (int)$s->job($fid)['archived'] === 0 && (int)$s->job($kept)['archived'] === 0 && (int)$s->job($bad)['archived'] === 0);
 $n = $jb->archiveFinished();
 check('archive finished leaves queued jobs', $n > 0 && (int)$s->job($q1)['archived'] === 0 && (int)$s->job((int)$job['id'])['archived'] === 1);
 $s->updateJob($q1, ['status' => 'cancelled']);
@@ -1977,6 +1981,14 @@ check('mcp: a tool the connector calls read-only still asks until the user says 
 $ma->approvals()->decide((int)$ma->approvals()->pending()[0]['id'], false);
 $ma->mcp()->setReadOnly('local_fake', 'lookup', true);
 check('mcp: marked read-only by the user, kept in mcp.json', (json_decode($ma->mcp()->raw(), true)['mcpServers']['Local Fake']['read_only'] ?? null) === ['lookup']);
+$ma->tools->run('mcp_local_fake_lookup', ['word' => 'long']);
+$lp = $ma->approvals()->pending(); $lp = end($lp);
+$ma->approvals()->decide((int)$lp['id'], true);
+$r = (string)$ma->approvals()->get((int)$lp['id'])['result'];
+preg_match('/\(file #(\d+)\)/', $r, $fm);
+$lf = $fm ? $ma->files()->get((int)$fm[1]) : null;
+check('mcp: a long result is saved whole in the library, the model gets its place and start', $lf && str_ends_with($lf['name'], '.html') && str_contains($r, 'kb_move') && mb_strlen($r) < 4000
+    && str_contains((string)$ma->files()->text((int)$fm[1]), 'THE END'), $r);
 $ma = App::fromEnv();
 if (\Talixio\Shell::binary()) {
     check('mcp: local servers run in the sandbox', \Talixio\Mcp::sandboxed($ma->mcp()->servers()['local_fake']) && !\Talixio\Mcp::sandboxed(['command' => 'x', 'sandbox' => false]));

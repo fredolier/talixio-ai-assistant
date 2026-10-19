@@ -2570,5 +2570,6 @@ window.I18N.fr = {
 "Trusted websites": "Sites web de confiance",
 "Opened without asking, also from Confidential spaces and routines (never from Secret ones). Subdomains included, e.g. lemonde.fr, gouv.fr.": "Ouverts sans demander, y compris depuis les espaces Confidentiels et les routines (jamais depuis les espaces Secrets). Sous-domaines inclus, par ex. lemonde.fr, gouv.fr.",
 "Web search from Confidential spaces without asking": "Recherche web depuis les espaces Confidentiels sans demander",
-"The search words go to your search service. Never from Secret spaces.": "Les mots recherchés partent vers votre service de recherche. Jamais depuis les espaces Secrets."
+"The search words go to your search service. Never from Secret spaces.": "Les mots recherchés partent vers votre service de recherche. Jamais depuis les espaces Secrets.",
+"show the result": "voir le résultat"
 };

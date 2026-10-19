@@ -146,6 +146,12 @@ function renderMessage(m) {
     el.innerHTML = `<details><summary><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Job ${status || 'finished'}: <b>${esc(title || 'background job')}</b> · ${fmtTime(m.ts)} · show the full report</span></summary><div class="report doc">${md(report)}</div></details>`;
     return el;
   }
+  if (m.role === 'assistant' && m.channel === 'approval' && m.content.includes('\n\n')) { // a tool's raw result: folded, the chat stays for the conversation
+    const i = m.content.indexOf('\n\n');
+    el.className = 'jobcard';
+    el.innerHTML = `<details><summary><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg><span>${esc(m.content.slice(0, i))} · ${fmtTime(m.ts)} · ${esc(t('show the result'))}</span></summary><div class="report doc">${md(m.content.slice(i + 2))}</div></details>`;
+    return el;
+  }
   el.className = `msg ${m.role}`;
   if (m.id) { el.dataset.id = m.id; el.dataset.channel = m.channel; }
   const chip = CHANNEL[m.channel] ? `<span class="chip ${m.channel}">${CHANNEL[m.channel]}</span>` : '';

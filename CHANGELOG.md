@@ -3,6 +3,13 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.58 (2026-10-19)
+
+- Connectors: a long result (over 12,000 characters, e.g. a converted HTML page) is saved whole as a library file and
+  the assistant moves it where you want, instead of retyping it and cutting it. Approved actions now show their raw
+  result folded in the chat ("show the result"). Jobs done without trouble are archived after 2 days (failed or
+  tagged ones after 30).
+
 ## 0.28.57 (2026-10-18)
 
 - Trusted websites: sites in Settings → Browser and approvals open without asking (subdomains included), also from

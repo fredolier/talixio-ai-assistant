@@ -59,5 +59,7 @@ For a server that is not on GitHub (or in a private repository):
 - No need to restart the assistant: the new tools are there from the next message.
 - The *Configuration* is strict JSON: no comments (`//`).
 - An ordinary web API (REST) is not an MCP server: it needs an MCP server that uses it.
+- A long result (a converted page, a big export) is saved whole as a file in your library, in the space's
+  *Notes*; ask the assistant to move or rename it where you want. The chat only shows the start, folded.
 
 Step-by-step examples: *Connectors / anki.talixio.com* (a connector to install) and *Connectors / Home Assistant* (a remote service, by its address).
