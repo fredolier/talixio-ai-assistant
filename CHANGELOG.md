@@ -3,6 +3,9 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.59 (2026-10-19)
+- Optional knowledge graph of the library (Settings → Search, off by default): the people, companies, projects and places each document mentions are noted in the background by the fast model (capped per day, never for a folder the model may not read), and the new `kb_related` tool gathers everything about a name or what is linked to a file.
+
 ## 0.28.58 (2026-10-19)
 
 - Connectors: a long result (over 12,000 characters, e.g. a converted HTML page) is saved whole as a library file and

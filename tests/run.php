@@ -1428,6 +1428,32 @@ $lib->createFolder('/Clients/Secret Co');
 $conf = $la->spaces()->save(['name' => 'Client Conf', 'folder' => '/Clients/Dupont', 'privacy' => 'confidential']);
 $sec = $la->spaces()->save(['name' => 'Coffre', 'folder' => '/Clients/Secret Co', 'privacy' => 'secret']);
 check('privacy: a folder has the level of its space', $pv->folderLevel('/Clients/Dupont/2026') === 'confidential' && $pv->folderLevel('/Clients/Secret Co') === 'secret' && $pv->folderLevel('/Inbox') === 'internal');
+// knowledge graph: off by default; on, files are read once (again when changed), linked by what they mention; Secret stays hidden
+check('graph: off by default, no tool, nothing read', !$la->cfg->graph && !in_array('kb_related', array_column($la->tools->schemas(), 'name'), true) && $la->graph()->tick(time()) === 0);
+putenv('TALIXIO_GRAPH=1'); putenv('TALIXIO_GRAPH_DAILY=3'); $ga = App::fromEnv(); putenv('TALIXIO_GRAPH'); putenv('TALIXIO_GRAPH_DAILY');
+$ga->graph()->stats(); // the files of the tests above count as read
+foreach ($ga->store->q('SELECT id, text FROM files')->fetchAll() as $f) $ga->store->q('INSERT OR REPLACE INTO graph_files VALUES(?, ?, 0, 0)', [$f['id'], md5((string)$f['text'])]);
+$gAsked = 0;
+\Talixio\Graph::$fake = function (string $p) use (&$gAsked) { $gAsked++; return str_contains($p, 'Dupont') ? 'Here: [{"kind":"person","name":"Jean Dupont"},{"kind":"company","name":"Acme"},{"kind":"bogus","name":"x"}]' : '[{"kind":"company","name":"ACME "}]'; };
+$g1 = $ga->library()->saveNote('/Graph', 'offre.md', "Offre pour Jean Dupont chez Acme\n");
+$g2 = $ga->library()->saveNote('/Graph', 'facture.md', "Facture Acme\n");
+$g3 = $ga->library()->saveNote('/Clients/Secret Co', 'graphe.md', "Jean Dupont, secret\n");
+$gb = $ga->privacy()->modelBlocked('secret') !== null;
+$n = $ga->graph()->tick(time());
+check('graph: new documents read, within the daily cap; a Secret folder only with a local model', $n === ($gb ? 2 : 3) && $gAsked === $n, "$n/$gAsked");
+check('graph: nothing read again while unchanged', $ga->graph()->tick(time()) === 0 && $gAsked === $n);
+$r = $ga->graph()->related('dupont');
+check('graph: a name gives its documents, accents and case ignored; Secret ones hidden outside their space', count($r['files']) === 1 && $r['files'][0]['id'] === (int)$g1['id'] && $r['entities'][0]['name'] === 'Jean Dupont', json_encode($r));
+$r = $ga->graph()->related('#' . $g2['id']);
+check('graph: a file gives what it is about and the files sharing it', array_column($r['entities'], 'kind') === ['company'] && array_column($r['files'], 'id') === [(int)$g1['id']], json_encode($r));
+check('graph: the assistant gets kb_related', str_contains($ga->tools->run('kb_related', ['query' => 'Acme']), 'offre.md'));
+$ga->store->set('graph_used', '0');
+$ga->library()->saveNote('/Graph', 'facture.md', "Facture Acme, payée\n", (int)$g2['id']);
+$gn = $ga->graph()->tick(time());
+check('graph: a changed document is read again', $gn === 1, (string)$gn);
+$ga->library()->purgeFile((int)$g2['id']); $ga->graph()->tick(time());
+check('graph: a deleted document leaves the graph', array_column($ga->graph()->related('acme')['files'], 'id') === [(int)$g1['id']]);
+\Talixio\Graph::$fake = null; $ga->library()->purgeFile((int)$g1['id']); $ga->library()->purgeFile((int)$g3['id']);
 // shares: a Secret space never leaves through a link, even one made before it became secret
 check('shares: a folder holding a Secret space cannot be shared', (function () use ($shs) { try { $shs->create(['folder' => '/Clients'], ['days' => 1]); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), 'Secret'); } })());
 $idSec = $lf->save($mk('x', 'coffre'), 'coffre.txt', 'text/plain', '/Clients/Secret Co');

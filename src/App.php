@@ -116,6 +116,7 @@ final class App
     public function approvals(): Approvals { return new Approvals($this); }
     public function skills(): Skills { return new Skills($this); }
     public function mind(): Mind { return new Mind($this); }
+    public function graph(): Graph { return new Graph($this); }
     public function shares(): Shares { return new Shares($this); }
     public function privacy(): Privacy { return $this->privacy ??= new Privacy($this); }
     public function backup(): Backup { return new Backup($this); }

@@ -166,6 +166,8 @@ final class Config
     public string $lang = 'auto';                // interface language: auto (the browser's) | en | fr
     public bool $geminiPaid = false;             // the Gemini key is on a paid plan (data not used for training): Privacy page
     public bool $notifyNeutral = false;          // notifications never carry the content ("New answer in X")
+    public bool $graph = false;                  // knowledge graph of the library (Graph), off: costs a fast-model call per document
+    public int $graphDaily = 100;                // at most this many documents read for the graph a day
     public bool $mind = true;                    // learn values, ways and a character from the history (Mind)
     public bool $learn = true;                   // write skills from multi-step tasks (background, fast tier)
     public int $learnMinSteps = 4;
@@ -362,6 +364,8 @@ final class Config
         $c->autoUpdate = $e('TALIXIO_AUTO_UPDATE', '0') === '1';
         $c->learn = $e('TALIXIO_LEARN', '1') !== '0';
         $c->mind = $e('TALIXIO_MIND', '1') !== '0';
+        $c->graph = $e('TALIXIO_GRAPH', '0') === '1';
+        $c->graphDaily = max(0, (int)$e('TALIXIO_GRAPH_DAILY', '100'));
         $c->geminiPaid = $e('TALIXIO_GEMINI_PAID', '0') === '1';
         $c->notifyNeutral = $e('TALIXIO_NOTIFY_NEUTRAL', '0') === '1';
         $c->publicUrl = rtrim($e('TALIXIO_PUBLIC_URL'), '/');

@@ -2571,5 +2571,9 @@ window.I18N.fr = {
 "Opened without asking, also from Confidential spaces and routines (never from Secret ones). Subdomains included, e.g. lemonde.fr, gouv.fr.": "Ouverts sans demander, y compris depuis les espaces Confidentiels et les routines (jamais depuis les espaces Secrets). Sous-domaines inclus, par ex. lemonde.fr, gouv.fr.",
 "Web search from Confidential spaces without asking": "Recherche web depuis les espaces Confidentiels sans demander",
 "The search words go to your search service. Never from Secret spaces.": "Les mots recherchés partent vers votre service de recherche. Jamais depuis les espaces Secrets.",
-"show the result": "voir le résultat"
+"show the result": "voir le résultat",
+"Knowledge graph of the library": "Graphe de connaissances de la bibliothèque",
+"Notes the people, companies, projects and places each document mentions, so the assistant can gather everything about a name and what is linked to a file. One fast-model call per new or changed document, in the background; never for a folder the model may not read.": "Note les personnes, sociétés, projets et lieux cités par chaque document, pour que l'assistant rassemble tout ce qui concerne un nom et ce qui est lié à un fichier. Un appel au modèle rapide par document nouveau ou modifié, en arrière-plan ; jamais pour un dossier que le modèle n'a pas le droit de lire.",
+"Documents added to the graph per day (max)": "Documents ajoutés au graphe par jour (max)",
+"Caps the cost: the rest waits for the next days.": "Plafonne le coût : le reste attend les jours suivants."
 };

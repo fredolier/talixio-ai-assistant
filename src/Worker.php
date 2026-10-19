@@ -94,6 +94,7 @@ final class Worker
             $this->lastSummary = $now;
             $this->guard('summary', fn() => (new Summarizer($app))->maybeRun($now));
             $this->guard('mind', fn() => $app->mind()->tick($now));
+            $this->guard('graph', fn() => $app->graph()->tick($now));
             $this->guard('billing', fn() => $app->billing()->sync(false, $now)); // every 6 hours at most
         }
         if ($now - $this->lastBatch >= 60) { // answers of the Mistral batches (summaries, the Mind)

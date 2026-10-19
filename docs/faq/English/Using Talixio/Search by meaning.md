@@ -34,3 +34,13 @@ must be turned into a vector: that computation is what you choose in **Settings 
 ## Modest server
 On a small processor, indexing a large library can keep the machine busy for hours.
 Choose *light* or *very light*, or an online service if confidential spaces can make do with words.
+
+## Knowledge graph (optional)
+Settings → Search → *Knowledge graph of the library* (off by default). When it is on, the assistant
+notes in the background the people, companies, projects and places each document mentions. It can
+then gather **everything about a name** ("everything about Dupont") or **what is linked to a file**,
+on top of the search by words and meaning.
+- It costs one call to the fast model per new or changed document. *Documents added to the graph per
+  day* caps it (100 by default); the rest waits for the next days.
+- A folder the model may not read (a Secret space without a local model, for example) is never sent,
+  and the assistant only sees links to documents it is allowed to read.

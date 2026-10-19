@@ -34,3 +34,13 @@ chaque passage en vecteur : c'est ce calcul qu'on choisit dans **Réglages → R
 ## Serveur modeste
 Sur un petit processeur, l'indexation d'une grande bibliothèque peut occuper la machine pendant des heures.
 Prenez *léger* ou *très léger*, ou un service en ligne si les espaces confidentiels peuvent se contenter des mots.
+
+## Graphe de connaissances (optionnel)
+Réglages → Recherche → *Graphe de connaissances de la bibliothèque* (désactivé par défaut). Activé,
+l'assistant note en arrière-plan les personnes, sociétés, projets et lieux cités par chaque document.
+Il peut alors rassembler **tout ce qui concerne un nom** (« tout sur Dupont ») ou **ce qui est lié à un
+fichier**, en plus de la recherche par les mots et par le sens.
+- Cela coûte un appel au modèle rapide par document nouveau ou modifié. *Documents ajoutés au graphe par
+  jour* le plafonne (100 par défaut) ; le reste attend les jours suivants.
+- Un dossier que le modèle n'a pas le droit de lire (un espace Secret sans modèle local, par exemple)
+  n'est jamais envoyé, et l'assistant ne voit que les liens vers des documents qu'il peut lire.

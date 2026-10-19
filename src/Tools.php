@@ -8,16 +8,16 @@ final class Tools
     /** Which tools each kind of run gets. Sub-agents can read and research but not change memory, schedules or spawn more jobs. */
     public const SETS = [
         'chat' => null, // everything
-        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'mail_triage', 'contact_find', 'file_read', 'kb_search', 'kb_find', 'kb_list', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report', 'usage_bill', 'board_list', 'board_get'],
+        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'mail_triage', 'contact_find', 'file_read', 'kb_search', 'kb_find', 'kb_related', 'kb_list', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report', 'usage_bill', 'board_list', 'board_get'],
         'reflect' => ['skill_read', 'skill_save'],
-        'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'kb_search', 'kb_find', 'kb_list', 'calendar_events', 'mail_list', 'mail_read',
+        'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'kb_search', 'kb_find', 'kb_related', 'kb_list', 'calendar_events', 'mail_list', 'mail_read',
             'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot', 'shell_run', 'script_run', 'script_read', 'mail_triage', 'contact_find', 'board_list', 'board_get'],
         'none' => [],
     ];
 
     /** Always sent when tools are focused: memory, search, reading. */
     private const CORE = ['memory_read', 'memory_append', 'memory_replace', 'skill_read', 'search_memory', 'web_search', 'fetch_url',
-        'file_read', 'kb_search', 'kb_find', 'kb_list', 'mind_observe', 'space_notes', 'list_tasks', 'script_run'];
+        'file_read', 'kb_search', 'kb_find', 'kb_related', 'kb_list', 'mind_observe', 'space_notes', 'list_tasks', 'script_run'];
 
     /**
      * The other tools by group: [name prefixes, words in the conversation that call for them, what the group does].
@@ -120,6 +120,19 @@ final class Tools
                 return implode("\n", array_merge(
                     array_map(fn($f) => "- folder {$f['path']} ({$f['total']} files), link: [" . preg_replace('/[\[\]]/', '', $f['path']) . '](#library' . implode('/', array_map('rawurlencode', explode('/', $f['path']))) . ')', $folders),
                     array_map(fn($f) => '- ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']}), link: [" . preg_replace('/[\[\]]/', '', $f['name']) . "](/files/{$f['id']})", $files)));
+            });
+        if ($this->app->graph()->enabled()) $this->register('kb_related',
+            "What is linked in the user's library (its knowledge graph): query a name (person, company, project, place: \"everything about Dupont\") "
+            . "to get the documents that mention it, or a file id (#12) to get what it is about and the documents sharing the most with it. "
+            . "Use after kb_search to gather the whole picture; read the files with file_read.",
+            ['query' => ['type' => 'string']], ['query'],
+            function (array $a) {
+                $r = $this->app->graph()->related((string)$a['query']);
+                Privacy::local('Library graph');
+                if (!$r['files'] && !$r['entities']) return "nothing linked to '{$a['query']}' in the graph (documents are added to it in the background; try kb_search)";
+                $out = $r['entities'] ? ['entities: ' . implode('; ', array_map(fn($e) => "{$e['name']} ({$e['kind']})", $r['entities']))] : [];
+                foreach ($r['files'] as $f) $out[] = "- {$f['label']}: {$f['via']}";
+                return implode("\n", $out);
             });
         $this->register('routine_feedback',
             "Record the user's opinion on what a routine sent (morning briefing, weekly review, a watch...) when they say they liked it or not (\"stop telling me the weather\", \"the bit on X was great\"): its next runs follow it. routine: its title or id; item: what they rated, in a few words; vote: up or down; note: why, if they said.",
