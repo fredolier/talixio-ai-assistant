@@ -52,6 +52,13 @@ td.n,th.n{text-align:right}
     for (const c of kids.flat()) e.append(c instanceof Node ? c : String(c));
     return e;
   };
+  // an app that breaks shows why instead of a blank page (a syntax error stops its whole script)
+  const fail = m => { const box = el('p', { class: 'tk-msg tk-err', text: m }); (document.body || document.documentElement).prepend(box); };
+  window.addEventListener('error', e => fail(e.message || 'error'));
+  window.addEventListener('unhandledrejection', e => fail((e.reason && e.reason.message) || String(e.reason)));
+  // the app's code runs once the page is ready: a DOMContentLoaded listener it adds then still runs
+  const addListener = document.addEventListener.bind(document);
+  document.addEventListener = (type, fn, o) => type === 'DOMContentLoaded' && document.readyState !== 'loading' ? setTimeout(fn) : addListener(type, fn, o);
   const num = (x, d = 0) => (x === null || x === undefined || isNaN(x)) ? '–' : Number(x).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
   const short = x => Math.abs(x) >= 1e9 ? num(x / 1e9, 1) + 'B' : Math.abs(x) >= 1e6 ? num(x / 1e6, 1) + 'M' : Math.abs(x) >= 1e4 ? num(x / 1e3, 0) + 'k' : num(x, Math.abs(x) < 10 && x % 1 ? 2 : 0);
   const message = (target, text, error = false) => { const t = $(target); t.innerHTML = ''; t.append(el('p', { class: 'tk-msg' + (error ? ' tk-err' : ''), text })); };

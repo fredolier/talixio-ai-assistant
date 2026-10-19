@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.62 (2026-10-19)
+
+- Apps: making or changing an app takes the deep tier; an app whose code breaks now shows the error instead of a blank page, and a DOMContentLoaded listener in its code still runs.
+
 ## 0.28.61 (2026-10-19)
 - Apps: an answer saying an app was created when no app_save succeeded goes once to a stronger model, which saves it for real or gives the error; app_save errors now say plainly that nothing was saved, a missing script source is refused up front, sources sent as JSON text and script names ending in .py are accepted; the example descriptions are translated.
 

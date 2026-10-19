@@ -222,6 +222,7 @@ final class Agent
     {
         if (!$this->app->cfg->escalates() || in_array($channel, ['schedule', 'job', 'heartbeat'], true)) return null;
         if (self::aboutScheduling($text)) return 'scheduling';
+        if (self::buildsApp($text)) return 'building an app';
         if (self::saysFailed($text)) return 'retry';
         if ((int)$this->app->store->get("trouble_$space", '0') > time() - 1800) return 'a tool failed last turn';
         return null;
@@ -234,6 +235,14 @@ final class Agent
         $often = preg_match('/\b(every|each|daily|weekly|monthly|tous les|toutes les|chaque|quotidien\w*|hebdo\w*|mensuel\w*)\b/u', $t);
         $when = preg_match('/\b(\d{1,2}\s?(h|:\d{2}|am|pm)|morning|evening|matin|soir|midi|noon|monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|weekdays?|semaine|mois|month)\b/u', $t);
         return $often && $when;
+    }
+
+    /** Making or changing an app: code the small models often get wrong. */
+    public static function buildsApp(string $text): bool
+    {
+        $t = mb_strtolower($text);
+        return (bool)preg_match('/(*UCP)\b(apps?|applis?|applications?|widgets?|dashboards?|tableaux? de bord|mini.?apps?)\b/u', $t)
+            && (bool)preg_match('/(*UCP)\b(nouvel\w*|new|cr[ée]\w*|fai[st]\w*|make|build|create|modifi\w*|change|am[ée]lior\w*|improve|corrig\w*|fix|répare\w*|ajout\w*|add)\b/u', $t);
     }
 
     public static function saysFailed(string $text): bool

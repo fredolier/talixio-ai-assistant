@@ -10,7 +10,10 @@ tasks, a tracker for your expenses or habits, a table of a CSV file in the libra
   the Apps menu?”** The assistant looks at your memory, library, tasks and routines and proposes a few, each with
   what it would show and where its data comes from. Pick one and it builds it.
 - Or start from an example on the Apps page (*Stock prices*, *Tasks at a glance*).
-- To change an app: open it → *Change in the chat*, and say what you want different.
+- To change an app: open it → *Change in the chat*, and say what you want different. If it breaks, the app shows the
+  error at the top: copy it into the chat.
+- Making or changing an app is code: the assistant uses your **deep** model for it (if you set one), as small models
+  often get it wrong.
 
 ## Why it is safe
 

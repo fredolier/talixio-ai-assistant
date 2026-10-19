@@ -13,6 +13,9 @@ la bibliothèque…
   Choisissez-en une, il la construit.
 - Ou partez d'un exemple sur la page Apps (*Cours de bourse*, *Les tâches en un coup d'œil*).
 - Pour modifier une app : ouvrez-la → *Modifier dans la discussion*, et dites ce que vous voulez changer.
+  Si elle plante, l'app affiche l'erreur en haut : copiez-la dans la discussion.
+- Créer ou modifier une app, c'est du code : l'assistant utilise pour cela votre modèle **deep** (si vous en avez
+  réglé un), car les petits modèles s'y trompent souvent.
 
 ## Pourquoi c'est sûr
 

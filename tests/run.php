@@ -1481,6 +1481,8 @@ check('apps: sources sent as JSON text are read; a missing script is refused, sa
 check('apps: an answer claiming an app it did not save is caught, not a proposal or a failure',
     \Talixio\Agent::claimsApp('✅ App "Suivi CAC 40" créée !') && \Talixio\Agent::claimsApp('Tableau de bord ajouté au menu Apps') && \Talixio\Agent::claimsApp('I built the app')
     && !\Talixio\Agent::claimsApp('Voulez-vous que je crée une app ?') && !\Talixio\Agent::claimsApp('Je peux enregistrer cette app') && !\Talixio\Agent::claimsApp('L’app n’a pas été créée.'));
+check('apps: making or fixing an app takes the deep tier, not a question about one', \Talixio\Agent::buildsApp('Une nouvelle app des taches de la semaine') && \Talixio\Agent::buildsApp('fix the dashboard') && \Talixio\Agent::buildsApp('Améliore l’appli CAC 40')
+    && !\Talixio\Agent::buildsApp('quelles apps as-tu ?') && !\Talixio\Agent::buildsApp('Crée une tâche pour demain'));
 check('apps: asking for an app or a dashboard calls for the app tools', (bool)preg_match(\Talixio\Tools::GROUPS['apps'][1], 'build me a dashboard') && (bool)preg_match(\Talixio\Tools::GROUPS['apps'][1], 'crée une appli') && !preg_match(\Talixio\Tools::GROUPS['apps'][1], 'Bonjour, quoi de neuf ?') && in_array('app_save', $la->tools->names(), true));
 $ga->library()->saveNote('/Graph', 'facture.md', "Facture Acme, payée\n", (int)$g2['id']);
 $gn = $ga->graph()->tick(time());
