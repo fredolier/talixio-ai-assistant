@@ -94,9 +94,26 @@ final class Web
             ? "Something went wrong on the server (reference $ref, in the log)." : $e->getMessage();
     }
 
+    /** Sends each /api/<area>/... request to the handler of its area. */
     private function route(string $m, string $path, array $b): array
     {
-        $s = $this->app->store;
+        $area = explode('/', $path)[2] ?? '';
+        return match ($area) {
+            'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
+            'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals' => $this->routeChat($m, $path, $b),
+            'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
+            'google', 'microsoft', 'spotify', 'connectors', 'mcp', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
+            'memory', 'mind', 'skills', 'scripts' => $this->routeMind($m, $path, $b),
+            'library', 'files', 'shares', 'privacy' => $this->routeLibrary($m, $path, $b),
+            'board' => $this->board($m, $path, $b),
+            'apps' => $this->apps($m, $path, $b),
+            default => $this->fail(404, 'not found'),
+        };
+    }
+
+    /** The API of the account, settings, AI accounts, updates and costs. */
+    private function routeSystem(string $m, string $path, array $b): array
+    {
         return match (true) {
             $path === '/api/logout' && $m === 'POST' => $this->logout(),
             $path === '/api/status' => $this->status(),
@@ -108,6 +125,50 @@ final class Web
             $path === '/api/transfer/code' && $m === 'POST' => (new Transfer($this->app))->create(),
             $path === '/api/transfer/cancel' && $m === 'POST' => (function () { (new Transfer($this->app))->cancel(); return ['ok' => true]; })(),
             $path === '/api/transfer/resume' && $m === 'POST' => (function () { (new Transfer($this->app))->resume(); return ['ok' => true]; })(),
+            $path === '/api/accounts' && $m === 'GET' => ['accounts' => $this->app->accounts()->all(), 'kinds' => Accounts::KINDS, 'services' => Sovereign::catalog(),
+                'claude_code' => ClaudeLogin::installed($this->app->cfg), 'main' => $this->app->mainCfg->provider],
+            $path === '/api/accounts' && $m === 'POST' => ['account' => $this->app->accounts()->save($b)],
+            $path === '/api/accounts/test' && $m === 'POST' => $this->app->accounts()->test($b, ($b['id'] ?? '') !== '' ? (string)$b['id'] : null),
+            (bool)preg_match('#^/api/accounts/([a-z0-9-]+)$#', $path, $mm) && $m === 'POST' => ['account' => $this->app->accounts()->save($b, $mm[1])],
+            (bool)preg_match('#^/api/accounts/([a-z0-9-]+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->accounts()->delete($mm[1]); return ['ok' => true]; })(),
+            $path === '/api/activity' => $this->activity(),
+            $path === '/api/bill' && $m === 'POST' => (function () use ($b) {
+                try { return $this->app->calibration()->report((float)($b['amount'] ?? -1), (string)($b['currency'] ?? 'EUR'), (string)($b['month'] ?? '')); }
+                catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+            })(),
+            $path === '/api/billing/sync' && $m === 'POST' => $this->app->billing()->sync(true),
+            $path === '/api/channels' => $this->channels(),
+            $path === '/api/settings' && $m === 'GET' => ['groups' => Settings::describe($this->app->cfg->dataDir)],
+            $path === '/api/settings' && $m === 'POST' => $this->saveSettings($b),
+            $path === '/api/sovereign' && $m === 'GET' => $this->sovereign($this->app),
+            $path === '/api/sovereign/test' && $m === 'POST' => $this->withPrices(Sovereign::test((string)($b['service'] ?? ''), $this->sovereignKey($b), (string)($b['url'] ?? ''))),
+            $path === '/api/sovereign/apply' && $m === 'POST' => $this->sovereignApply($b),
+            $path === '/api/settings/password' && $m === 'POST' => $this->changePassword($b),
+            $path === '/api/security' => ['totp' => $this->auth()->totpEnabled()],
+            (bool)preg_match('#^/api/security/totp/(setup|enable|disable)$#', $path, $mm) && $m === 'POST' => $this->totp($mm[1], $b),
+            $path === '/api/update' => ['installed' => $this->app->updater()->installed(), 'version' => $this->app->updater()->version(),
+                'status' => $this->app->updater()->status(), 'auto' => $this->app->cfg->autoUpdate],
+            (bool)preg_match('#^/api/update/(check|update|rollback)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->updater()->request($mm[1]); return ['ok' => true]; })(),
+            $path === '/api/doctor' && $m === 'POST' => (function () { set_time_limit(0); return ['results' => (new Doctor(App::fromEnv()))->run()]; })(),
+            $path === '/api/notifications' => ['notifications' => $this->app->notifier()->inbox(), 'unread' => $this->app->notifier()->unread()],
+            $path === '/api/notifications/read' && $m === 'POST' => ['ok' => true, 'marked' => $this->app->notifier()->markRead(isset($b['id']) ? (int)$b['id'] : null), 'unread' => $this->app->notifier()->unread()],
+            $path === '/api/notifications/clear' && $m === 'POST' => ['ok' => true, 'removed' => $this->app->notifier()->clear()],
+            $path === '/api/push/key' => ['key' => $this->app->webPush()->publicKey()],
+            $path === '/api/push/subscribe' && $m === 'POST' => (function () use ($b) {
+                $this->app->webPush()->subscribe((string)($b['endpoint'] ?? ''), (string)($b['keys']['p256dh'] ?? ''), (string)($b['keys']['auth'] ?? ''), (string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
+                return ['ok' => true];
+            })(),
+            $path === '/api/push/unsubscribe' && $m === 'POST' => (function () use ($b) { $this->app->webPush()->unsubscribe((string)($b['endpoint'] ?? '')); return ['ok' => true]; })(),
+            $path === '/api/notify/test' && $m === 'POST' => ['results' => $this->app->notifier()->notify($this->app->cfg->name, 'Test notification: this channel works.')],
+            default => $this->fail(404, 'not found'),
+        };
+    }
+
+    /** The API of chat, spaces, approvals and search. */
+    private function routeChat(string $m, string $path, array $b): array
+    {
+        $s = $this->app->store;
+        return match (true) {
             $path === '/api/messages' => (function () use ($s) {
                 $space = (int)($_GET['space'] ?? 0);
                 $list = isset($_GET['before']) ? $s->messagesBefore((int)$_GET['before'], 100, $space) : $s->messagesAfter((int)($_GET['after'] ?? 0), 200, $space);
@@ -122,12 +183,6 @@ final class Web
             (bool)preg_match('#^/api/spaces/(\d+)$#', $path, $mm) && $m === 'POST' => ['space' => $this->app->spaces()->save($b, (int)$mm[1])],
             $path === '/api/spaces/0/tier' && $m === 'POST' => ['space' => $this->app->spaces()->setGeneralTier((string)($b['tier'] ?? ''))],
             $path === '/api/spaces/0/account' && $m === 'POST' => ['space' => $this->app->spaces()->setGeneralAccount((string)($b['account'] ?? ''))],
-            $path === '/api/accounts' && $m === 'GET' => ['accounts' => $this->app->accounts()->all(), 'kinds' => Accounts::KINDS, 'services' => Sovereign::catalog(),
-                'claude_code' => ClaudeLogin::installed($this->app->cfg), 'main' => $this->app->mainCfg->provider],
-            $path === '/api/accounts' && $m === 'POST' => ['account' => $this->app->accounts()->save($b)],
-            $path === '/api/accounts/test' && $m === 'POST' => $this->app->accounts()->test($b, ($b['id'] ?? '') !== '' ? (string)$b['id'] : null),
-            (bool)preg_match('#^/api/accounts/([a-z0-9-]+)$#', $path, $mm) && $m === 'POST' => ['account' => $this->app->accounts()->save($b, $mm[1])],
-            (bool)preg_match('#^/api/accounts/([a-z0-9-]+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->accounts()->delete($mm[1]); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/spaces/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->spaces()->delete((int)$mm[1]); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/spaces/(\d+)/move-ticket$#', $path, $mm) && $m === 'POST' => $this->app->spaces()->get((int)$mm[1]) && (int)$mm[1] ? $this->app->links()->importTicket((string)($b['to'] ?? ''))
                 : throw new \InvalidArgumentException('no such space'),
@@ -136,6 +191,30 @@ final class Web
             (bool)preg_match('#^/api/messages/(\d+)/undo$#', $path, $mm) && $m === 'POST' => $this->undoTurn((int)$mm[1]),
             $path === '/api/chat/stop' && $m === 'POST' => (function () use ($s) { $s->set('chat_stop', (string)microtime(true)); return ['ok' => true]; })(),
             $path === '/api/chat' && $m === 'POST' => $this->chat((string)($b['text'] ?? ''), array_map('intval', (array)($b['files'] ?? [])), !empty($b['meeting']), null, (int)($b['space'] ?? 0)),
+            $path === '/api/feedback' && $m === 'GET' => ['feedback' => $this->app->routines()->feedback()],
+            $path === '/api/feedback' && $m === 'POST' => ['id' => $this->app->routines()->vote((int)($b['task'] ?? 0), (string)($b['item'] ?? ''), (int)($b['vote'] ?? 0),
+                (string)($b['note'] ?? ''), isset($b['message']) ? (int)$b['message'] : null)],
+            (bool)preg_match('#^/api/feedback/(\d+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->routines()->forget((int)$mm[1])],
+            // quick capture: a task or a note in one step, without the model
+            $path === '/api/capture' && $m === 'POST' => $this->app->routines()->capture(($b['kind'] ?? '') === 'note' ? 'note' : 'task', (string)($b['text'] ?? ''), (int)($b['space'] ?? 0)),
+            $path === '/api/approvals' => ['approvals' => array_map(fn($a) => $a + ['args_decoded' => json_decode($a['args'], true)], $this->app->approvals()->pending())],
+            (bool)preg_match('#^/api/approvals/(\d+)/(approve|reject|always)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) {
+                $before = $this->app->store->maxMessageId();
+                $msg = $mm[2] === 'always' ? $this->app->approvals()->always((int)$mm[1]) : $this->app->approvals()->decide((int)$mm[1], $mm[2] === 'approve', 'web');
+                return ['message' => $msg, 'messages' => $this->app->store->messagesAfter($before)];
+            })(),
+            $path === '/api/search' => ['results' => array_map(fn($h) => array_intersect_key($h, array_flip(['kind', 'ref', 'ts', 'label', 'text', 'keyword', 'sim'])),
+                Privacy::forPerson(fn() => $this->app->recall()->search((string)($_GET['q'] ?? ''), 20, PHP_INT_MAX, null, null, null, ($_GET['mode'] ?? '') !== 'quick'))),
+                'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
+            default => $this->fail(404, 'not found'),
+        };
+    }
+
+    /** The API of tasks, routines, mail and contacts. */
+    private function routeWork(string $m, string $path, array $b): array
+    {
+        $s = $this->app->store;
+        return match (true) {
             $path === '/api/tasks' => ['tasks' => array_map(fn($t) => $t + ['next_text' => $t['next_run'] ? date('D j M, H:i', (int)$t['next_run']) : null,
                 'space_name' => (int)$t['space'] ? ($this->app->spaces()->get((int)$t['space'])['name'] ?? null) : null,
                 'feedback' => (int)$s->q('SELECT COUNT(*) FROM routine_feedback WHERE task = ?', [$t['id']])->fetchColumn()], $s->tasks())],
@@ -163,12 +242,6 @@ final class Web
             $path === '/api/tasks/watches' => ['watches' => $this->app->routines()->watches()],
             $path === '/api/tasks/watch' && $m === 'POST' => ['task' => $this->app->routines()->setupWatch($b, isset($b['id']) && $b['id'] !== '' && $b['id'] !== null ? (int)$b['id'] : null)],
             (bool)preg_match('#^/api/tasks/(\d+)/feedback$#', $path, $mm) => ['feedback' => $this->app->routines()->feedback((int)$mm[1])],
-            $path === '/api/feedback' && $m === 'GET' => ['feedback' => $this->app->routines()->feedback()],
-            $path === '/api/feedback' && $m === 'POST' => ['id' => $this->app->routines()->vote((int)($b['task'] ?? 0), (string)($b['item'] ?? ''), (int)($b['vote'] ?? 0),
-                (string)($b['note'] ?? ''), isset($b['message']) ? (int)$b['message'] : null)],
-            (bool)preg_match('#^/api/feedback/(\d+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->routines()->forget((int)$mm[1])],
-            // quick capture: a task or a note in one step, without the model
-            $path === '/api/capture' && $m === 'POST' => $this->app->routines()->capture(($b['kind'] ?? '') === 'note' ? 'note' : 'task', (string)($b['text'] ?? ''), (int)($b['space'] ?? 0)),
             (bool)preg_match('#^/api/tasks/(\d+)/run$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $s) {
                 set_time_limit(0);
                 $t = $s->task((int)$mm[1]) ?? $this->fail(404, 'no such task');
@@ -176,6 +249,30 @@ final class Web
                 $reply = $this->app->agent()->runTask($t['title'], $t['prompt'], (string)$t['tier'], (int)$t['space'], (int)$t['id']);
                 return ['reply' => $reply, 'space' => (int)$t['space']];
             })(),
+            $path === '/api/heartbeat/run' && $m === 'POST' => (function () {
+                set_time_limit(0);
+                if (!$this->app->ws->hasContent('HEARTBEAT.md')) $this->fail(400, 'The checklist (Memory → HEARTBEAT.md) is empty: write what to check first.');
+                $msg = $this->app->agent()->heartbeat();
+                if ($msg !== null) $this->app->notifier()->notify($this->app->cfg->name, $msg);
+                return ['message' => $msg] + $this->heartbeats();
+            })(),
+            $path === '/api/jobs' => $this->jobList(),
+            $path === '/api/jobs/archive-finished' && $m === 'POST' => ['count' => $this->app->jobs()->archiveFinished(isset($b['space']) && $b['space'] !== '' ? (int)$b['space'] : null, (string)($b['tag'] ?? ''))],
+            (bool)preg_match('#^/api/jobs/(\d+)/archive$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->archive((int)$mm[1], ($b['archived'] ?? true) !== false)],
+            (bool)preg_match('#^/api/jobs/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->jobs()->delete((int)$mm[1]); return ['ok' => true]; })(),
+            (bool)preg_match('#^/api/jobs/(\d+)/schedule$#', $path, $mm) && $m === 'POST' => ['task' => $this->app->jobs()->schedule((int)$mm[1], (string)($b['cron'] ?? ''), (string)($b['at'] ?? ''), (string)($b['when'] ?? ''))],
+            (bool)preg_match('#^/api/jobs/(\d+)/tags$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->setTags((int)$mm[1], $b['tags'] ?? [])],
+            (bool)preg_match('#^/api/jobs/(\d+)/cancel$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->jobs()->cancel((int)$mm[1])],
+            (bool)preg_match('#^/api/jobs/(\d+)/continue$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->continue((int)$mm[1], is_numeric($b['max_usd'] ?? null) ? (float)$b['max_usd'] : null, (string)($b['effort'] ?? ''), (string)($b['note'] ?? ''))],
+            (bool)preg_match('#^/api/jobs/(\d+)/rerun$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->rerun((int)$mm[1], (string)($b['tier'] ?? ''), is_numeric($b['max_usd'] ?? null) ? (float)$b['max_usd'] : null, (string)($b['effort'] ?? ''))],
+            default => $this->fail(404, 'not found'),
+        };
+    }
+
+    /** The API of Google, Microsoft, Spotify, MCP connectors, the shell, meaning and WebDAV. */
+    private function routeConnectors(string $m, string $path, array $b): array
+    {
+        return match (true) {
             $path === '/api/google' => $this->googleState(),
             $path === '/api/google/connect' && $m === 'POST' => ['url' => $this->app->google()->authUrl(Google::redirectUri($this->app->cfg->publicUrl))],
             $path === '/api/google/disconnect' && $m === 'POST' => (function () { $this->app->google()->disconnect(); return $this->googleState(); })(),
@@ -205,13 +302,18 @@ final class Web
             $path === '/api/mcp/oauth/forget' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcpOAuth()->forget((string)($b['server'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/mcp/refresh' && $m === 'POST' => (function () { set_time_limit(0); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/shell/check' && $m === 'POST' => (function () { try { return ['ok' => true, 'text' => $this->app->shell()->check()]; } catch (\Throwable $e) { return ['ok' => false, 'text' => $e->getMessage()]; } })(),
-            $path === '/api/heartbeat/run' && $m === 'POST' => (function () {
-                set_time_limit(0);
-                if (!$this->app->ws->hasContent('HEARTBEAT.md')) $this->fail(400, 'The checklist (Memory → HEARTBEAT.md) is empty: write what to check first.');
-                $msg = $this->app->agent()->heartbeat();
-                if ($msg !== null) $this->app->notifier()->notify($this->app->cfg->name, $msg);
-                return ['message' => $msg] + $this->heartbeats();
-            })(),
+            $path === '/api/dav' && $m === 'GET' => (new Dav($this->app))->status(),
+            $path === '/api/dav' && $m === 'POST' => (new Dav($this->app))->setMode((string)($b['mode'] ?? '')),
+            $path === '/api/dav/unblock' && $m === 'POST' => (new Dav($this->app))->unblock(),
+            $path === '/api/dav/password' && $m === 'POST' => (function () use ($b) { $this->checkSecret((string)($b['current'] ?? '')); $d = new Dav($this->app); return ['password' => $d->newPassword()] + $d->status(); })(),
+            default => $this->fail(404, 'not found'),
+        };
+    }
+
+    /** The API of memory, Mind, skills and scripts. */
+    private function routeMind(string $m, string $path, array $b): array
+    {
+        return match (true) {
             $path === '/api/memory' && $m === 'GET' => ['files' => $this->app->ws->all()],
             $path === '/api/memory/digest' && $m === 'GET' => $this->digest(),
             $path === '/api/memory/compact' && $m === 'POST' => (function () {
@@ -222,37 +324,6 @@ final class Web
                 return ['done' => $did] + $this->digest();
             })(),
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
-            $path === '/api/activity' => $this->activity(),
-            $path === '/api/bill' && $m === 'POST' => (function () use ($b) {
-                try { return $this->app->calibration()->report((float)($b['amount'] ?? -1), (string)($b['currency'] ?? 'EUR'), (string)($b['month'] ?? '')); }
-                catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
-            })(),
-            $path === '/api/billing/sync' && $m === 'POST' => $this->app->billing()->sync(true),
-            str_starts_with($path, '/api/board') => $this->board($m, $path, $b),
-            str_starts_with($path, '/api/apps') => $this->apps($m, $path, $b),
-            $path === '/api/jobs' => $this->jobList(),
-            $path === '/api/jobs/archive-finished' && $m === 'POST' => ['count' => $this->app->jobs()->archiveFinished(isset($b['space']) && $b['space'] !== '' ? (int)$b['space'] : null, (string)($b['tag'] ?? ''))],
-            (bool)preg_match('#^/api/jobs/(\d+)/archive$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->archive((int)$mm[1], ($b['archived'] ?? true) !== false)],
-            (bool)preg_match('#^/api/jobs/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->jobs()->delete((int)$mm[1]); return ['ok' => true]; })(),
-            (bool)preg_match('#^/api/jobs/(\d+)/schedule$#', $path, $mm) && $m === 'POST' => ['task' => $this->app->jobs()->schedule((int)$mm[1], (string)($b['cron'] ?? ''), (string)($b['at'] ?? ''), (string)($b['when'] ?? ''))],
-            (bool)preg_match('#^/api/jobs/(\d+)/tags$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->setTags((int)$mm[1], $b['tags'] ?? [])],
-            $path === '/api/channels' => $this->channels(),
-            $path === '/api/settings' && $m === 'GET' => ['groups' => Settings::describe($this->app->cfg->dataDir)],
-            $path === '/api/settings' && $m === 'POST' => $this->saveSettings($b),
-            $path === '/api/sovereign' && $m === 'GET' => $this->sovereign($this->app),
-            $path === '/api/sovereign/test' && $m === 'POST' => $this->withPrices(Sovereign::test((string)($b['service'] ?? ''), $this->sovereignKey($b), (string)($b['url'] ?? ''))),
-            $path === '/api/sovereign/apply' && $m === 'POST' => $this->sovereignApply($b),
-            $path === '/api/settings/password' && $m === 'POST' => $this->changePassword($b),
-            $path === '/api/security' => ['totp' => $this->auth()->totpEnabled()],
-            $path === '/api/dav' && $m === 'GET' => (new Dav($this->app))->status(),
-            $path === '/api/dav' && $m === 'POST' => (new Dav($this->app))->setMode((string)($b['mode'] ?? '')),
-            $path === '/api/dav/unblock' && $m === 'POST' => (new Dav($this->app))->unblock(),
-            $path === '/api/dav/password' && $m === 'POST' => (function () use ($b) { $this->checkSecret((string)($b['current'] ?? '')); $d = new Dav($this->app); return ['password' => $d->newPassword()] + $d->status(); })(),
-            (bool)preg_match('#^/api/security/totp/(setup|enable|disable)$#', $path, $mm) && $m === 'POST' => $this->totp($mm[1], $b),
-            $path === '/api/update' => ['installed' => $this->app->updater()->installed(), 'version' => $this->app->updater()->version(),
-                'status' => $this->app->updater()->status(), 'auto' => $this->app->cfg->autoUpdate],
-            (bool)preg_match('#^/api/update/(check|update|rollback)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->updater()->request($mm[1]); return ['ok' => true]; })(),
-            $path === '/api/doctor' && $m === 'POST' => (function () { set_time_limit(0); return ['results' => (new Doctor(App::fromEnv()))->run()]; })(),
             $path === '/api/skills' => ['skills' => $this->app->skills()->all()],
             $path === '/api/mind' && $m === 'GET' => $this->app->mind()->overview(),
             (bool)preg_match('#^/api/mind/(\d+)$#', $path, $mm) && $m === 'GET' => ['evidence' => $this->app->mind()->evidence((int)$mm[1])],
@@ -276,25 +347,14 @@ final class Web
                 return ['ok' => true];
             })(),
             (bool)preg_match('#^/api/scripts/([\w-]+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->scripts()->delete($mm[1])],
-            $path === '/api/notifications' => ['notifications' => $this->app->notifier()->inbox(), 'unread' => $this->app->notifier()->unread()],
-            $path === '/api/notifications/read' && $m === 'POST' => ['ok' => true, 'marked' => $this->app->notifier()->markRead(isset($b['id']) ? (int)$b['id'] : null), 'unread' => $this->app->notifier()->unread()],
-            $path === '/api/notifications/clear' && $m === 'POST' => ['ok' => true, 'removed' => $this->app->notifier()->clear()],
-            $path === '/api/approvals' => ['approvals' => array_map(fn($a) => $a + ['args_decoded' => json_decode($a['args'], true)], $this->app->approvals()->pending())],
-            (bool)preg_match('#^/api/approvals/(\d+)/(approve|reject|always)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) {
-                $before = $this->app->store->maxMessageId();
-                $msg = $mm[2] === 'always' ? $this->app->approvals()->always((int)$mm[1]) : $this->app->approvals()->decide((int)$mm[1], $mm[2] === 'approve', 'web');
-                return ['message' => $msg, 'messages' => $this->app->store->messagesAfter($before)];
-            })(),
-            $path === '/api/push/key' => ['key' => $this->app->webPush()->publicKey()],
-            $path === '/api/push/subscribe' && $m === 'POST' => (function () use ($b) {
-                $this->app->webPush()->subscribe((string)($b['endpoint'] ?? ''), (string)($b['keys']['p256dh'] ?? ''), (string)($b['keys']['auth'] ?? ''), (string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
-                return ['ok' => true];
-            })(),
-            $path === '/api/push/unsubscribe' && $m === 'POST' => (function () use ($b) { $this->app->webPush()->unsubscribe((string)($b['endpoint'] ?? '')); return ['ok' => true]; })(),
-            $path === '/api/notify/test' && $m === 'POST' => ['results' => $this->app->notifier()->notify($this->app->cfg->name, 'Test notification: this channel works.')],
-            (bool)preg_match('#^/api/jobs/(\d+)/cancel$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->jobs()->cancel((int)$mm[1])],
-            (bool)preg_match('#^/api/jobs/(\d+)/continue$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->continue((int)$mm[1], is_numeric($b['max_usd'] ?? null) ? (float)$b['max_usd'] : null, (string)($b['effort'] ?? ''), (string)($b['note'] ?? ''))],
-            (bool)preg_match('#^/api/jobs/(\d+)/rerun$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->rerun((int)$mm[1], (string)($b['tier'] ?? ''), is_numeric($b['max_usd'] ?? null) ? (float)$b['max_usd'] : null, (string)($b['effort'] ?? ''))],
+            default => $this->fail(404, 'not found'),
+        };
+    }
+
+    /** The API of the library, files, shares and privacy. */
+    private function routeLibrary(string $m, string $path, array $b): array
+    {
+        return match (true) {
             $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/')) + ['stats' => $this->app->library()->stats(), 'shared' => $this->app->shares()->sharedIndex(),
                 'level' => $this->app->privacy()->folderLevel(Library::normalize((string)($_GET['folder'] ?? '/')))],
             $path === '/api/privacy' => $this->app->privacy()->overview() + ['journal' => $this->app->privacy()->journal()],
@@ -336,9 +396,6 @@ final class Web
                 foreach ($this->app->library()->list(Library::INBOX)['files'] as $f) if ($f['suggestion']) { $filing->apply($f['id']); $n++; }
                 return ['filed' => $n];
             })(),
-            $path === '/api/search' => ['results' => array_map(fn($h) => array_intersect_key($h, array_flip(['kind', 'ref', 'ts', 'label', 'text', 'keyword', 'sim'])),
-                Privacy::forPerson(fn() => $this->app->recall()->search((string)($_GET['q'] ?? ''), 20, PHP_INT_MAX, null, null, null, ($_GET['mode'] ?? '') !== 'quick'))),
-                'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
             default => $this->fail(404, 'not found'),
         };
     }
