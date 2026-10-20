@@ -15,16 +15,42 @@ tasks, a tracker for your expenses or habits, a table of a CSV file in the libra
 - Making or changing an app is code: the assistant uses your **deep** model for it (if you set one), as small models
   often get it wrong.
 
+## What an app can show
+
+Key figures (with a change arrow and a small trend line), line and bar charts (stacked too), pies and donuts,
+gauges, ranked bars, progress toward goals, a calendar heatmap, a timeline, badges, tabs and tables. Tables can be
+downloaded as CSV and charts as PNG.
+
+Sources an app can declare:
+
+| Source | What it reads |
+|---|---|
+| Web | a fixed address (only a few words of it may change, like a share symbol) |
+| File / Folder | a library file, or the files of a folder (handy with a routine that saves results there) |
+| Search | a search in the library |
+| Tasks, Calendar, Contacts | those of Talixio |
+| Script | one of your saved scripts |
+| Connector | one tool of a connector, **only if you marked it *only reading*** in Settings → Connectors |
+
 ## Why it is safe
 
 An app is not free code. The assistant writes it with a small kit (charts, tables, figures, its own small store), and:
 
 - it runs in a sealed frame: no network, no cookies, no access to the rest of the app or your session;
-- it gets data only from the **sources it declares**: a fixed web address, a library file, the tasks of its space,
-  or one of your saved scripts. Nothing else;
+- it gets data only from the **sources it declares**: a fixed web address, a library file or folder, a library
+  search, the tasks of its space, your calendar, your contacts, one of your saved scripts, or a connector tool you
+  marked *only reading*. Nothing else;
 - **every app the assistant makes or changes waits for your approval.** Open it: you see the sources it reads (and
   the code if you like), then *Approve*. Until then it gets no data;
 - an app belongs to a space and follows its privacy level: apps of a Secret space are not shown elsewhere and never
   read the web.
 
-Web data is cached (30 minutes by default) and limited to 60 fetches an hour per app. Delete an app from its page.
+A connector tool can do things (send, delete, pay), and what the connector says about itself is not trusted: an app
+may only call a tool *you* marked as only reading, with the arguments fixed when you approved it.
+
+## What an app cannot do
+
+Write anything (tasks, files, mail, connectors), use the network freely, run code on the server, see your keys or
+settings, read another space, or be shared publicly. These are deliberate. The plans are in the project's roadmap.
+
+Web and connector data is cached (30 minutes by default) and limited to 60 fetches an hour per app. Delete an app from its page.

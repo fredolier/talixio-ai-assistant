@@ -12,7 +12,7 @@ namespace Talixio;
  */
 final class Apps
 {
-    public const TYPES = ['web', 'file', 'tasks', 'script'];
+    public const TYPES = ['web', 'file', 'tasks', 'script', 'folder', 'search', 'calendar', 'contacts', 'mcp'];
     private const MAX_CODE = 200_000;
     private const MAX_STATE = 200_000;
     private const WEB_PER_HOUR = 60;
@@ -126,20 +126,32 @@ final class Apps
                 $c['script'] = preg_replace('/\.py$/', '', (string)($s['script'] ?? ''));
                 if ($c['script'] === '') throw new \InvalidArgumentException("source $name: script is the name of a saved script");
                 $c['args'] = array_map('strval', array_slice((array)($s['args'] ?? []), 0, 20));
+            } elseif ($type === 'folder' || $type === 'search') {
+                $c['folder'] = Library::normalize((string)($s['folder'] ?? '/'));
+                if ($type === 'folder' && $c['folder'] === '/') throw new \InvalidArgumentException("source $name: folder is a library folder, like /Reports/OVH");
+            } elseif ($type === 'calendar') {
+                $c['days'] = max(1, min(90, (int)($s['days'] ?? 14)));
+            } elseif ($type === 'mcp') {
+                $c['server'] = preg_replace('/[^a-z0-9]+/', '_', strtolower((string)($s['server'] ?? '')));
+                $c['tool'] = (string)($s['tool'] ?? '');
+                if ($c['server'] === '' || !preg_match('/^[\w.\/-]{1,80}$/', $c['tool'])) throw new \InvalidArgumentException("source $name: server (a connector) and tool (one of its tools)");
+                $args = $s['args'] ?? [];
+                if (is_string($args)) $args = json_decode($args, true) ?: [];
+                $c['args'] = array_slice((array)$args, 0, 20, true);
             }
-            if ($type === 'web' || $type === 'script') $c['ttl'] = max(5, min(1440, (int)($s['ttl'] ?? 30)));
-            $c['format'] = in_array($s['format'] ?? '', ['json', 'csv', 'text'], true) ? $s['format'] : ($type === 'tasks' ? 'json' : 'text');
+            if (in_array($type, ['web', 'script', 'mcp'], true)) $c['ttl'] = max(5, min(1440, (int)($s['ttl'] ?? 30)));
+            $c['format'] = in_array($s['format'] ?? '', ['json', 'csv', 'text'], true) ? $s['format'] : (in_array($type, ['tasks', 'folder', 'search', 'calendar', 'contacts'], true) ? 'json' : 'text');
             $out[] = $c;
         }
         return $out;
     }
 
-    /** A placeholder's value from the app: plain words and numbers only, URL-encoded. */
+    /** A placeholder's value from the app: words, numbers and common punctuation, URL-encoded (or one shell argument for a script). */
     private static function fill(string $tpl, array $params, bool $url): string
     {
         return preg_replace_callback('/\{([a-z][a-z0-9_]{0,30})\}/', function ($m) use ($params, $url) {
             $v = (string)($params[$m[1]] ?? '');
-            if (!preg_match('/^[\p{L}\p{N} ._:,\-]{0,80}$/u', $v)) throw new \InvalidArgumentException("parameter {$m[1]}: letters, digits and . _ - : , only");
+            if (!preg_match('/^[\p{L}\p{N}\p{Zs}._:,\-+\/@\'()&#%?=!€$]{0,200}$/u', $v)) throw new \InvalidArgumentException("parameter {$m[1]}: letters, digits, spaces and common punctuation, 200 characters at most");
             return $url ? rawurlencode($v) : $v;
         }, $tpl);
     }
@@ -170,13 +182,50 @@ final class Apps
             if ($p->hidden($p->folderLevel((string)$f['folder']), null, (string)$f['folder'])) throw new \RuntimeException("file #{$src['file']} belongs to a Secret space");
             return self::parse($this->app->files()->text((int)$f['id']), $src['format']);
         }
+        if ($src['type'] === 'folder' || $src['type'] === 'search') {
+            if ($p->hidden($p->folderLevel($src['folder']), null, $src['folder'])) throw new \RuntimeException("the folder {$src['folder']} belongs to a Secret space");
+            $lib = $this->app->library();
+            if ($src['type'] === 'search') {
+                $q = trim((string)($params['q'] ?? ''));
+                return $q === '' ? [] : $lib->search(mb_substr($q, 0, 200), $src['folder'], 20, false);
+            }
+            if (isset($params['file'])) { // one file of the folder (or below it), read like a file source
+                $f = $this->app->files()->get((int)$params['file']);
+                $in = $f && ($f['folder'] === $src['folder'] || str_starts_with((string)$f['folder'], rtrim($src['folder'], '/') . '/'));
+                if (!$in || $p->hidden($p->folderLevel((string)$f['folder']), null, (string)$f['folder'])) throw new \RuntimeException("file #{$params['file']} is not in {$src['folder']}");
+                $fmt = in_array($params['format'] ?? '', ['json', 'csv', 'text'], true) ? $params['format'] : (preg_match('/\.(json|csv)$/i', (string)$f['name'], $fm) ? strtolower($fm[1]) : 'text');
+                return self::parse($this->app->files()->text((int)$f['id']), $fmt);
+            }
+            $rows = $this->app->store->q('SELECT id, name, folder, size, created FROM files WHERE (folder = ? OR folder LIKE ?) AND deleted_at IS NULL ORDER BY created DESC LIMIT 500',
+                [$src['folder'], addcslashes(rtrim($src['folder'], '/'), '%_') . '/%'])->fetchAll();
+            return array_values(array_filter(array_map(fn($r) => ['id' => (int)$r['id'], 'name' => $r['name'], 'folder' => $r['folder'], 'size' => (int)$r['size'], 'created' => date('c', (int)$r['created'])], $rows),
+                fn($r) => !$p->hidden($p->folderLevel($r['folder']), null, $r['folder'])));
+        }
+        if ($src['type'] === 'calendar') {
+            return array_map(fn($e) => ['title' => (string)($e['title'] ?? ''), 'start' => date('c', (int)$e['start']), 'end' => date('c', (int)$e['end']), 'all_day' => (bool)($e['all_day'] ?? false), 'location' => (string)($e['location'] ?? '')],
+                $this->app->calendar()->events(time() - 3600, time() + $src['days'] * 86400));
+        }
+        if ($src['type'] === 'contacts') {
+            return array_map(fn($c) => array_intersect_key($c, array_flip(['id', 'name', 'email', 'phone', 'org', 'last_ts'])), $this->app->contacts()->search(mb_substr(trim((string)($params['q'] ?? '')), 0, 100), 200));
+        }
         $k = $src['name'] . ':' . json_encode($params);
         $hit = $this->app->store->q('SELECT ts, body FROM app_cache WHERE app = ? AND k = ?', [$app['id'], $k])->fetch();
         if ($hit && $hit['ts'] > time() - $src['ttl'] * 60) return self::parse((string)$hit['body'], $src['format']);
-        if ($src['type'] === 'web') {
-            if ($lvl === 'secret') throw new \RuntimeException('an app of a Secret space never reaches the web');
+        if ($src['type'] === 'web' || $src['type'] === 'mcp') {
+            if ($lvl === 'secret') throw new \RuntimeException('an app of a Secret space never reaches the web or a connector');
             $n = (int)$this->app->store->q('SELECT COUNT(*) FROM app_cache WHERE app = ? AND ts > ?', [$app['id'], time() - 3600])->fetchColumn();
-            if ($n >= self::WEB_PER_HOUR) throw new \RuntimeException('too many web requests this hour; try again later');
+            if ($n >= self::WEB_PER_HOUR) throw new \RuntimeException('too many requests this hour; try again later');
+        }
+        if ($src['type'] === 'mcp') {
+            $mcp = $this->app->mcp();
+            $srv = $mcp->servers()[$src['server']] ?? throw new \RuntimeException("no connector {$src['server']}");
+            // only a tool you marked as only reading, in Settings → Connectors: an app never changes anything through a connector
+            if (!in_array($src['tool'], array_map('strval', (array)($srv['read_only'] ?? [])), true))
+                throw new \RuntimeException("the tool {$src['tool']} of {$src['server']} is not marked as only reading (Settings → Connectors)");
+            $args = array_map(fn($v) => is_string($v) ? self::fill($v, $params, false) : $v, $src['args']);
+            $body = $mcp->call($src['server'], $src['tool'], $args);
+            if (str_starts_with($body, 'error:')) throw new \RuntimeException($body);
+        } elseif ($src['type'] === 'web') {
             [$code, $body] = Http::safeGet(self::fill($src['url'], $params, true), 2_000_000, 20);
             if ($code >= 400) throw new \RuntimeException("the site answered HTTP $code");
         } else {

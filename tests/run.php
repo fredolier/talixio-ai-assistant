@@ -1452,6 +1452,9 @@ $ga->store->set('graph_used', '0');
 check('apps: code with a script tag, a handler, fetch or eval is refused', \Talixio\Apps::checkCode('<script>x</script>', '') !== null && \Talixio\Apps::checkCode('<b onclick="x()">', '') !== null
     && \Talixio\Apps::checkCode('', 'fetch("https://x")') !== null && \Talixio\Apps::checkCode('', 'eval("1")') !== null && \Talixio\Apps::checkCode('', 'parent.location="x"') !== null && \Talixio\Apps::checkCode('<div id="a" class="card"></div>', "talixio.table('#a', [])") === null);
 $bad = []; foreach ([[['name' => 'q', 'type' => 'web', 'url' => 'http://x.example/a']], [['name' => 'q', 'type' => 'web', 'url' => 'https://{host}/a']], [['name' => 'Q!', 'type' => 'tasks']], [['name' => 'q', 'type' => 'shell']]] as $l) { try { \Talixio\Apps::checkSources($l); } catch (\InvalidArgumentException) { $bad[] = 1; } }
+$newSrc = \Talixio\Apps::checkSources([['name' => 'f', 'type' => 'folder', 'folder' => 'Reports/OVH'], ['name' => 'c', 'type' => 'calendar', 'days' => 400], ['name' => 'm', 'type' => 'mcp', 'server' => 'OVH Cloud', 'tool' => 'list_bills', 'args' => '{"year":"{year}"}']]);
+$bad2 = 0; foreach ([[['name' => 'f', 'type' => 'folder', 'folder' => '/']], [['name' => 'm', 'type' => 'mcp', 'server' => 'ovh']]] as $l) { try { \Talixio\Apps::checkSources($l); } catch (\InvalidArgumentException) { $bad2++; } }
+check('apps: folder, calendar and connector sources are checked', $newSrc[1]['days'] === 90 && $newSrc[2]['server'] === 'ovh_cloud' && $newSrc[2]['args'] === ['year' => '{year}'] && $bad2 === 2, json_encode($newSrc) . $bad2);
 $okSrc = \Talixio\Apps::checkSources([['name' => 'q', 'type' => 'web', 'url' => 'https://stooq.example/q?s={symbol}', 'format' => 'csv']]);
 check('apps: sources need https, a fixed host, a plain name and a known type', count($bad) === 4 && $okSrc[0]['ttl'] === 30 && $okSrc[0]['format'] === 'csv', json_encode($okSrc));
 check('apps: csv becomes rows', \Talixio\Apps::csv("Date,Close\n2026-01-02,10.5\n2026-01-03,11\n") === [['Date' => '2026-01-02', 'Close' => '10.5'], ['Date' => '2026-01-03', 'Close' => '11']]);
@@ -1465,6 +1468,10 @@ $la->apps()->approve($aid);
 $d = $la->apps()->data($aid, 'tasks');
 check('apps: approved, it reads the tasks of its space', in_array('Write the app tests', array_column($d, 'title'), true), json_encode($d));
 check('apps: a bad save is refused with the reason', str_starts_with($la->tools->run('app_save', ['name' => 'x', 'html' => '<script></script>', 'script' => '']), 'error:'));
+$mid = $la->apps()->save(['name' => 'Bills', 'html' => '<div></div>', 'script' => '', 'sources' => [['name' => 'b', 'type' => 'mcp', 'server' => 'nowhere', 'tool' => 'delete_all'], ['name' => 'f', 'type' => 'calendar']]])['id'];
+$la->apps()->approve($mid);
+$mErr = ''; try { $la->apps()->data($mid, 'b'); } catch (\Throwable $e) { $mErr = $e->getMessage(); }
+check('apps: a connector tool not marked as only reading gives an app nothing', $mErr !== '' && is_array($la->apps()->data($mid, 'f')), $mErr);
 $la->apps()->state($aid, 'prefs', ['symbol' => 'aapl'], true);
 check('apps: its own store keeps a value', $la->apps()->state($aid, 'prefs') === ['symbol' => 'aapl'] && $la->apps()->state($aid, 'none') === null);
 $la->tools->run('app_save', ['id' => $aid, 'name' => 'My tasks', 'html' => '<div id="t"></div>', 'script' => "talixio.message('#t', 'hi')"]);

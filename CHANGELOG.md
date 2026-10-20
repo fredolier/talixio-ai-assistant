@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.63 (2026-10-20)
+
+- Apps: new sources (library folder and search, calendar, contacts, connector tools marked as only reading), looser
+  source parameters, new visual components (pie, gauge, ranked bars, progress, heatmap, timeline, badges, tabs,
+  trend lines, stacked bars) and downloads (CSV, PNG). New `docs/ROADMAP.md`.
+
 ## 0.28.62 (2026-10-19)
 
 - Apps: making or changing an app takes the deep tier; an app whose code breaks now shows the error instead of a blank page, and a DOMContentLoaded listener in its code still runs.

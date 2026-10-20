@@ -4460,6 +4460,14 @@ window.addEventListener('message', async e => {
   if (!f || e.source !== f.el.contentWindow || !m || m.talixio !== 1 || !m.op) return;
   const reply = r => e.source.postMessage({ talixio: 1, id: m.id, ...r }, '*');
   const sp = state.space ?? '';
+  if (m.op === 'download') { // a file the app made: offered here, as the sealed frame cannot download
+    const name = String(m.name || 'download').replace(/[^\w. -]+/g, '_').slice(0, 80) || 'download', c = String(m.content || '');
+    if (c.length > 20e6) return reply({ error: 'file too large' });
+    const a = document.createElement('a');
+    a.href = /^data:image\/png;base64,/.test(c) ? c : URL.createObjectURL(new Blob([c], { type: /^[\w.+-]+\/[\w.+-]+$/.test(m.mime || '') && !/html|xml|javascript/i.test(m.mime) ? m.mime : 'text/plain' }));
+    a.download = name; document.body.append(a); a.click(); a.remove();
+    return reply({ result: true });
+  }
   try {
     const body = m.op === 'data' ? { name: String(m.name || ''), params: m.params || {} }
       : { key: String(m.key || ''), value: m.value ?? null, write: m.op === 'save' };

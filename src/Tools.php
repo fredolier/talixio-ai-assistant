@@ -155,9 +155,16 @@ final class Tools
             . 'script: the JavaScript run once the page is ready, inside an async function (await allowed). Kit: $(sel), $$(sel); '
             . 'await talixio.data(source, {param: value}) → the data of a declared source; await talixio.load(key) / talixio.save(key, value) → the app\'s own small store (JSON); '
             . 'talixio.chart(target, {type: "line"|"area"|"bar", labels: [...], series: [{name, values: [numbers]}]}); talixio.table(target, rows, [columns]) (sortable); '
-            . 'talixio.stats(target, [{label, value, note}]); talixio.message(target, text); talixio.el(tag, props, ...children); talixio.num(x, decimals); talixio.csv(text); talixio.date(s). '
+            . 'talixio.stats(target, [{label, value, note, delta (e.g. +3.2 or -5), trend: [numbers]}]); talixio.pie(target, {labels, values, donut: true, center: "text"}); '
+            . 'talixio.gauge(target, {value, min, max, label, unit, good: "high"|"low", warn, bad}); talixio.bars(target, [{label, value, note}], {unit}) (horizontal, ranked); talixio.progress(target, [{label, value, max}]); '
+            . 'talixio.heatmap(target, {"YYYY-MM-DD": number}, {weeks: 26}); talixio.timeline(target, [{date, title, note, tone}]); talixio.badge(text, "ok"|"warn"|"bad"|"info") → element; talixio.sparkline(values) → element; '
+            . 'talixio.tabs(target, {"Tab name": async (box) => {...}}); talixio.download(fileName, rows or text) (CSV for rows); charts and tables get their own download button. chart also takes stacked: true for bars. '
+            . 'talixio.message(target, text); talixio.el(tag, props, ...children); talixio.num(x, decimals); talixio.csv(text); talixio.date(s); talixio.ago(s). Layout: wrap figures in <div class="grid"> of <section class="card">. '
             . 'sources: [{name, type, ...}] — web: {url: "https://host/path?q={param}", format: json|csv|text, ttl: minutes} (fixed host, {param} filled from the app, letters and digits only); '
-            . 'file: {file: library file id, format}; tasks: the space\'s tasks (id, code, title, status, priority, start_date, due_date); script: {script: a saved script name, args: ["{param}"], format}. '
+            . 'file: {file: library file id, format}; folder: {folder: "/Reports/OVH"} → its files, newest first (id, name, folder, size, created); data(name, {file: id}) reads one of them; '
+            . 'search: {folder} → data(name, {q: "words"}) finds library passages; calendar: {days: 14} → events (title, start, end, all_day, location); contacts → data(name, {q}) (name, email, phone, org); '
+            . 'tasks: the space\'s tasks (id, code, title, status, priority, start_date, due_date); script: {script: a saved script name, args: ["{param}"], format}; '
+            . 'mcp: {server: connector, tool, args: {key: "value or {param}"}, format, ttl} — only a tool the user marked as only reading in Settings → Connectors. '
             . 'Use only sources you checked work (fetch_url the address first). The user approves the app (its sources and code) in the Apps menu before it gets any data; '
             . 'tell them so, with a link [name](#apps/ID).',
             ['id' => ['type' => 'integer'], 'name' => ['type' => 'string'], 'description' => ['type' => 'string'], 'icon' => ['type' => 'string', 'description' => 'one emoji'],
