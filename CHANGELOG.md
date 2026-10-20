@@ -3,6 +3,9 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.67 (2026-10-20)
+- Review fixes. Apps: an app of a Confidential space, or one reading a Confidential file or folder, never reaches the web or a connector; the approval card names every kind of source (folders, searches, connector tools, calendar, contacts); a folder source with `_` or `%` in its name lists its subfolders; script arguments may not start with `-`; cached answers older than a day are cleared. Moving a space: a link to a file that did not come along points nowhere (it no longer opens another file with the same number), and files from outside the space's folder land in its "Linked files" folder, never in another space's folder. Library: changing a file keeps its creation date; Recent changes filters before counting, so a burst of your own changes no longer hides others'; the digest is sent once an hour (or day), never twice or skipped.
+
 ## 0.28.66 (2026-10-20)
 - Recent changes: an *Acknowledge* button marks one file's change as seen; the folder button is now *Stop notifying* / *Notify again* (clearer than "Mute" in French).
 

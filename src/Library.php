@@ -47,13 +47,12 @@ final class Library
     {
         $hours = max(1, min(24 * 31, $hours));
         $rows = $this->app->store->q("SELECT id, name, folder, kind, changed, changed_by, change, seen FROM files
-            WHERE deleted_at IS NULL AND changed >= ? AND folder <> ? AND folder NOT LIKE ? ORDER BY changed DESC LIMIT 300",
-            [time() - $hours * 3600, self::FAQ, self::FAQ . '/%'])->fetchAll();
+            WHERE deleted_at IS NULL AND changed >= ? AND folder <> ? AND folder NOT LIKE ?" . ($mine ? '' : " AND changed_by <> 'you'") . ' ORDER BY changed DESC',
+            [time() - $hours * 3600, self::FAQ, self::FAQ . '/%']);
         $p = $this->app->privacy();
         $out = [];
-        foreach ($rows as $r) {
+        while ($r = $rows->fetch()) {
             if ($p->hidden($p->folderLevel((string)$r['folder']), null, (string)$r['folder'])) continue;
-            if (!$mine && $r['changed_by'] === 'you') continue;
             $out[] = ['id' => (int)$r['id'], 'name' => $r['name'], 'folder' => $r['folder'], 'kind' => $r['kind'], 'changed' => (int)$r['changed'],
                 'changed_by' => $r['changed_by'], 'change' => $r['change'], 'unseen' => $r['changed_by'] !== 'you' && $r['seen'] === null];
             if (count($out) >= 200) break;
@@ -95,7 +94,7 @@ final class Library
         if ($mode === 'off') return 0;
         $st = $this->app->store;
         $last = (int)$st->get('library_notify_last', '0') ?: $now - 3600;
-        if ($mode === 'daily' && $now - $last < 86400 - 60) return 0;
+        if ($now - $last < ($mode === 'daily' ? 86400 : 3600) - 60) return 0; // asked every tick: once an hour (or day), never twice
         $st->set('library_notify_last', (string)$now);
         $in = fn(string $f) => (bool)array_filter($muted, fn($m) => $f === $m || str_starts_with($f, rtrim($m, '/') . '/'));
         $items = array_filter($this->recent((int)ceil(($now - $last) / 3600) + 1, false), fn($r) => $r['changed'] > $last && !$in($r['folder']));

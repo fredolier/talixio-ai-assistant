@@ -55,13 +55,13 @@ final class Notifier
         return $results;
     }
 
-    /** The in-app inbox keeps every notification, with its full text (it stays in the app); a secret space's only says where to look. Returns the unread count. */
     /** A notification kept in the app's inbox only (not sent to chat apps or e-mail). */
     public function inApp(string $title, string $text, string $url, int $space = 0): int
     {
         return $this->record($title, $text, $space, $url);
     }
 
+    /** The in-app inbox keeps every notification, with its full text (it stays in the app); a secret space's only says where to look. Returns the unread count. */
     private function record(string $title, string $text, int $space, string $url): int
     {
         try {

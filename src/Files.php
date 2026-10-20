@@ -83,8 +83,8 @@ final class Files
         if ($mime === 'application/octet-stream' || $mime === 'text/plain' || $mime === 'application/x-empty') $mime = $f['mime']; // a guess no better than the one kept
         $kind = self::kind($mime, (string)$f['name']);
         $this->app->store->deleteDocs(['file', 'transcript'], $id);
-        $this->app->store->q('UPDATE files SET size = ?, mime = ?, kind = ?, text = NULL, status = ?, duration = ?, created = ? WHERE id = ?',
-            [filesize($path), $mime, $kind, $kind === 'other' ? 'ready' : 'pending', $kind === 'audio' ? self::duration($path) : null, time(), $id]);
+        $this->app->store->q('UPDATE files SET size = ?, mime = ?, kind = ?, text = NULL, status = ?, duration = ? WHERE id = ?',
+            [filesize($path), $mime, $kind, $kind === 'other' ? 'ready' : 'pending', $kind === 'audio' ? self::duration($path) : null, $id]);
         $this->dropPreviews($id);
         $this->app->library()->touch($id, 'changed');
         return $this->get($id);

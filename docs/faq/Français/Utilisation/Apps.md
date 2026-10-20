@@ -47,7 +47,9 @@ stockage à elle), et :
 - **toute app créée ou modifiée par l'assistant attend votre validation.** Ouvrez-la : vous voyez les sources qu'elle
   lit (et le code si vous voulez), puis *Approuver*. D'ici là, elle ne reçoit aucune donnée ;
 - une app appartient à un espace et suit son niveau de confidentialité : les apps d'un espace Secret ne sont pas
-  montrées ailleurs et ne lisent jamais le web.
+  montrées ailleurs et ne lisent jamais le web. Une app d'un espace Confidentiel, ou qui lit un fichier ou un
+  dossier Confidentiel, n'atteint pas non plus le web ni un connecteur : ce qu'elle lit reste dans l'app. Les
+  arguments d'un script ne peuvent pas commencer par `-`.
 
 Un outil de connecteur peut agir (envoyer, supprimer, payer), et ce que le connecteur dit de lui-même n'est pas pris
 pour argent comptant : une app ne peut appeler qu'un outil que *vous* avez marqué lecture seule, avec les arguments

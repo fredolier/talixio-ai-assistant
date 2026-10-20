@@ -87,6 +87,10 @@ $q = (int)$bs->q("SELECT id FROM files WHERE name = 'quote.txt'")->fetchColumn()
 $p = (int)$bs->q("SELECT id FROM files WHERE name = 'prices.txt'")->fetchColumn();
 check('move: the documents are in the new folder, or back where they were', (string)$bs->q('SELECT folder FROM files WHERE id = ?', [$q])->fetchColumn() === '/Clients/Acme (2)/Quotes'
     && (string)$bs->q('SELECT folder FROM files WHERE id = ?', [$p])->fetchColumn() === '/Reference');
+$bc = $open(test_dir('move-c'), 'home', 'Private');
+$bc->spaces()->save(['name' => 'Ref', 'folder' => '/Reference']);
+(new SpaceMove($bc))->import($zip);
+check('move: a document never lands in the folder of another space', (string)$bc->store->q("SELECT folder FROM files WHERE name = 'prices.txt'")->fetchColumn() === '/Clients/Acme/Linked files/Reference');
 check('move: their text came along, nothing to read again', (string)$bs->q('SELECT status FROM files WHERE id = ?', [$q])->fetchColumn() === 'ready'
     && str_contains((string)$bs->q('SELECT text FROM files WHERE id = ?', [$q])->fetchColumn(), '1200 EUR') && file_get_contents($bb->files()->get($q)['path']) === 'Quote for Acme: 1200 EUR');
 check('move: the conversation points to the new file ids', count($msgs) === 2 && str_contains($msgs[0]['content'], "#$p: prices.txt") && json_decode($msgs[0]['files'], true) === [$p]

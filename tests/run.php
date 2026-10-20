@@ -1372,13 +1372,21 @@ check('recent changes: the digest counts what others changed, in one notificatio
 $lib->seen((int)$rc['id']);
 check('recent changes: opening the file marks it seen', !$byOf((int)$rc['id'])['unseen']);
 $lib->saveNote('/Recent', 'mine.md', "x\n");
-check('recent changes: nothing to say about your own changes', $lib->digest(time() + 5) === 0);
+check('recent changes: one digest an hour, never two', $lib->digest(time() + 60) === 0);
+$la->store->set('library_notify_last', (string)time());
+check('recent changes: nothing to say about your own changes', $lib->digest(time() + 3600) === 0);
+$la->store->set('library_notify_last', (string)(time() - 1));
 $la->tools->run('kb_save_note', ['id' => (int)$rc['id'], 'content' => "v3\n"]);
 $lib->changeSettings(['mute' => '/Recent']);
-check('recent changes: a muted folder is left out of the digest', $lib->digest(time() + 10) === 0 && $lib->changeSettings()['muted'] === ['/Recent']);
+check('recent changes: a muted folder is left out of the digest', $lib->digest(time() + 3600) === 0 && $lib->changeSettings()['muted'] === ['/Recent']);
 $lib->changeSettings(['unmute' => '/Recent', 'notify' => 'daily']);
 check('recent changes: daily at most', $lib->digest(time() + 3600) === 0 && $lib->changeSettings()['notify'] === 'daily');
 $lib->changeSettings(['notify' => 'hourly']);
+$la->store->q('UPDATE files SET created = 1000 WHERE id = ?', [$rc['id']]);
+$la->tools->run('kb_save_note', ['id' => (int)$rc['id'], 'content' => "v4\n"]);
+check('recent changes: a change keeps the date the file was created', (int)$la->store->q('SELECT created FROM files WHERE id = ?', [$rc['id']])->fetchColumn() === 1000);
+check('space move: a link to a file that did not come along points nowhere, not to another file',
+    \Talixio\SpaceMove::rewriteFileRefs('[a](/files/5) [b](files/9) [attached pdf #9: x] [attached pdf #5: y]', [5 => 12]) === '[a](/files/12) [b](#file-not-moved) [attached pdf #?: x] [attached pdf #12: y]');
 $note = $lib->saveNote('/Notes', 'Idées cadeaux', "- Livre de cuisine pour Marie\n");
 check('library: notes are Markdown files, searchable right away', $note['note'] == 1 && $note['name'] === 'Idées cadeaux.md' && array_column($lib->search('cuisine Marie'), 'id') === [(int)$note['id']]);
 $lib->saveNote('/Notes', 'Idées cadeaux.md', "- Vélo pour Paul\n", (int)$note['id']);
@@ -1504,6 +1512,17 @@ $la->space = (int)$sec['id'];
 $sa1 = $la->apps()->save(['name' => 'Vault chart', 'html' => '<div></div>', 'script' => "await talixio.data('q')", 'sources' => [['name' => 'q', 'type' => 'web', 'url' => 'https://example.com/a.json', 'format' => 'json']]], 'you');
 $werr = ''; try { $la->apps()->data((int)$sa1['id'], 'q'); } catch (\RuntimeException $e) { $werr = $e->getMessage(); }
 $la->space = 0;
+$lib->saveNote('/Clients/Dupont', 'a_b.md', "x\n");
+$ca = $la->apps()->save(['name' => 'Leak', 'html' => '<div></div>', 'script' => '', 'sources' => [['name' => 'f', 'type' => 'folder', 'folder' => '/Clients/Dupont'], ['name' => 'q', 'type' => 'web', 'url' => 'https://example.com/{q}']]], 'you');
+$cerr = ''; try { $la->apps()->data((int)$ca['id'], 'q', ['q' => 'x']); } catch (\RuntimeException $e) { $cerr = $e->getMessage(); }
+check('apps: an app that reads Confidential documents never reaches the web', str_contains($cerr, 'Confidential'), $cerr);
+$la->apps()->save(['name' => 'Und', 'html' => '<div></div>', 'script' => '', 'sources' => [['name' => 'f', 'type' => 'folder', 'folder' => '/Clients/Dup_nt']]], 'you');
+$la->spaces()->save(['name' => 'Und', 'folder' => '/Clients/Dup_nt']);
+$lib->saveNote('/Clients/Dup_nt/sub', 'n.md', "x\n");
+$und = array_values(array_filter($la->apps()->list(), fn($a) => $a['name'] === 'Und'))[0];
+check('apps: a folder source with _ in its name lists its subfolders', in_array('n.md', array_column($la->apps()->data((int)$und['id'], 'f'), 'name'), true));
+check('apps: a folder source does not match a look-alike folder', !in_array('a_b.md', array_column($la->apps()->data((int)$und['id'], 'f'), 'name'), true));
+foreach ($la->store->q("SELECT id FROM files WHERE name IN ('a_b.md', 'n.md')")->fetchAll(\PDO::FETCH_COLUMN) as $x) $lib->purgeFile((int)$x);
 check('apps: a Secret space app never reaches the web and is hidden from other spaces', $werr !== '' && !in_array('Vault chart', array_column($la->apps()->list(), 'name'), true), $werr);
 $r = $la->tools->run('app_save', ['name' => 'CAC', 'html' => '<div></div>', 'script' => "await talixio.data('q')", 'sources' => json_encode([['name' => 'q', 'type' => 'script', 'script' => 'nope-scraper.py']])]);
 check('apps: sources sent as JSON text are read; a missing script is refused, saying nothing was saved', str_contains($r, 'NOT saved') && str_contains($r, 'nope-scraper'), $r);

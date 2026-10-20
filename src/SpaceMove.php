@@ -148,10 +148,13 @@ final class SpaceMove
             if (($row['privacy'] ?? 'internal') !== 'internal') $st->set('privacy_rev', (string)((int)$st->get('privacy_rev', '0') + 1));
 
             // ---- documents: the folder tree, then each file with its read text (nothing to read again)
-            $mapFolder = function (string $f) use ($oldFolder, $folder): string {
+            $under = fn(string $f, string $root) => $root !== '' && $root !== '/' && ($f === $root || str_starts_with($f, rtrim($root, '/') . '/'));
+            $others = array_filter(array_map(fn($sp) => Library::normalize((string)$sp['folder']), $this->app->spaces()->all(true)), fn($r) => $r !== Library::normalize($folder));
+            $mapFolder = function (string $f) use ($oldFolder, $folder, $under, $others): string {
                 $f = Library::normalize($f);
-                if ($oldFolder !== '' && ($f === Library::normalize($oldFolder) || str_starts_with($f, rtrim(Library::normalize($oldFolder), '/') . '/')))
+                if ($oldFolder !== '' && $under($f, Library::normalize($oldFolder)))
                     $f = $folder . substr($f, strlen(Library::normalize($oldFolder)));
+                elseif (array_filter($others, fn($r) => $under($f, $r))) $f = ($folder !== '' ? $folder : '/Inbox') . '/Linked files' . $f; // never into another space's folder
                 return Library::readonly($f) ? '/Inbox' : $f;
             };
             $lib = $this->app->library();
@@ -396,7 +399,8 @@ final class SpaceMove
 
     public static function rewriteFileRefs(string $t, array $map): string
     {
-        $t = preg_replace_callback('#(\]\(/?files/)(\d+)#', fn($x) => $x[1] . ($map[(int)$x[2]] ?? $x[2]), $t);
-        return preg_replace_callback('#(\[attached [a-z]+ \#)(\d+)(:)#', fn($x) => $x[1] . ($map[(int)$x[2]] ?? $x[2]) . $x[3], $t);
+        // a file that did not come along points nowhere: its id is another file here
+        $t = preg_replace_callback('#(\]\()(/?files/)(\d+)#', fn($x) => $x[1] . (isset($map[(int)$x[3]]) ? $x[2] . $map[(int)$x[3]] : '#file-not-moved'), $t);
+        return preg_replace_callback('#(\[attached [a-z]+ \#)(\d+)(:)#', fn($x) => $x[1] . ($map[(int)$x[2]] ?? '?') . $x[3], $t);
     }
 }

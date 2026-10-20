@@ -4470,7 +4470,10 @@ async function openApp(id) {
   $('#apps-list').hidden = true;
   const box = $('#app-open'); box.hidden = false;
   const pending = app.status === 'pending';
-  const src = s => s.type === 'web' ? s.url : s.type === 'file' ? t('library file #{a}', { a: s.file }) : s.type === 'script' ? t('script {a}', { a: s.script }) : t('the tasks of this space');
+  const src = s => ({ web: () => s.url, file: () => t('library file #{a}', { a: s.file }), script: () => t('script {a}', { a: s.script }),
+    folder: () => t('the files of the folder {a}', { a: s.folder }), search: () => t('a search in the folder {a}', { a: s.folder }),
+    mcp: () => t('the tool {a} of the connector {b}', { a: s.tool, b: s.server }), calendar: () => t('your calendar, {a} days ahead', { a: s.days }),
+    contacts: () => t('your contacts'), tasks: () => t('the tasks of this space') }[s.type] || (() => s.type))();
   box.innerHTML = `<div class="row wrap app-bar"><a class="btn small ghost" href="#apps">← Apps</a>
       <h3 class="no-i18n">${esc(app.icon || '🧩')} ${esc(app.name)}</h3><span class="grow"></span>
       <button type="button" class="btn small ghost" id="app-edit">Change in the chat</button>

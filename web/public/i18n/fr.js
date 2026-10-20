@@ -2621,5 +2621,10 @@ window.I18N.fr = {
 "Acknowledge": "Acquitter",
 "Mark this change as seen": "Marquer cette modification comme vue",
 "Stop notifying": "Ne plus notifier",
-"Notify again": "Notifier à nouveau"
+"Notify again": "Notifier à nouveau",
+"the files of the folder {a}": "les fichiers du dossier {a}",
+"a search in the folder {a}": "une recherche dans le dossier {a}",
+"the tool {a} of the connector {b}": "l'outil {a} du connecteur {b}",
+"your calendar, {a} days ahead": "votre agenda, {a} jours à venir",
+"your contacts": "vos contacts"
 };

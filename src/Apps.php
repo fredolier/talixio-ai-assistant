@@ -196,8 +196,8 @@ final class Apps
                 $fmt = in_array($params['format'] ?? '', ['json', 'csv', 'text'], true) ? $params['format'] : (preg_match('/\.(json|csv)$/i', (string)$f['name'], $fm) ? strtolower($fm[1]) : 'text');
                 return self::parse($this->app->files()->text((int)$f['id']), $fmt);
             }
-            $rows = $this->app->store->q('SELECT id, name, folder, size, created, changed, changed_by FROM files WHERE (folder = ? OR folder LIKE ?) AND deleted_at IS NULL ORDER BY COALESCE(changed, created) DESC LIMIT 500',
-                [$src['folder'], addcslashes(rtrim($src['folder'], '/'), '%_') . '/%'])->fetchAll();
+            [$w, $wp] = Library::within(rtrim($src['folder'], '/') ?: '/');
+            $rows = $this->app->store->q("SELECT id, name, folder, size, created, changed, changed_by FROM files WHERE $w AND deleted_at IS NULL ORDER BY COALESCE(changed, created) DESC LIMIT 500", $wp)->fetchAll();
             return array_values(array_filter(array_map(fn($r) => ['id' => (int)$r['id'], 'name' => $r['name'], 'folder' => $r['folder'], 'size' => (int)$r['size'], 'created' => date('c', (int)$r['created']),
                 'changed' => date('c', (int)($r['changed'] ?? $r['created'])), 'changed_by' => (string)$r['changed_by']], $rows),
                 fn($r) => !$p->hidden($p->folderLevel($r['folder']), null, $r['folder'])));
@@ -214,6 +214,7 @@ final class Apps
         if ($hit && $hit['ts'] > time() - $src['ttl'] * 60) return self::parse((string)$hit['body'], $src['format']);
         if ($src['type'] === 'web' || $src['type'] === 'mcp') {
             if ($lvl === 'secret') throw new \RuntimeException('an app of a Secret space never reaches the web or a connector');
+            if ($this->readsConfidential($app)) throw new \RuntimeException('an app that reads Confidential documents never reaches the web or a connector');
             $n = (int)$this->app->store->q('SELECT COUNT(*) FROM app_cache WHERE app = ? AND ts > ?', [$app['id'], time() - 3600])->fetchColumn();
             if ($n >= self::WEB_PER_HOUR) throw new \RuntimeException('too many requests this hour; try again later');
         }
@@ -233,11 +234,26 @@ final class Apps
             $s = $this->app->scripts();
             if (!$this->app->shell()->enabled() || $s->read($src['script']) === null) throw new \RuntimeException("no script named '{$src['script']}'");
             if (!$s->approved($src['script']) && $this->app->cfg->shell === 'ask') throw new \RuntimeException("the script {$src['script']} changed since you approved it: run it once in the chat");
-            $body = $this->app->shell()->run($s->command($src['script'], array_map(fn($a) => self::fill($a, $params, false), $src['args'])), []);
+            $args = array_map(fn($a) => self::fill($a, $params, false), $src['args']);
+            foreach ($args as $a) if (str_starts_with($a, '-')) throw new \InvalidArgumentException('a script argument may not start with -');
+            $body = $this->app->shell()->run($s->command($src['script'], $args), []);
         }
         if (!mb_check_encoding($body, 'UTF-8')) $body = mb_convert_encoding($body, 'UTF-8', 'UTF-8, ISO-8859-1');
+        $this->app->store->q('DELETE FROM app_cache WHERE app = ? AND ts < ?', [$app['id'], time() - 86400]); // longest ttl: a day
         $this->app->store->q('INSERT OR REPLACE INTO app_cache(app, k, ts, body) VALUES(?,?,?,?)', [$app['id'], $k, time(), $body]);
         return self::parse($body, $src['format']);
+    }
+
+    /** Whether the app's space, or a file or folder it reads, is Confidential (or more). */
+    private function readsConfidential(array $app): bool
+    {
+        $p = $this->app->privacy();
+        if ($p->spaceLevel($app['space']) !== 'internal') return true;
+        foreach ($app['sources'] as $s) {
+            $folder = $s['type'] === 'file' ? (string)($this->app->files()->get((int)$s['file'])['folder'] ?? '') : (in_array($s['type'], ['folder', 'search'], true) ? $s['folder'] : null);
+            if ($folder !== null && $folder !== '' && $p->folderLevel($folder) !== 'internal') return true;
+        }
+        return false;
     }
 
     private static function parse(string $body, string $format): mixed
