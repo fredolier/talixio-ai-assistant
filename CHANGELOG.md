@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.69 (2026-10-20)
+
+- Tests: browser tests for the web app (`node tests/browser/run.mjs`, Playwright and Chromium). They sign in, open every view, and go through the main flows: chat and its search, quick capture of a task and a note, spaces, library folders, notes, search, sharing, the board in all its views with quick add and card editing, contacts, settings, notifications, the French interface and a phone-sized screen. Any error in the page fails the run; the run also reports how much of `app.js` it used (about two thirds).
+
 ## 0.28.68 (2026-10-20)
 
 - Code quality: the web API router is split by area (system, chat, work, connectors, mind, library, board, apps) instead of one 250-line match, and the assistant's tools are registered by group instead of in one 460-line constructor. No change in behaviour; the tools keep their order.

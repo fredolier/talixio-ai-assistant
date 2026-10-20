@@ -485,12 +485,14 @@ deploy/                    systemd units, `talixio` CLI wrapper
 src/                       PHP app (no dependencies beyond php-curl, php-sqlite3, php-mbstring)
 web/                       web app (router + static files, no build step)
 tests/run.php              php tests/run.php
+tests/browser/             node tests/browser/run.mjs (needs Playwright and Chromium)
 ```
 Data lives in `/var/lib/talixio` (SQLite database, memory files in `workspace/`).
 
 ## Develop locally
 ```bash
 php tests/run.php
+node tests/browser/run.mjs   # the web app in a real browser; skipped if Playwright is missing
 TALIXIO_PROVIDER=echo TALIXIO_WEB_PASSWORD=dev php -S 127.0.0.1:8080 -t web/public web/router.php
 TALIXIO_PROVIDER=anthropic ANTHROPIC_API_KEY=... php bin/talixio chat
 ```
