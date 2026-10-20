@@ -2616,8 +2616,10 @@ window.I18N.fr = {
 "restored by {who}": "restauré par {who}",
 "not opened since": "pas ouvert depuis",
 "Notifications for this folder": "Notifications pour ce dossier",
-"Mute": "Couper",
-"Unmute": "Réactiver",
 "Nothing created or changed in that time.": "Rien n'a été créé ni modifié pendant cette période.",
-"No notifications for: {list}": "Pas de notifications pour : {list}"
+"No notifications for: {list}": "Pas de notifications pour : {list}",
+"Acknowledge": "Acquitter",
+"Mark this change as seen": "Marquer cette modification comme vue",
+"Stop notifying": "Ne plus notifier",
+"Notify again": "Notifier à nouveau"
 };

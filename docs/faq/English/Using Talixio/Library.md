@@ -49,7 +49,7 @@
   **a routine**, **the network drive**) and when. A dot marks a file someone else changed that you have not opened
   since; *Mark all as seen* clears them. Click a file to open it.
 - **Notifications**: one grouped notification in the app, at most hourly (or once a day, or never: the menu at the
-  bottom), for the files *others* changed — never for your own changes. *Mute* a folder to leave it out.
+  bottom), for the files *others* changed — never for your own changes. *Acknowledge* clears one file's dot; *Stop notifying* leaves a folder out of the notifications (*Notify again* undoes it).
 - The **morning briefing** has a line like "Since yesterday: 3 new and 2 changed files".
 - Ask the assistant: "what changed in my library today?".
 - Files of a Secret space appear only in that space. Changes made before this feature show their creation date only.

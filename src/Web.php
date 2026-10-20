@@ -315,7 +315,7 @@ final class Web
             $path === '/api/library/folder/delete' && $m === 'POST' => ['deleted_files' => $this->app->library()->deleteFolder((string)($b['path'] ?? ''), !empty($b['recursive']))],
             $path === '/api/library/recent' && $m === 'GET' => Privacy::forPerson(fn() => ['items' => $this->app->library()->recent((int)($_GET['hours'] ?? 24))]) + $this->app->library()->changeSettings(),
             $path === '/api/library/recent/settings' && $m === 'POST' => $this->app->library()->changeSettings($b),
-            $path === '/api/library/recent/seen' && $m === 'POST' => (function () { $this->app->library()->seen(); return ['ok' => true]; })(),
+            $path === '/api/library/recent/seen' && $m === 'POST' => (function () use ($b) { $this->app->library()->seen(isset($b['id']) ? (int)$b['id'] : null); return ['ok' => true]; })(),
             $path === '/api/library/trash' => ['items' => $this->app->library()->trash(), 'days' => Library::TRASH_DAYS],
             $path === '/api/library/trash/restore' && $m === 'POST' => $this->app->library()->restore(isset($b['id']) ? (int)$b['id'] : null, (string)($b['folder'] ?? ''), (int)($b['at'] ?? 0)),
             $path === '/api/library/trash/empty' && $m === 'POST' => ['deleted' => $this->app->library()->purgeTrash(null)],

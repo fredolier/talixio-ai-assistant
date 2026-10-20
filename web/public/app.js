@@ -3851,10 +3851,13 @@ async function showLibRecent(hours = recentHours) {
   $('#recent-list').innerHTML = r.items.length ? r.items.map((x, i) => {
     const what = t(x.change === 'created' ? 'created by {who}' : x.change === 'changed' ? 'changed by {who}' : x.change === 'moved' ? 'moved by {who}' : x.change === 'renamed' ? 'renamed by {who}' : 'restored by {who}', { who: t(RECENT_BY[x.changed_by] || x.changed_by) });
     return `<div class="trash-item recent-item${x.unseen ? ' unseen' : ''}">${CITE_SVG}<a href="#file/${x.id}" data-open="${i}"><b>${x.unseen ? '<span class="dot" title="' + esc(t('not opened since')) + '"></span>' : ''}${esc(x.name)}</b></a>
-      <button class="btn small ghost" type="button" data-mute="${esc(x.folder)}" title="${esc(t('Notifications for this folder'))}">${esc(t(muted.has(x.folder) ? 'Unmute' : 'Mute'))}</button>
+      <span class="row">${x.unseen ? `<button class="btn small" type="button" data-ack="${x.id}" title="${esc(t('Mark this change as seen'))}">${esc(t('Acknowledge'))}</button>` : ''}<button class="btn small ghost" type="button" data-mute="${esc(x.folder)}" title="${esc(t('Notifications for this folder'))}">${esc(t(muted.has(x.folder) ? 'Notify again' : 'Stop notifying'))}</button></span>
       <span class="muted small">${esc(x.folder)} · ${esc(what)} · ${esc(fmtTime(x.changed))}</span></div>`;
   }).join('') : `<p class="muted">${esc(t('Nothing created or changed in that time.'))}</p>`;
   $('#recent-list').querySelectorAll('[data-open]').forEach(a => a.onclick = e => { e.preventDefault(); d.close(); openCited(r.items[+a.dataset.open].id); });
+  $('#recent-list').querySelectorAll('[data-ack]').forEach(b => b.onclick = async () => {
+    try { await post('api/library/recent/seen', { id: +b.dataset.ack }); showLibRecent(); } catch (e) { toast(e.message); }
+  });
   $('#recent-list').querySelectorAll('[data-mute]').forEach(b => b.onclick = async () => {
     const f = b.dataset.mute;
     try { await post('api/library/recent/settings', muted.has(f) ? { unmute: f } : { mute: f }); showLibRecent(); } catch (e) { toast(e.message); }
