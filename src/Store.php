@@ -63,6 +63,11 @@ final class Store
             CREATE INDEX IF NOT EXISTS files_folder ON files(folder);");
         $this->addColumn('files', 'deleted_at', 'INTEGER');   // in the trash since (Library::trash)
         $this->addColumn('files', 'deleted_with', 'TEXT');    // the folder deleted with it ('' = deleted on its own)
+        // last change (Library::touch): when, by whom (you | assistant | routine | webdav | share), what (created | changed | moved | renamed | restored); seen = opened since
+        $this->addColumn('files', 'changed_by', "TEXT NOT NULL DEFAULT 'you'");
+        $this->addColumn('files', 'change', "TEXT NOT NULL DEFAULT 'created'");
+        $this->addColumn('files', 'seen', 'INTEGER');
+        if ($this->addColumn('files', 'changed', 'INTEGER')) $this->db->exec("UPDATE files SET changed = created");
         // earlier contents of a file, kept Library::TRASH_DAYS days when it is replaced (Files::replace); ids of files merged into another
         $this->db->exec('CREATE TABLE IF NOT EXISTS file_versions(id INTEGER PRIMARY KEY, file_id INTEGER NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL,
                 mime TEXT NOT NULL, created INTEGER NOT NULL, replaced INTEGER NOT NULL);

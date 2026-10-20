@@ -82,6 +82,9 @@ final class I18n
         ' (for {label})' => ' (pour {label})',
         // confidentiality
         'New message in {space}' => 'Nouveau message dans {space}',
+        '1 file changed: {list}' => '1 fichier modifié : {list}',
+        '{n} files changed: {list}' => '{n} fichiers modifiés : {list}',
+        'Library' => 'Bibliothèque',
         '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).' => '« {name} » est un espace Confidentiel : Telegram peut lire les messages, utilisez-le dans l\'app (ou Signal).',
         'This is a Secret space: nothing may leave the server, and the assistant runs on a service outside. The library and tasks of this space still work; to chat here, use a model on this server (Settings → AI model).' =>
             'Cet espace est Secret : rien ne doit quitter le serveur, et l\'assistant fonctionne avec un service extérieur. La bibliothèque et les tâches de cet espace fonctionnent toujours ; pour discuter ici, utilisez un modèle installé sur ce serveur (Réglages → Modèle d\'IA).',

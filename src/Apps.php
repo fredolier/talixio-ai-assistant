@@ -196,9 +196,10 @@ final class Apps
                 $fmt = in_array($params['format'] ?? '', ['json', 'csv', 'text'], true) ? $params['format'] : (preg_match('/\.(json|csv)$/i', (string)$f['name'], $fm) ? strtolower($fm[1]) : 'text');
                 return self::parse($this->app->files()->text((int)$f['id']), $fmt);
             }
-            $rows = $this->app->store->q('SELECT id, name, folder, size, created FROM files WHERE (folder = ? OR folder LIKE ?) AND deleted_at IS NULL ORDER BY created DESC LIMIT 500',
+            $rows = $this->app->store->q('SELECT id, name, folder, size, created, changed, changed_by FROM files WHERE (folder = ? OR folder LIKE ?) AND deleted_at IS NULL ORDER BY COALESCE(changed, created) DESC LIMIT 500',
                 [$src['folder'], addcslashes(rtrim($src['folder'], '/'), '%_') . '/%'])->fetchAll();
-            return array_values(array_filter(array_map(fn($r) => ['id' => (int)$r['id'], 'name' => $r['name'], 'folder' => $r['folder'], 'size' => (int)$r['size'], 'created' => date('c', (int)$r['created'])], $rows),
+            return array_values(array_filter(array_map(fn($r) => ['id' => (int)$r['id'], 'name' => $r['name'], 'folder' => $r['folder'], 'size' => (int)$r['size'], 'created' => date('c', (int)$r['created']),
+                'changed' => date('c', (int)($r['changed'] ?? $r['created'])), 'changed_by' => (string)$r['changed_by']], $rows),
                 fn($r) => !$p->hidden($p->folderLevel($r['folder']), null, $r['folder'])));
         }
         if ($src['type'] === 'calendar') {

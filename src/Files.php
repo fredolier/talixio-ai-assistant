@@ -60,6 +60,7 @@ final class Files
         chmod($path, 0640);
         $duration = $kind === 'audio' ? self::duration($path) : null;
         $st->q('UPDATE files SET path=?, duration=? WHERE id=?', [$path, $duration, $id]);
+        $lib->touch($id, 'created');
         return $id;
     }
 
@@ -85,6 +86,7 @@ final class Files
         $this->app->store->q('UPDATE files SET size = ?, mime = ?, kind = ?, text = NULL, status = ?, duration = ?, created = ? WHERE id = ?',
             [filesize($path), $mime, $kind, $kind === 'other' ? 'ready' : 'pending', $kind === 'audio' ? self::duration($path) : null, time(), $id]);
         $this->dropPreviews($id);
+        $this->app->library()->touch($id, 'changed');
         return $this->get($id);
     }
 

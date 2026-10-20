@@ -66,6 +66,12 @@ final class Worker
 
     public function tick(int $now): void
     {
+        Library::$by = 'routine'; // what the worker's routines and jobs change
+        try { $this->work($now); } finally { Library::$by = ''; }
+    }
+
+    private function work(int $now): void
+    {
         $app = $this->app;
         $store = $app->store;
         $this->guard('jobs', fn() => $app->jobs()->dispatch());
@@ -124,6 +130,7 @@ final class Worker
         if ($now % 3600 < 15) $this->guard('tasks trash', fn() => $app->board()->purge());
         if ($now % 3600 < 15) $this->guard('jobs archive', fn() => $app->jobs()->autoArchive($now));
         if ($now % 3600 < 15) $this->guard('library trash', fn() => $app->library()->purgeTrash());
+        if ($now % 3600 < 15) $this->guard('library changes', fn() => $app->library()->digest($now));
         if ($now % 86400 < 15) $this->guard('old shares', fn() => $app->shares()->purge());
         if ($now % 86400 < 15) $this->guard('privacy journal', fn() => $app->privacy()->purge());
         if ($paused) return;

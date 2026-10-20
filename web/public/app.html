@@ -124,6 +124,7 @@
           <button id="lib-newnote" class="btn" type="button">New note</button>
           <button id="lib-newfolder" class="btn" type="button">New folder</button>
           <button id="lib-shares" class="btn" type="button" title="Links to your documents for people outside">Shares</button>
+          <button id="lib-recent" class="btn" type="button" title="Files created or changed lately, and by whom">Recent changes</button>
           <button id="lib-trash" class="btn lib-trash-btn" type="button" title="Deleted files, restorable for 30 days">Trash</button>
         </div>
       </header>
@@ -630,6 +631,14 @@
   <p id="trash-note" class="muted small"></p>
   <div id="trash-list" class="trash-list"></div>
   <div class="row wrap"><button id="trash-empty" class="btn ghost danger" type="button">Empty the trash</button><span class="spacer"></span><button id="trash-close" class="btn" type="button">Close</button></div>
+</dialog>
+<dialog id="recent-dialog" class="dialog trash-dialog" aria-labelledby="recent-title">
+  <h3 id="recent-title">Recent changes</h3>
+  <div id="recent-range" class="row wrap chips" role="group" aria-label="Period"></div>
+  <div id="recent-list" class="trash-list"></div>
+  <div class="row wrap"><label class="small muted" for="recent-notify">Notify me</label><select id="recent-notify"><option value="hourly">at most hourly</option><option value="daily">once a day</option><option value="off">never</option></select>
+    <span class="spacer"></span><button id="recent-seen" class="btn ghost" type="button">Mark all as seen</button><button id="recent-close" class="btn" type="button">Close</button></div>
+  <p id="recent-muted" class="muted small"></p>
 </dialog>
 <dialog id="conn-dialog" class="dialog" aria-labelledby="conn-title">
   <form id="conn-form" method="dialog" class="fields">

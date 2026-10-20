@@ -3,6 +3,9 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.65 (2026-10-20)
+- Library: **Recent changes**. Each file keeps when it was last created, changed, moved, renamed or restored, and by whom (you, the assistant, a routine, the network drive). A *Recent changes* view (last hour, today, 2 days, 7 days) marks the files others changed that you have not opened since; a grouped in-app notification (at most hourly, daily or off; folders can be muted) never counts your own changes; the morning briefing gets a "since yesterday" line; new `kb_recent` tool; an app's folder source gives `changed`. Secret files stay in their space.
+
 ## 0.28.64 (2026-10-20)
 
 - Apps: links now work (library files, Talixio pages; a web address asks first), a new list component, and a

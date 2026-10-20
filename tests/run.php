@@ -1357,6 +1357,28 @@ $lib->deleteFile((int)$c2['id']);
 check('library trash: after 30 days, deleted for good (not what is more recent)', $lib->purgeTrash() === 1 && !$lf->get((int)$c1['id'], true) && !is_file($cp) && $lf->get((int)$c2['id'], true));
 check('library trash: emptying it deletes the rest', $lib->purgeTrash(null) === 1 && $lib->trash() === []);
 try { $lib->restore((int)$c2['id']); check('library trash: nothing to restore once emptied', false); } catch (\InvalidArgumentException) { check('library trash: nothing to restore once emptied', true); }
+// recent changes: who changed what, and the hourly digest of what others changed
+$rc = $lib->saveNote('/Recent', 'plan.md', "v1\n");
+$byOf = fn(int $id) => array_values(array_filter($lib->recent(1), fn($r) => $r['id'] === $id))[0] ?? null;
+check('recent changes: a note you save is listed as created by you, already seen', ($x = $byOf((int)$rc['id'])) && $x['change'] === 'created' && $x['changed_by'] === 'you' && !$x['unseen'], json_encode($x ?? null));
+$la->tools->run('kb_save_note', ['id' => (int)$rc['id'], 'content' => "v2\n"]);
+check('recent changes: changed by the assistant, not opened since', ($x = $byOf((int)$rc['id'])) && $x['change'] === 'changed' && $x['changed_by'] === 'assistant' && $x['unseen'], json_encode($x ?? null));
+check('recent changes: the assistant can list them', str_contains($la->tools->run('kb_recent', ['hours' => 2]), "plan.md #{$rc['id']}: changed by assistant"));
+$la->store->set('library_notify_last', (string)(time() - 3600));
+$before = (int)$la->store->q("SELECT COUNT(*) FROM notifications WHERE url = '#library/recent'")->fetchColumn();
+$sent = $lib->digest(time());
+$nrow = $la->store->q("SELECT body FROM notifications WHERE url = '#library/recent' ORDER BY id DESC LIMIT 1")->fetchColumn();
+check('recent changes: the digest counts what others changed, in one notification', $sent >= 1 && (int)$la->store->q("SELECT COUNT(*) FROM notifications WHERE url = '#library/recent'")->fetchColumn() === $before + 1 && str_contains((string)$nrow, '/Recent (1)'), (string)$nrow);
+$lib->seen((int)$rc['id']);
+check('recent changes: opening the file marks it seen', !$byOf((int)$rc['id'])['unseen']);
+$lib->saveNote('/Recent', 'mine.md', "x\n");
+check('recent changes: nothing to say about your own changes', $lib->digest(time() + 5) === 0);
+$la->tools->run('kb_save_note', ['id' => (int)$rc['id'], 'content' => "v3\n"]);
+$lib->changeSettings(['mute' => '/Recent']);
+check('recent changes: a muted folder is left out of the digest', $lib->digest(time() + 10) === 0 && $lib->changeSettings()['muted'] === ['/Recent']);
+$lib->changeSettings(['unmute' => '/Recent', 'notify' => 'daily']);
+check('recent changes: daily at most', $lib->digest(time() + 3600) === 0 && $lib->changeSettings()['notify'] === 'daily');
+$lib->changeSettings(['notify' => 'hourly']);
 $note = $lib->saveNote('/Notes', 'Idées cadeaux', "- Livre de cuisine pour Marie\n");
 check('library: notes are Markdown files, searchable right away', $note['note'] == 1 && $note['name'] === 'Idées cadeaux.md' && array_column($lib->search('cuisine Marie'), 'id') === [(int)$note['id']]);
 $lib->saveNote('/Notes', 'Idées cadeaux.md', "- Vélo pour Paul\n", (int)$note['id']);

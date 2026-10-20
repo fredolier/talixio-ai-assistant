@@ -19,7 +19,97 @@ final class Library
     /** Set while Faq::sync() writes the FAQ. */
     public static bool $system = false;
 
+    /** Who is changing files right now (see writer()): set by the worker, the assistant's tools and the network drive. */
+    public static string $by = '';
+
     public function __construct(private App $app) {}
+
+    /** Who a change is made by: the assistant, a routine, the network drive, or you (the person, in the app). */
+    public function writer(): string
+    {
+        return self::$by !== '' ? self::$by : ($this->app->jobId !== null ? 'routine' : 'you');
+    }
+
+    /** Note a change to a file (Recent changes, the digest). The FAQ kept up to date by Talixio is not a change. */
+    public function touch(int $id, string $what): void
+    {
+        if (self::$system) return;
+        $by = $this->writer();
+        $this->app->store->q('UPDATE files SET changed = ?, changed_by = ?, change = ?, seen = CASE WHEN ? THEN ? ELSE NULL END WHERE id = ?',
+            [time(), $by, $what, (int)($by === 'you'), time(), $id]);
+    }
+
+    /**
+     * Files created or changed in the last $hours, newest first, as this person (or space) may see them:
+     * Secret files only in their space. unseen: changed by someone else and not opened since.
+     */
+    public function recent(int $hours, bool $mine = true): array
+    {
+        $hours = max(1, min(24 * 31, $hours));
+        $rows = $this->app->store->q("SELECT id, name, folder, kind, changed, changed_by, change, seen FROM files
+            WHERE deleted_at IS NULL AND changed >= ? AND folder <> ? AND folder NOT LIKE ? ORDER BY changed DESC LIMIT 300",
+            [time() - $hours * 3600, self::FAQ, self::FAQ . '/%'])->fetchAll();
+        $p = $this->app->privacy();
+        $out = [];
+        foreach ($rows as $r) {
+            if ($p->hidden($p->folderLevel((string)$r['folder']), null, (string)$r['folder'])) continue;
+            if (!$mine && $r['changed_by'] === 'you') continue;
+            $out[] = ['id' => (int)$r['id'], 'name' => $r['name'], 'folder' => $r['folder'], 'kind' => $r['kind'], 'changed' => (int)$r['changed'],
+                'changed_by' => $r['changed_by'], 'change' => $r['change'], 'unseen' => $r['changed_by'] !== 'you' && $r['seen'] === null];
+            if (count($out) >= 200) break;
+        }
+        return $out;
+    }
+
+    /** The person opened the file (or all of them: $id null). */
+    public function seen(?int $id = null): void
+    {
+        $id === null ? $this->app->store->q('UPDATE files SET seen = ? WHERE seen IS NULL OR seen < changed', [time()])
+            : $this->app->store->q('UPDATE files SET seen = ? WHERE id = ?', [time(), $id]);
+    }
+
+    public const NOTIFY_MODES = ['off', 'hourly', 'daily'];
+
+    /** Recent changes settings: how often the digest comes, and the folders it leaves out. */
+    public function changeSettings(?array $set = null): array
+    {
+        $st = $this->app->store;
+        $muted = json_decode($st->get('library_mute', '[]'), true) ?: [];
+        if ($set !== null) {
+            if (isset($set['notify']) && in_array($set['notify'], self::NOTIFY_MODES, true)) $st->set('library_notify', $set['notify']);
+            if (!empty($set['mute'])) $muted[] = self::normalize((string)$set['mute']);
+            if (!empty($set['unmute'])) $muted = array_diff($muted, [self::normalize((string)$set['unmute'])]);
+            $muted = array_values(array_unique($muted));
+            $st->set('library_mute', json_encode($muted));
+        }
+        return ['notify' => $st->get('library_notify', 'hourly'), 'muted' => $muted];
+    }
+
+    /**
+     * One grouped notification (in the app only) for the files others changed since the last one:
+     * at most hourly or daily, never for your own changes or muted folders; Secret files are left out.
+     */
+    public function digest(int $now): int
+    {
+        ['notify' => $mode, 'muted' => $muted] = $this->changeSettings();
+        if ($mode === 'off') return 0;
+        $st = $this->app->store;
+        $last = (int)$st->get('library_notify_last', '0') ?: $now - 3600;
+        if ($mode === 'daily' && $now - $last < 86400 - 60) return 0;
+        $st->set('library_notify_last', (string)$now);
+        $in = fn(string $f) => (bool)array_filter($muted, fn($m) => $f === $m || str_starts_with($f, rtrim($m, '/') . '/'));
+        $items = array_filter($this->recent((int)ceil(($now - $last) / 3600) + 1, false), fn($r) => $r['changed'] > $last && !$in($r['folder']));
+        if (!$items) return 0;
+        $byFolder = [];
+        foreach ($items as $r) $byFolder[$r['folder']] = ($byFolder[$r['folder']] ?? 0) + 1;
+        arsort($byFolder);
+        $parts = [];
+        foreach (array_slice($byFolder, 0, 3, true) as $f => $n) $parts[] = "$f ($n)";
+        $n = count($items);
+        $text = I18n::t($this->app, $n === 1 ? '1 file changed: {list}' : '{n} files changed: {list}', ['n' => $n, 'list' => implode(', ', $parts) . (count($byFolder) > 3 ? '…' : '')]);
+        $this->app->notifier()->inApp(I18n::t($this->app, 'Library'), $text, '#library/recent');
+        return $n;
+    }
 
     /** Clean a folder path: '/A/B', no '.', '..', empty or control parts; '' and '/' are the root. */
     public static function normalize(string $path): string
@@ -107,10 +197,10 @@ final class Library
         $folder = self::normalize($folder);
         $subs = [];
         foreach ($this->tree() as $t) if ($t['path'] !== '/' && self::parent($t['path']) === $folder) $subs[] = $t;
-        $files = $this->app->store->q('SELECT id, name, mime, kind, size, duration, created, folder, status, note, suggestion, LENGTH(text) chars FROM files WHERE folder = ? AND deleted_at IS NULL ORDER BY name COLLATE NOCASE', [$folder])->fetchAll();
+        $files = $this->app->store->q('SELECT id, name, mime, kind, size, duration, created, changed, changed_by, folder, status, note, suggestion, LENGTH(text) chars FROM files WHERE folder = ? AND deleted_at IS NULL ORDER BY name COLLATE NOCASE', [$folder])->fetchAll();
         $sugg = fn(?string $j) => ($d = json_decode((string)$j, true)) && !empty($d['folder']) ? $d : null; // only real suggestions, not done/dismissed
         return ['folder' => $folder, 'readonly' => self::readonly($folder), 'folders' => $subs, 'files' => array_map(fn($f) => ['id' => (int)$f['id'], 'size' => (int)$f['size'], 'note' => (bool)$f['note'], 'chars' => (int)$f['chars'],
-            'created' => (int)$f['created'], 'suggestion' => $sugg($f['suggestion'])] + $f, $files)];
+            'created' => (int)$f['created'], 'changed' => (int)($f['changed'] ?? $f['created']), 'suggestion' => $sugg($f['suggestion'])] + $f, $files)];
     }
 
     public function createFolder(string $path): string
@@ -187,6 +277,7 @@ final class Library
         }
         $this->ensureFolder($folder);
         $this->app->store->q('UPDATE files SET folder = ? WHERE id = ?', [$folder, $id]);
+        $this->touch($id, 'moved');
         $this->relabel(['folder' => $folder] + $f);
         return $this->app->files()->get($id);
     }
@@ -209,6 +300,7 @@ final class Library
             $mime = self::textMime($name);
             $this->app->store->q('UPDATE files SET mime = ?, kind = ?, note = ? WHERE id = ?', [$mime, Files::kind($mime, $name), (int)self::isNoteName($name), $id]);
         }
+        $this->touch($id, 'renamed');
         $this->relabel(['name' => $name] + $f);
         return $this->app->files()->get($id);
     }
@@ -361,6 +453,7 @@ final class Library
             $this->ensureFolder((string)$f['folder']);
             $name = $this->freeName((string)$f['folder'], (string)$f['name'], $i); // its name taken since: keep both
             $this->app->store->q('UPDATE files SET deleted_at = NULL, deleted_with = NULL, name = ? WHERE id = ?', [$name, $i]);
+            $this->touch((int)$i, 'restored');
             if ($name !== $f['name']) $this->relabel(['name' => $name] + $f);
             if ($f['status'] === 'ready') $this->app->files()->index($i); // searchable again, from the text kept (nothing read again)
             $done[] = $i;

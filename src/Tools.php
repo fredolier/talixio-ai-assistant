@@ -8,9 +8,9 @@ final class Tools
     /** Which tools each kind of run gets. Sub-agents can read and research but not change memory, schedules or spawn more jobs. */
     public const SETS = [
         'chat' => null, // everything
-        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'mail_triage', 'contact_find', 'file_read', 'kb_search', 'kb_find', 'kb_related', 'kb_list', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report', 'usage_bill', 'board_list', 'board_get'],
+        'heartbeat' => ['skill_read', 'calendar_events', 'mail_list', 'mail_triage', 'contact_find', 'file_read', 'kb_search', 'kb_find', 'kb_related', 'kb_list', 'kb_recent', 'memory_read', 'memory_append', 'memory_replace', 'schedule_task', 'list_tasks', 'search_memory', 'fetch_url', 'web_search', 'usage_report', 'usage_bill', 'board_list', 'board_get'],
         'reflect' => ['skill_read', 'skill_save'],
-        'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'kb_search', 'kb_find', 'kb_related', 'kb_list', 'calendar_events', 'mail_list', 'mail_read',
+        'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'kb_search', 'kb_find', 'kb_related', 'kb_list', 'kb_recent', 'calendar_events', 'mail_list', 'mail_read',
             'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot', 'shell_run', 'script_run', 'script_read', 'mail_triage', 'contact_find', 'board_list', 'board_get'],
         'none' => [],
     ];
@@ -193,6 +193,15 @@ final class Tools
             });
         $this->register('kb_list', "List a folder of the user's library: its subfolders and files (id, size, date). folder '/' is the top; omit it to see the whole folder tree.",
             ['folder' => ['type' => 'string']], [], fn(array $a) => $this->kbList($a['folder'] ?? null));
+        $this->register('kb_recent', "Files in the user's library created or changed in the last hours (default 24): when, by whom (you = the user, assistant, routine, webdav = the network drive), and whether the user has opened them since.",
+            ['hours' => ['type' => 'integer']], [], function (array $a) {
+                $p = $this->app->privacy();
+                $rows = array_filter($this->app->library()->recent((int)($a['hours'] ?? 24)), fn($r) => $p->mayRead($p->folderLevel($r['folder']), null, $r['folder']));
+                if (!$rows) return 'no file created or changed in that time';
+                $out = [];
+                foreach (array_slice($rows, 0, 60) as $r) $out[] = '- ' . Library::join($r['folder'], $r['name']) . " #{$r['id']}: {$r['change']} by {$r['changed_by']}, " . date('D j M H:i', $r['changed']) . ($r['unseen'] ? ', not opened yet' : '');
+                return count($rows) . " file(s):\n" . implode("\n", $out);
+            });
         $this->register('kb_save_note',
             "Save a note in the user's library (it becomes searchable), e.g. meeting notes, a summary of research, a checklist. Markdown by default; "
             . "a name ending in .html, .csv, .json, .xml or .txt saves that format instead (a newsletter or web page: name it page.html, full HTML in content). Give id to update an existing file, keeping its name unless you give a new one. "
@@ -842,6 +851,10 @@ final class Tools
     /** Runs a tool for real (after approval, or for tools that don't need one). */
     public function execute(string $name, array $args): string
     {
+        if (Library::$by === '' && $this->app->jobId === null) { // files it changes show "by the assistant" in Recent changes
+            Library::$by = 'assistant';
+            try { return $this->execute($name, $args); } finally { Library::$by = ''; }
+        }
         if (!isset($this->tools[$name])) {
             $out = "error: unknown tool $name";
         } else {

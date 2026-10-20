@@ -2,6 +2,13 @@
 
 Features of Talixio, what is being built and what comes next. Kept up to date with each release.
 
+## Library
+
+- Done (0.28.65): **Recent changes** — who changed which file and when (you, the assistant, a routine, the network
+  drive), a view for the last hour / today / 2 days / 7 days with "not opened since" dots, a grouped in-app
+  notification (hourly, daily or off, folders can be muted), a morning-briefing line, and `changed` in an app's
+  folder source.
+
 ## Apps
 
 The rule: **an app never gets more power than its declaration, you approve that declaration, and every new ability

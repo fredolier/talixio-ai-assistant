@@ -313,6 +313,9 @@ final class Web
             $path === '/api/library/folder' && $m === 'POST' => ['folder' => $this->app->library()->createFolder((string)($b['path'] ?? ''))],
             $path === '/api/library/folder/move' && $m === 'POST' => ['folder' => $this->app->library()->moveFolder((string)($b['from'] ?? ''), (string)($b['to'] ?? ''))],
             $path === '/api/library/folder/delete' && $m === 'POST' => ['deleted_files' => $this->app->library()->deleteFolder((string)($b['path'] ?? ''), !empty($b['recursive']))],
+            $path === '/api/library/recent' && $m === 'GET' => Privacy::forPerson(fn() => ['items' => $this->app->library()->recent((int)($_GET['hours'] ?? 24))]) + $this->app->library()->changeSettings(),
+            $path === '/api/library/recent/settings' && $m === 'POST' => $this->app->library()->changeSettings($b),
+            $path === '/api/library/recent/seen' && $m === 'POST' => (function () { $this->app->library()->seen(); return ['ok' => true]; })(),
             $path === '/api/library/trash' => ['items' => $this->app->library()->trash(), 'days' => Library::TRASH_DAYS],
             $path === '/api/library/trash/restore' && $m === 'POST' => $this->app->library()->restore(isset($b['id']) ? (int)$b['id'] : null, (string)($b['folder'] ?? ''), (int)($b['at'] ?? 0)),
             $path === '/api/library/trash/empty' && $m === 'POST' => ['deleted' => $this->app->library()->purgeTrash(null)],
@@ -938,12 +941,13 @@ final class Web
 
     private function fileInfo(array $f): array
     {
-        return array_intersect_key($f, array_flip(['id', 'name', 'mime', 'kind', 'size', 'duration', 'folder', 'status', 'note', 'created']));
+        return array_intersect_key($f, array_flip(['id', 'name', 'mime', 'kind', 'size', 'duration', 'folder', 'status', 'note', 'created', 'changed', 'changed_by']));
     }
 
     private function fileText(int $id): array
     {
         $f = $this->app->files()->get($id) ?? $this->fail(404, 'not found');
+        $this->app->library()->seen($id);
         $text = $f['status'] === 'ready' || $f['status'] === 'failed' ? (string)$f['text'] : '';
         if ($f['note'] || ($f['kind'] === 'text' && $f['size'] < 2_000_000)) $text = (string)file_get_contents($f['path']); // the source, for editing
         return ['file' => $this->fileInfo($f), 'text' => mb_substr($text, 0, 200000), 'truncated' => mb_strlen($text) > 200000,

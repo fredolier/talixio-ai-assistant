@@ -650,6 +650,7 @@ async function loadPrivacy() {
   const outside = d.flows.filter(f => f.status !== 'local');
   $('#pv-flows').querySelectorAll('[data-fix]').forEach(b => b.onclick = async () => {
     const f = outside[+b.closest('[data-n]').dataset.n], x = f.fix[+b.dataset.fix];
+    if (x.href === '#library/recent') { location.hash = '#library'; setTimeout(() => showLibRecent(), 300); return; }
     if (x.href === '#library/shares') { location.hash = '#library'; setTimeout(() => openSharesManager(), 300); return; }
     if (x.href) { location.hash = x.href.split('/')[0]; return; }
     try { await post('api/settings', { changes: x.set }); toast('Saved.'); loadPrivacy(); } catch (e) { toast(e.message); }
@@ -3835,6 +3836,37 @@ async function showLibTrash() {
   if (!d.open) d.showModal();
 }
 
+// ---- recent changes: what was created or changed lately, and by whom ----
+const RECENT_RANGES = [[1, 'Last hour'], [24, 'Today'], [48, '2 days'], [168, '7 days']];
+const RECENT_BY = { you: 'you', assistant: 'the assistant', routine: 'a routine', webdav: 'the network drive', share: 'a share' };
+let recentHours = 24;
+async function showLibRecent(hours = recentHours) {
+  const d = $('#recent-dialog');
+  recentHours = hours;
+  let r;
+  try { r = await api('api/library/recent?hours=' + hours); } catch (e) { toast(e.message); return; }
+  $('#recent-range').innerHTML = RECENT_RANGES.map(([h, l]) => `<button class="rchip${h === hours ? ' on' : ''}" type="button" data-h="${h}" aria-pressed="${h === hours}">${esc(t(l))}</button>`).join('');
+  $('#recent-range').querySelectorAll('[data-h]').forEach(b => b.onclick = () => showLibRecent(+b.dataset.h));
+  const muted = new Set(r.muted);
+  $('#recent-list').innerHTML = r.items.length ? r.items.map((x, i) => {
+    const what = t(x.change === 'created' ? 'created by {who}' : x.change === 'changed' ? 'changed by {who}' : x.change === 'moved' ? 'moved by {who}' : x.change === 'renamed' ? 'renamed by {who}' : 'restored by {who}', { who: t(RECENT_BY[x.changed_by] || x.changed_by) });
+    return `<div class="trash-item recent-item${x.unseen ? ' unseen' : ''}">${CITE_SVG}<a href="#file/${x.id}" data-open="${i}"><b>${x.unseen ? '<span class="dot" title="' + esc(t('not opened since')) + '"></span>' : ''}${esc(x.name)}</b></a>
+      <button class="btn small ghost" type="button" data-mute="${esc(x.folder)}" title="${esc(t('Notifications for this folder'))}">${esc(t(muted.has(x.folder) ? 'Unmute' : 'Mute'))}</button>
+      <span class="muted small">${esc(x.folder)} · ${esc(what)} · ${esc(fmtTime(x.changed))}</span></div>`;
+  }).join('') : `<p class="muted">${esc(t('Nothing created or changed in that time.'))}</p>`;
+  $('#recent-list').querySelectorAll('[data-open]').forEach(a => a.onclick = e => { e.preventDefault(); d.close(); openCited(r.items[+a.dataset.open].id); });
+  $('#recent-list').querySelectorAll('[data-mute]').forEach(b => b.onclick = async () => {
+    const f = b.dataset.mute;
+    try { await post('api/library/recent/settings', muted.has(f) ? { unmute: f } : { mute: f }); showLibRecent(); } catch (e) { toast(e.message); }
+  });
+  $('#recent-muted').textContent = r.muted.length ? t('No notifications for: {list}', { list: r.muted.join(', ') }) : '';
+  const sel = $('#recent-notify'); sel.value = r.notify;
+  sel.onchange = async () => { try { await post('api/library/recent/settings', { notify: sel.value }); toast(t('Saved')); } catch (e) { toast(e.message); } };
+  $('#recent-seen').onclick = async () => { try { await post('api/library/recent/seen'); showLibRecent(); } catch (e) { toast(e.message); } };
+  $('#recent-close').onclick = () => d.close();
+  if (!d.open) d.showModal();
+}
+
 const DL_SVG = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
 const LINK_SVG = '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>';
 
@@ -3930,6 +3962,7 @@ async function openSharesManager() {
 }
 $('#lib-shares').onclick = () => openSharesManager();
 $('#lib-trash').onclick = () => showLibTrash();
+$('#lib-recent').onclick = () => showLibRecent();
 $('#viewer-share').onclick = () => lib.file && openShare({ file: lib.file.id }, lib.file.name);
 const isVideo = f => (f.mime || '').startsWith('video/');
 const Library_join = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;

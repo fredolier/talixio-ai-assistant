@@ -59,6 +59,7 @@ final class Dav
     public function handle(string $method, string $rawPath): void
     {
         while (ob_get_level() > 0) ob_end_clean();
+        Library::$by = 'webdav'; // its changes show "by the network drive" in Recent changes
         header('DAV: 1, 2');
         header('MS-Author-Via: DAV');
         header('X-Content-Type-Options: nosniff');

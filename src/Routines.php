@@ -105,8 +105,9 @@ final class Routines
             . "2. Emails waiting (mail_triage): to answer and to do first, with due dates.\n"
             . "3. Tasks (board_list with all_spaces): overdue, due today, blocked; then today's routines and reminders (list_tasks).\n"
             . "4. The weather today in the user's town (from USER.md; skip it if unknown) with a quick web search.\n"
-            . "5. Anything else that matters today (follow-ups promised, birthdays in USER.md...).\n"
-            . "Write only a Markdown bullet list, nothing before or after it: one line per item, starting with an emoji for its kind (📅 ✉️ ✅ ⚠️ 🌦️ 🎂 💡), "
+            . "5. The library (kb_recent, hours 24): if files are new or changed since yesterday, one 📄 line: \"Since yesterday: N new and M changed files\", naming the main ones.\n"
+            . "6. Anything else that matters today (follow-ups promised, birthdays in USER.md...).\n"
+            . "Write only a Markdown bullet list, nothing before or after it: one line per item, starting with an emoji for its kind (📅 ✉️ ✅ ⚠️ 🌦️ 📄 🎂 💡), "
             . "then the essential in under 20 words (time, who, what to do). Merge small things of the same kind into one line. Skip what is empty or not useful today. "
             . "In the user's language. The user can ask for details afterwards."
             . (trim($extra) !== '' ? "\nAlso: " . trim($extra) : '');

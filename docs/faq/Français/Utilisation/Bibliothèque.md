@@ -43,6 +43,19 @@
 - Les fichiers qui portaient le même nom dans un dossier avant la version 0.28.29 ont été fusionnés une fois :
   le plus récent est gardé, les autres sont ses versions.
 
+## Modifications récentes
+- *Modifications récentes* (en haut de la Bibliothèque) liste les fichiers créés ou modifiés dans la dernière heure,
+  aujourd'hui, sur 2 jours ou 7 jours : dossier, ce qui s'est passé (créé, modifié, déplacé, renommé, restauré),
+  par qui (**vous**, **l'assistant**, **une routine**, **le lecteur réseau**) et quand. Un point signale un fichier
+  modifié par un autre que vous et pas ouvert depuis ; *Tout marquer comme vu* les efface. Cliquez pour l'ouvrir.
+- **Notifications** : une notification groupée dans l'app, au plus toutes les heures (ou une fois par jour, ou
+  jamais : le menu en bas), pour les fichiers modifiés *par d'autres* — jamais pour vos propres modifications.
+  *Couper* un dossier l'en exclut.
+- Le **briefing du matin** a une ligne du type « Depuis hier : 3 nouveaux fichiers et 2 modifiés ».
+- Demandez à l'assistant : « qu'est-ce qui a changé dans ma bibliothèque aujourd'hui ? ».
+- Les fichiers d'un espace Secret n'apparaissent que dans cet espace. Les modifications antérieures à cette
+  fonction n'affichent que la date de création.
+
 ## Supprimer, la corbeille
 - *Supprimer* (sur un fichier ouvert, ou sur un dossier avec ses fichiers) met à la **corbeille**, pas
   à la poubelle définitive. Ce qui y est sort des recherches, de l'assistant et des liens de partage.

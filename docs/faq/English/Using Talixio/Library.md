@@ -43,6 +43,17 @@
 - Files that had the same name in a folder before version 0.28.29 were merged once: the newest is kept,
   the others are its versions.
 
+## Recent changes
+- *Recent changes* (top of the Library) lists the files created or changed in the last hour, today, 2 days or
+  7 days: folder, what happened (created, changed, moved, renamed, restored), by whom (**you**, **the assistant**,
+  **a routine**, **the network drive**) and when. A dot marks a file someone else changed that you have not opened
+  since; *Mark all as seen* clears them. Click a file to open it.
+- **Notifications**: one grouped notification in the app, at most hourly (or once a day, or never: the menu at the
+  bottom), for the files *others* changed — never for your own changes. *Mute* a folder to leave it out.
+- The **morning briefing** has a line like "Since yesterday: 3 new and 2 changed files".
+- Ask the assistant: "what changed in my library today?".
+- Files of a Secret space appear only in that space. Changes made before this feature show their creation date only.
+
 ## Deleting, the trash
 - *Delete* (on an open file, or on a folder with its files) moves it to the **trash**; it is not
   deleted for good. What is in the trash leaves the searches, the assistant and the share links.
