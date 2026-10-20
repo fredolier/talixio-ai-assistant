@@ -8,23 +8,24 @@
 :root[data-theme=dark]{--bg:#0d1412;--surface:#141e1b;--ink:#e4ebe8;--muted:#94a49f;--line:#24322e;--accent:#3cc2a8;--danger:#f97066;
   --c1:#3cc2a8;--c2:#e9a23b;--c3:#6aa6e8;--c4:#e07ab0;--c5:#94a49f;color-scheme:dark}
 *{box-sizing:border-box}
-body{margin:0;padding:16px;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;display:flex;flex-direction:column;gap:14px}
-h1{font-size:1.35rem;margin:0}h2{font-size:1.05rem;margin:0 0 6px}
+body{margin:0;padding:18px;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;display:flex;flex-direction:column;gap:14px}
+h1{font-size:1.35rem;margin:0;letter-spacing:-.01em}h2{font-size:.8rem;margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:flex;gap:8px;align-items:center}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
-.card,section{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.card,section{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0;box-shadow:0 1px 2px rgb(0 0 0/.04)}
 .muted{color:var(--muted)}.small{font-size:.85rem}
 input,select,textarea,button{font:inherit;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
 button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:#fff}button.ghost{background:none;color:var(--ink);border-color:var(--line)}
-.stats{display:flex;gap:12px;flex-wrap:wrap}
-.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:130px}
-.stat b{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums}.stat span{color:var(--muted);font-size:.85rem}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0;border-top:3px solid var(--t,var(--accent));box-shadow:0 1px 2px rgb(0 0 0/.04)}
+.stat b{display:block;font-size:1.9rem;line-height:1.2;font-variant-numeric:tabular-nums;letter-spacing:-.02em}.stat b.tk-zero{color:var(--muted);font-weight:600}.stat span{color:var(--muted);font-size:.85rem}
 .tk-table{overflow-x:auto}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600;cursor:pointer;white-space:nowrap}
 td.n,th.n{text-align:right}
 .tk-chart svg{width:100%;height:auto;display:block}.tk-chart text{fill:var(--muted);font-size:11px}
 .tk-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:.85rem;color:var(--muted)}.tk-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
-.tk-msg{color:var(--muted);padding:12px 0}.tk-err{color:var(--danger)}
+.tk-msg{color:var(--muted);padding:18px 8px;text-align:center;font-size:.9rem;margin:0}.tk-err{color:var(--danger)}
 :root{--ok:#13795b;--warn:#b26a00;--bad:#b42318;--info:#2f6fb0}:root[data-theme=dark]{--ok:#3ccf91;--warn:#f0b13d;--bad:#f97066;--info:#6aa6e8}
 .tk-dl{float:right;background:none;border:0;color:var(--muted);padding:0 4px;font-size:.85rem}.tk-dl:hover{color:var(--accent)}
 .tk-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.78rem;font-weight:600;background:color-mix(in srgb,var(--t) 14%,transparent);color:var(--t)}
@@ -38,7 +39,11 @@ td.n,th.n{text-align:right}
 .tk-heat{overflow-x:auto}.tk-heat svg{display:block}.tk-tl{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:12px}
 .tk-tl li{position:relative}.tk-tl li::before{content:"";position:absolute;left:-20px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--t,var(--accent))}
 .tk-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:12px;flex-wrap:wrap}.tk-tabs button{background:none;color:var(--muted);border:0;border-bottom:2px solid transparent;border-radius:0}
-.tk-tabs button.on{color:var(--ink);border-color:var(--accent)}`;
+.tk-tabs button.on{color:var(--ink);border-color:var(--accent)}
+.tk-list{list-style:none;margin:0 -8px;padding:0;display:flex;flex-direction:column}.tk-list li{display:flex;gap:10px;align-items:center;padding:8px;border-radius:9px;min-width:0}
+.tk-list li.tk-go{cursor:pointer}.tk-list li.tk-go:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}.tk-list .tk-ic{flex:none;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:color-mix(in srgb,var(--t,var(--accent)) 12%,transparent);color:var(--t,var(--accent));font-size:.95rem}
+.tk-list .tk-tx{flex:1;min-width:0}.tk-list .tk-tx b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:600;font-size:.92rem}.tk-list .tk-tx div{color:var(--muted);font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-list .tk-meta{flex:none;color:var(--muted);font-size:.8rem;font-variant-numeric:tabular-nums}`;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 
   const $ = s => typeof s === 'string' ? document.querySelector(s) : s;
@@ -150,7 +155,8 @@ td.n,th.n{text-align:right}
     const t = $(target); t.innerHTML = ''; t.classList.add('stats');
     t.append(...items.map(i => {
       const d = i.delta === undefined || i.delta === null || i.delta === '' ? '' : el('span', { class: 'tk-delta ' + (parseFloat(i.delta) >= 0 ? 'tk-up' : 'tk-down'), text: (parseFloat(i.delta) >= 0 ? '▲ ' : '▼ ') + String(i.delta).replace(/^[+-]/, '') });
-      return el('div', { class: 'stat' }, el('b', {}, String(i.value ?? '–'), d), el('span', { text: i.label }), i.note ? el('div', { class: 'muted small', text: i.note }) : '', i.trend ? sparkline(i.trend) : '');
+      const box = el('div', { class: 'stat' }); if (i.tone) box.style.setProperty('--t', TONES[i.tone] || i.tone);
+      box.append(el('b', { class: +i.value === 0 ? 'tk-zero' : '' }, String(i.value ?? '–'), d), el('span', { text: i.label }), i.note ? el('div', { class: 'muted small', text: i.note }) : '', i.trend ? sparkline(i.trend) : ''); return box;
     }));
   }
 
@@ -247,6 +253,24 @@ td.n,th.n{text-align:right}
     t.append(bar, box); if (names.length) show(names[0]);
   }
 
+  /** Open something in Talixio: a library file ({ id } or its number), a page like '#tasks', or a web address (asked first). */
+  const fileLink = h => { const m = String(h).match(/(?:api\/files\/|#file\/|[?&]file=)(\d+)/); return m ? `#file/${m[1]}` : h; };
+  const open = what => call('open', { href: typeof what === 'string' && !/^\d+$/.test(what) ? fileLink(what) : typeof what === 'number' || /^\d+$/.test(String(what)) ? `#file/${what}` : what && what.id ? `#file/${what.id}` : String(what || '') });
+  // links in an app open in Talixio, not inside the sealed frame (where they would do nothing)
+  document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href]'); if (!a) return; e.preventDefault(); open(a.dataset.file ? +a.dataset.file : a.getAttribute('href')).catch(err => console.warn(err.message)); });
+
+  /** A tidy list: [{ title, note, meta, icon, tone, open }]; open is a file, a '#page' or an address. */
+  function list(target, items, o = {}) {
+    const t = $(target); t.innerHTML = '';
+    if (!items || !items.length) { message(t, o.empty || 'Nothing yet'); return; }
+    t.append(el('ul', { class: 'tk-list' }, items.slice(0, o.limit || 50).map(i => {
+      const ic = i.icon ? el('span', { class: 'tk-ic', text: i.icon }) : '', li = el('li', { title: i.title || '' }, ic, el('div', { class: 'tk-tx' }, el('b', { text: i.title || '' }), i.note ? el('div', { text: i.note }) : ''), i.meta !== undefined && i.meta !== '' ? el('span', { class: 'tk-meta', text: String(i.meta) }) : '', i.badge ? badge(i.badge, i.tone) : '');
+      if (i.tone) li.style.setProperty('--t', TONES[i.tone] || i.tone);
+      if (i.open) { li.classList.add('tk-go'); li.tabIndex = 0; const go = () => open(i.open).catch(e => console.warn(e.message)); li.addEventListener('click', go); li.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }); }
+      return li;
+    })));
+  }
+
   /** Hand a file to the Talixio page, which offers it as a download (the frame itself cannot). Rows become CSV. */
   function download(name, data, mime) {
     let content = data;
@@ -287,8 +311,8 @@ td.n,th.n{text-align:right}
     data: (name, params = {}) => call('data', { name, params }),
     load: key => call('load', { key }),
     save: (key, value) => call('save', { key, value }),
-    chart, table, stats, message, el, num, csv, ready, sparkline, badge, pie, gauge, bars, progress, heatmap, timeline, tabs, download,
+    chart, table, stats, message, el, num, csv, ready, sparkline, badge, pie, gauge, bars, progress, heatmap, timeline, tabs, download, list, open,
     date: s => new Date(s).toLocaleDateString(),
-    ago: s => { const m = Math.round((Date.now() - new Date(s)) / 60000); return m < 60 ? `${m} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`; },
+    ago: s => { const m = Math.round((Date.now() - new Date(s)) / 60000); return m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`; },
   });
 })();

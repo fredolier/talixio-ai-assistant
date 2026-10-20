@@ -2597,5 +2597,6 @@ window.I18N.fr = {
 "Stock prices": "Cours de bourse",
 "Tasks at a glance": "Les tâches en un coup d'œil",
 "Daily closing prices of a share over the last month (data from stooq.com).": "Cours de clôture quotidiens d'une action sur le dernier mois (données stooq.com).",
-"This space's open tasks by status and priority, and what is due soon.": "Les tâches ouvertes de cet espace par statut et priorité, et ce qui arrive à échéance."
+"This space's open tasks by status and priority, and what is due soon.": "Les tâches ouvertes de cet espace par statut et priorité, et ce qui arrive à échéance.",
+"This app wants to open {host}. Open it?": "Cette app veut ouvrir {host}. L'ouvrir ?"
 };

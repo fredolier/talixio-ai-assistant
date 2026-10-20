@@ -19,7 +19,8 @@ tasks, a tracker for your expenses or habits, a table of a CSV file in the libra
 
 Key figures (with a change arrow and a small trend line), line and bar charts (stacked too), pies and donuts,
 gauges, ranked bars, progress toward goals, a calendar heatmap, a timeline, badges, tabs and tables. Tables can be
-downloaded as CSV and charts as PNG.
+downloaded as CSV and charts as PNG. Links in an app open in Talixio (a library file, the tasks…); a web address
+asks you first.
 
 Sources an app can declare:
 

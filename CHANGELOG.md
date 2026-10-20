@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.64 (2026-10-20)
+
+- Apps: links now work (library files, Talixio pages; a web address asks first), a new list component, and a
+  cleaner dashboard look (figure cards, section titles, links, empty states).
+
 ## 0.28.63 (2026-10-20)
 
 - Apps: new sources (library folder and search, calendar, contacts, connector tools marked as only reading), looser

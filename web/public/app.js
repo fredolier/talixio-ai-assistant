@@ -4460,6 +4460,14 @@ window.addEventListener('message', async e => {
   if (!f || e.source !== f.el.contentWindow || !m || m.talixio !== 1 || !m.op) return;
   const reply = r => e.source.postMessage({ talixio: 1, id: m.id, ...r }, '*');
   const sp = state.space ?? '';
+  if (m.op === 'open') { // a link in an app: a page of Talixio, or a web address the person agrees to open
+    const h = String(m.href || '');
+    if (/^#[a-z]+(\/[\w%.\-\/]*)?$/.test(h)) { location.hash = h; return reply({ result: true }); }
+    let u = null; try { u = new URL(h); } catch {}
+    if (!u || !/^https?:$/.test(u.protocol)) return reply({ error: 'only Talixio pages and web addresses can be opened' });
+    if (!confirm(t('This app wants to open {host}. Open it?', { host: u.host }))) return reply({ result: false });
+    window.open(u.href, '_blank', 'noopener,noreferrer'); return reply({ result: true });
+  }
   if (m.op === 'download') { // a file the app made: offered here, as the sealed frame cannot download
     const name = String(m.name || 'download').replace(/[^\w. -]+/g, '_').slice(0, 80) || 'download', c = String(m.content || '');
     if (c.length > 20e6) return reply({ error: 'file too large' });

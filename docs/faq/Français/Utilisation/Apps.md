@@ -21,7 +21,8 @@ la bibliothèque…
 
 Chiffres clés (avec une flèche d'évolution et une petite courbe), courbes et barres (empilées aussi), camemberts et
 anneaux, jauges, barres classées, progression vers un objectif, calendrier de chaleur, frise chronologique, pastilles,
-onglets et tableaux. Les tableaux se téléchargent en CSV et les graphiques en PNG.
+onglets et tableaux. Les tableaux se téléchargent en CSV et les graphiques en PNG. Les liens d'une app s'ouvrent dans Talixio (un fichier de la bibliothèque, les
+tâches…) ; une adresse web vous est demandée d'abord.
 
 Sources qu'une app peut déclarer :
 
