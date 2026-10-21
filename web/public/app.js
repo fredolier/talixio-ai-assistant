@@ -3300,7 +3300,7 @@ async function installFromLink(src, name, headers) {
 async function storeConnectors() {
   const box = $('#store-conn');
   const st = await api('api/store').catch(() => null);
-  if (!st?.available) { box.hidden = true; return; }
+  if (!st?.available) { box.innerHTML = `<h4>${esc(t('From the store'))}</h4>${storeOff(st)}`; box.hidden = false; return; }
   const mine = (state.mcpData?.servers || []).map(x => x.name);
   const sent = st.outbox.filter(x => x.kind === 'connector');
   box.innerHTML = `<h4>${esc(t('From the store'))}</h4>`
@@ -4565,9 +4565,9 @@ async function loadApps() {
 /** The server's store (several people on one server): what the admin approved, to install here, update or remove. */
 async function storeApps(box, sp) {
   const st = await api('api/store?space=' + sp).catch(() => null);
-  if (!st?.available) return;
-  state.store = st;
   const el = document.createElement('div'); el.className = 'store-box';
+  if (!st?.available) { el.innerHTML = `<h3>${esc(t('From the store'))}</h3>${storeOff(st)}`; box.append(el); return; }
+  state.store = st;
   el.innerHTML = `<h3>${esc(t('From the store'))}</h3><p class="muted small">${esc(t('Apps the server’s admin approved. An app you install still waits for your approval before it gets any data.'))}</p>`
     + (st.apps.length ? `<div class="store-items">${st.apps.map(a => `<div class="card store-item" data-id="${esc(a.id)}">
         <div class="row"><span class="app-icon">${esc(a.icon || '🧩')}</span><b class="no-i18n">${esc(a.name)}</b><span class="spacer"></span>
@@ -4588,6 +4588,11 @@ async function storeApps(box, sp) {
   });
 }
 
+/** Why there is no store here: on one's own server there is none; on a shared one, this assistant was made before it. */
+const storeOff = st => `<p class="muted small">${esc(st?.shared
+  ? t('The store is not set up on this assistant yet: it was made by an older version. Ask the admin to update the server again, or to choose “Rebuild the container” for this assistant on the admin page.')
+  : t('The store is shared by the people of a server run from the admin page (install-stack.sh). This assistant runs on its own, so it has none: share apps as files instead.'))}</p>`;
+
 /** Where something sent to the store stands. */
 const storeStatus = it => it.status === 'approved' ? t('In the store') + (it.reason ? ' · ' + it.reason : '')
   : it.status === 'rejected' ? t('Not accepted') + (it.reason ? ': ' + it.reason : '') : t('Waiting for the admin’s review');
@@ -4605,6 +4610,7 @@ async function openApp(id) {
   box.innerHTML = `<div class="row wrap app-bar"><a class="btn small ghost" href="#apps">← Apps</a>
       <h3 class="no-i18n">${esc(app.icon || '🧩')} ${esc(app.name)}</h3><span class="grow"></span>
       <button type="button" class="btn small ghost" id="app-share">Share</button>
+      <button type="button" class="btn small ghost" id="app-to-store">Submit to the store</button>
       <button type="button" class="btn small ghost" id="app-edit">Change in the chat</button>
       <button type="button" class="btn small ghost danger" id="app-del">Delete</button></div>
     <div class="card app-review" id="app-share-box" hidden></div>
@@ -4632,6 +4638,7 @@ async function openApp(id) {
     try { await post('api/mcp/read-only', { server: n.server, tools: n.tools.map(x => x.tool), on: true }); openApp(id); } catch (e) { toast(e.message); }
   });
   $('#app-share').onclick = () => appShare(app, $('#app-share-box'));
+  $('#app-to-store').onclick = () => { const b = $('#app-share-box'); b.hidden = true; appShare(app, b); setTimeout(() => ($('#app-store-note') || $('#app-store-send'))?.scrollIntoView({ block: 'center' }), 400); };
   if (pending) $('#app-approve').onclick = async () => { await post(`api/apps/${id}/approve?space=${sp}`).catch(e => toast(e.message)); openApp(id); };
 }
 
@@ -4667,8 +4674,8 @@ function appShare(app, el) {
     <p class="small" id="app-share-say" role="status"></p>`;
   el.hidden = false;
   api('api/store?space=' + sp).then(st => {
-    if (!st.available) return;
     const box = $('#app-store-send'); if (!box) return;
+    if (!st.available) { box.innerHTML = `<p class="small"><b>${esc(t('Submit to the store'))}</b></p>${storeOff(st)}`; return; }
     const it = st.outbox.find(x => x.key === 'app-' + app.id);
     box.innerHTML = `<form class="row wrap" id="app-store-form"><input id="app-store-note" placeholder="${esc(t('A word for the admin (optional)'))}" maxlength="500">
       <button class="btn small">${esc(t(it ? 'Send this version to the store' : 'Submit to the store'))}</button></form>

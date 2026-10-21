@@ -2706,5 +2706,7 @@ window.I18N.fr = {
 "From a GitHub repository, or an https address (header names only: each person fills in their own values).": "Depuis un dépôt GitHub, ou une adresse https (noms d’en-têtes seulement : chacun remplit ses propres valeurs).",
 "GitHub repository or https address": "Dépôt GitHub ou adresse https",
 "Header names (comma-separated, optional)": "Noms d’en-têtes (séparés par des virgules, facultatif)",
-"Publish": "Publier"
+"Publish": "Publier",
+"The store is shared by the people of a server run from the admin page (install-stack.sh). This assistant runs on its own, so it has none: share apps as files instead.": "Le catalogue est partagé par les personnes d’un serveur géré depuis la page d’administration (install-stack.sh). Cet assistant fonctionne seul, il n’en a donc pas : partagez plutôt les apps sous forme de fichiers.",
+"The store is not set up on this assistant yet: it was made by an older version. Ask the admin to update the server again, or to choose “Rebuild the container” for this assistant on the admin page.": "Le catalogue n’est pas encore en place sur cet assistant : il a été créé par une version plus ancienne. Demandez à l’administrateur de mettre à jour le serveur à nouveau, ou de choisir « Reconstruire le conteneur » pour cet assistant dans la page d’administration."
 };

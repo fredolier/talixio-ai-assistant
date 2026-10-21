@@ -109,7 +109,7 @@ final class AppStore
             }
             return $x + ['installed' => $at];
         }, $c['connectors']);
-        return ['available' => $this->available(), 'apps' => $apps, 'connectors' => $conns, 'outbox' => $this->outbox()];
+        return ['available' => $this->available(), 'shared' => Config::inFleet(), 'apps' => $apps, 'connectors' => $conns, 'outbox' => $this->outbox()];
     }
 
     /** Installs a store app in this space, or brings the installed copy to the store's version: it waits for approval. */

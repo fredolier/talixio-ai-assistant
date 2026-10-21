@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 // Agent commands for the install script (run inside the agent container):
-//   php fleetctl.php init                 write the Caddyfile (agent start)
+//   php fleetctl.php init                 write the Caddyfile (agent start), then heal in the background
+//   php fleetctl.php heal                 add the store volume to an agent made without it, else sync
 //   php fleetctl.php adopt <id> [name]    an existing installation, already copied into the volume talixio-<id>
 //   php fleetctl.php create <id> [name]   a new person (prints the address and first password)
 //   php fleetctl.php reload               rewrite the Caddyfile and reload Caddy
@@ -18,7 +19,9 @@ try {
             $dir = getenv('CADDY_CONFIG_DIR') ?: '/caddy-config';
             if (is_dir($dir) && is_writable($dir)) file_put_contents("$dir/Caddyfile", $fleet->caddyfile());
             try { $fleet->reloadCaddy(); } catch (Throwable) {} // Caddy may not be up yet: it reads the file when it starts
+            if (file_exists(getenv('DOCKER_SOCKET') ?: '/var/run/docker.sock')) Talixio\Background::start([PHP_BINARY, __FILE__, 'heal'], (getenv('TALIXIO_STATE_DIR') ?: '/state') . '/heal.log');
             break;
+        case 'heal': foreach ($fleet->heal() as $i) echo date('c'), " $i made again\n"; break;
         case 'adopt': echo json_encode($fleet->adopt($id, $name)), "\n"; break;
         case 'create': $r = $fleet->create($id, $name); echo "Address: {$r['url']}\nPassword: {$r['password']}\n"; break;
         case 'reload': $fleet->reloadCaddy(); echo "Caddy reloaded\n"; break;

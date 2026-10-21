@@ -5,7 +5,7 @@ server can install. Each assistant sees the store in **Apps** (*From the store*)
 
 ## Sending something to the store
 
-- **An app**: open it, choose **Share**, then **Submit to the store**, with a word for the admin if you like. What is
+- **An app**: open it and choose **Submit to the store** (also under **Share**), with a word for the admin if you like. What is
   sent is the same package as a shared app: its code, what it reads and how to install its connectors, never its data,
   saved state or keys.
 - **A connector**: in Settings → Connectors, pick it under *From the store* and press **Send for review**. Only how to
@@ -31,3 +31,7 @@ or address yourself, and remove anything: people who installed it keep their cop
   with your own account. **Uninstall** removes it.
 
 Apps of a Secret space never leave it, so they cannot be sent to the store.
+
+## I don't see the store
+
+The store needs a server run from the admin page. If the store section says it is not set up, the assistant was made by a version older than the store: update the server again, or choose **Rebuild the container** for that assistant on the admin page. From 0.28.73, the agent also repairs this by itself when it starts.

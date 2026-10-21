@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.73 (2026-10-21)
+
+- The store is always visible: in Apps (“From the store”), on each app (a new “Submit to the store” button, also in Share) and in Settings → Connectors. Where the store is not set up, it says why and what to do instead of hiding.
+- An agent made by an older update now repairs itself when it starts: it adds the store volume to itself, then remakes the assistants the old code made (so they get the store too). Runs of this repair and of an update never overlap.
+
 ## 0.28.72 (2026-10-21)
 
 - A store for servers shared by several people. The admin page has a **Store** tab: apps and connectors sent by people wait there for review (who sent it, their note, all the code, sources and connectors) and reach the store only once approved; the admin can also publish an app file or a connector directly, and remove anything. Each assistant sees the store in **Apps → From the store** (install, update to a new version, uninstall) and in **Settings → Connectors** (install, uninstall, send one for review). An app is submitted from its **Share** card. Nothing secret travels: no data, saved state, keys or header values; connectors only by their GitHub repository or https address. An installed app still waits for its owner's approval, and Secret-space apps never leave. The catalog lives on a shared volume the agent writes and every assistant reads only.

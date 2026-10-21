@@ -31,6 +31,11 @@ goes through the Talixio page or the server, never straight from the app.**
   carries the code, what it reads and how to install its connectors, never data or keys; it waits for approval on
   the other side, which installs the connectors with its own account.
 
+### Done (0.28.73)
+
+- **Store always visible**, with a direct “Submit to the store” button on each app; an agent made by an older
+  update adds the store to itself at start and remakes the assistants.
+
 ### Done (0.28.72)
 
 - **Store** (several people on one server): people send apps and connectors for review; the admin approves or

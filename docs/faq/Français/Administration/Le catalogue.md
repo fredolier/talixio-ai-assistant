@@ -6,7 +6,7 @@ connecteurs que tout le monde sur le serveur peut installer. Chaque assistant vo
 
 ## Envoyer quelque chose au catalogue
 
-- **Une app** : ouvrez-la, choisissez **Partager**, puis **Proposer au catalogue**, avec un mot pour l'administrateur
+- **Une app** : ouvrez-la et choisissez **Proposer au catalogue** (aussi sous **Partager**), avec un mot pour l'administrateur
   si vous voulez. Ce qui part est le même paquet qu'une app partagée : son code, ce qu'elle lit et comment installer
   ses connecteurs, jamais ses données, son état enregistré ni de clé.
 - **Un connecteur** : dans Réglages → Connecteurs, choisissez-le sous *Depuis le catalogue* et appuyez sur **Envoyer
@@ -34,3 +34,7 @@ leur copie.
   ou remplissez ses réglages avec votre propre compte. **Désinstaller** le retire.
 
 Les apps d'un espace Secret n'en sortent jamais : elles ne peuvent pas être envoyées au catalogue.
+
+## Je ne vois pas le catalogue
+
+Le catalogue a besoin d'un serveur géré depuis la page d'administration. Si la section du catalogue indique qu'il n'est pas en place, l'assistant a été créé par une version antérieure au catalogue : mettez à jour le serveur à nouveau, ou choisissez **Reconstruire le conteneur** pour cet assistant dans la page d'administration. Depuis la 0.28.73, l'agent corrige aussi cela tout seul à son démarrage.

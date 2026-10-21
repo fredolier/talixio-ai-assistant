@@ -2139,7 +2139,7 @@ $cat->collect('alice', 'Alice', $obf); $cat->collect('alice', 'Alice', $obf);
 $subs = array_column($cat->submissions(), null, 'key');
 check('store: collected once, waiting for review, cleaned', count($subs) === 2 && $subs["app-{$sh['id']}"]['status'] === 'pending' && $subs["app-{$sh['id']}"]['note'] === 'For the team'
     && $subs['mcp-bills_online']['item'] === ['name' => 'bills_online', 'description' => 'Bills', 'url' => 'https://mcp.example.com/mcp', 'headers' => ['X-Api-Key']], json_encode($subs));
-check('store: nothing is in the catalog before the admin approves', $ast->catalog() === ['apps' => [], 'connectors' => []] && $ast->view()['available']);
+check('store: nothing is in the catalog before the admin approves', $ast->catalog() === ['apps' => [], 'connectors' => []] && $ast->view()['available'] && $ast->view()['shared'] === false);
 $da = $cat->decide($subs["app-{$sh['id']}"]['id'], true, 'Nice');
 $dc = $cat->decide($subs['mcp-bills_online']['id'], false, 'Use the official one');
 $twice = ''; try { $cat->decide($da['id'], true); } catch (\InvalidArgumentException $e) { $twice = $e->getMessage(); }
@@ -2797,6 +2797,13 @@ check('fleet: the shared whisper models are mounted read-only', $hc['Mounts'][1]
 check('fleet: the store is mounted read-only in each assistant, read-write in the agent', in_array(['Type' => 'volume', 'Source' => 'talixio-store', 'Target' => '/store', 'ReadOnly' => true], $hc['Mounts'], true)
     && in_array('TALIXIO_STORE=/store', $spec['Env'], true) && !\Talixio\Fleet::validId('store')
     && ($ws = \Talixio\Fleet::withStore(['Config' => ['Env' => ['A=1']], 'HostConfig' => ['Mounts' => []]])) === \Talixio\Fleet::withStore($ws) && end($ws['HostConfig']['Mounts'])['Target'] === '/store' && in_array('TALIXIO_STORE_DIR=/store', $ws['Config']['Env'], true));
+putenv('TALIXIO_STORE_DIR'); @mkdir("$dir/fleet-heal");
+$fh = new \Talixio\Fleet("$dir/fleet-heal", "$dir/no-docker.sock");
+try { $fh->heal(); $hl = 'no error'; } catch (\Throwable $e) { $hl = $e->getMessage(); }
+putenv('TALIXIO_STORE_DIR=/store');
+check('fleet: at its start, an agent without the store looks at itself (here no Docker: it says so); with it, it syncs its assistants under a lock',
+    str_contains($hl, 'Docker is not reachable') && $fh->heal() === [] && is_file("$dir/fleet-heal/sync.lock"));
+putenv('TALIXIO_STORE_DIR');
 check('fleet: instance settings (prefix, shared Ollama through Caddy)', in_array('TALIXIO_BASE_PATH=alice', $spec['Env'], true) && in_array('TALIXIO_OLLAMA_URL=http://talixio-caddy:11434', $spec['Env'], true));
 $cf = $fl->caddyfile($fs);
 check('fleet: Caddy routes the admin page and each assistant under its path', str_contains($cf, "assistant.example.com {") && str_contains($cf, 'handle_path /admin/*') && str_contains($cf, "handle @alice {\n\t\turi strip_prefix /alice\n\t\treverse_proxy talixio-alice:8080") && !str_contains($cf, 'on_demand'));

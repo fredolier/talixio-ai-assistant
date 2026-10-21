@@ -197,6 +197,8 @@ final class Fleet
      */
     public function sync(): array
     {
+        $lock = fopen("{$this->stateDir}/sync.lock", 'c'); // the agent's start and an update may both run it
+        if ($lock) flock($lock, LOCK_EX);
         $s = $this->state(); $done = [];
         foreach (array_keys($s['instances']) as $id) {
             [$code, $c] = $this->docker('GET', '/containers/' . $this->containerName($id) . '/json');
@@ -801,10 +803,21 @@ final class Fleet
         [$code, $c] = $this->docker('GET', "/containers/$agent/json");
         if ($code !== 200 || $want === '' || $c['Image'] === $want) { $progress('done', $done); return; }
         $progress('done', "$done The admin page and its agent restart on it: reload the page in a few seconds.");
+        $this->replaceAgent($c, self::IMAGE . ':current', fn($e) => $progress('done', "$done The agent stayed on the previous version ({$e->getMessage()}); run install-stack.sh to move it."));
+    }
+
+    /**
+     * The agent replaces itself with one made from $c on $image (and the store's volume): the new one starts under its
+     * name, then the old one, running this code, is removed, which ends this process. If the new one does not answer,
+     * the old one stays and $failed hears why (without it, this throws).
+     */
+    private function replaceAgent(array $c, string $image, ?callable $failed = null): void
+    {
+        $agent = self::PREFIX . 'agent';
         $this->docker('DELETE', "/containers/$agent-old", null, ['force' => 'true']); // left by an earlier try
         $this->ok($this->docker('POST', "/containers/$agent/rename", null, ['name' => "$agent-old"]), 'rename the agent');
         try {
-            $this->respawn(self::withStore($c), $agent, self::IMAGE . ':current');
+            $this->respawn(self::withStore($c), $agent, $image);
             for ($t = 0; $t < 45; $t++) {
                 sleep(2);
                 $ch = curl_init("http://$agent:8090/health");
@@ -823,8 +836,23 @@ final class Fleet
         } catch (\Throwable $e) {
             $this->docker('DELETE', "/containers/$agent", null, ['force' => 'true']);
             $this->docker('POST', "/containers/$agent-old/rename", null, ['name' => $agent]);
-            $progress('done', "$done The agent stayed on the previous version ({$e->getMessage()}); run install-stack.sh to move it.");
+            if (!$failed) throw $e;
+            $failed($e);
         }
+    }
+
+    /**
+     * Run in the background at each agent start, with the code just installed: an agent made by an older update has
+     * no store volume, so it makes itself again with it; otherwise the containers the old code made are made again
+     * as this code would (an update run by the previous version made them with its own settings).
+     */
+    public function heal(): array
+    {
+        if ((string)getenv('TALIXIO_STORE_DIR') === '') {
+            [$code, $c] = $this->docker('GET', '/containers/' . self::PREFIX . 'agent/json');
+            if ($code === 200 && is_array($c) && self::withStore($c) !== $c) { $this->replaceAgent($c, $c['Image']); return []; }
+        }
+        return $this->sync();
     }
 
     /** The agent as inspected, with the store's volume (an agent installed before the store had none). */
