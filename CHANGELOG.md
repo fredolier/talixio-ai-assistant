@@ -9,6 +9,7 @@ and with `talixio version`. Each delivery raises it and adds a line here.
   (only once each: one the admin removes does not come back). The admin button still adds them all on demand.
 - Settings → Connected accounts: tabs, one per account or service, so you see one card at a time (all of them while
   searching).
+- FAQ: Dolibarr connector added to the connector list (and so to the store).
 - FAQ: the connector list says where to find these connectors in the assistant's store.
 
 ## 0.28.75 (2026-10-21)

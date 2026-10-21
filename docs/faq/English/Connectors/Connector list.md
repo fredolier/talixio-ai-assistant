@@ -167,6 +167,11 @@ The assistant only gets what you allow.
   `Authorization` header to `Basic ` followed by `your-email:your-token` encoded in Base64 (on a computer:
   `echo -n 'you@example.com:TOKEN' | base64`). The assistant gets the same rights as your account.
   [▶ Install](?connector=https://mcp.atlassian.com/v1/mcp&name=atlassian&headers=Authorization)
+- **Dolibarr**: third parties (customers and suppliers), commercial proposals, contracts and invoices, in your
+  own Dolibarr (version 15 or later). Turn on the *API REST* module, create an API key on your Dolibarr user, then
+  set `DOLIBARR_URL` (for example `https://erp.example.com/api/index.php`) and `DOLIBARR_API_KEY` when installing.
+  The assistant gets the same rights as that user: a user with limited rights is safer.
+  [▶ Install](?connector=https://github.com/sachitha7/mcp-server-dolibarr&name=dolibarr)
 - **Zapier and Make**: connect thousands of apps (Google Drive, Dropbox, Gmail, Trello…). The address is
   specific to your account: create your server at mcp.zapier.com (or in Make), copy its address, then add it in
   Settings → Connectors. No direct link here.

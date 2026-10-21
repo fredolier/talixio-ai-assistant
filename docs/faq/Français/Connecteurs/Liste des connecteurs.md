@@ -169,6 +169,12 @@ dans Réglages → Connecteurs. L'assistant n'a accès qu'à ce que vous autoris
   en Base64 (sur un ordinateur : `echo -n 'vous@example.com:JETON' | base64`). L'assistant a les mêmes droits que
   votre compte.
   [▶ Installer](?connector=https://mcp.atlassian.com/v1/mcp&name=atlassian&headers=Authorization)
+- **Dolibarr** : tiers (clients et fournisseurs), propositions commerciales, contrats et factures, dans votre
+  propre Dolibarr (version 15 ou plus). Activez le module *API REST*, créez une clé API sur votre utilisateur
+  Dolibarr, puis renseignez `DOLIBARR_URL` (par exemple `https://erp.example.com/api/index.php`) et
+  `DOLIBARR_API_KEY` à l'installation. L'assistant a les mêmes droits que cet utilisateur : un utilisateur aux droits
+  limités est plus sûr.
+  [▶ Installer](?connector=https://github.com/sachitha7/mcp-server-dolibarr&name=dolibarr)
 - **Zapier et Make** : relient des milliers d'applications (Google Drive, Dropbox, Gmail, Trello…). L'adresse est
   propre à votre compte : créez votre serveur sur mcp.zapier.com (ou dans Make), copiez son adresse, puis
   ajoutez-la dans Réglages → Connecteurs. Pas de lien direct ici.
