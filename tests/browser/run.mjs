@@ -1,7 +1,7 @@
 // Browser tests of the web app: a real Chromium drives the page against a local server with the "echo" model.
 // Run: node tests/browser/run.mjs   (needs Playwright; prints the share of app.js the run executed)
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,9 +14,10 @@ try { ({ chromium } = require('playwright')); } catch { console.log('SKIP browse
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const data = mkdtempSync(join(tmpdir(), 'talixio-browser-'));
+mkdirSync(join(data, 'store')); // the server's shared store, as on a server run from the admin page
 const port = await new Promise(r => { const s = net.createServer().listen(0, () => { const p = s.address().port; s.close(() => r(p)); }); });
 const server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', join(root, 'web/public'), join(root, 'web/router.php')],
-  { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw', TALIXIO_NOTIFY: 'none' }, stdio: 'ignore' });
+  { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw', TALIXIO_NOTIFY: 'none', TALIXIO_STORE: join(data, 'store') }, stdio: 'ignore' });
 const base = `http://127.0.0.1:${port}`;
 for (let i = 0; i < 50; i++) { try { await fetch(base + '/'); break; } catch { await new Promise(r => setTimeout(r, 100)); } }
 

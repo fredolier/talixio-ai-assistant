@@ -3,6 +3,18 @@ const go = async (page, v) => { await page.evaluate(h => { location.hash = h; },
 const api = (page, path) => page.evaluate(p => fetch(p).then(r => r.json()), path);
 
 const flows = {
+  async store({ page, check }) {
+    await go(page, 'apps');
+    await page.waitForSelector('#apps-list .store-box', { timeout: 10000 });
+    check('store: Apps shows what the store offers', (await page.textContent('#apps-list .store-box')).includes('The store has no app yet'));
+    await page.click('#apps-list [data-ex=tasks]');
+    await page.click('#app-to-store');
+    await page.waitForSelector('#app-store-note', { timeout: 10000 });
+    await page.fill('#app-store-note', 'For the team');
+    await page.click('#app-store-form button');
+    await page.waitForSelector('#app-store-send :text("Waiting for the admin")', { timeout: 10000 });
+    check('store: an app is submitted from its page and waits for the admin', true);
+  },
   async chat({ page, check }) {
     await go(page, 'chat');
     await page.fill('#input', 'hello from the browser');

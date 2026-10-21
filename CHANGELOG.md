@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.74 (2026-10-21)
+
+- Fix: the store answered “not found” to every assistant (its web routes were not wired), so nothing could be submitted, listed or installed. A browser test now submits an app to the store.
+- “Submit to the store” on an app opens only the submission form; “Share” keeps the copy and file options with it.
+
 ## 0.28.73 (2026-10-21)
 
 - The store is always visible: in Apps (“From the store”), on each app (a new “Submit to the store” button, also in Share) and in Settings → Connectors. Where the store is not set up, it says why and what to do instead of hiding.

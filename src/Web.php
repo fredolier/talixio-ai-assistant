@@ -103,7 +103,7 @@ final class Web
             'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
             'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals' => $this->routeChat($m, $path, $b),
             'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
-            'google', 'microsoft', 'spotify', 'connectors', 'mcp', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
+            'google', 'microsoft', 'spotify', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
             'memory', 'mind', 'skills', 'scripts' => $this->routeMind($m, $path, $b),
             'library', 'files', 'shares', 'privacy' => $this->routeLibrary($m, $path, $b),
             'board' => $this->board($m, $path, $b),

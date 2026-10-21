@@ -4638,7 +4638,7 @@ async function openApp(id) {
     try { await post('api/mcp/read-only', { server: n.server, tools: n.tools.map(x => x.tool), on: true }); openApp(id); } catch (e) { toast(e.message); }
   });
   $('#app-share').onclick = () => appShare(app, $('#app-share-box'));
-  $('#app-to-store').onclick = () => { const b = $('#app-share-box'); b.hidden = true; appShare(app, b); setTimeout(() => ($('#app-store-note') || $('#app-store-send'))?.scrollIntoView({ block: 'center' }), 400); };
+  $('#app-to-store').onclick = () => appShare(app, $('#app-share-box'), true);
   if (pending) $('#app-approve').onclick = async () => { await post(`api/apps/${id}/approve?space=${sp}`).catch(e => toast(e.message)); openApp(id); };
 }
 
@@ -4661,11 +4661,12 @@ function appNeeds(app, needs) {
 }
 
 /** Share an app: to another of the person's assistants (sent from this page, like a space), or as a file for anyone. Never its data or keys. */
-function appShare(app, el) {
-  if (!el.hidden) { el.hidden = true; return; }
+function appShare(app, el, storeOnly = false) {
+  if (!el.hidden && el.dataset.storeOnly === String(storeOnly)) { el.hidden = true; return; }
+  el.dataset.storeOnly = String(storeOnly);
   const list = state.assistants || [], sp = state.space ?? '';
   const file = pkg => ({ blob: new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' }), name: (app.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app') + '.talixio-app.json' });
-  el.innerHTML = `<p class="small">${esc(t('Shares the app’s code and what it reads, never its data, its saved state or a key. The other side approves it before it gets any data, and installs the connectors it uses with its own account.'))}</p>
+  el.innerHTML = storeOnly ? `<div id="app-store-send"></div><p class="small" id="app-share-say" role="status"></p>` : `<p class="small">${esc(t('Shares the app’s code and what it reads, never its data, its saved state or a key. The other side approves it before it gets any data, and installs the connectors it uses with its own account.'))}</p>
     ${list.length ? `<form class="row wrap" id="app-send"><select id="app-send-to">${list.map(a => `<option value="${esc(a.id)}" class="no-i18n">${esc(a.name)}</option>`).join('')}</select>
       <button class="btn small">Copy to this assistant</button></form>` : ''}
     <p class="row wrap"><button type="button" class="btn small ghost" id="app-dl">Download it as a file</button>
@@ -4682,11 +4683,12 @@ function appShare(app, el) {
       ${it ? `<p class="small muted">${esc(storeStatus(it))}</p>` : `<p class="small muted">${esc(t('Everyone on this server can install it once the admin approves it.'))}</p>`}`;
     $('#app-store-form').onsubmit = async e => {
       e.preventDefault();
-      try { await post('api/store/submit?space=' + sp, { app: app.id, note: $('#app-store-note').value }); say(t('Sent: the admin reviews it, then it shows in everyone’s store.')); el.hidden = true; appShare(app, el); }
+      try { await post('api/store/submit?space=' + sp, { app: app.id, note: $('#app-store-note').value }); say(t('Sent: the admin reviews it, then it shows in everyone’s store.')); el.hidden = true; appShare(app, el, storeOnly); }
       catch (err) { say(err.message, true); }
     };
   }).catch(() => {});
   const say = (m, bad) => { const s = $('#app-share-say'); s.textContent = m; s.classList.toggle('bad', !!bad); };
+  if (storeOnly) return;
   $('#app-dl').onclick = async () => { try { saveBlob(file((await api(`api/apps/${app.id}/package?space=${sp}`)).package)); } catch (e) { say(e.message, true); } };
   if (list.length) $('#app-send').onsubmit = async e => {
     e.preventDefault();
