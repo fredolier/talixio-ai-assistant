@@ -3326,9 +3326,11 @@ async function storeConnectors() {
   if (!st?.available) { box.innerHTML = `<h4>${esc(t('From the store'))}</h4>${storeOff(st)}`; box.hidden = false; return; }
   const mine = (state.mcpData?.servers || []).map(x => x.name);
   const sent = st.outbox.filter(x => x.kind === 'connector');
+  const cats = [...new Set(st.connectors.map(c => c.category || 'Other'))]; // themes, in the FAQ's order
   box.innerHTML = `<h4>${esc(t('From the store'))}</h4>`
     + (st.connectors.length > 8 ? `<input type="search" id="store-conn-filter" placeholder="${esc(t('Search the store'))}">` : '')
-    + (st.connectors.length ? st.connectors.map(c => `<div class="row wrap store-item" data-id="${esc(c.id)}"><b class="no-i18n">${esc(c.name)}</b>
+    + (cats.length > 1 ? `<div class="tabs" role="tablist" id="store-conn-tabs">${cats.map(k => `<button type="button" class="tab" role="tab" data-cat="${esc(k)}">${esc(t(k))}</button>`).join('')}</div>` : '')
+    + (st.connectors.length ? st.connectors.map(c => `<div class="row wrap store-item" data-id="${esc(c.id)}" data-cat="${esc(c.category || 'Other')}"><b class="no-i18n">${esc(c.name)}</b>
         <span class="muted small no-i18n">${esc(c.description || c.github || c.url)}</span><span class="spacer"></span>
         ${c.installed ? `<span class="pill on">${esc(t('Installed'))}</span><button type="button" class="btn small ghost" data-conn-remove="${esc(c.installed)}">${esc(t('Uninstall'))}</button>`
           : `<button type="button" class="btn small" data-conn-install>${esc(t('Install'))}</button>`}</div>`).join('')
@@ -3347,7 +3349,17 @@ async function storeConnectors() {
     try { showConnectors(await post('api/mcp/remove', { server: b.dataset.connRemove })); } catch (e) { toast(e.message); }
   });
   const q = $('#store-conn-filter');
-  if (q) q.oninput = () => { const v = fold(q.value.trim()); box.querySelectorAll('.store-item').forEach(r => { r.hidden = !!v && !fold(r.textContent).includes(v); }); };
+  const tabs = $('#store-conn-tabs');
+  let cur; try { cur = localStorage.getItem('storeTab'); } catch {}
+  if (!cats.includes(cur)) cur = cats[0];
+  const show = () => {
+    const v = q ? fold(q.value.trim()) : '';
+    if (tabs) { tabs.hidden = !!v; tabs.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.cat === cur))); }
+    box.querySelectorAll('.store-item').forEach(r => { r.hidden = v ? !fold(r.textContent).includes(v) : !!tabs && r.dataset.cat !== cur; }); // a search looks in every theme
+  };
+  tabs?.querySelectorAll('.tab').forEach(b => b.onclick = () => { cur = b.dataset.cat; try { localStorage.setItem('storeTab', cur); } catch {} show(); });
+  if (q) q.oninput = show;
+  show();
   const f = $('#store-conn-send');
   if (f) f.onsubmit = async e => {
     e.preventDefault();

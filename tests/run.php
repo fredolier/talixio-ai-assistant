@@ -2174,6 +2174,10 @@ check('store: the FAQ connectors are added once (GitHub ones and online ones, wi
     && isset($byName['french_company_directory']['github']), json_encode(array_slice($fc, 0, 3)));
 $cat->remove($cid); foreach ($cat->read()['connectors'] as $x) $cat->remove($x['id']);
 check('store: at start, FAQ connectors the admin removed do not come back; the button brings them back', $cat->addFaq($faqMd, true) === 0 && $cat->addFaq($faqMd) === count($fc));
+foreach ($cat->read()['connectors'] as $x) $cat->remove($x['id']); $cat->add('connector', ['name' => 'fcd', 'github' => $byName['french_company_directory']['github']]); $cat->addFaq($faqMd);
+$fcd = array_column($cat->read()['connectors'], null, 'name')['fcd'] ?? [];
+check('store: FAQ connectors carry their theme, and one added before themes gets it', ($byName['brevo']['category'] ?? '') === 'Online services'
+    && ($byName['french_company_directory']['category'] ?? '') === 'French public data' && ($fcd['category'] ?? '') === 'French public data', json_encode($fcd));
 foreach ($cat->read()['connectors'] as $x) $cat->remove($x['id']); $cid = $cat->add('connector', ['name' => 'Bills Online', 'url' => 'https://mcp.example.com/mcp']);
 $cat->collect('bob', 'Bob', [['key' => 'app-9', 'kind' => 'app', 'status' => 'sent', 'package' => ['format' => 'talixio-app', 'name' => 'Bad', 'html' => '<script src="https://evil.example/x.js"></script>']],
     ['key' => '../evil', 'kind' => 'app', 'status' => 'sent'], ['key' => 'app-10', 'kind' => 'other', 'status' => 'sent']]);

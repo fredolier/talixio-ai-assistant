@@ -91,7 +91,8 @@ final class Catalog
         if ($name === '' || strlen($name) > 40) throw new \InvalidArgumentException('name: letters and digits, 40 at most');
         $c = Apps::cleanRecipe($r);
         if (!empty($c['manual'])) throw new \InvalidArgumentException('A connector of the store installs from a GitHub repository or an https address.');
-        return ['name' => $name] + $c;
+        $cat = trim(preg_replace('/\s+/', ' ', strip_tags((string)($r['category'] ?? ''))));
+        return ['name' => $name] + $c + ($cat !== '' ? ['category' => mb_substr($cat, 0, 60)] : []);
     }
 
     /**
@@ -175,7 +176,9 @@ final class Catalog
     public static function faqConnectors(string $md): array
     {
         $out = [];
-        foreach (preg_split('/^- /m', $md) as $item) {
+        foreach (preg_split('/^(?=## )/m', $md) as $sec) {
+        $cat = preg_match('/^## (.+)/', $sec, $h) ? trim(preg_replace('/\s*\(.*?\)/', '', $h[1])) : '';
+        foreach (preg_split('/^- /m', $sec) as $item) {
             $item = preg_split('/\n\s*\n|\n#/', $item)[0]; // up to the end of the list item
             if (!preg_match('/\[▶ Install\]\(\?connector=([^)\s]+)\)/u', $item, $m)) continue;
             parse_str('connector=' . $m[1], $q);
@@ -186,8 +189,9 @@ final class Catalog
             $desc = trim(preg_replace('/\s+/', ' ', str_replace(['**', '`', '*'], '', ltrim($desc, ': '))));
             $r = ['name' => $name, 'description' => rtrim(($label !== '' ? "$label: " : '') . $desc, ': '),
                 (preg_match('#^https://(www\.)?github\.com/#i', $src) ? 'github' : 'url') => $src,
-                'headers' => array_filter(explode(',', (string)($q['headers'] ?? '')))];
+                'headers' => array_filter(explode(',', (string)($q['headers'] ?? ''))), 'category' => $cat];
             try { $out[] = self::cleanConnector($r); } catch (\InvalidArgumentException) {}
+        }
         }
         return $out;
     }
@@ -199,16 +203,17 @@ final class Catalog
     public function addFaq(string $md, bool $once = false): int
     {
         $c = $this->read(); $s = $this->state(); $seen = array_flip((array)($s['faq'] ?? [])); $have = [];
-        foreach ($c['connectors'] as $x) $have[strtolower((string)($x['github'] ?? $x['url'] ?? ''))] = 1;
-        $n = 0;
+        foreach ($c['connectors'] as $i => $x) $have[strtolower((string)($x['github'] ?? $x['url'] ?? ''))] = $i;
+        $n = 0; $tagged = false;
         foreach (self::faqConnectors($md) as $r) {
             $k = strtolower((string)($r['github'] ?? $r['url'] ?? ''));
+            if (isset($have[$k]) && isset($r['category']) && !isset($c['connectors'][$have[$k]]['category'])) { $c['connectors'][$have[$k]]['category'] = $r['category']; $tagged = true; } // themes came later
             if (isset($have[$k]) || ($once && isset($seen[$k]))) { $seen[$k] = 1; continue; }
             $have[$k] = $seen[$k] = 1;
             $c['connectors'][] = ['id' => 'mcp-' . bin2hex(random_bytes(5)), 'version' => 1, 'at' => time()] + $r;
             $n++;
         }
-        if ($n) $this->saveCatalog($c);
+        if ($n || $tagged) $this->saveCatalog($c);
         if (count($seen) !== count((array)($s['faq'] ?? []))) { $s['faq'] = array_keys($seen); $this->saveState($s); }
         return $n;
     }

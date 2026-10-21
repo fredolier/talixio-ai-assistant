@@ -2714,5 +2714,20 @@ window.I18N.fr = {
 "The agent runs an older version than this page: run the update again from this page, or install-stack.sh on the server.": "L'agent tourne sur une version plus ancienne que cette page : relancez la mise à jour depuis cette page, ou install-stack.sh sur le serveur.",
 "Search the store": "Chercher dans le catalogue",
 "The store has no connector yet. The connectors listed in the FAQ arrive once the server is updated.": "Le catalogue n'a pas encore de connecteur. Les connecteurs listés dans la FAQ arrivent une fois le serveur mis à jour.",
-"Share one of your connectors with everyone on this server (the admin reviews it first):": "Partager un de vos connecteurs avec tout le monde sur ce serveur (l'administrateur le vérifie d'abord) :"
+"Share one of your connectors with everyone on this server (the admin reviews it first):": "Partager un de vos connecteurs avec tout le monde sur ce serveur (l'administrateur le vérifie d'abord) :",
+"Other": "Autres",
+"French public data": "Données publiques françaises",
+"Cities and regions": "Villes et régions",
+"Europe": "Europe",
+"Maps, journeys and transport": "Cartes, trajets et transports",
+"Weather": "Météo",
+"Energy and economy": "Énergie et économie",
+"News and RSS feeds": "Actualités et flux RSS",
+"Banking": "Banque",
+"Films, series, TV and cinema": "Films, séries, TV et cinéma",
+"Online services": "Services en ligne",
+"Hosting and cloud": "Hébergement et cloud",
+"Travel and outings": "Voyages et sorties",
+"Jobs": "Emploi",
+"Groceries and delivery": "Courses et livraison"
 };
