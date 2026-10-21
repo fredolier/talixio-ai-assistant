@@ -3,11 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
-## 0.28.76 (2026-10-21)
+## 0.28.77 (2026-10-21)
 
 - Apps: an open app now takes the whole page width and height (the page's introduction hides while an app is open).
 - Connectors → From the store: the connectors are grouped in tabs by theme (French public data, Online services, Banking…), taken from the FAQ list; a search looks in every theme.
 - Connectors → From the store: a line now explains the form below the list (share one of your connectors, the admin reviews it first), the empty-store message says the FAQ connectors arrive after the server update, and a search box appears when the store holds more than 8 connectors.
+
+## 0.28.76 (2026-10-21)
+
 - Store: the connectors listed in the FAQ are added to the catalog automatically when the agent starts or is updated
   (only once each: one the admin removes does not come back). The admin button still adds them all on demand.
 - Settings: every section has tabs, one per card, so you see one card at a time (all of them while searching). Each

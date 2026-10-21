@@ -31,7 +31,7 @@ goes through the Talixio page or the server, never straight from the app.**
   carries the code, what it reads and how to install its connectors, never data or keys; it waits for approval on
   the other side, which installs the connectors with its own account.
 
-### Done (0.28.76)
+### Done (0.28.76, 0.28.77)
 
 - The store fills itself with the FAQ's connectors at each agent start; tabs in every Settings section.
 
