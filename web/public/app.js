@@ -4573,7 +4573,7 @@ async function loadApps() {
   const sp = state.space ?? '';
   if (id) return openApp(id);
   appFrame = null;
-  $('#app-open').hidden = true; $('#app-open').innerHTML = '';
+  $('#app-open').hidden = true; $('#view-apps').classList.remove('app-wide'); $('#app-open').innerHTML = '';
   const { apps, examples } = await api('api/apps?space=' + sp);
   const box = $('#apps-list'); box.hidden = false;
   const have = new Set(apps.map(a => a.name));
@@ -4638,7 +4638,7 @@ const storeStatus = it => it.status === 'approved' ? t('In the store') + (it.rea
 async function openApp(id) {
   const sp = state.space ?? '';
   const { app, needs = [] } = await api(`api/apps/${id}?space=${sp}`);
-  $('#apps-list').hidden = true;
+  $('#apps-list').hidden = true; $('#view-apps').classList.add('app-wide'); // an open app takes the whole page
   const box = $('#app-open'); box.hidden = false;
   const pending = app.status === 'pending';
   const src = s => ({ web: () => s.url, file: () => t('library file #{a}', { a: s.file }), script: () => t('script {a}', { a: s.script }),

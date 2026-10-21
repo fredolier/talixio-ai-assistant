@@ -1350,3 +1350,6 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .set-tabs{margin:0 0 12px}
 .settings-page:not(.searching) .set-card.tab-off{display:none}
 .settings-page.searching .set-tabs{display:none}
+#view-apps.app-wide{padding:12px 16px 16px;gap:10px}
+#view-apps.app-wide>.page-head{display:none}
+#view-apps.app-wide .app-frame{height:calc(100vh - 110px)}
