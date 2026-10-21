@@ -105,6 +105,10 @@ only when `base.Dockerfile` changes. When a fix is urgent and the file did not c
 changed, so the next update rebuilds it, and the build stops if Debian's fixed PHP is missing. Without
 Docker (install.sh), run `apt update && apt upgrade` and restart `talixio-web`.
 
+To confirm a running server is not exposed, run `deploy/check-php2shell.sh` on it (or
+`docker exec talixio-<name> sh /opt/talixio/deploy/check-php2shell.sh`): it reports the PHP patch level
+and whether the mitigation is on.
+
 ## Addresses
 
 Settings → Addresses: `assistant.example.com/<person>/` (default, nothing to do in DNS) or
