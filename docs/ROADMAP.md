@@ -31,6 +31,10 @@ goes through the Talixio page or the server, never straight from the app.**
   carries the code, what it reads and how to install its connectors, never data or keys; it waits for approval on
   the other side, which installs the connectors with its own account.
 
+### Done (0.28.76)
+
+- The store fills itself with the FAQ's connectors at each agent start; tabs in Connected accounts.
+
 ### Done (0.28.75)
 
 - **FAQ connectors in the store** in one click, and Brevo, Jira and Confluence in the connector list.

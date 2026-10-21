@@ -852,6 +852,7 @@ final class Fleet
             [$code, $c] = $this->docker('GET', '/containers/' . self::PREFIX . 'agent/json');
             if ($code === 200 && is_array($c) && self::withStore($c) !== $c) { $this->replaceAgent($c, $c['Image']); return []; }
         }
+        try { $this->catalog()?->addFaq(self::faqList(), true); } catch (\Throwable $e) { error_log('store: ' . $e->getMessage()); } // new FAQ connectors, once each
         return $this->sync();
     }
 
@@ -917,8 +918,10 @@ final class Fleet
     /** The connectors listed in the FAQ, added to the store (those it does not have yet). */
     public function storeAddFaq(): int
     {
-        return $this->needCatalog()->addFaq((string)@file_get_contents(dirname(__DIR__) . '/docs/faq/English/Connectors/Connector list.md'));
+        return $this->needCatalog()->addFaq(self::faqList());
     }
+
+    private static function faqList(): string { return (string)@file_get_contents(dirname(__DIR__) . '/docs/faq/English/Connectors/Connector list.md'); }
 
     public function storeRemove(string $id): void { $this->needCatalog()->remove($id); }
 

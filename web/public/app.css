@@ -1347,3 +1347,6 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .app-frame{width:100%;height:calc(100vh - 200px);min-height:420px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
 #app-share-say.bad{color:var(--danger)} .app-review ul{margin:.4em 0;padding-left:1.2em} .app-review li{margin:.35em 0}
 .store-box{display:flex;flex-direction:column;gap:8px;margin-top:16px} .store-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px} .store-item .row{gap:8px;align-items:center} .store-box form{gap:8px}
+.acc-tabs{margin:0 0 12px}
+.settings-page:not(.searching) .set-card.tab-off{display:none}
+.settings-page.searching .acc-tabs{display:none}

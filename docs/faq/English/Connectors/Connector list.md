@@ -7,6 +7,9 @@ and prepares the installation. You stay in control at every step.
   Check what it found, fill in any settings, then click *Install*.
 - For an **online service**, Talixio asks you to confirm, then adds it and connects to it.
 
+On a shared server, these connectors are also in the store: in the assistant, open **Settings → Connected
+accounts → Connectors → From the store** and install them from there.
+
 You can also ask the assistant: "install the French company directory connector".
 
 *Last checked: 11 October 2026.* These are community projects unless stated otherwise.

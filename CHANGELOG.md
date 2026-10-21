@@ -3,6 +3,14 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.76 (2026-10-21)
+
+- Store: the connectors listed in the FAQ are added to the catalog automatically when the agent starts or is updated
+  (only once each: one the admin removes does not come back). The admin button still adds them all on demand.
+- Settings → Connected accounts: tabs, one per account or service, so you see one card at a time (all of them while
+  searching).
+- FAQ: the connector list says where to find these connectors in the assistant's store.
+
 ## 0.28.75 (2026-10-21)
 - Store: *Add the connectors listed in the FAQ* on the admin's store page puts every connector of the FAQ's connector
   list in the store at once (those it does not have yet). Remove the ones you do not want.

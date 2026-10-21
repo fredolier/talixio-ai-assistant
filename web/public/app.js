@@ -2890,8 +2890,28 @@ function renderGroups(groups) {
   }
   const page = $('#view-settings');
   page.oninput = page.onchange = e => { if (e.target.closest('.set-groups')) setDirty(); };
-  setDirty(); setAccounts(); showMsMail();
+  setDirty(); setAccounts(); showMsMail(); accountTabs();
   if ($('#set-search').value) setSearch();
+}
+/** Connected accounts: one tab per card, one card at a time (all of them while searching). */
+function accountTabs(pick) {
+  const sec = $('#view-settings .set-sec[data-sec="accounts"]');
+  const cards = [...sec.querySelectorAll('.set-groups > .set-card'), $('#mcp-card')];
+  let bar = sec.querySelector('.acc-tabs');
+  if (!bar) { bar = document.createElement('div'); bar.className = 'tabs acc-tabs'; bar.setAttribute('role', 'tablist'); sec.querySelector('header').after(bar); }
+  const key = c => c.dataset.id || c.id;
+  if (pick) try { localStorage.setItem('accTab', pick); } catch {}
+  let cur = pick; if (!cur) try { cur = localStorage.getItem('accTab'); } catch {}
+  if (!cards.some(c => key(c) === cur && !c.hidden)) cur = key(cards.find(c => !c.hidden) || cards[0]);
+  bar.innerHTML = '';
+  for (const c of cards) {
+    c.classList.toggle('tab-off', key(c) !== cur);
+    if (c.hidden) continue;
+    const h = c.querySelector('h4')?.cloneNode(true); h?.querySelectorAll('.badge, span').forEach(x => x.remove());
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(key(c) === cur)); b.textContent = (h?.textContent || key(c)).trim();
+    b.onclick = () => accountTabs(key(c)); bar.append(b);
+  }
 }
 /** "Connect with Microsoft" under a mail group's Sign-in choice: Outlook / Microsoft 365 mail needs OAuth (XOAUTH2), not a password. */
 function msMailRow(purpose) {
@@ -3329,7 +3349,7 @@ async function storeConnectors() {
     catch (err) { toast(err.message); }
   };
 }
-function showMcpCard() { location.hash = '#settings'; setTimeout(() => { showSection('accounts'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600); }
+function showMcpCard() { location.hash = '#settings'; setTimeout(() => { showSection('accounts'); accountTabs('mcp-card'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600); }
 document.addEventListener('click', e => {
   const a = e.target.closest('a.connector');
   if (!a || a.closest('[contenteditable=true]')) return;

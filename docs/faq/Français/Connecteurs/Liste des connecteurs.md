@@ -7,6 +7,9 @@ Talixio s'ouvre dans un nouvel onglet et prépare l'installation. Vous gardez la
   Vérifiez ce qu'elle a trouvé, remplissez les réglages éventuels, puis cliquez sur *Installer*.
 - Pour un **service en ligne**, Talixio vous demande de confirmer, puis l'ajoute et s'y connecte.
 
+Sur un serveur partagé, ces connecteurs sont aussi dans le catalogue : dans l'assistant, ouvrez **Réglages →
+Comptes connectés → Connecteurs → Depuis le catalogue** et installez-les de là.
+
 Vous pouvez aussi demander à l'assistant : « installe le connecteur Annuaire des entreprises ».
 
 *Dernière vérification : 11 octobre 2026.* Ce sont des projets de la communauté, sauf mention contraire.

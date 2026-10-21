@@ -192,20 +192,24 @@ final class Catalog
         return $out;
     }
 
-    /** Adds the FAQ's connectors the store does not have yet (same repository or address). @return int how many */
-    public function addFaq(string $md): int
+    /**
+     * Adds the FAQ's connectors the store does not have yet (same repository or address). $once (at each start of the
+     * agent): only those it never offered before, so one the admin removed does not come back. @return int how many
+     */
+    public function addFaq(string $md, bool $once = false): int
     {
-        $c = $this->read(); $have = [];
+        $c = $this->read(); $s = $this->state(); $seen = array_flip((array)($s['faq'] ?? [])); $have = [];
         foreach ($c['connectors'] as $x) $have[strtolower((string)($x['github'] ?? $x['url'] ?? ''))] = 1;
         $n = 0;
         foreach (self::faqConnectors($md) as $r) {
             $k = strtolower((string)($r['github'] ?? $r['url'] ?? ''));
-            if (isset($have[$k])) continue;
-            $have[$k] = 1;
+            if (isset($have[$k]) || ($once && isset($seen[$k]))) { $seen[$k] = 1; continue; }
+            $have[$k] = $seen[$k] = 1;
             $c['connectors'][] = ['id' => 'mcp-' . bin2hex(random_bytes(5)), 'version' => 1, 'at' => time()] + $r;
             $n++;
         }
         if ($n) $this->saveCatalog($c);
+        if (count($seen) !== count((array)($s['faq'] ?? []))) { $s['faq'] = array_keys($seen); $this->saveState($s); }
         return $n;
     }
 
