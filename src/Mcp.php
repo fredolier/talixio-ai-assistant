@@ -19,6 +19,9 @@ final class Mcp
 {
     public const PROTOCOL = '2025-06-18';
 
+    /** The last server's initialize answer (its name and its own description). */
+    private array $hello = [];
+
     public function __construct(private App $app) {}
 
     public function file(): string { return $this->app->cfg->dataDir . '/mcp.json'; }
@@ -71,7 +74,8 @@ final class Mcp
                     $tools = array_merge($tools, (array)($r['tools'] ?? []));
                     if (!($cursor = $r['nextCursor'] ?? null)) break;
                 }
-                $cache[$name] = ['tools' => array_values(array_filter($tools, fn($t) => is_array($t) && isset($t['name']))), 'error' => null, 'at' => time()];
+                $about = trim((string)($s['description'] ?? '')) ?: trim((string)($this->hello['instructions'] ?? '')) ?: trim((string)($this->hello['serverInfo']['description'] ?? ''));
+                $cache[$name] = ['tools' => array_values(array_filter($tools, fn($t) => is_array($t) && isset($t['name']))), 'error' => null, 'at' => time(), 'about' => mb_substr($about, 0, 1000)];
             } catch (McpAuthRequired $e) {
                 $cache[$name] = ['tools' => [], 'error' => $e->getMessage(), 'at' => time(), 'auth' => true, 'auth_meta' => $e->metadata];
             } catch (\Throwable $e) {
@@ -111,14 +115,26 @@ final class Mcp
         return !empty($t['annotations']['readOnlyHint']) && empty($t['annotations']['destructiveHint']);
     }
 
-    /** Mark a tool as only reading (runs without asking, offered to background jobs), or not any more. */
-    public function setReadOnly(string $server, string $tool, bool $on): void
+    /** What a tool seems to do, for Settings only: the connector's hints, else its name (get_…, delete_…). Never trusted to skip an approval. */
+    public static function guessKind(array $t): string
     {
+        if (!empty($t['annotations']['destructiveHint'])) return 'changes';
+        if (self::saysReadOnly($t)) return 'reads';
+        $n = strtolower(preg_replace('/([a-z])([A-Z])/', '$1_$2', (string)($t['name'] ?? '')));
+        if (preg_match('/^(get|list|search|read|fetch|find|query|describe|show|lookup|view|count|check|browse|download|export|head)(?![a-z])/', $n)) return 'reads';
+        if (preg_match('/^(delete|remove|create|update|post|put|patch|set|send|add|write|move|rename|upload|insert|edit|change|cancel|run|execute|start|stop|restart|reset|enable|disable|install|purge|drop|archive|close|merge|publish|reply|forward|invite|share|assign|approve|reject|import)(?![a-z])/', $n)) return 'changes';
+        return 'unknown';
+    }
+
+    /** Mark tools as only reading (run without asking, offered to background jobs), or not any more. */
+    public function setReadOnly(string $server, string|array $tool, bool $on): void
+    {
+        $tool = array_map('strval', (array)$tool);
         $d = json_decode($this->raw(), true);
         foreach ((array)($d['mcpServers'] ?? []) as $key => $s) {
             if (preg_replace('/[^a-z0-9]+/', '_', strtolower((string)$key)) !== $server || !is_array($s)) continue;
-            $reads = array_values(array_diff(array_map('strval', (array)($s['read_only'] ?? [])), [$tool]));
-            if ($on) $reads[] = $tool;
+            $reads = array_values(array_diff(array_map('strval', (array)($s['read_only'] ?? [])), $tool));
+            if ($on) $reads = array_merge($reads, $tool);
             if ($reads) $d['mcpServers'][$key]['read_only'] = $reads; else unset($d['mcpServers'][$key]['read_only']);
             $this->saveRaw(json_encode($d));
             return;
@@ -297,7 +313,7 @@ final class Mcp
                 }
             };
             $send(['id' => 1, 'method' => 'initialize', 'params' => self::initialize()]);
-            $wait(1);
+            $this->hello = $wait(1);
             $send(['method' => 'notifications/initialized']);
             $send(['id' => 2, 'method' => $method, 'params' => $params]);
             return $wait(2);
@@ -369,7 +385,7 @@ final class Mcp
             }
             throw new \RuntimeException('unexpected answer: ' . mb_substr(trim($body), 0, 300));
         };
-        $post(['id' => 1, 'method' => 'initialize', 'params' => self::initialize()]);
+        $this->hello = $post(['id' => 1, 'method' => 'initialize', 'params' => self::initialize()]);
         $post(['method' => 'notifications/initialized']);
         return $post(['id' => 2, 'method' => $method, 'params' => $params]);
     }

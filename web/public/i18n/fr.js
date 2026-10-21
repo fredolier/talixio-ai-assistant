@@ -2626,5 +2626,21 @@ window.I18N.fr = {
 "a search in the folder {a}": "une recherche dans le dossier {a}",
 "the tool {a} of the connector {b}": "l'outil {a} du connecteur {b}",
 "your calendar, {a} days ahead": "votre agenda, {a} jours à venir",
-"your contacts": "vos contacts"
+"your contacts": "vos contacts",
+"signed in": "connecté",
+"checked": "vérifié",
+"local": "local",
+"{n} tool(s)": "{n} outil(s)",
+"{n} run without asking": "{n} sans validation",
+"Seem to only read": "Semblent seulement lire",
+"Not sure what they do": "Rôle incertain",
+"Can change or send things": "Peuvent modifier ou envoyer",
+"Runs without asking": "S'exécute sans demander",
+"No description from the connector.": "Le connecteur ne donne pas de description.",
+"This connector is trusted: all its tools run without asking. Remove \"trust\": \"all\" in the configuration below to choose tool by tool.": "Ce connecteur est de confiance : tous ses outils s'exécutent sans demander. Retirez \"trust\": \"all\" dans la configuration ci-dessous pour choisir outil par outil.",
+"Ticked: runs without asking you, also in background tasks. Unticked: asks for your approval each time. Tick only tools that read; the groups are a guess from the connector, check the description.": "Coché : s'exécute sans vous demander, y compris dans les tâches de fond. Décoché : demande votre validation à chaque fois. Ne cochez que des outils qui lisent ; les groupes sont une estimation d'après le connecteur, vérifiez la description.",
+"Filter the tools": "Filtrer les outils",
+"No approval": "Sans validation",
+"What it does": "Ce qu'il fait",
+"{n} of {m} without asking": "{n} sur {m} sans validation"
 };

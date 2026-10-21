@@ -42,10 +42,14 @@ Pour un serveur qui n'est pas sur GitHub (ou dans un dépôt privé) :
 - **Mettre à jour** : importez le nouveau `.zip` et réinstallez sous le même nom. Un mot de passe laissé
   vide garde l'ancien.
 - **Supprimer** : retirez son entrée dans *Configuration*, puis *Enregistrer et connecter*.
-- Chaque outil **demande votre validation** tant que vous n'en décidez pas autrement : dans Réglages →
-  Connecteurs, cliquez un outil qui ne fait que lire (un `?` marque ceux que le connecteur dit en lecture
-  seule) pour qu'il tourne sans demander, et dans les tâches de fond ; ou ajoutez `"trust": "all"` à son
-  entrée pour faire confiance à tous ses outils.
+- Chaque outil **demande votre validation** tant que vous n'en décidez pas autrement. Dans Réglages →
+  Connecteurs, chaque connecteur est une carte à déplier : elle dit ce que fait le connecteur, puis donne
+  un tableau de ses outils avec ce que fait chacun. Les outils sont groupés selon ce qu'ils semblent
+  faire (*semblent seulement lire*, *incertain*, *peuvent modifier ou envoyer*) ; ce classement est
+  deviné d'après les indications du connecteur et le nom de l'outil, vérifiez la description. Cochez
+  un outil pour qu'il tourne sans demander, aussi dans les tâches de fond ; la case d'un groupe coche
+  tout le groupe (seulement les lignes que le filtre affiche). Chaque case est enregistrée aussitôt. Ou
+  ajoutez `"trust": "all"` à son entrée pour faire confiance à tous ses outils.
 - Les réglages (mot de passe compris) sont gardés dans `data/mcp.json`, dans votre assistant : ils font
   partie des sauvegardes et des transferts. Un compte dédié est préférable.
 - Le connecteur tourne dans un bac à sable quand bubblewrap est installé (toujours sous Docker) : il voit

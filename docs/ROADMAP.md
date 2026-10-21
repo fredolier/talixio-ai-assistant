@@ -21,7 +21,7 @@ goes through the Talixio page or the server, never straight from the app.**
 - **C. Built-in visual components**: figures with change and trend, stacked bars, pie and donut, gauge, ranked bars,
   progress, heatmap, timeline, badges, tabs. Written in-house, no third-party library.
 - **D. Export**: tables as CSV, charts as PNG, any data through `talixio.download()`, handed to the Talixio page.
-- **Connector (MCP) source**: read-only, only for tools you marked *only reading* in Settings → Connectors (the
+- **Connector (MCP) source**: read-only, only for tools you ticked *No approval* in Settings → Connectors (the
   server's own hint is not enough), tool and arguments fixed at approval, refused in Secret spaces, cached and
   limited per hour.
 

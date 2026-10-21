@@ -9,7 +9,7 @@ $tools = [
 $handle = function (array $m) use ($tools): ?array {
     if (!isset($m['id'])) return null;
     $r = match ($m['method']) {
-        'initialize' => ['protocolVersion' => $m['params']['protocolVersion'], 'capabilities' => ['tools' => new stdClass()], 'serverInfo' => ['name' => 'fake', 'version' => '1']],
+        'initialize' => ['protocolVersion' => $m['params']['protocolVersion'], 'capabilities' => ['tools' => new stdClass()], 'serverInfo' => ['name' => 'fake', 'version' => '1'], 'instructions' => 'Looks words up in a fake dictionary.'],
         'tools/list' => ['tools' => $tools],
         'tools/call' => match ($m['params']['name']) {
             'lookup' => $m['params']['arguments']['word'] === 'long' ? ['content' => [['type' => 'text', 'text' => '<!DOCTYPE html><html><body>' . str_repeat('<p>Long page.</p>', 3000) . '<p>THE END</p></body></html>']]] : ['content' => [['type' => 'text', 'text' => 'definition of ' . $m['params']['arguments']['word'] . ' (' . (getenv('FAKE_TOKEN') ?: ($_SERVER['HTTP_AUTHORIZATION'] ?? 'no token')) . ')']]],

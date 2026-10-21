@@ -3125,22 +3125,78 @@ function showConnectors(d) {
   const ok = d.servers.filter(x => !x.error).length;
   state.setAcc = { ...state.setAcc, mcp: ok }; setAccounts();
   $('#mcp-badge').textContent = d.servers.length ? `· ${ok}/${d.servers.length} connected` : '· none';
-  $('#mcp-servers').innerHTML = d.servers.map(x => `<div class="mcp-server ${x.error && x.auth !== 'needed' ? 'bad' : ''}">
-      <div class="row"><b>${esc(x.name)}</b><span class="chip">${x.kind}</span>${x.sandbox ? `<span class="chip">${esc(t('sandboxed'))}</span>` : ''}${x.trust === 'all' ? '<span class="chip">trusted: no approval</span>' : ''}
-        <span class="muted small">${x.error ? '' : x.tools.length + ' tool(s)'}${x.at ? ' · checked ' + fmtTime(x.at) : ''}</span>
-        ${x.auth === 'signed_in' ? `<span class="spacer"></span><span class="muted small">signed in ${esc(x.signed_in_at || '')}</span><button type="button" class="btn small ghost" data-signout="${esc(x.name)}">Sign out</button>`
-          : x.auth === 'needed' ? `<span class="spacer"></span><button type="button" class="btn small primary" data-signin="${esc(x.name)}">Sign in</button>` : ''}</div>
-      ${x.auth === 'needed' ? `<p class="small">This service asks you to sign in with your account: press <b>Sign in</b>, accept, and you come back here.</p>` : x.error ? `<p class="error small">${esc(x.error)}</p>` : `<div class="tools">${x.tools.map(tl => `<button type="button" class="chip" data-server="${esc(x.name)}" data-tool="${esc(tl.tool)}" data-on="${tl.read_only ? '' : '1'}"
-          title="${esc(tl.name + (tl.says_read_only ? ' · ' + t('the connector says it only reads') : ''))}">${esc(tl.title)}${tl.read_only || x.trust === 'all' ? '' : ' ✋'}${tl.says_read_only && !tl.read_only ? ' ?' : ''}</button>`).join('')}</div>`}
-      ${x.sandbox === false && x.kind === 'local' ? `<p class="muted small">${esc(t('Runs without the sandbox: it can read everything this server can.'))}</p>` : ''}
-    </div>`).join('') + (d.servers.some(x => x.tools.length) ? `<p class="muted small">${esc(t('✋ asks for your approval before running. Click a tool that only reads to let it run without asking (and in background tasks); ? marks the ones the connector says only read.'))}</p>` : '');
-  $('#mcp-servers').querySelectorAll('[data-tool]').forEach(b => b.onclick = () => mcpAction('api/mcp/read-only', { server: b.dataset.server, tool: b.dataset.tool, on: !!b.dataset.on }));
-  $('#mcp-servers').querySelectorAll('[data-signin]').forEach(b => b.onclick = async () => {
-    b.disabled = true; $('#mcp-state').textContent = 'Opening the sign-in page…';
+  state.mcpData = d;
+  $('#mcp-servers').innerHTML = d.servers.map(mcpCard).join('');
+  $('#mcp-servers').querySelectorAll('details.mcp-server').forEach(el => {
+    el.ontoggle = () => { const n = el.dataset.srv; el.open ? state.mcpOpen.add(n) : state.mcpOpen.delete(n); if (el.open && !el.querySelector('.mcp-body')) { el.insertAdjacentHTML('beforeend', mcpBody(d.servers.find(x => x.name === n))); mcpWire(el); } };
+    if (el.open) mcpWire(el);
+  });
+  $('#mcp-servers').querySelectorAll('[data-signin]').forEach(b => b.onclick = async ev => {
+    ev.preventDefault(); b.disabled = true; $('#mcp-state').textContent = 'Opening the sign-in page…';
     try { location.href = (await post('api/mcp/oauth/start', { server: b.dataset.signin })).url; } catch (e) { $('#mcp-state').textContent = e.message; b.disabled = false; }
   });
-  $('#mcp-servers').querySelectorAll('[data-signout]').forEach(b => b.onclick = () => mcpAction('api/mcp/oauth/forget', { server: b.dataset.signout }));
+  $('#mcp-servers').querySelectorAll('[data-signout]').forEach(b => b.onclick = ev => { ev.preventDefault(); mcpAction('api/mcp/oauth/forget', { server: b.dataset.signout }); });
   $('#shell-state').textContent = !d.shell.installed ? 'not installed (install.sh --with-shell).' : d.shell.mode === 'off' ? 'installed, off (Settings → Security → Sandboxed shell).' : d.shell.mode === 'ask' ? 'on, asks before each command.' : 'on, runs without asking.';
+}
+// A connector: folded to one line (what it is, how many tools, how many run without asking); open, its tools in a table by what they seem to do.
+state.mcpOpen = new Set(); state.mcpQ = {};
+const MCP_KINDS = [['reads', 'Seem to only read'], ['unknown', 'Not sure what they do'], ['changes', 'Can change or send things']];
+function mcpStat(x) {
+  const free = x.trust === 'all' ? x.tools.length : x.tools.filter(tl => tl.read_only).length;
+  return `<span class="muted small" data-stat>${x.error ? '' : esc(t('{n} tool(s)', { n: x.tools.length })) + (x.tools.length ? ' · ' + esc(t('{n} run without asking', { n: free })) : '')}${x.at ? ' · ' + esc(t('checked')) + ' ' + fmtTime(x.at) : ''}</span>`;
+}
+function mcpCard(x) {
+  const head = `<div class="row"><b>${esc(x.name)}</b><span class="chip">${esc(t(x.kind))}</span>${x.sandbox ? `<span class="chip">${esc(t('sandboxed'))}</span>` : ''}${x.trust === 'all' ? `<span class="chip">${esc(t('trusted: no approval'))}</span>` : ''}
+      ${mcpStat(x)}
+      ${x.auth === 'signed_in' ? `<span class="spacer"></span><span class="muted small">${esc(t('signed in'))} ${esc(x.signed_in_at || '')}</span><button type="button" class="btn small ghost" data-signout="${esc(x.name)}">${esc(t('Sign out'))}</button>`
+        : x.auth === 'needed' ? `<span class="spacer"></span><button type="button" class="btn small primary" data-signin="${esc(x.name)}">${esc(t('Sign in'))}</button>` : ''}</div>
+    ${x.about ? `<p class="small mcp-about">${esc(x.about)}</p>` : ''}`;
+  const foot = x.sandbox === false && x.kind === 'local' ? `<p class="muted small">${esc(t('Runs without the sandbox: it can read everything this server can.'))}</p>` : '';
+  if (!x.tools.length) return `<div class="mcp-server ${x.error && x.auth !== 'needed' ? 'bad' : ''}">${head}
+    ${x.auth === 'needed' ? `<p class="small">${t('This service asks you to sign in with your account: press <b>Sign in</b>, accept, and you come back here.')}</p>` : x.error ? `<p class="error small">${esc(x.error)}</p>` : ''}${foot}</div>`;
+  const open = state.mcpOpen.has(x.name);
+  return `<details class="mcp-server" data-srv="${esc(x.name)}" ${open ? 'open' : ''}><summary>${head}</summary>${foot}${open ? mcpBody(x) : ''}</details>`;
+}
+function mcpBody(x) {
+  const all = x.trust === 'all', q = state.mcpQ[x.name] || '';
+  const groups = MCP_KINDS.map(([k, label]) => {
+    const tl = x.tools.filter(tl => tl.kind === k);
+    if (!tl.length) return '';
+    return `<tbody data-kind="${k}"><tr class="mcp-group"><th colspan="3"><label><input type="checkbox" data-group="${k}" ${all ? 'checked disabled' : ''}> ${esc(t(label))} <span class="muted" data-count></span></label></th></tr>
+      ${tl.map(tl => `<tr data-q="${esc((tl.tool + ' ' + tl.title + ' ' + tl.description).toLowerCase())}">
+        <td><input type="checkbox" data-tool="${esc(tl.tool)}" ${all || tl.read_only ? 'checked' : ''} ${all ? 'disabled' : ''} aria-label="${esc(t('Runs without asking'))}"></td>
+        <td><b>${esc(tl.title)}</b>${tl.title !== tl.tool ? `<div class="muted small mono">${esc(tl.tool)}</div>` : ''}${tl.says_read_only ? `<div class="muted small">${esc(t('the connector says it only reads'))}</div>` : ''}</td>
+        <td class="small">${tl.description ? esc(tl.description) : `<span class="muted">${esc(t('No description from the connector.'))}</span>`}</td></tr>`).join('')}</tbody>`;
+  }).join('');
+  return `<div class="mcp-body">
+    <p class="muted small">${esc(all ? t('This connector is trusted: all its tools run without asking. Remove "trust": "all" in the configuration below to choose tool by tool.')
+      : t('Ticked: runs without asking you, also in background tasks. Unticked: asks for your approval each time. Tick only tools that read; the groups are a guess from the connector, check the description.'))}</p>
+    ${x.tools.length > 8 ? `<input type="search" class="mcp-q" placeholder="${esc(t('Filter the tools'))}" value="${esc(q)}">` : ''}
+    <div class="mcp-table"><table><colgroup><col class="c1"><col class="c2"><col></colgroup><thead><tr><th>${esc(t('No approval'))}</th><th>${esc(t('Tool'))}</th><th>${esc(t('What it does'))}</th></tr></thead>${groups}</table></div></div>`;
+}
+function mcpWire(el) {
+  const name = el.dataset.srv, x = state.mcpData.servers.find(s => s.name === name);
+  const shown = tr => !tr.hidden;
+  const counts = () => el.querySelectorAll('tbody[data-kind]').forEach(tb => {
+    const boxes = [...tb.querySelectorAll('[data-tool]')].filter(b => shown(b.closest('tr'))), on = boxes.filter(b => b.checked).length, g = tb.querySelector('[data-group]');
+    tb.querySelector('[data-count]').textContent = `(${t('{n} of {m} without asking', { n: on, m: boxes.length })})`;
+    tb.querySelector('.mcp-group').hidden = !boxes.length;
+    if (!g.disabled) { g.checked = boxes.length > 0 && on === boxes.length; g.indeterminate = on > 0 && on < boxes.length; }
+  });
+  const filter = () => { const q = (state.mcpQ[name] || '').toLowerCase().trim(); el.querySelectorAll('tr[data-q]').forEach(tr => tr.hidden = !!q && !tr.dataset.q.includes(q)); counts(); };
+  const save = async (tools, on) => {
+    try { const d = await post('api/mcp/read-only', { server: name, tools, on }); state.mcpData = d; Object.assign(x, d.servers.find(s => s.name === name) || {}); el.querySelector('[data-stat]').outerHTML = mcpStat(x); }
+    catch (e) { toast(e.message); loadConnectors(); }
+  };
+  el.oninput = el.onchange = e => e.stopPropagation(); // these switches save at once: not part of the Settings form
+  const q = el.querySelector('.mcp-q');
+  if (q) q.oninput = () => { state.mcpQ[name] = q.value; filter(); };
+  el.querySelectorAll('[data-tool]').forEach(b => b.onchange = () => { counts(); save([b.dataset.tool], b.checked); });
+  el.querySelectorAll('[data-group]').forEach(g => g.onchange = () => {
+    const boxes = [...g.closest('tbody').querySelectorAll('[data-tool]')].filter(b => shown(b.closest('tr')));
+    boxes.forEach(b => b.checked = g.checked); counts(); save(boxes.map(b => b.dataset.tool), g.checked);
+  });
+  filter();
 }
 async function loadConnectors() { try { showConnectors(await api('api/mcp')); } catch {} }
 const mcpAction = async (path, body) => {

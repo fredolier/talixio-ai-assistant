@@ -2091,6 +2091,14 @@ check('mcp: a tool the connector calls read-only still asks until the user says 
 $ma->approvals()->decide((int)$ma->approvals()->pending()[0]['id'], false);
 $ma->mcp()->setReadOnly('local_fake', 'lookup', true);
 check('mcp: marked read-only by the user, kept in mcp.json', (json_decode($ma->mcp()->raw(), true)['mcpServers']['Local Fake']['read_only'] ?? null) === ['lookup']);
+$ma->mcp()->setReadOnly('local_fake', ['lookup', 'create_note'], true); $ro = json_decode($ma->mcp()->raw(), true)['mcpServers']['Local Fake']['read_only'] ?? null;
+$ma->mcp()->setReadOnly('local_fake', ['create_note'], false);
+check('mcp: several tools marked at once, and unmarked', $ro === ['lookup', 'create_note'] && (json_decode($ma->mcp()->raw(), true)['mcpServers']['Local Fake']['read_only'] ?? null) === ['lookup'], json_encode($ro));
+check('mcp: the server\'s own description kept for Settings', ($ma->mcp()->cache()['local_fake']['about'] ?? '') === 'Looks words up in a fake dictionary.', json_encode($ma->mcp()->cache()['local_fake']['about'] ?? null));
+$gk = fn(array $t) => \Talixio\Mcp::guessKind($t);
+check('mcp: what a tool seems to do, from its hints then its name', $gk(['name' => 'GET_/v1/email/domain']) === 'reads' && $gk(['name' => 'DELETE_/v1/email/x']) === 'changes'
+    && $gk(['name' => 'listFiles']) === 'reads' && $gk(['name' => 'createIssue']) === 'changes' && $gk(['name' => 'getaway']) === 'unknown' && $gk(['name' => 'summarize']) === 'unknown'
+    && $gk(['name' => 'get_x', 'annotations' => ['destructiveHint' => true]]) === 'changes' && $gk(['name' => 'zap', 'annotations' => ['readOnlyHint' => true]]) === 'reads');
 $ma->tools->run('mcp_local_fake_lookup', ['word' => 'long']);
 $lp = $ma->approvals()->pending(); $lp = end($lp);
 $ma->approvals()->decide((int)$lp['id'], true);
@@ -2632,6 +2640,11 @@ check('mcp oauth: a server cannot send Talixio to another machine on the network
 check('mcp oauth: tokens kept privately', (fileperms("$ad/mcp-oauth.json") & 0777) === 0600);
 $mc = $aj('/api/mcp/read-only', ['server' => 'notes', 'tool' => 'search_notes', 'on' => true], 'd');
 check('mcp: a tool marked read-only from Settings', (array_values(array_filter($mc['servers'], fn($x) => $x['name'] === 'notes'))[0]['tools'][0]['read_only'] ?? null) === true, json_encode($mc));
+$nt = array_values(array_filter($mc['servers'], fn($x) => $x['name'] === 'notes'))[0]['tools'][0];
+check('mcp: Settings shows what a tool does and what it seems to be', isset($nt['description'], $nt['kind']) && $nt['kind'] === 'reads', json_encode($nt));
+$mc = $aj('/api/mcp/read-only', ['server' => 'notes', 'tools' => ['search_notes'], 'on' => false], 'd');
+check('mcp: tools unmarked in one go from Settings', (array_values(array_filter($mc['servers'], fn($x) => $x['name'] === 'notes'))[0]['tools'][0]['read_only'] ?? null) === false);
+$mc = $aj('/api/mcp/read-only', ['server' => 'notes', 'tool' => 'search_notes', 'on' => true], 'd');
 putenv("TALIXIO_DATA_DIR=$ad"); $oa = App::fromEnv(); putenv("TALIXIO_DATA_DIR=$dir");
 check('mcp oauth: tools called with the token', str_contains($oa->tools->run('mcp_notes_search_notes', ['q' => 'budget']), 'notes about budget (token at-1)'));
 $hop("http://127.0.0.1:$oport/revoke-all");

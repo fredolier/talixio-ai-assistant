@@ -42,9 +42,13 @@ For a server that is not on GitHub (or in a private repository):
 - **Update**: upload the new `.zip` and reinstall under the same name. A password left
   empty keeps the old one.
 - **Remove**: delete its entry in *Configuration*, then *Save and connect*.
-- Every tool **asks for your approval** until you say otherwise: in Settings → Connectors, click a
-  tool that only reads (a `?` marks those the connector says only read) to let it run without asking,
-  and in background tasks; or add `"trust": "all"` to its entry to trust all its tools.
+- Every tool **asks for your approval** until you say otherwise. In Settings → Connectors, each
+  connector is a card you unfold: it shows what the connector does, then a table of its tools with
+  what each one does. The tools are grouped by what they seem to do (*seem to only read*, *not sure*,
+  *can change or send things*); this guess comes from the connector's hints and the tool's name, so
+  check the description. Tick a tool to let it run without asking, also in background tasks; the
+  box on a group row ticks the whole group (only the rows the filter shows). Each tick is saved at
+  once. Or add `"trust": "all"` to its entry to trust all its tools.
 - The settings (password included) are kept in `data/mcp.json`, in your assistant: they are
   part of backups and transfers. A dedicated account is better.
 - The connector runs in a sandbox when bubblewrap is installed (always under Docker): it sees its own

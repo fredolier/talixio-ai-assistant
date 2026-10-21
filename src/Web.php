@@ -293,7 +293,7 @@ final class Web
             $path === '/api/connectors/install' && $m === 'GET' => (new ConnectorPackage($this->app))->status(),
             $path === '/api/mcp' && $m === 'GET' => $this->connectors(),
             $path === '/api/mcp' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcp()->saveRaw((string)($b['raw'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
-            $path === '/api/mcp/read-only' && $m === 'POST' => (function () use ($b) { $this->app->mcp()->setReadOnly((string)($b['server'] ?? ''), (string)($b['tool'] ?? ''), !empty($b['on'])); return $this->connectors(); })(),
+            $path === '/api/mcp/read-only' && $m === 'POST' => (function () use ($b) { $this->app->mcp()->setReadOnly((string)($b['server'] ?? ''), is_array($b['tools'] ?? null) ? array_slice($b['tools'], 0, 2000) : (string)($b['tool'] ?? ''), !empty($b['on'])); return $this->connectors(); })(),
             $path === '/api/mcp/oauth/start' && $m === 'POST' => (function () use ($b) {
                 $name = (string)($b['server'] ?? '');
                 $cfg = $this->app->mcp()->servers()[$name] ?? $this->fail(404, 'no such connector');
@@ -410,9 +410,10 @@ final class Web
             try { $box = isset($srv['url']) ? null : Mcp::sandboxed($srv); } catch (\RuntimeException) { $box = false; }
             $out[] = ['name' => $name, 'kind' => isset($srv['url']) ? 'remote' : 'local', 'trust' => ($srv['trust'] ?? '') === 'all' ? 'all' : 'read', 'sandbox' => $box,
                 'auth' => $signed ? 'signed_in' : (!empty($c['auth']) || !empty($srv['oauth']) ? 'needed' : null), 'signed_in_at' => $signed ? $this->app->mcpOAuth()->account($name) : null,
-                'error' => $c['error'] ?? ($c ? null : 'not checked yet'), 'at' => $c['at'] ?? null,
+                'error' => $c['error'] ?? ($c ? null : 'not checked yet'), 'at' => $c['at'] ?? null, 'about' => (string)($c['about'] ?? ''),
                 'tools' => array_map(fn($t) => ['name' => Mcp::toolName($name, (string)$t['name']), 'title' => (string)($t['title'] ?? $t['name']),
-                    'tool' => (string)$t['name'], 'read_only' => in_array((string)$t['name'], $reads, true), 'says_read_only' => Mcp::saysReadOnly($t)], $c['tools'] ?? [])];
+                    'tool' => (string)$t['name'], 'read_only' => in_array((string)$t['name'], $reads, true), 'says_read_only' => Mcp::saysReadOnly($t),
+                    'kind' => Mcp::guessKind($t), 'description' => mb_substr(trim((string)($t['description'] ?? '')), 0, 400)], $c['tools'] ?? [])];
         }
         return ['raw' => $mcp->raw(), 'servers' => $out, 'shell' => ['mode' => $this->app->cfg->shell, 'installed' => Shell::binary() !== null]];
     }
