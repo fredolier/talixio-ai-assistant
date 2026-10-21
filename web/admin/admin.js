@@ -373,6 +373,10 @@ $('#store-file').onchange = async e => {
   try { await api('api/store/add', { kind: 'app', data: JSON.parse(await f.text()) }); toast(t('Published.')); } catch (err) { toast(err instanceof SyntaxError ? t('This is not a Talixio app (.talixio-app.json).') : err.message); }
   loadStore();
 };
+$('#store-add-faq').onclick = async () => {
+  try { const r = await api('api/store/add-faq', {}); toast(t('{n} connector(s) added.', { n: r.added })); } catch (err) { toast(err.message); }
+  loadStore();
+};
 $('#store-add-conn').onclick = async () => {
   const v = await ask(t('Add a connector'), { html: `<p class="muted small">${esc(t('From a GitHub repository, or an https address (header names only: each person fills in their own values).'))}</p>`,
     fields: [{ id: 'name', label: t('Name') }, { id: 'description', label: t('What it does') }, { id: 'src', label: t('GitHub repository or https address'), placeholder: 'https://' }, { id: 'headers', label: t('Header names (comma-separated, optional)'), placeholder: 'Authorization' }], ok: t('Publish') });

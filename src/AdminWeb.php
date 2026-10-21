@@ -220,6 +220,12 @@ final class AdminWeb
             $this->json($r);
             return;
         }
+        if ($path === '/api/store/add-faq' && $m === 'POST') {
+            $r = $this->agent('POST', '/store/add-faq', [], 60);
+            $this->audit('store connectors added from the FAQ', ['count' => (int)($r['added'] ?? 0)]);
+            $this->json($r);
+            return;
+        }
         if ($path === '/api/store/remove' && $m === 'POST') {
             $r = $this->agent('POST', '/store/remove', ['id' => (string)($b['id'] ?? '')]);
             $this->audit('store item removed', ['id' => (string)($b['id'] ?? '')]);

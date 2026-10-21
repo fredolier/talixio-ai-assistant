@@ -24,6 +24,8 @@ connecteurs) avant que vous le **validiez** ou le **refusiez**, avec un mot facu
 catalogue avant votre accord. Vous pouvez aussi publier vous-même une app depuis un fichier `.talixio-app.json` ou un
 connecteur depuis son dépôt GitHub ou son adresse, et retirer n'importe quel élément : ceux qui l'ont installé gardent
 leur copie.
+**Ajouter les connecteurs listés dans la FAQ** remplit le catalogue avec toute la *Liste des connecteurs* en un clic
+(seulement ceux qui n'y sont pas encore) ; retirez ensuite ceux que vous ne voulez pas.
 
 ## Installer depuis le catalogue
 

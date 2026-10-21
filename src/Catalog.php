@@ -168,6 +168,47 @@ final class Catalog
         return $this->publish($kind, $kind === 'app' ? self::cleanApp($data) : self::cleanConnector($data));
     }
 
+    /**
+     * The connectors the FAQ lists ("▶ Install" links of "Connector list.md"), as store connectors: label, what it does,
+     * and its GitHub repository or address (with the header names each person fills in).
+     */
+    public static function faqConnectors(string $md): array
+    {
+        $out = [];
+        foreach (preg_split('/^- /m', $md) as $item) {
+            $item = preg_split('/\n\s*\n|\n#/', $item)[0]; // up to the end of the list item
+            if (!preg_match('/\[▶ Install\]\(\?connector=([^)\s]+)\)/u', $item, $m)) continue;
+            parse_str('connector=' . $m[1], $q);
+            $src = (string)$q['connector'];
+            $label = preg_match('/^\*\*(.+?)\*\*/', $item, $l) ? trim(preg_replace('/\s*\(.*?\)/', '', $l[1])) : '';
+            $name = (string)($q['name'] ?? '') ?: (string)@iconv('UTF-8', 'ASCII//TRANSLIT', $label !== '' ? $label : basename($src));
+            $desc = preg_replace('/\[▶ Install\]\([^)]*\)/u', '', substr($item, strlen($l[0] ?? '')));
+            $desc = trim(preg_replace('/\s+/', ' ', str_replace(['**', '`', '*'], '', ltrim($desc, ': '))));
+            $r = ['name' => $name, 'description' => rtrim(($label !== '' ? "$label: " : '') . $desc, ': '),
+                (preg_match('#^https://(www\.)?github\.com/#i', $src) ? 'github' : 'url') => $src,
+                'headers' => array_filter(explode(',', (string)($q['headers'] ?? '')))];
+            try { $out[] = self::cleanConnector($r); } catch (\InvalidArgumentException) {}
+        }
+        return $out;
+    }
+
+    /** Adds the FAQ's connectors the store does not have yet (same repository or address). @return int how many */
+    public function addFaq(string $md): int
+    {
+        $c = $this->read(); $have = [];
+        foreach ($c['connectors'] as $x) $have[strtolower((string)($x['github'] ?? $x['url'] ?? ''))] = 1;
+        $n = 0;
+        foreach (self::faqConnectors($md) as $r) {
+            $k = strtolower((string)($r['github'] ?? $r['url'] ?? ''));
+            if (isset($have[$k])) continue;
+            $have[$k] = 1;
+            $c['connectors'][] = ['id' => 'mcp-' . bin2hex(random_bytes(5)), 'version' => 1, 'at' => time()] + $r;
+            $n++;
+        }
+        if ($n) $this->saveCatalog($c);
+        return $n;
+    }
+
     /** Out of the store: assistants that installed it keep their copy. */
     public function remove(string $id): void
     {

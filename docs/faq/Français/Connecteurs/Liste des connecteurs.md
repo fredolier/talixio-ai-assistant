@@ -154,6 +154,18 @@ dans Réglages → Connecteurs. L'assistant n'a accès qu'à ce que vous autoris
   [▶ Installer](?connector=https://hf.co/mcp&name=huggingface)
 - **Wolfram (officiel)** : calculs, conversions, données scientifiques et pratiques.
   [▶ Installer](?connector=https://agenttools.wolfram.com/mcp&name=wolfram)
+- **Brevo (officiel)** : contacts et listes, campagnes e-mail et SMS, e-mails transactionnels, statistiques. Il faut
+  une clé MCP Brevo (Brevo → SMTP & API → Clés API, cocher *Serveur MCP*). Une fois ajouté, dans Réglages →
+  Connecteurs, mettez dans l'en-tête `Authorization` : `Bearer ` suivi de votre clé. La clé donne un accès complet à
+  votre compte Brevo.
+  [▶ Installer](?connector=https://mcp.brevo.com/v1/brevo/mcp&name=brevo&headers=Authorization)
+- **Jira et Confluence (Atlassian, officiel)** : chercher, lire, créer et modifier tickets et pages. Pour Atlassian
+  Cloud. Un administrateur de l'organisation doit d'abord autoriser les jetons d'API pour le serveur Rovo MCP
+  (Atlassian Administration). Créez ensuite un jeton d'API (id.atlassian.com → Sécurité → Jetons d'API), puis dans
+  Réglages → Connecteurs mettez dans l'en-tête `Authorization` : `Basic ` suivi de `votre-email:votre-jeton` encodé
+  en Base64 (sur un ordinateur : `echo -n 'vous@example.com:JETON' | base64`). L'assistant a les mêmes droits que
+  votre compte.
+  [▶ Installer](?connector=https://mcp.atlassian.com/v1/mcp&name=atlassian&headers=Authorization)
 - **Zapier et Make** : relient des milliers d'applications (Google Drive, Dropbox, Gmail, Trello…). L'adresse est
   propre à votre compte : créez votre serveur sur mcp.zapier.com (ou dans Make), copiez son adresse, puis
   ajoutez-la dans Réglages → Connecteurs. Pas de lien direct ici.
@@ -238,7 +250,7 @@ fonctionner à tout moment. Utilisez un compte dont vous acceptez le risque.
 - **Google Drive, Dropbox, Box** : Google a un serveur officiel pour Drive, mais il faut créer sa propre
   application dans Google Cloud. Celui de Dropbox n'accepte que certaines applications. Pour Box, il faut aussi
   créer une application. Le plus simple : passer par Zapier ou Make, ci-dessus.
-- **Asana, Jira et Confluence (Atlassian), Slack, ClickUp, Figma, GitHub** : leurs serveurs officiels
+- **Asana, Slack, ClickUp, Figma, GitHub** : leurs serveurs officiels
   demandent de créer d'abord une application chez eux (identifiant client). C'est possible avec Talixio
   (réglage `oauth` du connecteur), mais réservé aux habitués.
 - **LinkedIn** : pas de connecteur officiel. Ceux de la communauté lisent le site avec votre session, contre

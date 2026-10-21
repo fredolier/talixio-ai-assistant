@@ -154,6 +154,16 @@ The assistant only gets what you allow.
   [▶ Install](?connector=https://hf.co/mcp&name=huggingface)
 - **Wolfram (official)**: calculations, unit conversions, scientific and everyday data.
   [▶ Install](?connector=https://agenttools.wolfram.com/mcp&name=wolfram)
+- **Brevo (official)**: contacts and lists, email and SMS campaigns, transactional emails, statistics. Needs a Brevo
+  MCP key (Brevo → SMTP & API → API keys, tick *MCP server*). Once added, in Settings → Connectors set the
+  `Authorization` header to `Bearer ` followed by your key. The key gives full access to your Brevo account.
+  [▶ Install](?connector=https://mcp.brevo.com/v1/brevo/mcp&name=brevo&headers=Authorization)
+- **Jira and Confluence (Atlassian, official)**: search, read, create and update issues and pages. For Atlassian
+  Cloud. An organisation admin must first allow API tokens for the Rovo MCP server (Atlassian Administration). Then
+  create an API token (id.atlassian.com → Security → API tokens), and in Settings → Connectors set the
+  `Authorization` header to `Basic ` followed by `your-email:your-token` encoded in Base64 (on a computer:
+  `echo -n 'you@example.com:TOKEN' | base64`). The assistant gets the same rights as your account.
+  [▶ Install](?connector=https://mcp.atlassian.com/v1/mcp&name=atlassian&headers=Authorization)
 - **Zapier and Make**: connect thousands of apps (Google Drive, Dropbox, Gmail, Trello…). The address is
   specific to your account: create your server at mcp.zapier.com (or in Make), copy its address, then add it in
   Settings → Connectors. No direct link here.
@@ -234,7 +244,7 @@ time. Use an account you are willing to risk.
 - **Google Drive, Dropbox, Box**: Google has an official Drive server, but you must create your own app in
   Google Cloud. Dropbox's only accepts some apps. Box also needs an app. The simplest: go through Zapier or
   Make, above.
-- **Asana, Jira and Confluence (Atlassian), Slack, ClickUp, Figma, GitHub**: their official servers need you to
+- **Asana, Slack, ClickUp, Figma, GitHub**: their official servers need you to
   create an app there first (client id). Talixio can use it (the connector's `oauth` setting), but it is for
   experienced users.
 - **LinkedIn**: no official connector. The community ones read the site with your session, against its terms

@@ -2165,6 +2165,14 @@ $cid = $cat->add('connector', ['name' => 'Bills Online', 'url' => 'https://mcp.e
 $cv = $ast->view();
 check('store: a connector added by the admin keeps only valid header names, and is seen as installed by its address', $cv['connectors'][0]['id'] === $cid && $cv['connectors'][0]['headers'] === ['X-Api-Key']
     && $cv['connectors'][0]['installed'] === 'bills_online', json_encode($cv['connectors']));
+$faqMd = (string)file_get_contents(__DIR__ . '/../docs/faq/English/Connectors/Connector list.md');
+$fc = \Talixio\Catalog::faqConnectors($faqMd); $byName = array_column($fc, null, 'name');
+$added = $cat->addFaq($faqMd); $again = $cat->addFaq($faqMd);
+check('store: the FAQ connectors are added once (GitHub ones and online ones, with their header names)', count($fc) > 50 && $added === count($fc) && $again === 0
+    && ($byName['brevo']['url'] ?? '') === 'https://mcp.brevo.com/v1/brevo/mcp' && ($byName['brevo']['headers'] ?? []) === ['Authorization']
+    && ($byName['atlassian']['url'] ?? '') === 'https://mcp.atlassian.com/v1/mcp' && str_starts_with((string)($byName['notion']['description'] ?? ''), 'Notion: search')
+    && isset($byName['french_company_directory']['github']), json_encode(array_slice($fc, 0, 3)));
+$cat->remove($cid); foreach ($cat->read()['connectors'] as $x) $cat->remove($x['id']); $cid = $cat->add('connector', ['name' => 'Bills Online', 'url' => 'https://mcp.example.com/mcp']);
 $cat->collect('bob', 'Bob', [['key' => 'app-9', 'kind' => 'app', 'status' => 'sent', 'package' => ['format' => 'talixio-app', 'name' => 'Bad', 'html' => '<script src="https://evil.example/x.js"></script>']],
     ['key' => '../evil', 'kind' => 'app', 'status' => 'sent'], ['key' => 'app-10', 'kind' => 'other', 'status' => 'sent']]);
 $bad = array_values(array_filter($cat->submissions(), fn($x) => $x['instance'] === 'bob'));

@@ -914,6 +914,12 @@ final class Fleet
         return $this->needCatalog()->add($kind, $data);
     }
 
+    /** The connectors listed in the FAQ, added to the store (those it does not have yet). */
+    public function storeAddFaq(): int
+    {
+        return $this->needCatalog()->addFaq((string)@file_get_contents(dirname(__DIR__) . '/docs/faq/English/Connectors/Connector list.md'));
+    }
+
     public function storeRemove(string $id): void { $this->needCatalog()->remove($id); }
 
     /** A container like the inspected one $c (same settings, networks and aliases), from $image. */

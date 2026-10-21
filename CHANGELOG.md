@@ -3,6 +3,12 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.75 (2026-10-21)
+- Store: *Add the connectors listed in the FAQ* on the admin's store page puts every connector of the FAQ's connector
+  list in the store at once (those it does not have yet). Remove the ones you do not want.
+- Connector list: Brevo (official) and Jira and Confluence (Atlassian, official, with an API token). An "▶ Install"
+  link can now name the headers each person fills in.
+
 ## 0.28.74 (2026-10-21)
 
 - Fix: the store answered “not found” to every assistant (its web routes were not wired), so nothing could be submitted, listed or installed. A browser test now submits an app to the store.

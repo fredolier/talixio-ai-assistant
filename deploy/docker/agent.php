@@ -78,6 +78,7 @@ try {
         $path === '/store' && $method === 'GET' => $json($fleet->storeState()),
         $path === '/store/decide' && $method === 'POST' => $json(['submission' => $fleet->storeDecide((string)($b['id'] ?? ''), !empty($b['approve']), (string)($b['note'] ?? ''))]),
         $path === '/store/add' && $method === 'POST' => $json(['id' => $fleet->storeAdd((string)($b['kind'] ?? ''), (array)($b['data'] ?? []))]),
+        $path === '/store/add-faq' && $method === 'POST' => $json(['added' => $fleet->storeAddFaq()]),
         $path === '/store/remove' && $method === 'POST' => (function () use ($fleet, $b, $json) { $fleet->storeRemove((string)($b['id'] ?? '')); $json(['ok' => true]); })(),
         $path === '/update' && $method === 'POST' => $background('update', (string)($b['branch'] ?? (getenv('TALIXIO_GIT_BRANCH') ?: 'main'))),
         $path === '/rollback' && $method === 'POST' => $background('rollback'),

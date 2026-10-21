@@ -21,6 +21,8 @@ In **Store**, each item waiting for review shows who sent it, their note and eve
 connectors) before you **Approve** or **Reject** it, with an optional note sent back. Nothing reaches the store before
 you approve it. You can also publish an app from a `.talixio-app.json` file or a connector from its GitHub repository
 or address yourself, and remove anything: people who installed it keep their copy.
+**Add the connectors listed in the FAQ** fills the store with the whole *Connector list* in one click (only those
+not already there); then remove the ones you do not want.
 
 ## Installing from the store
 

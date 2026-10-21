@@ -3335,7 +3335,7 @@ document.addEventListener('click', e => {
   if (!a || a.closest('[contenteditable=true]')) return;
   e.preventDefault();
   const q = new URL(a.getAttribute('href'), location.href).searchParams;
-  installFromLink(q.get('connector'), q.get('name')).catch(err => toast(err.message));
+  installFromLink(q.get('connector'), q.get('name'), (q.get('headers') || '').split(',').filter(Boolean)).catch(err => toast(err.message));
 });
 $('#viewer-connector').onclick = () => connectorDialog(lib.file.id).catch(e => toast(e.message));
 $('#viewer-script').onclick = async () => {
@@ -5270,7 +5270,7 @@ async function handleLaunch() {
   }
   if (params.has('connector')) { // "▶ Install" in the FAQ connector list (opens here in a new tab)
     history.replaceState(null, '', location.pathname + location.hash);
-    installFromLink(params.get('connector'), params.get('name')).catch(e => toast(e.message));
+    installFromLink(params.get('connector'), params.get('name'), (params.get('headers') || '').split(',').filter(Boolean)).catch(e => toast(e.message));
   }
   if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', '/' + location.hash);
   if (token) {
