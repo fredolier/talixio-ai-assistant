@@ -50,9 +50,27 @@ An app is not free code. The assistant writes it with a small kit (charts, table
 A connector tool can do things (send, delete, pay), and what the connector says about itself is not trusted: an app
 may only call a tool *you* marked as only reading, with the arguments fixed when you approved it.
 
+## Sharing an app
+
+Open the app and choose **Share**:
+
+- **Copy to this assistant** sends a copy to another of your assistants (one you switch to from the menu). Your
+  page sends it straight there, like a moved space.
+- **Download it as a file** saves a `.talixio-app.json` file you can give to anyone. They add it with **Add an app
+  from a file** in their Apps.
+
+The copy carries the app's code and what it reads, never its data, its saved state, a key or a header value. A
+library file it reads is looked for at the same place in the other library; if it is not there, that source is left
+out and the app says so. An app of a Secret space cannot be shared.
+
+On the other side the app waits for approval, like one the assistant wrote. Its page lists what it needs before it
+works there: a connector to install (**Install it** uses the GitHub repository or the online address it came from;
+you then sign in or fill its settings with your own account) and the connector tools to let run without asking. A
+connector added from a `.zip` or a command must be installed by hand under the same name.
+
 ## What an app cannot do
 
 Write anything (tasks, files, mail, connectors), use the network freely, run code on the server, see your keys or
-settings, read another space, or be shared publicly. These are deliberate. The plans are in the project's roadmap.
+settings, read another space, or be shared live: a shared app is a copy that runs with the other side's own data. These are deliberate. The plans are in the project's roadmap.
 
 Web and connector data is cached (30 minutes by default) and limited to 60 fetches an hour per app. Delete an app from its page.

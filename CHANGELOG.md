@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.71 (2026-10-21)
+
+- Apps can be shared. **Share** on an app copies it to another of your assistants, or downloads it as a `.talixio-app.json` file that anyone adds with **Add an app from a file**. The copy carries the code, what the app reads and how to install the connectors it uses (GitHub repository or online address, with header names but never their values), never its data, saved state or keys. Library files are found again by their place. A copied app waits for approval, and its page lists what is missing: connectors to install with one button, tools to let run without asking. Apps of a Secret space stay where they are.
+
 ## 0.28.70 (2026-10-21)
 
 - Settings → Connectors: each connector is a card you unfold, with its own description (from the connector, or `description` in `mcp.json`). Inside, a table lists every tool with what it does, grouped by what it seems to do (only reads, not sure, can change or send things), with a filter for long lists and one box per group to let a whole group run without asking. The groups are only a guess shown to help; only your ticks skip the approval.

@@ -55,10 +55,30 @@ Un outil de connecteur peut agir (envoyer, supprimer, payer), et ce que le conne
 pour argent comptant : une app ne peut appeler qu'un outil que *vous* avez marqué lecture seule, avec les arguments
 fixés au moment de votre validation.
 
+## Partager une app
+
+Ouvrez l'app et choisissez **Partager** :
+
+- **Copier vers cet assistant** envoie une copie à un autre de vos assistants (ceux que vous rejoignez depuis le
+  menu). Votre page l'envoie directement, comme un espace déplacé.
+- **La télécharger en fichier** enregistre un fichier `.talixio-app.json` que vous pouvez donner à n'importe qui. Il
+  l'ajoute avec **Ajouter une app depuis un fichier** dans ses Apps.
+
+La copie contient le code de l'app et ce qu'elle lit, jamais ses données, son état enregistré, une clé ou la valeur
+d'un en-tête. Un fichier de la bibliothèque qu'elle lit est cherché au même endroit dans l'autre bibliothèque ;
+s'il n'y est pas, cette source est laissée de côté et l'app l'indique. Une app d'un espace Secret ne peut pas être
+partagée.
+
+De l'autre côté, l'app attend d'être approuvée, comme une app écrite par l'assistant. Sa page liste ce qu'il lui
+faut pour fonctionner : un connecteur à installer (**L'installer** utilise le dépôt GitHub ou l'adresse en ligne
+d'origine ; vous vous connectez ensuite ou remplissez ses réglages avec votre propre compte) et les outils du
+connecteur à laisser s'exécuter sans demander. Un connecteur ajouté depuis un `.zip` ou une commande s'installe à
+la main, sous le même nom.
+
 ## Ce qu'une app ne peut pas faire
 
 Écrire quoi que ce soit (tâches, fichiers, mails, connecteurs), utiliser le réseau librement, exécuter du code sur le
-serveur, voir vos clés ou réglages, lire un autre espace, ou être partagée publiquement. C'est voulu. Les évolutions
+serveur, voir vos clés ou réglages, lire un autre espace, ou être partagée en direct : une app partagée est une copie qui tourne avec les données de l'autre côté. C'est voulu. Les évolutions
 prévues sont dans la feuille de route du projet.
 
 Les données web et des connecteurs sont mises en cache (30 minutes par défaut) et limitées à 60 lectures par heure et par app.

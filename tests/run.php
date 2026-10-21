@@ -1523,6 +1523,9 @@ $und = array_values(array_filter($la->apps()->list(), fn($a) => $a['name'] === '
 check('apps: a folder source with _ in its name lists its subfolders', in_array('n.md', array_column($la->apps()->data((int)$und['id'], 'f'), 'name'), true));
 check('apps: a folder source does not match a look-alike folder', !in_array('a_b.md', array_column($la->apps()->data((int)$und['id'], 'f'), 'name'), true));
 foreach ($la->store->q("SELECT id FROM files WHERE name IN ('a_b.md', 'n.md')")->fetchAll(\PDO::FETCH_COLUMN) as $x) $lib->purgeFile((int)$x);
+$la->space = (int)$sec['id']; $sxe = ''; try { $la->apps()->export((int)$sa1['id']); } catch (\InvalidArgumentException $e) { $sxe = $e->getMessage(); }
+$la->space = 0;
+check('apps: an app of a Secret space is never packaged to leave', str_contains($sxe, 'Secret'), $sxe);
 check('apps: a Secret space app never reaches the web and is hidden from other spaces', $werr !== '' && !in_array('Vault chart', array_column($la->apps()->list(), 'name'), true), $werr);
 $r = $la->tools->run('app_save', ['name' => 'CAC', 'html' => '<div></div>', 'script' => "await talixio.data('q')", 'sources' => json_encode([['name' => 'q', 'type' => 'script', 'script' => 'nope-scraper.py']])]);
 check('apps: sources sent as JSON text are read; a missing script is refused, saying nothing was saved', str_contains($r, 'NOT saved') && str_contains($r, 'nope-scraper'), $r);
@@ -2094,6 +2097,33 @@ check('mcp: marked read-only by the user, kept in mcp.json', (json_decode($ma->m
 $ma->mcp()->setReadOnly('local_fake', ['lookup', 'create_note'], true); $ro = json_decode($ma->mcp()->raw(), true)['mcpServers']['Local Fake']['read_only'] ?? null;
 $ma->mcp()->setReadOnly('local_fake', ['create_note'], false);
 check('mcp: several tools marked at once, and unmarked', $ro === ['lookup', 'create_note'] && (json_decode($ma->mcp()->raw(), true)['mcpServers']['Local Fake']['read_only'] ?? null) === ['lookup'], json_encode($ro));
+// apps shared as a package: code, sources and how to install the connectors, never data, keys or header values
+$ma->space = 0;
+$shf = $ma->library()->saveNote('/Reports', 'share-me.md', "x\n");
+$sh = $ma->apps()->save(['name' => 'Cloud bills', 'icon' => '☁️', 'html' => '<div id="b"></div>', 'script' => "talixio.table('#b', await talixio.data('b'))", 'sources' => [
+    ['name' => 'b', 'type' => 'mcp', 'server' => 'local_fake', 'tool' => 'lookup'], ['name' => 'r', 'type' => 'mcp', 'server' => 'remote', 'tool' => 'create_note'],
+    ['name' => 'f', 'type' => 'file', 'file' => (int)$shf['id']]]], 'you');
+$ma->apps()->state($sh['id'], 'prefs', ['secret' => 'kept-here'], true);
+$pkg = $ma->apps()->export($sh['id']); $pj = json_encode($pkg);
+check('apps: a package carries the code, the file by its place and connector recipes, never a value or a key',
+    $pkg['format'] === 'talixio-app' && $pkg['sources'][2]['path'] === '/Reports/share-me.md' && ($pkg['connectors']['local_fake']['manual'] ?? false) === true
+    && !str_contains($pj, 'xyz') && !str_contains($pj, 'tok-1') && !str_contains($pj, 'kept-here'), $pj);
+$rcp = (new \ReflectionMethod(\Talixio\Apps::class, 'recipe'))->invoke(null, ['url' => 'https://u:p@mcp.example.com:8443/mcp?key=abc', 'headers' => ['X-Api-Key' => 'v'], 'description' => 'Bills']);
+$rgh = (new \ReflectionMethod(\Talixio\Apps::class, 'recipe'))->invoke(null, ['command' => 'node', 'source' => ['github' => 'https://github.com/acme/ovh-mcp']]);
+check('apps: a remote recipe keeps the address without its query or user, and only the header names', $rcp === ['description' => 'Bills', 'url' => 'https://mcp.example.com:8443/mcp', 'headers' => ['X-Api-Key']]
+    && $rgh === ['github' => 'https://github.com/acme/ovh-mcp'], json_encode([$rcp, $rgh]));
+$pkg['sources'][] = ['name' => 'g', 'type' => 'file', 'file' => 1, 'path' => '/Nowhere/gone.md'];
+$pkg['connectors']['ovh'] = ['github' => 'javascript:alert(1)']; $pkg['connectors']['remote'] = ['url' => 'https://mcp.example.com/mcp', 'headers' => ['X-Api-Key']];
+$im = $ma->apps()->import($pkg, 'Work');
+$nd = array_column($ma->apps()->needs($im), null, 'server');
+check('apps: an imported app waits for approval, finds the file by its place and leaves out a missing one', $im['status'] === 'pending' && $im['origin']['from'] === 'Work'
+    && count($im['sources']) === 3 && $im['sources'][2]['file'] === (int)$shf['id'] && $im['origin']['dropped'][0]['path'] === '/Nowhere/gone.md'
+    && $ma->apps()->state($im['id'], 'prefs') === null, json_encode($im));
+check('apps: a bad recipe becomes manual; what is missing is listed per connector', ($im['origin']['connectors']['ovh'] ?? null) === ['manual' => true]
+    && $nd['local_fake']['installed'] && $nd['local_fake']['tools'][0]['allowed'] && !$nd['remote']['tools'][0]['allowed'] && $nd['remote']['recipe']['headers'] === ['X-Api-Key'], json_encode($nd));
+$bf = ''; try { $ma->apps()->import(['format' => 'other']); } catch (\InvalidArgumentException $e) { $bf = $e->getMessage(); }
+check('apps: a file that is not an app package is refused', str_contains($bf, 'talixio-app'), $bf);
+$ma->apps()->delete($im['id']); $ma->apps()->delete($sh['id']); $ma->library()->purgeFile((int)$shf['id']);
 check('mcp: the server\'s own description kept for Settings', ($ma->mcp()->cache()['local_fake']['about'] ?? '') === 'Looks words up in a fake dictionary.', json_encode($ma->mcp()->cache()['local_fake']['about'] ?? null));
 $gk = fn(array $t) => \Talixio\Mcp::guessKind($t);
 check('mcp: what a tool seems to do, from its hints then its name', $gk(['name' => 'GET_/v1/email/domain']) === 'reads' && $gk(['name' => 'DELETE_/v1/email/x']) === 'changes'

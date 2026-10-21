@@ -24,6 +24,7 @@ final class Apps
                 sources TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'pending', created INTEGER NOT NULL, updated INTEGER NOT NULL, created_by TEXT NOT NULL DEFAULT 'assistant');
             CREATE TABLE IF NOT EXISTS app_state(app INTEGER NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(app, key));
             CREATE TABLE IF NOT EXISTS app_cache(app INTEGER NOT NULL, k TEXT NOT NULL, ts INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(app, k));");
+        $app->store->addColumn('apps', 'origin', "TEXT NOT NULL DEFAULT '{}'"); // where an installed app came from, and how to install its connectors
     }
 
     /** Apps the person may see from this space: a Secret space's apps only inside it. */
@@ -42,6 +43,7 @@ final class Apps
         if ($p->hidden($p->spaceLevel((int)$r['space']), (int)$r['space'])) return null;
         $r = self::cast($r);
         $r['sources'] = json_decode((string)$r['sources'], true) ?: [];
+        $r['origin'] = json_decode((string)($r['origin'] ?? ''), true) ?: [];
         return $r;
     }
 
@@ -67,7 +69,7 @@ final class Apps
         if ($id && !$old) throw new \InvalidArgumentException("no app #$id");
         $now = time();
         $row = [$name, mb_substr(trim((string)($a['description'] ?? '')), 0, 300), mb_substr(trim((string)($a['icon'] ?? '')), 0, 4), $html, $script,
-            json_encode($sources, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $by === 'assistant' ? 'pending' : 'approved', $now];
+            json_encode($sources, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $by === 'you' ? 'approved' : 'pending', $now];
         if ($old) {
             $this->app->store->q('UPDATE apps SET name=?, description=?, icon=?, html=?, script=?, sources=?, status=?, updated=? WHERE id=?', [...$row, $old['id']]);
             $this->app->store->q('DELETE FROM app_cache WHERE app = ?', [$old['id']]);
@@ -77,6 +79,95 @@ final class Apps
             $id = (int)$this->app->store->db->lastInsertId();
         }
         return $this->get($id);
+    }
+
+    public const PACKAGE = 'talixio-app';
+
+    /**
+     * An app as a package for another assistant (a linked one, or anyone, as a file): its code, what it reads, and how to
+     * install the connectors it uses, without their secrets (no token, header value, key or address query). Never its
+     * data, its saved state or its cache. An app of a Secret space stays here.
+     */
+    public function export(int $id): array
+    {
+        $a = $this->get($id) ?? throw new \InvalidArgumentException("no app #$id");
+        $p = $this->app->privacy();
+        if ($p->spaceLevel($a['space']) === 'secret') throw new \InvalidArgumentException('An app of a Secret space stays in this assistant.');
+        $servers = $this->app->mcp()->servers(); $conn = [];
+        $sources = array_map(function (array $s) use ($servers, &$conn, $p) {
+            if ($s['type'] === 'file' && ($f = $this->app->files()->get($s['file'])) && !$p->hidden($p->folderLevel((string)$f['folder']), null, (string)$f['folder']))
+                $s['path'] = rtrim((string)$f['folder'], '/') . '/' . $f['name']; // the same file, found by its place, in the other library
+            if ($s['type'] === 'mcp') {
+                if (isset($servers[$s['server']])) $conn[$s['server']] = self::recipe($servers[$s['server']]);
+                elseif (isset($a['origin']['connectors'][$s['server']])) $conn[$s['server']] = $a['origin']['connectors'][$s['server']]; // passed on as received
+            }
+            return $s;
+        }, $a['sources']);
+        return ['format' => self::PACKAGE, 'version' => 1, 'name' => $a['name'], 'description' => $a['description'], 'icon' => $a['icon'],
+            'html' => $a['html'], 'script' => $a['script'], 'sources' => $sources, 'connectors' => $conn];
+    }
+
+    /** How to install a connector elsewhere: its GitHub repository, or its address (no query, no user) and the names of the headers to fill. */
+    private static function recipe(array $s): array
+    {
+        $r = array_filter(['description' => mb_substr(trim((string)($s['description'] ?? '')), 0, 300)]);
+        if ($gh = (string)($s['source']['github'] ?? '')) return $r + ['github' => $gh];
+        $u = parse_url((string)($s['url'] ?? ''));
+        if (($u['scheme'] ?? '') === 'https' && ($u['host'] ?? '') !== '')
+            return $r + ['url' => 'https://' . $u['host'] . (isset($u['port']) ? ':' . $u['port'] : '') . ($u['path'] ?? '')]
+                + (!empty($s['headers']) ? ['headers' => array_values(array_map('strval', array_keys((array)$s['headers'])))] : []);
+        return $r + ['manual' => true]; // a local one from a .zip or a command: set up by hand there
+    }
+
+    /**
+     * Installs a package (a file, or sent by a linked assistant) in this space. It always waits for approval, like an app
+     * the assistant wrote. A library file it read is looked for at the same place here; not found, that source is left out.
+     * @return array the app
+     */
+    public function import(array $pkg, string $from = ''): array
+    {
+        if (($pkg['format'] ?? '') !== self::PACKAGE) throw new \InvalidArgumentException('This is not a Talixio app (.talixio-app.json).');
+        $dropped = []; $sources = [];
+        foreach (array_slice((array)($pkg['sources'] ?? []), 0, 10) as $s) {
+            $s = (array)$s;
+            if (($s['type'] ?? '') === 'file') {
+                $path = (string)($s['path'] ?? '');
+                $f = $path !== '' ? $this->app->store->q('SELECT id FROM files WHERE folder = ? AND name = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1',
+                    [Library::normalize(dirname($path)), basename($path)])->fetch() : null;
+                if (!$f) { $dropped[] = ['name' => (string)($s['name'] ?? ''), 'path' => $path]; continue; }
+                $s['file'] = (int)$f['id'];
+            }
+            unset($s['path']);
+            $sources[] = $s;
+        }
+        $conn = [];
+        foreach ((array)($pkg['connectors'] ?? []) as $name => $r) {
+            $name = preg_replace('/[^a-z0-9]+/', '_', strtolower((string)$name)); $r = (array)$r;
+            if ($name === '') continue;
+            $c = array_filter(['description' => mb_substr((string)($r['description'] ?? ''), 0, 300)]);
+            if (preg_match('#^https://(www\.)?github\.com/[\w.\-/]+$#i', (string)($r['github'] ?? ''))) $c['github'] = (string)$r['github'];
+            elseif (preg_match('#^https://[^\s/?\#@]+(/[^\s?\#]*)?$#i', (string)($r['url'] ?? ''))) $c += ['url' => (string)$r['url'], 'headers' => array_slice(array_map('strval', (array)($r['headers'] ?? [])), 0, 10)];
+            else $c['manual'] = true;
+            $conn[$name] = $c;
+        }
+        $a = $this->save(['name' => $pkg['name'] ?? '', 'description' => $pkg['description'] ?? '', 'icon' => $pkg['icon'] ?? '',
+            'html' => $pkg['html'] ?? '', 'script' => $pkg['script'] ?? '', 'sources' => $sources], 'import');
+        $origin = ['from' => mb_substr($from, 0, 80), 'connectors' => $conn, 'dropped' => $dropped, 'at' => time()];
+        $this->app->store->q('UPDATE apps SET origin = ? WHERE id = ?', [json_encode($origin, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $a['id']]);
+        return $this->get($a['id']);
+    }
+
+    /** What the app needs here: each connector it reads (there or not, how to install it) and whether its tools run without asking. */
+    public function needs(array $a): array
+    {
+        $servers = $this->app->mcp()->servers(); $out = [];
+        foreach ($a['sources'] as $s) {
+            if ($s['type'] !== 'mcp') continue;
+            $srv = $servers[$s['server']] ?? null;
+            $out[$s['server']] ??= ['server' => $s['server'], 'installed' => $srv !== null, 'recipe' => $a['origin']['connectors'][$s['server']] ?? null, 'tools' => []];
+            $out[$s['server']]['tools'][$s['tool']] = ['tool' => $s['tool'], 'allowed' => $srv !== null && in_array($s['tool'], array_map('strval', (array)($srv['read_only'] ?? [])), true)];
+        }
+        return array_values(array_map(fn($n) => ['tools' => array_values($n['tools'])] + $n, $out));
     }
 
     public function approve(int $id): void

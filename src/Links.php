@@ -44,10 +44,10 @@ final class Links
     }
 
     /** Where (and with what) the browser hands $to a space moved from here: one use, ten minutes (a large package takes time). */
-    public function importTicket(string $to): array
+    public function importTicket(string $to, string $what = 'space'): array
     {
-        [$url, $t] = $this->sign($to, 'import', self::IMPORT_TTL);
-        return ['url' => $url . '/api/spaces/receive', 't' => $t, 'name' => (string)(current(array_filter(self::list(), fn($x) => $x['id'] === $to))['name'] ?? $to)];
+        [$url, $t] = $this->sign($to, $what === 'app' ? 'app' : 'import', self::IMPORT_TTL);
+        return ['url' => $url . ($what === 'app' ? '/api/apps/receive' : '/api/spaces/receive'), 't' => $t, 'name' => (string)(current(array_filter(self::list(), fn($x) => $x['id'] === $to))['name'] ?? $to)];
     }
 
     /** The web origins of the linked assistants (a moved space is sent to them from this page). */
@@ -74,7 +74,7 @@ final class Links
         if ($key === '' || self::self() === '' || !preg_match('/^([A-Za-z0-9_-]{20,400})\.([A-Za-z0-9_-]{43})$/', $ticket, $m)) return null;
         if (!hash_equals(self::b64(hash_hmac('sha256', $m[1], $key, true)), $m[2])) return null;
         $p = json_decode((string)base64_decode(strtr($m[1], '-_', '+/')), true);
-        $ttl = $purpose === 'import' ? self::IMPORT_TTL : self::TTL;
+        $ttl = $purpose === '' ? self::TTL : self::IMPORT_TTL;
         if (!is_array($p) || ($p['t'] ?? '') !== self::self() || ($p['p'] ?? '') !== $purpose || !is_int($p['e'] ?? null) || $p['e'] < time() || $p['e'] > time() + $ttl + 5) return null;
         $from = (string)($p['f'] ?? '');
         if (!in_array($from, array_column(self::all(), 'id'), true)) return null;

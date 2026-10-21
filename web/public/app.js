@@ -3208,6 +3208,7 @@ $('#mcp-save').onclick = () => mcpAction('api/mcp', { raw: $('#mcp-raw').value }
 
 /** A connector from a .zip in the library: pick it, fill in what it reads (address, account…), install. */
 async function connectorDialog(fileId) {
+  const preset = window.connName || ''; window.connName = '';
   const d = $('#conn-dialog'), state = $('#conn-state');
   state.textContent = ''; $('#conn-go').disabled = false;
   const fill = async () => {
@@ -3224,7 +3225,7 @@ async function connectorDialog(fileId) {
     $('#conn-info').textContent = t('Reading the package…'); $('#conn-env').innerHTML = '';
     try {
       info = await api('api/connectors/inspect?file=' + $('#conn-file').value);
-      $('#conn-name').value = info.name;
+      $('#conn-name').value = preset || info.name;
       $('#conn-info').textContent = info.entry
         ? t('Starts with {cmd} {entry}', { cmd: info.runtime === 'python' ? 'python3' : 'node', entry: info.entry }) + (info.deps ? ' · ' + t('its dependencies will be installed') : '') + (info.installed ? ' · ' + t('already installed: this replaces it') : '')
         : info.build ? t('Will be built (npm run build) before it starts.') : t('No server file found in this package.');
@@ -3273,7 +3274,7 @@ $('#conn-install').onclick = () => connectorDialog().catch(e => toast(e.message)
  * "▶ Install" in the connector list (FAQ, or an answer): ?connector=<address>&name=<name>. A GitHub address
  * opens the install dialog and fetches it (the user then clicks Install); an online server is added after a confirmation.
  */
-async function installFromLink(src, name) {
+async function installFromLink(src, name, headers) {
   if (!/^https:\/\/[^\s/]+\.[^\s/]+/i.test(src || '')) { toast(t('Not a connector address: {src}', { src: src || '' })); return; }
   if (/^https:\/\/(www\.)?github\.com\//i.test(src)) {
     await connectorDialog();
@@ -3285,7 +3286,7 @@ async function installFromLink(src, name) {
   if (Object.values(d.mcpServers).some(x => x && x.url === src)) { toast(t('This connector is already there.')); showMcpCard(); return; }
   if (!confirm(t('Add the online connector “{name}” ({url})? Talixio will connect to it and list its tools.', { name, url: src }))) return;
   for (let i = 2, base = name; d.mcpServers[name]; i++) name = base + '-' + i;
-  d.mcpServers[name] = { url: src };
+  d.mcpServers[name] = { url: src, ...(headers?.length ? { headers: Object.fromEntries(headers.map(h => [h, ''])) } : {}) };
   toast(t('Connecting to {name}…', { name }));
   const r = await post('api/mcp', { raw: JSON.stringify(d, null, 2) });
   showConnectors(r);
@@ -4512,7 +4513,13 @@ async function loadApps() {
       <span class="small muted no-i18n">${esc(spaceOf(a.space))}${a.status === 'pending' ? ` · <span class="app-pending">${esc(t('Waiting for approval'))}</span>` : ''}</span></a>`).join('')}</div>`
     : `<div class="empty"><p>No apps yet. Ask the assistant: “With what you know about me, could you suggest several apps you could build and add to the Apps menu?”</p></div>`)
     + (ex.length ? `<h3 class="apps-ex-title">Examples</h3><div class="row wrap">${ex.map(e => `<button type="button" class="btn ghost" data-ex="${esc(e.key)}" title="${esc(e.description)}">${esc(e.icon)} ${esc(e.name)}</button>`).join('')}</div>` : '')
-    + `<p class="row wrap"><button type="button" class="btn small" id="apps-ask">Ask the assistant for app ideas</button></p>`;
+    + `<p class="row wrap"><button type="button" class="btn small" id="apps-ask">Ask the assistant for app ideas</button>
+      <label class="btn small ghost">Add an app from a file<input type="file" id="apps-import" accept=".json,application/json" hidden></label></p>`;
+  $('#apps-import').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { const { app } = await post('api/apps/import?space=' + sp, JSON.parse(await f.text())); location.hash = '#apps/' + app.id; }
+    catch (err) { toast(err instanceof SyntaxError ? t('This is not a Talixio app (.talixio-app.json).') : err.message); }
+  };
   box.querySelectorAll('[data-ex]').forEach(b => b.onclick = async () => {
     const { app } = await post('api/apps/example?space=' + sp, { key: b.dataset.ex }).catch(e => (toast(e.message), {}));
     if (app) location.hash = '#apps/' + app.id;
@@ -4522,7 +4529,7 @@ async function loadApps() {
 
 async function openApp(id) {
   const sp = state.space ?? '';
-  const { app } = await api(`api/apps/${id}?space=${sp}`);
+  const { app, needs = [] } = await api(`api/apps/${id}?space=${sp}`);
   $('#apps-list').hidden = true;
   const box = $('#app-open'); box.hidden = false;
   const pending = app.status === 'pending';
@@ -4532,8 +4539,11 @@ async function openApp(id) {
     contacts: () => t('your contacts'), tasks: () => t('the tasks of this space') }[s.type] || (() => s.type))();
   box.innerHTML = `<div class="row wrap app-bar"><a class="btn small ghost" href="#apps">← Apps</a>
       <h3 class="no-i18n">${esc(app.icon || '🧩')} ${esc(app.name)}</h3><span class="grow"></span>
+      <button type="button" class="btn small ghost" id="app-share">Share</button>
       <button type="button" class="btn small ghost" id="app-edit">Change in the chat</button>
       <button type="button" class="btn small ghost danger" id="app-del">Delete</button></div>
+    <div class="card app-review" id="app-share-box" hidden></div>
+    ${appNeeds(app, needs)}
     ${pending ? `<div class="card app-review"><p><b>This app waits for your approval.</b> It gets no data until you approve it. It reads:</p>
       <ul>${(app.sources || []).map(s => `<li class="no-i18n"><code>${esc(s.name)}</code> — ${esc(src(s))}</li>`).join('') || `<li>${esc(t('no data source'))}</li>`}</ul>
       <details><summary>Show the code</summary><pre class="no-i18n">${esc(app.html)}</pre><pre class="no-i18n">${esc(app.script)}</pre></details>
@@ -4547,7 +4557,66 @@ async function openApp(id) {
     await post(`api/apps/${id}/delete?space=${sp}`).catch(e => toast(e.message));
     location.hash = '#apps';
   };
+  box.querySelectorAll('[data-install]').forEach(b => b.onclick = () => {
+    const n = needs.find(x => x.server === b.dataset.install), r = n.recipe || {};
+    if (r.github) window.connName = n.server;
+    installFromLink(r.github || r.url, n.server, r.headers).catch(e => toast(e.message));
+  });
+  box.querySelectorAll('[data-allow]').forEach(b => b.onclick = async () => {
+    const n = needs.find(x => x.server === b.dataset.allow);
+    try { await post('api/mcp/read-only', { server: n.server, tools: n.tools.map(x => x.tool), on: true }); openApp(id); } catch (e) { toast(e.message); }
+  });
+  $('#app-share').onclick = () => appShare(app, $('#app-share-box'));
   if (pending) $('#app-approve').onclick = async () => { await post(`api/apps/${id}/approve?space=${sp}`).catch(e => toast(e.message)); openApp(id); };
+}
+
+/** What an app reads through connectors and is missing here: the connector (installed from what the package says) or the tick on its tools. */
+function appNeeds(app, needs) {
+  const o = app.origin || {}, dropped = o.dropped || [];
+  const rows = needs.filter(n => !n.installed || n.tools.some(x => !x.allowed)).map(n => {
+    const r = n.recipe || {}, tools = n.tools.map(x => x.tool).join(', ');
+    if (n.installed) return `<li><span class="no-i18n"><b>${esc(n.server)}</b>: <code>${esc(tools)}</code></span> — ${esc(t('it reads with these tools; they must run without asking.'))}
+      <button type="button" class="btn small" data-allow="${esc(n.server)}">Let them run without asking</button></li>`;
+    return `<li><span class="no-i18n"><b>${esc(n.server)}</b>${r.description ? ' — ' + esc(r.description) : ''}</span> — ${esc(t('this connector is not installed here.'))}
+      ${r.github || r.url ? `<button type="button" class="btn small" data-install="${esc(n.server)}">Install it</button>
+        <span class="muted small">${esc(r.github ? t('from {a}', { a: r.github }) : t('at {a}; then sign in or fill its settings there', { a: r.url }))}${r.headers?.length ? ' (' + esc(r.headers.join(', ')) + ')' : ''}</span>`
+        : `<span class="muted small">${esc(t('Install it by hand in Settings → Connectors, under this name.'))}</span>`}</li>`;
+  });
+  if (!rows.length && !dropped.length && !o.from) return '';
+  return `<div class="card app-review">${o.from ? `<p class="muted small">${esc(t('Installed from {a}.', { a: o.from }))}</p>` : ''}
+    ${rows.length ? `<p><b>Before it works here</b></p><ul>${rows.join('')}</ul>` : ''}
+    ${dropped.length ? `<p class="small">${esc(t('Left out, not found in this library: {a}. Ask the assistant to point the app to another file.', { a: dropped.map(x => x.path || x.name).join(', ') }))}</p>` : ''}</div>`;
+}
+
+/** Share an app: to another of the person's assistants (sent from this page, like a space), or as a file for anyone. Never its data or keys. */
+function appShare(app, el) {
+  if (!el.hidden) { el.hidden = true; return; }
+  const list = state.assistants || [], sp = state.space ?? '';
+  const file = pkg => ({ blob: new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' }), name: (app.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app') + '.talixio-app.json' });
+  el.innerHTML = `<p class="small">${esc(t('Shares the app’s code and what it reads, never its data, its saved state or a key. The other side approves it before it gets any data, and installs the connectors it uses with its own account.'))}</p>
+    ${list.length ? `<form class="row wrap" id="app-send"><select id="app-send-to">${list.map(a => `<option value="${esc(a.id)}" class="no-i18n">${esc(a.name)}</option>`).join('')}</select>
+      <button class="btn small">Copy to this assistant</button></form>` : ''}
+    <p class="row wrap"><button type="button" class="btn small ghost" id="app-dl">Download it as a file</button>
+      <span class="muted small">${esc(t('To give it to anyone: they add it with “Add an app from a file” in their Apps.'))}</span></p>
+    <p class="small" id="app-share-say" role="status"></p>`;
+  el.hidden = false;
+  const say = (m, bad) => { const s = $('#app-share-say'); s.textContent = m; s.classList.toggle('bad', !!bad); };
+  $('#app-dl').onclick = async () => { try { saveBlob(file((await api(`api/apps/${app.id}/package?space=${sp}`)).package)); } catch (e) { say(e.message, true); } };
+  if (list.length) $('#app-send').onsubmit = async e => {
+    e.preventDefault();
+    const to = $('#app-send-to').value, name = list.find(a => a.id === to)?.name || to;
+    try {
+      say(t('Sending it to {name}…', { name }));
+      const tk = await post(`api/apps/${app.id}/send-ticket?space=${sp}`, { to });
+      let res;
+      try { res = await fetch(tk.url + '?t=' + encodeURIComponent(tk.t), { method: 'POST', headers: { 'X-Talixio': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(tk.package) }); }
+      catch { throw new Error(t('{name} could not be reached from this page. Download the file and add it there instead.', { name })); }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(t(data.error || `Request failed (${res.status})`));
+      el.querySelector('#app-share-say').innerHTML = esc(t('Copied to {name}. Open it there to approve it and install what it needs.', { name })) + ` <button type="button" class="btn small" id="app-sent-open">${esc(t('Open {name}', { name }))}</button>`;
+      $('#app-sent-open').onclick = () => openAssistant(to);
+    } catch (err) { say(err.message, true); }
+  };
 }
 
 window.addEventListener('message', async e => {

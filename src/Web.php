@@ -37,7 +37,8 @@ final class Web
             (new Transfer($this->app))->export((string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? '')), !empty($_GET['final']), (string)($_GET['to'] ?? ''));
             return;
         }
-        if ($path === '/api/spaces/receive') { $this->receiveSpace($method); return; } // a space moved from another assistant: its ticket, no session here
+        if ($path === '/api/spaces/receive') { $this->receiveSpace($method); return; }
+        if ($path === '/api/apps/receive') { $this->receiveApp($method); return; } // an app sent from the person's other assistant: its ticket, no session here // a space moved from another assistant: its ticket, no session here
         if ($path === '/api/google/callback' && $method === 'GET') { $this->googleCallback(); return; } // Google's redirect carries no session cookie (SameSite)
         if ($path === '/api/microsoft/callback' && $method === 'GET') { $this->microsoftCallback(); return; }
         if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
@@ -472,11 +473,16 @@ final class Web
             $e = Apps::EXAMPLES[(string)($b['key'] ?? '')] ?? $this->fail(404, 'no such example');
             return ['app' => $ap->save($e, 'you')];
         }
-        if (!preg_match('#^/api/apps/(\d+)(?:/(approve|delete|data|state))?$#', $path, $mm)) $this->fail(404, 'not found');
+        if ($path === '/api/apps/import' && $m === 'POST') {
+            try { return ['app' => $ap->import($b)]; } catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+        }
+        if (!preg_match('#^/api/apps/(\d+)(?:/(approve|delete|data|state|package|send-ticket))?$#', $path, $mm)) $this->fail(404, 'not found');
         $id = (int)$mm[1]; $op = $mm[2] ?? '';
         try {
             return match (true) {
-                $op === '' && $m === 'GET' => ['app' => $ap->get($id) ?? $this->fail(404, 'no such app')],
+                $op === '' && $m === 'GET' => (function () use ($ap, $id) { $a = $ap->get($id) ?? $this->fail(404, 'no such app'); return ['app' => $a, 'needs' => $ap->needs($a)]; })(),
+                $op === 'package' && $m === 'GET' => ['package' => $ap->export($id)],
+                $op === 'send-ticket' && $m === 'POST' => ['package' => $ap->export($id)] + $this->app->links()->importTicket((string)($b['to'] ?? ''), 'app'),
                 $op === 'approve' && $m === 'POST' => (function () use ($ap, $id) { $ap->approve($id); return ['app' => $ap->get($id)]; })(),
                 $op === 'delete' && $m === 'POST' => ['ok' => $ap->delete($id)],
                 $op === 'data' && $m === 'POST' => ['result' => $ap->data($id, (string)($b['name'] ?? ''), (array)($b['params'] ?? []))],
@@ -1430,6 +1436,30 @@ final class Web
             $from = $this->app->links()->verify((string)($_GET['t'] ?? ''), 'import');
             if ($from === null) $this->fail(403, 'This transfer has expired or was already used. Try again from the other assistant.');
             $this->json(['space' => $this->importSpace('app')]);
+        } catch (\InvalidArgumentException $e) {
+            $this->json(['error' => $e->getMessage()], 400);
+        } catch (\Throwable $e) {
+            $this->json(['error' => self::internalError($e)], 500);
+        }
+    }
+
+    /** POST /api/apps/receive?t=: the browser hands over an app (its package, as JSON) from a linked assistant. */
+    private function receiveApp(string $method): void
+    {
+        $origin = strtolower(rtrim((string)($_SERVER['HTTP_ORIGIN'] ?? ''), '/'));
+        if ($origin !== '' && in_array($origin, Links::origins(), true)) {
+            header("Access-Control-Allow-Origin: $origin"); header('Vary: Origin');
+            header('Access-Control-Allow-Methods: POST'); header('Access-Control-Allow-Headers: X-Talixio, Content-Type'); header('Access-Control-Max-Age: 600');
+        }
+        if ($method === 'OPTIONS') { http_response_code(204); return; }
+        ob_start();
+        try {
+            if ($method !== 'POST' || ($_SERVER['HTTP_X_TALIXIO'] ?? '') !== '1') $this->fail(405, 'not here');
+            $from = $this->app->links()->verify((string)($_GET['t'] ?? ''), 'app');
+            if ($from === null) $this->fail(403, 'This transfer has expired or was already used. Try again from the other assistant.');
+            $pkg = json_decode((string)file_get_contents('php://input', false, null, 0, 1_000_000), true);
+            $name = (string)(current(array_filter($this->app->links()->list(), fn($x) => $x['id'] === $from))['name'] ?? $from);
+            $this->json(['app' => $this->app->apps()->import(is_array($pkg) ? $pkg : [], $name)]);
         } catch (\InvalidArgumentException $e) {
             $this->json(['error' => $e->getMessage()], 400);
         } catch (\Throwable $e) {

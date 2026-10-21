@@ -1345,3 +1345,4 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .app-review{padding:12px 14px;margin-bottom:12px}
 .app-review pre{max-height:300px;overflow:auto;background:var(--sunk);padding:8px;border-radius:var(--r);font-size:.8rem;white-space:pre-wrap}
 .app-frame{width:100%;height:calc(100vh - 200px);min-height:420px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+#app-share-say.bad{color:var(--danger)} .app-review ul{margin:.4em 0;padding-left:1.2em} .app-review li{margin:.35em 0}

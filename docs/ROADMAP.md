@@ -25,6 +25,12 @@ goes through the Talixio page or the server, never straight from the app.**
   server's own hint is not enough), tool and arguments fixed at approval, refused in Secret spaces, cached and
   limited per hour.
 
+### Done (0.28.71)
+
+- **Sharing an app**: copy it to another of your assistants, or download it as a file anyone can add. The copy
+  carries the code, what it reads and how to install its connectors, never data or keys; it waits for approval on
+  the other side, which installs the connectors with its own account.
+
 ### Next
 
 - **E. Write actions with confirmation**: an app declares an action (add a task, save a file); each use asks you in
