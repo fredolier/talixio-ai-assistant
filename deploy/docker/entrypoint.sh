@@ -6,7 +6,7 @@ mkdir -p "$HOME" "$TALIXIO_DATA_DIR"
 cd "$TALIXIO_DATA_DIR"
 
 web() {
-  exec php -d variables_order=EGPCS -d upload_max_filesize=500M -d post_max_size=510M -d memory_limit=512M -d max_execution_time=0 \
+  exec php -d variables_order=EGPCS -d upload_max_filesize=500M -d post_max_size=510M -d memory_limit=512M -d session.upload_progress.enabled=0 -d max_execution_time=0 \
     -S "$TALIXIO_WEB_BIND" -t /opt/talixio/web/public /opt/talixio/web/router.php
 }
 worker() { exec php /opt/talixio/bin/talixio worker; }

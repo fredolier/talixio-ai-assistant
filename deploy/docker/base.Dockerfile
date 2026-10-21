@@ -44,6 +44,11 @@ RUN set -eux; \
     [ "$WITH_NODE" = 1 ] && pkgs="$pkgs nodejs npm"; \
     [ "$WITH_WHISPER" = 1 ] && pkgs="$pkgs libgomp1"; \
     apt-get update; apt-get install -y --no-install-recommends $pkgs; \
+    # PHP2Shell (CVE-2026-109618, CVE-2026-109619, 2026-10-21): refuse to build with a PHP older than the fix,
+    # and turn off the upload-progress handler (one of the two attack paths; Talixio does not use it)
+    v="$(dpkg-query -W -f '${Version}' php8.4-cli 2>/dev/null || true)"; [ -z "$v" ] || dpkg --compare-versions "$v" ge 8.4.27-1~deb13u1 || { echo "PHP $v has PHP2Shell: the security update is missing" >&2; exit 1; }; \
+    v="$(dpkg-query -W -f '${Version}' php8.2-cli 2>/dev/null || true)"; [ -z "$v" ] || dpkg --compare-versions "$v" ge 8.2.35-1~deb12u1 || { echo "PHP $v has PHP2Shell: the security update is missing" >&2; exit 1; }; \
+    for d in /etc/php/*/cli/conf.d; do echo 'session.upload_progress.enabled=0' > "$d/90-talixio-security.ini"; done; \
     if [ "$WITH_SIGNAL" = 1 ]; then \
       assets="$(curl -fsSL https://api.github.com/repos/AsamK/signal-cli/releases/latest | grep -oE '"browser_download_url": *"[^"]*\.tar\.gz"' | cut -d'"' -f4 || true)"; \
       native="$(echo "$assets" | grep -- '-Linux-native\.tar\.gz$' | head -1)"; java="$(echo "$assets" | grep -v -- '-Linux' | grep -E '/signal-cli-[0-9.]+\.tar\.gz$' | head -1)"; \

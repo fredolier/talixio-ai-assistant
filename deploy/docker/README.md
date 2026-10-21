@@ -99,6 +99,12 @@ then each assistant is moved to it one by one. If one doesn't start, it goes bac
 version and the update stops. **Back to the previous version** undoes the last update.
 Running `install-stack.sh` again from an up-to-date clone does the same from the command line.
 
+**Security updates of PHP and the system packages** come with the dependencies image, which is rebuilt
+only when `base.Dockerfile` changes. When a fix is urgent and the file did not change, run
+`install-stack.sh --rebuild-base`. For PHP2Shell (CVE-2026-109618, CVE-2026-109619, October 2026) the file
+changed, so the next update rebuilds it, and the build stops if Debian's fixed PHP is missing. Without
+Docker (install.sh), run `apt update && apt upgrade` and restart `talixio-web`.
+
 ## Addresses
 
 Settings → Addresses: `assistant.example.com/<person>/` (default, nothing to do in DNS) or

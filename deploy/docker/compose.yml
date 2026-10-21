@@ -42,7 +42,7 @@ services:
     image: talixio:current
     container_name: talixio-agent
     restart: unless-stopped
-    entrypoint: ["/usr/bin/tini", "--", "sh", "-c", "php /opt/talixio/deploy/docker/fleetctl.php init; exec php -S 0.0.0.0:8090 /opt/talixio/deploy/docker/agent.php"]
+    entrypoint: ["/usr/bin/tini", "--", "sh", "-c", "php /opt/talixio/deploy/docker/fleetctl.php init; exec php -d session.upload_progress.enabled=0 -S 0.0.0.0:8090 /opt/talixio/deploy/docker/agent.php"]
     group_add: ["${DOCKER_GID}"]          # access to the Docker socket
     environment:
       TALIXIO_AGENT_TOKEN: ${AGENT_TOKEN}
@@ -74,7 +74,7 @@ services:
     image: talixio:current
     container_name: talixio-admin
     restart: unless-stopped
-    entrypoint: ["/usr/bin/tini", "--", "sh", "-c", "php /opt/talixio/deploy/docker/admin.php; exec php -S 0.0.0.0:8080 /opt/talixio/deploy/docker/admin.php"]
+    entrypoint: ["/usr/bin/tini", "--", "sh", "-c", "php /opt/talixio/deploy/docker/admin.php; exec php -d session.upload_progress.enabled=0 -S 0.0.0.0:8080 /opt/talixio/deploy/docker/admin.php"]
     environment:
       TALIXIO_AGENT_URL: http://talixio-agent:8090
       TALIXIO_AGENT_TOKEN: ${AGENT_TOKEN}

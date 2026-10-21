@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.78 (2026-10-21)
+
+- Security, PHP2Shell (CVE-2026-109618, CVE-2026-109619, critical PHP flaws that let anyone run code on the server without logging in): the server's dependencies image is rebuilt at the next update with Debian's fixed PHP, and its build stops if that fix is missing. The PHP upload-progress handler (one of the two attack paths, not used by Talixio) is turned off everywhere. Without Docker, run `apt update && apt upgrade` and restart talixio-web.
+
 ## 0.28.77 (2026-10-21)
 
 - Apps: an open app now takes the whole page width and height (the page's introduction hides while an app is open).
