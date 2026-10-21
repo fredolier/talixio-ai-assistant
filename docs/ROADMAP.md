@@ -31,6 +31,12 @@ goes through the Talixio page or the server, never straight from the app.**
   carries the code, what it reads and how to install its connectors, never data or keys; it waits for approval on
   the other side, which installs the connectors with its own account.
 
+### Done (0.28.72)
+
+- **Store** (several people on one server): people send apps and connectors for review; the admin approves or
+  rejects them in the admin page's Store tab, or publishes some directly. Every assistant installs, updates and
+  uninstalls them from Apps and Settings → Connectors; an installed app still waits for its owner's approval.
+
 ### Next
 
 - **E. Write actions with confirmation**: an app declares an action (add a task, save a file); each use asks you in

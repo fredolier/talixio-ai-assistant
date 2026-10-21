@@ -69,3 +69,6 @@ Pour un serveur qui n'est pas sur GitHub (ou dans un dépôt privé) :
   voulez. Le fil n'en montre que le début, replié.
 
 Exemples pas à pas : *Connecteurs / anki.talixio.com* (un connecteur à installer) et *Connecteurs / Home Assistant* (un service distant, par son adresse).
+
+Sur un serveur partagé par plusieurs personnes, les connecteurs validés par l'administrateur sont dans Réglages →
+Connecteurs → *Depuis le catalogue*, à installer d'un bouton (voir *Administration / Le catalogue*).

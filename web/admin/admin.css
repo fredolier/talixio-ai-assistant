@@ -65,3 +65,8 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0} pre.out{background
 .pill.muted{color:var(--muted)}
 .latest{margin:6px 0 12px} .latest .new{font-weight:600;color:var(--accent)} .latest details{margin-top:8px} .latest pre{max-height:320px;overflow:auto;white-space:pre-wrap}
 .btn.pulse{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 35%,transparent)}
+/* store */
+.store-list{display:grid;gap:10px;margin-bottom:12px}
+.store-list .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:6px;min-width:0}
+.store-list .card p{margin:0} .store-list details pre{max-height:320px;overflow:auto}
+#store-note .warn{color:var(--warn)}

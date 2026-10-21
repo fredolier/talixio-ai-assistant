@@ -10,7 +10,7 @@ FROM ${BASE_IMAGE}
 COPY --chown=root:root . /opt/talixio
 ARG VERSION_SHA=unknown VERSION_DATE= VERSION_SUBJECT=
 RUN set -eux; chmod 755 /opt/talixio/deploy/docker/entrypoint.sh /caddy-config; \
-    ln -s /opt/talixio/bin/talixio /usr/local/bin/talixio; \
+    ln -s /opt/talixio/bin/talixio /usr/local/bin/talixio; install -d -o talixio -g talixio -m 755 /store; \
     php -r 'file_put_contents("/opt/talixio/VERSION.json", json_encode(["sha" => $argv[1], "short" => substr($argv[1], 0, 7), "branch" => "image", "date" => $argv[2], "subject" => $argv[3], "installed_at" => time()]));' \
       "$VERSION_SHA" "$VERSION_DATE" "$VERSION_SUBJECT"
 

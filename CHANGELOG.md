@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.72 (2026-10-21)
+
+- A store for servers shared by several people. The admin page has a **Store** tab: apps and connectors sent by people wait there for review (who sent it, their note, all the code, sources and connectors) and reach the store only once approved; the admin can also publish an app file or a connector directly, and remove anything. Each assistant sees the store in **Apps → From the store** (install, update to a new version, uninstall) and in **Settings → Connectors** (install, uninstall, send one for review). An app is submitted from its **Share** card. Nothing secret travels: no data, saved state, keys or header values; connectors only by their GitHub repository or https address. An installed app still waits for its owner's approval, and Secret-space apps never leave. The catalog lives on a shared volume the agent writes and every assistant reads only.
+
 ## 0.28.71 (2026-10-21)
 
 - Apps can be shared. **Share** on an app copies it to another of your assistants, or downloads it as a `.talixio-app.json` file that anyone adds with **Add an app from a file**. The copy carries the code, what the app reads and how to install the connectors it uses (GitHub repository or online address, with header names but never their values), never its data, saved state or keys. Library files are found again by their place. A copied app waits for approval, and its page lists what is missing: connectors to install with one button, tools to let run without asking. Apps of a Secret space stay where they are.

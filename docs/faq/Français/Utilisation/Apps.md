@@ -75,6 +75,9 @@ d'origine ; vous vous connectez ensuite ou remplissez ses réglages avec votre p
 connecteur à laisser s'exécuter sans demander. Un connecteur ajouté depuis un `.zip` ou une commande s'installe à
 la main, sous le même nom.
 
+Sur un serveur partagé par plusieurs personnes, **Proposer au catalogue** l'envoie à l'administrateur pour
+validation ; une fois validée, chacun l'installe depuis *Apps → Depuis le catalogue* (voir *Administration / Le catalogue*).
+
 ## Ce qu'une app ne peut pas faire
 
 Écrire quoi que ce soit (tâches, fichiers, mails, connecteurs), utiliser le réseau librement, exécuter du code sur le

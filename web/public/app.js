@@ -3126,6 +3126,7 @@ function showConnectors(d) {
   state.setAcc = { ...state.setAcc, mcp: ok }; setAccounts();
   $('#mcp-badge').textContent = d.servers.length ? `· ${ok}/${d.servers.length} connected` : '· none';
   state.mcpData = d;
+  storeConnectors();
   $('#mcp-servers').innerHTML = d.servers.map(mcpCard).join('');
   $('#mcp-servers').querySelectorAll('details.mcp-server').forEach(el => {
     el.ontoggle = () => { const n = el.dataset.srv; el.open ? state.mcpOpen.add(n) : state.mcpOpen.delete(n); if (el.open && !el.querySelector('.mcp-body')) { el.insertAdjacentHTML('beforeend', mcpBody(d.servers.find(x => x.name === n))); mcpWire(el); } };
@@ -3294,6 +3295,39 @@ async function installFromLink(src, name, headers) {
   toast(srv?.auth === 'needed' ? t('“{name}” is added: sign in to it in Settings → Connectors.', { name })
     : srv?.error ? srv.error : t('Ready: {n} tool(s) from “{name}”. The assistant can use them from the next message.', { n: srv?.tools.length || 0, name }));
   showMcpCard();
+}
+/** Settings → Connectors: the store's connectors (install, uninstall) and sending one of yours for review. */
+async function storeConnectors() {
+  const box = $('#store-conn');
+  const st = await api('api/store').catch(() => null);
+  if (!st?.available) { box.hidden = true; return; }
+  const mine = (state.mcpData?.servers || []).map(x => x.name);
+  const sent = st.outbox.filter(x => x.kind === 'connector');
+  box.innerHTML = `<h4>${esc(t('From the store'))}</h4>`
+    + (st.connectors.length ? st.connectors.map(c => `<div class="row wrap store-item" data-id="${esc(c.id)}"><b class="no-i18n">${esc(c.name)}</b>
+        <span class="muted small no-i18n">${esc(c.description || c.github || c.url)}</span><span class="spacer"></span>
+        ${c.installed ? `<span class="pill on">${esc(t('Installed'))}</span><button type="button" class="btn small ghost" data-conn-remove="${esc(c.installed)}">${esc(t('Uninstall'))}</button>`
+          : `<button type="button" class="btn small" data-conn-install>${esc(t('Install'))}</button>`}</div>`).join('')
+      : `<p class="muted small">${esc(t('The store has no connector yet.'))}</p>`)
+    + (mine.length ? `<form class="row wrap" id="store-conn-send"><select id="store-conn-pick">${mine.map(n => `<option class="no-i18n">${esc(n)}</option>`).join('')}</select>
+        <input id="store-conn-note" placeholder="${esc(t('A word for the admin (optional)'))}" maxlength="500"><button class="btn small">${esc(t('Send for review'))}</button></form>
+        <p class="muted small">${esc(t('Shares how to install it (its GitHub repository or address), never your keys or header values.'))}</p>` : '')
+    + sent.map(x => `<p class="small muted"><span class="no-i18n">${esc(x.name)}</span>: ${esc(storeStatus(x))}</p>`).join('');
+  box.hidden = false;
+  box.querySelectorAll('[data-conn-install]').forEach(b => b.onclick = () => {
+    const c = st.connectors.find(x => x.id === b.closest('[data-id]').dataset.id);
+    installFromLink(c.github || c.url, c.name, c.headers).catch(e => toast(e.message));
+  });
+  box.querySelectorAll('[data-conn-remove]').forEach(b => b.onclick = async () => {
+    if (!confirm(t('Uninstall the connector “{name}”? Apps and the assistant lose its tools.', { name: b.dataset.connRemove }))) return;
+    try { showConnectors(await post('api/mcp/remove', { server: b.dataset.connRemove })); } catch (e) { toast(e.message); }
+  });
+  const f = $('#store-conn-send');
+  if (f) f.onsubmit = async e => {
+    e.preventDefault();
+    try { await post('api/store/submit', { connector: $('#store-conn-pick').value, note: $('#store-conn-note').value }); toast(t('Sent: the admin reviews it, then it shows in everyone’s store.')); storeConnectors(); }
+    catch (err) { toast(err.message); }
+  };
 }
 function showMcpCard() { location.hash = '#settings'; setTimeout(() => { showSection('accounts'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600); }
 document.addEventListener('click', e => {
@@ -4515,6 +4549,7 @@ async function loadApps() {
     + (ex.length ? `<h3 class="apps-ex-title">Examples</h3><div class="row wrap">${ex.map(e => `<button type="button" class="btn ghost" data-ex="${esc(e.key)}" title="${esc(e.description)}">${esc(e.icon)} ${esc(e.name)}</button>`).join('')}</div>` : '')
     + `<p class="row wrap"><button type="button" class="btn small" id="apps-ask">Ask the assistant for app ideas</button>
       <label class="btn small ghost">Add an app from a file<input type="file" id="apps-import" accept=".json,application/json" hidden></label></p>`;
+  storeApps(box, sp);
   $('#apps-import').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
     try { const { app } = await post('api/apps/import?space=' + sp, JSON.parse(await f.text())); location.hash = '#apps/' + app.id; }
@@ -4526,6 +4561,36 @@ async function loadApps() {
   });
   $('#apps-ask').onclick = () => { location.hash = '#chat'; $('#input').value = t('With what you know about me, could you suggest several apps you could build and add to the Apps menu?'); $('#input').focus(); };
 }
+
+/** The server's store (several people on one server): what the admin approved, to install here, update or remove. */
+async function storeApps(box, sp) {
+  const st = await api('api/store?space=' + sp).catch(() => null);
+  if (!st?.available) return;
+  state.store = st;
+  const el = document.createElement('div'); el.className = 'store-box';
+  el.innerHTML = `<h3>${esc(t('From the store'))}</h3><p class="muted small">${esc(t('Apps the server’s admin approved. An app you install still waits for your approval before it gets any data.'))}</p>`
+    + (st.apps.length ? `<div class="store-items">${st.apps.map(a => `<div class="card store-item" data-id="${esc(a.id)}">
+        <div class="row"><span class="app-icon">${esc(a.icon || '🧩')}</span><b class="no-i18n">${esc(a.name)}</b><span class="spacer"></span>
+          ${a.installed ? `<a class="btn small" href="#apps/${a.installed}">${esc(t('Open'))}</a>${a.update ? `<button type="button" class="btn small primary" data-store-install>${esc(t('Update'))}</button>` : ''}<button type="button" class="btn small ghost" data-store-remove="${a.installed}">${esc(t('Uninstall'))}</button>`
+            : `<button type="button" class="btn small primary" data-store-install>${esc(t('Install'))}</button>`}</div>
+        <span class="muted small no-i18n">${esc(a.description || '')}</span>
+        ${a.connectors?.length ? `<span class="small muted">${esc(t('Uses: {list}', { list: a.connectors.join(', ') }))}</span>` : ''}</div>`).join('')}</div>`
+      : `<p class="muted">${esc(t('The store has no app yet.'))}</p>`);
+  box.append(el);
+  el.querySelectorAll('[data-store-install]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try { const { app } = await post('api/store/install?space=' + sp, { id: b.closest('[data-id]').dataset.id }); location.hash = '#apps/' + app.id; }
+    catch (err) { toast(err.message); b.disabled = false; }
+  });
+  el.querySelectorAll('[data-store-remove]').forEach(b => b.onclick = async () => {
+    if (!confirm(t('Uninstall this app? Its saved state goes with it.'))) return;
+    try { await post(`api/apps/${b.dataset.storeRemove}/delete?space=${sp}`, {}); loadApps(); } catch (err) { toast(err.message); }
+  });
+}
+
+/** Where something sent to the store stands. */
+const storeStatus = it => it.status === 'approved' ? t('In the store') + (it.reason ? ' · ' + it.reason : '')
+  : it.status === 'rejected' ? t('Not accepted') + (it.reason ? ': ' + it.reason : '') : t('Waiting for the admin’s review');
 
 async function openApp(id) {
   const sp = state.space ?? '';
@@ -4598,8 +4663,22 @@ function appShare(app, el) {
       <button class="btn small">Copy to this assistant</button></form>` : ''}
     <p class="row wrap"><button type="button" class="btn small ghost" id="app-dl">Download it as a file</button>
       <span class="muted small">${esc(t('To give it to anyone: they add it with “Add an app from a file” in their Apps.'))}</span></p>
+    <div id="app-store-send"></div>
     <p class="small" id="app-share-say" role="status"></p>`;
   el.hidden = false;
+  api('api/store?space=' + sp).then(st => {
+    if (!st.available) return;
+    const box = $('#app-store-send'); if (!box) return;
+    const it = st.outbox.find(x => x.key === 'app-' + app.id);
+    box.innerHTML = `<form class="row wrap" id="app-store-form"><input id="app-store-note" placeholder="${esc(t('A word for the admin (optional)'))}" maxlength="500">
+      <button class="btn small">${esc(t(it ? 'Send this version to the store' : 'Submit to the store'))}</button></form>
+      ${it ? `<p class="small muted">${esc(storeStatus(it))}</p>` : `<p class="small muted">${esc(t('Everyone on this server can install it once the admin approves it.'))}</p>`}`;
+    $('#app-store-form').onsubmit = async e => {
+      e.preventDefault();
+      try { await post('api/store/submit?space=' + sp, { app: app.id, note: $('#app-store-note').value }); say(t('Sent: the admin reviews it, then it shows in everyone’s store.')); el.hidden = true; appShare(app, el); }
+      catch (err) { say(err.message, true); }
+    };
+  }).catch(() => {});
   const say = (m, bad) => { const s = $('#app-share-say'); s.textContent = m; s.classList.toggle('bad', !!bad); };
   $('#app-dl').onclick = async () => { try { saveBlob(file((await api(`api/apps/${app.id}/package?space=${sp}`)).package)); } catch (e) { say(e.message, true); } };
   if (list.length) $('#app-send').onsubmit = async e => {

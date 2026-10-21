@@ -17,9 +17,10 @@ final class Fleet
     public const IMAGE = 'talixio';
     public const BASE_IMAGE = 'talixio-base'; // the dependencies (deploy/docker/base.Dockerfile), tagged with that file's SHA-1
     public const WHISPER = 'talixio-whisper';  // whisper.cpp models, shared read-only by everyone (install-stack.sh fills it)
+    public const STORE = 'talixio-store';      // the store's catalog: written by the agent, read-only for everyone
     public const PREFIX = 'talixio-';          // containers, volumes and networks of instances: talixio-<id>
     public const CADDY = 'talixio-caddy';
-    public const RESERVED = ['admin', 'api', 'cal', 'share', 'static', 'assets', 'www', 'mail', 'caddy', 'agent', 'ollama', 'control', 'current', 'previous', 'whisper'];
+    public const RESERVED = ['admin', 'api', 'cal', 'share', 'static', 'assets', 'www', 'mail', 'caddy', 'agent', 'ollama', 'control', 'current', 'previous', 'whisper', 'store'];
 
     private string $socket;
     private string $stateFile;
@@ -146,6 +147,7 @@ final class Fleet
         if ($set['ollama']) array_push($env, 'TALIXIO_EMBEDDINGS=ollama', 'TALIXIO_EMBEDDINGS_MODEL=' . $set['ollama_model'], 'TALIXIO_OLLAMA_URL=http://' . self::CADDY . ':11434');
         if ($set['google_client_id'] !== '') array_push($env, 'TALIXIO_GOOGLE_CLIENT_ID=' . $set['google_client_id'], 'TALIXIO_GOOGLE_CLIENT_SECRET=' . $set['google_client_secret']);
         $env[] = 'TALIXIO_INSTANCE_NAME=' . ($i['name'] ?? '');
+        $env[] = 'TALIXIO_STORE=/store';
         if (!empty($i['links']) && !empty($s['sso_key'])) { // the person's other assistants: one sign-in opens them all (Links)
             $links = [];
             foreach (self::group($s, $id) as $to)
@@ -167,7 +169,8 @@ final class Fleet
             'Healthcheck' => ['Test' => ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8080/sw.js'], 'Interval' => 30_000_000_000, 'Timeout' => 5_000_000_000, 'StartPeriod' => 20_000_000_000],
             'HostConfig' => [
                 'Mounts' => [['Type' => 'volume', 'Source' => self::PREFIX . $id, 'Target' => '/data'],
-                    ['Type' => 'volume', 'Source' => self::WHISPER, 'Target' => '/opt/whisper.cpp/models', 'ReadOnly' => true]], // shared transcription models
+                    ['Type' => 'volume', 'Source' => self::WHISPER, 'Target' => '/opt/whisper.cpp/models', 'ReadOnly' => true], // shared transcription models
+                    ['Type' => 'volume', 'Source' => self::STORE, 'Target' => '/store', 'ReadOnly' => true]], // the store: what the admin approved
                 'Memory' => (int)$i['memory_mb'] * 1048576,
                 'MemoryReservation' => (int)min(512, (int)$i['memory_mb'] / 2) * 1048576,
                 'NanoCpus' => (int)round((float)$i['cpus'] * 1e9),
@@ -261,6 +264,8 @@ final class Fleet
         $this->ensureNetwork(self::PREFIX . 'i-' . $id);
         [$code] = $this->docker('GET', '/volumes/' . self::PREFIX . $id);
         if ($code === 404) $this->ok($this->docker('POST', '/volumes/create', ['Name' => self::PREFIX . $id, 'Labels' => ['talixio.instance' => $id]]), 'volume');
+        [$code] = $this->docker('GET', '/volumes/' . self::STORE);
+        if ($code === 404) $this->ok($this->docker('POST', '/volumes/create', ['Name' => self::STORE]), 'volume');
         $this->ok($this->docker('POST', '/containers/create', $this->spec($id, $s, $image), ['name' => $name]), "create $name");
         $this->ok($this->docker('POST', "/containers/$name/start"), "start $name");
         $this->connect(self::PREFIX . 'i-' . $id, self::CADDY); // Caddy is the only other member of this network
@@ -799,7 +804,7 @@ final class Fleet
         $this->docker('DELETE', "/containers/$agent-old", null, ['force' => 'true']); // left by an earlier try
         $this->ok($this->docker('POST', "/containers/$agent/rename", null, ['name' => "$agent-old"]), 'rename the agent');
         try {
-            $this->respawn($c, $agent, self::IMAGE . ':current');
+            $this->respawn(self::withStore($c), $agent, self::IMAGE . ':current');
             for ($t = 0; $t < 45; $t++) {
                 sleep(2);
                 $ch = curl_init("http://$agent:8090/health");
@@ -821,6 +826,67 @@ final class Fleet
             $progress('done', "$done The agent stayed on the previous version ({$e->getMessage()}); run install-stack.sh to move it.");
         }
     }
+
+    /** The agent as inspected, with the store's volume (an agent installed before the store had none). */
+    public static function withStore(array $c): array
+    {
+        foreach ($c['HostConfig']['Mounts'] ?? [] as $m) if (($m['Target'] ?? '') === '/store') return $c;
+        $c['HostConfig']['Mounts'][] = ['Type' => 'volume', 'Source' => self::STORE, 'Target' => '/store'];
+        $c['Config']['Env'] = array_values(array_filter($c['Config']['Env'] ?? [], fn($e) => !str_starts_with($e, 'TALIXIO_STORE_DIR=')));
+        $c['Config']['Env'][] = 'TALIXIO_STORE_DIR=/store';
+        return $c;
+    }
+
+    // ---------- the store ----------
+
+    /** The store as the agent keeps it, or null where the agent has no store volume yet. */
+    public function catalog(): ?Catalog
+    {
+        $dir = rtrim((string)getenv('TALIXIO_STORE_DIR'), '/');
+        return $dir !== '' && is_dir($dir) ? new Catalog($dir, $this->stateDir) : null;
+    }
+
+    private function needCatalog(): Catalog
+    {
+        $c = $this->catalog() ?? throw new \InvalidArgumentException('The store needs the update that brings it (or install-stack.sh).');
+        if (!is_writable(rtrim((string)getenv('TALIXIO_STORE_DIR'), '/'))) throw new \InvalidArgumentException('The store volume is not writable by the agent: run install-stack.sh once.');
+        return $c;
+    }
+
+    /** What the admin sees: the catalog, and what each running assistant sent for review (collected now). */
+    public function storeState(): array
+    {
+        $cat = $this->catalog();
+        if (!$cat) return ['available' => false, 'catalog' => ['apps' => [], 'connectors' => []], 'submissions' => []];
+        $s = $this->state();
+        foreach ($s['instances'] as $id => $i) {
+            [$code, $c] = $this->docker('GET', '/containers/' . $this->containerName($id) . '/json');
+            if ($code !== 200 || ($c['State']['Status'] ?? '') !== 'running') continue;
+            try {
+                [$code, $out] = $this->exec($this->containerName($id), ['php', '/opt/talixio/bin/talixio', 'store-outbox'], 30);
+                $items = $code === 0 ? json_decode($out, true) : null;
+                if (is_array($items) && is_writable(rtrim((string)getenv('TALIXIO_STORE_DIR'), '/'))) $cat->collect($id, (string)($i['name'] ?? '') ?: $id, $items);
+            } catch (\Throwable $e) { error_log("store-outbox $id: " . $e->getMessage()); }
+        }
+        return ['available' => true, 'writable' => is_writable(rtrim((string)getenv('TALIXIO_STORE_DIR'), '/')), 'catalog' => $cat->read(), 'submissions' => $cat->submissions()];
+    }
+
+    public function storeDecide(string $id, bool $approve, string $note = ''): array
+    {
+        $sub = $this->needCatalog()->decide($id, $approve, $note);
+        try { // the person sees the decision next to what they sent
+            $this->exec($this->containerName($sub['instance']), ['php', '/opt/talixio/bin/talixio', 'store-outbox', 'done', $sub['key'], $sub['hash'], $sub['status'], $sub['reason']], 30);
+        } catch (\Throwable $e) { error_log("store-outbox done: " . $e->getMessage()); }
+        return $sub;
+    }
+
+    public function storeAdd(string $kind, array $data): string
+    {
+        if (!in_array($kind, ['app', 'connector'], true)) throw new \InvalidArgumentException('kind: app or connector');
+        return $this->needCatalog()->add($kind, $data);
+    }
+
+    public function storeRemove(string $id): void { $this->needCatalog()->remove($id); }
 
     /** A container like the inspected one $c (same settings, networks and aliases), from $image. */
     private function respawn(array $c, string $name, string $image): void

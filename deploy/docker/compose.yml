@@ -54,12 +54,14 @@ services:
       TALIXIO_GIT_USER: ${GIT_USER:-x-access-token}
       TALIXIO_GIT_TOKEN: ${GIT_TOKEN:-}
       TALIXIO_STATE_DIR: /state
+      TALIXIO_STORE_DIR: /store            # the store's catalog, read-only in each assistant
       CADDY_CONFIG_DIR: /caddy-config
       PHP_CLI_SERVER_WORKERS: "4"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - agent-state:/state
       - caddy-conf:/caddy-config
+      - store:/store
     networks: [control]
     healthcheck: { test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8090/health"], interval: 30s }
     read_only: true
@@ -99,3 +101,4 @@ volumes:
   ollama: { name: talixio-ollama-models }
   agent-state: { name: talixio-agent-state }
   admin-data: { name: talixio-admin-data }
+  store: { name: talixio-store }

@@ -108,7 +108,7 @@ final class Apps
     }
 
     /** How to install a connector elsewhere: its GitHub repository, or its address (no query, no user) and the names of the headers to fill. */
-    private static function recipe(array $s): array
+    public static function recipe(array $s): array
     {
         $r = array_filter(['description' => mb_substr(trim((string)($s['description'] ?? '')), 0, 300)]);
         if ($gh = (string)($s['source']['github'] ?? '')) return $r + ['github' => $gh];
@@ -119,12 +119,23 @@ final class Apps
         return $r + ['manual' => true]; // a local one from a .zip or a command: set up by hand there
     }
 
+    /** A received connector recipe, kept to what can install it: a GitHub repository, or an https address and header names. */
+    public static function cleanRecipe(array $r): array
+    {
+        $c = array_filter(['description' => mb_substr((string)($r['description'] ?? ''), 0, 300)]);
+        if (preg_match('#^https://(www\.)?github\.com/[\w.\-/]+$#i', (string)($r['github'] ?? ''))) $c['github'] = (string)$r['github'];
+        elseif (preg_match('#^https://[^\s/?\#@]+(/[^\s?\#]*)?$#i', (string)($r['url'] ?? ''))) $c += ['url' => (string)$r['url'], 'headers' => array_values(array_filter(array_slice(array_map('strval', (array)($r['headers'] ?? [])), 0, 10), fn($h) => (bool)preg_match('/^[\w-]{1,60}$/', $h)))];
+        else $c['manual'] = true;
+        return $c;
+    }
+
     /**
      * Installs a package (a file, or sent by a linked assistant) in this space. It always waits for approval, like an app
      * the assistant wrote. A library file it read is looked for at the same place here; not found, that source is left out.
+     * $id: an app installed earlier from the same place, changed in place (it waits for approval again); $extra joins its origin.
      * @return array the app
      */
-    public function import(array $pkg, string $from = ''): array
+    public function import(array $pkg, string $from = '', ?int $id = null, array $extra = []): array
     {
         if (($pkg['format'] ?? '') !== self::PACKAGE) throw new \InvalidArgumentException('This is not a Talixio app (.talixio-app.json).');
         $dropped = []; $sources = [];
@@ -144,15 +155,11 @@ final class Apps
         foreach ((array)($pkg['connectors'] ?? []) as $name => $r) {
             $name = preg_replace('/[^a-z0-9]+/', '_', strtolower((string)$name)); $r = (array)$r;
             if ($name === '') continue;
-            $c = array_filter(['description' => mb_substr((string)($r['description'] ?? ''), 0, 300)]);
-            if (preg_match('#^https://(www\.)?github\.com/[\w.\-/]+$#i', (string)($r['github'] ?? ''))) $c['github'] = (string)$r['github'];
-            elseif (preg_match('#^https://[^\s/?\#@]+(/[^\s?\#]*)?$#i', (string)($r['url'] ?? ''))) $c += ['url' => (string)$r['url'], 'headers' => array_slice(array_map('strval', (array)($r['headers'] ?? [])), 0, 10)];
-            else $c['manual'] = true;
-            $conn[$name] = $c;
+            $conn[$name] = self::cleanRecipe($r);
         }
         $a = $this->save(['name' => $pkg['name'] ?? '', 'description' => $pkg['description'] ?? '', 'icon' => $pkg['icon'] ?? '',
-            'html' => $pkg['html'] ?? '', 'script' => $pkg['script'] ?? '', 'sources' => $sources], 'import');
-        $origin = ['from' => mb_substr($from, 0, 80), 'connectors' => $conn, 'dropped' => $dropped, 'at' => time()];
+            'html' => $pkg['html'] ?? '', 'script' => $pkg['script'] ?? '', 'sources' => $sources], 'import', $id);
+        $origin = ['from' => mb_substr($from, 0, 80), 'connectors' => $conn, 'dropped' => $dropped, 'at' => time()] + $extra;
         $this->app->store->q('UPDATE apps SET origin = ? WHERE id = ?', [json_encode($origin, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $a['id']]);
         return $this->get($a['id']);
     }

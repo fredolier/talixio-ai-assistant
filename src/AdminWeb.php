@@ -206,6 +206,26 @@ final class AdminWeb
         }
         if ($path === '/api/check-update') { $this->json($this->agent('GET', '/check-update?' . http_build_query(['branch' => (string)($_GET['branch'] ?? 'main')]), null, 120)); return; }
         if ($path === '/api/job') { $this->json($this->agent('GET', '/job')); return; }
+        if ($path === '/api/store') { $this->json($this->agent('GET', '/store', null, 300)); return; } // collects what assistants sent
+        if ($path === '/api/store/decide' && $m === 'POST') {
+            $r = $this->agent('POST', '/store/decide', array_intersect_key($b, array_flip(['id', 'approve', 'note'])), 60);
+            $sub = (array)($r['submission'] ?? []);
+            $this->audit(!empty($b['approve']) ? 'store item approved' : 'store item rejected', ['id' => (string)($b['id'] ?? ''), 'name' => $sub['name'] ?? '', 'from' => $sub['instance'] ?? '']);
+            $this->json($r);
+            return;
+        }
+        if ($path === '/api/store/add' && $m === 'POST') {
+            $r = $this->agent('POST', '/store/add', ['kind' => (string)($b['kind'] ?? ''), 'data' => (array)($b['data'] ?? [])], 60);
+            $this->audit('store item added', ['id' => $r['id'] ?? '', 'name' => mb_substr((string)($b['data']['name'] ?? ''), 0, 60)]);
+            $this->json($r);
+            return;
+        }
+        if ($path === '/api/store/remove' && $m === 'POST') {
+            $r = $this->agent('POST', '/store/remove', ['id' => (string)($b['id'] ?? '')]);
+            $this->audit('store item removed', ['id' => (string)($b['id'] ?? '')]);
+            $this->json($r);
+            return;
+        }
         if ($path === '/api/audit') {
             $lines = array_slice(file("$this->dir/audit.log", FILE_IGNORE_NEW_LINES) ?: [], -200);
             $this->json(['entries' => array_reverse(array_map(fn($l) => json_decode($l, true), $lines))]);

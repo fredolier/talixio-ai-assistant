@@ -76,6 +76,11 @@ final class Cli
                     return 0;
                 case 'doctor':
                     return self::doctor($app);
+                case 'store-outbox': // run by the agent (the store): what the person sent for review, or "done KEY HASH STATUS [NOTE]"
+                    $st = new AppStore($app);
+                    if (($argv[2] ?? '') === 'done') return $st->mark((string)($argv[3] ?? ''), (string)($argv[4] ?? ''), (string)($argv[5] ?? ''), (string)($argv[6] ?? '')) ? 0 : 1;
+                    echo json_encode($st->outbox(true), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "\n";
+                    return 0;
                 case 'password': // reset the web app password (forgotten), read from stdin or generated
                     $pw = stream_isatty(STDIN) ? '' : trim((string)fgets(STDIN));
                     if ($pw === '') $pw = substr(strtr(base64_encode(random_bytes(18)), '+/=', 'xyz'), 0, 20);
@@ -95,7 +100,7 @@ final class Cli
                     $p = proc_open(array_merge([$c->signalCli, '--config', $c->dataDir . '/signal', '-a', $c->signalNumber], array_slice($argv, 2)), [STDIN, STDOUT, STDERR], $pipes);
                     return is_resource($p) ? proc_close($p) : 1;
                 default:
-                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|backup|password|totp [off]|signal ARGS|transfer-pull URL CODE [--final] [--url URL]|mcp|index|job ID|drain [off]\n");
+                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|backup|password|totp [off]|signal ARGS|transfer-pull URL CODE [--final] [--url URL]|mcp|index|job ID|drain [off]|store-outbox [done KEY HASH STATUS NOTE]\n");
                     return 2;
             }
         } catch (\Throwable $e) {

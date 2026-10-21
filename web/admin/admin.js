@@ -62,6 +62,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.tab').forEach(t => t.hidden = t.id !== 'tab-' + b.dataset.tab);
   if (b.dataset.tab === 'activity') loadAudit();
+  if (b.dataset.tab === 'store') loadStore();
   if (b.dataset.tab === 'update' && Date.now() - (checkUpdate.at || 0) > 600000) checkUpdate();
 });
 
@@ -319,5 +320,67 @@ async function loadAudit() {
   const { entries } = await api('api/audit');
   $('#audit').innerHTML = entries.length ? entries.map(a => `<div><span class="muted">${when(a.ts)}</span> <b>${esc(a.what)}</b> ${esc(a.id || '')} <span class="muted small">${esc(a.ip)}</span></div>`).join('') : '<p class="muted">Nothing yet.</p>';
 }
+
+// ---- store ----
+/** What a submission or published app holds, to read before deciding: everything escaped, nothing runs here. */
+function storeDetails(kind, it) {
+  if (!it) return '';
+  if (kind !== 'app') return `<details><summary>${esc(t('Details'))}</summary><pre class="out">${esc(JSON.stringify(it, null, 2))}</pre></details>`;
+  const src = (it.sources || []).map(x => `<li>${esc(x.name)} <span class="muted small">${esc(x.type)} ${esc(x.url || x.path || [x.server, x.tool].filter(Boolean).join(' → ') || x.folder || '')}</span></li>`).join('');
+  const conn = Object.entries(it.connectors || {}).map(([n, r]) => `<li>${esc(n)} <span class="muted small">${esc(r.github || r.url || t('installed by hand'))}</span></li>`).join('');
+  return `<details><summary>${esc(t('Code, sources and connectors'))}</summary>
+    ${src ? `<h4>${esc(t('Sources'))}</h4><ul>${src}</ul>` : ''}${conn ? `<h4>${esc(t('Connectors'))}</h4><ul>${conn}</ul>` : ''}
+    <h4>HTML</h4><pre class="out">${esc(it.html)}</pre><h4>Script</h4><pre class="out">${esc(it.script)}</pre></details>`;
+}
+async function loadStore() {
+  let d;
+  try { d = await api('api/store'); } catch (e) { $('#store-note').innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  $('#store-note').innerHTML = !d.available ? `<p class="warn">${esc(t('The store needs this update on the agent: run the update, then come back.'))}</p>`
+    : d.writable === false ? `<p class="warn">${esc(t('The store volume is not writable by the agent: run install-stack.sh once.'))}</p>`
+    : `<p class="muted small">${esc(t('Assistants see the store once they run this version (after the update, or Recreate).'))}</p>`;
+  const subs = d.submissions || [], pend = subs.filter(x => x.status === 'pending'), done = subs.filter(x => x.status !== 'pending').reverse().slice(0, 30);
+  const kindWord = k => t(k === 'app' ? 'App' : 'Connector');
+  $('#store-pending').innerHTML = pend.length ? pend.map(x => `<div class="card" data-id="${esc(x.id)}">
+      <div class="row"><b>${esc(x.name)}</b><span class="pill">${esc(kindWord(x.kind))}</span>${x.replaces ? `<span class="pill warn">${esc(t('new version'))}</span>` : ''}<span class="spacer"></span><span class="muted small">${esc(x.who)} · ${when(x.at)}</span></div>
+      ${x.note ? `<p>${esc(x.note)}</p>` : ''}${x.error ? `<p class="err">${esc(t('Cannot be published:'))} ${esc(x.error)}</p>` : ''}
+      ${storeDetails(x.kind, x.item)}
+      <div class="row"><span class="spacer"></span><button class="btn" data-act="reject">${esc(t('Reject'))}</button>${x.item ? `<button class="btn primary" data-act="approve">${esc(t('Approve'))}</button>` : ''}</div></div>`).join('')
+    : `<p class="muted">${esc(t('Nothing waits for review.'))}</p>`;
+  const items = [...(d.catalog.apps || []).map(a => ({ ...a, kind: 'app' })), ...(d.catalog.connectors || []).map(c => ({ ...c, kind: 'connector' }))];
+  $('#store-items').innerHTML = items.length ? items.map(x => `<div class="card" data-id="${esc(x.id)}">
+      <div class="row"><b>${esc((x.icon ? x.icon + ' ' : '') + x.name)}</b><span class="pill">${esc(kindWord(x.kind))}</span><span class="muted small">v${esc(x.version)} · ${when(x.at)}</span><span class="spacer"></span><button class="btn danger" data-act="remove">${esc(t('Remove'))}</button></div>
+      ${x.description ? `<p class="muted">${esc(x.description)}</p>` : ''}${storeDetails(x.kind, x.kind === 'app' ? x.package : x)}</div>`).join('')
+    : `<p class="muted">${esc(t('The store is empty.'))}</p>`;
+  $('#store-done').innerHTML = done.length ? done.map(x => `<div><span class="muted">${when(x.decided)}</span> <b>${esc(x.name)}</b> <span class="pill ${x.status === 'approved' ? 'on' : 'off'}">${esc(t(x.status === 'approved' ? 'Approved' : 'Rejected'))}</span> <span class="muted small">${esc(x.who)}${x.reason ? ' · ' + esc(x.reason) : ''}</span></div>`).join('')
+    : `<p class="muted">${esc(t('Nothing yet.'))}</p>`;
+}
+$('#store-pending').onclick = async e => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const id = b.closest('[data-id]').dataset.id, approve = b.dataset.act === 'approve';
+  const v = await ask(approve ? t('Publish to the store') : t('Reject'), { fields: [{ id: 'note', label: t(approve ? 'A word for the person (optional)' : 'Why (the person sees it)') }], ok: t(approve ? 'Approve' : 'Reject'), danger: !approve });
+  if (!v) return;
+  try { await api('api/store/decide', { id, approve, note: v.note }); toast(t(approve ? 'Published.' : 'Rejected.')); } catch (err) { toast(err.message); }
+  loadStore();
+};
+$('#store-items').onclick = async e => {
+  const b = e.target.closest('button[data-act=remove]'); if (!b) return;
+  if (!await ask(t('Remove from the store'), { html: `<p>${esc(t('Assistants that installed it keep their copy.'))}</p>`, ok: t('Remove'), danger: true })) return;
+  try { await api('api/store/remove', { id: b.closest('[data-id]').dataset.id }); } catch (err) { toast(err.message); }
+  loadStore();
+};
+$('#store-file').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try { await api('api/store/add', { kind: 'app', data: JSON.parse(await f.text()) }); toast(t('Published.')); } catch (err) { toast(err instanceof SyntaxError ? t('This is not a Talixio app (.talixio-app.json).') : err.message); }
+  loadStore();
+};
+$('#store-add-conn').onclick = async () => {
+  const v = await ask(t('Add a connector'), { html: `<p class="muted small">${esc(t('From a GitHub repository, or an https address (header names only: each person fills in their own values).'))}</p>`,
+    fields: [{ id: 'name', label: t('Name') }, { id: 'description', label: t('What it does') }, { id: 'src', label: t('GitHub repository or https address'), placeholder: 'https://' }, { id: 'headers', label: t('Header names (comma-separated, optional)'), placeholder: 'Authorization' }], ok: t('Publish') });
+  if (!v) return;
+  const data = { name: v.name, description: v.description, headers: v.headers.split(/[\s,]+/).filter(Boolean) };
+  data[/^https:\/\/(www\.)?github\.com\//i.test(v.src) ? 'github' : 'url'] = v.src;
+  try { await api('api/store/add', { kind: 'connector', data }); toast(t('Published.')); } catch (err) { toast(err.message); }
+  loadStore();
+};
 
 showGate().catch(e => { document.body.textContent = e.message; });

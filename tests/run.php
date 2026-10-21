@@ -2123,6 +2123,60 @@ check('apps: a bad recipe becomes manual; what is missing is listed per connecto
     && $nd['local_fake']['installed'] && $nd['local_fake']['tools'][0]['allowed'] && !$nd['remote']['tools'][0]['allowed'] && $nd['remote']['recipe']['headers'] === ['X-Api-Key'], json_encode($nd));
 $bf = ''; try { $ma->apps()->import(['format' => 'other']); } catch (\InvalidArgumentException $e) { $bf = $e->getMessage(); }
 check('apps: a file that is not an app package is refused', str_contains($bf, 'talixio-app'), $bf);
+// the server's store: sent for review from an outbox, approved by the admin, installed by everyone (waiting for approval)
+$sd = "$dir/store"; @mkdir($sd); putenv("TALIXIO_STORE=$sd");
+$ast = new \Talixio\AppStore($ma); $cat = new \Talixio\Catalog($sd, "$dir/agent-state");
+$raw0 = $ma->mcp()->raw(); $rw = json_decode($raw0, true);
+$rw['mcpServers']['bills_online'] = ['url' => 'https://mcp.example.com/mcp?key=abc', 'headers' => ['X-Api-Key' => 'secret-v'], 'description' => 'Bills'];
+$ma->mcp()->saveRaw(json_encode($rw));
+$o1 = $ast->submitApp($sh['id'], 'For the team'); $o2 = $ast->submitConnector('bills_online');
+$mf = ''; try { $ast->submitConnector('local_fake'); } catch (\InvalidArgumentException $e) { $mf = $e->getMessage(); }
+$ob = $ast->outbox(); $obf = $ast->outbox(true); $obj = json_encode($obf);
+check('store: an app and a connector wait in the outbox; a connector from a .zip or a command cannot go; never a key, a header value or saved state',
+    count($ob) === 2 && !isset($ob[0]['package']) && !isset($o1['package']) && $o2['key'] === 'mcp-bills_online' && str_contains($mf, 'GitHub')
+    && !str_contains($obj, 'secret-v') && !str_contains($obj, 'key=abc') && !str_contains($obj, 'kept-here') && str_contains($obj, 'X-Api-Key'), $obj);
+$cat->collect('alice', 'Alice', $obf); $cat->collect('alice', 'Alice', $obf);
+$subs = array_column($cat->submissions(), null, 'key');
+check('store: collected once, waiting for review, cleaned', count($subs) === 2 && $subs["app-{$sh['id']}"]['status'] === 'pending' && $subs["app-{$sh['id']}"]['note'] === 'For the team'
+    && $subs['mcp-bills_online']['item'] === ['name' => 'bills_online', 'description' => 'Bills', 'url' => 'https://mcp.example.com/mcp', 'headers' => ['X-Api-Key']], json_encode($subs));
+check('store: nothing is in the catalog before the admin approves', $ast->catalog() === ['apps' => [], 'connectors' => []] && $ast->view()['available']);
+$da = $cat->decide($subs["app-{$sh['id']}"]['id'], true, 'Nice');
+$dc = $cat->decide($subs['mcp-bills_online']['id'], false, 'Use the official one');
+$twice = ''; try { $cat->decide($da['id'], true); } catch (\InvalidArgumentException $e) { $twice = $e->getMessage(); }
+check('store: the instance hears the decision only for the version reviewed', !$ast->mark($da['key'], 'wrong', 'approved') && $ast->mark($da['key'], $da['hash'], 'approved', 'Nice')
+    && $ast->mark($dc['key'], $dc['hash'], 'rejected', 'Use the official one') && !$ast->mark('../x', $da['hash'], 'approved') && $twice === 'Already decided.');
+$ob = array_column($ast->outbox(), null, 'key');
+$cv = $ast->view(); $capp = $cv['apps'][0] ?? [];
+check('store: approved and rejected are told back; the approved app is in everyone\'s store, without its package', $ob[$da['key']]['status'] === 'approved' && $ob['mcp-bills_online']['reason'] === 'Use the official one'
+    && count($cv['apps']) === 1 && $cv['connectors'] === [] && $capp['name'] === 'Cloud bills' && $capp['version'] === 1 && $capp['installed'] === null && !isset($capp['package'])
+    && $capp['connectors'] === ['local_fake', 'remote'] && count($capp['sources']) === 3, json_encode($cv));
+$si = $ast->install($capp['id']);
+$cv = $ast->view();
+check('store: an installed store app waits for approval, and shows as installed', $si['status'] === 'pending' && $si['origin']['store'] === $capp['id'] && $si['origin']['store_version'] === 1
+    && $cv['apps'][0]['installed'] === $si['id'] && !$cv['apps'][0]['update'], json_encode($si['origin']));
+$ma->apps()->save(['name' => 'Cloud bills', 'icon' => '☁️', 'html' => '<div id="b">v2</div>', 'script' => '', 'sources' => []], 'you', $sh['id']);
+$ast->submitApp($sh['id']); $cat->collect('alice', 'Alice', $ast->outbox(true));
+$p2 = array_values(array_filter($cat->submissions(), fn($x) => $x['status'] === 'pending'));
+$cat->decide($p2[0]['id'], true);
+$cv = $ast->view(); $si2 = $ast->install($capp['id']);
+check('store: a new version replaces the published one; the installed copy is updated in place', count($p2) === 1 && $p2[0]['replaces'] === $capp['id'] && count($cv['apps']) === 1
+    && $cv['apps'][0]['version'] === 2 && $cv['apps'][0]['update'] && $si2['id'] === $si['id'] && $si2['status'] === 'pending' && str_contains($si2['html'], 'v2'), json_encode($cv['apps']));
+$cid = $cat->add('connector', ['name' => 'Bills Online', 'url' => 'https://mcp.example.com/mcp', 'headers' => ['X-Api-Key', 'bad header!']]);
+$cv = $ast->view();
+check('store: a connector added by the admin keeps only valid header names, and is seen as installed by its address', $cv['connectors'][0]['id'] === $cid && $cv['connectors'][0]['headers'] === ['X-Api-Key']
+    && $cv['connectors'][0]['installed'] === 'bills_online', json_encode($cv['connectors']));
+$cat->collect('bob', 'Bob', [['key' => 'app-9', 'kind' => 'app', 'status' => 'sent', 'package' => ['format' => 'talixio-app', 'name' => 'Bad', 'html' => '<script src="https://evil.example/x.js"></script>']],
+    ['key' => '../evil', 'kind' => 'app', 'status' => 'sent'], ['key' => 'app-10', 'kind' => 'other', 'status' => 'sent']]);
+$bad = array_values(array_filter($cat->submissions(), fn($x) => $x['instance'] === 'bob'));
+$be = ''; try { $cat->decide($bad[0]['id'], true); } catch (\InvalidArgumentException $e) { $be = $e->getMessage(); }
+check('store: a bad package waits with its error and cannot be published; bad keys and kinds are ignored', count($bad) === 1 && $bad[0]['error'] && str_contains($be, 'cannot be published'), json_encode($bad));
+$cat->remove($capp['id']); $re = ''; try { $cat->remove($capp['id']); } catch (\InvalidArgumentException $e) { $re = $e->getMessage(); }
+check('store: removed from the store, the installed copy stays', count($ast->view()['apps']) === 0 && $ma->apps()->get($si['id']) && $re === 'Not in the store.');
+$ast->withdraw('mcp-bills_online'); $ast->withdraw('../../x');
+check('store: a sent item can be withdrawn', !in_array('mcp-bills_online', array_column($ast->outbox(), 'key'), true));
+check('store: catalog readable by everyone, review state only by the agent', (fileperms("$sd/catalog.json") & 0777) === 0644 && (fileperms("$dir/agent-state/store.json") & 0777) === 0600);
+$ma->apps()->delete($si['id']); $ma->mcp()->saveRaw($raw0); putenv('TALIXIO_STORE');
+check('store: no store without the shared volume', !(new \Talixio\AppStore($ma))->available() && (function () use ($ma, $sh) { try { (new \Talixio\AppStore($ma))->submitApp($sh['id']); return false; } catch (\InvalidArgumentException $e) { return true; } })());
 $ma->apps()->delete($im['id']); $ma->apps()->delete($sh['id']); $ma->library()->purgeFile((int)$shf['id']);
 check('mcp: the server\'s own description kept for Settings', ($ma->mcp()->cache()['local_fake']['about'] ?? '') === 'Looks words up in a fake dictionary.', json_encode($ma->mcp()->cache()['local_fake']['about'] ?? null));
 $gk = fn(array $t) => \Talixio\Mcp::guessKind($t);
@@ -2740,6 +2794,9 @@ check('fleet: containers are locked down (no privileges, read-only, limits, own 
     && $hc['NanoCpus'] === 1500000000 && $hc['NetworkMode'] === 'talixio-i-alice' && in_array('no-new-privileges', $hc['SecurityOpt'], true) && !isset($hc['Binds']) && $hc['Mounts'][0]['Source'] === 'talixio-alice'
     && str_starts_with(implode("\n", $hc['SecurityOpt']), 'no-new-privileges') && json_decode(substr($hc['SecurityOpt'][1], 8), true)['defaultAction'] === 'SCMP_ACT_ERRNO');
 check('fleet: the shared whisper models are mounted read-only', $hc['Mounts'][1] === ['Type' => 'volume', 'Source' => 'talixio-whisper', 'Target' => '/opt/whisper.cpp/models', 'ReadOnly' => true] && !\Talixio\Fleet::validId('whisper'));
+check('fleet: the store is mounted read-only in each assistant, read-write in the agent', in_array(['Type' => 'volume', 'Source' => 'talixio-store', 'Target' => '/store', 'ReadOnly' => true], $hc['Mounts'], true)
+    && in_array('TALIXIO_STORE=/store', $spec['Env'], true) && !\Talixio\Fleet::validId('store')
+    && ($ws = \Talixio\Fleet::withStore(['Config' => ['Env' => ['A=1']], 'HostConfig' => ['Mounts' => []]])) === \Talixio\Fleet::withStore($ws) && end($ws['HostConfig']['Mounts'])['Target'] === '/store' && in_array('TALIXIO_STORE_DIR=/store', $ws['Config']['Env'], true));
 check('fleet: instance settings (prefix, shared Ollama through Caddy)', in_array('TALIXIO_BASE_PATH=alice', $spec['Env'], true) && in_array('TALIXIO_OLLAMA_URL=http://talixio-caddy:11434', $spec['Env'], true));
 $cf = $fl->caddyfile($fs);
 check('fleet: Caddy routes the admin page and each assistant under its path', str_contains($cf, "assistant.example.com {") && str_contains($cf, 'handle_path /admin/*') && str_contains($cf, "handle @alice {\n\t\turi strip_prefix /alice\n\t\treverse_proxy talixio-alice:8080") && !str_contains($cf, 'on_demand'));

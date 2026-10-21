@@ -68,6 +68,9 @@ works there: a connector to install (**Install it** uses the GitHub repository o
 you then sign in or fill its settings with your own account) and the connector tools to let run without asking. A
 connector added from a `.zip` or a command must be installed by hand under the same name.
 
+On a server shared by several people, **Submit to the store** sends it for the admin's review; once approved,
+everyone installs it from *Apps → From the store* (see *Administration / The store*).
+
 ## What an app cannot do
 
 Write anything (tasks, files, mail, connectors), use the network freely, run code on the server, see your keys or

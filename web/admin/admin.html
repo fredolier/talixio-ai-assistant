@@ -40,7 +40,7 @@
     <button id="logout" class="btn ghost small" type="button">Sign out</button>
   </header>
   <nav class="tabs" role="tablist">
-    <button data-tab="people" class="on">People</button><button data-tab="update">Updates</button><button data-tab="settings">Settings</button><button data-tab="security">Security</button><button data-tab="activity">Activity</button>
+    <button data-tab="people" class="on">People</button><button data-tab="update">Updates</button><button data-tab="settings">Settings</button><button data-tab="store">Store</button><button data-tab="security">Security</button><button data-tab="activity">Activity</button>
   </nav>
 
   <section id="tab-people" class="tab">
@@ -112,6 +112,19 @@
       <label>New password (12 characters or more)<input id="pw-new" type="password" autocomplete="new-password" minlength="12"></label>
       <label>Authenticator code<input id="pw-code" inputmode="numeric" maxlength="8"></label>
       <button class="btn" type="submit">Change</button> <span id="pw-msg" class="muted small"></span></fieldset></form>
+  </section>
+
+  <section id="tab-store" class="tab" hidden>
+    <h2>Store</h2>
+    <p class="muted">Apps and connectors every assistant on this server can install. People send theirs for review; nothing reaches the store before you approve it. An app installed from the store still waits for its owner's approval before it runs.</p>
+    <div id="store-note"></div>
+    <h3>Waiting for review</h3>
+    <div id="store-pending" class="store-list"></div>
+    <h3>In the store</h3>
+    <div id="store-items" class="store-list"></div>
+    <div class="row wrap"><label class="btn">Add an app from a file<input id="store-file" type="file" accept=".json,application/json" hidden></label><button id="store-add-conn" class="btn" type="button">Add a connector</button></div>
+    <h3>Recent decisions</h3>
+    <div id="store-done" class="store-list"></div>
   </section>
 
   <section id="tab-activity" class="tab" hidden>

@@ -430,6 +430,7 @@
             <div class="fields">
               <p class="muted small">Give the assistant tools from MCP servers: GitHub, Notion, your home automation, your own scripts… Local servers are started by command (Node servers need <code>install.sh --with-node</code>); remote ones by URL with a token in <code>headers</code>, or <b>Sign in</b> for services that use OAuth (Notion, Linear, Atlassian…). Tools that change something wait for your approval, unless the server has <code>"trust": "all"</code>. Saved in <code>data/mcp.json</code>.</p>
               <div class="row wrap"><button id="conn-install" class="btn" type="button">Install a connector…</button><span class="muted small">A local connector: give the address of its GitHub repository, or put its folder as a .zip in the library (e.g. /Connecteurs).</span></div>
+              <div id="store-conn" class="store-box" hidden></div>
               <div id="mcp-servers" class="mcp-servers"></div>
               <details class="adv" id="mcp-config"><summary>Configuration (JSON)</summary>
               <textarea id="mcp-raw" class="editor mono" rows="10" spellcheck="false" placeholder='{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "…"}}}}'></textarea>
