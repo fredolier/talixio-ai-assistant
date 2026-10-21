@@ -122,6 +122,7 @@ final class AdminWeb
         if ($out === false) { $e = curl_error($ch); curl_close($ch); $this->fail(502, "The agent is not reachable: $e"); }
         $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE); curl_close($ch);
         $d = json_decode((string)$out, true) ?: [];
+        if ($code === 404 && ($d['error'] ?? '') === 'not found') $this->fail(502, 'The agent runs an older version than this page: run the update again from this page, or install-stack.sh on the server.');
         if ($code >= 400) $this->fail($code === 400 ? 400 : 502, $d['error'] ?? "agent error $code");
         return $d;
     }

@@ -2632,7 +2632,7 @@ async function loadUpdate() {
   let d;
   try { d = await api('api/update'); }
   catch { if (state.updating) setTimeout(loadUpdate, 3000); return; } // the app restarts during an update
-  const box = $('#update'); box.hidden = false;
+  const box = $('#update'); box.hidden = false; sectionTabs('system');
   if (!d.installed) { box.innerHTML = `<div class="row between"><h3>Updates</h3><span class="version">${esc(t('Version {v}', { v: d.version?.label || '?' }))}</span></div><p class="muted small">Updates from the app work on an installation made with <code>git clone</code> + <code>install.sh</code>.</p>`; return; }
   const v = d.version || {}, st = d.status || {};
   const busy = ['updating', 'checking'].includes(st.state);
@@ -2759,6 +2759,7 @@ function showSection(id, scroll = true) {
   state.setSection = id;
   if ($('#set-search').value) { $('#set-search').value = ''; setSearch(); }
   document.querySelectorAll('#view-settings .set-sec').forEach(s => { s.hidden = s.dataset.sec !== id; });
+  sectionTabs(id);
   document.querySelectorAll('#set-nav a, #set-chips a').forEach(a => { a.classList.toggle('on', a.dataset.sec === id); a.setAttribute('aria-current', a.dataset.sec === id ? 'page' : 'false'); });
   $('#set-chips a.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   if (location.hash !== '#settings/' + id) history.replaceState(null, '', '#settings/' + id);
@@ -2890,28 +2891,30 @@ function renderGroups(groups) {
   }
   const page = $('#view-settings');
   page.oninput = page.onchange = e => { if (e.target.closest('.set-groups')) setDirty(); };
-  setDirty(); setAccounts(); showMsMail(); accountTabs();
+  setDirty(); setAccounts(); showMsMail(); sectionTabs(state.setSection);
   if ($('#set-search').value) setSearch();
 }
-/** Connected accounts: one tab per card, one card at a time (all of them while searching). */
-function accountTabs(pick) {
-  const sec = $('#view-settings .set-sec[data-sec="accounts"]');
-  const cards = [...sec.querySelectorAll('.set-groups > .set-card'), $('#mcp-card')];
-  let bar = sec.querySelector('.acc-tabs');
-  if (!bar) { bar = document.createElement('div'); bar.className = 'tabs acc-tabs'; bar.setAttribute('role', 'tablist'); sec.querySelector('header').after(bar); }
-  const key = c => c.dataset.id || c.id;
-  if (pick) try { localStorage.setItem('accTab', pick); } catch {}
-  let cur = pick; if (!cur) try { cur = localStorage.getItem('accTab'); } catch {}
-  if (!cards.some(c => key(c) === cur && !c.hidden)) cur = key(cards.find(c => !c.hidden) || cards[0]);
+/** Each settings section: one tab per card, one card at a time (all of them while searching). */
+function sectionTabs(id, pick) {
+  const sec = $(`#view-settings .set-sec[data-sec="${id}"]`); if (!sec) return;
+  const cards = [...sec.querySelectorAll(':scope > .set-card, .set-groups > .set-card')];
+  const key = (c, i) => c.dataset.id || c.id || 'card' + i;
+  let bar = sec.querySelector('.set-tabs');
+  if (!bar) { bar = document.createElement('div'); bar.className = 'tabs set-tabs'; bar.setAttribute('role', 'tablist'); sec.querySelector('header').after(bar); }
+  const shown = cards.filter(c => !c.hidden);
+  bar.hidden = shown.length < 2;
+  if (pick) try { localStorage.setItem('setTab:' + id, pick); } catch {}
+  let cur = pick; if (!cur) try { cur = localStorage.getItem('setTab:' + id); } catch {}
+  if (!shown.some(c => key(c, cards.indexOf(c)) === cur)) cur = shown[0] && key(shown[0], cards.indexOf(shown[0]));
   bar.innerHTML = '';
-  for (const c of cards) {
-    c.classList.toggle('tab-off', key(c) !== cur);
-    if (c.hidden) continue;
-    const h = c.querySelector('h4')?.cloneNode(true); h?.querySelectorAll('.badge, span').forEach(x => x.remove());
+  cards.forEach((c, i) => {
+    c.classList.toggle('tab-off', !bar.hidden && key(c, i) !== cur);
+    if (c.hidden) return;
+    const h = c.querySelector('h4')?.cloneNode(true); h?.querySelectorAll('span, button').forEach(x => x.remove());
     const b = document.createElement('button'); b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab');
-    b.setAttribute('aria-selected', String(key(c) === cur)); b.textContent = (h?.textContent || key(c)).trim();
-    b.onclick = () => accountTabs(key(c)); bar.append(b);
-  }
+    b.setAttribute('aria-selected', String(key(c, i) === cur)); b.textContent = (h?.textContent || '').trim() || t('More');
+    b.onclick = () => sectionTabs(id, key(c, i)); bar.append(b);
+  });
 }
 /** "Connect with Microsoft" under a mail group's Sign-in choice: Outlook / Microsoft 365 mail needs OAuth (XOAUTH2), not a password. */
 function msMailRow(purpose) {
@@ -3349,7 +3352,7 @@ async function storeConnectors() {
     catch (err) { toast(err.message); }
   };
 }
-function showMcpCard() { location.hash = '#settings'; setTimeout(() => { showSection('accounts'); accountTabs('mcp-card'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600); }
+function showMcpCard() { location.hash = '#settings'; setTimeout(() => { showSection('accounts'); sectionTabs('accounts', 'mcp-card'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600); }
 document.addEventListener('click', e => {
   const a = e.target.closest('a.connector');
   if (!a || a.closest('[contenteditable=true]')) return;

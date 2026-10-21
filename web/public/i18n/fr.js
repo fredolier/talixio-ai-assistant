@@ -2710,5 +2710,6 @@ window.I18N.fr = {
 "The store is shared by the people of a server run from the admin page (install-stack.sh). This assistant runs on its own, so it has none: share apps as files instead.": "Le catalogue est partagé par les personnes d’un serveur géré depuis la page d’administration (install-stack.sh). Cet assistant fonctionne seul, il n’en a donc pas : partagez plutôt les apps sous forme de fichiers.",
 "The store is not set up on this assistant yet: it was made by an older version. Ask the admin to update the server again, or to choose “Rebuild the container” for this assistant on the admin page.": "Le catalogue n’est pas encore en place sur cet assistant : il a été créé par une version plus ancienne. Demandez à l’administrateur de mettre à jour le serveur à nouveau, ou de choisir « Reconstruire le conteneur » pour cet assistant dans la page d’administration.",
 "Add the connectors listed in the FAQ": "Ajouter les connecteurs listés dans la FAQ",
-"{n} connector(s) added.": "{n} connecteur(s) ajouté(s)."
+"{n} connector(s) added.": "{n} connecteur(s) ajouté(s).",
+"The agent runs an older version than this page: run the update again from this page, or install-stack.sh on the server.": "L'agent tourne sur une version plus ancienne que cette page : relancez la mise à jour depuis cette page, ou install-stack.sh sur le serveur."
 };

@@ -7,8 +7,10 @@ and with `talixio version`. Each delivery raises it and adds a line here.
 
 - Store: the connectors listed in the FAQ are added to the catalog automatically when the agent starts or is updated
   (only once each: one the admin removes does not come back). The admin button still adds them all on demand.
-- Settings → Connected accounts: tabs, one per account or service, so you see one card at a time (all of them while
-  searching).
+- Settings: every section has tabs, one per card, so you see one card at a time (all of them while searching). Each
+  section remembers its last tab.
+- Admin: when the agent is older than the admin page (an action answers "not found"), the message says to run the
+  update again or install-stack.sh.
 - FAQ: Dolibarr connector added to the connector list (and so to the store).
 - FAQ: the connector list says where to find these connectors in the assistant's store.
 

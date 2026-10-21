@@ -90,6 +90,8 @@ const flows = {
     await page.fill('#set-search', 'theme');
     await page.waitForTimeout(400);
     await page.press('#set-search', 'Escape');
+    await page.click('.set-sec[data-sec="essentials"] .set-tabs .tab:has-text("Appearance")');
+    check('settings: one card per tab', await page.isVisible('#theme-mode') && !(await page.isVisible('#install-card')));
     await page.selectOption('#theme-mode', 'dark');
     await page.waitForTimeout(400);
     check('settings: the dark theme applies', await page.evaluate(() => document.documentElement.outerHTML.includes('dark')));

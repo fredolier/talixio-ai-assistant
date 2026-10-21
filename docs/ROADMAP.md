@@ -33,7 +33,7 @@ goes through the Talixio page or the server, never straight from the app.**
 
 ### Done (0.28.76)
 
-- The store fills itself with the FAQ's connectors at each agent start; tabs in Connected accounts.
+- The store fills itself with the FAQ's connectors at each agent start; tabs in every Settings section.
 
 ### Done (0.28.75)
 
