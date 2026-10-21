@@ -3327,12 +3327,13 @@ async function storeConnectors() {
   const mine = (state.mcpData?.servers || []).map(x => x.name);
   const sent = st.outbox.filter(x => x.kind === 'connector');
   box.innerHTML = `<h4>${esc(t('From the store'))}</h4>`
+    + (st.connectors.length > 8 ? `<input type="search" id="store-conn-filter" placeholder="${esc(t('Search the store'))}">` : '')
     + (st.connectors.length ? st.connectors.map(c => `<div class="row wrap store-item" data-id="${esc(c.id)}"><b class="no-i18n">${esc(c.name)}</b>
         <span class="muted small no-i18n">${esc(c.description || c.github || c.url)}</span><span class="spacer"></span>
         ${c.installed ? `<span class="pill on">${esc(t('Installed'))}</span><button type="button" class="btn small ghost" data-conn-remove="${esc(c.installed)}">${esc(t('Uninstall'))}</button>`
           : `<button type="button" class="btn small" data-conn-install>${esc(t('Install'))}</button>`}</div>`).join('')
-      : `<p class="muted small">${esc(t('The store has no connector yet.'))}</p>`)
-    + (mine.length ? `<form class="row wrap" id="store-conn-send"><select id="store-conn-pick">${mine.map(n => `<option class="no-i18n">${esc(n)}</option>`).join('')}</select>
+      : `<p class="muted small">${esc(t('The store has no connector yet. The connectors listed in the FAQ arrive once the server is updated.'))}</p>`)
+    + (mine.length ? `<p class="muted small">${esc(t('Share one of your connectors with everyone on this server (the admin reviews it first):'))}</p><form class="row wrap" id="store-conn-send"><select id="store-conn-pick">${mine.map(n => `<option class="no-i18n">${esc(n)}</option>`).join('')}</select>
         <input id="store-conn-note" placeholder="${esc(t('A word for the admin (optional)'))}" maxlength="500"><button class="btn small">${esc(t('Send for review'))}</button></form>
         <p class="muted small">${esc(t('Shares how to install it (its GitHub repository or address), never your keys or header values.'))}</p>` : '')
     + sent.map(x => `<p class="small muted"><span class="no-i18n">${esc(x.name)}</span>: ${esc(storeStatus(x))}</p>`).join('');
@@ -3345,6 +3346,8 @@ async function storeConnectors() {
     if (!confirm(t('Uninstall the connector “{name}”? Apps and the assistant lose its tools.', { name: b.dataset.connRemove }))) return;
     try { showConnectors(await post('api/mcp/remove', { server: b.dataset.connRemove })); } catch (e) { toast(e.message); }
   });
+  const q = $('#store-conn-filter');
+  if (q) q.oninput = () => { const v = fold(q.value.trim()); box.querySelectorAll('.store-item').forEach(r => { r.hidden = !!v && !fold(r.textContent).includes(v); }); };
   const f = $('#store-conn-send');
   if (f) f.onsubmit = async e => {
     e.preventDefault();

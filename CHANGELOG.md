@@ -5,6 +5,7 @@ and with `talixio version`. Each delivery raises it and adds a line here.
 
 ## 0.28.76 (2026-10-21)
 
+- Connectors → From the store: a line now explains the form below the list (share one of your connectors, the admin reviews it first), the empty-store message says the FAQ connectors arrive after the server update, and a search box appears when the store holds more than 8 connectors.
 - Store: the connectors listed in the FAQ are added to the catalog automatically when the agent starts or is updated
   (only once each: one the admin removes does not come back). The admin button still adds them all on demand.
 - Settings: every section has tabs, one per card, so you see one card at a time (all of them while searching). Each
