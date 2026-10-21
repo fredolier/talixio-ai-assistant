@@ -161,6 +161,10 @@ The assistant only gets what you allow.
   MCP key (Brevo → SMTP & API → API keys, tick *MCP server*). Once added, in Settings → Connectors set the
   `Authorization` header to `Bearer ` followed by your key. The key gives full access to your Brevo account.
   [▶ Install](?connector=https://mcp.brevo.com/v1/brevo/mcp&name=brevo&headers=Authorization)
+- **lemlist (official)**: prospecting campaigns, leads, sequences and their statistics. Once added, click
+  **Sign in** in Settings → Connectors and choose your lemlist team. The assistant gets full access to that team:
+  it can add leads and change campaigns.
+  [▶ Install](?connector=https://app.lemlist.com/mcp&name=lemlist)
 - **Jira and Confluence (Atlassian, official)**: search, read, create and update issues and pages. For Atlassian
   Cloud. An organisation admin must first allow API tokens for the Rovo MCP server (Atlassian Administration). Then
   create an API token (id.atlassian.com → Security → API tokens), and in Settings → Connectors set the

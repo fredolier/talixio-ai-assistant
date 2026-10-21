@@ -11,7 +11,7 @@ and with `talixio version`. Each delivery raises it and adds a line here.
   section remembers its last tab.
 - Admin: when the agent is older than the admin page (an action answers "not found"), the message says to run the
   update again or install-stack.sh.
-- FAQ: Dolibarr connector added to the connector list (and so to the store).
+- FAQ: Dolibarr and lemlist connectors added to the connector list (and so to the store).
 - FAQ: the connector list says where to find these connectors in the assistant's store.
 
 ## 0.28.75 (2026-10-21)

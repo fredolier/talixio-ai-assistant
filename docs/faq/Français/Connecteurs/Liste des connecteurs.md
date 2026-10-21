@@ -162,6 +162,10 @@ dans Réglages → Connecteurs. L'assistant n'a accès qu'à ce que vous autoris
   Connecteurs, mettez dans l'en-tête `Authorization` : `Bearer ` suivi de votre clé. La clé donne un accès complet à
   votre compte Brevo.
   [▶ Installer](?connector=https://mcp.brevo.com/v1/brevo/mcp&name=brevo&headers=Authorization)
+- **lemlist (officiel)** : campagnes de prospection, leads, séquences et leurs statistiques. Une fois ajouté,
+  cliquez sur **Se connecter** dans Réglages → Connecteurs et choisissez votre équipe lemlist. L'assistant a un accès
+  complet à cette équipe : il peut ajouter des leads et modifier des campagnes.
+  [▶ Installer](?connector=https://app.lemlist.com/mcp&name=lemlist)
 - **Jira et Confluence (Atlassian, officiel)** : chercher, lire, créer et modifier tickets et pages. Pour Atlassian
   Cloud. Un administrateur de l'organisation doit d'abord autoriser les jetons d'API pour le serveur Rovo MCP
   (Atlassian Administration). Créez ensuite un jeton d'API (id.atlassian.com → Sécurité → Jetons d'API), puis dans
