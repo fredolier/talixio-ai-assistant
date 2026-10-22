@@ -971,7 +971,6 @@ window.I18N.fr = {
 "Reading the page": "Lecture de la page",
 "Reading this file… it will be searchable in a moment.": "Lecture de ce fichier… il sera consultable dans un instant.",
 "Reading {a}": "Lecture de {a}",
-"Reading {a} new file{b} to make {c} searchable…": "Lecture de {a} fichier{b} récent{b} pour {c} rendre consultable{b}…",
 "reading…": "lecture…",
 "Reads the HEARTBEAT.md checklist and tells you if something needs attention. 0 = off. Each check is a model call.": "Lit la liste de contrôle HEARTBEAT.md et vous prévient si quelque chose demande votre attention. 0 = désactivé. Chaque vérification est un appel au modèle.",
 "Reads {a}; adds events to your main calendar after your approval.": "Lit {a} ; ajoute des événements à votre agenda principal après votre validation.",
@@ -2754,5 +2753,10 @@ window.I18N.fr = {
 "Move {n} files to which folder?": "Déplacer {n} fichiers vers quel dossier ?",
 "{n} moved": "{n} déplacés",
 "Delete {n}?": "Supprimer {n} ?",
-"{n} moved to the trash": "{n} mis à la corbeille"
+"{n} moved to the trash": "{n} mis à la corbeille",
+"Reading {a} new file{b} to index…": "Lecture de {a} nouveau{b} fichier{b} à indexer…",
+"＋ Add": "＋ Ajouter",
+"Trash ({n})": "Corbeille ({n})",
+"{a} files · {b}": "{a} fichiers · {b}",
+"{a} reading…": "{a} en lecture…"
 };

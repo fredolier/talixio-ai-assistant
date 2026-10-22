@@ -82,6 +82,12 @@ const flows = {
       await page.click(b); await page.waitForTimeout(500); await page.keyboard.press('Escape');
     }
     check('library: trash, recent and shares open', true);
+    await page.setViewportSize({ width: 390, height: 780 }); await page.waitForTimeout(150);
+    check('library mobile: toolbar is one + button', await page.isVisible('#lib-add') && !(await page.isVisible('#lib-upload')));
+    await page.click('#lib-add'); await page.waitForTimeout(150);
+    check('library mobile: the + opens every action', await page.isVisible('.row-menu') && (await page.textContent('.row-menu')).includes('New folder'));
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 1280, height: 860 }); await page.waitForTimeout(100);
   },
   async board({ page, check }) {
     await go(page, 'board');

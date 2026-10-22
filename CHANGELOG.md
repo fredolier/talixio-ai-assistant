@@ -5,6 +5,7 @@ and with `talixio version`. Each delivery raises it and adds a line here.
 
 ## 0.28.79 (2026-10-22)
 
+- Library on mobile: the toolbar is now a single **+** button that opens every action (import, new note/folder, shares, recent, trash); the search no longer overflows, the folder's actions sit on one scrollable row, and the stats line is compact. The full toolbar stays on desktop.
 - Library: search file and folder names with a regular expression (tick *Regex*), then move, download as a zip, or delete the matches in bulk.
 - Library (desktop): each file and folder has an actions button (⋯) — rename, move, download, share, delete, and for a folder: new file, new folder, download zip.
 - The assistant can make real document files — PDF, Word, Excel, OpenDocument, HTML or Markdown — and save them to the library, all on the server with LibreOffice, nothing sent to an outside service (tool `kb_make_document`). Ask for "a PDF of this", "a Word letter", "an Excel of these figures".

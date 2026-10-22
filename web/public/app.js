@@ -3853,8 +3853,12 @@ async function loadLibrary() {
   lib.folder = list.folder; lib.readonly = !!list.readonly;
   for (const b of ['#lib-upload', '#lib-newnote', '#lib-newfolder']) $(b).hidden = lib.readonly;
   const st = list.stats;
-  $('#lib-stats').textContent = st.files ? `${nf.format(st.files)} files · ${fmtSize(st.bytes)}${st.failed ? ` · ${st.failed} unreadable` : ''}. ${st.pending ? `Reading ${st.pending} new file${st.pending > 1 ? 's' : ''} to make ${st.pending > 1 ? 'them' : 'it'} searchable…` : 'Everything is searchable, by you and by the assistant.'}`
-    : 'Your documents, notes and recordings. Everything is searchable, by you and by the assistant.';
+  if (st.files) {
+    const full = `${nf.format(st.files)} files · ${fmtSize(st.bytes)}${st.failed ? ' ' + t('· {a} unreadable', { a: st.failed }) : ''}. ${st.pending ? t('Reading {a} new file{b} to index…', { a: st.pending, b: st.pending > 1 ? 's' : '' }) : t('Everything is searchable, by you and by the assistant.')}`;
+    const short = t('{a} files · {b}', { a: nf.format(st.files), b: fmtSize(st.bytes) }) + (st.failed ? ' ' + t('· {a} unreadable', { a: st.failed }) : '') + (st.pending ? ' · ' + t('{a} reading…', { a: st.pending }) : '');
+    $('#lib-stats').innerHTML = `<span class="stats-full">${esc(full)}</span><span class="stats-short">${esc(short)}</span>`;
+    $('#lib-stats').setAttribute('aria-label', full);
+  } else { $('#lib-stats').textContent = t('Your documents, notes and recordings. Everything is searchable, by you and by the assistant.'); $('#lib-stats').removeAttribute('aria-label'); }
   $('#folder-list').innerHTML = lib.tree.map(t => `<option value="${esc(t.path)}">`).join('');
   renderTree(); renderCrumbs(); renderList(list);
   if (!libSearch.phase && !libRegex.on) { $('#lib-results').hidden = true; $('#lib-list').hidden = false; } // no search: show the folder
@@ -5064,6 +5068,20 @@ document.querySelectorAll('.rail a[data-view=library]').forEach(a => a.addEventL
 $('#lib-upload').onclick = () => $('#lib-upload-input').click();
 $('#lib-upload-input').onchange = e => { libUpload([...e.target.files]); e.target.value = ''; };
 $('#lib-newnote').onclick = newNote;
+// mobile: one "+" opens every library action, so the toolbar is a single row
+$('#lib-add').onclick = e => {
+  e.stopPropagation();
+  if (lib.readonly) return;
+  openRowMenu(e.currentTarget, [
+    { label: t('Upload'), run: () => $('#lib-upload-input').click() },
+    { label: t('New note'), run: () => newNote() },
+    { label: t('New folder'), run: () => $('#lib-newfolder').click() },
+    { sep: true },
+    { label: t('Shares'), run: () => openSharesManager() },
+    { label: t('Recent changes'), run: () => showLibRecent() },
+    { label: lib.trash ? t('Trash ({n})', { n: lib.trash }) : t('Trash'), run: () => showLibTrash() },
+  ]);
+};
 $('#lib-newfolder').onclick = () => libInline(lib.folder === '/' ? '/' : lib.folder + '/', 'New folder path, e.g. /Clients/Alice', async v => {
   const { folder } = await post('api/library/folder', { path: v }); toast('Folder created'); libGo(folder);
 });

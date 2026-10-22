@@ -120,12 +120,13 @@
         <div><h2>Library</h2><p class="muted" id="lib-stats">Your documents, notes and recordings. Everything is searchable, by you and by the assistant.</p></div>
         <div class="lib-actions">
           <input id="lib-upload-input" type="file" multiple hidden>
-          <button id="lib-upload" class="btn primary" type="button">Upload</button>
-          <button id="lib-newnote" class="btn" type="button">New note</button>
-          <button id="lib-newfolder" class="btn" type="button">New folder</button>
-          <button id="lib-shares" class="btn" type="button" title="Links to your documents for people outside">Shares</button>
-          <button id="lib-recent" class="btn" type="button" title="Files created or changed lately, and by whom">Recent changes</button>
-          <button id="lib-trash" class="btn lib-trash-btn" type="button" title="Deleted files, restorable for 30 days">Trash</button>
+          <button id="lib-add" class="btn primary lib-add" type="button" aria-haspopup="menu" aria-label="Add">＋ Add</button>
+          <button id="lib-upload" class="btn primary lib-sec" type="button">Upload</button>
+          <button id="lib-newnote" class="btn lib-sec" type="button">New note</button>
+          <button id="lib-newfolder" class="btn lib-sec" type="button">New folder</button>
+          <button id="lib-shares" class="btn lib-sec" type="button" title="Links to your documents for people outside">Shares</button>
+          <button id="lib-recent" class="btn lib-sec" type="button" title="Files created or changed lately, and by whom">Recent changes</button>
+          <button id="lib-trash" class="btn lib-trash-btn lib-sec" type="button" title="Deleted files, restorable for 30 days">Trash</button>
         </div>
       </header>
       <form id="lib-search" class="search" role="search">

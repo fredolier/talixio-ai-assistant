@@ -319,6 +319,8 @@ tr:last-child td{border-bottom:0}
 }
 .lib-head{flex-direction:row;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .lib-actions{display:flex;gap:8px;flex-wrap:wrap}
+.lib-add{display:none}
+.stats-short{display:none}
 .search .scope{display:flex;align-items:center;gap:6px;white-space:nowrap;color:var(--muted);font-size:.83rem}
 .search .scope input{width:auto}
 .lib{display:grid;grid-template-columns:230px 1fr;gap:16px;align-items:start;min-height:0}
@@ -493,8 +495,22 @@ button.mark:disabled{cursor:default}
   .rail .more.active{color:var(--ink);font-weight:600}
   .lib{grid-template-columns:1fr}
   .lib-tree{display:none}
-  .lib-trash-btn{display:inline-flex}
   .lib-drop-hint{display:none}
+  /* one-row toolbar: a single "+" opens every action */
+  .lib-sec{display:none!important}
+  .lib-add{display:inline-flex}
+  .lib-head{align-items:center}
+  .stats-full{display:none}
+  .stats-short{display:inline}
+  #lib-stats{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  /* search: full-width field, toggles + button wrap below, never overflow */
+  .search{flex-wrap:wrap}
+  #lib-q{flex:1 1 100%;min-width:0}
+  .search>.btn[type=submit]{flex:1}
+  /* in-folder actions: one scrollable row instead of stacking */
+  .lib-bar #lib-folder-actions{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;max-width:100%}
+  .lib-bar #lib-folder-actions::-webkit-scrollbar{display:none}
+  .lib-bar #lib-folder-actions .btn{flex:none}
   .viewer{border-left:0}
   .viewer-head{padding:12px 12px 6px}
   .viewer-title h3{font-size:.98rem;line-height:1.3}
