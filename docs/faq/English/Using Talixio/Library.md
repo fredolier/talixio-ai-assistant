@@ -75,5 +75,12 @@ formatting toolbar; in a table, add or move rows and columns from its handles. *
 (files with front matter or HTML open on it). *Full screen* gives the editor the whole window; Esc closes a menu
 first, then leaves it. A file you open and save without changing it is kept exactly as it was.
 
+## Documents the assistant makes
+Ask for a **PDF, Word (.docx), Excel (.xlsx), OpenDocument (.odt/.ods), web page (.html) or Markdown** file and the
+assistant builds it on the server with LibreOffice (`kb_make_document`) and saves it to your library, ready to
+download, print, sign or send. Nothing is sent to an outside service. For a report, letter or quote it writes
+Markdown; for a spreadsheet, a table. This needs LibreOffice (the Docker image has it; otherwise `install.sh
+--with-office`).
+
 ## The /FAQ folder
 It is read-only and refreshed with each version: these pages are part of it.

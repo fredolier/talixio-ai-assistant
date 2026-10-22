@@ -242,6 +242,21 @@ final class Tools
                 $f = $this->app->library()->saveNote($folder, (string)($a['name'] ?? ''), $a['content'], isset($a['id']) ? (int)$a['id'] : null);
                 return 'saved ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']})";
             });
+        $this->register('kb_make_document',
+            "Make a real document file and save it to the user's library — PDF, Word (docx), Excel (xlsx), OpenDocument (odt/ods), HTML or Markdown — all on the server, nothing sent outside. "
+            . "Use it when the user wants a document to download, print, sign or send (a report, a letter, a quote, a table), not just an on-screen answer. "
+            . "For pdf/docx/odt/html/md, write content as Markdown (headings, lists, tables, **bold**); for xlsx/ods, give content as CSV or a Markdown table. "
+            . "Name it without needing an extension; it lands in the Inbox unless you give a folder.",
+            ['content' => ['type' => 'string'], 'format' => ['type' => 'string', 'enum' => Documents::formats()], 'name' => ['type' => 'string'],
+             'folder' => ['type' => 'string'], 'from' => ['type' => 'string', 'enum' => ['markdown', 'html', 'csv'], 'description' => 'how content is written; default markdown']],
+            ['content', 'format', 'name'],
+            function (array $a) {
+                $folder = Library::normalize((string)($a['folder'] ?? ($this->spaceFolder() !== '' ? $this->spaceFolder() . '/Notes' : Library::INBOX)));
+                $this->noWriteDown($folder, $this->app->privacy()->effective());
+                $id = $this->app->documents()->make((string)$a['content'], (string)$a['format'], (string)$a['name'], $folder, (string)($a['from'] ?? 'markdown'));
+                $f = $this->app->files()->get($id);
+                return 'made ' . Library::join((string)$f['folder'], (string)$f['name']) . " (file #{$id})";
+            });
         $this->register('kb_move', "File a document in the user's library: move it to a folder (created if needed), optionally renaming it. Use to tidy attachments out of /Inbox when the user asks. "
             . "If the name is already used there, both are kept (\"name (2)\"); replace true instead makes this the new content of that file (its earlier content becomes a version).",
             ['id' => ['type' => 'integer'], 'folder' => ['type' => 'string'], 'name' => ['type' => 'string'], 'replace' => ['type' => 'boolean']], ['id', 'folder'],

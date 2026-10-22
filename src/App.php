@@ -113,6 +113,7 @@ final class App
     public function email(): Email { return new Email($this); }
     public function files(): Files { return new Files($this); }
     public function library(): Library { return new Library($this); }
+    public function documents(): Documents { return new Documents($this); }
     public function approvals(): Approvals { return new Approvals($this); }
     public function skills(): Skills { return new Skills($this); }
     public function mind(): Mind { return new Mind($this); }

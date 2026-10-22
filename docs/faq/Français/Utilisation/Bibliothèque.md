@@ -78,5 +78,12 @@ et colonnes depuis ses poignées. **Markdown** bascule sur la source (les fichie
 s'ouvrent dessus). *Plein écran* donne toute la fenêtre à l'éditeur ; Échap ferme d'abord un menu, puis en sort.
 Un fichier ouvert puis enregistré sans modification reste exactement tel quel.
 
+## Les documents créés par l'assistant
+Demandez un fichier **PDF, Word (.docx), Excel (.xlsx), OpenDocument (.odt/.ods), page web (.html) ou Markdown** et
+l'assistant le fabrique sur le serveur avec LibreOffice (`kb_make_document`) puis l'enregistre dans votre
+bibliothèque, prêt à télécharger, imprimer, signer ou envoyer. Rien n'est envoyé à un service extérieur. Pour un
+rapport, une lettre ou un devis il écrit du Markdown ; pour un tableur, un tableau. Cela nécessite LibreOffice
+(l'image Docker l'inclut ; sinon `install.sh --with-office`).
+
 ## Le dossier /FAQ
 Il est en lecture seule et remis à jour à chaque version : ces pages en font partie.

@@ -1402,6 +1402,23 @@ check('library: and back to .md, a note again', $md['note'] == 1 && $md['mime'] 
 $la->store->q("UPDATE files SET note = 1, mime = 'text/markdown' WHERE id = ?", [$page['id']]); $la->store->set('fix.html_notes', '');
 new \Talixio\Store($la->store->path);
 check('library: notes already named .html are repaired once', !$lf->get((int)$page['id'])['note'] && $lf->get((int)$page['id'])['mime'] === 'text/html' && $lf->get((int)$md['id'])['note'] == 1);
+// kb_make_document: real document files made on the server (LibreOffice), nothing sent outside
+$docs = $la->documents();
+$dmd = $lf->get($docs->make("# Titre\n\n- un\n- deux\n", 'md', 'Compte rendu'));
+check('documents: Markdown is saved as a .md file', $dmd['name'] === 'Compte rendu.md' && $dmd['mime'] === 'text/markdown' && str_contains((string)file_get_contents($dmd['path']), '# Titre'));
+$dhtml = $lf->get($docs->make("# Bonjour\n", 'html', 'Page', '/Notes'));
+check('documents: Markdown to HTML is a styled web page', $dhtml['name'] === 'Page.html' && $dhtml['mime'] === 'text/html' && str_contains((string)file_get_contents($dhtml['path']), '<h1>Bonjour</h1>'));
+check('documents: an unknown format is refused', (function () use ($docs) { try { $docs->make('x', 'exe', 'bad'); return false; } catch (\InvalidArgumentException) { return true; } })());
+if (\Talixio\Files::officeBinary()) {
+    $dpdf = $lf->get($docs->make("# Devis\n\nTotal : 500\n", 'pdf', 'Devis'));
+    check('documents: a PDF is produced by LibreOffice', $dpdf['name'] === 'Devis.pdf' && $dpdf['kind'] === 'pdf' && str_starts_with((string)file_get_contents($dpdf['path']), '%PDF'));
+    $ddocx = $lf->get($docs->make("## Lettre\n\nMadame, Monsieur\n", 'docx', 'Lettre'));
+    check('documents: a Word file is produced', str_ends_with($ddocx['name'], '.docx') && $ddocx['kind'] === 'office' && filesize($ddocx['path']) > 0);
+    $dxls = $lf->get($docs->make("Nom,Montant\nConseil,500\n", 'xlsx', 'Tableau', '/', 'csv'));
+    check('documents: a spreadsheet is produced from CSV', str_ends_with($dxls['name'], '.xlsx') && $dxls['kind'] === 'office' && filesize($dxls['path']) > 0);
+    $dtab = $lf->get($docs->make("| A | B |\n|---|---|\n| 1 | 2 |\n", 'xlsx', 'FromTable'));
+    check('documents: a spreadsheet can be made from a Markdown table', str_ends_with($dtab['name'], '.xlsx') && filesize($dtab['path']) > 0);
+} else { fwrite(STDERR, "note: LibreOffice not installed, documents office formats not tested here\n"); }
 // images: described by the fast model when allowed (skipped with the echo provider)
 $png = (function () { $im = imagecreatetruecolor(40, 30); ob_start(); imagepng($im); return (string)ob_get_clean(); })();
 $idImg = $lf->save($mk('x', $png), 'ticket.png', 'image/png', '/Perso/Admin/Budget');
