@@ -4098,6 +4098,57 @@ $('#lib-recent').onclick = () => showLibRecent();
 $('#viewer-share').onclick = () => lib.file && openShare({ file: lib.file.id }, lib.file.name);
 const isVideo = f => (f.mime || '').startsWith('video/');
 const Library_join = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
+
+// A small action menu anchored under a row's "⋯" button (desktop). items: {label, run?, href?, download?, danger?, sep?}.
+let rowMenuEl = null;
+function closeRowMenu() { rowMenuEl?.remove(); rowMenuEl = null; }
+function openRowMenu(btn, items) {
+  const open = rowMenuEl && rowMenuEl._btn === btn; closeRowMenu();
+  if (open) return; // a second click on the same button closes it
+  const m = document.createElement('div'); m.className = 'row-menu'; m.setAttribute('role', 'menu'); m._btn = btn;
+  for (const it of items) {
+    if (it.sep) { const s = document.createElement('div'); s.className = 'row-menu-sep'; m.append(s); continue; }
+    const a = document.createElement(it.href ? 'a' : 'button');
+    if (it.href) { a.href = it.href; if (it.download) a.setAttribute('download', it.download); } else a.type = 'button';
+    a.className = 'row-menu-item' + (it.danger ? ' danger' : ''); a.setAttribute('role', 'menuitem'); a.textContent = it.label;
+    a.addEventListener('click', e => { e.stopPropagation(); if (!it.href) e.preventDefault(); closeRowMenu(); it.run?.(); });
+    m.append(a);
+  }
+  document.body.append(m);
+  const r = btn.getBoundingClientRect();
+  m.style.top = Math.max(8, Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 8)) + 'px';
+  m.style.left = Math.max(8, Math.min(r.right - m.offsetWidth, innerWidth - m.offsetWidth - 8)) + 'px';
+  rowMenuEl = m;
+}
+document.addEventListener('click', e => { if (!e.target.closest('.row-menu')) closeRowMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && rowMenuEl) { e.stopPropagation(); closeRowMenu(); } }, true);
+window.addEventListener('resize', closeRowMenu);
+window.addEventListener('scroll', closeRowMenu, true);
+
+function libFileMenu(btn, f) {
+  openRowMenu(btn, [
+    { label: t('Rename'), run: () => libInline(f.name, t('New name'), async v => { if (await withReplace(r => post(`api/files/${f.id}/rename`, { name: v, ...r }))) { toast(t('Renamed')); loadLibrary(); } }, false) },
+    { label: t('Move to…'), run: () => libInline(f.folder, t('Folder'), async v => { if (await withReplace(r => post(`api/files/${f.id}/move`, { folder: v, ...r }))) { toast(t('Moved to {folder}', { folder: v })); loadLibrary(); } }, true) },
+    { label: t('Download'), href: `api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1`, download: f.name },
+    { label: t('Share…'), run: () => openShare({ file: f.id }, f.name) },
+    { sep: true },
+    { label: t('Delete'), danger: true, run: async () => { try { await post(`api/files/${f.id}/delete`); toast(t('Moved to the trash')); loadLibrary(); } catch (e) { toast(e.message); } } },
+  ]);
+}
+function libFolderMenu(btn, folder, total) {
+  const name = folder.split('/').pop();
+  openRowMenu(btn, [
+    { label: t('Open'), run: () => libGo(folder) },
+    { label: t('New file here'), run: () => newNote(folder) },
+    { label: t('New folder here'), run: () => libInline(folder + '/', t('New folder path'), async v => { const { folder: nf } = await post('api/library/folder', { path: v }); toast(t('Folder created')); libGo(nf); }, true) },
+    { label: t('Rename or move'), run: () => libInline(folder, t('Folder path'), async v => { const { folder: nf } = await post('api/library/folder/move', { from: folder, to: v }); toast(t('Folder renamed')); libGo(nf); }, true) },
+    { label: t('Download zip'), href: `api/library/zip?folder=${encodeURIComponent(folder)}`, download: name + '.zip' },
+    { sep: true },
+    { label: t('Delete'), danger: true, run: async () => { if (!confirm(t('Delete the folder “{name}”{n}?', { name, n: total ? t(' and its {n} files', { n: total }) : '' }))) return; try { const r = await post('api/library/folder/delete', { path: folder, recursive: true }); toast(r.deleted_files ? t('Folder moved to the trash') : t('Folder deleted')); loadLibrary(); } catch (e) { toast(e.message); } } },
+  ]);
+}
+const KEBAB_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
+
 function fileRow(f, sub) {
   const el = document.createElement('div'); el.className = 'lib-row'; el.draggable = true; el.tabIndex = 0; el.setAttribute('role', 'button');
   const ext = (f.name.match(/\.([a-z0-9]{1,4})$/i) || [])[1];
@@ -4105,8 +4156,10 @@ function fileRow(f, sub) {
   const ico = f.kind === 'image' || f.kind === 'pdf' ? `<img src="api/files/${f.id}/thumb" alt="" loading="lazy">` : label;
   const status = f.status === 'pending' || f.status === 'processing' ? '<span class="pill pending">reading…</span>' : f.status === 'failed' ? '<span class="pill failed">unreadable</span>' : '';
   el.innerHTML = `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>`
-    + `<span class="row-end">${status}${lib.shared?.files?.includes(f.id) ? `<span class="shared-mark" title="${esc(t('Shared by link'))}">${LINK_SVG}</span>` : ''}<a class="btn ghost icon dl" href="api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a></span>`;
+    + `<span class="row-end">${status}${lib.shared?.files?.includes(f.id) ? `<span class="shared-mark" title="${esc(t('Shared by link'))}">${LINK_SVG}</span>` : ''}<a class="btn ghost icon dl" href="api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a>`
+    + (lib.readonly ? '' : `<button type="button" class="btn ghost icon kebab" aria-label="${esc(t('Actions'))}" aria-haspopup="menu" title="${esc(t('Actions'))}">${KEBAB_SVG}</button>`) + `</span>`;
   el.querySelector('.dl').onclick = e => e.stopPropagation();
+  el.querySelector('.kebab')?.addEventListener('click', e => { e.stopPropagation(); libFileMenu(e.currentTarget, f); });
   const sg = f.suggestion;
   if (sg) { // where it would go: one click to file it, or edit, or dismiss
     const target = (sg.folder !== f.folder ? sg.folder + '/' : '') + (sg.name !== f.name ? sg.name : (sg.folder !== f.folder ? '' : sg.name));
@@ -4133,8 +4186,10 @@ function renderList(list) {
   const box = $('#lib-list'); box.innerHTML = '';
   for (const t of list.folders) {
     const el = document.createElement('a'); el.href = '#'; el.className = 'lib-row';
-    el.innerHTML = `<span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(t.name)}</b><span>${t.total} file${t.total === 1 ? '' : 's'}</span></span><span class="row-end">${lib.shared?.folders?.includes(t.path) ? `<span class="shared-mark" title="${esc(window.t('Shared by link'))}">${LINK_SVG}</span>` : ''}</span>`;
+    el.innerHTML = `<span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(t.name)}</b><span>${t.total} file${t.total === 1 ? '' : 's'}</span></span><span class="row-end">${lib.shared?.folders?.includes(t.path) ? `<span class="shared-mark" title="${esc(window.t('Shared by link'))}">${LINK_SVG}</span>` : ''}`
+      + (lib.readonly ? '' : `<button type="button" class="btn ghost icon kebab" aria-label="${esc(window.t('Actions'))}" aria-haspopup="menu" title="${esc(window.t('Actions'))}">${KEBAB_SVG}</button>`) + `</span>`;
     el.onclick = e => { e.preventDefault(); libGo(t.path); };
+    el.querySelector('.kebab')?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); libFolderMenu(e.currentTarget, t.path, t.total); });
     dropTarget(el, t.path);
     box.append(el);
   }
@@ -4377,8 +4432,8 @@ function viewerForm(value, onOk, folders = false) {
 function pdfPageHtml(id, n, total) {
   return `<figure class="pdf-page"><img src="api/files/${id}/page/${n}" alt="Page ${n}" loading="lazy"><figcaption>Page ${n} of ${total}</figcaption></figure>`;
 }
-async function newNote() {
-  const folder = lib.folder === '/' ? '/Notes' : lib.folder;
+async function newNote(where) {
+  const folder = (typeof where === 'string' ? where : lib.folder) === '/' ? '/Notes' : (typeof where === 'string' ? where : lib.folder);
   try { const { file } = await post('api/library/note', { folder, name: '', content: '# ' }); await loadLibrary(); await openFile(file.id); $('#viewer-body [data-tab=edit]')?.click(); }
   catch (e) { toast(e.message); }
 }

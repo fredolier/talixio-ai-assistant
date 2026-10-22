@@ -1353,3 +1353,13 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 #view-apps.app-wide{padding:12px 16px 16px;gap:10px}
 #view-apps.app-wide>.page-head{display:none}
 #view-apps.app-wide .app-frame{height:calc(100vh - 110px)}
+/* library row action menu */
+.lib-row .row-end .kebab{opacity:0;transition:opacity .12s;padding:4px}
+.lib-row:hover .kebab,.lib-row:focus-within .kebab,.lib-row .kebab[aria-expanded=true]{opacity:1}
+@media (hover:none){.lib-row .kebab{opacity:1}}
+.kebab svg{width:18px;height:18px;fill:currentColor;stroke:none}
+.row-menu{position:fixed;z-index:60;min-width:190px;background:var(--surface,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:6px;display:flex;flex-direction:column}
+.row-menu-item{display:block;width:100%;text-align:left;background:none;border:0;border-radius:7px;padding:8px 12px;font:inherit;color:var(--ink,inherit);cursor:pointer;text-decoration:none}
+.row-menu-item:hover,.row-menu-item:focus{background:var(--sunk,#f2f5f4);outline:none}
+.row-menu-item.danger{color:#b42318}
+.row-menu-sep{height:1px;background:var(--line);margin:5px 4px}

@@ -52,6 +52,12 @@ const flows = {
     await page.press('#lib-inline-input', 'Enter');
     await page.waitForTimeout(800);
     check('library: the new folder shows', (await page.textContent('#lib-tree')).includes('Alex'));
+    await page.evaluate(() => { location.hash = '#library'; }); await page.waitForTimeout(500);
+    await page.hover('#lib-list .lib-row');
+    await page.click('#lib-list .lib-row .kebab');
+    await page.waitForTimeout(200);
+    check('library: a row action menu opens', await page.isVisible('.row-menu') && (await page.textContent('.row-menu')).includes('New file here'));
+    await page.keyboard.press('Escape');
     await page.click('#lib-newnote');
     await page.waitForTimeout(1000);
     check('library: a new note opens', await page.isVisible('#viewer-body'));

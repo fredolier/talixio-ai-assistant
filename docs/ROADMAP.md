@@ -34,6 +34,9 @@ goes through the Talixio page or the server, never straight from the app.**
 ### Done (0.28.76-0.28.79)
 
 - The store fills itself with the FAQ's connectors at each agent start; tabs in every Settings section.
+- Store connectors grouped in tabs by theme; an open app takes the whole page.
+- **The assistant makes document files** — PDF, Word, Excel, OpenDocument, HTML, Markdown — locally with LibreOffice, saved to the library (nothing sent outside).
+- PHP2Shell (CVE-2026-109618/109619): patched PHP in the rebuilt image, upload-progress mitigation, and a check script.
 
 ### Done (0.28.75)
 

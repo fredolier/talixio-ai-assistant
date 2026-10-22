@@ -5,6 +5,7 @@ and with `talixio version`. Each delivery raises it and adds a line here.
 
 ## 0.28.79 (2026-10-22)
 
+- Library (desktop): each file and folder has an actions button (⋯) — rename, move, download, share, delete, and for a folder: new file, new folder, download zip.
 - The assistant can make real document files — PDF, Word, Excel, OpenDocument, HTML or Markdown — and save them to the library, all on the server with LibreOffice, nothing sent to an outside service (tool `kb_make_document`). Ask for "a PDF of this", "a Word letter", "an Excel of these figures".
 
 ## 0.28.78 (2026-10-21)

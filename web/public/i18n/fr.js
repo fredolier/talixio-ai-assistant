@@ -2729,5 +2729,20 @@ window.I18N.fr = {
 "Hosting and cloud": "Hébergement et cloud",
 "Travel and outings": "Voyages et sorties",
 "Jobs": "Emploi",
-"Groceries and delivery": "Courses et livraison"
+"Groceries and delivery": "Courses et livraison",
+"Actions": "Actions",
+"New name": "Nouveau nom",
+"Move to…": "Déplacer vers…",
+"Renamed": "Renommé",
+"Moved to {folder}": "Déplacé vers {folder}",
+"Moved to the trash": "Mis à la corbeille",
+"Share…": "Partager…",
+"New file here": "Nouveau fichier ici",
+"New folder here": "Nouveau dossier ici",
+"New folder path": "Chemin du nouveau dossier",
+"Rename or move": "Renommer ou déplacer",
+"Delete the folder “{name}”{n}?": "Supprimer le dossier « {name} »{n} ?",
+" and its {n} files": " et ses {n} fichiers",
+"Folder moved to the trash": "Dossier mis à la corbeille",
+"Moved": "Déplacé"
 };
