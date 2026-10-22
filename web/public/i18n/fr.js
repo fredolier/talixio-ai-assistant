@@ -2744,5 +2744,15 @@ window.I18N.fr = {
 "Delete the folder “{name}”{n}?": "Supprimer le dossier « {name} »{n} ?",
 " and its {n} files": " et ses {n} fichiers",
 "Folder moved to the trash": "Dossier mis à la corbeille",
-"Moved": "Déplacé"
+"Moved": "Déplacé",
+"Regex": "Regex",
+"Searching names for /{q}/…": "Recherche des noms /{q}/…",
+"1 name matches /{q}/": "1 nom correspond à /{q}/",
+"{n} names match /{q}/": "{n} noms correspondent à /{q}/",
+"No name matches /{q}/": "Aucun nom ne correspond à /{q}/",
+"{n} selected": "{n} sélectionnés",
+"Move {n} files to which folder?": "Déplacer {n} fichiers vers quel dossier ?",
+"{n} moved": "{n} déplacés",
+"Delete {n}?": "Supprimer {n} ?",
+"{n} moved to the trash": "{n} mis à la corbeille"
 };

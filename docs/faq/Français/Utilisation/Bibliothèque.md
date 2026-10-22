@@ -30,6 +30,8 @@
   Il cite le document et la page ; un clic l'ouvre à cette page.
 - *Demander à propos de ce dossier* lance une question sur ses documents.
 
+
+**Recherche par nom avec une expression régulière** : cochez *Regex* à côté de la recherche pour filtrer les noms de fichiers et de dossiers avec un motif (par ex. `facture 2026-0\d`, `\.pdf$`). Dans les résultats, cochez plusieurs fichiers pour les **déplacer**, les **télécharger en zip** ou les **supprimer** d'un coup.
 ## Un nom par dossier, les versions
 - Un nom n'est utilisé qu'une fois par dossier (majuscules comprises). Envoyer un fichier sous un nom déjà présent,
   l'assistant qui enregistre de nouveau une note, ou un enregistrement depuis le lecteur réseau **remplace** ce fichier :

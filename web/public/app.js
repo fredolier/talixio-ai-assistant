@@ -3846,7 +3846,7 @@ function libGo(folder) { location.hash = '#library' + (folder === '/' ? '' : fol
 async function loadLibrary() {
   const was = lib.folder;
   lib.folder = libFolderFromHash() || '/';
-  if (was !== undefined && was !== lib.folder && libSearch.phase) libSearchClose(); // another folder: its content, not old results
+  if (was !== undefined && was !== lib.folder && (libSearch.phase || libRegex.on)) libSearchClose(); // another folder: its content, not old results
   const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
   lib.tree = tree.tree; lib.trash = tree.stats.trash || 0; lib.shared = list.shared;
   $('#lib-trash').textContent = lib.trash ? `${t('Trash')} (${lib.trash})` : t('Trash'); lib.level = list.level || 'internal';
@@ -3857,6 +3857,7 @@ async function loadLibrary() {
     : 'Your documents, notes and recordings. Everything is searchable, by you and by the assistant.';
   $('#folder-list').innerHTML = lib.tree.map(t => `<option value="${esc(t.path)}">`).join('');
   renderTree(); renderCrumbs(); renderList(list);
+  if (!libSearch.phase && !libRegex.on) { $('#lib-results').hidden = true; $('#lib-list').hidden = false; } // no search: show the folder
   // the Library tab reopens the last folder; the breadcrumb's "Library" goes to the top
   document.querySelectorAll('a[data-view=library]').forEach(a => { a.href = '#library' + (lib.folder === '/' ? '' : lib.folder.split('/').map(encodeURIComponent).join('/')); });
   $('#lib-scope-label').textContent = lib.folder === '/' ? 'this folder only' : `only in ${lib.folder.split('/').pop()}`;
@@ -5124,7 +5125,79 @@ function libSearchStop() {
 /** Back to the folder's list. */
 function libSearchClose() {
   libSearch.ctl?.abort(); libSearch.ctl = null; libSearch.phase = ''; libSearch.results = null; libSearch.names = null;
+  libRegex.on = false; libRegex.picked = new Set();
   $('#lib-results').hidden = true; $('#lib-results').innerHTML = ''; $('#lib-list').hidden = false;
+}
+
+// Power search by name with a regular expression; results carry checkboxes and bulk actions (move, delete, zip).
+const libRegex = { on: false, q: '', folder: '/', files: [], folders: [], picked: new Set() };
+async function libRegexSearch(q, folder) {
+  libSearch.phase = ''; // not the keyword/meaning flow
+  Object.assign(libRegex, { on: true, q, folder, files: [], folders: [], picked: new Set() });
+  const box = $('#lib-results'); box.hidden = false; $('#lib-list').hidden = true;
+  box.innerHTML = `<div class="search-head"><span class="small">${esc(t('Searching names for /{q}/…', { q }))}</span></div>`;
+  try {
+    const r = await api(`api/library/find-regex?q=${encodeURIComponent(q)}&folder=${encodeURIComponent(folder)}`);
+    libRegex.files = r.files; libRegex.folders = r.folders; libRegexRender();
+  } catch (err) { box.innerHTML = `<div class="search-head"><span class="small error">${esc(err.message)}</span><span class="spacer"></span><button class="btn small ghost" type="button" data-a="close">${esc(t('Close the search'))}</button></div>`; box.querySelector('[data-a=close]').onclick = libSearchClose; }
+}
+function libRegexRender() {
+  const box = $('#lib-results'), { q, folder, files, folders, picked } = libRegex;
+  box.hidden = false; $('#lib-list').hidden = true; box.innerHTML = '';
+  const where = folder !== '/' ? ' ' + t('in {folder}', { folder }) : '';
+  const n = files.length + folders.length;
+  const head = document.createElement('div'); head.className = 'search-head';
+  head.innerHTML = `<span class="small">${esc(n === 1 ? t('1 name matches /{q}/', { q }) : t('{n} names match /{q}/', { n, q }))}${esc(where)}</span><span class="spacer"></span>`
+    + `<button class="btn small ghost" type="button" data-a="close">${esc(t('Close the search'))}</button>`;
+  head.querySelector('[data-a=close]').onclick = libSearchClose;
+  box.append(head);
+  if (!n) { const p = document.createElement('div'); p.className = 'placeholder'; p.textContent = t('No name matches /{q}/', { q }); box.append(p); return; }
+  // bulk action bar (shown when at least one file is ticked)
+  const bar = document.createElement('div'); bar.className = 'bulk-bar'; bar.hidden = !picked.size;
+  bar.innerHTML = `<label class="small"><input type="checkbox" id="rx-all"> ${esc(t('All'))}</label><span class="small bulk-n"></span><span class="spacer"></span>`
+    + `<button class="btn small" type="button" data-a="move">${esc(t('Move to…'))}</button>`
+    + `<a class="btn small" data-a="zip">${esc(t('Download zip'))}</a>`
+    + `<button class="btn small ghost danger" type="button" data-a="del">${esc(t('Delete'))}</button>`;
+  box.append(bar);
+  const refreshBar = () => {
+    bar.hidden = !picked.size; bar.querySelector('.bulk-n').textContent = picked.size ? t('{n} selected', { n: picked.size }) : '';
+    const all = bar.querySelector('#rx-all'); all.checked = picked.size === files.length && files.length > 0; all.indeterminate = picked.size > 0 && picked.size < files.length;
+    const zip = bar.querySelector('[data-a=zip]'); zip.href = `api/library/zip?folder=/&ids=${[...picked].join(',')}`; zip.setAttribute('download', 'library-selection.zip');
+  };
+  bar.querySelector('#rx-all').onchange = e => { picked.clear(); if (e.target.checked) for (const f of files) picked.add(f.id); box.querySelectorAll('.rx-pick').forEach(c => c.checked = e.target.checked); refreshBar(); };
+  bar.querySelector('[data-a=move]').onclick = () => libInline('/', t('Move {n} files to which folder?', { n: picked.size }), async v => {
+    const r = await post('api/files/bulk', { ids: [...picked], action: 'move', folder: v });
+    toast(t('{n} moved', { n: r.done }) + (r.errors?.length ? ' · ' + r.errors.length + ' ' + t('failed') : '')); libRegexSearch(q, folder); loadLibrary();
+  }, true);
+  bar.querySelector('[data-a=del]').onclick = async ev => {
+    const b = ev.currentTarget;
+    if (b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = t('Delete {n}?', { n: picked.size }); return; }
+    try { const r = await post('api/files/bulk', { ids: [...picked], action: 'delete' }); toast(t('{n} moved to the trash', { n: r.done })); libRegexSearch(q, folder); loadLibrary(); } catch (e) { toast(e.message); }
+  };
+  if (folders.length) {
+    const sub = document.createElement('div'); sub.className = 'search-sub muted small'; sub.textContent = t('Folders'); box.append(sub);
+    const list = document.createElement('div'); list.className = 'lib-list';
+    for (const d of folders) {
+      const el = document.createElement('a'); el.href = '#'; el.className = 'lib-row';
+      el.innerHTML = `<span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(d.path.split('/').pop())}</b><span class="snippet">${esc(d.path)} · ${esc(d.total === 1 ? t('1 file') : t('{n} files', { n: d.total }))}</span></span>`;
+      el.onclick = e => { e.preventDefault(); libSearchClose(); libGo(d.path); };
+      list.append(el);
+    }
+    box.append(list);
+  }
+  if (files.length) {
+    const sub = document.createElement('div'); sub.className = 'search-sub muted small'; sub.textContent = t('Files'); box.append(sub);
+    const list = document.createElement('div'); list.className = 'lib-list';
+    for (const f of files) {
+      const wrap = document.createElement('div'); wrap.className = 'rx-item';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'rx-pick'; cb.checked = picked.has(f.id);
+      cb.onclick = e => { e.stopPropagation(); cb.checked ? picked.add(f.id) : picked.delete(f.id); refreshBar(); };
+      const row = fileRow({ ...f, created: 0, status: 'ready' }, joinPath(f.folder, f.name));
+      wrap.append(cb, row); list.append(wrap);
+    }
+    box.append(list);
+  }
+  refreshBar();
 }
 $('#lib-search').onsubmit = async e => {
   e.preventDefault();
@@ -5132,6 +5205,7 @@ $('#lib-search').onsubmit = async e => {
   const q = $('#lib-q').value.trim();
   if (!q) return libSearchClose();
   const folder = $('#lib-scope').checked ? lib.folder : '/';
+  if ($('#lib-regex').checked) return libRegexSearch(q, folder);
   const ctl = new AbortController();
   Object.assign(libSearch, { ctl, q, folder, results: null, names: null, phase: 'quick' });
   libSearchRender();
@@ -5153,7 +5227,7 @@ $('#lib-search').onsubmit = async e => {
   }
 };
 document.addEventListener('keydown', e => { // Esc: stops a running search (then closes it), unless a document or a dialog is open
-  if (e.key !== 'Escape' || !libSearch.phase || $('#view-library').hidden || !$('#viewer').hidden || document.querySelector('dialog[open]')) return;
+  if (e.key !== 'Escape' || (!libSearch.phase && !libRegex.on) || $('#view-library').hidden || !$('#viewer').hidden || document.querySelector('dialog[open]')) return;
   e.preventDefault(); libSearch.ctl ? libSearchStop() : libSearchClose();
 });
 $('#viewer-close').onclick = closeViewer;

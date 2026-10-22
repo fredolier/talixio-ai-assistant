@@ -3156,6 +3156,16 @@ $fd2 = $app->library()->find('contrat generale');
 check('where is…: names are found without accents or case, folders too', in_array('/Clients/Société Générale', array_column($fd['folders'], 'path'), true)
     && in_array('Contrat cadre.md', array_column($app->library()->find('CONTRAT')['files'], 'name'), true) && $fd2['files'] === [] && $app->library()->find('contrat', 20, '/Autre')['files'] === [], json_encode($fd));
 check('where is…: the kb_find tool answers with paths and links', str_contains($ff = $tools->run('kb_find', ['query' => 'contrat cadre']), '/Clients/Société Générale') && str_contains($ff, '/files/'), $ff);
+// regex name search
+$app->library()->saveNote('/Clients', 'Facture 2026-01.md', 'x');
+$app->library()->saveNote('/Clients', 'Facture 2026-02.md', 'x');
+$app->library()->saveNote('/Clients', 'Devis 2026-01.md', 'x');
+$rx = $app->library()->findRegex('facture 2026-0\\d', '/Clients');
+check('regex search: matches names by pattern, not the others', count($rx['files']) === 2 && !in_array('Devis 2026-01.md', array_column($rx['files'], 'name'), true));
+check('regex search: an invalid pattern is refused', (function () use ($app) { try { $app->library()->findRegex('[', '/'); return false; } catch (\InvalidArgumentException) { return true; } })());
+foreach (array_column($rx['files'], 'id') as $rid) $app->library()->moveFile((int)$rid, '/Clients/Factures', false); // what the bulk route does
+check('regex search: the matches can be moved in bulk', array_values(array_unique(array_column($app->library()->findRegex('facture', '/Clients/Factures')['files'], 'folder'))) === ['/Clients/Factures']
+    && count($app->library()->findRegex('facture', '/Clients/Factures')['files']) === 2);
 
 // Europe only
 $ep = new Pricing();

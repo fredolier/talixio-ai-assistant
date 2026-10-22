@@ -537,6 +537,31 @@ final class Library
         return ['files' => $sort($files), 'folders' => $sort($folders)];
     }
 
+    /**
+     * Files and folders whose name matches a regular expression (PCRE, case-insensitive), for a power search by name.
+     * Throws on an invalid pattern. $folder limits the search to that subtree.
+     */
+    public function findRegex(string $pattern, string $folder = '/', int $limit = 500): array
+    {
+        $pattern = trim($pattern);
+        if ($pattern === '') return ['files' => [], 'folders' => [], 'regex' => true];
+        $re = '~' . str_replace('~', '\~', $pattern) . '~iu'; // ~ as delimiter, the user's own ~ escaped
+        if (@preg_match($re, '') === false) throw new \InvalidArgumentException('invalid regular expression');
+        $folder = self::normalize($folder);
+        $folders = [];
+        foreach ($this->tree() as $tn) {
+            if ($folder !== '/' && $tn['path'] !== $folder && !str_starts_with($tn['path'], "$folder/")) continue;
+            if (preg_match($re, (string)$tn['name'])) $folders[] = ['path' => $tn['path'], 'total' => $tn['total']];
+        }
+        [$w, $a] = self::within($folder);
+        $files = [];
+        foreach ($this->app->store->q("SELECT id, name, folder, kind, size FROM files WHERE deleted_at IS NULL AND $w ORDER BY folder, name", $a) as $f) {
+            if (preg_match($re, (string)$f['name'])) $files[] = ['id' => (int)$f['id'], 'name' => $f['name'], 'folder' => $f['folder'], 'kind' => $f['kind'], 'size' => (int)$f['size']];
+            if (count($files) >= $limit) break;
+        }
+        return ['files' => $files, 'folders' => array_slice($folders, 0, $limit), 'regex' => true];
+    }
+
     /** Lower case without accents, for comparing names. */
     public static function fold(string $s): string
     {

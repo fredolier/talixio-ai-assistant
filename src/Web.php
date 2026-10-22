@@ -64,7 +64,7 @@ final class Web
             if (preg_match('#^/api/files/(\d+)/pdf(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveOfficePdf((int)$fm[1]); return; }
             if (preg_match('#^/api/files/(\d+)/versions/(\d+)/file$#', $path, $fm) && $method === 'GET') { $this->serveVersion((int)$fm[1], (int)$fm[2]); return; }
             if (preg_match('#^/api/files/(\d+)/(thumb|page/(\d+))$#', $path, $fm) && $method === 'GET') { $this->servePreview((int)$fm[1], (int)($fm[3] ?? 0)); return; }
-            if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/')); return; }
+            if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/'), isset($_GET['ids']) && $_GET['ids'] !== '' ? array_map('intval', explode(',', (string)$_GET['ids'])) : null); return; }
             if ($path === '/api/privacy/journal.csv' && $method === 'GET') { $this->privacyCsv(); return; }
             if ($path === '/api/privacy/register' && $method === 'GET') {
                 header('Content-Type: text/markdown; charset=utf-8'); header('Cache-Control: no-store');
@@ -387,6 +387,8 @@ final class Web
             (bool)preg_match('#^/api/shares/(\d+)/log$#', $path, $mm) => ['log' => $this->app->shares()->accessLog((int)$mm[1])],
             $path === '/api/library/tree' => ['tree' => $this->app->library()->tree(), 'stats' => $this->app->library()->stats()],
             // mode=quick: keywords only, at once; then the full search (with meaning) completes it. more: a full search would add something
+            $path === '/api/library/find-regex' => $this->app->library()->findRegex((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/')),
+            $path === '/api/files/bulk' && $m === 'POST' => $this->bulkFiles(array_map('intval', (array)($b['ids'] ?? [])), (string)($b['action'] ?? ''), $b),
             $path === '/api/library/search' => ['results' => Privacy::forPerson(fn() => $this->app->library()->search((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/'), 30, ($_GET['mode'] ?? '') !== 'quick')),
                 'names' => $this->app->library()->find((string)($_GET['q'] ?? ''), 20, (string)($_GET['folder'] ?? '/')),
                 'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
@@ -1060,6 +1062,25 @@ final class Web
         try { $name = $this->app->scripts()->import($content, preg_replace('/\.py$/i', '', $f['name']), true); }
         catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
         return ['name' => $name, 'replaced' => in_array($name, $before, true), 'enabled' => $this->app->shell()->enabled()];
+    }
+
+    /** Several files at once (from a name search): move them to a folder, or send them to the trash. */
+    private function bulkFiles(array $ids, string $action, array $b): array
+    {
+        $ids = array_values(array_unique(array_filter($ids)));
+        if (!$ids) throw new \InvalidArgumentException('no file selected');
+        if (count($ids) > 1000) throw new \InvalidArgumentException('too many files at once (1000 max)');
+        $lib = $this->app->library();
+        $done = 0; $errors = [];
+        foreach ($ids as $id) {
+            try {
+                if ($action === 'move') $lib->moveFile($id, (string)($b['folder'] ?? ''), false); // keep both on a name clash
+                elseif ($action === 'delete') $lib->deleteFile($id);
+                else throw new \InvalidArgumentException('action: move or delete');
+                $done++;
+            } catch (\Throwable $e) { $errors[] = "#$id: " . $e->getMessage(); }
+        }
+        return ['done' => $done, 'errors' => array_slice($errors, 0, 10)];
     }
 
     private function fileAction(int $id, string $action, array $b): array

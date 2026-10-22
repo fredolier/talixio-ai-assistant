@@ -63,6 +63,19 @@ const flows = {
     check('library: a new note opens', await page.isVisible('#viewer-body'));
     await page.keyboard.press('Escape');
     await go(page, 'library');
+    await page.check('#lib-regex');
+    await page.fill('#lib-q', '\\.md$');
+    await page.click('#lib-search button[type=submit]');
+    await page.waitForTimeout(600);
+    check('library: regex name search lists matches with checkboxes', await page.isVisible('#lib-results .rx-pick'));
+    await page.click('#lib-results .rx-pick');
+    await page.waitForTimeout(150);
+    check('library: ticking a match shows the bulk bar', await page.isVisible('#lib-results .bulk-bar:not([hidden])'));
+    await page.fill('#lib-q', '');
+    await page.click('#lib-search button[type=submit]'); // empty: closes the search and shows the folder again
+    await page.uncheck('#lib-regex');
+    await page.waitForTimeout(300);
+    await go(page, 'library');
     await page.fill('#lib-q', 'note');
     await page.waitForTimeout(800);
     for (const b of ['#lib-tree [data-trash]', '#lib-recent', '#lib-shares']) {

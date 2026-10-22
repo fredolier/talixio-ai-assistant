@@ -30,6 +30,8 @@
   It cites the document and the page; a click opens it at that page.
 - *Ask about this folder* starts a question about its documents.
 
+
+**Search by name with a regular expression**: tick *Regex* next to the search box to match file and folder names with a pattern (e.g. `facture 2026-0\d`, `\.pdf$`). In the results you can tick several files and **move**, **download as a zip** or **delete** them in one go.
 ## One name per folder, versions
 - A name is used only once in a folder (capitals aside). Uploading a file under a name already there,
   the assistant saving a note again, or saving from the network drive **replaces** that file: same file,

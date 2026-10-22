@@ -1363,3 +1363,9 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .row-menu-item:hover,.row-menu-item:focus{background:var(--sunk,#f2f5f4);outline:none}
 .row-menu-item.danger{color:#b42318}
 .row-menu-sep{height:1px;background:var(--line);margin:5px 4px}
+/* regex name search: bulk selection */
+.bulk-bar{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--sunk,#f2f5f4);border:1px solid var(--line);border-radius:9px;margin:6px 0;flex-wrap:wrap;position:sticky;top:0;z-index:2}
+.bulk-bar label{display:flex;align-items:center;gap:6px}
+.rx-item{display:flex;align-items:center;gap:10px}
+.rx-item .lib-row{flex:1;min-width:0}
+.rx-item .rx-pick{width:17px;height:17px;flex:none}
