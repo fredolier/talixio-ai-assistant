@@ -71,6 +71,18 @@ const flows = {
     await page.click('#lib-results .rx-pick');
     await page.waitForTimeout(150);
     check('library: ticking a match shows the bulk bar', await page.isVisible('#lib-results .bulk-bar:not([hidden])'));
+    // a unique file, found by regex, ticked and bulk-deleted: the results must refresh (no stale rows)
+    await page.evaluate(async () => { const fd = new FormData(); fd.append('file', new File(['x'], 'rxdelme-unique.md')); fd.append('folder', '/Inbox'); await fetch('api/files', { method: 'POST', headers: { 'X-Talixio': '1' }, body: fd }); });
+    await page.fill('#lib-q', 'rxdelme-unique');
+    await page.click('#lib-search button[type=submit]');
+    await page.waitForTimeout(500);
+    check('library: regex finds the unique file', (await page.$$eval('#lib-results .rx-item', e => e.length)) === 1);
+    await page.click('#lib-results .rx-pick');
+    await page.waitForTimeout(100);
+    await page.click('#lib-results .bulk-bar [data-a=del]'); // confirm
+    await page.click('#lib-results .bulk-bar [data-a=del]'); // delete
+    await page.waitForTimeout(600);
+    check('library: after bulk delete the regex results refresh (no stale rows)', (await page.$$eval('#lib-results .rx-item', e => e.length)) === 0);
     await page.fill('#lib-q', '');
     await page.click('#lib-search button[type=submit]'); // empty: closes the search and shows the folder again
     await page.uncheck('#lib-regex');

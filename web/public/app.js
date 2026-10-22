@@ -4130,14 +4130,16 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && rowMenuEl)
 window.addEventListener('resize', closeRowMenu);
 window.addEventListener('scroll', closeRowMenu, true);
 
+// Redraw whatever the library is showing: the regex results when a name search is open, else the folder.
+function libRefresh() { if (libRegex.on) { libRegexSearch(libRegex.q, libRegex.folder); loadLibrary().catch(() => {}); } else loadLibrary(); }
 function libFileMenu(btn, f) {
   openRowMenu(btn, [
-    { label: t('Rename'), run: () => libInline(f.name, t('New name'), async v => { if (await withReplace(r => post(`api/files/${f.id}/rename`, { name: v, ...r }))) { toast(t('Renamed')); loadLibrary(); } }, false) },
-    { label: t('Move to…'), run: () => libInline(f.folder, t('Folder'), async v => { if (await withReplace(r => post(`api/files/${f.id}/move`, { folder: v, ...r }))) { toast(t('Moved to {folder}', { folder: v })); loadLibrary(); } }, true) },
+    { label: t('Rename'), run: () => libInline(f.name, t('New name'), async v => { if (await withReplace(r => post(`api/files/${f.id}/rename`, { name: v, ...r }))) { toast(t('Renamed')); libRefresh(); } }, false) },
+    { label: t('Move to…'), run: () => libInline(f.folder, t('Folder'), async v => { if (await withReplace(r => post(`api/files/${f.id}/move`, { folder: v, ...r }))) { toast(t('Moved to {folder}', { folder: v })); libRefresh(); } }, true) },
     { label: t('Download'), href: `api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1`, download: f.name },
     { label: t('Share…'), run: () => openShare({ file: f.id }, f.name) },
     { sep: true },
-    { label: t('Delete'), danger: true, run: async () => { try { await post(`api/files/${f.id}/delete`); toast(t('Moved to the trash')); loadLibrary(); } catch (e) { toast(e.message); } } },
+    { label: t('Delete'), danger: true, run: async () => { try { await post(`api/files/${f.id}/delete`); toast(t('Moved to the trash')); libRefresh(); } catch (e) { toast(e.message); } } },
   ]);
 }
 function libFolderMenu(btn, folder, total) {
@@ -4149,7 +4151,7 @@ function libFolderMenu(btn, folder, total) {
     { label: t('Rename or move'), run: () => libInline(folder, t('Folder path'), async v => { const { folder: nf } = await post('api/library/folder/move', { from: folder, to: v }); toast(t('Folder renamed')); libGo(nf); }, true) },
     { label: t('Download zip'), href: `api/library/zip?folder=${encodeURIComponent(folder)}`, download: name + '.zip' },
     { sep: true },
-    { label: t('Delete'), danger: true, run: async () => { if (!confirm(t('Delete the folder “{name}”{n}?', { name, n: total ? t(' and its {n} files', { n: total }) : '' }))) return; try { const r = await post('api/library/folder/delete', { path: folder, recursive: true }); toast(r.deleted_files ? t('Folder moved to the trash') : t('Folder deleted')); loadLibrary(); } catch (e) { toast(e.message); } } },
+    { label: t('Delete'), danger: true, run: async () => { if (!confirm(t('Delete the folder “{name}”{n}?', { name, n: total ? t(' and its {n} files', { n: total }) : '' }))) return; try { const r = await post('api/library/folder/delete', { path: folder, recursive: true }); toast(r.deleted_files ? t('Folder moved to the trash') : t('Folder deleted')); libRefresh(); } catch (e) { toast(e.message); } } },
   ]);
 }
 const KEBAB_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
@@ -5185,7 +5187,7 @@ function libRegexRender() {
   bar.querySelector('#rx-all').onchange = e => { picked.clear(); if (e.target.checked) for (const f of files) picked.add(f.id); box.querySelectorAll('.rx-pick').forEach(c => c.checked = e.target.checked); refreshBar(); };
   bar.querySelector('[data-a=move]').onclick = () => libInline('/', t('Move {n} files to which folder?', { n: picked.size }), async v => {
     const r = await post('api/files/bulk', { ids: [...picked], action: 'move', folder: v });
-    toast(t('{n} moved', { n: r.done }) + (r.errors?.length ? ' · ' + r.errors.length + ' ' + t('failed') : '')); libRegexSearch(q, folder); loadLibrary();
+    toast(t('{n} moved', { n: r.done }) + (r.failed?.length ? ' · ' + r.failed.length + ' ' + t('failed') : '')); libRegexSearch(q, folder); loadLibrary();
   }, true);
   bar.querySelector('[data-a=del]').onclick = async ev => {
     const b = ev.currentTarget;

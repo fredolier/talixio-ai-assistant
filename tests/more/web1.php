@@ -68,7 +68,8 @@ check('web1: sign in', $web('/api/login', ['password' => 'correct horse battery'
 
 $reg = $raw('/api/privacy/register');
 check('web1: the record of processing downloads as Markdown', $reg['code'] === 200 && str_contains($reg['h']['content-type'] ?? '', 'text/markdown')
-    && str_contains($reg['h']['content-disposition'] ?? '', 'record-of-processing-' . date('Y-m-d') . '.md') && $reg['body'] !== '', json_encode($reg['h']));
+    && (bool)preg_match('/record-of-processing-\d{4}-\d\d-\d\d\.md/', $reg['h']['content-disposition'] ?? '') // the server's own day (its timezone may differ from this test's)
+    && $reg['body'] !== '', json_encode($reg['h']));
 
 // method mismatches fall through every POST-only (or GET-only) route to "not found"
 $postOnly = ['/api/logout', '/api/claude-login/start', '/api/claude-login/code', '/api/transfer/code', '/api/transfer/cancel', '/api/transfer/resume',

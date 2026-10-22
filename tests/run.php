@@ -3163,6 +3163,12 @@ $app->library()->saveNote('/Clients', 'Devis 2026-01.md', 'x');
 $rx = $app->library()->findRegex('facture 2026-0\\d', '/Clients');
 check('regex search: matches names by pattern, not the others', count($rx['files']) === 2 && !in_array('Devis 2026-01.md', array_column($rx['files'], 'name'), true));
 check('regex search: an invalid pattern is refused', (function () use ($app) { try { $app->library()->findRegex('[', '/'); return false; } catch (\InvalidArgumentException) { return true; } })());
+$rxWeb = new ReflectionMethod(\Talixio\Web::class, 'bulkFiles'); $rxWeb->setAccessible(true); $web = new \Talixio\Web($app);
+$rxOk = $rxWeb->invoke($web, array_column($rx['files'], 'id'), 'delete', []);
+check('bulk files: a clean run returns no "errors" key (that key means 422 to the client)', ($rxOk['done'] ?? 0) === count($rx['files']) && !array_key_exists('errors', $rxOk));
+$rxBad = $rxWeb->invoke($web, [999999999], 'delete', []);
+check('bulk files: real failures come back under "failed", not "errors"', ($rxBad['done'] ?? 1) === 0 && !empty($rxBad['failed']) && !array_key_exists('errors', $rxBad));
+foreach (array_column($rx['files'], 'id') as $rid) if ($f = $app->files()->get($rid, true)) $app->library()->restore((int)$rid); // undo, the later checks expect them
 foreach (array_column($rx['files'], 'id') as $rid) $app->library()->moveFile((int)$rid, '/Clients/Factures', false); // what the bulk route does
 check('regex search: the matches can be moved in bulk', array_values(array_unique(array_column($app->library()->findRegex('facture', '/Clients/Factures')['files'], 'folder'))) === ['/Clients/Factures']
     && count($app->library()->findRegex('facture', '/Clients/Factures')['files']) === 2);

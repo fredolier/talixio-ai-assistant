@@ -1080,7 +1080,7 @@ final class Web
                 $done++;
             } catch (\Throwable $e) { $errors[] = "#$id: " . $e->getMessage(); }
         }
-        return ['done' => $done, 'errors' => array_slice($errors, 0, 10)];
+        return ['done' => $done] + ($errors ? ['failed' => array_slice($errors, 0, 10)] : []); // never an 'errors' key: that means 422 to the dispatcher
     }
 
     private function fileAction(int $id, string $action, array $b): array

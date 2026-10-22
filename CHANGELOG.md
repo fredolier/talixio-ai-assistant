@@ -5,6 +5,7 @@ and with `talixio version`. Each delivery raises it and adds a line here.
 
 ## 0.28.79 (2026-10-22)
 
+- Fix: bulk actions on a regex search (delete/move) failed with a 422 even when they succeeded, and the results did not refresh afterwards. Both are fixed.
 - Library on mobile: the toolbar is now a single **+** button that opens every action (import, new note/folder, shares, recent, trash); the search no longer overflows, the folder's actions sit on one scrollable row, and the stats line is compact. The full toolbar stays on desktop.
 - Library: search file and folder names with a regular expression (tick *Regex*), then move, download as a zip, or delete the matches in bulk.
 - Library (desktop): each file and folder has an actions button (⋯) — rename, move, download, share, delete, and for a folder: new file, new folder, download zip.
