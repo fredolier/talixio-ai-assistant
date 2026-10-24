@@ -79,6 +79,8 @@ check('fetch: private addresses hidden in IPv6 forms or odd ranges are blocked',
 check('fetch blocks private LAN', str_contains($tools->run('fetch_url', ['url' => 'http://192.168.1.1/']), 'blocked'));
 check('fetch blocks file://', str_contains($tools->run('fetch_url', ['url' => 'file:///etc/passwd']), 'only http'));
 check('html to text', Http::htmlToText('<html><head><title>x</title></head><body><script>bad()</script><p>Hello&nbsp;<b>world</b></p></body></html>') === "Hello\u{a0}world");
+check('fetch strips null and control bytes, keeps tabs and newlines', preg_replace('/[\x00-\x08\x0b\x0c\x0e-\x1f]/', '', "a\0b\x07\tc\nd") === "ab\tc\nd");
+check('a null byte never reaches a subprocess command array', array_map(fn($a) => str_replace("\0", '', (string)$a), ['ok', "sys\0prompt", 42]) === ['ok', 'sysprompt', '42']);
 
 $mcp = new McpServer($tools);
 $init = $mcp->handle(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize', 'params' => ['protocolVersion' => '2025-06-18']]);

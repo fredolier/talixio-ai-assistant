@@ -1193,8 +1193,21 @@ final class Tools
     private function fetch(string $url): string
     {
         [$code, $body, $type, $final] = Http::safeGet($url);
-        $text = str_contains($type, 'html') ? Http::htmlToText($body) : $body;
+        $isPdf = str_contains($type, 'pdf') || (bool)preg_match('/\.pdf($|[?#])/i', $final) || str_starts_with($body, '%PDF-');
+        if ($isPdf) {
+            $text = '';
+            if (trim((string)shell_exec('command -v pdftotext 2>/dev/null')) !== '') {
+                $tmp = tempnam(sys_get_temp_dir(), 'talixio-fetch') . '.pdf';
+                file_put_contents($tmp, $body);
+                $text = (string)shell_exec('pdftotext -layout -l 50 ' . escapeshellarg($tmp) . ' - 2>/dev/null');
+                @unlink($tmp);
+            }
+            if (trim($text) === '') return "HTTP $code $final\n\n(This is a PDF; its text could not be extracted here. Save it to the library to read it.)";
+        } else {
+            $text = str_contains($type, 'html') ? Http::htmlToText($body) : $body;
+        }
         if (!mb_check_encoding($text, 'UTF-8')) $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8, ISO-8859-1');
+        $text = preg_replace('/[\x00-\x08\x0b\x0c\x0e-\x1f]/', '', $text); // never return control/null bytes: they poison storage and subprocess arguments
         return "HTTP $code $final\n\n" . mb_substr($text, 0, 15000);
     }
 

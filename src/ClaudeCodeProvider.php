@@ -43,6 +43,7 @@ final class ClaudeCodeProvider implements Provider
             if ($this->tier->model !== '') array_push($cmd, '--model', $this->tier->model);
 
             $errFile = "$work/.stderr";
+            $cmd = array_map(fn($a) => str_replace("\0", '', (string)$a), $cmd); // a stray null byte (e.g. from fetched binary in the context) would make proc_open reject the whole command
             $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $errFile, 'w']], $pipes, $work, $this->env());
             if (!is_resource($proc)) throw new \RuntimeException("cannot run {$this->bin}");
             fwrite($pipes[0], $prompt);

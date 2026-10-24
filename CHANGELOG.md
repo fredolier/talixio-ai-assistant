@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.84 (2026-10-24)
+
+- Fix: a turn could fail with "Command array element N contains a null byte" after fetching a PDF. `fetch_url` now extracts a PDF's text (instead of returning raw bytes) and strips null/control bytes from any page, and the Claude Code provider strips a stray null byte from its command, so a turn never crashes on one.
+
 ## 0.28.83 (2026-10-24)
 
 - Fix: the store catalog failed to show ("s.replace is not a function") when it listed an installed app, because an app's id is a number. HTML-escaping now accepts numbers, so the Connectors/Apps catalog renders correctly.
