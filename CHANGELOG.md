@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.83 (2026-10-24)
+
+- Fix: the store catalog failed to show ("s.replace is not a function") when it listed an installed app, because an app's id is a number. HTML-escaping now accepts numbers, so the Connectors/Apps catalog renders correctly.
+
 ## 0.28.82 (2026-10-24)
 
 - Fix: the store catalog ("From the store") could vanish entirely instead of showing its list, if the store response was missing a field. It now always shows the heading, and a clear message if the catalog can't be loaded.

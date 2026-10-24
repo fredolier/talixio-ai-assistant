@@ -29,7 +29,7 @@ function toast(text) {
   const t = $('#toast'); t.textContent = text; t.hidden = false;
   clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.hidden = true), 3500);
 }
-const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const INTENT_HREF = /^intent:\/\/#Intent;package=[a-z]\w*(?:\.[a-z]\w*)+;S\.browser_fallback_url=https%3A%2F%2Fplay\.google\.com%2F[\w%.-]*;end$/i;
 const INTENT_MD = new RegExp(String.raw`\[([^\]]+)\]\((${INTENT_HREF.source.slice(1, -1)})\)`, 'gi');
