@@ -83,6 +83,7 @@ final class AppStore
     private function installedApps(): array
     {
         $out = [];
+        $this->app->apps(); // make sure the apps table exists before we read it
         foreach ($this->app->store->q("SELECT id, origin FROM apps WHERE origin LIKE '%\"store\"%'")->fetchAll() as $r) {
             $o = json_decode((string)$r['origin'], true);
             if (isset($o['store'])) $out[(string)$o['store']] = ['id' => (int)$r['id'], 'version' => (int)($o['store_version'] ?? 1)];

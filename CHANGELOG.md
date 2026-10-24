@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.81 (2026-10-24)
+
+- Store catalog easier to navigate: **Connectors** and **Apps** are now separate tabs, with the existing theme/category tabs and a new **A–Z** filter (A–C, D–F…). The connector list and the store's apps are both browsable from Settings → Connectors.
+
 ## 0.28.80 (2026-10-24)
 
 - French & EU law search, built in (nothing sent to a third party): **Légifrance** and **JudiLibre** (French codes, laws, decrees, Journal officiel and case law) via a free PISTE account, set up in Settings → Connected accounts; and **EUR-Lex** for EU law (read the GDPR, the AI Act… by CELEX number), which needs no key. The EU AI Act MCP (Lexbeam, hosted) was added to the connector list.

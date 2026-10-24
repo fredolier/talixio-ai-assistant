@@ -3329,7 +3329,9 @@ async function installFromLink(src, name, headers) {
     : srv?.error ? srv.error : t('Ready: {n} tool(s) from “{name}”. The assistant can use them from the next message.', { n: srv?.tools.length || 0, name }));
   showMcpCard();
 }
-/** Settings → Connectors: the store's connectors (install, uninstall) and sending one of yours for review. */
+const STORE_RANGES = [['a', 'c'], ['d', 'f'], ['g', 'i'], ['j', 'l'], ['m', 'o'], ['p', 'r'], ['s', 'u'], ['v', 'z']];
+const storeLetter = n => (fold(n).replace(/[^a-z0-9]/g, '')[0] || '#');
+/** Settings → Connectors: the store catalog — connectors (MCP) and apps, with tabs, a category and an A–Z filter. */
 async function storeConnectors() {
   const box = $('#store-conn');
   const st = await api('api/store').catch(() => null);
@@ -3337,14 +3339,26 @@ async function storeConnectors() {
   const mine = (state.mcpData?.servers || []).map(x => x.name);
   const sent = st.outbox.filter(x => x.kind === 'connector');
   const cats = [...new Set(st.connectors.map(c => c.category || 'Other'))]; // themes, in the FAQ's order
+  const hasApps = (st.apps || []).length > 0;
+  const long = st.connectors.length > 8 || hasApps;
+  const connItem = c => `<div class="row wrap store-item" data-id="${esc(c.id)}" data-cat="${esc(c.category || 'Other')}" data-name="${esc(c.name)}"><b class="no-i18n">${esc(c.name)}</b>
+      <span class="muted small no-i18n">${esc(c.description || c.github || c.url)}</span><span class="spacer"></span>
+      ${c.installed ? `<span class="pill on">${esc(t('Installed'))}</span><button type="button" class="btn small ghost" data-conn-remove="${esc(c.installed)}">${esc(t('Uninstall'))}</button>`
+        : `<button type="button" class="btn small" data-conn-install>${esc(t('Install'))}</button>`}</div>`;
+  const appItem = a => `<div class="row wrap store-item" data-aid="${esc(a.id)}" data-name="${esc(a.name)}"><b class="no-i18n">${esc(a.icon || '🧩')} ${esc(a.name)}</b>
+      <span class="muted small no-i18n">${esc(a.description || '')}</span><span class="spacer"></span>
+      ${a.installed ? `<a class="btn small ghost" href="#apps/${esc(a.installed)}">${esc(t('Open'))}</a>${a.update ? `<button type="button" class="btn small" data-app-install>${esc(t('Update'))}</button>` : ''}`
+        : `<button type="button" class="btn small" data-app-install>${esc(t('Install'))}</button>`}</div>`;
+  const rangeRow = id => `<div class="tabs alpha" id="${id}"><button type="button" class="tab" data-range="all">${esc(t('All'))}</button>`
+    + STORE_RANGES.map(r => `<button type="button" class="tab" data-range="${r[0]}${r[1]}">${r[0].toUpperCase()}–${r[1].toUpperCase()}</button>`).join('') + '</div>';
   box.innerHTML = `<h4>${esc(t('From the store'))}</h4>`
-    + (st.connectors.length > 8 ? `<input type="search" id="store-conn-filter" placeholder="${esc(t('Search the store'))}">` : '')
+    + (hasApps ? `<div class="tabs" role="tablist" id="store-kind"><button type="button" class="tab" role="tab" data-kind="connectors">${esc(t('Connectors'))}</button><button type="button" class="tab" role="tab" data-kind="apps">${esc(t('Apps'))}</button></div>` : '')
+    + (long ? `<input type="search" id="store-conn-filter" placeholder="${esc(t('Search the store'))}">` : '')
     + (cats.length > 1 ? `<div class="tabs" role="tablist" id="store-conn-tabs">${cats.map(k => `<button type="button" class="tab" role="tab" data-cat="${esc(k)}">${esc(t(k))}</button>`).join('')}</div>` : '')
-    + (st.connectors.length ? st.connectors.map(c => `<div class="row wrap store-item" data-id="${esc(c.id)}" data-cat="${esc(c.category || 'Other')}"><b class="no-i18n">${esc(c.name)}</b>
-        <span class="muted small no-i18n">${esc(c.description || c.github || c.url)}</span><span class="spacer"></span>
-        ${c.installed ? `<span class="pill on">${esc(t('Installed'))}</span><button type="button" class="btn small ghost" data-conn-remove="${esc(c.installed)}">${esc(t('Uninstall'))}</button>`
-          : `<button type="button" class="btn small" data-conn-install>${esc(t('Install'))}</button>`}</div>`).join('')
-      : `<p class="muted small">${esc(t('The store has no connector yet. The connectors listed in the FAQ arrive once the server is updated.'))}</p>`)
+    + (long ? rangeRow('store-alpha') : '')
+    + `<div id="store-conn-list">` + (st.connectors.length ? st.connectors.map(connItem).join('')
+      : `<p class="muted small">${esc(t('The store has no connector yet. The connectors listed in the FAQ arrive once the server is updated.'))}</p>`) + '</div>'
+    + (hasApps ? `<div id="store-apps-list" hidden>${st.apps.map(appItem).join('')}</div>` : '')
     + (mine.length ? `<p class="muted small">${esc(t('Share one of your connectors with everyone on this server (the admin reviews it first):'))}</p><form class="row wrap" id="store-conn-send"><select id="store-conn-pick">${mine.map(n => `<option class="no-i18n">${esc(n)}</option>`).join('')}</select>
         <input id="store-conn-note" placeholder="${esc(t('A word for the admin (optional)'))}" maxlength="500"><button class="btn small">${esc(t('Send for review'))}</button></form>
         <p class="muted small">${esc(t('Shares how to install it (its GitHub repository or address), never your keys or header values.'))}</p>` : '')
@@ -3358,16 +3372,33 @@ async function storeConnectors() {
     if (!confirm(t('Uninstall the connector “{name}”? Apps and the assistant lose its tools.', { name: b.dataset.connRemove }))) return;
     try { showConnectors(await post('api/mcp/remove', { server: b.dataset.connRemove })); } catch (e) { toast(e.message); }
   });
-  const q = $('#store-conn-filter');
-  const tabs = $('#store-conn-tabs');
-  let cur; try { cur = localStorage.getItem('storeTab'); } catch {}
-  if (!cats.includes(cur)) cur = cats[0];
+  box.querySelectorAll('[data-app-install]').forEach(b => b.onclick = async () => {
+    try { const { app } = await post('api/store/install?space=' + (state.space || 0), { id: b.closest('[data-aid]').dataset.aid }); location.hash = '#apps/' + app.id; }
+    catch (e) { toast(e.message); }
+  });
+  const q = $('#store-conn-filter'), kindTabs = $('#store-kind'), catTabs = $('#store-conn-tabs'), alpha = $('#store-alpha');
+  let kind = 'connectors', cat, range = 'all';
+  try { cat = localStorage.getItem('storeTab'); if (hasApps) kind = localStorage.getItem('storeKind') || 'connectors'; } catch {}
+  if (!cats.includes(cat)) cat = cats[0];
   const show = () => {
     const v = q ? fold(q.value.trim()) : '';
-    if (tabs) { tabs.hidden = !!v; tabs.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.cat === cur))); }
-    box.querySelectorAll('.store-item').forEach(r => { r.hidden = v ? !fold(r.textContent).includes(v) : !!tabs && r.dataset.cat !== cur; }); // a search looks in every theme
+    const apps = kind === 'apps';
+    $('#store-conn-list').hidden = apps;
+    const appsList = $('#store-apps-list'); if (appsList) appsList.hidden = !apps;
+    if (catTabs) catTabs.hidden = apps || !!v; // categories only apply to connectors, and a search spans all
+    kindTabs?.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.kind === kind)));
+    catTabs?.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.cat === cat)));
+    alpha?.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.range === range)));
+    const [lo, hi] = range === 'all' ? ['', ''] : [range[0], range[1]];
+    const rangeOk = n => range === 'all' || (storeLetter(n) >= lo && storeLetter(n) <= hi);
+    (apps ? (appsList?.querySelectorAll('.store-item') || []) : $('#store-conn-list').querySelectorAll('.store-item')).forEach(r => {
+      const name = r.dataset.name || '';
+      r.hidden = v ? !fold(r.textContent).includes(v) : (!rangeOk(name) || (!apps && catTabs && r.dataset.cat !== cat));
+    });
   };
-  tabs?.querySelectorAll('.tab').forEach(b => b.onclick = () => { cur = b.dataset.cat; try { localStorage.setItem('storeTab', cur); } catch {} show(); });
+  kindTabs?.querySelectorAll('.tab').forEach(b => b.onclick = () => { kind = b.dataset.kind; try { localStorage.setItem('storeKind', kind); } catch {} show(); });
+  catTabs?.querySelectorAll('.tab').forEach(b => b.onclick = () => { cat = b.dataset.cat; try { localStorage.setItem('storeTab', cat); } catch {} show(); });
+  alpha?.querySelectorAll('.tab').forEach(b => b.onclick = () => { range = b.dataset.range; show(); });
   if (q) q.oninput = show;
   show();
   const f = $('#store-conn-send');

@@ -1385,3 +1385,5 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .rx-item{display:flex;align-items:center;gap:10px}
 .rx-item .lib-row{flex:1;min-width:0}
 .rx-item .rx-pick{width:17px;height:17px;flex:none}
+#store-conn .tabs.alpha{flex-wrap:wrap;gap:4px;margin:6px 0}
+#store-conn .tabs.alpha .tab{padding:3px 8px;font-size:.8rem}
