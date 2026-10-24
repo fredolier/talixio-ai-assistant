@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.82 (2026-10-24)
+
+- Fix: the store catalog ("From the store") could vanish entirely instead of showing its list, if the store response was missing a field. It now always shows the heading, and a clear message if the catalog can't be loaded.
+
 ## 0.28.81 (2026-10-24)
 
 - Store catalog easier to navigate: **Connectors** and **Apps** are now separate tabs, with the existing theme/category tabs and a new **A–Z** filter (A–C, D–F…). The connector list and the store's apps are both browsable from Settings → Connectors.

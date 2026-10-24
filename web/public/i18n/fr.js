@@ -2770,5 +2770,7 @@ window.I18N.fr = {
 "· keys set": "· clés renseignées",
 "· EU law ready, French law needs PISTE keys": "· droit européen prêt, droit français : clés PISTE requises",
 "Create a free account on <a href=\"https://piste.gouv.fr\" target=\"_blank\" rel=\"noopener\">piste.gouv.fr</a>, create an application, and subscribe it to the <b>Légifrance</b> and <b>JudiLibre</b> APIs.": "Créez un compte gratuit sur <a href=\"https://piste.gouv.fr\" target=\"_blank\" rel=\"noopener\">piste.gouv.fr</a>, créez une application et abonnez-la aux API <b>Légifrance</b> et <b>JudiLibre</b>.",
-"Copy the application's <i>client ID</i> and <i>client secret</i> into the PISTE fields above, save, then press <b>Test connection</b>.": "Copiez l'<i>identifiant client</i> et le <i>secret client</i> de l'application dans les champs PISTE ci-dessus, enregistrez, puis cliquez sur <b>Tester la connexion</b>."
+"Copy the application's <i>client ID</i> and <i>client secret</i> into the PISTE fields above, save, then press <b>Test connection</b>.": "Copiez l'<i>identifiant client</i> et le <i>secret client</i> de l'application dans les champs PISTE ci-dessus, enregistrez, puis cliquez sur <b>Tester la connexion</b>.",
+"The store could not be loaded: {err}": "Le catalogue n'a pas pu être chargé : {err}",
+"The catalog could not be shown: {err}": "Le catalogue n'a pas pu être affiché : {err}"
 };

@@ -3334,12 +3334,21 @@ const storeLetter = n => (fold(n).replace(/[^a-z0-9]/g, '')[0] || '#');
 /** Settings → Connectors: the store catalog — connectors (MCP) and apps, with tabs, a category and an A–Z filter. */
 async function storeConnectors() {
   const box = $('#store-conn');
-  const st = await api('api/store').catch(() => null);
-  if (!st?.available) { box.innerHTML = `<h4>${esc(t('From the store'))}</h4>${storeOff(st)}`; box.hidden = false; return; }
+  if (!box) return;
+  const head = `<h4>${esc(t('From the store'))}</h4>`;
+  let st;
+  try { st = await api('api/store'); } catch (e) { box.innerHTML = head + `<p class="muted small error">${esc(t('The store could not be loaded: {err}', { err: e.message || 'error' }))}</p>`; box.hidden = false; return; }
+  if (!st?.available) { box.innerHTML = head + storeOff(st); box.hidden = false; return; }
+  try { renderStore(box, st); }
+  catch (e) { box.innerHTML = head + `<p class="muted small error">${esc(t('The catalog could not be shown: {err}', { err: e.message || 'error' }))}</p>`; box.hidden = false; }
+}
+function renderStore(box, st) {
   const mine = (state.mcpData?.servers || []).map(x => x.name);
-  const sent = st.outbox.filter(x => x.kind === 'connector');
+  const sent = (st.outbox || []).filter(x => x.kind === 'connector');
+  st.connectors = Array.isArray(st.connectors) ? st.connectors : [];
+  st.apps = Array.isArray(st.apps) ? st.apps : [];
   const cats = [...new Set(st.connectors.map(c => c.category || 'Other'))]; // themes, in the FAQ's order
-  const hasApps = (st.apps || []).length > 0;
+  const hasApps = st.apps.length > 0;
   const long = st.connectors.length > 8 || hasApps;
   const connItem = c => `<div class="row wrap store-item" data-id="${esc(c.id)}" data-cat="${esc(c.category || 'Other')}" data-name="${esc(c.name)}"><b class="no-i18n">${esc(c.name)}</b>
       <span class="muted small no-i18n">${esc(c.description || c.github || c.url)}</span><span class="spacer"></span>
