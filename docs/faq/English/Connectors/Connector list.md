@@ -111,6 +111,11 @@ No account needed, from OpenStreetMap and open data.
   service: once added, click **Sign in** in Settings → Connectors. Sensitive operations are approved in the
   Qonto app. [▶ Install](?connector=https://mcp.qonto.com/mcp&name=qonto)
 
+## Law and compliance
+- **EU AI Act (Lexbeam)**: the EU AI Act (Regulation 2024/1689) — classify a system's risk level, obligations by
+  role, deadlines, penalties and article summaries. Official hosted server, no key, nothing stored.
+  [▶ Install](?connector=https://mcp.lexbeam.com/mcp&name=eu_ai_act)
+
 ## Films, series, TV and cinema
 - **TMDB (films and series)**: search a film or a series, ratings, recommendations, and **where to watch
   it** (Netflix, Prime Video, Disney+, Canal+…): "what is new on Netflix?". Needs a free themoviedb.org

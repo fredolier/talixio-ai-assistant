@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.80 (2026-10-24)
+
+- French & EU law search, built in (nothing sent to a third party): **Légifrance** and **JudiLibre** (French codes, laws, decrees, Journal officiel and case law) via a free PISTE account, set up in Settings → Connected accounts; and **EUR-Lex** for EU law (read the GDPR, the AI Act… by CELEX number), which needs no key. The EU AI Act MCP (Lexbeam, hosted) was added to the connector list.
+
 ## 0.28.79 (2026-10-22)
 
 - Fix: bulk actions on a regex search (delete/move) failed with a 422 even when they succeeded, and the results did not refresh afterwards. Both are fixed.

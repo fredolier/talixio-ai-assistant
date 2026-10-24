@@ -283,6 +283,8 @@ final class Web
             $path === '/api/spotify' => $this->spotifyState(),
             $path === '/api/spotify/connect' && $m === 'POST' => ['url' => $this->app->spotify()->authUrl(Spotify::redirectUri($this->app->cfg->publicUrl))],
             $path === '/api/spotify/disconnect' && $m === 'POST' => (function () { $this->app->spotify()->disconnect(); return $this->spotifyState(); })(),
+            $path === '/api/legifrance' => ['configured' => $this->app->legifrance()->configured()],
+            $path === '/api/legifrance/test' && $m === 'POST' => ['ok' => true, 'message' => $this->app->legifrance()->test()],
             $path === '/api/meaning' && $m === 'GET' => (new Meaning($this->app))->status(),
             $path === '/api/meaning/choose' && $m === 'POST' => (new Meaning($this->app))->choose((string)($b['preset'] ?? '')),
             $path === '/api/meaning/pull' && $m === 'POST' => (function () { $mn = new Meaning($this->app); $mn->startPull($this->app->cfg->embeddingsModel); return ['ok' => true]; })(),

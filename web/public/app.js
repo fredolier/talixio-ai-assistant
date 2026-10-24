@@ -2737,7 +2737,7 @@ const SET_SECTIONS = [
 ];
 /** Old links (#settings/brain, #settings/memory…) and names used in messages: which section they mean. */
 const SET_ALIAS = { brain: 'model', budget: 'model', memory: 'library', search: 'library', connectors: 'accounts', google: 'accounts', calendar: 'accounts',
-  spotify: 'accounts', mcp: 'accounts', mailbox: 'accounts', notify: 'channels', update: 'system', backups: 'system', totp: 'security' };
+  spotify: 'accounts', legifrance: 'accounts', mcp: 'accounts', mailbox: 'accounts', notify: 'channels', update: 'system', backups: 'system', totp: 'security' };
 /** Fields only useful with a given choice; shown anyway once they hold a value. */
 const SHOW_IF = {
   ANTHROPIC_API_KEY: ['TALIXIO_PROVIDER', ['anthropic']], CLAUDE_CODE_OAUTH_TOKEN: ['TALIXIO_PROVIDER', ['claude-code']],
@@ -3016,7 +3016,7 @@ async function loadSettings() {
   renderAppearance();
   loadConnectors();
   loadGoogle(); loadMicrosoft();
-  loadSpotify();
+  loadSpotify(); loadLegifrance();
   loadTransfer().catch(() => {});
   refreshStatus().then(setHealth);
   if (!state.setGroups || $('#set-save').hidden) renderGroups((await api('api/settings')).groups);
@@ -3105,6 +3105,16 @@ function showSpotify(g) {
   $('#spotify-connect').disabled = !g.configured; $('#spotify-connect').title = g.configured ? '' : 'Fill in the client ID and secret first (step 3)';
 }
 async function loadSpotify() { try { showSpotify(await api('api/spotify')); } catch {} }
+async function loadLegifrance() {
+  try { const g = await api('api/legifrance'); state.setAcc = { ...state.setAcc, legifrance: !!g.configured }; setAccounts();
+    $('#legifrance-badge').textContent = g.configured ? t('· keys set') : t('· EU law ready, French law needs PISTE keys'); } catch {}
+}
+$('#legifrance-test').onclick = async () => {
+  const b = $('#legifrance-test'), out = $('#legifrance-status'); b.disabled = true; out.textContent = t('Testing…'); out.className = 'small muted';
+  try { const r = await post('api/legifrance/test'); out.textContent = '✓ ' + r.message; out.className = 'small'; }
+  catch (e) { out.textContent = e.message; out.className = 'small error'; }
+  b.disabled = false; loadLegifrance();
+};
 $('#spotify-copy').onclick = () => copyText($('#spotify-redirect').textContent);
 $('#spotify-connect').onclick = async () => { try { location.href = (await post('api/spotify/connect')).url; } catch (e) { toast(e.message); } };
 $('#spotify-disconnect').onclick = async () => { try { showSpotify(await post('api/spotify/disconnect')); toast('Spotify disconnected.'); } catch (e) { toast(e.message); } };

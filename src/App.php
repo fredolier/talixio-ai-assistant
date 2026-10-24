@@ -114,6 +114,8 @@ final class App
     public function files(): Files { return new Files($this); }
     public function library(): Library { return new Library($this); }
     public function documents(): Documents { return new Documents($this); }
+    public function legifrance(): Legifrance { return new Legifrance($this); }
+    public function eurlex(): Eurlex { return new Eurlex($this); }
     public function approvals(): Approvals { return new Approvals($this); }
     public function skills(): Skills { return new Skills($this); }
     public function mind(): Mind { return new Mind($this); }

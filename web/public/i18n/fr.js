@@ -2758,5 +2758,17 @@ window.I18N.fr = {
 "＋ Add": "＋ Ajouter",
 "Trash ({n})": "Corbeille ({n})",
 "{a} files · {b}": "{a} fichiers · {b}",
-"{a} reading…": "{a} en lecture…"
+"{a} reading…": "{a} en lecture…",
+"French & EU law": "Droit français et européen",
+"Search French law on Légifrance and JudiLibre (needs a free PISTE account subscribed to both APIs). EU law on EUR-Lex works without any key.": "Recherchez le droit français sur Légifrance et JudiLibre (nécessite un compte PISTE gratuit abonné aux deux API). Le droit européen sur EUR-Lex fonctionne sans aucune clé.",
+"PISTE client ID": "Identifiant client PISTE",
+"From piste.gouv.fr → your application. Subscribe it to the Légifrance and JudiLibre APIs.": "Depuis piste.gouv.fr → votre application. Abonnez-la aux API Légifrance et JudiLibre.",
+"PISTE client secret": "Secret client PISTE",
+"Ask about French law (\"que dit l'article 1240 du Code civil ?\", \"jurisprudence sur la responsabilité du fait des choses\") or EU law (\"lis le RGPD\", \"le règlement IA\"). French law (Légifrance, JudiLibre) needs a free PISTE account; EU law (EUR-Lex) works with no key.": "Posez des questions sur le droit français (« que dit l'article 1240 du Code civil ? », « jurisprudence sur la responsabilité du fait des choses ») ou européen (« lis le RGPD », « le règlement IA »). Le droit français (Légifrance, JudiLibre) nécessite un compte PISTE gratuit ; le droit européen (EUR-Lex) fonctionne sans clé.",
+"Test connection": "Tester la connexion",
+"Testing…": "Test en cours…",
+"· keys set": "· clés renseignées",
+"· EU law ready, French law needs PISTE keys": "· droit européen prêt, droit français : clés PISTE requises",
+"Create a free account on <a href=\"https://piste.gouv.fr\" target=\"_blank\" rel=\"noopener\">piste.gouv.fr</a>, create an application, and subscribe it to the <b>Légifrance</b> and <b>JudiLibre</b> APIs.": "Créez un compte gratuit sur <a href=\"https://piste.gouv.fr\" target=\"_blank\" rel=\"noopener\">piste.gouv.fr</a>, créez une application et abonnez-la aux API <b>Légifrance</b> et <b>JudiLibre</b>.",
+"Copy the application's <i>client ID</i> and <i>client secret</i> into the PISTE fields above, save, then press <b>Test connection</b>.": "Copiez l'<i>identifiant client</i> et le <i>secret client</i> de l'application dans les champs PISTE ci-dessus, enregistrez, puis cliquez sur <b>Tester la connexion</b>."
 };

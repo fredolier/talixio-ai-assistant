@@ -566,6 +566,18 @@
               <div class="row"><button id="spotify-connect" class="btn primary" type="button">Connect Spotify</button><button id="spotify-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button></div>
             </div>
           </div>
+          <div class="connect" id="legifrance-card">
+            <h5>French &amp; EU law <span id="legifrance-badge" class="muted small"></span></h5>
+            <div class="fields">
+              <p class="muted small">Ask about French law ("que dit l'article 1240 du Code civil ?", "jurisprudence sur la responsabilité du fait des choses") or EU law ("lis le RGPD", "le règlement IA"). French law (Légifrance, JudiLibre) needs a free PISTE account; EU law (EUR-Lex) works with no key.</p>
+              <ol class="steps small" id="legifrance-steps">
+                <li>Create a free account on <a href="https://piste.gouv.fr" target="_blank" rel="noopener">piste.gouv.fr</a>, create an application, and subscribe it to the <b>Légifrance</b> and <b>JudiLibre</b> APIs.</li>
+                <li>Copy the application's <i>client ID</i> and <i>client secret</i> into the PISTE fields above, save, then press <b>Test connection</b>.</li>
+              </ol>
+              <div class="row"><button id="legifrance-test" class="btn" type="button">Test connection</button></div>
+              <div id="legifrance-status" class="small"></div>
+            </div>
+          </div>
       </div>
 
       <div id="set-save" class="set-save" hidden>

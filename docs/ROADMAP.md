@@ -31,12 +31,13 @@ goes through the Talixio page or the server, never straight from the app.**
   carries the code, what it reads and how to install its connectors, never data or keys; it waits for approval on
   the other side, which installs the connectors with its own account.
 
-### Done (0.28.76-0.28.79)
+### Done (0.28.76-0.28.80)
 
 - The store fills itself with the FAQ's connectors at each agent start; tabs in every Settings section.
 - Store connectors grouped in tabs by theme; an open app takes the whole page.
 - **The assistant makes document files** — PDF, Word, Excel, OpenDocument, HTML, Markdown — locally with LibreOffice, saved to the library (nothing sent outside).
 - PHP2Shell (CVE-2026-109618/109619): patched PHP in the rebuilt image, upload-progress mitigation, and a check script.
+- **French & EU law search** built in: Légifrance + JudiLibre (via a free PISTE account) and EUR-Lex (no key); the EU AI Act MCP (Lexbeam) added to the connector list.
 
 ### Done (0.28.75)
 

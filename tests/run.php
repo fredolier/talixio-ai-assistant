@@ -2603,6 +2603,40 @@ check('spotify: disconnect forgets the tokens', !$sa->spotify()->connected() && 
 foreach (['AUTH_URL', 'TOKEN_URL', 'API_BASE'] as $k) putenv("TALIXIO_SPOTIFY_$k");
 putenv("TALIXIO_DATA_DIR=$dir");
 proc_terminate($ss); proc_close($ss);
+
+// French & EU law: Légifrance + JudiLibre (PISTE) and EUR-Lex (public)
+$pport = $freePort();
+$pp2 = proc_open([PHP_BINARY, '-S', "127.0.0.1:$pport", __DIR__ . '/fakes/piste.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipesP);
+$waitPort($pport);
+$eport = $freePort();
+$ep = proc_open([PHP_BINARY, '-S', "127.0.0.1:$eport", __DIR__ . '/fakes/eurlex.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipesE);
+$waitPort($eport);
+putenv("TALIXIO_DATA_DIR=$ad");
+putenv("TALIXIO_EURLEX_SPARQL_URL=http://127.0.0.1:$eport/sparql"); putenv("TALIXIO_EURLEX_CONTENT_BASE=http://127.0.0.1:$eport");
+$la = App::fromEnv();
+check('law: Légifrance tools only when configured, EUR-Lex always on', !isset(array_flip(array_column($la->tools->schemas(), 'name'))['legifrance_search'])
+    && isset(array_flip(array_column($la->tools->schemas(), 'name'))['eurlex_get']));
+\Talixio\Settings::save($ad, ['TALIXIO_PISTE_CLIENT_ID' => 'pcid', 'TALIXIO_PISTE_CLIENT_SECRET' => 'psec']);
+putenv("TALIXIO_PISTE_TOKEN_URL=http://127.0.0.1:$pport/token"); putenv("TALIXIO_PISTE_API_BASE=http://127.0.0.1:$pport");
+$la = App::fromEnv();
+check('law: Légifrance tools appear once the PISTE keys are set', isset(array_flip(array_column($la->tools->schemas(), 'name'))['legifrance_search']));
+check('law: the PISTE token is cached private', str_contains($la->legifrance()->test(), 'Connected to PISTE') && (fileperms("$ad/piste.json") & 0777) === 0600);
+$ls = $la->tools->run('legifrance_search', ['query' => 'responsabilité civile', 'fond' => 'ALL']);
+check('law: Légifrance search lists results with ids', str_contains($ls, 'Article 1382 du Code civil') && str_contains($ls, 'LEGIARTI000006419288'), $ls);
+$lg = $la->tools->run('legifrance_get', ['id' => 'LEGIARTI000006419288']);
+check('law: a Légifrance article reads as clean text (tags and entities decoded)', str_contains($lg, 'Tout fait quelconque') && str_contains($lg, 'qui cause un dommage') && !str_contains($lg, '<p>'), $lg);
+$js = $la->tools->run('judilibre_search', ['query' => 'responsabilité du fait des choses']);
+check('law: JudiLibre search lists decisions', str_contains($js, '21-12.345') && str_contains($js, 'dec-1'), $js);
+$jg = $la->tools->run('judilibre_get', ['id' => 'dec-1']);
+check('law: a JudiLibre decision reads in full', str_contains($jg, 'LA COUR DE CASSATION'), $jg);
+$es = $la->tools->run('eurlex_search', ['query' => 'data protection']);
+check('law: EUR-Lex title search finds the GDPR', str_contains($es, '32016R0679') && str_contains($es, 'GDPR'), $es);
+$eg = $la->tools->run('eurlex_get', ['celex' => '32016R0679']);
+check('law: EUR-Lex reads a document by CELEX as clean text', str_contains($eg, 'Regulation (EU) 2016/679') && str_contains($eg, 'This Regulation lays down rules') && !str_contains($eg, '<h1>') && !str_contains($eg, 'x()'), $eg);
+foreach (['TALIXIO_PISTE_TOKEN_URL', 'TALIXIO_PISTE_API_BASE', 'TALIXIO_EURLEX_SPARQL_URL', 'TALIXIO_EURLEX_CONTENT_BASE'] as $k) putenv($k);
+\Talixio\Settings::save($ad, ['TALIXIO_PISTE_CLIENT_ID' => '']); putenv("TALIXIO_DATA_DIR=$dir"); @unlink("$ad/piste.json");
+proc_terminate($pp2); proc_close($pp2); proc_terminate($ep); proc_close($ep);
+
 $pl = fn(...$a) => \Talixio\PhoneLinks::make(...$a);
 check('phone: known app opens by its own link', $pl('app', 'Spotify') === '[▶ Open Spotify](spotify:)');
 check('phone: other app by package, Play Store as fallback', str_starts_with($pl('app', 'com.sncf.connect'), '[▶ Open com.sncf.connect](intent://#Intent;package=com.sncf.connect;S.browser_fallback_url=https%3A%2F%2Fplay.google.com'));

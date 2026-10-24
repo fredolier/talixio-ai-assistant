@@ -111,6 +111,11 @@ Des connecteurs sans compte, à partir d'OpenStreetMap et des données ouvertes.
   après l'ajout, cliquez sur **Se connecter** dans Réglages → Connecteurs. Les opérations sensibles se
   valident dans l'application Qonto. [▶ Installer](?connector=https://mcp.qonto.com/mcp&name=qonto)
 
+## Droit et conformité
+- **EU AI Act (Lexbeam)** : le règlement européen sur l'IA (2024/1689) — niveau de risque d'un système,
+  obligations par rôle, échéances, sanctions et résumés d'articles. Serveur hébergé officiel, sans clé, rien n'est conservé.
+  [▶ Install](?connector=https://mcp.lexbeam.com/mcp&name=eu_ai_act)
+
 ## Films, séries, télévision et cinéma
 - **TMDB (films et séries)** : chercher un film ou une série, les notes, les recommandations, et **où le
   regarder** (Netflix, Prime Video, Disney+, Canal+…) : « qu'y a-t-il de nouveau sur Netflix ? ».

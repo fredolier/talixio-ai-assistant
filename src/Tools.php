@@ -35,6 +35,7 @@ final class Tools
         'shell' => [['shell_', 'script_'], '/script|outil|\btools?\b|simulat|commande|command|shell|code|python|calcul|comput|csv|excel|xlsx|json|convert|graph|chart|zip|statisti/iu', 'run code in a sandbox (calculations, files, conversions)'],
         'phone' => [['phone_'], '/appel|call|sms|texto|téléphon|phone|whatsapp|signal/iu', 'calls and texts from the phone'],
         'music' => [['spotify_'], '/musique|music|joue|play|chanson|song|spotify|playlist|album|artist|volume|écoute|listen/iu', 'Spotify'],
+        'law' => [['legifrance_', 'judilibre_', 'eurlex_'], '/\bloi\b|lois|légifrance|legifrance|judilibre|jurisprudence|arrêt|cassation|code civil|code du travail|code pénal|décret|ordonnance|article [LRD]?\s?\d|juridi|droit (français|europ|de l)|eur-?lex|celex|règlement (ue|européen)|directive|jurispruden|cour de justice|conseil d.état|conseil constitutionnel|rgpd|gdpr|ai act|règlement sur l.ia/iu', 'search French and EU law (Légifrance, JudiLibre, EUR-Lex)'],
         'skills' => [['skill_'], '/compétence|skill|méthode|procédure|apprend|learn|retiens|à l\'avenir|next time|prochaine fois|toujours|always|jamais|never/iu', 'save or delete a skill (a method to reuse)'],
         'spaces' => [['spaces'], '/espace|space/iu', 'the user\'s spaces'],
         'connectors' => [['connector_'], '/\bmcp\b|connect(eu|o)rs?|github|plugin|intégration|integration/iu', 'install a connector (MCP server) from GitHub'],
@@ -578,6 +579,8 @@ final class Tools
         $this->app->mcp()->register($this);
         $this->registerBoard();
         $this->app->spotify()->register($this);
+        $this->app->legifrance()->register($this);
+        $this->app->eurlex()->register($this);
         $this->register('phone_action',
             "Make a button that opens an app on the user's phone: they tap it in the app (a web page can't open apps by itself). Put the returned link in your answer as is. kind: app (open an app by name or Android package), music (search a song or artist; via spotify, youtube music or deezer), navigate (to an address; via maps or waze), call, sms, whatsapp, email (target = number or address, text = the message), video (YouTube search), web (an address)."
             . ($this->app->spotify()->connected() ? ' To play music, use spotify_play instead: it plays directly.' : ''),

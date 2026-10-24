@@ -107,6 +107,10 @@ final class Settings
                 ['TALIXIO_SPOTIFY_CLIENT_SECRET', 'Spotify client secret', 'secret', ''],
                 ['TALIXIO_SPOTIFY_DEVICE', 'Usual device', 'text', 'Where to play when nothing is playing, e.g. "Galaxy S25 Ultra". Empty = your phone.'],
             ]],
+            'legifrance' => ['French & EU law', 'Search French law on Légifrance and JudiLibre (needs a free PISTE account subscribed to both APIs). EU law on EUR-Lex works without any key.', [
+                ['TALIXIO_PISTE_CLIENT_ID', 'PISTE client ID', 'text', 'From piste.gouv.fr → your application. Subscribe it to the Légifrance and JudiLibre APIs.'],
+                ['TALIXIO_PISTE_CLIENT_SECRET', 'PISTE client secret', 'secret', ''],
+            ]],
             'signal' => ['Signal', 'A number dedicated to the assistant, registered with "sudo talixio signal register" (in Docker: "docker exec -it talixio-<you> talixio signal register"; see the README).', [
                 ['TALIXIO_SIGNAL_NUMBER', 'Assistant\'s number', 'text', '+33…'],
                 ['TALIXIO_SIGNAL_ALLOWED', 'Your numbers', 'list', 'The only numbers it answers.'],
@@ -180,7 +184,7 @@ final class Settings
         'assistant' => 'essentials', 'tasks' => 'essentials',
         'brain' => 'model', 'budget' => 'model',
         'notify' => 'channels', 'email' => 'channels', 'signal' => 'channels', 'telegram' => 'channels',
-        'mailbox' => 'accounts', 'calendar' => 'accounts', 'spotify' => 'accounts',
+        'mailbox' => 'accounts', 'calendar' => 'accounts', 'spotify' => 'accounts', 'legifrance' => 'accounts',
         'search' => 'library', 'audio' => 'library', 'learning' => 'library',
         'browser' => 'security', 'shell' => 'security',
         'maintenance' => 'system', 'advanced' => 'system',

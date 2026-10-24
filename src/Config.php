@@ -86,6 +86,12 @@ final class Config
     public string $spotifyAuthUrl = 'https://accounts.spotify.com/authorize';
     public string $spotifyTokenUrl = 'https://accounts.spotify.com/api/token';
     public string $spotifyApiBase = 'https://api.spotify.com/v1';
+    public string $pisteClientId = '';
+    public string $pisteClientSecret = '';
+    public string $pisteTokenUrl = 'https://oauth.piste.gouv.fr/api/oauth/token';
+    public string $pisteApiBase = 'https://api.piste.gouv.fr';
+    public string $eurlexSparqlUrl = 'https://publications.europa.eu/webapi/rdf/sparql';
+    public string $eurlexContentBase = 'https://publications.europa.eu';
     public bool $shellNetwork = false;
     public int $shellTimeout = 120;
     public string $webPassword = '';
@@ -257,6 +263,11 @@ final class Config
         $c->spotifyClientSecret = trim($e('TALIXIO_SPOTIFY_CLIENT_SECRET'));
         $c->spotifyDevice = trim($e('TALIXIO_SPOTIFY_DEVICE'));
         foreach (['spotifyAuthUrl' => 'TALIXIO_SPOTIFY_AUTH_URL', 'spotifyTokenUrl' => 'TALIXIO_SPOTIFY_TOKEN_URL', 'spotifyApiBase' => 'TALIXIO_SPOTIFY_API_BASE'] as $prop => $var) {
+            if ($e($var) !== '') $c->$prop = rtrim($e($var), '/');
+        }
+        $c->pisteClientId = trim($e('TALIXIO_PISTE_CLIENT_ID'));
+        $c->pisteClientSecret = trim($e('TALIXIO_PISTE_CLIENT_SECRET'));
+        foreach (['pisteTokenUrl' => 'TALIXIO_PISTE_TOKEN_URL', 'pisteApiBase' => 'TALIXIO_PISTE_API_BASE', 'eurlexSparqlUrl' => 'TALIXIO_EURLEX_SPARQL_URL', 'eurlexContentBase' => 'TALIXIO_EURLEX_CONTENT_BASE'] as $prop => $var) {
             if ($e($var) !== '') $c->$prop = rtrim($e($var), '/');
         }
         $c->taskReminder = preg_match('/^([01]?\d|2[0-3]):[0-5]\d$/', trim($e('TALIXIO_TASK_REMINDER', '18:00'))) ? trim($e('TALIXIO_TASK_REMINDER', '18:00')) : '';
