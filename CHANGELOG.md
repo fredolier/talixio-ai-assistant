@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.90 (2026-10-25)
+
+- Agent factory, phase 4 — **share worker roles across the fleet.** On a multi-assistant server, a role can now be published to the shared store (admin-reviewed, exactly like an app or connector) and installed by other assistants. New tools: **`role_publish`** sends a role for review (only its purpose, brief, tier and the skills/tools it uses — never any data or key; a protected role like the assessor is never shared; it warns if the store already has a similar role), and **`role_install`** installs or updates a shared role into the local registry. The admin's store page reviews and lists roles alongside apps and connectors. This is the piece that lets an organisation's assistants get better together — one person's proven role becomes everyone's.
+
 ## 0.28.89 (2026-10-25)
 
 - Agent factory, phase 2 complete — **roles now improve themselves, honestly.** New tool **`role_improve`**: propose a better brief for a role and the assessor **A/Bs it for real** — a background evaluation job runs the current and the candidate brief on the role's golden cases, an impartial judge pass scores both against each case's rubric, and the candidate is **promoted to a new version only if it clearly wins** (and isn't gated). A brief that doesn't beat the current one is discarded; the current version stays. This closes the loop the earlier phases set up: run a team → record real acceptance → test improvements against reference cases → keep only what measurably helps.

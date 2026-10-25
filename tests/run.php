@@ -2226,7 +2226,7 @@ $cat->collect('alice', 'Alice', $obf); $cat->collect('alice', 'Alice', $obf);
 $subs = array_column($cat->submissions(), null, 'key');
 check('store: collected once, waiting for review, cleaned', count($subs) === 2 && $subs["app-{$sh['id']}"]['status'] === 'pending' && $subs["app-{$sh['id']}"]['note'] === 'For the team'
     && $subs['mcp-bills_online']['item'] === ['name' => 'bills_online', 'description' => 'Bills', 'url' => 'https://mcp.example.com/mcp', 'headers' => ['X-Api-Key']], json_encode($subs));
-check('store: nothing is in the catalog before the admin approves', $ast->catalog() === ['apps' => [], 'connectors' => []] && $ast->view()['available'] && $ast->view()['shared'] === false);
+check('store: nothing is in the catalog before the admin approves', $ast->catalog() === ['apps' => [], 'connectors' => [], 'roles' => []] && $ast->view()['available'] && $ast->view()['shared'] === false);
 $da = $cat->decide($subs["app-{$sh['id']}"]['id'], true, 'Nice');
 $dc = $cat->decide($subs['mcp-bills_online']['id'], false, 'Use the official one');
 $twice = ''; try { $cat->decide($da['id'], true); } catch (\InvalidArgumentException $e) { $twice = $e->getMessage(); }
@@ -2252,6 +2252,22 @@ $cid = $cat->add('connector', ['name' => 'Bills Online', 'url' => 'https://mcp.e
 $cv = $ast->view();
 check('store: a connector added by the admin keeps only valid header names, and is seen as installed by its address', $cv['connectors'][0]['id'] === $cid && $cv['connectors'][0]['headers'] === ['X-Api-Key']
     && $cv['connectors'][0]['installed'] === 'bills_online', json_encode($cv['connectors']));
+// ---- a worker role shared to the fleet (agent factory, phase 4) ----
+$ma->skills()->save('fleet-researcher', 'Research options across the web', 'Gather and compare options with sources.', ['kind' => 'role', 'tier' => 'standard', 'tools' => 'web_search, fetch_url', 'version' => '1']);
+$ro = $ast->submitRole('fleet-researcher', 'Handy for comparisons');
+check('store: a role waits in the outbox with its brief, no secrets', $ro['kind'] === 'role' && $ro['key'] === 'role-fleet-researcher' && !isset($ro['package']));
+$cat->collect('alice', 'Alice', $ast->outbox(true));
+$rsub = array_values(array_filter($cat->submissions(), fn($x) => $x['kind'] === 'role'))[0];
+check('store: the role is reviewable with its cleaned definition', ($rsub['item']['tier'] ?? '') === 'standard' && str_contains((string)($rsub['item']['body'] ?? ''), 'Gather and compare') && ($rsub['item']['tools'] ?? '') === 'web_search, fetch_url');
+$dr = $cat->decide($rsub['id'], true, 'Good'); $ast->mark($dr['key'], $dr['hash'], 'approved');
+$rv = $ast->view();
+check('store: the approved role is in the catalog, not installed here yet, without its brief', count($rv['roles']) === 1 && $rv['roles'][0]['name'] === 'fleet-researcher' && $rv['roles'][0]['installed'] === null && !isset($rv['roles'][0]['body']));
+$rid = $rv['roles'][0]['id'];
+$ma->skills()->delete('fleet-researcher');
+$ast->installRole($rid);
+check('store: installing a shared role writes it into the local registry, marked from the store', ($ma->skills()->meta('fleet-researcher')['kind'] ?? '') === 'role' && ($ma->skills()->meta('fleet-researcher')['store_id'] ?? '') === $rid
+    && str_contains((string)$ma->skills()->raw('fleet-researcher'), 'Gather and compare') && $ast->view()['roles'][0]['installed'] === 'fleet-researcher');
+$ma->skills()->delete('fleet-researcher');
 $faqMd = (string)file_get_contents(__DIR__ . '/../docs/faq/English/Connectors/Connector list.md');
 $fc = \Talixio\Catalog::faqConnectors($faqMd); $byName = array_column($fc, null, 'name');
 $added = $cat->addFaq($faqMd, true); $again = $cat->addFaq($faqMd);

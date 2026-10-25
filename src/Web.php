@@ -308,12 +308,12 @@ final class Web
             $path === '/api/store' && $m === 'GET' => (function () { if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space']; return (new AppStore($this->app))->view(); })(),
             $path === '/api/store/install' && $m === 'POST' => (function () use ($b) {
                 if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space'];
-                try { return ['app' => (new AppStore($this->app))->install((string)($b['id'] ?? ''))]; } catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+                try { $st = new AppStore($this->app); $id = (string)($b['id'] ?? ''); return str_starts_with($id, 'role-') ? ['role' => $st->installRole($id)] : ['app' => $st->install($id)]; } catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
             })(),
             $path === '/api/store/submit' && $m === 'POST' => (function () use ($b) {
                 if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space'];
                 $st = new AppStore($this->app);
-                try { return ['item' => isset($b['app']) ? $st->submitApp((int)$b['app'], (string)($b['note'] ?? '')) : $st->submitConnector((string)($b['connector'] ?? ''), (string)($b['note'] ?? ''))]; }
+                try { return ['item' => isset($b['app']) ? $st->submitApp((int)$b['app'], (string)($b['note'] ?? '')) : (isset($b['role']) ? $st->submitRole((string)$b['role'], (string)($b['note'] ?? '')) : $st->submitConnector((string)($b['connector'] ?? ''), (string)($b['note'] ?? '')))]; }
                 catch (\InvalidArgumentException | \RuntimeException $e) { $this->fail(400, $e->getMessage()); }
             })(),
             $path === '/api/store/withdraw' && $m === 'POST' => (function () use ($b) { (new AppStore($this->app))->withdraw((string)($b['key'] ?? '')); return ['outbox' => (new AppStore($this->app))->outbox()]; })(),

@@ -415,6 +415,19 @@ final class Tools
             "Propose a better brief for a role and have the assessor A/B it: a background job runs the current and candidate briefs on the role's golden cases, scores both, and promotes the candidate ONLY if it clearly wins. Use this to improve a role based on what you learned — not role_save, which just overwrites. The role needs golden cases (role_case_add) first.",
             ['role' => ['type' => 'string'], 'content' => ['type' => 'string', 'description' => 'the candidate brief: the improved instructions to test against the current ones']], ['role', 'content'],
             fn(array $a) => $this->sharedWrite('skills') ?? $this->app->assessor()->improve((string)$a['role'], (string)$a['content']));
+        $this->register('role_publish',
+            'Share a worker role with the fleet: send it to the store for the admin to review, so other assistants on this server can install it. Only its purpose, brief, tier and the skills/tools it uses are shared — never any data or key. The user should agree before you publish.',
+            ['role' => ['type' => 'string'], 'note' => ['type' => 'string', 'description' => 'a word for the reviewer (why it is useful)']], ['role'],
+            fn(array $a) => $this->sharedWrite('skills') ?? (function () use ($a) {
+                try { $r = (new AppStore($this->app))->submitRole((string)$a['role'], (string)($a['note'] ?? '')); } catch (\InvalidArgumentException | \RuntimeException $e) { return 'error: ' . $e->getMessage(); }
+                $dupes = array_values(array_filter((new AppStore($this->app))->catalog()['roles'], fn($x) => Skills::slug((string)$x['name']) !== Skills::slug((string)$a['role']) && !empty(array_intersect(explode(' ', strtolower((string)$x['description'])), explode(' ', strtolower((string)($this->app->skills()->meta((string)$a['role'])['description'] ?? '')))))));
+                return "sent role '{$r['name']}' to the store for review." . ($dupes ? ' Note: the store already has a similar role (' . implode(', ', array_map(fn($x) => $x['name'], array_slice($dupes, 0, 3))) . ') — the admin may prefer to merge.' : '');
+            })());
+        $this->register('role_install', 'Install a shared role from the store into this assistant\'s registry (or update the installed copy). id is the store role id (role-…), from the store catalog.',
+            ['id' => ['type' => 'string']], ['id'],
+            fn(array $a) => $this->sharedWrite('skills') ?? (function () use ($a) {
+                try { return (new AppStore($this->app))->installRole((string)$a['id']); } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
+            })());
         $this->register('role_case_add',
             'Add a golden case for a role: a reference task the role is judged on (title, optional input, optional rubric describing a good result). These are what an improvement must win on before it is promoted.',
             ['role' => ['type' => 'string'], 'title' => ['type' => 'string'], 'input' => ['type' => 'string'], 'rubric' => ['type' => 'string']], ['role', 'title'],

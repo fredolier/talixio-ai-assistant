@@ -16,7 +16,8 @@ final class Catalog
     public function read(): array
     {
         $c = json_decode((string)@file_get_contents("$this->dir/catalog.json"), true);
-        return ['apps' => array_values((array)($c['apps'] ?? [])), 'connectors' => array_values((array)($c['connectors'] ?? [])), 'updated' => (int)($c['updated'] ?? 0)];
+        return ['apps' => array_values((array)($c['apps'] ?? [])), 'connectors' => array_values((array)($c['connectors'] ?? [])),
+            'roles' => array_values((array)($c['roles'] ?? [])), 'updated' => (int)($c['updated'] ?? 0)];
     }
 
     /** What people sent: pending first, then the latest decisions. */
@@ -83,6 +84,19 @@ final class Catalog
             'icon' => mb_substr(trim((string)($pkg['icon'] ?? '')), 0, 4), 'html' => $html, 'script' => $script, 'sources' => $sources, 'connectors' => $conn];
     }
 
+    /** A worker role: its name, purpose, model tier, the skills and tools it relies on, and its brief. No secrets (a role has none). */
+    public static function cleanRole(array $pkg): array
+    {
+        $name = Skills::slug((string)($pkg['name'] ?? ''));
+        $body = trim((string)($pkg['body'] ?? ''));
+        if ($name === '') throw new \InvalidArgumentException('a role needs a name');
+        if ($body === '') throw new \InvalidArgumentException('a role needs a brief (its instructions)');
+        if (strlen($body) > 100_000) throw new \InvalidArgumentException('the brief is too long (100 KB at most)');
+        $str = fn(string $k, int $max = 300) => mb_substr(trim(preg_replace('/\s+/', ' ', (string)($pkg[$k] ?? ''))), 0, $max);
+        return ['name' => $name, 'description' => $str('description') ?: 'A worker role', 'tier' => in_array($pkg['tier'] ?? '', Tier::NAMES, true) ? (string)$pkg['tier'] : 'standard',
+            'skills' => $str('skills'), 'tools' => $str('tools'), 'when_to_use' => $str('when_to_use'), 'when_not' => $str('when_not'), 'body' => $body];
+    }
+
     /** A connector: its name, what it does, and how to install it (a GitHub repository, or an https address and header names). */
     public static function cleanConnector(array $r): array
     {
@@ -106,13 +120,13 @@ final class Catalog
         foreach ($items as $it) {
             $it = (array)$it;
             $key = (string)($it['key'] ?? ''); $kind = (string)($it['kind'] ?? '');
-            if (!preg_match('/^(app|mcp)-[\w-]{1,60}$/', $key) || !in_array($kind, ['app', 'connector'], true) || ($it['status'] ?? '') !== 'sent') continue;
+            if (!preg_match('/^(app|mcp|role)-[\w-]{1,60}$/', $key) || !in_array($kind, ['app', 'connector', 'role'], true) || ($it['status'] ?? '') !== 'sent') continue;
             $hash = self::hash($it);
             $id = substr(sha1("$instance\n$key\n$hash"), 0, 12);
             if (isset($s['subs'][$id])) continue;
             foreach ($s['subs'] as $k => $x) if ($x['instance'] === $instance && $x['key'] === $key && $x['status'] === 'pending') unset($s['subs'][$k]);
             try {
-                $clean = $kind === 'app' ? self::cleanApp((array)($it['package'] ?? [])) : self::cleanConnector((array)($it['recipe'] ?? []));
+                $clean = match ($kind) { 'app' => self::cleanApp((array)($it['package'] ?? [])), 'role' => self::cleanRole((array)($it['package'] ?? [])), default => self::cleanConnector((array)($it['recipe'] ?? [])) };
                 $error = null;
             } catch (\InvalidArgumentException $e) { $clean = null; $error = $e->getMessage(); }
             $raw = (array)($it['package'] ?? $it['recipe'] ?? []);
@@ -148,7 +162,7 @@ final class Catalog
     /** Puts an item in the catalog, as a new one or over the one it replaces (its version goes up). @return string its id */
     private function publish(string $kind, array $item, ?string $replace = null): string
     {
-        $c = $this->read(); $list = $kind === 'app' ? 'apps' : 'connectors';
+        $c = $this->read(); $list = ['app' => 'apps', 'connector' => 'connectors', 'role' => 'roles'][$kind];
         $entry = $kind === 'app'
             ? ['name' => $item['name'], 'description' => $item['description'], 'icon' => $item['icon'], 'connectors' => array_keys($item['connectors']), 'package' => $item]
             : $item;
@@ -157,7 +171,7 @@ final class Catalog
             $this->saveCatalog($c);
             return $replace;
         }
-        $id = ($kind === 'app' ? 'app-' : 'mcp-') . bin2hex(random_bytes(5));
+        $id = ['app' => 'app-', 'connector' => 'mcp-', 'role' => 'role-'][$kind] . bin2hex(random_bytes(5));
         $c[$list][] = ['id' => $id, 'version' => 1, 'at' => time()] + $entry;
         $this->saveCatalog($c);
         return $id;
@@ -166,7 +180,7 @@ final class Catalog
     /** Added by the admin: published at once. */
     public function add(string $kind, array $data): string
     {
-        return $this->publish($kind, $kind === 'app' ? self::cleanApp($data) : self::cleanConnector($data));
+        return $this->publish($kind, match ($kind) { 'app' => self::cleanApp($data), 'role' => self::cleanRole($data), default => self::cleanConnector($data) });
     }
 
     /**
@@ -221,9 +235,9 @@ final class Catalog
     /** Out of the store: assistants that installed it keep their copy. */
     public function remove(string $id): void
     {
-        $c = $this->read(); $n = count($c['apps']) + count($c['connectors']);
-        foreach (['apps', 'connectors'] as $l) $c[$l] = array_values(array_filter($c[$l], fn($x) => $x['id'] !== $id));
-        if (count($c['apps']) + count($c['connectors']) === $n) throw new \InvalidArgumentException('Not in the store.');
+        $c = $this->read(); $n = count($c['apps']) + count($c['connectors']) + count($c['roles']);
+        foreach (['apps', 'connectors', 'roles'] as $l) $c[$l] = array_values(array_filter($c[$l], fn($x) => $x['id'] !== $id));
+        if (count($c['apps']) + count($c['connectors']) + count($c['roles']) === $n) throw new \InvalidArgumentException('Not in the store.');
         $this->saveCatalog($c);
         $s = $this->state(); $s['links'] = array_filter($s['links'], fn($v) => $v !== $id); $this->saveState($s);
     }

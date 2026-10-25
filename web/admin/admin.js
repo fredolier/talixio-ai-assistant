@@ -339,14 +339,14 @@ async function loadStore() {
     : d.writable === false ? `<p class="warn">${esc(t('The store volume is not writable by the agent: run install-stack.sh once.'))}</p>`
     : `<p class="muted small">${esc(t('Assistants see the store once they run this version (after the update, or Recreate).'))}</p>`;
   const subs = d.submissions || [], pend = subs.filter(x => x.status === 'pending'), done = subs.filter(x => x.status !== 'pending').reverse().slice(0, 30);
-  const kindWord = k => t(k === 'app' ? 'App' : 'Connector');
+  const kindWord = k => t(k === 'app' ? 'App' : k === 'role' ? 'Role' : 'Connector');
   $('#store-pending').innerHTML = pend.length ? pend.map(x => `<div class="card" data-id="${esc(x.id)}">
       <div class="row"><b>${esc(x.name)}</b><span class="pill">${esc(kindWord(x.kind))}</span>${x.replaces ? `<span class="pill warn">${esc(t('new version'))}</span>` : ''}<span class="spacer"></span><span class="muted small">${esc(x.who)} · ${when(x.at)}</span></div>
       ${x.note ? `<p>${esc(x.note)}</p>` : ''}${x.error ? `<p class="err">${esc(t('Cannot be published:'))} ${esc(x.error)}</p>` : ''}
       ${storeDetails(x.kind, x.item)}
       <div class="row"><span class="spacer"></span><button class="btn" data-act="reject">${esc(t('Reject'))}</button>${x.item ? `<button class="btn primary" data-act="approve">${esc(t('Approve'))}</button>` : ''}</div></div>`).join('')
     : `<p class="muted">${esc(t('Nothing waits for review.'))}</p>`;
-  const items = [...(d.catalog.apps || []).map(a => ({ ...a, kind: 'app' })), ...(d.catalog.connectors || []).map(c => ({ ...c, kind: 'connector' }))];
+  const items = [...(d.catalog.apps || []).map(a => ({ ...a, kind: 'app' })), ...(d.catalog.connectors || []).map(c => ({ ...c, kind: 'connector' })), ...(d.catalog.roles || []).map(r => ({ ...r, kind: 'role' }))];
   $('#store-items').innerHTML = items.length ? items.map(x => `<div class="card" data-id="${esc(x.id)}">
       <div class="row"><b>${esc((x.icon ? x.icon + ' ' : '') + x.name)}</b><span class="pill">${esc(kindWord(x.kind))}</span><span class="muted small">v${esc(x.version)} · ${when(x.at)}</span><span class="spacer"></span><button class="btn danger" data-act="remove">${esc(t('Remove'))}</button></div>
       ${x.description ? `<p class="muted">${esc(x.description)}</p>` : ''}${storeDetails(x.kind, x.kind === 'app' ? x.package : x)}</div>`).join('')

@@ -1,6 +1,7 @@
 window.I18N = window.I18N || {};
 /* French interface: English text (as it appears on screen) → French. {placeholders} match any value. See i18n.js. */
 window.I18N.fr = {
+"Role": "Rôle",
 "directive": "directive",
 "directives": "directives",
 "workers": "agents",
