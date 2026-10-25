@@ -110,6 +110,34 @@ final class Director
         return $rows ? implode("\n", $rows) : 'no directives in this space yet.';
     }
 
+    /** Structured directives + their workers for the Activity view (directives shown as rows, workers nested). */
+    public function board(?int $space = null): array
+    {
+        $out = [];
+        foreach ($this->app->store->directives(20, $space) as $d) {
+            $workers = array_map(fn($w) => [
+                'id' => (int)$w['id'], 'role' => $w['role'] ?: $w['title'], 'tier' => $w['tier'], 'status' => $w['status'],
+                'cost' => (float)$w['cost_usd'], 'note' => $w['status'] === 'failed' ? mb_substr((string)$w['result'], 0, 120) : '',
+            ], $this->app->store->directiveWorkers((int)$d['id']));
+            $out[] = [
+                'id' => (int)$d['id'], 'title' => $d['title'], 'goal' => $d['goal'], 'priority' => (int)$d['priority'],
+                'status' => $d['status'], 'cost' => (float)$d['cost_usd'], 'created' => (int)$d['ts'],
+                'finished' => $d['finished'] ? (int)$d['finished'] : null, 'result' => (string)($d['result'] ?? ''), 'workers' => $workers,
+            ];
+        }
+        return $out;
+    }
+
+    /** The few still-running directives, with how many of their workers are live — cheap enough for the status poll. */
+    public function active(?int $space = null): array
+    {
+        $rows = $this->app->store->q("SELECT id, title, priority FROM directives WHERE status IN ('running','finalizing')" . ($space !== null ? ' AND space = ?' : '') . ' ORDER BY priority, id DESC LIMIT 10', $space !== null ? [$space] : [])->fetchAll();
+        return array_map(function ($d) {
+            $running = 0; foreach ($this->app->store->directiveWorkers((int)$d['id']) as $w) $running += (int)in_array($w['status'], ['queued', 'running'], true);
+            return ['id' => (int)$d['id'], 'title' => $d['title'], 'priority' => (int)$d['priority'], 'running' => $running];
+        }, $rows);
+    }
+
     /** Steer a directive: reprioritise, or cancel it (and its unfinished workers). */
     public function steer(int $did, string $action, int $priority = 0): string
     {

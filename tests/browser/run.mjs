@@ -32,7 +32,7 @@ page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/
 const location = () => { try { return new URL(page.url()).hash || '/'; } catch { return '?'; } };
 await page.coverage.startJSCoverage({ resetOnNavigation: false });
 
-const ctx = { browser, page, base, check, errors };
+const ctx = { browser, page, base, check, errors, root, data };
 const suites = ['smoke', 'flows'];
 try {
   for (const s of suites) await (await import(`./${s}.mjs`)).default(ctx);

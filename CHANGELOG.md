@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.88 (2026-10-25)
+
+- Agent factory, phase 3 (glass box, first slice) — you can now **watch and steer** the director's teams. The Jobs page shows **directives as rows** with their workers nested inside (role · tier · status · cost), a progress bar, and controls: raise priority, cancel, or — once a directive is done — **👍 Accept / Not useful**, which feeds the phase-2 acceptance anchor so the roles learn from real outcomes. Expand a directive to see its workers; its combined result is there too. A slim **live bar above the chat composer** (`🎬 N directives · M workers running · $X left today`) appears whenever a directive is active and opens the Activity view in one tap. Worker jobs stay out of the flat job list — they live under their directive. (The board and voice remain for later in this phase.)
+
 ## 0.28.87 (2026-10-25)
 
 - Agent factory, phase 3 (executor backbone) — the director can now run a **team of worker roles** toward one goal (see `docs/design/agent-factory.md`). The director is the ordinary chat assistant given four tools: **`direct`** opens a *directive* (a goal) and queues its **workers** — each a role running as a background job, so they reuse the whole jobs engine (tiers A+B: headless web + sandboxed shell, cost caps, cancel, recovery); **`directive_status`** shows a directive and its workers; **`directive_steer`** reprioritises or cancels; **`directive_rate`** records whether the user accepted the result — the phase-2 anchor, now fed by real runs. Workers don't each report to the chat: when the last one finishes, the directive is finalised once, its workers' outcomes aggregated into a single reply, and each role's run recorded for the assessor. Worker jobs stay out of the flat Jobs list (they live under their directive). The glass-box UI (board, Activity, in-thread status, voice) is the next step; this release is the engine under it.

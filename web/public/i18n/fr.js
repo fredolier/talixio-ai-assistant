@@ -1,6 +1,20 @@
 window.I18N = window.I18N || {};
 /* French interface: English text (as it appears on screen) → French. {placeholders} match any value. See i18n.js. */
 window.I18N.fr = {
+"directive": "directive",
+"directives": "directives",
+"workers": "agents",
+"Accept": "Accepter",
+"Raise priority": "Augmenter la priorité",
+"Combined result": "Résultat combiné",
+"left today": "restant aujourd'hui",
+"worker(s) running": "agent(s) en cours",
+"no workers yet": "aucun agent pour l'instant",
+"Show the workers": "Afficher les agents",
+"Recorded": "Enregistré",
+"Recorded — the roles learn from it": "Enregistré — les rôles en tirent les leçons",
+"Cancel this directive and stop its unfinished workers?": "Annuler cette directive et arrêter ses agents en cours ?",
+"The roles learn from what you accept": "Les rôles apprennent de ce que vous acceptez",
 "\"Ask me\" shows each command and waits for your approval (in the app, or \"yes N\" in a chat).": "« Me demander » affiche chaque commande et attend votre validation (dans l'app, ou « yes N » dans une discussion).",
 "\"{a}\" already exists.": "« {a} » existe déjà.",
 "\"{a}\" will run on the {b} tier.": "« {a} » s'exécutera au niveau {b}.",

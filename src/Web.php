@@ -264,6 +264,8 @@ final class Web
             (bool)preg_match('#^/api/jobs/(\d+)/schedule$#', $path, $mm) && $m === 'POST' => ['task' => $this->app->jobs()->schedule((int)$mm[1], (string)($b['cron'] ?? ''), (string)($b['at'] ?? ''), (string)($b['when'] ?? ''))],
             (bool)preg_match('#^/api/jobs/(\d+)/tags$#', $path, $mm) && $m === 'POST' => ['job' => $this->app->jobs()->setTags((int)$mm[1], $b['tags'] ?? [])],
             (bool)preg_match('#^/api/jobs/(\d+)/cancel$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->jobs()->cancel((int)$mm[1])],
+            (bool)preg_match('#^/api/directives/(\d+)/steer$#', $path, $mm) && $m === 'POST' => ['result' => $this->app->director()->steer((int)$mm[1], (string)($b['action'] ?? ''), (int)($b['priority'] ?? 0))],
+            (bool)preg_match('#^/api/directives/(\d+)/rate$#', $path, $mm) && $m === 'POST' => ['result' => $this->app->director()->rate((int)$mm[1], (bool)($b['accepted'] ?? false))],
             (bool)preg_match('#^/api/jobs/(\d+)/continue$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->continue((int)$mm[1], is_numeric($b['max_usd'] ?? null) ? (float)$b['max_usd'] : null, (string)($b['effort'] ?? ''), (string)($b['note'] ?? ''))],
             (bool)preg_match('#^/api/jobs/(\d+)/rerun$#', $path, $mm) && $m === 'POST' => ['id' => $this->app->jobs()->rerun((int)$mm[1], (string)($b['tier'] ?? ''), is_numeric($b['max_usd'] ?? null) ? (float)$b['max_usd'] : null, (string)($b['effort'] ?? ''))],
             default => $this->fail(404, 'not found'),
@@ -661,7 +663,8 @@ final class Web
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store),
-            'model_problem' => $c->modelProblem(), 'claude_code' => ClaudeLogin::installed($c), 'assistants' => $this->app->links()->list(), 'assistant' => $this->app->links()->current()];
+            'model_problem' => $c->modelProblem(), 'claude_code' => ClaudeLogin::installed($c), 'assistants' => $this->app->links()->list(), 'assistant' => $this->app->links()->current(),
+            'directives' => $this->app->director()->active((int)$this->app->space)];
     }
 
     private function channels(): array
@@ -1367,7 +1370,8 @@ final class Web
             $j['routines'] = $routines[(int)$j['id']] ?? [];
         }
         unset($j);
-        return ['jobs' => $jobs, 'tags' => $s->jobTags(), 'archived_count' => (int)$s->q('SELECT COUNT(*) FROM jobs WHERE archived = 1')->fetchColumn(), 'archive_days' => Jobs::ARCHIVE_DAYS];
+        $space = isset($_GET['space']) && $_GET['space'] !== '' ? (int)$_GET['space'] : null;
+        return ['jobs' => $jobs, 'directives' => $this->app->director()->board($space), 'tags' => $s->jobTags(), 'archived_count' => (int)$s->q('SELECT COUNT(*) FROM jobs WHERE archived = 1')->fetchColumn(), 'archive_days' => Jobs::ARCHIVE_DAYS];
     }
 
     private function taskAction(int $id, string $action): array

@@ -1114,13 +1114,67 @@ function saveJobsFilter() { try { localStorage.setItem(LSK + 'talixio.jobs', JSO
 const spaceChip = id => { const sp = spaceOf(+id); return `<span class="chip space-chip" data-space="${sp.id}" title="Show only the jobs of this space"><i class="space-dot" style="background:${esc(sp.color || 'var(--muted)')}"></i>${esc(sp.name)}</span>`; };
 const tagsOf = j => (j.tags || '').split(',').filter(Boolean);
 
+// ---- directives (the director's teams): shown as rows on the Jobs/Activity page, workers nested ----
+const dirOpen = new Set(); // directive ids the user expanded (or '-id' = collapsed on purpose)
+function renderDirectives(list) {
+  const box = $('#directives'); if (!box) return;
+  if (jobsFilter.archived || !list.length) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false; box.innerHTML = '';
+  for (const d of list) box.appendChild(dirRow(d));
+}
+function dirRow(d) {
+  const el = document.createElement('div');
+  el.className = 'task dir';
+  const total = d.workers.length;
+  const done = d.workers.filter(w => ['done', 'failed', 'cancelled'].includes(w.status)).length;
+  const running = d.workers.filter(w => ['queued', 'running'].includes(w.status)).length;
+  const active = ['running', 'finalizing'].includes(d.status);
+  const open = dirOpen.has(d.id) || (active && running > 0 && !dirOpen.has('-' + d.id));
+  const pct = total ? Math.round(done / total * 100) : (d.status === 'done' ? 100 : 0);
+  el.innerHTML = `<div class="dir-head">
+      <button class="dir-exp" aria-label="${esc(t('Show the workers'))}">${open ? '▾' : '▸'}</button>
+      <span class="pill p${d.priority}">P${d.priority}</span><span class="chip dir-chip">${esc(t('directive'))}</span>
+      <h3>${esc(d.title)}</h3>
+      <span class="muted small dir-meta">${total} ${esc(t('workers'))}${running ? ` · ${running} ${esc(t('running'))}` : ''}${done ? ` · ${done} ${esc(t('done'))}` : ''}</span>
+      <span class="dir-prog" title="${done}/${total}"><i style="width:${pct}%"></i></span>
+      <span class="muted small dir-cost">${money(+d.cost) || '$0'}</span>
+      <span class="dir-actions"></span></div>
+    <div class="dir-workers"${open ? '' : ' hidden'}>${d.workers.map(w => `<div class="dir-w"><b>${esc(w.role)}</b><span class="chip">${esc(w.tier)}</span><span class="pill ${w.status}">${w.status === 'running' ? '<span class="dot"></span>' : ''}${esc(w.status)}</span><span class="muted small">${money(+w.cost) || '$0'}</span>${w.note ? `<span class="muted small dir-w-note">${esc(w.note)}</span>` : ''}</div>`).join('') || `<div class="muted small">${esc(t('no workers yet'))}</div>`}</div>`;
+  const wb = el.querySelector('.dir-workers'), exp = el.querySelector('.dir-exp');
+  exp.onclick = () => { const o = wb.hidden; wb.hidden = !o; exp.textContent = o ? '▾' : '▸'; if (o) { dirOpen.add(d.id); dirOpen.delete('-' + d.id); } else { dirOpen.delete(d.id); dirOpen.add('-' + d.id); } };
+  const act = el.querySelector('.dir-actions');
+  const btn = (cls, label, title, fn) => { const b = document.createElement('button'); b.className = 'btn small ' + cls; b.textContent = label; if (title) b.title = title; b.onclick = fn; return b; };
+  if (active) {
+    if (d.priority > 1) act.appendChild(btn('ghost', '↑ P' + (d.priority - 1), t('Raise priority'), async () => { try { await post(`api/directives/${d.id}/steer`, { action: 'prioritize', priority: d.priority - 1 }); loadJobs(); } catch (e) { toast(e.message); } }));
+    act.appendChild(btn('ghost', t('Cancel'), '', async () => { if (!confirm(t('Cancel this directive and stop its unfinished workers?'))) return; try { await post(`api/directives/${d.id}/steer`, { action: 'cancel' }); loadJobs(); } catch (e) { toast(e.message); } }));
+  } else if (d.status === 'done') {
+    act.appendChild(btn('', '👍 ' + t('Accept'), t('The roles learn from what you accept'), async () => { try { await post(`api/directives/${d.id}/rate`, { accepted: true }); toast(t('Recorded — the roles learn from it')); } catch (e) { toast(e.message); } }));
+    act.appendChild(btn('ghost', t('Not useful'), '', async () => { try { await post(`api/directives/${d.id}/rate`, { accepted: false }); toast(t('Recorded')); } catch (e) { toast(e.message); } }));
+  }
+  if (d.result) { const det = document.createElement('details'); det.className = 'dir-result'; det.innerHTML = `<summary>${esc(t('Combined result'))}</summary><div class="doc">${md(d.result)}</div>`; el.appendChild(det); }
+  return el;
+}
+function updateDirBar(list) {
+  const bar = $('#dir-bar'); if (!bar) return;
+  const acts = (list || []).filter(d => d.status ? ['running', 'finalizing'].includes(d.status) : true);
+  if (!acts.length) { bar.hidden = true; return; }
+  const workers = acts.reduce((n, d) => n + (d.running != null ? d.running : (d.workers || []).filter(w => ['queued', 'running'].includes(w.status)).length), 0);
+  const b = state.status?.budget;
+  const left = b && b.daily_limit > 0 ? ` · $${Math.max(0, b.daily_limit - b.today).toFixed(2)} ${t('left today')}` : '';
+  bar.hidden = false;
+  bar.innerHTML = `<span class="dir-bar-ic">🎬</span><span class="dir-bar-txt">${acts.length} ${esc(t(acts.length === 1 ? 'directive' : 'directives'))} · ${workers} ${esc(t('worker(s) running'))}${esc(left)}</span><span class="dir-bar-go">${esc(t('Open'))} ▸</span>`;
+  bar.onclick = () => { location.hash = '#jobs'; };
+}
+
 async function loadJobs() {
   const q = new URLSearchParams();
   if (jobsFilter.space != null && jobsFilter.space !== '') q.set('space', jobsFilter.space);
   if (jobsFilter.tag) q.set('tag', jobsFilter.tag);
   if (jobsFilter.archived) q.set('archived', '1');
   if (jobsFilter.q) q.set('q', jobsFilter.q);
-  const { jobs, tags, archived_count, archive_days } = await api('api/jobs?' + q);
+  const { jobs, directives, tags, archived_count, archive_days } = await api('api/jobs?' + q);
+  renderDirectives(directives || []);
+  updateDirBar(directives || []);
   const s = state.status;
   if (s) $('#jobs-help').textContent = `Sub-agents the assistant starts for research and multi-step work: up to ${s.max_parallel_jobs} at once, each capped at $${s.job_max_usd.toFixed(2)} unless you give a budget (up to $${(+s.job_max_usd_limit).toFixed(2)}, Settings → Budget). Results come back in the chat of the space that started them; a job stopped by its cap can Continue from where it stopped.`;
   // filters: space, tags
@@ -4963,6 +5017,7 @@ async function refreshStatus() {
     $('#setup-model').hidden = !s.model_problem;
     $('#setup-claude').hidden = !s.claude_code;
     if (JSON.stringify(s.paused || null) !== $('#paused').dataset.p) { $('#paused').dataset.p = JSON.stringify(s.paused || null); renderPaused(s.paused); }
+    updateDirBar(s.directives || []);
   } catch {}
 }
 

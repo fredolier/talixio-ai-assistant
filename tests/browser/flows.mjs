@@ -1,4 +1,6 @@
 // The main things a person does in the app, each one checked against the page and the server.
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 const go = async (page, v) => { await page.evaluate(h => { location.hash = h; }, '#' + v); await page.waitForTimeout(500); };
 const api = (page, path) => page.evaluate(p => fetch(p).then(r => r.json()), path);
 
@@ -173,8 +175,20 @@ const flows = {
     check('chat search: the message is found', (await page.textContent('#chat-search-results')).includes('kiwi'));
     await page.keyboard.press('Escape');
   },
-  async jobs({ page, check }) {
+  async jobs({ page, check, root, data }) {
+    // seed a directive with two workers directly in the shared store, as the director would
+    const php = "$a=\\Talixio\\App::fromEnv();$d=$a->store->addDirective('Browser directive','compare and draft',1,0);"
+      + "$w1=$a->store->addJob('researcher: compare','i','standard',1,'worker',null,0,[],'',null,'',$d,'researcher');"
+      + "$w2=$a->store->addJob('writer: draft','i','fast',1,'worker',null,0,[],'',null,'',$d,'writer');"
+      + "$a->store->updateJob($w1,['status'=>'done','cost_usd'=>0.4]);$a->store->updateJob($w2,['status'=>'running']);";
+    execFileSync('php', ['-r', "require '" + join(root, 'src/autoload.php') + "';" + php],
+      { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
     await go(page, 'jobs');
+    await page.waitForSelector('#directives .task.dir', { timeout: 5000 });
+    check('jobs: a directive shows as a row with its workers', (await page.textContent('#directives')).includes('Browser directive'));
+    await page.click('#directives .task.dir .dir-exp'); await page.waitForTimeout(200);
+    check('jobs: the directive expands to show its worker roles', /researcher/.test(await page.textContent('#directives .dir-workers')));
+    check('jobs: the in-thread directive bar is activated while a worker runs', (await page.getAttribute('#dir-bar', 'hidden')) === null);
     await page.fill('#jobs-search', 'x'); await page.waitForTimeout(400); await page.fill('#jobs-search', '');
     await page.click('#jobs-archived'); await page.waitForTimeout(400);
     check('jobs: the filters work', true);
