@@ -1,6 +1,7 @@
 # The agent factory — director, roles, and a self-improving capability registry
 
-> Status: design spec (not built). Mockups: the "Factory Director UI" canvas
+> Status: design spec. Phase 1 (the role registry) is built as of 0.28.85; the rest is forward plan.
+> Mockups: the "Factory Director UI" canvas
 > (Chat · Board · Phone · Activity · Capability library · Map).
 > This is the forward plan discussed Oct 2026; build it in the phases at the end,
 > only when real work of the "when it earns its keep" class shows up.
@@ -191,7 +192,7 @@ altitude, workers tucked inside.
 
 ## 11. Phased build (value early, danger gated)
 
-1. **Registry on skills + search-before-create** (local). Kills duplication. *Small.*
+1. **Registry on skills + search-before-create** (local). Kills duplication. *Small.* — **built, 0.28.85**: roles are enriched skills (`kind: role` + purpose/tier/skills/tools in the header); `role_find` ranks what already covers a purpose, `role_save` warns on overlap.
 2. **Assessor role #0 + per-role eval spec + golden-case A/B promotion** (metrics-first; the improvement gate). *Medium.*
 3. **Director + glass box** (conversation-home + board + Activity), workers as jobs, **Tiers A+B only**. *Medium.*
 4. **Fleet sharing via the store** (review + embedding-dedup, human-gated). *Medium.*

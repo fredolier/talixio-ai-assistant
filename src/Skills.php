@@ -9,10 +9,16 @@ namespace Talixio;
  *   description: When Fred asks for his weekly report: sources, format, who gets it
  *   ---
  * Only names and descriptions go into every prompt; the full text is read when a task matches.
+ *
+ * A role is the same thing, enriched: a worker definition (a bundle of skills + a model tier + tools + a brief),
+ * marked `kind: role` in the header. No parallel store — the registry is these files. See docs/design/agent-factory.md.
  */
 final class Skills
 {
     public function __construct(private App $app) {}
+
+    /** Header keys written in this order; list-valued ones (skills, tools) are stored comma-joined on one line. */
+    private const ORDER = ['name', 'description', 'kind', 'tier', 'skills', 'tools', 'when_to_use', 'when_not', 'scope', 'version', 'uses'];
 
     private function dir(): string
     {
@@ -28,14 +34,15 @@ final class Skills
         return substr($s, 0, 60);
     }
 
-    /** @return array<array{name:string,description:string,updated:int,used:int}> */
+    /** @return array<array{name:string,description:string,kind:string,updated:int,used:int}> */
     public function all(): array
     {
         $out = [];
         foreach (glob($this->dir() . '/*.md') ?: [] as $f) {
             [$meta] = self::parse((string)file_get_contents($f));
             $name = basename($f, '.md');
-            $out[] = ['name' => $name, 'description' => $meta['description'] ?? '', 'updated' => filemtime($f), 'used' => (int)$this->app->store->get("skill_used_$name", '0')];
+            $out[] = ['name' => $name, 'description' => $meta['description'] ?? '', 'kind' => $meta['kind'] ?? 'skill',
+                'updated' => filemtime($f), 'used' => (int)$this->app->store->get("skill_used_$name", '0')];
         }
         usort($out, fn($a, $b) => $b['used'] <=> $a['used'] ?: strcmp($a['name'], $b['name']));
         return $out;
@@ -57,6 +64,15 @@ final class Skills
         return [$meta, trim($text)];
     }
 
+    /** The full header of one skill/role (name, description, and any role fields), or [] if there is no such file. */
+    public function meta(string $name): array
+    {
+        $f = $this->dir() . '/' . self::slug($name) . '.md';
+        if (!is_file($f)) return [];
+        [$meta] = self::parse((string)file_get_contents($f));
+        return $meta;
+    }
+
     public function read(string $name, bool $countUse = true): string
     {
         $f = $this->dir() . '/' . self::slug($name) . '.md';
@@ -65,7 +81,11 @@ final class Skills
         return (string)file_get_contents($f);
     }
 
-    public function save(string $name, string $description, string $body): string
+    /**
+     * Save or replace a skill. $extra carries role fields (kind, tier, skills, tools, …), preserved in the header.
+     * The body keeps whatever the model wrote (any header it added is dropped so it can't fight $extra).
+     */
+    public function save(string $name, string $description, string $body, array $extra = []): string
     {
         $slug = self::slug($name);
         $f = $this->dir() . "/$slug.md";
@@ -73,8 +93,55 @@ final class Skills
         $description = trim(preg_replace('/\s+/', ' ', $description));
         if ($description === '') throw new \InvalidArgumentException('a skill needs a description saying when to use it');
         [, $body] = self::parse($body); // drop any header the model wrote itself
-        file_put_contents($f, "---\nname: $slug\ndescription: $description\n---\n\n" . trim($body) . "\n", LOCK_EX);
-        return ($existed ? 'updated' : 'saved') . " skill '$slug'";
+        $header = ['name' => $slug, 'description' => $description] + $extra;
+        file_put_contents($f, $this->header($header) . "\n" . trim($body) . "\n", LOCK_EX);
+        return ($existed ? 'updated' : 'saved') . " {$this->noun($header)} '$slug'";
+    }
+
+    /** A YAML-ish header, known keys first (ORDER), then any others, skipping empty values. */
+    private function header(array $meta): string
+    {
+        $meta = array_filter($meta, fn($v) => trim((string)$v) !== '');
+        $keys = array_merge(array_intersect(self::ORDER, array_keys($meta)), array_diff(array_keys($meta), self::ORDER));
+        $lines = '';
+        foreach ($keys as $k) $lines .= "$k: " . str_replace("\n", ' ', (string)$meta[$k]) . "\n";
+        return "---\n$lines---\n";
+    }
+
+    private function noun(array $meta): string { return ($meta['kind'] ?? 'skill') === 'role' ? 'role' : 'skill'; }
+
+    /**
+     * Search-before-create: rank skills/roles by how well they already cover `query`, so an existing one is reused
+     * instead of a near-duplicate being made. Lexical overlap over name, description, skills and tools — no index to
+     * warm, always available. `kind` filters to 'role' or 'skill' when given.
+     * @return array<array{name:string,description:string,kind:string,score:float}>
+     */
+    public function find(string $query, int $limit = 5, ?string $kind = null): array
+    {
+        $want = self::tokens($query);
+        if (!$want) return [];
+        $out = [];
+        foreach ($this->all() as $s) {
+            $meta = $this->meta($s['name']);
+            if ($kind !== null && ($meta['kind'] ?? 'skill') !== $kind) continue;
+            $hay = self::tokens($s['name'] . ' ' . $s['description'] . ' ' . ($meta['skills'] ?? '') . ' ' . ($meta['tools'] ?? '') . ' ' . ($meta['when_to_use'] ?? ''));
+            if (!$hay) continue;
+            $hit = count(array_intersect($want, $hay));
+            if (!$hit) continue;
+            $score = $hit / count($want);
+            if (array_intersect($want, self::tokens($s['name']))) $score += 0.15; // a name match is a strong signal
+            $out[] = ['name' => $s['name'], 'description' => $s['description'], 'kind' => $meta['kind'] ?? 'skill', 'score' => round(min($score, 1.0), 2)];
+        }
+        usort($out, fn($a, $b) => $b['score'] <=> $a['score']);
+        return array_slice($out, 0, $limit);
+    }
+
+    /** @return string[] distinct lowercase word stems of length ≥ 3 (accents folded), for lexical matching. */
+    private static function tokens(string $s): array
+    {
+        $s = strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s) ?: $s);
+        preg_match_all('/[a-z0-9]{3,}/', $s, $m);
+        return array_values(array_unique($m[0]));
     }
 
     /** Raw file (header included), for the editor. */
@@ -87,7 +154,8 @@ final class Skills
     public function writeRaw(string $name, string $content): void
     {
         [$meta, $body] = self::parse($content);
-        $this->save($meta['name'] ?? $name, $meta['description'] ?? 'Procedure', $body);
+        $extra = $meta; unset($extra['name'], $extra['description']);
+        $this->save($meta['name'] ?? $name, $meta['description'] ?? 'Procedure', $body, $extra);
         if (isset($meta['name']) && self::slug($meta['name']) !== self::slug($name)) $this->delete($name); // renamed
     }
 

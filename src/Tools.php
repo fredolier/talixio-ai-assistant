@@ -36,7 +36,7 @@ final class Tools
         'phone' => [['phone_'], '/appel|call|sms|texto|téléphon|phone|whatsapp|signal/iu', 'calls and texts from the phone'],
         'music' => [['spotify_'], '/musique|music|joue|play|chanson|song|spotify|playlist|album|artist|volume|écoute|listen/iu', 'Spotify'],
         'law' => [['legifrance_', 'judilibre_', 'eurlex_'], '/\bloi\b|lois|légifrance|legifrance|judilibre|jurisprudence|arrêt|cassation|code civil|code du travail|code pénal|décret|ordonnance|article [LRD]?\s?\d|juridi|droit (français|europ|de l)|eur-?lex|celex|règlement (ue|européen)|directive|jurispruden|cour de justice|conseil d.état|conseil constitutionnel|rgpd|gdpr|ai act|règlement sur l.ia/iu', 'search French and EU law (Légifrance, JudiLibre, EUR-Lex)'],
-        'skills' => [['skill_'], '/compétence|skill|méthode|procédure|apprend|learn|retiens|à l\'avenir|next time|prochaine fois|toujours|always|jamais|never/iu', 'save or delete a skill (a method to reuse)'],
+        'skills' => [['skill_', 'role_'], '/compétence|skill|méthode|procédure|apprend|learn|retiens|à l\'avenir|next time|prochaine fois|toujours|always|jamais|never|r[ôo]le|\brole\b|équipe|\bteam\b|worker|agent spécial|sub-?agent|directeu?r/iu', 'save or delete a skill, or find and save a worker role (a reusable method to reuse)'],
         'spaces' => [['spaces'], '/espace|space/iu', 'the user\'s spaces'],
         'connectors' => [['connector_'], '/\bmcp\b|connect(eu|o)rs?|github|plugin|intégration|integration/iu', 'install a connector (MCP server) from GitHub'],
         'apps' => [['app_'], '/\bapps?\b|appli|widget|dashboard|tableau de bord|mini.?app|outil visuel|visuali[sz]/iu', 'small apps for the Apps menu (build, list, change)'],
@@ -385,6 +385,55 @@ final class Tools
         $this->register('skill_delete', 'Delete a skill that is wrong or no longer useful.', ['name' => ['type' => 'string']], ['name'],
             fn(array $a) => $this->app->skills()->delete($a['name']) ? 'deleted' : 'error: no such skill');
 
+        $this->register('role_find',
+            'Search the registry for a worker role (a saved bundle of skills + model tier + tools for a recurring kind of work) that already covers a purpose, BEFORE making a new one. Call this first whenever you are about to define a worker: reuse the closest match if it fits, adapt it if close, create one only if nothing matches. Read a match with skill_read.',
+            ['purpose' => ['type' => 'string', 'description' => 'what the worker is for, in one line, e.g. "review a commercial contract for red flags"']], ['purpose'],
+            fn(array $a) => $this->roleFind((string)$a['purpose']));
+        $this->register('role_save',
+            'Save or update a worker role in the registry (stored as an enriched skill). A role = a purpose + a brief (the instructions, given as content) + a model tier + the skills and tools it uses. Reuse an existing role (role_find) before creating a near-duplicate. Saving under an existing name replaces it and bumps its version.',
+            ['name' => ['type' => 'string'], 'purpose' => ['type' => 'string', 'description' => 'one line: what this role is for (also how it is searched)'],
+                'content' => ['type' => 'string', 'description' => 'the brief: the role\'s instructions, standards and pitfalls (Markdown)'],
+                'tier' => ['type' => 'string', 'enum' => ['fast', 'standard', 'deep'], 'description' => 'model size this role needs (default standard)'],
+                'skills' => ['type' => 'string', 'description' => 'names of skills this role relies on, comma-separated'],
+                'tools' => ['type' => 'string', 'description' => 'tool/connector names this role needs, comma-separated'],
+                'when_to_use' => ['type' => 'string'], 'when_not' => ['type' => 'string']],
+            ['name', 'purpose', 'content'],
+            fn(array $a) => $this->sharedWrite('skills') ?? $this->roleSave($a));
+
+    }
+
+    /** role_find: rank existing roles that already cover a purpose. */
+    private function roleFind(string $purpose): string
+    {
+        $hits = $this->app->skills()->find($purpose, 5, 'role');
+        if (!$hits) return "No existing role matches \"$purpose\". None to reuse — define one with role_save (keep it focused).";
+        $lines = array_map(fn($h) => sprintf('- %s (%d%% match): %s', $h['name'], (int)round($h['score'] * 100), $h['description']), $hits);
+        $best = $hits[0]['score'];
+        $advice = $best >= 0.6 ? "Likely reuse '{$hits[0]['name']}' (read it with skill_read). " : ($best >= 0.3 ? "'{$hits[0]['name']}' is close — adapt it rather than start over. " : 'None is a strong match; a new role may be warranted. ');
+        return $advice . "Existing roles:\n" . implode("\n", $lines);
+    }
+
+    /** role_save: write a role as an enriched skill, bumping version and warning on a near-duplicate. */
+    private function roleSave(array $a): string
+    {
+        $skills = $this->app->skills();
+        $name = (string)$a['name'];
+        $slug = Skills::slug($name);
+        $norm = fn($v) => is_array($v) ? implode(', ', $v) : (string)($v ?? '');
+        $prev = $skills->meta($name);
+        $extra = array_filter([
+            'kind' => 'role',
+            'tier' => in_array($a['tier'] ?? '', ['fast', 'standard', 'deep'], true) ? $a['tier'] : 'standard',
+            'skills' => $norm($a['skills'] ?? ''), 'tools' => $norm($a['tools'] ?? ''),
+            'when_to_use' => trim((string)($a['when_to_use'] ?? '')), 'when_not' => trim((string)($a['when_not'] ?? '')),
+            'scope' => $prev['scope'] ?? 'private',
+            'version' => (string)(((int)($prev['version'] ?? 0)) + 1),
+            'uses' => $prev['uses'] ?? '',
+        ], fn($v) => $v !== '');
+        $msg = $skills->save($name, (string)$a['purpose'], (string)$a['content'], $extra);
+        $dupes = array_values(array_filter($skills->find((string)$a['purpose'], 4, 'role'), fn($h) => Skills::slug($h['name']) !== $slug && $h['score'] >= 0.6));
+        if ($dupes) $msg .= ' — note: this overlaps existing role(s) ' . implode(', ', array_map(fn($h) => "'{$h['name']}'", $dupes)) . '; consider merging rather than keeping both.';
+        return $msg;
     }
 
     /** Tools for scheduled tasks, jobs and usage. */

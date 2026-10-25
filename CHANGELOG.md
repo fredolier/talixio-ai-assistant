@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.85 (2026-10-25)
+
+- Agent factory, phase 1 — the role registry (see `docs/design/agent-factory.md`). A **role** is a reusable worker definition (a purpose + a brief + a model tier + the skills and tools it uses), stored as an enriched skill — no parallel store. Two new tools: **`role_find`** ranks existing roles that already cover a purpose, so one is reused instead of a near-duplicate being made (search-before-create); **`role_save`** writes a role, bumps its version, and warns when it overlaps an existing one. Skill files round-trip the extra header fields, so the editor can see and change them.
+
 ## 0.28.84 (2026-10-24)
 
 - Fix: a turn could fail with "Command array element N contains a null byte" after fetching a PDF. `fetch_url` now extracts a PDF's text (instead of returning raw bytes) and strips null/control bytes from any page, and the Claude Code provider strips a stray null byte from its command, so a turn never crashes on one.

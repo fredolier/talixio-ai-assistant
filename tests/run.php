@@ -1145,6 +1145,15 @@ check('skills: unknown skill lists existing ones', str_contains($app->tools->run
 $sk->writeRaw('rapport-hebdo', "---\nname: weekly-report\ndescription: Weekly report, Fridays\n---\nSteps v2");
 check('skills: editor rename keeps one file', array_column($sk->all(), 'name') === ['weekly-report'] && str_contains((string)$sk->raw('weekly-report'), 'Steps v2'));
 check('skills: path tricks neutralised', Skills::slug('../../etc/passwd') === 'etc-passwd');
+// ---- the role registry (search-before-create) ----
+check('roles: save keeps role fields in the header, bumps version', ($rs = $app->tools->run('role_save', ['name' => 'Contract reviewer', 'purpose' => 'Review a commercial contract for red flags and missing clauses', 'content' => 'Read every clause. Flag unlimited liability, auto-renewal, exclusivity.', 'tier' => 'deep', 'skills' => 'legal-glossary', 'tools' => 'legifrance_search, file_read'])) === "saved role 'contract-reviewer'"
+    && ($rm = $sk->meta('contract-reviewer'))['kind'] === 'role' && $rm['tier'] === 'deep' && $rm['version'] === '1' && str_contains($rm['tools'], 'legifrance_search'));
+check('roles: a role is not listed as a plain skill kind', in_array('role', array_column($sk->all(), 'kind'), true));
+check('roles: re-saving bumps the version and preserves scope', str_contains($app->tools->run('role_save', ['name' => 'contract-reviewer', 'purpose' => 'Review a commercial contract for red flags', 'content' => 'v2']), 'updated role') && $sk->meta('contract-reviewer')['version'] === '2');
+check('roles: role_find reuses a close match, not the weekly-report skill', str_contains(($rf = $app->tools->run('role_find', ['purpose' => 'review a contract for red flags'])), 'contract-reviewer') && str_contains($rf, 'reuse') && !str_contains($rf, 'weekly-report'));
+check('roles: role_find on an unrelated purpose finds nothing to reuse', str_contains($app->tools->run('role_find', ['purpose' => 'translate a poem into Japanese']), 'None to reuse'));
+check('roles: role_save warns about a near-duplicate role', str_contains($app->tools->run('role_save', ['name' => 'Contract red-flag reviewer', 'purpose' => 'Review a commercial contract for red flags and missing clauses', 'content' => 'dup']), "overlaps existing role") && str_contains($app->tools->run('role_find', ['purpose' => 'xyzzy nonexistent']), 'None'));
+$sk->delete('contract-reviewer'); $sk->delete('contract-red-flag-reviewer');
 // a multi-step chat turn queues a learning job; the job saves a skill and tells the user
 $app->providerOverride = $fake;
 $fake->script = function ($last, $tools) {
