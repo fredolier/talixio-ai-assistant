@@ -93,6 +93,8 @@ final class Store
         $this->addColumn('jobs', 'folder', "TEXT NOT NULL DEFAULT ''"); // where its report is saved ('' = the Inbox)
         $this->addColumn('jobs', 'report_file', 'INTEGER'); // the library note holding its full report
         $this->addColumn('jobs', 'archived', 'INTEGER NOT NULL DEFAULT 0'); // put away: hidden from the list, kept for history
+        $this->addColumn('jobs', 'directive', 'INTEGER'); // the agent-factory directive this worker job belongs to
+        $this->addColumn('jobs', 'role', "TEXT NOT NULL DEFAULT ''"); // the worker role this job runs (kind='worker')
         $this->addColumn('tasks', 'job', 'INTEGER'); // a routine that runs this job again, instead of a prompt
         // the assistant's mind (Mind): observations from the history, beliefs built from them, a journal of how it changes
         $this->db->exec("CREATE TABLE IF NOT EXISTS mind_obs(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, strength INTEGER NOT NULL DEFAULT 1,
@@ -133,7 +135,11 @@ final class Store
             CREATE INDEX IF NOT EXISTS role_runs_role ON role_runs(role);
             CREATE TABLE IF NOT EXISTS role_cases(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, role TEXT NOT NULL, title TEXT NOT NULL,
                 input TEXT NOT NULL DEFAULT \'\', rubric TEXT NOT NULL DEFAULT \'\');
-            CREATE INDEX IF NOT EXISTS role_cases_role ON role_cases(role);');
+            CREATE INDEX IF NOT EXISTS role_cases_role ON role_cases(role);
+            -- a directive: one goal the director is driving; its workers are jobs with directive = this id (see Director)
+            CREATE TABLE IF NOT EXISTS directives(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, title TEXT NOT NULL, goal TEXT NOT NULL DEFAULT \'\',
+                priority INTEGER NOT NULL DEFAULT 2, space INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT \'running\',
+                result TEXT, cost_usd REAL NOT NULL DEFAULT 0, finished INTEGER);');
         if ($this->get('briefing_v2') === '') { // the morning briefing becomes 5 rated lines; keep what the user added ("Also: …")
             foreach ($this->q("SELECT id, prompt FROM tasks WHERE title = 'Morning briefing' AND job IS NULL")->fetchAll() as $t) {
                 $i = strpos((string)$t['prompt'], "\nAlso: ");
@@ -285,17 +291,33 @@ final class Store
     }
 
     // --- background jobs (sub-agents) ---
-    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null, int $space = 0, array|string $tags = [], string $effort = '', ?int $parent = null, string $folder = ''): int
+    public function addJob(string $title, string $instructions, string $tier, float $maxCost, string $kind = 'agent', ?int $fileId = null, int $space = 0, array|string $tags = [], string $effort = '', ?int $parent = null, string $folder = '', ?int $directive = null, string $role = ''): int
     {
-        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id,space,tags,effort,parent,folder) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId, $space, self::tagString($tags), $effort, $parent, $folder]);
+        $this->q('INSERT INTO jobs(title,instructions,tier,max_cost_usd,created,kind,file_id,space,tags,effort,parent,folder,directive,role) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [$title, $instructions, $tier, $maxCost, time(), $kind, $fileId, $space, self::tagString($tags), $effort, $parent, $folder, $directive, $role]);
         return (int)$this->db->lastInsertId();
     }
 
     public function job(int $id): ?array { return $this->q('SELECT * FROM jobs WHERE id=?', [$id])->fetch() ?: null; }
+
+    // --- directives (agent factory): a directive groups its worker jobs ---
+    public function addDirective(string $title, string $goal, int $priority, int $space): int
+    {
+        $this->q('INSERT INTO directives(ts,title,goal,priority,space) VALUES(?,?,?,?,?)', [time(), $title, $goal, $priority, $space]);
+        return (int)$this->db->lastInsertId();
+    }
+    public function directive(int $id): ?array { return $this->q('SELECT * FROM directives WHERE id=?', [$id])->fetch() ?: null; }
+    public function directives(int $limit = 30, ?int $space = null): array
+    {
+        return $this->q('SELECT * FROM directives' . ($space !== null ? ' WHERE space=?' : '') . ' ORDER BY id DESC LIMIT ?', $space !== null ? [$space, $limit] : [$limit])->fetchAll();
+    }
+    public function directiveWorkers(int $id): array { return $this->q('SELECT * FROM jobs WHERE directive=? ORDER BY id', [$id])->fetchAll(); }
+    public function updateDirective(int $id, array $fields): void { $this->update('directives', $id, $fields); }
+    /** Atomically move a running directive to 'finalizing' so only one finishing worker finalizes it. */
+    public function claimDirective(int $id): bool { return $this->q("UPDATE directives SET status='finalizing' WHERE id=? AND status='running'", [$id])->rowCount() > 0; }
     /** Newest first; optionally only one space and/or one tag, archived or not, matching some words. */
     public function jobs(int $limit = 50, ?int $space = null, string $tag = '', ?bool $archived = null, string $search = ''): array
     {
-        $where = []; $args = [];
+        $where = ["(kind IS NULL OR kind != 'worker')"]; $args = []; // workers show under their directive, not in the flat list
         if ($space !== null) { $where[] = 'space = ?'; $args[] = $space; }
         if ($tag !== '') { $where[] = "tags LIKE ? ESCAPE '\\'"; $args[] = '%,' . addcslashes(mb_strtolower($tag), '%_\\') . ',%'; }
         if ($archived !== null) { $where[] = 'archived = ?'; $args[] = (int)$archived; }

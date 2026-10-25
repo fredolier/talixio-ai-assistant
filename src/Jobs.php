@@ -313,12 +313,13 @@ final class Jobs
             $store->updateJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);
             if (trim((string)$text) !== '') $this->saveReport($store->job($id), $text);
         } catch (Abort $e) {
-            if ($e->getMessage() === 'cancelled') return; // the user or assistant cancelled it: nothing to report
+            if ($e->getMessage() === 'cancelled') { if ($j['kind'] === 'worker') $this->app->director()->onWorkerDone($id); return; } // cancelled: no chat report, but the directive may now be done
             $store->updateJob($id, ['status' => 'failed', 'result' => 'Stopped: ' . $e->getMessage(), 'finished' => time()]);
         } catch (\Throwable $e) {
             $store->updateJob($id, ['status' => 'failed', 'result' => 'Error: ' . $e->getMessage(), 'finished' => time()]);
         }
-        if ($j['kind'] !== 'reflect') $this->report($id); // learning is quiet unless it learned something
+        if ($j['kind'] === 'worker') $this->app->director()->onWorkerDone($id); // the directive reports once, not each worker
+        elseif ($j['kind'] !== 'reflect') $this->report($id); // learning is quiet unless it learned something
     }
 
     /** In the job's process: every tier gets the job's effort and its number of tool steps. Returns the effort. */

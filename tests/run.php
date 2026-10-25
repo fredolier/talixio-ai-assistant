@@ -1174,6 +1174,27 @@ check('assessor: a new proxy metric backtests against the anchor before it is tr
     return $c !== null && $c > 0.8 && $as->backtest('backtester', 'rubric', 99) === null; // too few when the floor is raised
 })());
 $sk->delete('contract-reviewer'); $sk->delete('contract-red-flag-reviewer');
+// ---- the director: a directive runs worker roles as jobs, reports once, records the anchor ----
+$app->tools->run('role_save', ['name' => 'researcher-x', 'purpose' => 'Research options for a decision', 'content' => 'Gather and compare options.', 'tier' => 'standard']);
+$app->tools->run('role_save', ['name' => 'writer-x', 'purpose' => 'Write a short draft from notes', 'content' => 'Turn notes into prose.', 'tier' => 'fast']);
+check('director: a directive needs existing roles', str_contains($app->tools->run('direct', ['goal' => 'g', 'title' => 'T', 'workers' => [['role' => 'ghost-role', 'task' => 'x']]]), "no role 'ghost-role'"));
+$app->providerOverride = $fake;
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on);
+    if (str_contains($last, 'Your brief') && str_contains($last, 'researcher-x')) return 'Options: A, B, C.';
+    if (str_contains($last, 'Your brief') && str_contains($last, 'writer-x')) return 'A short draft.';
+    return 'Relayed the directive result to the user.'; };
+$od = $app->tools->run('direct', ['goal' => 'Compare options then draft', 'title' => 'Compare+draft', 'workers' => [['role' => 'researcher-x', 'task' => 'compare the options'], ['role' => 'writer-x', 'task' => 'write it up']]]);
+check('director: directive opens with its workers queued', str_contains($od, 'directive #') && str_contains($od, '2 worker(s)'));
+$did = (int)$s->q('SELECT MAX(id) FROM directives')->fetchColumn();
+$ws = $s->directiveWorkers($did);
+check('director: workers are jobs under the directive, hidden from the flat job list', count($ws) === 2 && $ws[0]['kind'] === 'worker' && !in_array('worker', array_column($s->jobs(50, null), 'kind'), true));
+foreach ($ws as $w) $app->jobs()->runJob((int)$w['id']);
+$drv = $s->directive($did);
+check('director: the directive finalises once, aggregating every worker', $drv['status'] === 'done' && str_contains((string)$drv['result'], 'researcher-x') && str_contains((string)$drv['result'], 'A short draft.'));
+check('director: each worker run is recorded as an anchor sample (acceptance pending)', (int)$s->q("SELECT COUNT(*) FROM role_runs WHERE role IN ('researcher-x','writer-x') AND accepted IS NULL")->fetchColumn() >= 2);
+check('director: directive_rate records the user accepting the result', str_contains($app->tools->run('directive_rate', ['id' => $did, 'accepted' => true]), 'acceptance') && (int)$s->q("SELECT COUNT(*) FROM role_runs WHERE role IN ('researcher-x','writer-x') AND accepted = 1")->fetchColumn() === 2);
+check('director: directive_status shows the finished directive', str_contains($app->tools->run('directive_status', ['id' => $did]), 'done') && str_contains($app->tools->run('directive_status', []), '#' . $did));
+$sk->delete('researcher-x'); $sk->delete('writer-x');
 // a multi-step chat turn queues a learning job; the job saves a skill and tells the user
 $app->providerOverride = $fake;
 $fake->script = function ($last, $tools) {

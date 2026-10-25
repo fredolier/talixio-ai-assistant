@@ -32,6 +32,7 @@ final class Tools
         'browser' => [['browser_'], '/site|page|navig|browser|clique|click|formulaire|form\b|connecte|log ?in|réserv|book|https?:\/\/|www\.|\.(com|fr|eu|net|org)\b|command|order|achète|buy|livr|deliver|panier|cart|(regarde|cherche|vérifie|check|look|search)\w* (sur|on)\b|uber|deliveroo|amazon|airbnb|doctolib|leboncoin|sncf|vinted/iu', 'a web browser that clicks and types on pages'],
         'schedule' => [['schedule_task', 'cancel_task', 'routine_'], '/rappel|remind|chaque|tous les|toutes les|every|daily|quotidien|hebdo|weekly|mensuel|monthly|routine|programm|planifi|schedul|automati|plus tard|later|\bdans \d|\bin \d/iu', 'reminders and recurring routines'],
         'jobs' => [['delegate', 'list_jobs', 'continue_job', 'cancel_job', 'archive_job', 'schedule_job'], '/job|recherch|research|cherche|enquête|compar|analys|étude|study|arrière-plan|background|rapport|report|veille|approfondi|trouve|find|liste d|list of/iu', 'background jobs: long research and reports'],
+        'director' => [['direct', 'directive_'], '/directive|director|directeu?r|équipe|\bteam\b|en parallèle|in parallel|plusieurs (agents|rôles|workers)|several (agents|roles|workers)|worker|mission|chantier|orchestr|fan.?out|à la (fois|chaîne)|chacun|chaque (poster|contrat|concurrent|produit|item)/iu', 'the director: run a team of worker roles toward one goal'],
         'shell' => [['shell_', 'script_'], '/script|outil|\btools?\b|simulat|commande|command|shell|code|python|calcul|comput|csv|excel|xlsx|json|convert|graph|chart|zip|statisti/iu', 'run code in a sandbox (calculations, files, conversions)'],
         'phone' => [['phone_'], '/appel|call|sms|texto|téléphon|phone|whatsapp|signal/iu', 'calls and texts from the phone'],
         'music' => [['spotify_'], '/musique|music|joue|play|chanson|song|spotify|playlist|album|artist|volume|écoute|listen/iu', 'Spotify'],
@@ -522,6 +523,26 @@ final class Tools
             });
         $this->register('cancel_job', 'Cancel a queued or running background job.', ['id' => ['type' => 'integer']], ['id'],
             fn(array $a) => $this->visibleItem('job', (int)$a['id']) && $this->app->jobs()->cancel((int)$a['id']) ? 'cancelled' : 'error: job not found or already finished');
+
+        // The director (agent factory): run a TEAM of worker roles toward one goal. Only when the request truly earns it
+        // — real parallelism or genuinely different expertise; otherwise do it inline or with one delegate job.
+        $this->register('direct',
+            "Open a DIRECTIVE: run several worker roles in parallel toward one goal, each as a background job. Use ONLY for a goal with real breadth or mixed expertise (e.g. research + draft + check across many items); a single task is a delegate job, a quick one you do inline. Every role must already exist — role_find first, role_save any that are missing, then list the workers here. Each worker: {role, task, tier?}. The directive reports back once, when all workers finish.",
+            ['goal' => ['type' => 'string'], 'title' => ['type' => 'string', 'description' => 'a short name for the directive'],
+                'priority' => ['type' => 'integer', 'enum' => [1, 2, 3], 'description' => '1 = highest (default 2)'],
+                'workers' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                    'role' => ['type' => 'string'], 'task' => ['type' => 'string', 'description' => 'what this worker should do for the goal'],
+                    'tier' => ['type' => 'string', 'enum' => Tier::NAMES, 'description' => 'override the role\'s default model tier']], 'required' => ['role']]]],
+            ['goal', 'title', 'workers'],
+            fn(array $a) => $this->sharedWrite('skills') ?? $this->app->director()->open((string)$a['goal'], (string)$a['title'], is_array($a['workers'] ?? null) ? $a['workers'] : [], (int)($a['priority'] ?? 2)));
+        $this->register('directive_status', 'How a directive and its workers are doing (role, tier, status, cost). Omit id to list the recent directives in this space.',
+            ['id' => ['type' => 'integer']], [], fn(array $a) => isset($a['id']) ? $this->app->director()->status((int)$a['id']) : $this->app->director()->list());
+        $this->register('directive_steer', "Steer a directive: 'prioritize' (set priority 1-3) or 'cancel' (stop it and its unfinished workers).",
+            ['id' => ['type' => 'integer'], 'action' => ['type' => 'string', 'enum' => ['prioritize', 'cancel']], 'priority' => ['type' => 'integer', 'enum' => [1, 2, 3]]], ['id', 'action'],
+            fn(array $a) => $this->sharedWrite('skills') ?? $this->app->director()->steer((int)$a['id'], (string)$a['action'], (int)($a['priority'] ?? 0)));
+        $this->register('directive_rate', "Record whether the user accepted a finished directive's result — the anchor metric its roles improve on. Call it when the user reacts (accept = true for 'good/ship it', false for 'redo/not useful').",
+            ['id' => ['type' => 'integer'], 'accepted' => ['type' => 'boolean']], ['id', 'accepted'],
+            fn(array $a) => $this->sharedWrite('skills') ?? $this->app->director()->rate((int)$a['id'], (bool)$a['accepted']));
         $this->register('usage_report', 'Your spending: budget status, cost and tokens by tier and by source (chat, schedules, jobs...) today and this month.',
             [], [], fn() => $this->usageReport());
         $this->register('usage_bill', "Record what the AI provider really billed (the figure the user read in the provider's console), to correct your cost estimates. Default period: last month.",
