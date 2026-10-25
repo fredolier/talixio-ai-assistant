@@ -1004,6 +1004,40 @@ async function finishRecording(meeting) {
   } catch (e) { toast(e.message); }
 }
 
+// ---- dictation: speak into any text field; the recording is transcribed and never kept ----
+let dictating = null;
+async function toggleDictate(input, btn) {
+  if (!input) return;
+  if (dictating) {
+    const d = dictating; dictating = null; d.btn.classList.remove('rec');
+    d.media.onstop = async () => {
+      d.stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(d.chunks, { type: d.media.mimeType || 'audio/webm' });
+      if (blob.size < 800) return;
+      d.btn.classList.add('busy'); d.btn.disabled = true;
+      try {
+        const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+        const info = await uploadFile(blob, `dictation-${Date.now()}.${ext}`, '');
+        const { text } = await post('api/transcribe', { id: info.id });
+        if (text) { input.value = (input.value.trim() ? input.value.replace(/\s*$/, ' ') : '') + text; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); }
+        else toast(t('Nothing was recognised.'));
+      } catch (e) { toast(e.message); } finally { d.btn.classList.remove('busy'); d.btn.disabled = false; }
+    };
+    d.media.stop();
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { toast(t('Dictation needs a recent browser over HTTPS.')); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+  catch { toast(t('Microphone access was refused.')); return; }
+  const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find(ty => MediaRecorder.isTypeSupported(ty)) || '';
+  const media = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
+  const chunks = []; media.ondataavailable = e => e.data.size && chunks.push(e.data);
+  dictating = { input, btn, media, chunks, stream };
+  media.start(); btn.classList.add('rec'); input.focus();
+}
+document.querySelectorAll('.dictate-btn').forEach(b => b.onclick = () => toggleDictate(document.getElementById(b.dataset.dictateFor), b));
+
 function autosize() { const i = $('#input'); i.style.height = 'auto'; i.style.height = Math.min(i.scrollHeight, 200) + 'px'; }
 
 // ---- tasks ----
@@ -1120,6 +1154,14 @@ function renderDirectives(list) {
   const box = $('#directives'); if (!box) return;
   if (jobsFilter.archived || !list.length) { box.hidden = true; box.innerHTML = ''; return; }
   box.hidden = false; box.innerHTML = '';
+  const b = state.status?.budget;
+  if (b && b.daily_limit > 0) { // the board's budget burn-down: how much of today's budget the running work is eating
+    const pct = Math.min(100, Math.round(b.today / b.daily_limit * 100));
+    const lvl = b.state === 'blocked' || pct >= 100 ? 'bad' : b.state === 'low' || pct >= 70 ? 'warn' : 'ok';
+    const m = document.createElement('div'); m.className = 'dir-budget ' + lvl;
+    m.innerHTML = `<div class="dir-budget-row"><b>${esc(t('Today’s budget'))}</b><span class="spacer"></span><span>$${b.today.toFixed(2)} ${esc(t('of'))} $${(+b.daily_limit).toFixed(2)}${lvl !== 'ok' ? ' · ' + esc(t(lvl === 'bad' ? 'budget reached' : 'budget low')) : ''}</span></div><div class="dir-budget-bar"><i style="width:${pct}%"></i></div>`;
+    box.appendChild(m);
+  }
   for (const d of list) box.appendChild(dirRow(d));
 }
 function dirRow(d) {

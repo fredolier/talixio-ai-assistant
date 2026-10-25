@@ -2,6 +2,13 @@ window.I18N = window.I18N || {};
 /* French interface: English text (as it appears on screen) → French. {placeholders} match any value. See i18n.js. */
 window.I18N.fr = {
 "Role": "Rôle",
+"Today’s budget": "Budget du jour",
+"budget reached": "budget atteint",
+"budget low": "budget bas",
+"Dictate": "Dicter",
+"Dictate: speak and I type it here": "Dictée : parlez, je l'écris ici",
+"Dictation needs a recent browser over HTTPS.": "La dictée demande un navigateur récent en HTTPS.",
+"Nothing was recognised.": "Rien n'a été reconnu.",
 "directive": "directive",
 "directives": "directives",
 "workers": "agents",

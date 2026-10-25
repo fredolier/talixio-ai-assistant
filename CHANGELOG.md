@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.91 (2026-10-25)
+
+- Agent factory, phase 3 finished — **the board's budget meter and voice dictation.** The directives section on the Jobs/Activity page now carries a **budget burn-down meter** (today's spend against the daily limit, turning amber then red as it fills) — the control-room gauge for how much the running teams are eating. And a **dictation mic** on the chat composer: tap it, speak, tap again, and what you said is transcribed (via your configured transcription) straight into the box to edit and send — nothing is kept as a file. The mic is wired by a reusable `data-dictate-for` hook, so it can sit on any field. (Hands-free "talk to the director" with send-on-silence is a later addition.)
+
 ## 0.28.90 (2026-10-25)
 
 - Agent factory, phase 4 — **share worker roles across the fleet.** On a multi-assistant server, a role can now be published to the shared store (admin-reviewed, exactly like an app or connector) and installed by other assistants. New tools: **`role_publish`** sends a role for review (only its purpose, brief, tier and the skills/tools it uses — never any data or key; a protected role like the assessor is never shared; it warns if the store already has a similar role), and **`role_install`** installs or updates a shared role into the local registry. The admin's store page reviews and lists roles alongside apps and connectors. This is the piece that lets an organisation's assistants get better together — one person's proven role becomes everyone's.

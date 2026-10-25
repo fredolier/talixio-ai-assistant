@@ -189,6 +189,7 @@ const flows = {
     await page.click('#directives .task.dir .dir-exp'); await page.waitForTimeout(200);
     check('jobs: the directive expands to show its worker roles', /researcher/.test(await page.textContent('#directives .dir-workers')));
     check('jobs: the in-thread directive bar is activated while a worker runs', (await page.getAttribute('#dir-bar', 'hidden')) === null);
+    check('voice: a dictation mic sits on the composer', await page.locator('#composer .dictate-btn[data-dictate-for="input"]').count() === 1);
     await page.fill('#jobs-search', 'x'); await page.waitForTimeout(400); await page.fill('#jobs-search', '');
     await page.click('#jobs-archived'); await page.waitForTimeout(400);
     check('jobs: the filters work', true);

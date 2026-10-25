@@ -55,6 +55,7 @@ final class Web
             if ($method === 'GET') Shares::remember($this->app); // the address for links sent outside: only as seen by the signed-in user, never by a stranger's Host header
             if ($path === '/api/chat' && $method === 'POST' && !empty($body['stream'])) { $this->chatStream($body); return; }
             if ($path === '/api/files' && $method === 'POST') { $this->json($this->upload()); return; }
+            if ($path === '/api/transcribe' && $method === 'POST') { $this->json($this->transcribe($body)); return; }
             if ($package) { $this->json(['space' => $this->importSpace('file')]); return; }
             if (preg_match('#^/api/spaces/(\d+)/export$#', $path, $fm) && $method === 'GET') { $this->exportSpace((int)$fm[1]); return; }
             // the file name at the end of the URL keeps its extension in the address bar, tabs and "save as"
@@ -1013,6 +1014,18 @@ final class Web
             Log::error("web stream: {$e->getMessage()}");
             $send('fail', ['error' => $e->getMessage()]);
         }
+    }
+
+    /** Dictation: transcribe one just-uploaded audio file to text and remove it (it is not kept in the library). */
+    private function transcribe(array $body): array
+    {
+        if (!$this->app->transcriber()->enabled()) $this->fail(400, 'Transcription is off. Turn it on in Settings → Voice.');
+        $id = (int)($body['id'] ?? 0);
+        $f = $this->app->files()->get($id) ?: $this->fail(404, 'no such recording');
+        if (!str_starts_with((string)$f['mime'], 'audio/') && !str_starts_with((string)$f['mime'], 'video/')) $this->fail(400, 'not an audio recording');
+        try { $text = $this->app->transcriber()->transcribe($f, false); }
+        finally { $this->app->library()->purgeFile($id); } // dictation leaves nothing behind
+        return ['text' => trim($text)];
     }
 
     private function upload(): array
