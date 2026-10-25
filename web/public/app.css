@@ -216,6 +216,8 @@ main{min-width:0;height:100%;overflow:hidden}
 #dir-bar:hover{border-color:var(--accent)}
 .dir-bar-ic{flex:none} .dir-bar-txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .dir-bar-go{flex:none;color:var(--accent);font-weight:600}
 @media (max-width:640px){.dir-prog{width:70px}.dir-meta{flex-basis:100%}}
+.placeholder.dir-hint{padding:12px 14px;text-align:left;font-size:.9rem;line-height:1.5}
+.dir-hint q{font-style:italic;color:var(--fg)}
 .dir-budget{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
 .dir-budget-row{display:flex;align-items:center;gap:8px;font-size:.9rem;margin-bottom:7px}
 .dir-budget-bar{height:7px;border-radius:99px;background:var(--sunk);overflow:hidden}

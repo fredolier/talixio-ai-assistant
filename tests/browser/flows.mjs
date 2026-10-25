@@ -176,6 +176,10 @@ const flows = {
     await page.keyboard.press('Escape');
   },
   async jobs({ page, check, root, data }) {
+    // with no directive yet, the section shows a discoverable one-line hint rather than nothing
+    await go(page, 'jobs');
+    await page.waitForSelector('#directives .dir-hint', { timeout: 5000 });
+    check('jobs: an empty directives section hints how to start a team', (await page.textContent('#directives .dir-hint')).includes('No directives yet'));
     // seed a directive with two workers directly in the shared store, as the director would
     const php = "$a=\\Talixio\\App::fromEnv();$d=$a->store->addDirective('Browser directive','compare and draft',1,0);"
       + "$w1=$a->store->addJob('researcher: compare','i','standard',1,'worker',null,0,[],'',null,'',$d,'researcher');"
@@ -183,7 +187,7 @@ const flows = {
       + "$a->store->updateJob($w1,['status'=>'done','cost_usd'=>0.4]);$a->store->updateJob($w2,['status'=>'running']);";
     execFileSync('php', ['-r', "require '" + join(root, 'src/autoload.php') + "';" + php],
       { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
-    await go(page, 'jobs');
+    await page.reload(); await page.waitForTimeout(500); // already on #jobs, so a hash change won't refetch — reload to pick up the seed
     await page.waitForSelector('#directives .task.dir', { timeout: 5000 });
     check('jobs: a directive shows as a row with its workers', (await page.textContent('#directives')).includes('Browser directive'));
     await page.click('#directives .task.dir .dir-exp'); await page.waitForTimeout(200);

@@ -1152,8 +1152,12 @@ const tagsOf = j => (j.tags || '').split(',').filter(Boolean);
 const dirOpen = new Set(); // directive ids the user expanded (or '-id' = collapsed on purpose)
 function renderDirectives(list) {
   const box = $('#directives'); if (!box) return;
-  if (jobsFilter.archived || !list.length) { box.hidden = true; box.innerHTML = ''; return; }
+  if (jobsFilter.archived) { box.hidden = true; box.innerHTML = ''; return; }
   box.hidden = false; box.innerHTML = '';
+  if (!list.length) { // no directive yet: a one-line hint so the director is discoverable instead of invisible until first use
+    box.innerHTML = `<div class="placeholder dir-hint">🎬 ${esc(t('No directives yet.'))} ${esc(t('Ask in the chat to run a team, e.g.'))} <q>${esc(t('research our top 3 competitors and draft a one-pager on each'))}</q>. <span class="muted">${esc(t('The director runs a worker role for each part, in parallel — the roles must already exist.'))}</span></div>`;
+    return;
+  }
   const b = state.status?.budget;
   if (b && b.daily_limit > 0) { // the board's budget burn-down: how much of today's budget the running work is eating
     const pct = Math.min(100, Math.round(b.today / b.daily_limit * 100));

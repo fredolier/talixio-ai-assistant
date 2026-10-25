@@ -158,6 +158,10 @@ Never a black box. Surfaces (see the mockup canvas):
   **workers live inside their directive** (expand, or open its board), never as a
   flat list. A "show individual workers" toggle (off) for debugging. This is the
   evolution of today's Jobs page — same "what's running" meaning, right altitude.
+  When no directive exists the section shows a **one-line hint** (what the
+  director is and the one sentence to type in chat to start a team), so the
+  capability is discoverable instead of invisible until first use — the real
+  rows replace it as soon as a directive runs.
 - **Capability library.** Teams ▸ roles ▸ skills, browsable. Each role card
   names its **skills (blue)** separate from **tools (grey)**, with tier, uses,
   acceptance %, metrics, and health (improving ↑ / duplicate ⚠ / under review).

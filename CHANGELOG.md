@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.92 (2026-10-25)
+
+- Agent factory — **the director is discoverable before you ever run one.** The directives section on the Jobs/Activity page used to be invisible until a directive existed, which made the whole feature hard to find. It now shows a one-line hint when empty — _"🎬 No directives yet. Ask in the chat to run a team, e.g. «research our top 3 competitors and draft a one-pager on each». The director runs a worker role for each part, in parallel — the roles must already exist."_ — so you know the capability is there and exactly how to start it. (Once a directive runs, the real rows replace the hint.)
+
 ## 0.28.91 (2026-10-25)
 
 - Agent factory, phase 3 finished — **the board's budget meter and voice dictation.** The directives section on the Jobs/Activity page now carries a **budget burn-down meter** (today's spend against the daily limit, turning amber then red as it fills) — the control-room gauge for how much the running teams are eating. And a **dictation mic** on the chat composer: tap it, speak, tap again, and what you said is transcribed (via your configured transcription) straight into the box to edit and send — nothing is kept as a file. The mic is wired by a reusable `data-dictate-for` hook, so it can sit on any field. (Hands-free "talk to the director" with send-on-silence is a later addition.)
