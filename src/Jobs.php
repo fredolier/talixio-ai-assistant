@@ -308,6 +308,12 @@ final class Jobs
                 $task .= "\n\nRecording: {$f['name']}, " . date('Y-m-d H:i', (int)$f['created']) . ". The full transcript is saved as file #{$f['id']} (searchable later).\n\n# Transcript\n" . mb_substr($transcript, 0, 300000);
             }
             if ($j['kind'] === 'reflect') { $this->reflect($j, $guard); return; }
+            if ($j['kind'] === 'eval') { // the assessor's A/B of a role improvement (agent factory, phase 2)
+                $text = $this->app->assessor()->runEvaluation($j, $guard);
+                $store->updateJob($id, ['status' => 'done', 'result' => $text, 'cost_usd' => (float)$store->job($id)['cost_usd'], 'finished' => time()]);
+                $this->report($id);
+                return;
+            }
             [$text, $meta] = $this->app->agent()->run('job', $j['tier'], 'job', [['role' => 'user', 'content' => $task]], $brief, 'job', $id, $guard);
             if ($j['kind'] === 'meeting') $store->addDoc('summary', $id, 'meeting summary: ' . $j['title'], $text, null, (int)($j['space'] ?? 0)); // its space's level applies
             $store->updateJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);

@@ -411,6 +411,10 @@ final class Tools
                 $this->app->assessor()->record((string)$a['role'], array_key_exists('accepted', $a) ? (bool)$a['accepted'] : null, (float)($a['cost'] ?? 0), isset($a['score']) ? (float)$a['score'] : null, (string)($a['case'] ?? ''), (string)($a['note'] ?? ''));
                 return 'recorded a run of ' . Skills::slug((string)$a['role']);
             })());
+        $this->register('role_improve',
+            "Propose a better brief for a role and have the assessor A/B it: a background job runs the current and candidate briefs on the role's golden cases, scores both, and promotes the candidate ONLY if it clearly wins. Use this to improve a role based on what you learned — not role_save, which just overwrites. The role needs golden cases (role_case_add) first.",
+            ['role' => ['type' => 'string'], 'content' => ['type' => 'string', 'description' => 'the candidate brief: the improved instructions to test against the current ones']], ['role', 'content'],
+            fn(array $a) => $this->sharedWrite('skills') ?? $this->app->assessor()->improve((string)$a['role'], (string)$a['content']));
         $this->register('role_case_add',
             'Add a golden case for a role: a reference task the role is judged on (title, optional input, optional rubric describing a good result). These are what an improvement must win on before it is promoted.',
             ['role' => ['type' => 'string'], 'title' => ['type' => 'string'], 'input' => ['type' => 'string'], 'rubric' => ['type' => 'string']], ['role', 'title'],

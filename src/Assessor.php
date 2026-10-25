@@ -85,6 +85,73 @@ final class Assessor
             [time(), $slug, $version, trim($case), $accepted === null ? null : (int)$accepted, $cost, $score, trim($note)]);
     }
 
+    // ---------- improvement: live A/B on the golden cases ----------
+
+    /** Propose a better brief for a role; queue an evaluation job that A/Bs it on the golden cases and promotes only if it wins. */
+    public function improve(string $role, string $candidate): string
+    {
+        $meta = $this->app->skills()->meta($role);
+        if (($meta['kind'] ?? '') !== 'role') return "error: no role '$role'. Create it with role_save first.";
+        if (trim($candidate) === '') return 'error: give the candidate brief (the improved instructions) to evaluate.';
+        if (!$this->cases($role)) return "error: role '$role' has no golden cases to judge on. Add some with role_case_add first — an improvement is only trusted if it wins on real reference tasks.";
+        if ($this->isProtected($role)) return "error: '$role' is protected (e.g. the assessor); its changes are the user's to make directly, not through automatic promotion.";
+        $cap = max($this->app->jobs()->cap(null), 1.0);
+        $id = $this->app->store->addJob("Evaluate an improvement to '" . Skills::slug($role) . "'", json_encode(['role' => Skills::slug($role), 'candidate' => $candidate]),
+            'deep', $cap, 'eval', null, (int)$this->app->space);
+        return "evaluation job #$id queued: it runs the current and candidate briefs on '" . Skills::slug($role) . "'’s golden cases, scores both, and promotes the candidate only if it wins. The result comes back in the chat.";
+    }
+
+    /** Runs inside an 'eval' job: the A/B. Returns the summary; promotes the candidate in place when it wins and isn't gated. */
+    public function runEvaluation(array $job, callable $guard): string
+    {
+        $d = json_decode((string)$job['instructions'], true) ?: [];
+        $role = (string)($d['role'] ?? ''); $candidate = trim((string)($d['candidate'] ?? ''));
+        $meta = $this->app->skills()->meta($role);
+        if (($meta['kind'] ?? '') !== 'role' || $candidate === '') return "Evaluation cancelled: the role or candidate is missing.";
+        $cases = array_slice($this->cases($role), 0, 4);
+        if (!$cases) return "Evaluation cancelled: '$role' has no golden cases.";
+        [, $current] = Skills::parse($this->app->skills()->read($role, false));
+        $tier = in_array($meta['tier'] ?? '', Tier::NAMES, true) ? (string)$meta['tier'] : 'standard';
+        $cost = 0.0;
+        $run = function (string $brief, string $input) use (&$cost, $tier, $role, $job, $guard) {
+            $task = "## Your brief\n$brief\n\n## Task\n" . ($input !== '' ? $input : 'Carry out the task this role exists for.');
+            [$text, $m] = $this->app->agent()->run('job', $tier, 'job', [['role' => 'user', 'content' => $task]], "You are the '$role' role. Do the task; produce your result only.", 'job', (int)$job['id'], $guard);
+            $cost += (float)($m['cost'] ?? 0); $guard($cost);
+            return trim((string)$text);
+        };
+        $trials = [];
+        foreach ($cases as $c) {
+            $trials[] = ['case' => $c['title'], 'rubric' => $c['rubric'],
+                'current' => $run($current, (string)$c['input']), 'candidate' => $run($candidate, (string)$c['input'])];
+        }
+        // one judge pass scores both outputs per case against the rubric
+        $prompt = "You are the assessor. For each case, score how well the CURRENT and the CANDIDATE output meet the rubric, each from 0.0 (poor) to 1.0 (excellent). "
+            . "Judge only the outputs against the rubric; ignore length and style unless the rubric asks. Reply with JSON only: {\"cases\":[{\"current\":0.0,\"candidate\":0.0}], \"why\":\"one line\"}.\n\n";
+        foreach ($trials as $i => $tr) $prompt .= "### Case " . ($i + 1) . ": {$tr['case']}\nRubric: " . ($tr['rubric'] ?: '(a good, correct, complete result)') . "\n-- CURRENT --\n{$tr['current']}\n-- CANDIDATE --\n{$tr['candidate']}\n\n";
+        [$verdict, $vm] = $this->app->agent()->run('job', 'deep', 'none', [['role' => 'user', 'content' => $prompt]], '', 'job', (int)$job['id'], $guard);
+        $cost += (float)($vm['cost'] ?? 0); $guard($cost);
+        $scores = json_decode((string)(preg_match('/\{.*\}/s', (string)$verdict, $mm) ? $mm[0] : ''), true);
+        $rows = is_array($scores['cases'] ?? null) ? $scores['cases'] : [];
+        if (count($rows) < count($trials)) return "Evaluation inconclusive: the judge did not score every case. The candidate was not promoted.";
+        $cur = $cand = 0.0;
+        foreach ($rows as $i => $r) {
+            $cc = max(0.0, min(1.0, (float)($r['candidate'] ?? 0))); $pc = max(0.0, min(1.0, (float)($r['current'] ?? 0)));
+            $cur += $pc; $cand += $cc;
+            $this->record($role, null, 0.0, $cc, $trials[$i]['case'], 'A/B candidate'); // candidate scores become anchor-linkable samples
+        }
+        $n = count($rows); $cur /= $n; $cand /= $n;
+        $won = $cand >= $cur + 0.05; // a clear win, not noise
+        $gated = $this->gate($role, $meta, $meta); // brief-only change; only a protected role blocks here
+        $head = sprintf("A/B on %d golden case(s) of '%s': current %.2f vs candidate %.2f.", $n, $role, $cur, $cand);
+        if ($won && !$gated) {
+            $extra = $meta; unset($extra['name'], $extra['description']);
+            $extra['version'] = (string)(((int)($meta['version'] ?? 0)) + 1);
+            $this->app->skills()->save($role, $meta['description'] ?? 'role', $candidate, array_filter($extra, fn($v) => trim((string)$v) !== ''));
+            return "$head Candidate wins — promoted to v{$extra['version']}." . (isset($scores['why']) ? ' ' . $scores['why'] : '');
+        }
+        return "$head " . ($won ? 'Candidate wins but the change is gated (' . implode('; ', $gated) . '); kept the current version pending your approval.' : 'Candidate does not clearly beat the current brief; kept the current version.') . (isset($scores['why']) ? ' ' . $scores['why'] : '');
+    }
+
     // ---------- health ----------
 
     /**

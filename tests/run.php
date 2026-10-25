@@ -1195,6 +1195,24 @@ check('director: each worker run is recorded as an anchor sample (acceptance pen
 check('director: directive_rate records the user accepting the result', str_contains($app->tools->run('directive_rate', ['id' => $did, 'accepted' => true]), 'acceptance') && (int)$s->q("SELECT COUNT(*) FROM role_runs WHERE role IN ('researcher-x','writer-x') AND accepted = 1")->fetchColumn() === 2);
 check('director: directive_status shows the finished directive', str_contains($app->tools->run('directive_status', ['id' => $did]), 'done') && str_contains($app->tools->run('directive_status', []), '#' . $did));
 $sk->delete('researcher-x'); $sk->delete('writer-x');
+// ---- the assessor's live A/B: promote a role improvement only if it wins on the golden cases ----
+$app->tools->run('role_save', ['name' => 'summ-x', 'purpose' => 'Summarise a document', 'content' => 'Write a summary.', 'tier' => 'fast']);
+check('improve: an A/B needs golden cases first', str_contains($app->tools->run('role_improve', ['role' => 'summ-x', 'content' => 'Better: 3 bullet points.']), 'no golden cases'));
+$as->addCase('summ-x', 'Long report', 'A 10-page report about Q3.', 'captures the key figures in 3 bullets');
+$app->providerOverride = $fake;
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on);
+    return str_contains($last, 'For each case, score') ? 'Here: {"cases":[{"current":0.3,"candidate":0.9}],"why":"candidate is sharper"}' : 'A plausible summary output.'; };
+check('improve: an evaluation job is queued', str_contains($app->tools->run('role_improve', ['role' => 'summ-x', 'content' => '3 crisp bullet points with the figures.']), 'evaluation job #'));
+$ev = (int)$s->q("SELECT MAX(id) FROM jobs WHERE kind='eval'")->fetchColumn();
+$app->jobs()->runJob($ev);
+check('improve: a winning candidate is promoted to a new version', str_contains((string)$s->job($ev)['result'], 'promoted to v2') && str_contains((string)$sk->raw('summ-x'), '3 crisp bullet points') && $sk->meta('summ-x')['version'] === '2');
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on);
+    return str_contains($last, 'For each case, score') ? '{"cases":[{"current":0.8,"candidate":0.5}]}' : 'Another output.'; };
+$app->tools->run('role_improve', ['role' => 'summ-x', 'content' => 'A worse brief.']);
+$ev2 = (int)$s->q("SELECT MAX(id) FROM jobs WHERE kind='eval'")->fetchColumn();
+$app->jobs()->runJob($ev2);
+check('improve: a candidate that does not clearly win is not promoted', str_contains((string)$s->job($ev2)['result'], 'does not clearly beat') && !str_contains((string)$sk->raw('summ-x'), 'A worse brief.') && $sk->meta('summ-x')['version'] === '2');
+$sk->delete('summ-x');
 // a multi-step chat turn queues a learning job; the job saves a skill and tells the user
 $app->providerOverride = $fake;
 $fake->script = function ($last, $tools) {

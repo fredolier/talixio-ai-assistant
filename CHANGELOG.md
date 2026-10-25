@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.89 (2026-10-25)
+
+- Agent factory, phase 2 complete — **roles now improve themselves, honestly.** New tool **`role_improve`**: propose a better brief for a role and the assessor **A/Bs it for real** — a background evaluation job runs the current and the candidate brief on the role's golden cases, an impartial judge pass scores both against each case's rubric, and the candidate is **promoted to a new version only if it clearly wins** (and isn't gated). A brief that doesn't beat the current one is discarded; the current version stays. This closes the loop the earlier phases set up: run a team → record real acceptance → test improvements against reference cases → keep only what measurably helps.
+
 ## 0.28.88 (2026-10-25)
 
 - Agent factory, phase 3 (glass box, first slice) — you can now **watch and steer** the director's teams. The Jobs page shows **directives as rows** with their workers nested inside (role · tier · status · cost), a progress bar, and controls: raise priority, cancel, or — once a directive is done — **👍 Accept / Not useful**, which feeds the phase-2 acceptance anchor so the roles learn from real outcomes. Expand a directive to see its workers; its combined result is there too. A slim **live bar above the chat composer** (`🎬 N directives · M workers running · $X left today`) appears whenever a directive is active and opens the Activity view in one tap. Worker jobs stay out of the flat job list — they live under their directive. (The board and voice remain for later in this phase.)
