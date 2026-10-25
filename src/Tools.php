@@ -396,10 +396,41 @@ final class Tools
                 'tier' => ['type' => 'string', 'enum' => ['fast', 'standard', 'deep'], 'description' => 'model size this role needs (default standard)'],
                 'skills' => ['type' => 'string', 'description' => 'names of skills this role relies on, comma-separated'],
                 'tools' => ['type' => 'string', 'description' => 'tool/connector names this role needs, comma-separated'],
-                'when_to_use' => ['type' => 'string'], 'when_not' => ['type' => 'string']],
+                'when_to_use' => ['type' => 'string'], 'when_not' => ['type' => 'string'],
+                'confirm' => ['type' => 'boolean', 'description' => 'set true ONLY after the user has approved a change the gate flagged (editing the assessor, etc.)']],
             ['name', 'purpose', 'content'],
             fn(array $a) => $this->sharedWrite('skills') ?? $this->roleSave($a));
+        $this->register('role_evaluate',
+            'The assessor\'s read on a role: acceptance rate and mean cost of its recorded runs, the trend, its metrics, golden cases, and any near-duplicates. Use it to decide what to improve, before changing a role.',
+            ['role' => ['type' => 'string']], ['role'], fn(array $a) => $this->roleEvaluate((string)$a['role']));
+        $this->register('role_record',
+            'Record how one run of a role turned out — the anchor metric. accepted: did the user accept/use it. cost: dollars it spent. score (0..1): an optional proxy metric\'s value for this run. case: the golden case it ran, if any.',
+            ['role' => ['type' => 'string'], 'accepted' => ['type' => 'boolean'], 'cost' => ['type' => 'number'], 'score' => ['type' => 'number'], 'case' => ['type' => 'string'], 'note' => ['type' => 'string']], ['role'],
+            fn(array $a) => $this->sharedWrite('skills') ?? (function () use ($a) {
+                $this->app->assessor()->record((string)$a['role'], array_key_exists('accepted', $a) ? (bool)$a['accepted'] : null, (float)($a['cost'] ?? 0), isset($a['score']) ? (float)$a['score'] : null, (string)($a['case'] ?? ''), (string)($a['note'] ?? ''));
+                return 'recorded a run of ' . Skills::slug((string)$a['role']);
+            })());
+        $this->register('role_case_add',
+            'Add a golden case for a role: a reference task the role is judged on (title, optional input, optional rubric describing a good result). These are what an improvement must win on before it is promoted.',
+            ['role' => ['type' => 'string'], 'title' => ['type' => 'string'], 'input' => ['type' => 'string'], 'rubric' => ['type' => 'string']], ['role', 'title'],
+            fn(array $a) => $this->sharedWrite('skills') ?? ('added golden case #' . $this->app->assessor()->addCase((string)$a['role'], (string)$a['title'], (string)($a['input'] ?? ''), (string)($a['rubric'] ?? '')) . ' to ' . Skills::slug((string)$a['role'])));
 
+    }
+
+    /** The assessor's health report for a role. */
+    private function roleEvaluate(string $role): string
+    {
+        $skills = $this->app->skills();
+        if (($skills->meta($role)['kind'] ?? '') !== 'role') return "error: no role named '$role'. Define one with role_save, or role_find to search.";
+        $h = $this->app->assessor()->health($role);
+        $acc = $h['acceptance'] === null ? 'no rated runs yet' : (int)round($h['acceptance'] * 100) . '% accepted';
+        $cost = $h['cost_mean'] === null ? '' : sprintf(' · $%.4f/run mean', $h['cost_mean']);
+        $out = "Role '{$h['role']}' — {$h['runs']} run(s), $acc$cost · trend: {$h['trend']} · {$h['cases']} golden case(s).";
+        $out .= "\nMetrics: " . implode(', ', $h['metrics']) . ' (acceptance+cost is the anchor and cannot be edited).';
+        if ($h['duplicates']) $out .= "\n⚠ Overlaps: " . implode(', ', $h['duplicates']) . ' — consider merging.';
+        $cases = $this->app->assessor()->cases($role);
+        if ($cases) $out .= "\nGolden cases: " . implode('; ', array_map(fn($c) => $c['title'], $cases)) . '.';
+        return $out;
     }
 
     /** role_find: rank existing roles that already cover a purpose. */
@@ -413,24 +444,27 @@ final class Tools
         return $advice . "Existing roles:\n" . implode("\n", $lines);
     }
 
-    /** role_save: write a role as an enriched skill, bumping version and warning on a near-duplicate. */
+    /** role_save: write a role as an enriched skill, bumping version, gating protected edits and warning on overlap. */
     private function roleSave(array $a): string
     {
         $skills = $this->app->skills();
+        $this->app->assessor()->seed(); // role #0 exists before any role is judged
         $name = (string)$a['name'];
         $slug = Skills::slug($name);
-        $norm = fn($v) => is_array($v) ? implode(', ', $v) : (string)($v ?? '');
+        $norm = fn($v) => is_array($v) ? implode(', ', $v) : trim((string)($v ?? ''));
         $prev = $skills->meta($name);
-        $extra = array_filter([
-            'kind' => 'role',
-            'tier' => in_array($a['tier'] ?? '', ['fast', 'standard', 'deep'], true) ? $a['tier'] : 'standard',
-            'skills' => $norm($a['skills'] ?? ''), 'tools' => $norm($a['tools'] ?? ''),
-            'when_to_use' => trim((string)($a['when_to_use'] ?? '')), 'when_not' => trim((string)($a['when_not'] ?? '')),
-            'scope' => $prev['scope'] ?? 'private',
-            'version' => (string)(((int)($prev['version'] ?? 0)) + 1),
-            'uses' => $prev['uses'] ?? '',
-        ], fn($v) => $v !== '');
-        $msg = $skills->save($name, (string)$a['purpose'], (string)$a['content'], $extra);
+        // keep every header field the role already had, then overlay what this call changes
+        $extra = $prev; unset($extra['name'], $extra['description']);
+        $extra['kind'] = 'role';
+        $extra['tier'] = in_array($a['tier'] ?? '', ['fast', 'standard', 'deep'], true) ? $a['tier'] : ($prev['tier'] ?? 'standard');
+        foreach (['skills', 'tools', 'when_to_use', 'when_not'] as $k) if (isset($a[$k])) $extra[$k] = $norm($a[$k]);
+        $extra['scope'] = $prev['scope'] ?? 'private';
+        $extra['version'] = (string)(((int)($prev['version'] ?? 0)) + 1);
+        $gate = $prev ? $this->app->assessor()->gate($name, $extra, $prev) : []; // creation is the user defining it; the gate judges changes
+        if ($gate && empty($a['confirm']))
+            return "This change is gated and was NOT saved — it " . implode('; and it ', $gate) . ". Ask the user to approve it; once they do, call role_save again with confirm=true.";
+        $msg = $skills->save($name, (string)$a['purpose'], (string)$a['content'], array_filter($extra, fn($v) => trim((string)$v) !== ''));
+        if ($gate) $msg .= ' (approved gated change: ' . implode('; ', $gate) . ')';
         $dupes = array_values(array_filter($skills->find((string)$a['purpose'], 4, 'role'), fn($h) => Skills::slug($h['name']) !== $slug && $h['score'] >= 0.6));
         if ($dupes) $msg .= ' — note: this overlaps existing role(s) ' . implode(', ', array_map(fn($h) => "'{$h['name']}'", $dupes)) . '; consider merging rather than keeping both.';
         return $msg;

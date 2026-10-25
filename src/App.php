@@ -118,6 +118,7 @@ final class App
     public function eurlex(): Eurlex { return new Eurlex($this); }
     public function approvals(): Approvals { return new Approvals($this); }
     public function skills(): Skills { return new Skills($this); }
+    public function assessor(): Assessor { return new Assessor($this); }
     public function mind(): Mind { return new Mind($this); }
     public function graph(): Graph { return new Graph($this); }
     public function shares(): Shares { return new Shares($this); }

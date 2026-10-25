@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.86 (2026-10-25)
+
+- Agent factory, phase 2 — the assessor and the improvement gate (see `docs/design/agent-factory.md`). The measurement spine that keeps role improvement honest: **`role_record`** logs how a role's run turned out — the anchor metric (was it accepted, at what cost), which is external and can't be gamed; **`role_case_add`** keeps the golden cases a role is judged on; **`role_evaluate`** is the assessor's read on a role (acceptance %, mean cost, trend, metrics, golden cases, near-duplicates). The **assessor is seeded as role #0**, protected: editing it, changing a role's metrics, a role gaining a new capability, or publishing it are gated — `role_save` refuses such a change until the user approves (`confirm`). A new proxy metric must **backtest** (correlate with the anchor over past runs) before it is trusted. Live A/B promotion (running old vs new on the golden cases) lands with the worker executor in phase 3, on top of this data.
+
 ## 0.28.85 (2026-10-25)
 
 - Agent factory, phase 1 — the role registry (see `docs/design/agent-factory.md`). A **role** is a reusable worker definition (a purpose + a brief + a model tier + the skills and tools it uses), stored as an enriched skill — no parallel store. Two new tools: **`role_find`** ranks existing roles that already cover a purpose, so one is reused instead of a near-duplicate being made (search-before-create); **`role_save`** writes a role, bumps its version, and warns when it overlaps an existing one. Skill files round-trip the extra header fields, so the editor can see and change them.

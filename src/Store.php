@@ -126,6 +126,14 @@ final class Store
         $this->db->exec('CREATE TABLE IF NOT EXISTS routine_feedback(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, task INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL,
                 item TEXT NOT NULL, vote INTEGER NOT NULL, note TEXT NOT NULL DEFAULT \'\', message INTEGER);
             CREATE INDEX IF NOT EXISTS routine_feedback_task ON routine_feedback(task);');
+        // the agent factory's role registry (see docs/design/agent-factory.md): what each worker role produced
+        // (the anchor metric: was it accepted, at what cost, plus any proxy score), and the golden cases it is judged on
+        $this->db->exec('CREATE TABLE IF NOT EXISTS role_runs(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, role TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
+                case_ref TEXT NOT NULL DEFAULT \'\', accepted INTEGER, cost_usd REAL NOT NULL DEFAULT 0, score REAL, note TEXT NOT NULL DEFAULT \'\');
+            CREATE INDEX IF NOT EXISTS role_runs_role ON role_runs(role);
+            CREATE TABLE IF NOT EXISTS role_cases(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, role TEXT NOT NULL, title TEXT NOT NULL,
+                input TEXT NOT NULL DEFAULT \'\', rubric TEXT NOT NULL DEFAULT \'\');
+            CREATE INDEX IF NOT EXISTS role_cases_role ON role_cases(role);');
         if ($this->get('briefing_v2') === '') { // the morning briefing becomes 5 rated lines; keep what the user added ("Also: …")
             foreach ($this->q("SELECT id, prompt FROM tasks WHERE title = 'Morning briefing' AND job IS NULL")->fetchAll() as $t) {
                 $i = strpos((string)$t['prompt'], "\nAlso: ");

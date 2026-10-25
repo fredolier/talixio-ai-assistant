@@ -1153,6 +1153,26 @@ check('roles: re-saving bumps the version and preserves scope', str_contains($ap
 check('roles: role_find reuses a close match, not the weekly-report skill', str_contains(($rf = $app->tools->run('role_find', ['purpose' => 'review a contract for red flags'])), 'contract-reviewer') && str_contains($rf, 'reuse') && !str_contains($rf, 'weekly-report'));
 check('roles: role_find on an unrelated purpose finds nothing to reuse', str_contains($app->tools->run('role_find', ['purpose' => 'translate a poem into Japanese']), 'None to reuse'));
 check('roles: role_save warns about a near-duplicate role', str_contains($app->tools->run('role_save', ['name' => 'Contract red-flag reviewer', 'purpose' => 'Review a commercial contract for red flags and missing clauses', 'content' => 'dup']), "overlaps existing role") && str_contains($app->tools->run('role_find', ['purpose' => 'xyzzy nonexistent']), 'None'));
+// ---- the assessor (role #0) and the improvement gate ----
+$as = $app->assessor();
+check('assessor: role #0 is seeded, protected, and is a role', $sk->meta('assessor')['kind'] === 'role' && $sk->meta('assessor')['protected'] === '1' && $as->isProtected('assessor'));
+check('assessor: editing the assessor is gated without confirm, applied with it', str_contains($app->tools->run('role_save', ['name' => 'assessor', 'purpose' => 'x', 'content' => 'tampered']), 'gated and was NOT saved')
+    && !str_contains((string)$sk->raw('assessor'), 'tampered')
+    && str_contains($app->tools->run('role_save', ['name' => 'assessor', 'purpose' => 'Score roles and gate improvements', 'content' => 'edited by the user', 'confirm' => true]), 'approved gated change')
+    && str_contains((string)$sk->raw('assessor'), 'edited by the user'));
+check('assessor: giving a role a new capability is gated', str_contains($app->tools->run('role_save', ['name' => 'contract-reviewer', 'purpose' => 'Review a commercial contract for red flags', 'content' => 'v', 'tools' => 'legifrance_search, file_read, shell_run']), 'new capabilities: shell_run'));
+check('assessor: records runs and reports acceptance + cost', (function () use ($as, $app) {
+    $as->record('contract-reviewer', true, 0.40); $as->record('contract-reviewer', false, 0.55); $as->record('contract-reviewer', true, 0.30);
+    $r = $app->tools->run('role_evaluate', ['role' => 'contract-reviewer']);
+    return str_contains($r, '67% accepted') && str_contains($r, '3 run(s)');
+})());
+check('assessor: a golden case is added and shown', str_contains($app->tools->run('role_case_add', ['role' => 'contract-reviewer', 'title' => 'NDA with auto-renewal', 'rubric' => 'flags the auto-renewal clause']), 'golden case #')
+    && str_contains($app->tools->run('role_evaluate', ['role' => 'contract-reviewer']), 'NDA with auto-renewal'));
+check('assessor: a new proxy metric backtests against the anchor before it is trusted', (function () use ($as) {
+    foreach ([[0.9, true], [0.8, true], [0.2, false], [0.1, false], [0.85, true], [0.3, false]] as [$sc, $ok]) $as->record('backtester', $ok, 0.1, $sc);
+    $c = $as->backtest('backtester', 'rubric');
+    return $c !== null && $c > 0.8 && $as->backtest('backtester', 'rubric', 99) === null; // too few when the floor is raised
+})());
 $sk->delete('contract-reviewer'); $sk->delete('contract-red-flag-reviewer');
 // a multi-step chat turn queues a learning job; the job saves a skill and tells the user
 $app->providerOverride = $fake;
