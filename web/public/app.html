@@ -702,6 +702,16 @@
       <label class="check"><input id="sp-hub-contribute" type="checkbox"> Contribute assets from this space for review</label>
       <p class="muted small">Off by default. Only the spaces you turn on reach the shared knowledge base.</p>
     </div>
+    <div id="sp-orch-row" class="sub">
+      <label>Fleet orchestrator <span class="muted small">(delegated code sessions across your machines)</span></label>
+      <p id="sp-orch-status" class="muted small">…</p>
+      <p id="sp-orch-dispatch" class="muted small" hidden></p>
+      <div class="row wrap">
+        <button id="sp-orch-connect" class="btn ghost" type="button">Connect…</button>
+        <button id="sp-orch-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button>
+      </div>
+      <pre id="sp-orch-steps" class="orch-steps" hidden></pre>
+    </div>
     <label for="sp-instructions">Instructions for this space</label>
     <textarea id="sp-instructions" rows="4" placeholder="Context, tone, language, what to watch for…"></textarea>
     <label for="sp-notes">Notes <span class="muted small">(the assistant keeps them up to date; you can edit)</span></label>

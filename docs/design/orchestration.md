@@ -412,6 +412,18 @@ its first slice is the small documented-surface piece, not the imagined board.*
      has gone quiet); `fleet_disconnect` forgets the binding. The webhook URL and inbox
      secret live 0600 in `conductor.json`, are never returned by any API after pairing,
      and are never logged.
+   - **Connect/bootstrap UI — ✅ shipped in 0.28.99.** The bridge was host-agnostic
+     but chat-only; the space editor now carries a **Fleet orchestrator** panel that
+     shows the binding's live state and, on _Connect_, prints the copy-paste bootstrap
+     instruction to paste into a **Claude Code session with Remote Control on — the
+     user's own host is fine, Anthropic-hosted is not required**. The binding is **one
+     per assistant**: a single orchestrator serves the whole assistant, so the panel in
+     every space configures the same shared orchestrator, yet each space still governs
+     independently whether it may dispatch (the privacy choke point is unchanged, shown
+     inline in the panel). Pairing leaks nothing (a one-time code + an instruction, no
+     key), so `fleet_setup`/`setup()` is **no longer privacy-gated** — the guard stays at
+     the single outbound seam (`toFleet`/`fleet_dispatch`) where knowledge travels. A new
+     secret-safe status endpoint (`statusInfo()`) drives the panel.
 5. **The messaging backbone, generalised. ✅ shipped in 0.28.98.** Address +
    durable mailbox + consent + budget envelope + loop guard, as one service
    (`Relay`) both adapters sit on, enforcing all five invariants in one place so no

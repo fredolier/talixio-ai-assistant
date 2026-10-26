@@ -275,6 +275,15 @@ const flows = {
     await page.fill('#sp-instructions', 'Answer briefly.');
     await page.click('#space-form [type=submit]'); await page.waitForTimeout(800);
     check('spaces: the instructions are saved', JSON.stringify(await api(page, 'api/spaces')).includes('Answer briefly.'));
+    // the fleet-orchestrator panel (one per assistant, bootstrapped from the space editor)
+    await page.click('#space-btn');
+    await page.click('#space-menu [data-act=edit]');
+    await page.waitForSelector('#space-dialog[open]');
+    check('spaces: the orchestrator panel is shown', await page.isVisible('#sp-orch-row'));
+    await page.click('#sp-orch-connect');
+    await page.waitForSelector('#sp-orch-steps:not([hidden])', { timeout: 4000 });
+    check('spaces: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#sp-orch-steps')));
+    await page.click('#sp-cancel');
   },
   async mobile({ page, check }) {
     await page.setViewportSize({ width: 400, height: 800 });

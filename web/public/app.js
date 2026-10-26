@@ -447,6 +447,33 @@ function spaceEvent(e) {
   return `${what} ${new Date(e.ts * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} (${e.by === 'assistant' ? t('by the assistant') : t('in the app')})`;
 }
 
+/** The fleet-orchestrator connect/bootstrap panel in the space editor. The binding is one per assistant (shared by
+ * every space); each space governs separately whether it may dispatch (shown by paintLevel). */
+async function initOrchestratorPanel() {
+  const steps = $('#sp-orch-steps'), connect = $('#sp-orch-connect'), disc = $('#sp-orch-disconnect');
+  steps.hidden = true; steps.textContent = '';
+  const ago = ts => { if (!ts) return 'never'; const d = Math.max(0, Date.now() / 1000 - ts); return d < 90 ? 'just now' : d < 3600 ? `${Math.floor(d / 60)} min ago` : d < 86400 ? `${Math.floor(d / 3600)} h ago` : `${Math.floor(d / 86400)} d ago`; };
+  const render = info => {
+    const on = !!info.connected;
+    $('#sp-orch-status').textContent = on
+      ? `Connected${info.session ? ` (session ${info.session})` : ''}. Last sent ${ago(info.lastDispatch)}; last report ${ago(info.lastReport)}. It reports back to ${info.inbox}.`
+      : 'Not connected. Run a Claude Code session with Remote Control on — on your own host is fine — and connect it here to delegate code work across your machines.';
+    disc.hidden = !on;
+    connect.textContent = on ? 'Re-pair…' : 'Connect…';
+  };
+  try { render(await api('api/conductor')); } catch { render({ connected: false, inbox: '' }); }
+  connect.onclick = async () => {
+    try { steps.textContent = (await post('api/conductor/setup', {})).instruction; steps.hidden = false; }
+    catch (err) { toast(err.message); }
+  };
+  disc.onclick = async () => {
+    if (disc.dataset.confirm !== '1') { disc.dataset.confirm = '1'; disc.textContent = t('Disconnect it?'); return; }
+    disc.dataset.confirm = ''; disc.textContent = t('Disconnect');
+    try { const r = await post('api/conductor/disconnect', {}); steps.hidden = true; render(r); toast(r.message || 'Disconnected.'); }
+    catch (err) { toast(err.message); }
+  };
+}
+
 /** Create or edit a space. prefill: {folder} when started from a library folder. */
 async function openSpaceEditor(sp, prefill = {}) {
   const d = $('#space-dialog'), editing = !!(sp && sp.id);
@@ -462,6 +489,7 @@ async function openSpaceEditor(sp, prefill = {}) {
   $('#sp-hub-row').hidden = !state.status?.fleet;
   $('#sp-hub-pull').checked = !!(editing && sp.hub_pull);
   $('#sp-hub-contribute').checked = !!(editing && sp.hub_contribute);
+  initOrchestratorPanel();
   $('#sp-code').value = editing ? (sp.code || '') : '';
   $('#sp-instructions').value = editing ? sp.instructions : '';
   $('#sp-notes').value = editing ? sp.notes : ''; $('#sp-notes').closest('form').querySelector('label[for=sp-notes]').hidden = $('#sp-notes').hidden = !editing;
@@ -473,6 +501,11 @@ async function openSpaceEditor(sp, prefill = {}) {
   const paintLevel = () => {
     $('#sp-privacy').innerHTML = Object.entries(LEVELS).map(([k, v]) => `<button type="button" class="lvl-card ${k}" role="radio" aria-checked="${k === level}" data-l="${k}">${SHIELD_SVG}<span class="lvl-text"><b>${v.label}</b><small>${v.text}</small></span></button>`).join('');
     $('#sp-privacy').querySelectorAll('[data-l]').forEach(b => b.onclick = () => { level = b.dataset.l; paintLevel(); });
+    const note = $('#sp-orch-dispatch');
+    note.hidden = false;
+    note.textContent = level === 'internal'
+      ? 'This space may dispatch work to the connected orchestrator.'
+      : `This space is ${level}; it cannot dispatch outward (connect and dispatch from an internal space). The orchestrator connection itself is shared by the whole assistant.`;
   };
   paintLevel();
   $('#sp-archive').hidden = $('#sp-delete').hidden = $('#sp-move').hidden = !editing;

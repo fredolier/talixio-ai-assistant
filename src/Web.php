@@ -103,7 +103,7 @@ final class Web
         $area = explode('/', $path)[2] ?? '';
         return match ($area) {
             'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
-            'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals' => $this->routeChat($m, $path, $b),
+            'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor' => $this->routeChat($m, $path, $b),
             'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
             'google', 'microsoft', 'spotify', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
             'memory', 'mind', 'skills', 'scripts' => $this->routeMind($m, $path, $b),
@@ -181,6 +181,9 @@ final class Web
             })(),
             $path === '/api/messages/search' => ['results' => $this->searchMessages((string)($_GET['q'] ?? ''), (int)($_GET['space'] ?? 0), ($_GET['mode'] ?? '') !== 'quick'),
                 'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
+            $path === '/api/conductor' && $m === 'GET' => $this->app->conductor()->statusInfo(),
+            $path === '/api/conductor/setup' && $m === 'POST' => ['instruction' => $this->app->conductor()->setup()],
+            $path === '/api/conductor/disconnect' && $m === 'POST' => ['message' => $this->app->conductor()->disconnect()] + $this->app->conductor()->statusInfo(),
             $path === '/api/spaces' && $m === 'GET' => ['spaces' => $this->app->spaces()->all(true), 'colors' => Spaces::COLORS],
             $path === '/api/spaces' && $m === 'POST' => ['space' => $this->app->spaces()->save($b)],
             (bool)preg_match('#^/api/spaces/(\d+)$#', $path, $mm) && $m === 'POST' => ['space' => $this->app->spaces()->save($b, (int)$mm[1])],

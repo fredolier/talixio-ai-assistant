@@ -1251,6 +1251,11 @@ $beforeN = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn();
 check('fleet: an authenticated report is accepted and surfaced to the user',
     $rc === 200 && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeN + 1);
 check('fleet: status shows the connected orchestrator once paired', str_contains($con->fleetStatus(), 'connected'));
+// the settings panel reads a secret-safe snapshot: connection + liveness, never the webhook URL or the inbox secret
+$si = $con->statusInfo();
+check('fleet: statusInfo reports the connection without leaking the secret or webhook',
+    $si['connected'] === true && str_contains((string)$si['inbox'], '/api/conductor/inbox') && $si['session'] === 'sess_abc'
+    && !array_key_exists('secret', $si) && !array_key_exists('webhook', $si) && !in_array('https://orch.example/hook', $si, true));
 // the single outbound choke point: dispatch grounds the instruction and POSTs it to the orchestrator's own webhook
 $app->tools->run('kb_save_note', ['name' => 'Release policy', 'content' => 'We ship on Thursdays after the suite is green.', 'folder' => '/Notes']);
 $seen = null; $prevHook = Talixio\Http::$hook;
@@ -1267,6 +1272,11 @@ $app->space = (int)$csp['id'];
 $ref = $app->conductor()->toFleet('leak this');
 $app->space = 0;
 check('fleet: a confidential space is refused at the outbound choke point', str_contains($ref, 'Confidential') && str_contains($ref, 'internal space'));
+// pairing leaks nothing outward, so it is NOT gated by the privacy guard — only dispatch (toFleet) is
+$app->space = (int)$csp['id'];
+$setupConf = $con->setup();
+$app->space = 0;
+check('fleet: setup is allowed from any space (pairing sends nothing outward)', preg_match('/"code":"[0-9a-f]{32}"/', $setupConf) === 1);
 check('fleet: disconnect forgets the binding', str_contains($con->disconnect(), 'disconnected') && !$con->connected());
 @unlink($app->cfg->dataDir . '/conductor.json');
 

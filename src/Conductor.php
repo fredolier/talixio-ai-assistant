@@ -140,30 +140,51 @@ final class Conductor
     public function connected(): bool { return ($this->binding()['webhook'] ?? '') !== ''; }
 
     /**
+     * A secret-safe snapshot for the settings UI: never the webhook URL or the inbox secret, only whether a binding
+     * exists, the orchestrator's self-reported session id / transcript link, and the liveness timestamps.
+     */
+    public function statusInfo(): array
+    {
+        $b = $this->binding();
+        return [
+            'connected' => $this->connected(),
+            'inbox' => $this->inboxUrl(),
+            'session' => (string)($b['session'] ?? ''),
+            'url' => (string)($b['url'] ?? ''),
+            'lastReport' => (int)($b['last_report'] ?? 0),
+            'lastDispatch' => (int)($b['last_dispatch'] ?? 0),
+            'summary' => $this->fleetStatus(),
+        ];
+    }
+
+    /**
      * Begin pairing: mint a one-time code and return the copy-paste setup for the user's orchestrator session. The
      * code (not its hash) is shown once to the signed-in user; the orchestrator uses it once, over HTTPS, to register
      * its webhook and collect its steady secret. Nothing account-wide is ever stored in this container.
      */
     public function setup(): string
     {
-        if (($g = $this->guard()) !== null) return $g;
+        // Pairing sends nothing outward — it only mints a one-time code and stores the webhook the orchestrator hands
+        // back — so it is not gated by the privacy guard. The outbound choke (toFleet) is where confidential/secret
+        // spaces are refused; connecting a fleet from any space is safe.
         $code = bin2hex(random_bytes(16));
         $b = $this->binding();
         $b['pair'] = ['hash' => hash('sha256', $code), 'expires' => time() + self::PAIR_TTL];
         $this->saveBinding($b);
         $inbox = $this->inboxUrl();
-        return "To connect your code fleet, open a **Claude Code session on your account with Remote Control on** "
-            . "(so it holds the `claude-code-remote` tools and `watch_url`), and give it this instruction:\n\n"
+        return "To connect your code fleet, start a **Claude Code session with Remote Control on** — on your own host "
+            . "is fine (keep it running; restart it if it stops) — signed in to your account so it can see your sessions "
+            . "across machines (ListAgents / SendMessage) and mint an inbound webhook (watch_url). Give it this once:\n\n"
             . "```\nYou are my fleet orchestrator. Do this once to pair with my Talixio assistant:\n"
-            . "1. Call watch_url to mint an inbound webhook for yourself (a URL + a sealed credential).\n"
+            . "1. Mint an inbound webhook for yourself (watch_url) — a URL plus a sealed credential I never see.\n"
             . "2. POST this JSON to $inbox :\n"
             . "   {\"type\":\"pair\",\"code\":\"$code\",\"webhook\":\"<the watch_url you got>\",\n"
-            . "    \"session\":\"<your session id>\",\"url\":\"<your claude.ai/code URL>\"}\n"
+            . "    \"session\":\"<your session id>\",\"url\":\"<your claude.ai/code URL, if any>\"}\n"
             . "3. Keep the \"secret\" from the response; send it as `Authorization: Bearer <secret>` on every\n"
             . "   future report you POST to $inbox (JSON {\"type\":\"report\",\"title\":...,\"text\":...}).\n"
-            . "4. Set up a heartbeat (create_trigger or send_later, every ~10 min): each tick, list_sessions /\n"
-            . "   get_session / list_events across the fleet, and report progress, completions and failures back\n"
-            . "   to that inbox. When I POST an instruction to your webhook, act on it and report what you did.\n```\n\n"
+            . "4. Keep yourself warm (a create_trigger / send_later heartbeat, ~10 min): each tick, enumerate my\n"
+            . "   sessions across machines, read their progress, and report completions and failures back to that\n"
+            . "   inbox. When I POST an instruction to your webhook, act on it and report what you did.\n```\n\n"
             . "The code is good for 30 minutes and works once. I never see or store your account token — only the "
             . "webhook you hand me. After it pairs I'll confirm here.";
     }
