@@ -438,7 +438,15 @@ final class Tools
                 catch (\InvalidArgumentException | \RuntimeException $e) { return 'error: ' . $e->getMessage(); }
                 return "sent '{$r['name']}' to the company knowledge base for review. Once the admin approves it, every assistant can install it.";
             })());
-        $this->register('asset_install', 'Install a shared asset from the company knowledge base into this library (or update the installed copy to the latest version). id is the store asset id (asset-…), from the store catalog. It is saved as a note under "' . AppStore::ASSET_FOLDER . '".',
+        $this->register('asset_publish_file',
+            'Contribute an IMAGE from the library (a brand chart, a logo…) to the shared company knowledge base so everyone can reuse it. file is the library file id of the image (PNG/JPEG/GIF/WebP, 2 MB at most); title defaults to the file name. A confidential or secret space cannot publish. It goes to the store for the admin to review. The user should agree before you publish.',
+            ['file' => ['type' => 'integer'], 'title' => ['type' => 'string'], 'note' => ['type' => 'string', 'description' => 'a word for the reviewer (why it is useful)']], ['file'],
+            fn(array $a) => $this->sharedWrite('company knowledge base') ?? $this->hubGrant('contribute') ?? (function () use ($a) {
+                try { $r = (new AppStore($this->app))->submitAssetFile((int)$a['file'], (string)($a['title'] ?? ''), (string)($a['note'] ?? '')); }
+                catch (\InvalidArgumentException | \RuntimeException $e) { return 'error: ' . $e->getMessage(); }
+                return "sent '{$r['name']}' (image) to the company knowledge base for review. Once the admin approves it, every assistant can install it.";
+            })());
+        $this->register('asset_install', 'Install a shared asset from the company knowledge base into this library (or update the installed copy to the latest version). id is the store asset id (asset-…), from the store catalog. A text asset is saved as a note under "' . AppStore::ASSET_FOLDER . '"; an image is saved as the file.',
             ['id' => ['type' => 'string']], ['id'],
             fn(array $a) => $this->sharedWrite('library') ?? $this->hubGrant('pull') ?? (function () use ($a) {
                 try { $d = (new AppStore($this->app))->installAsset((string)$a['id']); return "installed '{$d['name']}' into " . AppStore::ASSET_FOLDER . '.'; } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }

@@ -2304,6 +2304,40 @@ check('store: with the grants the same tools contribute to and pull from the kno
 $ma->spaces()->setHub(0, false, false);
 $ast->withdraw('asset-' . substr(sha1('holiday policy'), 0, 16));
 $ma->library()->purgeFile((int)$adoc['id']);
+// ---- a binary (image) knowledge asset: bytes live in a blob store beside the catalogue (orchestration, slice 2 follow-up) ----
+$png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+$pngHash = sha1($png);
+$ptmp = "$dir/brand-chart.png"; file_put_contents($ptmp, $png);
+$pfid = $ma->files()->save($ptmp, 'brand-chart.png', 'image/png', '/Inbox');
+$svgBad = ''; try { \Talixio\Catalog::cleanAssetFile(['name' => 'Logo', 'mime' => 'image/svg+xml', 'filename' => 'logo.svg', 'data' => base64_encode('<svg/>')]); } catch (\InvalidArgumentException $e) { $svgBad = $e->getMessage(); }
+check('store: a binary asset accepts only raster images, never a scriptable SVG', $svgBad !== '');
+$bas = $ast->submitAssetFile($pfid, 'Brand chart', 'The quarterly logo');
+check('store: an image asset waits in the outbox with its title, kind and note, the bytes kept out of the returned item', $bas['kind'] === 'asset'
+    && $bas['key'] === 'asset-' . substr(sha1('brand chart'), 0, 16) && $bas['name'] === 'Brand chart' && $bas['note'] === 'The quarterly logo' && !isset($bas['package']));
+$cat->collect('alice', 'Alice', $ast->outbox(true));
+$bsub = array_values(array_filter($cat->submissions(), fn($x) => $x['kind'] === 'asset' && isset($x['item']['mime'])))[0];
+check('store: the image submission is reviewable with its mime and size, carried as base64 for transit', ($bsub['item']['mime'] ?? '') === 'image/png'
+    && (int)($bsub['item']['size'] ?? 0) === strlen($png) && !empty($bsub['item']['data']) && base64_decode((string)$bsub['item']['data'], true) === $png);
+$dbin = $cat->decide($bsub['id'], true, 'Nice'); $ast->mark($dbin['key'], $dbin['hash'], 'approved');
+$bentry = current(array_filter($cat->read()['assets'], fn($x) => $x['name'] === 'Brand chart'));
+check('store: the approved image is in the catalogue as a blob reference (no inline bytes), with mime and provenance',
+    ($bentry['blob'] ?? '') === $pngHash && !isset($bentry['data']) && ($bentry['mime'] ?? '') === 'image/png' && ($bentry['by']['who'] ?? '') === 'Alice');
+check('store: the bytes are written to the blob store beside catalog.json, content-addressed by hash', is_file("$sd/blobs/$pngHash") && (string)file_get_contents("$sd/blobs/$pngHash") === $png);
+$bdoc = $ast->installAsset($bentry['id']);
+check('store: installing an image asset writes the real file into the library under Company KB', ($bdoc['folder'] ?? '') === \Talixio\AppStore::ASSET_FOLDER
+    && ($bdoc['kind'] ?? '') === 'image' && (int)($bdoc['size'] ?? 0) === strlen($png));
+check('store: re-installing the image updates the same file in place, no duplicate', (int)$ast->installAsset($bentry['id'])['id'] === (int)$bdoc['id']);
+// the one-click library Share path (asset_publish_file tool) enforces the same two gates as the chat tools
+$ptmp2 = "$dir/brand-two.png"; file_put_contents($ptmp2, $png);
+$pfid2 = $ma->files()->save($ptmp2, 'brand-two.png', 'image/png', '/Inbox');
+$fileClosed = $ma->tools->execute('asset_publish_file', ['file' => $pfid2]);
+check('store: without the contribute grant, asset_publish_file is refused, pointing at the space settings', str_contains($fileClosed, 'may not contribute') && str_contains($fileClosed, 'settings'));
+$ma->spaces()->setHub(0, false, true);
+$fileOpen = $ma->tools->execute('asset_publish_file', ['file' => $pfid2, 'title' => 'Second chart']);
+check('store: with the grant, asset_publish_file sends the image for review', str_contains($fileOpen, 'for review'));
+$ma->spaces()->setHub(0, false, false);
+$ast->withdraw('asset-' . substr(sha1('second chart'), 0, 16));
+$ma->library()->purgeFile((int)$bdoc['id']); $ma->library()->purgeFile($pfid); $ma->library()->purgeFile($pfid2);
 $faqMd = (string)file_get_contents(__DIR__ . '/../docs/faq/English/Connectors/Connector list.md');
 $fc = \Talixio\Catalog::faqConnectors($faqMd); $byName = array_column($fc, null, 'name');
 $added = $cat->addFaq($faqMd, true); $again = $cat->addFaq($faqMd);

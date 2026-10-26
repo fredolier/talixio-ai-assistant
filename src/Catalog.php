@@ -115,6 +115,50 @@ final class Catalog
             'category' => $cat, 'body' => $body];
     }
 
+    public const ASSET_BLOB_MAX = 2_000_000; // a binary asset (a brand chart, a logo): 2 MB at most
+    private const ASSET_MIMES = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/gif' => 'gif', 'image/webp' => 'webp']; // raster images only (no SVG: it can carry script)
+
+    /**
+     * A binary knowledge asset: an image (a brand chart, a logo…) a person contributes so everyone can reuse it. The
+     * bytes travel as base64 in the package and are written to the blob store on publish; the catalogue keeps only a
+     * reference. A locked/Secret document never reaches here (the leakage guard is enforced before submit).
+     */
+    public static function cleanAssetFile(array $pkg): array
+    {
+        $name = trim(preg_replace('/\s+/', ' ', (string)($pkg['name'] ?? '')));
+        if ($name === '' || mb_strlen($name) > 120) throw new \InvalidArgumentException('an asset needs a title (120 characters at most)');
+        $mime = strtolower(trim((string)($pkg['mime'] ?? '')));
+        if (!isset(self::ASSET_MIMES[$mime])) throw new \InvalidArgumentException('a binary asset must be a PNG, JPEG, GIF or WebP image');
+        $data = (string)($pkg['data'] ?? '');
+        $bytes = base64_decode($data, true);
+        if ($bytes === false || $bytes === '') throw new \InvalidArgumentException('the image is empty or not valid base64');
+        if (strlen($bytes) > self::ASSET_BLOB_MAX) throw new \InvalidArgumentException('the image is too large (2 MB at most)');
+        $cat = preg_replace('/[^a-z]+/', '', strtolower((string)($pkg['category'] ?? 'other')));
+        if (!in_array($cat, ['spec', 'template', 'policy', 'faq', 'note', 'other'], true)) $cat = 'other';
+        $fn = Library::cleanName((string)($pkg['filename'] ?? $name)); $ext = self::ASSET_MIMES[$mime];
+        if (!preg_match('/\.' . $ext . '$/i', $fn)) $fn = preg_replace('/\.[A-Za-z0-9]{1,5}$/', '', $fn) . '.' . $ext;
+        return ['name' => $name, 'description' => mb_substr(trim(preg_replace('/\s+/', ' ', (string)($pkg['description'] ?? ''))), 0, 300) ?: 'A shared image asset',
+            'category' => $cat, 'mime' => $mime, 'filename' => $fn, 'size' => strlen($bytes), 'data' => base64_encode($bytes)];
+    }
+
+    private function blobDir(): string { return "$this->dir/blobs"; }
+
+    /** Writes bytes to the content-addressed blob store (deduplicated). @return string the blob's id (its sha1). */
+    public function putBlob(string $bytes): string
+    {
+        $hash = sha1($bytes);
+        $f = $this->blobDir() . "/$hash";
+        if (!is_file($f)) { @mkdir($this->blobDir(), 0755, true); file_put_contents("$f.tmp", $bytes); chmod("$f.tmp", 0644); rename("$f.tmp", $f); }
+        return $hash;
+    }
+
+    /** The path of a published blob (an image asset's bytes), beside the catalogue; null when it is missing. */
+    public function blobPath(string $hash): ?string
+    {
+        $f = $this->blobDir() . '/' . preg_replace('/[^0-9a-f]/', '', strtolower($hash));
+        return is_file($f) ? $f : null;
+    }
+
     /** A connector: its name, what it does, and how to install it (a GitHub repository, or an https address and header names). */
     public static function cleanConnector(array $r): array
     {
@@ -144,7 +188,12 @@ final class Catalog
             if (isset($s['subs'][$id])) continue;
             foreach ($s['subs'] as $k => $x) if ($x['instance'] === $instance && $x['key'] === $key && $x['status'] === 'pending') unset($s['subs'][$k]);
             try {
-                $clean = match ($kind) { 'app' => self::cleanApp((array)($it['package'] ?? [])), 'role' => self::cleanRole((array)($it['package'] ?? [])), 'asset' => self::cleanAsset((array)($it['package'] ?? [])), default => self::cleanConnector((array)($it['recipe'] ?? [])) };
+                $clean = match ($kind) {
+                    'app' => self::cleanApp((array)($it['package'] ?? [])),
+                    'role' => self::cleanRole((array)($it['package'] ?? [])),
+                    'asset' => isset($it['package']['data']) ? self::cleanAssetFile((array)($it['package'] ?? [])) : self::cleanAsset((array)($it['package'] ?? [])),
+                    default => self::cleanConnector((array)($it['recipe'] ?? [])),
+                };
                 $error = null;
             } catch (\InvalidArgumentException $e) { $clean = null; $error = $e->getMessage(); }
             $raw = (array)($it['package'] ?? $it['recipe'] ?? []);
@@ -187,6 +236,10 @@ final class Catalog
     private function publish(string $kind, array $item, ?string $replace = null, ?array $by = null): string
     {
         $c = $this->read(); $list = ['app' => 'apps', 'connector' => 'connectors', 'role' => 'roles', 'asset' => 'assets'][$kind];
+        if ($kind === 'asset' && isset($item['data'])) { // a binary asset: its bytes go to the blob store, the catalogue keeps a reference
+            $item['blob'] = $this->putBlob((string)base64_decode((string)$item['data'], true));
+            unset($item['data']);
+        }
         $entry = $kind === 'app'
             ? ['name' => $item['name'], 'description' => $item['description'], 'icon' => $item['icon'], 'connectors' => array_keys($item['connectors']), 'package' => $item]
             : $item;
@@ -205,7 +258,7 @@ final class Catalog
     /** Added by the admin: published at once. */
     public function add(string $kind, array $data): string
     {
-        return $this->publish($kind, match ($kind) { 'app' => self::cleanApp($data), 'role' => self::cleanRole($data), 'asset' => self::cleanAsset($data), default => self::cleanConnector($data) });
+        return $this->publish($kind, match ($kind) { 'app' => self::cleanApp($data), 'role' => self::cleanRole($data), 'asset' => isset($data['data']) ? self::cleanAssetFile($data) : self::cleanAsset($data), default => self::cleanConnector($data) });
     }
 
     /**

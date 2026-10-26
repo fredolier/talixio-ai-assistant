@@ -415,6 +415,7 @@ final class Web
             (bool)preg_match('#^/api/files/(\d+)/versions$#', $path, $mm) => ['versions' => $this->app->files()->versions((int)($this->app->files()->get((int)$mm[1]) ?? $this->fail(404, 'not found'))['id'])],
             (bool)preg_match('#^/api/files/(\d+)/versions/(\d+)/restore$#', $path, $mm) && $m === 'POST' => ['file' => $this->fileInfo($this->app->files()->restoreVersion((int)$mm[1], (int)$mm[2]))],
             (bool)preg_match('#^/api/files/(\d+)/as-script$#', $path, $mm) && $m === 'POST' => $this->fileAsScript((int)$mm[1]),
+            (bool)preg_match('#^/api/files/(\d+)/contribute$#', $path, $mm) && $m === 'POST' => $this->fileContribute((int)$mm[1], $b),
             (bool)preg_match('#^/api/files/(\d+)/file-it$#', $path, $mm) && $m === 'POST' => ['file' => $this->fileInfo((new Filing($this->app))->apply((int)$mm[1],
                 isset($b['folder']) ? (string)$b['folder'] : null, isset($b['name']) ? (string)$b['name'] : null))],
             (bool)preg_match('#^/api/files/(\d+)/dismiss$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { (new Filing($this->app))->dismiss((int)$mm[1]); return ['ok' => true]; })(),
@@ -1081,6 +1082,32 @@ final class Web
         try { $name = $this->app->scripts()->import($content, preg_replace('/\.py$/i', '', $f['name']), true); }
         catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
         return ['name' => $name, 'replaced' => in_array($name, $before, true), 'enabled' => $this->app->shell()->enabled()];
+    }
+
+    /**
+     * The one-click "Share to the company knowledge base" action: send a library file up for review. Enforces the same
+     * two gates as the chat tools — the space's privacy level (a confidential/secret space cannot publish outward) and
+     * the per-space contribute grant — then submits the image or the text as a knowledge asset.
+     */
+    private function fileContribute(int $id, array $b): array
+    {
+        $store = new AppStore($this->app);
+        if (!$store->available()) $this->fail(400, 'This assistant has no company knowledge base.');
+        if ($this->app->privacy()->effective() !== 'internal') $this->fail(403, 'This space is confidential or secret, so it cannot share to the company knowledge base.');
+        if (!($this->app->spaces()->hubGrants((int)$this->app->space)['contribute'] ?? false)) $this->fail(403, 'This space may not contribute to the company knowledge base. An admin turns the grant on in this space\'s settings.');
+        $f = $this->app->files()->get($id) ?? $this->fail(404, 'not found');
+        $title = trim((string)($b['title'] ?? '')); $note = (string)($b['note'] ?? '');
+        try {
+            if (($f['kind'] ?? '') === 'image') {
+                $r = $store->submitAssetFile($id, $title, $note);
+            } else {
+                $text = $this->app->files()->text($id);
+                if (trim($text) === '') $this->fail(400, 'This file has no text to share.');
+                $cat = (string)($b['category'] ?? 'note');
+                $r = $store->submitAsset($title !== '' ? $title : (string)preg_replace('/\.[^.]+$/', '', (string)$f['name']), $text, $cat, $note);
+            }
+        } catch (\InvalidArgumentException | \RuntimeException $e) { $this->fail(400, $e->getMessage()); }
+        return ['ok' => true, 'name' => $r['name']];
     }
 
     /** Several files at once (from a name search): move them to a folder, or send them to the trash. */

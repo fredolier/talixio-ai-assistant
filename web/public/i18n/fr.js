@@ -641,6 +641,8 @@ window.I18N.fr = {
 "Install shared assets from the company knowledge base": "Installer les ressources partagées de la base de connaissances de l'entreprise",
 "Contribute assets from this space for review": "Proposer des ressources de cet espace à la validation",
 "Off by default. Only the spaces you turn on reach the shared knowledge base.": "Désactivé par défaut. Seuls les espaces que vous activez accèdent à la base de connaissances partagée.",
+"Share to the company knowledge base": "Partager à la base de connaissances de l'entreprise",
+"Sent “{name}” to the company knowledge base for review.": "« {name} » envoyé à la base de connaissances de l'entreprise pour validation.",
 "Interface language": "Langue de l'interface",
 "Internet access in the sandbox": "Accès à Internet dans le bac à sable",
 "invalid identifier": "identifiant invalide",

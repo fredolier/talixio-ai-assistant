@@ -87,6 +87,25 @@ final class AppStore
         return $this->put(['key' => $key, 'kind' => 'asset', 'name' => $pkg['name'], 'package' => $pkg, 'space' => $space, 'note' => mb_substr(trim($note), 0, 500), 'at' => time(), 'status' => 'sent']);
     }
 
+    /**
+     * A binary knowledge asset sent for review: an image from the library (a brand chart, a logo). Its bytes travel in
+     * the package and reach the blob store on approval. The leakage guard runs before this (a locked/Secret space never
+     * gets here). $title defaults to the file name; re-sending the same title supersedes that contributor's version.
+     */
+    public function submitAssetFile(int $fileId, string $title = '', string $note = ''): array
+    {
+        $f = $this->app->files()->get($fileId) ?? throw new \InvalidArgumentException('No such file.');
+        if (($f['kind'] ?? '') !== 'image') throw new \InvalidArgumentException('Only an image can be shared as a binary asset for now.');
+        $path = (string)$f['path'];
+        if (!is_file($path)) throw new \InvalidArgumentException('The file content is missing.');
+        if (filesize($path) > Catalog::ASSET_BLOB_MAX) throw new \InvalidArgumentException('The image is too large (2 MB at most).');
+        $title = trim($title) !== '' ? trim($title) : (string)preg_replace('/\.[^.]+$/', '', (string)$f['name']);
+        $pkg = Catalog::cleanAssetFile(['name' => $title, 'mime' => (string)$f['mime'], 'filename' => (string)$f['name'], 'category' => 'other', 'data' => base64_encode((string)file_get_contents($path))]);
+        $key = 'asset-' . substr(sha1(mb_strtolower($pkg['name'])), 0, 16);
+        $space = (string)($this->app->spaces()->get((int)($this->app->space ?? 0))['name'] ?? '');
+        return $this->put(['key' => $key, 'kind' => 'asset', 'name' => $pkg['name'], 'package' => $pkg, 'space' => $space, 'note' => mb_substr(trim($note), 0, 500), 'at' => time(), 'status' => 'sent']);
+    }
+
     public function withdraw(string $key): void
     {
         if (preg_match('/^(app|mcp|role|asset)-[\w-]{1,60}$/', $key)) @unlink($this->outDir() . "/$key.json");
@@ -197,7 +216,7 @@ final class AppStore
 
     public const ASSET_FOLDER = '/Company KB';
 
-    /** Install a shared asset into the library (or bring the installed copy to the store's version). Saved as a note. */
+    /** Install a shared asset into the library (or bring the installed copy to the store's version). A text asset is a note; a binary one (an image) is saved as the file. */
     public function installAsset(string $id): array
     {
         $a = current(array_filter($this->catalog()['assets'], fn($x) => $x['id'] === $id)) ?: throw new \InvalidArgumentException('Not in the store (any more).');
@@ -206,7 +225,17 @@ final class AppStore
         $state = $this->assetState();
         $fid = isset($state[$id]['id']) ? (int)$state[$id]['id'] : null;
         if ($fid !== null && !$this->app->files()->get($fid)) $fid = null; // deleted since: install fresh
-        $doc = $lib->saveNote(self::ASSET_FOLDER, (string)$a['name'] . '.md', (string)($a['body'] ?? ''), $fid);
+        if (isset($a['blob'])) { // a binary asset: its bytes live in the blob store beside the catalogue
+            $src = self::dir() . '/blobs/' . preg_replace('/[^0-9a-f]/', '', strtolower((string)$a['blob']));
+            if (!is_file($src)) throw new \InvalidArgumentException('The shared image is missing from the store.');
+            $tmp = (string)tempnam(sys_get_temp_dir(), 'kbasset');
+            copy($src, $tmp);
+            if ($fid !== null) { $this->app->files()->replace($fid, $tmp, (string)($a['mime'] ?? '')); }
+            else { $fid = $this->app->files()->save($tmp, (string)($a['filename'] ?? $a['name']), (string)($a['mime'] ?? ''), self::ASSET_FOLDER); }
+            $doc = $this->app->files()->get($fid);
+        } else {
+            $doc = $lib->saveNote(self::ASSET_FOLDER, (string)$a['name'] . '.md', (string)($a['body'] ?? ''), $fid);
+        }
         $state[$id] = ['id' => (int)$doc['id'], 'version' => (int)($a['version'] ?? 1)];
         $this->saveAssetState($state);
         return $doc;

@@ -3534,6 +3534,15 @@ document.addEventListener('click', e => {
   installFromLink(q.get('connector'), q.get('name'), (q.get('headers') || '').split(',').filter(Boolean)).catch(err => toast(err.message));
 });
 $('#viewer-connector').onclick = () => connectorDialog(lib.file.id).catch(e => toast(e.message));
+$('#viewer-contribute').onclick = async () => {
+  const b = $('#viewer-contribute'); b.disabled = true;
+  try {
+    const r = await post(`api/files/${lib.file.id}/contribute`, {});
+    moreActions(false);
+    toast(t('Sent “{name}” to the company knowledge base for review.', { name: r.name }));
+  } catch (e) { toast(e.message); }
+  b.disabled = false;
+};
 $('#viewer-script').onclick = async () => {
   const b = $('#viewer-script'); b.disabled = true;
   try {
@@ -4448,6 +4457,7 @@ async function openFile(id, opts = {}) {
   for (const b of ['#viewer-rename', '#viewer-move', '#viewer-reindex', '#viewer-delete']) $(b).hidden = ro;
   $('#viewer-connector').hidden = !/\.zip$/i.test(lib.file?.name || '');
   $('#viewer-script').hidden = !/\.py$/i.test(lib.file?.name || '');
+  $('#viewer-contribute').hidden = !(state.status?.fleet && spaceOf(state.space)?.hub_contribute && (f.kind === 'image' || f.note || f.kind === 'text'));
   const editable = !ro && f.note || !ro && (f.kind === 'text' && f.size < 2_000_000 && !/\.(html?|eml)$/i.test(f.name));
   const hasText = !editable && (f.kind === 'office' || f.kind === 'pdf' || /\.(html?|eml)$/i.test(f.name)) && d.text && !/^\(No text found/.test(d.text);
   const paged = officePages || (f.kind === 'pdf' && d.pages);

@@ -325,6 +325,11 @@ async function loadAudit() {
 /** What a submission or published app holds, to read before deciding: everything escaped, nothing runs here. */
 function storeDetails(kind, it) {
   if (!it) return '';
+  if (kind === 'asset' && it.mime && it.data) { // a binary asset waiting for review: show the image, not its base64
+    const copy = { ...it }; delete copy.data;
+    return `<img class="asset-preview" src="data:${esc(it.mime)};base64,${it.data.replace(/[^A-Za-z0-9+/=]/g, '')}" alt="${esc(it.filename || '')}" style="max-width:240px;max-height:240px;display:block;margin:.4rem 0;border-radius:6px">
+      <details><summary>${esc(t('Details'))}</summary><pre class="out">${esc(JSON.stringify(copy, null, 2))}</pre></details>`;
+  }
   if (kind !== 'app') return `<details><summary>${esc(t('Details'))}</summary><pre class="out">${esc(JSON.stringify(it, null, 2))}</pre></details>`;
   const src = (it.sources || []).map(x => `<li>${esc(x.name)} <span class="muted small">${esc(x.type)} ${esc(x.url || x.path || [x.server, x.tool].filter(Boolean).join(' → ') || x.folder || '')}</span></li>`).join('');
   const conn = Object.entries(it.connectors || {}).map(([n, r]) => `<li>${esc(n)} <span class="muted small">${esc(r.github || r.url || t('installed by hand'))}</span></li>`).join('');

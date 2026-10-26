@@ -275,9 +275,15 @@ its first slice is the small documented-surface piece, not the imagined board.*
    existing `sharedWrite` leakage guard; two checkboxes in the space editor, shown
    only in a fleet; and **provenance** (`by` = contributor name, instance and space)
    recorded on each published asset through collect/decide/publish and shown on the
-   admin store page. *Deferred to a follow-up in this slice:* binary/blob assets
-   (the brand-chart image) and the one-click library *Share* button — the
-   tool/endpoint path is the shipped surface.
+   admin store page. The two follow-up items — binary/blob assets (the
+   brand-chart image) and the one-click library *Share* button — **✅ shipped in
+   0.28.95:** a content-addressed, deduplicated blob store (`blobs/<sha1>`) beside
+   `catalog.json` holds image bytes (PNG/JPEG/GIF/WebP, ≤2 MB, no SVG) so the
+   catalogue keeps only a reference; bytes travel as base64 through the outbox and
+   review (the admin previews the image), `installAsset` writes the real file under
+   *Company KB*; the `asset_publish_file` tool and a library-viewer *Share to the
+   company knowledge base* button submit an image or the open document through the
+   same privacy guard and per-space grant as the chat tools.
 3. **Conductor, documented-surface slice.** What §5.1 actually allows: store the
    claude.ai-host prerequisite; **start** a cloud session (`claude --cloud`) and
    **send one-way follow-ups** (`claude -p --cloud <id>`) as tools; **fully manage
