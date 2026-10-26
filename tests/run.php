@@ -1270,6 +1270,67 @@ check('fleet: a confidential space is refused at the outbound choke point', str_
 check('fleet: disconnect forgets the binding', str_contains($con->disconnect(), 'disconnected') && !$con->connected());
 @unlink($app->cfg->dataDir . '/conductor.json');
 
+// ---- the messaging backbone (orchestration.md §3, Relay): address + durable mailbox + consent + budget envelope + loop guard ----
+$relay = $app->relay();
+$A = Talixio\Relay::addr('worker', 901); $B = Talixio\Relay::addr('director', 902);
+check('relay: address is a stable kind:id string', $A === 'worker:901' && $B === 'director:902');
+$threw = false; try { $relay->send($B, $A, 'hi'); } catch (\InvalidArgumentException $e) { $threw = str_contains($e->getMessage(), 'default closed'); }
+check('relay: consent is default-closed — no grant, no delivery', $threw && $relay->inbox($A, true, 10) === []);
+$relay->grant($A, $B, 'message'); // the recipient $A lets $B reach it
+check('relay: a grant is scoped and listable', $relay->allowed($A, $B, 'message') && !$relay->allowed($A, $B, 'other') && $relay->grants($A) === [['peer' => $B, 'scope' => 'message']]);
+$m1 = $relay->send($B, $A, 'first message');
+check('relay: a granted message lands in the durable mailbox', $m1 > 0 && count($relay->inbox($A, true, 10)) === 1 && $relay->inbox($A, true, 10)[0]['body'] === 'first message');
+$pulled = $relay->pull($A);
+check('relay: pull drains deliver-once', count($pulled) === 1 && $relay->inbox($A, true, 10) === [] && count($relay->inbox($A, false, 10)) === 1);
+$threw = false; try { $relay->send($B, $A, 'greedy', ['parentBudget' => 1.0, 'budget' => 2.0]); } catch (\InvalidArgumentException $e) { $threw = str_contains($e->getMessage(), 'only shrink'); }
+check('relay: a budget envelope may only shrink downstream', $threw);
+check('relay: a shrinking budget is allowed and recorded', (function () use ($relay, $B, $A) {
+    $id = $relay->send($B, $A, 'thrifty', ['parentBudget' => 1.0, 'budget' => 0.4]);
+    $row = $relay->inbox($A, false, 1, false)[0];
+    return $id > 0 && abs(($row['envelope']['budget'] ?? -1) - 0.4) < 1e-9;
+})());
+$threw = false; try { $relay->send($B, $A, 'loop', ['path' => [$A]]); } catch (\InvalidArgumentException $e) { $threw = str_contains($e->getMessage(), 'loop guard'); }
+check('relay: the loop guard refuses a cycle', $threw);
+$threw = false; try { $relay->send($B, $A, 'too deep', ['depth' => 0]); } catch (\InvalidArgumentException $e) { $threw = str_contains($e->getMessage(), 'depth limit'); }
+check('relay: the loop guard refuses past the depth limit', $threw);
+check('relay: depth decrements across a hop', $relay->inbox($A, false, 1, false)[0]['envelope']['depth'] === Talixio\Relay::MAX_DEPTH - 1);
+check('relay: render prefixes the untrusted-input banner', str_contains($relay->render($relay->inbox($A, false, 2)), Talixio\Relay::UNTRUSTED) && $relay->render([]) === 'no messages.');
+check('relay: revokeInvolving tears down both sides', $relay->revokeInvolving($A) >= 1 && !$relay->allowed($A, $B, 'message'));
+$s->q('DELETE FROM relay_messages'); $s->q('DELETE FROM relay_grants');
+
+// ---- the backbone's first proof: the in-assistant worker mailbox (director ↔ a running worker) ----
+$app->tools->run('role_save', ['name' => 'mb-worker', 'purpose' => 'A task that may need a decision', 'content' => 'Do the task; ask if blocked.', 'tier' => 'fast']);
+$app->providerOverride = $fake;
+$fake->script = fn($last) => 'done';
+$app->tools->run('direct', ['goal' => 'A directive with a mailbox', 'title' => 'Mailbox proof', 'workers' => [['role' => 'mb-worker', 'task' => 'do the thing']]]);
+$mdid = (int)$s->q('SELECT MAX(id) FROM directives')->fetchColumn();
+$mw = $s->directiveWorkers($mdid)[0]; $mwjid = (int)$mw['id'];
+$wAddr = Talixio\Relay::addr('worker', $mwjid); $dAddr = Talixio\Relay::addr('director', $mdid);
+check('proof: opening a directive grants the worker↔director team mailbox', $relay->allowed($wAddr, $dAddr, 'tell') && $relay->allowed($dAddr, $wAddr, 'ask'));
+// the worker asks the director a question (runs inside the worker job context)
+$beforeN = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn();
+$app->jobId = $mwjid;
+$asked = $app->tools->run('ask_director', ['question' => 'Which region should I target?']);
+$app->jobId = null;
+check('proof: a worker asks the director, and the question is surfaced to the user',
+    str_contains($asked, 'asked the director') && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeN + 1);
+check('proof: the director sees the question in its inbox', str_contains($app->tools->run('directive_inbox', ['id' => $mdid]), 'Which region should I target?') && str_contains($app->tools->run('directive_inbox', []), 'Which region'));
+// the director answers; the worker pulls it, banner-wrapped, deliver-once
+$told = $app->tools->run('directive_tell', ['job' => $mwjid, 'message' => 'Target the EU.']);
+check('proof: the director reaches the running worker', str_contains($told, "sent to worker #$mwjid"));
+$app->jobId = $mwjid;
+$inbox1 = $app->tools->run('check_inbox', []);
+$inbox2 = $app->tools->run('check_inbox', []);
+$app->jobId = null;
+check('proof: the worker reads the answer once, wrapped as untrusted data',
+    str_contains($inbox1, 'Target the EU.') && str_contains($inbox1, Talixio\Relay::UNTRUSTED) && str_contains($inbox2, 'no messages'));
+check('proof: ask_director refuses outside a worker job', str_contains($app->tools->run('ask_director', ['question' => 'x']), 'not running as a worker'));
+// finishing the directive dissolves the team mailbox
+foreach ($s->directiveWorkers($mdid) as $w) $app->jobs()->runJob((int)$w['id']);
+check('proof: finalising the directive dissolves the team mailbox', !$relay->allowed($wAddr, $dAddr, 'tell') && !$relay->allowed($dAddr, $wAddr, 'ask'));
+$sk->delete('mb-worker');
+$s->q('DELETE FROM relay_messages'); $s->q('DELETE FROM relay_grants');
+
 // ---- the assessor's live A/B: promote a role improvement only if it wins on the golden cases ----
 $app->tools->run('role_save', ['name' => 'summ-x', 'purpose' => 'Summarise a document', 'content' => 'Write a summary.', 'tier' => 'fast']);
 check('improve: an A/B needs golden cases first', str_contains($app->tools->run('role_improve', ['role' => 'summ-x', 'content' => 'Better: 3 bullet points.']), 'no golden cases'));

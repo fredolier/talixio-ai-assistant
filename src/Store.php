@@ -143,6 +143,13 @@ final class Store
             CREATE TABLE IF NOT EXISTS directives(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, title TEXT NOT NULL, goal TEXT NOT NULL DEFAULT \'\',
                 priority INTEGER NOT NULL DEFAULT 2, space INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT \'running\',
                 result TEXT, cost_usd REAL NOT NULL DEFAULT 0, finished INTEGER);');
+        // the inter-agent messaging backbone (orchestration.md §3, Relay): a durable, append-only mailbox per address,
+        // reachable only through a scoped, revocable grant (default closed), carrying a budget envelope + loop guard.
+        $this->db->exec('CREATE TABLE IF NOT EXISTS relay_messages(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, sender TEXT NOT NULL, recipient TEXT NOT NULL,
+                scope TEXT NOT NULL DEFAULT \'message\', body TEXT NOT NULL, envelope TEXT NOT NULL DEFAULT \'{}\', space INTEGER NOT NULL DEFAULT 0, delivered INTEGER);
+            CREATE INDEX IF NOT EXISTS relay_messages_box ON relay_messages(recipient, id);
+            CREATE TABLE IF NOT EXISTS relay_grants(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, owner TEXT NOT NULL, peer TEXT NOT NULL,
+                scope TEXT NOT NULL, UNIQUE(owner, peer, scope));');
         if ($this->get('briefing_v2') === '') { // the morning briefing becomes 5 rated lines; keep what the user added ("Also: …")
             foreach ($this->q("SELECT id, prompt FROM tasks WHERE title = 'Morning briefing' AND job IS NULL")->fetchAll() as $t) {
                 $i = strpos((string)$t['prompt'], "\nAlso: ");

@@ -47,6 +47,7 @@ final class Conductor
         $cwd = $this->app->cfg->dataDir . "/conductor/$jid";
         $handle = $this->cli->start($prompt, $this->app->cfg->tier($p['tier']), $cwd);
         $this->app->store->updateJob($jid, ['status' => 'running', 'started' => time(), 'session' => $handle]);
+        $this->app->director()->grantTeam($did); // same team mailbox as an in-process worker (orchestration.md §3)
 
         return "code session #$jid started: role **{$p['role']}** ({$p['tier']}) on directive #$did. It runs in the background; "
             . "I'll report when it finishes. Track it with directive_status $did.";

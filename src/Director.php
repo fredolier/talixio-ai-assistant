@@ -41,8 +41,33 @@ final class Director
             $this->app->store->addJob("{$p['role']}: " . mb_substr($p['task'] ?: $title, 0, 50), $instructions, $p['tier'], $cap, 'worker',
                 null, (int)$this->app->space, [], '', null, '', $did, $p['role']);
         }
+        $this->grantTeam($did);
         return sprintf("directive #%d \"%s\" opened (P%d) with %d worker(s): %s. They run in the background; I'll report when they're done. Track it with directive_status.",
             $did, $this->app->store->directive($did)['title'], max(1, min(3, $priority)), count($plans), implode(', ', array_column($plans, 'role')));
+    }
+
+    /**
+     * Open the team's mailbox (orchestration.md §3, Relay): the director may *tell* each worker, and each worker may
+     * *ask* the director. Scoped (two capabilities, not ambient reachability), default-closed otherwise, and dissolved
+     * at finalisation. Shared by the in-process director and the Tier-D conductor so both teams are reachable the same way.
+     */
+    public function grantTeam(int $did): void
+    {
+        $relay = $this->app->relay();
+        $dir = Relay::addr('director', $did);
+        foreach ($this->app->store->directiveWorkers($did) as $w) {
+            $wk = Relay::addr('worker', (int)$w['id']);
+            $relay->grant($wk, $dir, 'tell');  // the worker lets the director reach it
+            $relay->grant($dir, $wk, 'ask');   // the director lets the worker ask it a question
+        }
+    }
+
+    /** Revoke every grant that reached into this directive's team — no mailbox outlives the work it served. */
+    public function dissolveTeam(int $did): void
+    {
+        $relay = $this->app->relay();
+        $relay->revokeInvolving(Relay::addr('director', $did));
+        foreach ($this->app->store->directiveWorkers($did) as $w) $relay->revokeInvolving(Relay::addr('worker', (int)$w['id']));
     }
 
     /**
@@ -103,6 +128,7 @@ final class Director
         $done = array_sum(array_map(fn($w) => (int)($w['status'] === 'done'), $workers));
         $aggregate = "Directive \"{$d['title']}\" — goal: {$d['goal']}\n\n$done/" . count($workers) . " workers succeeded.\n\n" . implode("\n\n", $parts);
         $this->app->store->updateDirective($did, ['status' => 'done', 'result' => $aggregate, 'cost_usd' => $cost, 'finished' => time()]);
+        $this->dissolveTeam($did); // the team's mailbox does not outlive the directive
         $this->app->jobId = null; // relaying is the chat's work
         $how = 'A directive (a team of workers) has finished. Relay the combined result to the user concisely, say what each role produced and flag anything that needs their decision; '
             . 'then ask whether it met the bar — if they accept or reject it, call directive_rate so the roles learn from it.';
@@ -172,6 +198,7 @@ final class Director
         if ($action === 'cancel') {
             foreach ($this->app->store->directiveWorkers($did) as $w) if (in_array($w['status'], ['queued', 'running'], true)) $this->app->jobs()->cancel((int)$w['id']);
             $this->app->store->updateDirective($did, ['status' => 'cancelled', 'finished' => time()]);
+            $this->dissolveTeam($did);
             return "directive #$did cancelled; its unfinished workers were stopped.";
         }
         return "error: action must be 'prioritize' or 'cancel'.";

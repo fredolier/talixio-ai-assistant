@@ -412,10 +412,16 @@ its first slice is the small documented-surface piece, not the imagined board.*
      has gone quiet); `fleet_disconnect` forgets the binding. The webhook URL and inbox
      secret live 0600 in `conductor.json`, are never returned by any API after pairing,
      and are never logged.
-5. **The messaging backbone, generalised.** Address + durable mailbox + consent +
-   budget envelope + loop guard, as one service both adapters sit on; in-assistant
-   worker mailbox (reach a running worker, worker→director question) as its proof.
-   *Medium.*
+5. **The messaging backbone, generalised. ✅ shipped in 0.28.98.** Address +
+   durable mailbox + consent + budget envelope + loop guard, as one service
+   (`Relay`) both adapters sit on, enforcing all five invariants in one place so no
+   caller can skip one (default-closed consent via `relay_grants`; a budget that may
+   only shrink downstream; a decrementing depth and travelled-path cycle guard;
+   `render()`'s untrusted-input banner over an engine that never executes). Proven by
+   its first rider, the **in-assistant worker mailbox**: a directive's open grants the
+   worker↔director team their scoped mailbox and finalising/cancelling dissolves it; a
+   running worker uses `ask_director` (surfaced to the user) and `check_inbox`, the
+   director uses `directive_inbox`/`directive_tell`. *Medium.*
 6. **Live hub reach — ask the corporate brain.** Request/response channel to the
    hub assistant; hub runs a Company-KB-scoped RAG turn and answers. Opens the
    first consented instance-to-instance edge; gated behind 1 + 2 + 5. *Large.*

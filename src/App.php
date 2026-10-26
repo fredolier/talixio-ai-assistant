@@ -122,6 +122,7 @@ final class App
     public function skills(): Skills { return new Skills($this); }
     public function assessor(): Assessor { return new Assessor($this); }
     public function director(): Director { return new Director($this); }
+    public function relay(): Relay { return new Relay($this); }
     public function claudeCli(): ClaudeCli { return $this->claudeCliOverride ?? new ShellClaudeCli($this->cfg->claudeBin, $this->cfg->dataDir . '/conductor/logs', $this->cfg->claudeToken); }
     public function conductor(): Conductor { return new Conductor($this, $this->claudeCli()); }
     public function mind(): Mind { return new Mind($this); }
