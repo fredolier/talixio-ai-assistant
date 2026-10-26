@@ -181,13 +181,48 @@ Given 5.1, Talixio cannot be a pure external API client. Two buildable shapes:
   overview of cloud sessions across other machines, or read their replies (those
   live at claude.ai/code). Overview would need a tiny reporter on each machine.
 - **B — delegated conductor (fuller, recommended).** Talixio runs/drives a Claude
-  **"manager" session** — ideally a *local background* session on Talixio's own
-  host, so its transcript is readable via `claude agents --json` / `claude logs` /
-  the Agent SDK. That manager session, being a real connected Claude session,
-  natively reaches the user's peers through Remote Control (`ListAgents` /
-  `SendMessage`). Talixio is the brain and the UI; the Claude session is the hands
-  that touch the fabric. Talixio closes the loop by reading the manager session's
-  **local** transcript — all documented mechanisms.
+  **"manager" / orchestrator session** — a real connected Claude session, so it
+  natively holds the in-session fabric (`ListAgents` / `SendMessage`, and the
+  `claude-code-remote` tools: `list_sessions` across the whole account,
+  `get_session`, `list_events`, `send_message`, `create_session`). Talixio is the
+  brain and the UI; the Claude session is the hands that touch the fabric. Two
+  sub-shapes, by where that session runs and how its transcript is read back:
+  - **B-local.** A *local background* session on Talixio's host; Talixio reads its
+    transcript directly via `claude agents --json` / `claude logs` / the Agent SDK.
+    Simplest readback; reach limited to what Remote Control exposes on that host.
+  - **B-cloud (the "B+C" shape).** A *cloud* CCR orchestrator session — the one
+    kind that can `list_sessions` the user's **whole account fleet across
+    machines**, which §5.1 confirms is unavailable to any outside app. Because a
+    cloud session's replies aren't returned to a dispatcher (§5.1), the readback
+    gap is closed by **inverting the flow**: the orchestrator *actively reports in*
+    rather than Talixio polling an API that doesn't exist. The bridge is narrow and
+    credential-light, entirely inside the Talixio container:
+    - **Inbound (Talixio → orchestrator):** the orchestrator mints an inbound
+      webhook for *itself* with `watch_url` — a URL plus a **sealed** credential
+      (encrypted to the service; Talixio can neither read it nor use it for
+      anything but delivering a payload into that one session). It hands the URL to
+      Talixio once; Talixio POSTs the (KB-grounded) instruction there to wake it on
+      demand. **No account-wide token ever lives in the Talixio container.**
+    - **Outbound (orchestrator → Talixio):** an authenticated POST to a small
+      Talixio endpoint (`/api/conductor/inbox`), surfaced in chat and the
+      notifications inbox.
+    - **The monitor loop:** the orchestrator keeps itself warm with its own
+      `create_trigger` / `send_later` heartbeat; each tick it polls `get_session` /
+      `list_sessions`, reads results with `list_events`, and re-dispatches —
+      tick-based (minutes), not a continuous daemon. Clean completions are
+      discovered by polling; failures/restarts arrive as pushed
+      `<child-session-event>` turns (best-effort → re-verify with a poll).
+    - **KB grounding at one choke point:** Talixio retrieves the relevant
+      library/hub context and includes it in the instruction *before* it POSTs to
+      the webhook, so the orchestrator never touches raw KB and the **privacy guard
+      (`sharedWrite` + space level) runs at exactly one place** — the outbound
+      hand-off, inside Talixio where it is enforceable.
+    - **Liveness / bootstrap (the one part that isn't credential-free):** a webhook
+      delivers into an *existing* session; it cannot resurrect one whose heartbeat
+      lapsed. So the orchestrator is **created once** (from a session that has the
+      account credential, or a minimal stored create-capability), and Talixio runs
+      a **liveness check** (no heartbeat / failing POSTs → alert or revive). Steady
+      state is credential-free; only (re)creation is not.
 
 **Prerequisites/limits either way:** a claude.ai-authenticated host (not API key),
 `allow_remote_sessions`, and the standing fact that cloud replies aren't returned
@@ -199,6 +234,49 @@ A session's output (transcripts, summaries, proposed actions) is **untrusted
 input** per §3 — the conductor surfaces and summarises it, but a session asking
 to spend, deploy, or delete never auto-executes on the orchestrator's side.
 Dispatch to a session carries a budget envelope (§3).
+
+### 5.4 The conductor is the agent factory's fleet tier (not a second system)
+
+The conductor is **not** a parallel to the director in `agent-factory.md`; it is
+that director's **"teams of teams"** extension, which §11.6 of that spec already
+anticipated ("grown into its own spec, `orchestration.md`"). Everything maps onto
+concepts that already exist — one supervisor, one registry, one board, one budget:
+
+- **A delegated Claude Code session is a new worker *environment* — Tier D** in
+  the agent-factory §7 ladder (A headless web, B sandboxed shell — both built;
+  C disposable desktop — later; **D delegated Claude Code session — the fleet**).
+  A worker that needs a real codebase, git, shell and the full Claude Code toolset
+  for hours runs as a Tier-D session instead of an in-process job. A role
+  **declares** it needs that environment and the user approves it — the same
+  "a role never has more power than its declaration" model, no second trust model.
+- **The orchestrator session is a *sub-director* (a role that spawns roles).** The
+  Talixio assistant is the top director (human chat, decomposition, KB, budget,
+  the privacy choke point); it delegates fleet management to the B-cloud
+  orchestrator session, which holds the native `claude-code-remote` tools. The
+  mailbox/webhook bridge (§5.2-B) is just the director↔sub-director channel across
+  the fleet trust boundary.
+- **Roles carry over — as job description + acceptance test, not tool grants.**
+  `role_find` before spawning (search-before-create); the role's **brief** seeds
+  the session's prompt, its **tier** picks the model, its **golden cases +
+  assessor (role #0)** judge the session's output with the same A/B promotion, so
+  code agents are measured and improved like any other role; `role_publish` /
+  `role_install` already share a code-agent role across the fleet. The one
+  non-transfer: a role's Talixio-internal `tools`/`skills` list becomes, for a
+  Tier-D role, the *declared environment* ("a Claude Code session on repo X with
+  git+shell"), approved the same way.
+- **One glass box, one envelope.** Tier-D workers appear on the **same Activity
+  board**, nested under their directive as worker cards (role · tier · status ·
+  step · cost) — their status just comes from `get_session`/`list_events` instead
+  of the jobs engine. Their token spend feeds the **same budget burn-down meter**.
+  No separate conductor UI, no separate budget.
+- **The hub is the worker blackboard.** The company knowledge base (§4, shipped)
+  doubles as cross-session memory: a worker publishes an output
+  (`asset_publish`/`asset_publish_file` → review → `asset_install`), another picks
+  it up — the content-addressed substrate already exists.
+
+What the conductor genuinely *adds* over the in-process director is therefore
+small and bounded: the **Tier-D environment**, the **cross-boundary bridge**, and
+the **long-running monitor loop** (§5.2-B). Everything else is reuse.
 
 ## 6. Security & the trust boundary
 
@@ -226,9 +304,11 @@ Dispatch to a session carries a budget envelope (§3).
   privacy level → goes to the hub outbox.
 - **Hub admin (curator).** The store review page, widened: a queue of submitted
   assets with provenance, approve/reject, version history.
-- **Project board (conductor).** One page: a card per session/project with status,
-  last activity, cost; click to read the latest transcript summary, dispatch an
-  instruction, reprioritise, or interrupt. The engineering-manager glance.
+- **Project board (conductor).** *Not a new page* — the existing **Activity board**
+  (agent-factory §8/§10), where a Tier-D code session is a worker card nested under
+  its directive: role · status · last activity · cost; click to read the latest
+  transcript summary, dispatch an instruction, reprioritise, or interrupt. The
+  engineering-manager glance, on the same glass box that shows in-assistant workers.
 
 ## 8. Reuse — build on what exists
 
@@ -241,8 +321,10 @@ Dispatch to a session carries a budget envelope (§3).
 | Index + RAG + "already have one like this?" | **`Embeddings` / `Meaning`** |
 | Leakage guard | **`Privacy`** (per-space levels + locks) |
 | Durable mailbox / audit | **`Store`** (+ a new `messages` table) |
-| Session orchestration | documented CLI surface only — `claude --cloud` (create), `claude -p --cloud <id>` (one-way follow-up), `claude agents --json` / `logs` / `--resume` (local bg); **no external list/read/message API** (§5.1) |
-| Running the conductor | `ClaudeCodeProvider` / the `claude` CLI already wired; a local-bg manager session (§5.2-B) |
+| Session orchestration | documented CLI surface only — `claude --cloud` (create), `claude -p --cloud <id>` (one-way follow-up), `claude agents --json` / `logs` / `--resume` (local bg); **no external list/read/message API** (§5.1). Whole-account fleet reach only from *inside* a Claude session (the B-cloud orchestrator's `claude-code-remote` tools) |
+| Running the conductor | `ClaudeCodeProvider` / the `claude` CLI already wired; a delegated orchestrator session (§5.2-B); inbound via its own `watch_url` webhook, outbound via a Talixio `/api/conductor/inbox` POST |
+| Director / roles / assessor / registry | **`agent-factory.md`** — the conductor is its **Tier-D** worker environment and the orchestrator is a **sub-director**; roles, golden-case A/B, `role_publish`/`role_install` all reused (§5.4) |
+| One board + one budget | the **Activity page + budget burn-down meter** (0.28.88/0.28.91) — Tier-D workers are cards nested under their directive, status from `get_session`/`list_events` |
 
 ## 9. Phased build (safe foundation first, trust-boundary edges gated)
 
@@ -289,10 +371,19 @@ its first slice is the small documented-surface piece, not the imagined board.*
    **send one-way follow-ups** (`claude -p --cloud <id>`) as tools; **fully manage
    local background sessions** on Talixio's host (`claude agents --json` → a board,
    `claude logs`, `--resume`). No cross-machine cloud overview yet. *Small–Medium.*
-4. **Conductor, delegated shape (§5.2-B).** Talixio runs a local-background Claude
-   *manager* session that reaches the user's peers via Remote Control; Talixio reads
-   that session's local transcript for status/results and relays dispatch. Closes
-   the loop with documented local-session reads. *Medium.*
+4. **Conductor, delegated shape (§5.2-B) = the agent factory's Tier-D worker.**
+   Talixio (top director) drives a delegated orchestrator session (sub-director)
+   that manages the fleet with its native `claude-code-remote` tools. Start with
+   **B-local** (local-bg manager, transcript read via `claude agents`/`logs`) for
+   the simplest readback, then **B-cloud** for whole-account reach: the orchestrator
+   mints its own `watch_url` webhook (sealed credential, no account token in the
+   Talixio container), Talixio POSTs KB-grounded instructions in and the orchestrator
+   POSTs status/results back to `/api/conductor/inbox`; the monitor loop is the
+   orchestrator's own `create_trigger` heartbeat (poll `get_session`/`list_events`,
+   re-dispatch). Tier-D workers render on the **existing Activity board + budget
+   meter**; roles seed/judge them (§5.4). Privacy guard fires at the single outbound
+   choke point. Plan for orchestrator **liveness/bootstrap** (create once with a
+   credential; revive on missed heartbeat). *Medium.*
 5. **The messaging backbone, generalised.** Address + durable mailbox + consent +
    budget envelope + loop guard, as one service both adapters sit on; in-assistant
    worker mailbox (reach a running worker, worker→director question) as its proof.
