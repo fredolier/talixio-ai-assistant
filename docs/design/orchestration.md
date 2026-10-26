@@ -278,6 +278,19 @@ What the conductor genuinely *adds* over the in-process director is therefore
 small and bounded: the **Tier-D environment**, the **cross-boundary bridge**, and
 the **long-running monitor loop** (§5.2-B). Everything else is reuse.
 
+**Role invariant (homogeneity, enforced in code).** *Every* agent in the system —
+the orchestrator/sub-director and every worker it spawns, in-process or Tier-D —
+is instantiated **from a role in the registry**, seeded from that role's brief,
+tiered by the role, and has its acceptance+cost recorded to the assessor per role.
+There is no second spawn path. Concretely, the conductor reuses the Director's
+own role-resolve + brief-seed step (`Director::plan` / `Director::seed`,
+`src/Director.php`) rather than re-implementing it, so the two cannot drift: an
+improvement to a role (golden-case A/B via `role_improve`, then `role_publish`
+to the fleet) reaches in-process and code-session instances alike. The sole
+cross-runtime non-transfer is a role's Talixio `tools`/`skills` list, which a
+Claude Code session cannot use; for a Tier-D role that field is read as the
+*declared environment* instead (repo + git/shell), approved the same way.
+
 ## 6. Security & the trust boundary
 
 - **The fleet wall stays the default.** `Fleet` isolates instances at the network

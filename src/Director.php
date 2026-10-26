@@ -32,27 +32,48 @@ final class Director
         $active = count($this->app->store->jobsWithStatus('queued')) + count($this->app->store->jobsWithStatus('running'));
         if ($active + count($workers) > $this->app->cfg->maxParallelJobs * 3) return "error: too many jobs already running ($active); wait for some to finish before opening this directive.";
 
+        $plans = $this->plan($workers);
+        if (is_string($plans)) return $plans;
+        $did = $this->app->store->addDirective(trim($title) ?: mb_substr($goal, 0, 60), trim($goal), max(1, min(3, $priority)), (int)$this->app->space);
+        $cap = $this->app->jobs()->cap(null);
+        foreach ($plans as $p) {
+            $instructions = self::seed($p['role'], $p['brief'], $goal, $p['task']);
+            $this->app->store->addJob("{$p['role']}: " . mb_substr($p['task'] ?: $title, 0, 50), $instructions, $p['tier'], $cap, 'worker',
+                null, (int)$this->app->space, [], '', null, '', $did, $p['role']);
+        }
+        return sprintf("directive #%d \"%s\" opened (P%d) with %d worker(s): %s. They run in the background; I'll report when they're done. Track it with directive_status.",
+            $did, $this->app->store->directive($did)['title'], max(1, min(3, $priority)), count($plans), implode(', ', array_column($plans, 'role')));
+    }
+
+    /**
+     * Resolve each worker to a plan: the role must exist in the registry, its brief is read, its tier chosen
+     * (worker override → role's tier → standard). Returns the list of plans, or an error string on the first bad role.
+     * Shared with the conductor (orchestration.md §5.4) so every agent — in-process worker or Tier-D code session —
+     * is spawned from a role the same way; there is no second spawn path.
+     * @param list<array{role:string,task?:string,tier?:string}> $workers
+     * @return list<array{role:string,tier:string,task:string,brief:string}>|string
+     */
+    public function plan(array $workers): array|string
+    {
         $skills = $this->app->skills();
         $plans = [];
         foreach ($workers as $w) {
-            $role = (string)$w['role'];
+            $role = (string)($w['role'] ?? '');
             $meta = $skills->meta($role);
             if (($meta['kind'] ?? '') !== 'role') return "error: no role '$role'. Search with role_find, then create it with role_save before opening the directive.";
             [, $brief] = Skills::parse($skills->read($role, false));
             $tier = in_array($w['tier'] ?? '', Tier::NAMES, true) ? (string)$w['tier'] : (in_array($meta['tier'] ?? '', Tier::NAMES, true) ? (string)$meta['tier'] : 'standard');
             $plans[] = ['role' => Skills::slug($role), 'tier' => $tier, 'task' => trim((string)($w['task'] ?? '')), 'brief' => $brief];
         }
-        $did = $this->app->store->addDirective(trim($title) ?: mb_substr($goal, 0, 60), trim($goal), max(1, min(3, $priority)), (int)$this->app->space);
-        $cap = $this->app->jobs()->cap(null);
-        foreach ($plans as $p) {
-            $instructions = "You are the **{$p['role']}** role on a team working toward this goal:\n> " . trim($goal) . "\n\n"
-                . "## Your brief\n{$p['brief']}\n\n## Your task\n" . ($p['task'] !== '' ? $p['task'] : 'Carry out your part of the goal above.')
-                . "\n\nWork thoroughly, then write one complete, self-contained result for the rest of the team to build on.";
-            $this->app->store->addJob("{$p['role']}: " . mb_substr($p['task'] ?: $title, 0, 50), $instructions, $p['tier'], $cap, 'worker',
-                null, (int)$this->app->space, [], '', null, '', $did, $p['role']);
-        }
-        return sprintf("directive #%d \"%s\" opened (P%d) with %d worker(s): %s. They run in the background; I'll report when they're done. Track it with directive_status.",
-            $did, $this->app->store->directive($did)['title'], max(1, min(3, $priority)), count($plans), implode(', ', array_column($plans, 'role')));
+        return $plans;
+    }
+
+    /** The worker's seed prompt from its role — identical for an in-process worker and a Tier-D code session. */
+    public static function seed(string $role, string $brief, string $goal, string $task): string
+    {
+        return "You are the **$role** role on a team working toward this goal:\n> " . trim($goal) . "\n\n"
+            . "## Your brief\n$brief\n\n## Your task\n" . ($task !== '' ? $task : 'Carry out your part of the goal above.')
+            . "\n\nWork thoroughly, then write one complete, self-contained result for the rest of the team to build on.";
     }
 
     /** Called at the end of a worker job's process: trigger finalisation once every worker is finished. */
