@@ -185,6 +185,7 @@ final class Web
             (bool)preg_match('#^/api/spaces/(\d+)$#', $path, $mm) && $m === 'POST' => ['space' => $this->app->spaces()->save($b, (int)$mm[1])],
             $path === '/api/spaces/0/tier' && $m === 'POST' => ['space' => $this->app->spaces()->setGeneralTier((string)($b['tier'] ?? ''))],
             $path === '/api/spaces/0/account' && $m === 'POST' => ['space' => $this->app->spaces()->setGeneralAccount((string)($b['account'] ?? ''))],
+            (bool)preg_match('#^/api/spaces/(\d+)/hub$#', $path, $mm) && $m === 'POST' => ['space' => $this->app->spaces()->setHub((int)$mm[1], !empty($b['pull']), !empty($b['contribute']))],
             (bool)preg_match('#^/api/spaces/(\d+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->spaces()->delete((int)$mm[1]); return ['ok' => true]; })(),
             (bool)preg_match('#^/api/spaces/(\d+)/move-ticket$#', $path, $mm) && $m === 'POST' => $this->app->spaces()->get((int)$mm[1]) && (int)$mm[1] ? $this->app->links()->importTicket((string)($b['to'] ?? ''))
                 : throw new \InvalidArgumentException('no such space'),
@@ -665,7 +666,7 @@ final class Web
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store),
             'model_problem' => $c->modelProblem(), 'claude_code' => ClaudeLogin::installed($c), 'assistants' => $this->app->links()->list(), 'assistant' => $this->app->links()->current(),
-            'directives' => $this->app->director()->active((int)$this->app->space)];
+            'directives' => $this->app->director()->active((int)$this->app->space), 'fleet' => Config::inFleet()];
     }
 
     private function channels(): array

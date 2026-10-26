@@ -148,7 +148,8 @@ final class Catalog
                 $error = null;
             } catch (\InvalidArgumentException $e) { $clean = null; $error = $e->getMessage(); }
             $raw = (array)($it['package'] ?? $it['recipe'] ?? []);
-            $s['subs'][$id] = ['id' => $id, 'instance' => $instance, 'who' => mb_substr($who, 0, 80), 'key' => $key, 'hash' => $hash, 'kind' => $kind,
+            $s['subs'][$id] = ['id' => $id, 'instance' => $instance, 'who' => mb_substr($who, 0, 80), 'space' => mb_substr(trim((string)($it['space'] ?? '')), 0, 80),
+                'key' => $key, 'hash' => $hash, 'kind' => $kind,
                 'name' => mb_substr((string)($clean['name'] ?? $raw['name'] ?? $key), 0, 60), 'note' => mb_substr(trim((string)($it['note'] ?? '')), 0, 500),
                 'item' => $clean, 'error' => $error, 'replaces' => $s['links']["$instance:$key"] ?? null, 'at' => (int)($it['at'] ?? time()), 'status' => 'pending'];
             $changed = true;
@@ -165,7 +166,8 @@ final class Catalog
         if ($approve) {
             if (!$sub['item']) throw new \InvalidArgumentException('This one cannot be published: ' . $sub['error']);
             $src = $sub['instance'] . ':' . $sub['key'];
-            $sub['published'] = $this->publish($sub['kind'], $sub['item'], $s['links'][$src] ?? null);
+            $by = ['who' => $sub['who'], 'instance' => $sub['instance'], 'space' => (string)($sub['space'] ?? ''), 'at' => (int)$sub['at']];
+            $sub['published'] = $this->publish($sub['kind'], $sub['item'], $s['links'][$src] ?? null, $by);
             $s['links'][$src] = $sub['published'];
         }
         $sub['status'] = $approve ? 'approved' : 'rejected';
@@ -177,13 +179,18 @@ final class Catalog
         return $sub;
     }
 
-    /** Puts an item in the catalog, as a new one or over the one it replaces (its version goes up). @return string its id */
-    private function publish(string $kind, array $item, ?string $replace = null): string
+    /**
+     * Puts an item in the catalog, as a new one or over the one it replaces (its version goes up). For an asset, $by
+     * records who contributed it (name, instance, space, when) so the knowledge base shows its provenance.
+     * @return string its id
+     */
+    private function publish(string $kind, array $item, ?string $replace = null, ?array $by = null): string
     {
         $c = $this->read(); $list = ['app' => 'apps', 'connector' => 'connectors', 'role' => 'roles', 'asset' => 'assets'][$kind];
         $entry = $kind === 'app'
             ? ['name' => $item['name'], 'description' => $item['description'], 'icon' => $item['icon'], 'connectors' => array_keys($item['connectors']), 'package' => $item]
             : $item;
+        if ($kind === 'asset' && $by !== null) $entry['by'] = $by;
         foreach ($c[$list] as $i => $x) if ($replace !== null && $x['id'] === $replace) {
             $c[$list][$i] = ['id' => $replace, 'version' => (int)$x['version'] + 1, 'at' => time()] + $entry;
             $this->saveCatalog($c);

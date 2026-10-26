@@ -459,6 +459,9 @@ async function openSpaceEditor(sp, prefill = {}) {
   await loadAiAccounts();
   $('#sp-account').innerHTML = accountOptions(editing ? sp.account || '' : '');
   $('#sp-account-row').hidden = !state.aiAccounts.length && !(editing && sp.account);
+  $('#sp-hub-row').hidden = !state.status?.fleet;
+  $('#sp-hub-pull').checked = !!(editing && sp.hub_pull);
+  $('#sp-hub-contribute').checked = !!(editing && sp.hub_contribute);
   $('#sp-code').value = editing ? (sp.code || '') : '';
   $('#sp-instructions').value = editing ? sp.instructions : '';
   $('#sp-notes').value = editing ? sp.notes : ''; $('#sp-notes').closest('form').querySelector('label[for=sp-notes]').hidden = $('#sp-notes').hidden = !editing;
@@ -487,6 +490,11 @@ async function openSpaceEditor(sp, prefill = {}) {
     if (!$('#sp-account-row').hidden) body.account = $('#sp-account').value;
     try {
       const { space } = await post(editing ? `api/spaces/${sp.id}` : 'api/spaces', body);
+      if (!$('#sp-hub-row').hidden) {
+        const pull = $('#sp-hub-pull').checked, contribute = $('#sp-hub-contribute').checked;
+        if (pull !== !!(editing && sp.hub_pull) || contribute !== !!(editing && sp.hub_contribute))
+          await post(`api/spaces/${space.id}/hub`, { pull, contribute });
+      }
       d.close(); await loadSpaces(); toast(editing ? 'Space saved.' : `Space “${space.name}” created.`);
       if (!editing || location.hash.startsWith('#chat')) { if (location.hash.split('/')[0] !== '#chat') location.hash = '#chat'; await switchSpace(space.id); }
     } catch (err) { toast(err.message); }

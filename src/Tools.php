@@ -433,14 +433,14 @@ final class Tools
             ['title' => ['type' => 'string'], 'content' => ['type' => 'string', 'description' => 'the text to share (Markdown)'],
                 'category' => ['type' => 'string', 'enum' => ['spec', 'template', 'policy', 'faq', 'note', 'other']],
                 'note' => ['type' => 'string', 'description' => 'a word for the reviewer (why it is useful)']], ['title', 'content'],
-            fn(array $a) => $this->sharedWrite('company knowledge base') ?? (function () use ($a) {
+            fn(array $a) => $this->sharedWrite('company knowledge base') ?? $this->hubGrant('contribute') ?? (function () use ($a) {
                 try { $r = (new AppStore($this->app))->submitAsset((string)$a['title'], (string)$a['content'], (string)($a['category'] ?? 'note'), (string)($a['note'] ?? '')); }
                 catch (\InvalidArgumentException | \RuntimeException $e) { return 'error: ' . $e->getMessage(); }
                 return "sent '{$r['name']}' to the company knowledge base for review. Once the admin approves it, every assistant can install it.";
             })());
         $this->register('asset_install', 'Install a shared asset from the company knowledge base into this library (or update the installed copy to the latest version). id is the store asset id (asset-…), from the store catalog. It is saved as a note under "' . AppStore::ASSET_FOLDER . '".',
             ['id' => ['type' => 'string']], ['id'],
-            fn(array $a) => $this->sharedWrite('library') ?? (function () use ($a) {
+            fn(array $a) => $this->sharedWrite('library') ?? $this->hubGrant('pull') ?? (function () use ($a) {
                 try { $d = (new AppStore($this->app))->installAsset((string)$a['id']); return "installed '{$d['name']}' into " . AppStore::ASSET_FOLDER . '.'; } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
             })());
         $this->register('role_case_add',
@@ -950,6 +950,18 @@ final class Tools
         Privacy::blocked("Write to the $what");
         return "error: not saved: this answer is at the " . ucfirst($level) . " level (its space, or what it read), and the $what are read in every space. "
             . ($this->app->space ? 'Keep it in the notes of this space (space_notes) instead.' : 'Tell the user it was not kept, and why.');
+    }
+
+    /**
+     * The company knowledge base is reached per space, through two grants an admin sets (default closed, revocable):
+     * 'pull' to install published assets, 'contribute' to submit them for review. Null: this space holds the grant;
+     * else what the model is told, pointing at the space settings.
+     */
+    private function hubGrant(string $which): ?string
+    {
+        if (($this->app->spaces()->hubGrants((int)$this->app->space)[$which] ?? false)) return null;
+        $word = $which === 'pull' ? 'install assets from' : 'contribute assets to';
+        return "error: this space may not $word the company knowledge base. An admin turns the grant on in this space's settings.";
     }
 
     /** Whether the work may see or act on what belongs to this space (its jobs, routines, details): the current one, or one whose level this model may read. */

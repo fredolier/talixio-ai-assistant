@@ -696,6 +696,12 @@
     <div id="sp-privacy" class="sp-privacy" role="radiogroup" aria-label="Confidentiality"></div>
     <label for="sp-tier">Model</label><select id="sp-tier"><option value="standard">standard</option><option value="fast">fast</option><option value="deep">deep</option></select>
     <div id="sp-account-row" class="sub" hidden><label for="sp-account">AI account</label><select id="sp-account"></select></div>
+    <div id="sp-hub-row" class="sub" hidden>
+      <label>Company knowledge base</label>
+      <label class="check"><input id="sp-hub-pull" type="checkbox"> Install shared assets from the company knowledge base</label>
+      <label class="check"><input id="sp-hub-contribute" type="checkbox"> Contribute assets from this space for review</label>
+      <p class="muted small">Off by default. Only the spaces you turn on reach the shared knowledge base.</p>
+    </div>
     <label for="sp-instructions">Instructions for this space</label>
     <textarea id="sp-instructions" rows="4" placeholder="Context, tone, language, what to watch for…"></textarea>
     <label for="sp-notes">Notes <span class="muted small">(the assistant keeps them up to date; you can edit)</span></label>

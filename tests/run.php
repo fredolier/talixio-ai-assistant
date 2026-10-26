@@ -2288,6 +2288,21 @@ $avw2 = $ast->view();
 check('store: installing a shared asset writes it into the library under Company KB, marked installed', $adoc['folder'] === \Talixio\AppStore::ASSET_FOLDER
     && str_contains((string)$ma->files()->text((int)$adoc['id']), '#0a3') && $avw2['assets'][0]['installed'] === (int)$adoc['id'] && !$avw2['assets'][0]['update']);
 check('store: re-installing the same asset updates the library note in place, no duplicate', $ast->installAsset($aid)['id'] === (int)$adoc['id']);
+// ---- per-space hub grants + provenance (orchestration, slice 2) ----
+$aby = $cat->read()['assets'][0]['by'] ?? [];
+check('store: the published asset records who contributed it (name, instance, when)', ($aby['who'] ?? '') === 'Alice' && ($aby['instance'] ?? '') === 'alice' && (int)($aby['at'] ?? 0) > 0);
+check('store: a space may neither pull nor contribute to the knowledge base by default', $ma->spaces()->hubGrants(0) === ['pull' => false, 'contribute' => false]);
+$pubClosed = $ma->tools->execute('asset_publish', ['title' => 'Holiday policy', 'content' => 'Be kind.', 'category' => 'policy']);
+$instClosed = $ma->tools->execute('asset_install', ['id' => $aid]);
+check('store: without the grants the asset_publish and asset_install tools are refused, pointing at the space settings',
+    str_contains($pubClosed, 'may not contribute') && str_contains($instClosed, 'may not install') && str_contains($instClosed, 'settings'));
+$ma->spaces()->setHub(0, true, true);
+check('store: an admin can grant pull and contribute per space', $ma->spaces()->hubGrants(0) === ['pull' => true, 'contribute' => true]);
+$pubOpen = $ma->tools->execute('asset_publish', ['title' => 'Holiday policy', 'content' => 'Be kind.', 'category' => 'policy']);
+$instOpen = $ma->tools->execute('asset_install', ['id' => $aid]);
+check('store: with the grants the same tools contribute to and pull from the knowledge base', str_contains($pubOpen, 'for review') && str_contains($instOpen, 'installed'));
+$ma->spaces()->setHub(0, false, false);
+$ast->withdraw('asset-' . substr(sha1('holiday policy'), 0, 16));
 $ma->library()->purgeFile((int)$adoc['id']);
 $faqMd = (string)file_get_contents(__DIR__ . '/../docs/faq/English/Connectors/Connector list.md');
 $fc = \Talixio\Catalog::faqConnectors($faqMd); $byName = array_column($fc, null, 'name');

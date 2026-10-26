@@ -17,7 +17,28 @@ final class Spaces
     public function general(): array
     {
         return ['id' => 0, 'name' => 'General', 'slug' => 'general', 'code' => 'GEN', 'folder' => '', 'instructions' => '', 'notes' => '', 'tier' => $this->generalTier(), 'color' => '', 'archived' => 0, 'privacy' => 'internal',
-            'account' => $this->accountOf(0)];
+            'account' => $this->accountOf(0), 'hub_pull' => (int)($this->app->store->get('general_hub_pull', '0') === '1'), 'hub_contribute' => (int)($this->app->store->get('general_hub_contribute', '0') === '1')];
+    }
+
+    /** Whether a space may pull from / contribute to the company knowledge base (both default closed). */
+    public function hubGrants(int $id): array
+    {
+        $s = $this->get($id);
+        return ['pull' => (bool)($s['hub_pull'] ?? 0), 'contribute' => (bool)($s['hub_contribute'] ?? 0)];
+    }
+
+    /** Set a space's two hub grants (read ≠ write, each revocable); records it in the space history. */
+    public function setHub(int $id, bool $pull, bool $contribute): array
+    {
+        if ($this->get($id) === null) throw new \InvalidArgumentException('no such space');
+        $was = $this->hubGrants($id);
+        if ($id === 0) { $this->app->store->set('general_hub_pull', $pull ? '1' : '0'); $this->app->store->set('general_hub_contribute', $contribute ? '1' : '0'); }
+        else $this->app->store->q('UPDATE spaces SET hub_pull = ?, hub_contribute = ? WHERE id = ?', [$pull ? 1 : 0, $contribute ? 1 : 0, $id]);
+        if ($was['pull'] !== $pull || $was['contribute'] !== $contribute) {
+            $on = array_merge($pull ? ['pull'] : [], $contribute ? ['contribute'] : []);
+            $this->note($id, 'hub', 'app', $on ? implode(' + ', $on) : 'off');
+        }
+        return $this->get($id);
     }
 
     /** The AI account a space's model calls use ('' = the main settings). */
@@ -56,7 +77,8 @@ final class Spaces
     public function get(int $id): ?array
     {
         if ($id === 0) return $this->general();
-        return $this->app->store->q('SELECT * FROM spaces WHERE id = ?', [$id])->fetch() ?: null;
+        $s = $this->app->store->q('SELECT * FROM spaces WHERE id = ?', [$id])->fetch() ?: null;
+        return $s ? self::castHub($s) : null;
     }
 
     /** By id, slug or name (case-insensitive). */
@@ -76,6 +98,7 @@ final class Spaces
         $out = [];
         foreach ([$this->general() + ['last_read' => (int)$st->get('space_read_0', '0')], ...$rows] as $s) {
             $s['id'] = (int)$s['id'];
+            $s = self::castHub($s);
             $last = $s['id'] === 0 ? (int)$st->get('space_read_0', '0') : (int)$s['last_read'];
             $s['unread'] = (int)$st->q("SELECT COUNT(*) FROM messages WHERE space = ? AND id > ? AND role = 'assistant'", [$s['id'], $last])->fetchColumn();
             $s['last_ts'] = (int)$st->q('SELECT COALESCE(MAX(ts),0) FROM messages WHERE space = ?', [$s['id']])->fetchColumn();
@@ -184,6 +207,14 @@ final class Spaces
     }
 
     public function setForChannel(string $channel, int $id): void { $this->app->store->set("channel_space_$channel", (string)$id); }
+
+    /** The two hub grants come back from SQLite as strings; the UI needs real numbers. */
+    private static function castHub(array $s): array
+    {
+        $s['hub_pull'] = (int)($s['hub_pull'] ?? 0);
+        $s['hub_contribute'] = (int)($s['hub_contribute'] ?? 0);
+        return $s;
+    }
 
     public static function slug(string $name): string
     {

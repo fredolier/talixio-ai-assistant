@@ -267,7 +267,17 @@ its first slice is the small documented-surface piece, not the imagined board.*
    contribution space-scoped (pull/contribute grants, default off), wire the
    privacy leakage guard (locked/Secret never leaves), and the *Share to the
    company knowledge base* action + curator review UI. Binary assets (a brand-chart
-   image) add a blob store beside catalog.json here. *Medium.*
+   image) add a blob store beside catalog.json here. *Medium.* **✅ shipped in
+   0.28.94** — two per-space columns `hub_pull`/`hub_contribute` (default closed,
+   revocable; General via store keys), `Spaces::hubGrants`/`setHub` and an
+   `/api/spaces/{id}/hub` endpoint; `asset_install`/`asset_publish` now check the
+   current space's grant and refuse (pointing at the space settings) on top of the
+   existing `sharedWrite` leakage guard; two checkboxes in the space editor, shown
+   only in a fleet; and **provenance** (`by` = contributor name, instance and space)
+   recorded on each published asset through collect/decide/publish and shown on the
+   admin store page. *Deferred to a follow-up in this slice:* binary/blob assets
+   (the brand-chart image) and the one-click library *Share* button — the
+   tool/endpoint path is the shipped surface.
 3. **Conductor, documented-surface slice.** What §5.1 actually allows: store the
    claude.ai-host prerequisite; **start** a cloud session (`claude --cloud`) and
    **send one-way follow-ups** (`claude -p --cloud <id>`) as tools; **fully manage

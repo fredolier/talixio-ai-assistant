@@ -83,7 +83,8 @@ final class AppStore
     {
         $pkg = Catalog::cleanAsset(['name' => $title, 'body' => $body, 'category' => $category]);
         $key = 'asset-' . substr(sha1(mb_strtolower($pkg['name'])), 0, 16);
-        return $this->put(['key' => $key, 'kind' => 'asset', 'name' => $pkg['name'], 'package' => $pkg, 'note' => mb_substr(trim($note), 0, 500), 'at' => time(), 'status' => 'sent']);
+        $space = (string)($this->app->spaces()->get((int)($this->app->space ?? 0))['name'] ?? '');
+        return $this->put(['key' => $key, 'kind' => 'asset', 'name' => $pkg['name'], 'package' => $pkg, 'space' => $space, 'note' => mb_substr(trim($note), 0, 500), 'at' => time(), 'status' => 'sent']);
     }
 
     public function withdraw(string $key): void
