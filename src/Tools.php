@@ -32,7 +32,7 @@ final class Tools
         'browser' => [['browser_'], '/site|page|navig|browser|clique|click|formulaire|form\b|connecte|log ?in|réserv|book|https?:\/\/|www\.|\.(com|fr|eu|net|org)\b|command|order|achète|buy|livr|deliver|panier|cart|(regarde|cherche|vérifie|check|look|search)\w* (sur|on)\b|uber|deliveroo|amazon|airbnb|doctolib|leboncoin|sncf|vinted/iu', 'a web browser that clicks and types on pages'],
         'schedule' => [['schedule_task', 'cancel_task', 'routine_'], '/rappel|remind|chaque|tous les|toutes les|every|daily|quotidien|hebdo|weekly|mensuel|monthly|routine|programm|planifi|schedul|automati|plus tard|later|\bdans \d|\bin \d/iu', 'reminders and recurring routines'],
         'jobs' => [['delegate', 'list_jobs', 'continue_job', 'cancel_job', 'archive_job', 'schedule_job'], '/job|recherch|research|cherche|enquête|compar|analys|étude|study|arrière-plan|background|rapport|report|veille|approfondi|trouve|find|liste d|list of/iu', 'background jobs: long research and reports'],
-        'director' => [['direct', 'directive_', 'conductor_'], '/directive|director|directeu?r|équipe|\bteam\b|en parallèle|in parallel|plusieurs (agents|rôles|workers)|several (agents|roles|workers)|worker|mission|chantier|orchestr|fan.?out|à la (fois|chaîne)|chacun|chaque (poster|contrat|concurrent|produit|item)|claude.?code|code session|session de code|agent de code|coding agent|conductor|chef d.orchestre/iu', 'the director: run a team of worker roles toward one goal, or delegate one to a Claude Code session'],
+        'director' => [['direct', 'directive_', 'conductor_', 'fleet_'], '/directive|director|directeu?r|équipe|\bteam\b|en parallèle|in parallel|plusieurs (agents|rôles|workers)|several (agents|roles|workers)|worker|mission|chantier|orchestr|fan.?out|à la (fois|chaîne)|chacun|chaque (poster|contrat|concurrent|produit|item)|claude.?code|code session|session de code|agent de code|coding agent|conductor|chef d.orchestre|\bfleet\b|flotte|cloud session|session distante|remote control/iu', 'the director: run a team of worker roles toward one goal, delegate one to a Claude Code session, or drive a cloud orchestrator over the wider fleet'],
         'shell' => [['shell_', 'script_'], '/script|outil|\btools?\b|simulat|commande|command|shell|code|python|calcul|comput|csv|excel|xlsx|json|convert|graph|chart|zip|statisti/iu', 'run code in a sandbox (calculations, files, conversions)'],
         'phone' => [['phone_'], '/appel|call|sms|texto|téléphon|phone|whatsapp|signal/iu', 'calls and texts from the phone'],
         'music' => [['spotify_'], '/musique|music|joue|play|chanson|song|spotify|playlist|album|artist|volume|écoute|listen/iu', 'Spotify'],
@@ -591,6 +591,18 @@ final class Tools
                 'tier' => ['type' => 'string', 'enum' => Tier::NAMES, 'description' => "override the role's default model tier"]],
             ['role', 'goal'],
             fn(array $a) => $this->app->conductor()->dispatch((string)$a['role'], (string)($a['task'] ?? ''), (string)$a['goal'], (string)($a['tier'] ?? ''), (int)$this->app->space));
+        // The fleet beyond this host (orchestration.md §5.2-B): a delegated cloud orchestrator session, reached through a credential-light webhook bridge.
+        $this->register('fleet_setup',
+            "Connect a delegated cloud 'orchestrator' Claude Code session that manages the user's wider session fleet (ones Talixio can't reach directly). Returns a one-time pairing instruction to paste into that session. Use when the user wants to drive sessions across their account, or asks to connect/pair the fleet.",
+            [], [], fn() => $this->sharedWrite('skills') ?? $this->app->conductor()->setup());
+        $this->register('fleet_dispatch',
+            "Send a KB-grounded instruction to the connected fleet orchestrator (set up with fleet_setup). It works the fleet and reports back here. The instruction is grounded in this space's knowledge and gated by privacy before it leaves. Use for 'ask the orchestrator to...', 'have the fleet...'.",
+            ['instruction' => ['type' => 'string', 'description' => 'what the orchestrator should do with the fleet']], ['instruction'],
+            fn(array $a) => $this->sharedWrite('skills') ?? $this->app->conductor()->toFleet((string)$a['instruction'], (int)$this->app->space));
+        $this->register('fleet_status', 'Is a fleet orchestrator connected, which session, and is it still alive (when it last reported vs. when last sent to). Suggests recreating it if it has gone quiet.',
+            [], [], fn() => $this->app->conductor()->fleetStatus());
+        $this->register('fleet_disconnect', 'Forget the connected fleet orchestrator (its webhook and secret). Use when re-pairing or when the user wants to disconnect the fleet.',
+            [], [], fn() => $this->sharedWrite('skills') ?? $this->app->conductor()->disconnect());
         $this->register('usage_report', 'Your spending: budget status, cost and tokens by tier and by source (chat, schedules, jobs...) today and this month.',
             [], [], fn() => $this->usageReport());
         $this->register('usage_bill', "Record what the AI provider really billed (the figure the user read in the provider's console), to correct your cost estimates. Default period: last month.",

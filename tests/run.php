@@ -1226,6 +1226,50 @@ $app->tools->run('directive_steer', ['id' => (int)$s->job($cjid3)['directive'], 
 check('conductor: steering a directive to cancel stops its live session',
     $s->job($cjid3)['status'] === 'cancelled' && !empty($cli->sessions[$h3]['stopped']) && $s->job($cjid3)['session'] === '');
 $app->claudeCliOverride = null; $sk->delete('coder-x');
+
+// ---- the conductor's B-cloud bridge: a delegated cloud orchestrator, reached through a credential-light webhook (orchestration.md §5.2-B) ----
+@unlink($app->cfg->dataDir . '/conductor.json');
+$con = $app->conductor();
+check('fleet: nothing connected until paired', str_contains($con->fleetStatus(), 'No fleet orchestrator is connected') && !$con->connected());
+$setup = $app->tools->run('fleet_setup', []);
+check('fleet: setup returns a one-time pairing instruction for the orchestrator session',
+    str_contains($setup, '"type":"pair"') && str_contains($setup, '/api/conductor/inbox') && preg_match('/"code":"([0-9a-f]{32})"/', $setup) === 1);
+preg_match('/"code":"([0-9a-f]{32})"/', $setup, $pm); $pairCode = $pm[1];
+[$ic, $ir] = $con->inbox(['type' => 'pair', 'code' => 'deadbeef', 'webhook' => 'https://orch.example/hook'], '');
+check('fleet: a wrong pairing code is refused', $ic === 403 && !$con->connected());
+[$ic, $ir] = $con->inbox(['type' => 'pair', 'code' => $pairCode, 'webhook' => 'not-a-url'], '');
+check('fleet: pairing requires a https webhook', $ic === 400);
+[$ic, $ir] = $con->inbox(['type' => 'pair', 'code' => $pairCode, 'webhook' => 'https://orch.example/hook', 'session' => 'sess_abc', 'url' => 'https://claude.ai/code/sess_abc'], '');
+$secret = (string)($ir['secret'] ?? '');
+check('fleet: the right code pairs once and returns the steady secret', $ic === 200 && strlen($secret) === 64 && $con->connected());
+[$ic2] = $con->inbox(['type' => 'pair', 'code' => $pairCode, 'webhook' => 'https://orch.example/hook'], '');
+check('fleet: a pairing code is single-use', $ic2 === 403);
+[$rc] = $con->inbox(['type' => 'report', 'title' => 'Fleet progress', 'text' => 'Two sessions running, one done.'], 'wrong-secret');
+check('fleet: a report with the wrong secret is unauthorized', $rc === 401);
+$beforeN = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn();
+[$rc, $rr] = $con->inbox(['type' => 'report', 'title' => 'Fleet progress', 'text' => 'Two sessions running, one done.'], $secret);
+check('fleet: an authenticated report is accepted and surfaced to the user',
+    $rc === 200 && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeN + 1);
+check('fleet: status shows the connected orchestrator once paired', str_contains($con->fleetStatus(), 'connected'));
+// the single outbound choke point: dispatch grounds the instruction and POSTs it to the orchestrator's own webhook
+$app->tools->run('kb_save_note', ['name' => 'Release policy', 'content' => 'We ship on Thursdays after the suite is green.', 'folder' => '/Notes']);
+$seen = null; $prevHook = Talixio\Http::$hook;
+Talixio\Http::$hook = function (string $url, int $bytes) use (&$seen) { $seen = [$url, $bytes]; };
+$disp = $con->toFleet('Plan the Thursday release');
+Talixio\Http::$hook = $prevHook;
+check('fleet: dispatch posts a grounded instruction to the orchestrator webhook',
+    $seen !== null && $seen[0] === 'https://orch.example/hook' && $seen[1] > 0);
+check('fleet: dispatch reports gracefully when the orchestrator is unreachable',
+    str_contains($disp, 'could not reach') || str_contains($disp, 'returned HTTP') || str_contains($disp, 'sent to the fleet'));
+// privacy choke: a confidential space may not reach outside the assistant
+$csp = $app->spaces()->save(['name' => 'Fleet Conf', 'privacy' => 'confidential']);
+$app->space = (int)$csp['id'];
+$ref = $app->conductor()->toFleet('leak this');
+$app->space = 0;
+check('fleet: a confidential space is refused at the outbound choke point', str_contains($ref, 'Confidential') && str_contains($ref, 'internal space'));
+check('fleet: disconnect forgets the binding', str_contains($con->disconnect(), 'disconnected') && !$con->connected());
+@unlink($app->cfg->dataDir . '/conductor.json');
+
 // ---- the assessor's live A/B: promote a role improvement only if it wins on the golden cases ----
 $app->tools->run('role_save', ['name' => 'summ-x', 'purpose' => 'Summarise a document', 'content' => 'Write a summary.', 'tier' => 'fast']);
 check('improve: an A/B needs golden cases first', str_contains($app->tools->run('role_improve', ['role' => 'summ-x', 'content' => 'Better: 3 bullet points.']), 'no golden cases'));

@@ -43,6 +43,7 @@ final class Web
         if ($path === '/api/microsoft/callback' && $method === 'GET') { $this->microsoftCallback(); return; }
         if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
+        if ($path === '/api/conductor/inbox') { $this->conductorInbox($method); return; } // the delegated cloud orchestrator reports in: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
         $this->startSession();
         try {
@@ -1525,6 +1526,27 @@ final class Web
             $this->json(['space' => $this->importSpace('app')]);
         } catch (\InvalidArgumentException $e) {
             $this->json(['error' => $e->getMessage()], 400);
+        } catch (\Throwable $e) {
+            $this->json(['error' => self::internalError($e)], 500);
+        }
+    }
+
+    /**
+     * POST /api/conductor/inbox: the delegated cloud orchestrator session (orchestration.md §5.2-B) registers its
+     * webhook at pairing, then reports its fleet's progress. Authenticated by the one-time pairing code (pair) or the
+     * steady Bearer secret issued at pairing (report) — never by the web session. The body is untrusted: the conductor
+     * surfaces reports to the user and never executes them.
+     */
+    private function conductorInbox(string $method): void
+    {
+        ob_start();
+        try {
+            if ($method !== 'POST') $this->fail(405, 'POST only');
+            $msg = json_decode((string)file_get_contents('php://input'), true) ?: [];
+            if (!is_array($msg)) $this->fail(400, 'JSON object expected');
+            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+            [$code, $resp] = $this->app->conductor()->inbox($msg, $bearer);
+            $this->json($resp, $code);
         } catch (\Throwable $e) {
             $this->json(['error' => self::internalError($e)], 500);
         }

@@ -386,17 +386,32 @@ its first slice is the small documented-surface piece, not the imagined board.*
    `claude logs`, `--resume`). No cross-machine cloud overview yet. *Small–Medium.*
 4. **Conductor, delegated shape (§5.2-B) = the agent factory's Tier-D worker.**
    Talixio (top director) drives a delegated orchestrator session (sub-director)
-   that manages the fleet with its native `claude-code-remote` tools. Start with
-   **B-local** (local-bg manager, transcript read via `claude agents`/`logs`) for
-   the simplest readback, then **B-cloud** for whole-account reach: the orchestrator
-   mints its own `watch_url` webhook (sealed credential, no account token in the
-   Talixio container), Talixio POSTs KB-grounded instructions in and the orchestrator
-   POSTs status/results back to `/api/conductor/inbox`; the monitor loop is the
-   orchestrator's own `create_trigger` heartbeat (poll `get_session`/`list_events`,
-   re-dispatch). Tier-D workers render on the **existing Activity board + budget
-   meter**; roles seed/judge them (§5.4). Privacy guard fires at the single outbound
-   choke point. Plan for orchestrator **liveness/bootstrap** (create once with a
-   credential; revive on missed heartbeat). *Medium.*
+   that manages the fleet with its native `claude-code-remote` tools.
+   - **B-local — ✅ shipped in 0.28.96.** A delegated `claude -p` session on
+     Talixio's host, dispatched from a role through `Director::plan`/`seed`
+     (byte-identical to an in-process worker) as an ordinary directive with one
+     Tier-D worker, read back from its stream-json log (`ClaudeCli`/`ShellClaudeCli`,
+     a fake in tests), finalised by the same `onWorkerDone` path. `conductor_dispatch`
+     starts one; it is a worker card on the Activity board, spends the same budget,
+     and is rated/improved as any role. Privacy guard refuses a non-internal space.
+   - **B-cloud — ✅ shipped in 0.28.97.** Whole-account reach through a
+     credential-light webhook bridge, **no account token in the Talixio container**.
+     Pairing is inverted (the credential stays with the agent that owns it):
+     `fleet_setup` mints a one-time code + copy-paste instruction; the orchestrator
+     session mints **its own** `watch_url` webhook (a sealed credential Talixio cannot
+     read), POSTs that URL + the code to the authenticated `/api/conductor/inbox`, and
+     is issued a steady Bearer secret **once** in return. Talixio then POSTs
+     **KB-grounded** instructions to that webhook (`fleet_dispatch`), and the
+     orchestrator POSTs status/results back to the inbox as `Bearer <secret>`,
+     surfaced in the notifications inbox. The monitor loop is the orchestrator's own
+     `create_trigger`/`send_later` heartbeat (poll `get_session`/`list_events`,
+     re-dispatch). Privacy guard fires at the single outbound choke point; the
+     instruction is grounded **inside** Talixio so the orchestrator never touches raw
+     knowledge; replies are untrusted (§5.3) — surfaced, never executed. `fleet_status`
+     reports **liveness** (report-age vs. dispatch-age, with a recreate hint when it
+     has gone quiet); `fleet_disconnect` forgets the binding. The webhook URL and inbox
+     secret live 0600 in `conductor.json`, are never returned by any API after pairing,
+     and are never logged.
 5. **The messaging backbone, generalised.** Address + durable mailbox + consent +
    budget envelope + loop guard, as one service both adapters sit on; in-assistant
    worker mailbox (reach a running worker, worker→director question) as its proof.
