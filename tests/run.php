@@ -2226,7 +2226,7 @@ $cat->collect('alice', 'Alice', $obf); $cat->collect('alice', 'Alice', $obf);
 $subs = array_column($cat->submissions(), null, 'key');
 check('store: collected once, waiting for review, cleaned', count($subs) === 2 && $subs["app-{$sh['id']}"]['status'] === 'pending' && $subs["app-{$sh['id']}"]['note'] === 'For the team'
     && $subs['mcp-bills_online']['item'] === ['name' => 'bills_online', 'description' => 'Bills', 'url' => 'https://mcp.example.com/mcp', 'headers' => ['X-Api-Key']], json_encode($subs));
-check('store: nothing is in the catalog before the admin approves', $ast->catalog() === ['apps' => [], 'connectors' => [], 'roles' => []] && $ast->view()['available'] && $ast->view()['shared'] === false);
+check('store: nothing is in the catalog before the admin approves', $ast->catalog() === ['apps' => [], 'connectors' => [], 'roles' => [], 'assets' => []] && $ast->view()['available'] && $ast->view()['shared'] === false);
 $da = $cat->decide($subs["app-{$sh['id']}"]['id'], true, 'Nice');
 $dc = $cat->decide($subs['mcp-bills_online']['id'], false, 'Use the official one');
 $twice = ''; try { $cat->decide($da['id'], true); } catch (\InvalidArgumentException $e) { $twice = $e->getMessage(); }
@@ -2268,6 +2268,27 @@ $ast->installRole($rid);
 check('store: installing a shared role writes it into the local registry, marked from the store', ($ma->skills()->meta('fleet-researcher')['kind'] ?? '') === 'role' && ($ma->skills()->meta('fleet-researcher')['store_id'] ?? '') === $rid
     && str_contains((string)$ma->skills()->raw('fleet-researcher'), 'Gather and compare') && $ast->view()['roles'][0]['installed'] === 'fleet-researcher');
 $ma->skills()->delete('fleet-researcher');
+// ---- a knowledge asset contributed to the corporate hub (orchestration, slice 1) ----
+$aBad = ''; try { $ast->submitAsset('Draft', '', 'spec'); } catch (\InvalidArgumentException $e) { $aBad = $e->getMessage(); }
+$aBad2 = ''; try { $ast->submitAsset('', 'body here', 'spec'); } catch (\InvalidArgumentException $e) { $aBad2 = $e->getMessage(); }
+check('store: an asset needs a title and a body; a bad category falls back', $aBad !== '' && $aBad2 !== '');
+$as = $ast->submitAsset('Brand charter', "# Brand charter\n\nUse the blue #0a3.", 'template', 'For everyone');
+check('store: an asset waits in the outbox with its title, kind and note, the body kept out of the returned item', $as['kind'] === 'asset'
+    && $as['key'] === 'asset-' . substr(sha1('brand charter'), 0, 16) && $as['name'] === 'Brand charter' && $as['note'] === 'For everyone' && !isset($as['package']));
+$cat->collect('alice', 'Alice', $ast->outbox(true));
+$asub = array_values(array_filter($cat->submissions(), fn($x) => $x['kind'] === 'asset'))[0];
+check('store: the asset is reviewable with its cleaned body and category', ($asub['item']['category'] ?? '') === 'template' && str_contains((string)($asub['item']['body'] ?? ''), 'Brand charter'));
+$dasset = $cat->decide($asub['id'], true, 'Useful'); $ast->mark($dasset['key'], $dasset['hash'], 'approved');
+$avw = $ast->view();
+check('store: the approved asset is in the catalog, not installed here yet, without its body', count($avw['assets']) === 1 && $avw['assets'][0]['name'] === 'Brand charter'
+    && $avw['assets'][0]['category'] === 'template' && $avw['assets'][0]['installed'] === null && !isset($avw['assets'][0]['body']));
+$aid = $avw['assets'][0]['id'];
+$adoc = $ast->installAsset($aid);
+$avw2 = $ast->view();
+check('store: installing a shared asset writes it into the library under Company KB, marked installed', $adoc['folder'] === \Talixio\AppStore::ASSET_FOLDER
+    && str_contains((string)$ma->files()->text((int)$adoc['id']), '#0a3') && $avw2['assets'][0]['installed'] === (int)$adoc['id'] && !$avw2['assets'][0]['update']);
+check('store: re-installing the same asset updates the library note in place, no duplicate', $ast->installAsset($aid)['id'] === (int)$adoc['id']);
+$ma->library()->purgeFile((int)$adoc['id']);
 $faqMd = (string)file_get_contents(__DIR__ . '/../docs/faq/English/Connectors/Connector list.md');
 $fc = \Talixio\Catalog::faqConnectors($faqMd); $byName = array_column($fc, null, 'name');
 $added = $cat->addFaq($faqMd, true); $again = $cat->addFaq($faqMd);

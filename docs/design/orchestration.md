@@ -255,7 +255,14 @@ its first slice is the small documented-surface piece, not the imagined board.*
    spec, a template, an FAQ/note) from a space to the outbox → curator review →
    publish into the shared catalogue with **provenance + supersede-with-history**;
    another assistant installs/pulls it into its library. Reuses the store volume —
-   no new channel, no fleet-boundary change. *Medium.* **← start here.**
+   no new channel, no fleet-boundary change. *Medium.* **✅ shipped in 0.28.93** —
+   `Catalog::cleanAsset` + the `asset` kind through collect/decide/publish/add,
+   `AppStore::submitAsset`/`installAsset` (installed as a library note under
+   `/Company KB`, tracked in `store-assets.json`), the `asset_publish` /
+   `asset_install` chat tools (gated by the existing `sharedWrite` privacy guard, so
+   a confidential/secret space cannot publish), and the admin store view. Re-install
+   updates the note in place. Per-space grants and a dedicated contribute UI are
+   slice 2.
 2. **Per-space hub grants + leakage guard + the contribute action UI.** Make
    contribution space-scoped (pull/contribute grants, default off), wire the
    privacy leakage guard (locked/Secret never leaves), and the *Share to the

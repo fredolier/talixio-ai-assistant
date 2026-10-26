@@ -17,7 +17,7 @@ final class Catalog
     {
         $c = json_decode((string)@file_get_contents("$this->dir/catalog.json"), true);
         return ['apps' => array_values((array)($c['apps'] ?? [])), 'connectors' => array_values((array)($c['connectors'] ?? [])),
-            'roles' => array_values((array)($c['roles'] ?? [])), 'updated' => (int)($c['updated'] ?? 0)];
+            'roles' => array_values((array)($c['roles'] ?? [])), 'assets' => array_values((array)($c['assets'] ?? [])), 'updated' => (int)($c['updated'] ?? 0)];
     }
 
     /** What people sent: pending first, then the latest decisions. */
@@ -97,6 +97,24 @@ final class Catalog
             'skills' => $str('skills'), 'tools' => $str('tools'), 'when_to_use' => $str('when_to_use'), 'when_not' => $str('when_not'), 'body' => $body];
     }
 
+    /**
+     * A shared knowledge asset: a reusable text document (a spec, a template, a policy, an FAQ/note) a person
+     * contributes so everyone on the server can reuse it. Content only — the submission record (instance/who) carries
+     * the provenance; a locked/Secret document never reaches here (the leakage guard is enforced before submit).
+     */
+    public static function cleanAsset(array $pkg): array
+    {
+        $name = trim(preg_replace('/\s+/', ' ', (string)($pkg['name'] ?? '')));
+        if ($name === '' || mb_strlen($name) > 120) throw new \InvalidArgumentException('an asset needs a title (120 characters at most)');
+        $body = trim((string)($pkg['body'] ?? ''));
+        if ($body === '') throw new \InvalidArgumentException('an asset needs content');
+        if (strlen($body) > 500_000) throw new \InvalidArgumentException('the asset is too long (500 KB of text at most)');
+        $cat = preg_replace('/[^a-z]+/', '', strtolower((string)($pkg['category'] ?? 'note')));
+        if (!in_array($cat, ['spec', 'template', 'policy', 'faq', 'note', 'other'], true)) $cat = 'note';
+        return ['name' => $name, 'description' => mb_substr(trim(preg_replace('/\s+/', ' ', (string)($pkg['description'] ?? ''))), 0, 300) ?: 'A shared knowledge asset',
+            'category' => $cat, 'body' => $body];
+    }
+
     /** A connector: its name, what it does, and how to install it (a GitHub repository, or an https address and header names). */
     public static function cleanConnector(array $r): array
     {
@@ -120,13 +138,13 @@ final class Catalog
         foreach ($items as $it) {
             $it = (array)$it;
             $key = (string)($it['key'] ?? ''); $kind = (string)($it['kind'] ?? '');
-            if (!preg_match('/^(app|mcp|role)-[\w-]{1,60}$/', $key) || !in_array($kind, ['app', 'connector', 'role'], true) || ($it['status'] ?? '') !== 'sent') continue;
+            if (!preg_match('/^(app|mcp|role|asset)-[\w-]{1,60}$/', $key) || !in_array($kind, ['app', 'connector', 'role', 'asset'], true) || ($it['status'] ?? '') !== 'sent') continue;
             $hash = self::hash($it);
             $id = substr(sha1("$instance\n$key\n$hash"), 0, 12);
             if (isset($s['subs'][$id])) continue;
             foreach ($s['subs'] as $k => $x) if ($x['instance'] === $instance && $x['key'] === $key && $x['status'] === 'pending') unset($s['subs'][$k]);
             try {
-                $clean = match ($kind) { 'app' => self::cleanApp((array)($it['package'] ?? [])), 'role' => self::cleanRole((array)($it['package'] ?? [])), default => self::cleanConnector((array)($it['recipe'] ?? [])) };
+                $clean = match ($kind) { 'app' => self::cleanApp((array)($it['package'] ?? [])), 'role' => self::cleanRole((array)($it['package'] ?? [])), 'asset' => self::cleanAsset((array)($it['package'] ?? [])), default => self::cleanConnector((array)($it['recipe'] ?? [])) };
                 $error = null;
             } catch (\InvalidArgumentException $e) { $clean = null; $error = $e->getMessage(); }
             $raw = (array)($it['package'] ?? $it['recipe'] ?? []);
@@ -162,7 +180,7 @@ final class Catalog
     /** Puts an item in the catalog, as a new one or over the one it replaces (its version goes up). @return string its id */
     private function publish(string $kind, array $item, ?string $replace = null): string
     {
-        $c = $this->read(); $list = ['app' => 'apps', 'connector' => 'connectors', 'role' => 'roles'][$kind];
+        $c = $this->read(); $list = ['app' => 'apps', 'connector' => 'connectors', 'role' => 'roles', 'asset' => 'assets'][$kind];
         $entry = $kind === 'app'
             ? ['name' => $item['name'], 'description' => $item['description'], 'icon' => $item['icon'], 'connectors' => array_keys($item['connectors']), 'package' => $item]
             : $item;
@@ -171,7 +189,7 @@ final class Catalog
             $this->saveCatalog($c);
             return $replace;
         }
-        $id = ['app' => 'app-', 'connector' => 'mcp-', 'role' => 'role-'][$kind] . bin2hex(random_bytes(5));
+        $id = ['app' => 'app-', 'connector' => 'mcp-', 'role' => 'role-', 'asset' => 'asset-'][$kind] . bin2hex(random_bytes(5));
         $c[$list][] = ['id' => $id, 'version' => 1, 'at' => time()] + $entry;
         $this->saveCatalog($c);
         return $id;
@@ -180,7 +198,7 @@ final class Catalog
     /** Added by the admin: published at once. */
     public function add(string $kind, array $data): string
     {
-        return $this->publish($kind, match ($kind) { 'app' => self::cleanApp($data), 'role' => self::cleanRole($data), default => self::cleanConnector($data) });
+        return $this->publish($kind, match ($kind) { 'app' => self::cleanApp($data), 'role' => self::cleanRole($data), 'asset' => self::cleanAsset($data), default => self::cleanConnector($data) });
     }
 
     /**
@@ -235,9 +253,9 @@ final class Catalog
     /** Out of the store: assistants that installed it keep their copy. */
     public function remove(string $id): void
     {
-        $c = $this->read(); $n = count($c['apps']) + count($c['connectors']) + count($c['roles']);
-        foreach (['apps', 'connectors', 'roles'] as $l) $c[$l] = array_values(array_filter($c[$l], fn($x) => $x['id'] !== $id));
-        if (count($c['apps']) + count($c['connectors']) + count($c['roles']) === $n) throw new \InvalidArgumentException('Not in the store.');
+        $c = $this->read(); $n = count($c['apps']) + count($c['connectors']) + count($c['roles']) + count($c['assets']);
+        foreach (['apps', 'connectors', 'roles', 'assets'] as $l) $c[$l] = array_values(array_filter($c[$l], fn($x) => $x['id'] !== $id));
+        if (count($c['apps']) + count($c['connectors']) + count($c['roles']) + count($c['assets']) === $n) throw new \InvalidArgumentException('Not in the store.');
         $this->saveCatalog($c);
         $s = $this->state(); $s['links'] = array_filter($s['links'], fn($v) => $v !== $id); $this->saveState($s);
     }

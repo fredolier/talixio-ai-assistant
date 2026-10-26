@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 0.28.93 (2026-10-26)
+
+- Cross-assistant orchestration, slice 1 — **contribute a knowledge asset to the company hub.** On a server where several people each run their own Talixio, there is now one shared **company knowledge base**: a space can submit a spec, a template, a policy or an FAQ/note to it, the admin reviews it in the store, and once approved every assistant can install it into its own library under a _Company KB_ folder. Two new chat tools drive it — `asset_publish` (send the current document up for review) and `asset_install` (pull an approved one down) — and they reuse the existing store review/approve machinery, so nothing is shared until a human approves it. Sharing is **scoped by space**: a confidential or secret space cannot publish outward (the same privacy guard that already protects every other outbound write), and only the asset's title, text and category ever leave — never a key or saved state. Re-installing an updated asset replaces the library note in place rather than piling up copies. (This is the first buildable piece of the [orchestration spec](docs/design/orchestration.md); the per-space hub grants, binary assets and the session conductor come next.)
+
 ## 0.28.92 (2026-10-25)
 
 - Agent factory — **the director is discoverable before you ever run one.** The directives section on the Jobs/Activity page used to be invisible until a directive existed, which made the whole feature hard to find. It now shows a one-line hint when empty — _"🎬 No directives yet. Ask in the chat to run a team, e.g. «research our top 3 competitors and draft a one-pager on each». The director runs a worker role for each part, in parallel — the roles must already exist."_ — so you know the capability is there and exactly how to start it. (Once a directive runs, the real rows replace the hint.)

@@ -19,7 +19,8 @@ final class AppStore
     public function catalog(): array
     {
         $c = $this->available() ? json_decode((string)@file_get_contents(self::dir() . '/catalog.json'), true) : null;
-        return ['apps' => array_values((array)($c['apps'] ?? [])), 'connectors' => array_values((array)($c['connectors'] ?? [])), 'roles' => array_values((array)($c['roles'] ?? []))];
+        return ['apps' => array_values((array)($c['apps'] ?? [])), 'connectors' => array_values((array)($c['connectors'] ?? [])),
+            'roles' => array_values((array)($c['roles'] ?? [])), 'assets' => array_values((array)($c['assets'] ?? []))];
     }
 
     private function outDir(): string { return $this->app->cfg->dataDir . '/store-outbox'; }
@@ -73,15 +74,27 @@ final class AppStore
         return $this->put(['key' => 'role-' . Skills::slug($name), 'kind' => 'role', 'name' => $pkg['name'], 'package' => $pkg, 'note' => mb_substr(trim($note), 0, 500), 'at' => time(), 'status' => 'sent']);
     }
 
+    /**
+     * A knowledge asset sent for review (a spec, a template, a policy, an FAQ/note) so everyone can reuse it. Content
+     * only. The leakage guard runs before this: a locked/Secret document is never submitted (the caller checks).
+     * Re-sending the same title supersedes that contributor's earlier version (same key).
+     */
+    public function submitAsset(string $title, string $body, string $category = 'note', string $note = ''): array
+    {
+        $pkg = Catalog::cleanAsset(['name' => $title, 'body' => $body, 'category' => $category]);
+        $key = 'asset-' . substr(sha1(mb_strtolower($pkg['name'])), 0, 16);
+        return $this->put(['key' => $key, 'kind' => 'asset', 'name' => $pkg['name'], 'package' => $pkg, 'note' => mb_substr(trim($note), 0, 500), 'at' => time(), 'status' => 'sent']);
+    }
+
     public function withdraw(string $key): void
     {
-        if (preg_match('/^(app|mcp|role)-[\w-]{1,60}$/', $key)) @unlink($this->outDir() . "/$key.json");
+        if (preg_match('/^(app|mcp|role|asset)-[\w-]{1,60}$/', $key)) @unlink($this->outDir() . "/$key.json");
     }
 
     /** The admin's decision, told by the agent; only for the version that was reviewed. */
     public function mark(string $key, string $hash, string $status, string $note = ''): bool
     {
-        if (!preg_match('/^(app|mcp|role)-[\w-]{1,60}$/', $key) || !in_array($status, ['approved', 'rejected'], true)) return false;
+        if (!preg_match('/^(app|mcp|role|asset)-[\w-]{1,60}$/', $key) || !in_array($status, ['approved', 'rejected'], true)) return false;
         $f = $this->outDir() . "/$key.json";
         $it = json_decode((string)@file_get_contents($f), true);
         if (!is_array($it) || Catalog::hash($it) !== $hash) return false;
@@ -126,7 +139,13 @@ final class AppStore
             $h = $haveRoles[$r['id']] ?? null;
             return array_diff_key($r, ['body' => 1]) + ['installed' => $h['name'] ?? null, 'update' => $h !== null && $h['version'] < (int)($r['version'] ?? 1)];
         }, $c['roles']);
-        return ['available' => $this->available(), 'shared' => Config::inFleet(), 'apps' => $apps, 'connectors' => $conns, 'roles' => $roles, 'outbox' => $this->outbox()];
+        $haveAssets = $this->assetState();
+        $assets = array_map(function ($a) use ($haveAssets) {
+            $h = $haveAssets[$a['id']] ?? null;
+            if ($h && !$this->app->files()->get((int)$h['id'])) $h = null; // the installed copy was deleted
+            return array_diff_key($a, ['body' => 1]) + ['installed' => $h['id'] ?? null, 'update' => $h !== null && (int)$h['version'] < (int)($a['version'] ?? 1)];
+        }, $c['assets']);
+        return ['available' => $this->available(), 'shared' => Config::inFleet(), 'apps' => $apps, 'connectors' => $conns, 'roles' => $roles, 'assets' => $assets, 'outbox' => $this->outbox()];
     }
 
     /** Store role id => [local name, installed version], from the store_id marker written on install. */
@@ -158,5 +177,37 @@ final class AppStore
         $have = $this->installedApps()[$id] ?? null;
         if ($have && !$this->app->apps()->get($have['id'])) $have = null;
         return $this->app->apps()->import((array)$item['package'], 'Store', $have['id'] ?? null, ['store' => $id, 'store_version' => (int)($item['version'] ?? 1)]);
+    }
+
+    /** store asset id => [library file id, installed version]. A small JSON map (assets live in the library, which has no origin column). */
+    private function assetState(): array
+    {
+        $s = json_decode((string)@file_get_contents($this->app->cfg->dataDir . '/store-assets.json'), true);
+        return is_array($s) ? $s : [];
+    }
+
+    private function saveAssetState(array $s): void
+    {
+        $f = $this->app->cfg->dataDir . '/store-assets.json';
+        file_put_contents("$f.tmp", json_encode($s, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        @chmod("$f.tmp", 0600);
+        rename("$f.tmp", $f);
+    }
+
+    public const ASSET_FOLDER = '/Company KB';
+
+    /** Install a shared asset into the library (or bring the installed copy to the store's version). Saved as a note. */
+    public function installAsset(string $id): array
+    {
+        $a = current(array_filter($this->catalog()['assets'], fn($x) => $x['id'] === $id)) ?: throw new \InvalidArgumentException('Not in the store (any more).');
+        $lib = $this->app->library();
+        $lib->ensureFolder(self::ASSET_FOLDER);
+        $state = $this->assetState();
+        $fid = isset($state[$id]['id']) ? (int)$state[$id]['id'] : null;
+        if ($fid !== null && !$this->app->files()->get($fid)) $fid = null; // deleted since: install fresh
+        $doc = $lib->saveNote(self::ASSET_FOLDER, (string)$a['name'] . '.md', (string)($a['body'] ?? ''), $fid);
+        $state[$id] = ['id' => (int)$doc['id'], 'version' => (int)($a['version'] ?? 1)];
+        $this->saveAssetState($state);
+        return $doc;
     }
 }

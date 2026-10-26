@@ -28,7 +28,7 @@ final class Tools
         'calendar' => [['calendar_', 'contact_find'], '/agenda|calend|rdv|rendez|réunion|meeting|invit|visio|dispo|créneau|slot|planning|demain|tomorrow|aujourd|today|ce soir|tonight|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|semaine|week|\b\d{1,2} ?h\d*\b|\b\d{1,2}:\d\d|événement|event|déjeuner|lunch|dîner|dinner|anniversaire|birthday|vacances|holiday|congé/iu', 'see and create calendar events, invite people'],
         'contacts' => [['contact_'], '/contact|téléphone|phone|numéro|number|adresse|address|qui est|who is/iu', 'find and save contacts'],
         'tasks' => [['board_'], '/tâche|task|todo|to-do|à faire|kanban|tableau|board|carte|card|ticket|projet|project|priorit|backlog|deadline|échéance|estim|temps passé|time spent|\b[A-Z]{2,6}-\d+\b/u', 'the task board: list, create, update, prioritize, log time'],
-        'library' => [['kb_', 'share_', 'file_'], '/document|\bdoc|fichier|file|dossier|folder|biblioth|library|note|rapport|report|pdf|partag|share|lien|link|class|range|déplace|move|corbeille|trash|version|inbox|enregistr|save|sauvegard|word|excel|tableur|slides?\b/iu', 'file, move, save and share documents in the library'],
+        'library' => [['kb_', 'share_', 'file_', 'asset_'], '/document|\bdoc|fichier|file|dossier|folder|biblioth|library|note|rapport|report|pdf|partag|share|lien|link|class|range|déplace|move|corbeille|trash|version|inbox|enregistr|save|sauvegard|word|excel|tableur|slides?\b|knowledge base|base de connaissance|hub|entreprise|corporate|company|template|mod[èe]le|charte/iu', 'file, move, save and share documents, and contribute assets to the company knowledge base'],
         'browser' => [['browser_'], '/site|page|navig|browser|clique|click|formulaire|form\b|connecte|log ?in|réserv|book|https?:\/\/|www\.|\.(com|fr|eu|net|org)\b|command|order|achète|buy|livr|deliver|panier|cart|(regarde|cherche|vérifie|check|look|search)\w* (sur|on)\b|uber|deliveroo|amazon|airbnb|doctolib|leboncoin|sncf|vinted/iu', 'a web browser that clicks and types on pages'],
         'schedule' => [['schedule_task', 'cancel_task', 'routine_'], '/rappel|remind|chaque|tous les|toutes les|every|daily|quotidien|hebdo|weekly|mensuel|monthly|routine|programm|planifi|schedul|automati|plus tard|later|\bdans \d|\bin \d/iu', 'reminders and recurring routines'],
         'jobs' => [['delegate', 'list_jobs', 'continue_job', 'cancel_job', 'archive_job', 'schedule_job'], '/job|recherch|research|cherche|enquête|compar|analys|étude|study|arrière-plan|background|rapport|report|veille|approfondi|trouve|find|liste d|list of/iu', 'background jobs: long research and reports'],
@@ -427,6 +427,21 @@ final class Tools
             ['id' => ['type' => 'string']], ['id'],
             fn(array $a) => $this->sharedWrite('skills') ?? (function () use ($a) {
                 try { return (new AppStore($this->app))->installRole((string)$a['id']); } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
+            })());
+        $this->register('asset_publish',
+            "Contribute a knowledge asset to the shared company knowledge base so everyone on the server can reuse it: a spec, a template, a policy, or an FAQ/note. Pass the TITLE and the CONTENT deliberately (read the document first with file_read/kb_search if it is in the library) — a confidential or secret space cannot publish. It goes to the store for the admin to review, then appears for every assistant to install. The user should agree before you publish.",
+            ['title' => ['type' => 'string'], 'content' => ['type' => 'string', 'description' => 'the text to share (Markdown)'],
+                'category' => ['type' => 'string', 'enum' => ['spec', 'template', 'policy', 'faq', 'note', 'other']],
+                'note' => ['type' => 'string', 'description' => 'a word for the reviewer (why it is useful)']], ['title', 'content'],
+            fn(array $a) => $this->sharedWrite('company knowledge base') ?? (function () use ($a) {
+                try { $r = (new AppStore($this->app))->submitAsset((string)$a['title'], (string)$a['content'], (string)($a['category'] ?? 'note'), (string)($a['note'] ?? '')); }
+                catch (\InvalidArgumentException | \RuntimeException $e) { return 'error: ' . $e->getMessage(); }
+                return "sent '{$r['name']}' to the company knowledge base for review. Once the admin approves it, every assistant can install it.";
+            })());
+        $this->register('asset_install', 'Install a shared asset from the company knowledge base into this library (or update the installed copy to the latest version). id is the store asset id (asset-…), from the store catalog. It is saved as a note under "' . AppStore::ASSET_FOLDER . '".',
+            ['id' => ['type' => 'string']], ['id'],
+            fn(array $a) => $this->sharedWrite('library') ?? (function () use ($a) {
+                try { $d = (new AppStore($this->app))->installAsset((string)$a['id']); return "installed '{$d['name']}' into " . AppStore::ASSET_FOLDER . '.'; } catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
             })());
         $this->register('role_case_add',
             'Add a golden case for a role: a reference task the role is judged on (title, optional input, optional rubric describing a good result). These are what an improvement must win on before it is promoted.',
