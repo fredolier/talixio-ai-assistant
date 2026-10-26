@@ -95,6 +95,7 @@ final class Store
         $this->addColumn('jobs', 'archived', 'INTEGER NOT NULL DEFAULT 0'); // put away: hidden from the list, kept for history
         $this->addColumn('jobs', 'directive', 'INTEGER'); // the agent-factory directive this worker job belongs to
         $this->addColumn('jobs', 'role', "TEXT NOT NULL DEFAULT ''"); // the worker role this job runs (kind='worker')
+        $this->addColumn('jobs', 'session', "TEXT NOT NULL DEFAULT ''"); // a Tier-D delegated code session's handle (kind='conductor', Conductor)
         $this->addColumn('tasks', 'job', 'INTEGER'); // a routine that runs this job again, instead of a prompt
         // the assistant's mind (Mind): observations from the history, beliefs built from them, a journal of how it changes
         $this->db->exec("CREATE TABLE IF NOT EXISTS mind_obs(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, strength INTEGER NOT NULL DEFAULT 1,

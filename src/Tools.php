@@ -32,7 +32,7 @@ final class Tools
         'browser' => [['browser_'], '/site|page|navig|browser|clique|click|formulaire|form\b|connecte|log ?in|réserv|book|https?:\/\/|www\.|\.(com|fr|eu|net|org)\b|command|order|achète|buy|livr|deliver|panier|cart|(regarde|cherche|vérifie|check|look|search)\w* (sur|on)\b|uber|deliveroo|amazon|airbnb|doctolib|leboncoin|sncf|vinted/iu', 'a web browser that clicks and types on pages'],
         'schedule' => [['schedule_task', 'cancel_task', 'routine_'], '/rappel|remind|chaque|tous les|toutes les|every|daily|quotidien|hebdo|weekly|mensuel|monthly|routine|programm|planifi|schedul|automati|plus tard|later|\bdans \d|\bin \d/iu', 'reminders and recurring routines'],
         'jobs' => [['delegate', 'list_jobs', 'continue_job', 'cancel_job', 'archive_job', 'schedule_job'], '/job|recherch|research|cherche|enquête|compar|analys|étude|study|arrière-plan|background|rapport|report|veille|approfondi|trouve|find|liste d|list of/iu', 'background jobs: long research and reports'],
-        'director' => [['direct', 'directive_'], '/directive|director|directeu?r|équipe|\bteam\b|en parallèle|in parallel|plusieurs (agents|rôles|workers)|several (agents|roles|workers)|worker|mission|chantier|orchestr|fan.?out|à la (fois|chaîne)|chacun|chaque (poster|contrat|concurrent|produit|item)/iu', 'the director: run a team of worker roles toward one goal'],
+        'director' => [['direct', 'directive_', 'conductor_'], '/directive|director|directeu?r|équipe|\bteam\b|en parallèle|in parallel|plusieurs (agents|rôles|workers)|several (agents|roles|workers)|worker|mission|chantier|orchestr|fan.?out|à la (fois|chaîne)|chacun|chaque (poster|contrat|concurrent|produit|item)|claude.?code|code session|session de code|agent de code|coding agent|conductor|chef d.orchestre/iu', 'the director: run a team of worker roles toward one goal, or delegate one to a Claude Code session'],
         'shell' => [['shell_', 'script_'], '/script|outil|\btools?\b|simulat|commande|command|shell|code|python|calcul|comput|csv|excel|xlsx|json|convert|graph|chart|zip|statisti/iu', 'run code in a sandbox (calculations, files, conversions)'],
         'phone' => [['phone_'], '/appel|call|sms|texto|téléphon|phone|whatsapp|signal/iu', 'calls and texts from the phone'],
         'music' => [['spotify_'], '/musique|music|joue|play|chanson|song|spotify|playlist|album|artist|volume|écoute|listen/iu', 'Spotify'],
@@ -583,6 +583,14 @@ final class Tools
         $this->register('directive_rate', "Record whether the user accepted a finished directive's result — the anchor metric its roles improve on. Call it when the user reacts (accept = true for 'good/ship it', false for 'redo/not useful').",
             ['id' => ['type' => 'integer'], 'accepted' => ['type' => 'boolean']], ['id', 'accepted'],
             fn(array $a) => $this->sharedWrite('skills') ?? $this->app->director()->rate((int)$a['id'], (bool)$a['accepted']));
+        // The conductor: dispatch a role as a delegated Claude Code session (Tier D) — a real repo/git/shell for long work.
+        $this->register('conductor_dispatch',
+            "Delegate one role to a background Claude Code session (Tier D) for work that needs a real codebase, git and shell over a long run — not a quick chat task or headless-browser job. The role must already exist (role_find first, role_save if missing). It becomes a directive with one worker, reports back when the session finishes, and is rated and improved like any other directive. For several roles at once, use 'direct' with per-worker tiers instead.",
+            ['role' => ['type' => 'string'], 'task' => ['type' => 'string', 'description' => 'what this session should accomplish'],
+                'goal' => ['type' => 'string', 'description' => 'the overall goal the session serves'],
+                'tier' => ['type' => 'string', 'enum' => Tier::NAMES, 'description' => "override the role's default model tier"]],
+            ['role', 'goal'],
+            fn(array $a) => $this->app->conductor()->dispatch((string)$a['role'], (string)($a['task'] ?? ''), (string)$a['goal'], (string)($a['tier'] ?? ''), (int)$this->app->space));
         $this->register('usage_report', 'Your spending: budget status, cost and tokens by tier and by source (chat, schedules, jobs...) today and this month.',
             [], [], fn() => $this->usageReport());
         $this->register('usage_bill', "Record what the AI provider really billed (the figure the user read in the provider's console), to correct your cost estimates. Default period: last month.",

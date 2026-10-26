@@ -1195,6 +1195,37 @@ check('director: each worker run is recorded as an anchor sample (acceptance pen
 check('director: directive_rate records the user accepting the result', str_contains($app->tools->run('directive_rate', ['id' => $did, 'accepted' => true]), 'acceptance') && (int)$s->q("SELECT COUNT(*) FROM role_runs WHERE role IN ('researcher-x','writer-x') AND accepted = 1")->fetchColumn() === 2);
 check('director: directive_status shows the finished directive', str_contains($app->tools->run('directive_status', ['id' => $did]), 'done') && str_contains($app->tools->run('directive_status', []), '#' . $did));
 $sk->delete('researcher-x'); $sk->delete('writer-x');
+// ---- the conductor: a role runs as a delegated Tier-D code session, reusing the director's path (orchestration.md §5.4) ----
+$app->tools->run('role_save', ['name' => 'coder-x', 'purpose' => 'Implement a small code change end to end', 'content' => 'Read the repo, make the change, run the tests.', 'tier' => 'deep']);
+$cli = new Talixio\FakeClaudeCli(); $app->claudeCliOverride = $cli;
+check('conductor: a code session needs an existing role', str_contains($app->tools->run('conductor_dispatch', ['role' => 'ghost-coder', 'goal' => 'do a thing']), "no role 'ghost-coder'") && $cli->sessions === []);
+$app->providerOverride = $fake;
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return 'Relayed the code session result to the user.'; };
+$cd = $app->tools->run('conductor_dispatch', ['role' => 'coder-x', 'task' => 'add a flag', 'goal' => 'Add a --verbose flag']);
+check('conductor: dispatch starts a Tier-D session on its own directive', str_contains($cd, 'code session #') && count($cli->sessions) === 1);
+$cjid = (int)$s->q("SELECT MAX(id) FROM jobs WHERE kind='conductor'")->fetchColumn(); $cj = $s->job($cjid);
+check('conductor: the worker is a running conductor job seeded from the role brief, with a live session handle',
+    $cj['kind'] === 'conductor' && $cj['status'] === 'running' && $cj['role'] === 'coder-x' && $cj['session'] !== '' && str_contains((string)$cj['instructions'], 'Read the repo, make the change') && str_contains((string)$cj['instructions'], 'Add a --verbose flag'));
+$s->updateJob($cjid, ['status' => 'queued']); $app->jobs()->dispatch(); // the in-process engine must skip a Tier-D session, not run it
+check('conductor: the in-process jobs engine does not claim a Tier-D session', $s->job($cjid)['status'] === 'queued');
+$s->updateJob($cjid, ['status' => 'running']);
+$h = array_key_first($cli->sessions); $cli->finish($h, 'Added the --verbose flag and updated the tests.', 0.07);
+$app->conductor()->poll();
+$drv2 = $s->directive((int)$cj['directive']);
+check('conductor: poll finishes the session, aggregates the directive and records the role anchor',
+    $s->job($cjid)['status'] === 'done' && abs((float)$s->job($cjid)['cost_usd'] - 0.07) < 1e-9 && $drv2['status'] === 'done'
+    && str_contains((string)$drv2['result'], 'Added the --verbose flag') && (int)$s->q("SELECT COUNT(*) FROM role_runs WHERE role='coder-x' AND accepted IS NULL")->fetchColumn() >= 1);
+$app->tools->run('conductor_dispatch', ['role' => 'coder-x', 'task' => 'break', 'goal' => 'Attempt the impossible']);
+$cjid2 = (int)$s->q("SELECT MAX(id) FROM jobs WHERE kind='conductor'")->fetchColumn();
+$cli->fail(array_key_last($cli->sessions), 'the session failed'); $app->conductor()->poll();
+check('conductor: a failed session marks the worker failed and still finalises its directive',
+    $s->job($cjid2)['status'] === 'failed' && $s->directive((int)$s->job($cjid2)['directive'])['status'] === 'done');
+$app->tools->run('conductor_dispatch', ['role' => 'coder-x', 'task' => 'long', 'goal' => 'A long job']);
+$cjid3 = (int)$s->q("SELECT MAX(id) FROM jobs WHERE kind='conductor'")->fetchColumn(); $h3 = array_key_last($cli->sessions);
+$app->tools->run('directive_steer', ['id' => (int)$s->job($cjid3)['directive'], 'action' => 'cancel']); $app->conductor()->poll();
+check('conductor: steering a directive to cancel stops its live session',
+    $s->job($cjid3)['status'] === 'cancelled' && !empty($cli->sessions[$h3]['stopped']) && $s->job($cjid3)['session'] === '');
+$app->claudeCliOverride = null; $sk->delete('coder-x');
 // ---- the assessor's live A/B: promote a role improvement only if it wins on the golden cases ----
 $app->tools->run('role_save', ['name' => 'summ-x', 'purpose' => 'Summarise a document', 'content' => 'Write a summary.', 'tier' => 'fast']);
 check('improve: an A/B needs golden cases first', str_contains($app->tools->run('role_improve', ['role' => 'summ-x', 'content' => 'Better: 3 bullet points.']), 'no golden cases'));

@@ -139,6 +139,7 @@ final class Director
             $workers = array_map(fn($w) => [
                 'id' => (int)$w['id'], 'role' => $w['role'] ?: $w['title'], 'tier' => $w['tier'], 'status' => $w['status'],
                 'cost' => (float)$w['cost_usd'], 'note' => $w['status'] === 'failed' ? mb_substr((string)$w['result'], 0, 120) : '',
+                'kind' => $w['kind'], // 'worker' (in-process) or 'conductor' (a Tier-D delegated code session)
             ], $this->app->store->directiveWorkers((int)$d['id']));
             $out[] = [
                 'id' => (int)$d['id'], 'title' => $d['title'], 'goal' => $d['goal'], 'priority' => (int)$d['priority'],

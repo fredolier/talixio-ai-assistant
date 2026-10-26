@@ -75,6 +75,7 @@ final class Worker
         $app = $this->app;
         $store = $app->store;
         $this->guard('jobs', fn() => $app->jobs()->dispatch());
+        $this->guard('conductor', function () use ($app) { $c = $app->conductor(); if ($c->busy()) $c->poll(); }); // advance Tier-D code sessions only when any is live
         $paused = Transfer::paused($store) !== null; // only this server's housekeeping: nothing that answers, sends or acts
         foreach ($paused ? [] : $store->dueTasks($now) as $t) {
             // advance first so a crash never makes a task fire twice

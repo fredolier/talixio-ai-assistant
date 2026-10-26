@@ -253,6 +253,7 @@ final class Jobs
         if (self::draining($this->app->cfg->dataDir)) return; // an update is waiting for the running jobs to finish
         foreach ($store->jobsWithStatus('queued') as $j) {
             if (count(self::$procs) >= $this->app->cfg->maxParallelJobs) break;
+            if (($j['kind'] ?? '') === 'conductor') continue; // a Tier-D code session: the conductor runs it, not the in-process engine
             if (!$store->claimJob((int)$j['id'])) continue;
             $proc = proc_open([PHP_BINARY, dirname(__DIR__) . '/bin/talixio', 'job', (string)$j['id']], [0 => ['file', '/dev/null', 'r'], 1 => STDERR, 2 => STDERR], $pipes);
             if (is_resource($proc)) self::$procs[(int)$j['id']] = $proc;

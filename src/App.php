@@ -23,6 +23,8 @@ final class App
     private ?Privacy $privacy = null;
     /** Set in tests to replace the configured model. */
     public ?Provider $providerOverride = null;
+    /** Set in tests to replace the Claude Code CLI the conductor drives (FakeClaudeCli). */
+    public ?ClaudeCli $claudeCliOverride = null;
 
     /** The main settings; $cfg is the current space's AI account when it has one (setSpace). */
     public Config $mainCfg;
@@ -120,6 +122,8 @@ final class App
     public function skills(): Skills { return new Skills($this); }
     public function assessor(): Assessor { return new Assessor($this); }
     public function director(): Director { return new Director($this); }
+    public function claudeCli(): ClaudeCli { return $this->claudeCliOverride ?? new ShellClaudeCli($this->cfg->claudeBin, $this->cfg->dataDir . '/conductor/logs', $this->cfg->claudeToken); }
+    public function conductor(): Conductor { return new Conductor($this, $this->claudeCli()); }
     public function mind(): Mind { return new Mind($this); }
     public function graph(): Graph { return new Graph($this); }
     public function shares(): Shares { return new Shares($this); }
