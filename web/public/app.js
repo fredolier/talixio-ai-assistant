@@ -449,17 +449,18 @@ function spaceEvent(e) {
 
 /** The fleet-orchestrator connect/bootstrap panel in the space editor. The binding is one per assistant (shared by
  * every space); each space governs separately whether it may dispatch (shown by paintLevel). */
-async function initOrchestratorPanel() {
-  const steps = $('#sp-orch-steps'), connect = $('#sp-orch-connect'), disc = $('#sp-orch-disconnect');
+async function initOrchestratorPanel(prefix = 'sp', onRender) {
+  const steps = $(`#${prefix}-orch-steps`), connect = $(`#${prefix}-orch-connect`), disc = $(`#${prefix}-orch-disconnect`);
   steps.hidden = true; steps.textContent = '';
   const ago = ts => { if (!ts) return 'never'; const d = Math.max(0, Date.now() / 1000 - ts); return d < 90 ? 'just now' : d < 3600 ? `${Math.floor(d / 60)} min ago` : d < 86400 ? `${Math.floor(d / 3600)} h ago` : `${Math.floor(d / 86400)} d ago`; };
   const render = info => {
     const on = !!info.connected;
-    $('#sp-orch-status').textContent = on
+    $(`#${prefix}-orch-status`).textContent = on
       ? `Connected${info.session ? ` (session ${info.session})` : ''}. Last sent ${ago(info.lastDispatch)}; last report ${ago(info.lastReport)}. It reports back to ${info.inbox}.`
       : 'Not connected. Run a Claude Code session with Remote Control on — on your own host is fine — and connect it here to delegate code work across your machines.';
     disc.hidden = !on;
     connect.textContent = on ? 'Re-pair…' : 'Connect…';
+    onRender?.(info);
   };
   try { render(await api('api/conductor')); } catch { render({ connected: false, inbox: '' }); }
   connect.onclick = async () => {
@@ -1191,9 +1192,9 @@ const tagsOf = j => (j.tags || '').split(',').filter(Boolean);
 
 // ---- directives (the director's teams): shown as rows on the Jobs/Activity page, workers nested ----
 const dirOpen = new Set(); // directive ids the user expanded (or '-id' = collapsed on purpose)
-function renderDirectives(list) {
-  const box = $('#directives'); if (!box) return;
-  if (jobsFilter.archived) { box.hidden = true; box.innerHTML = ''; return; }
+function renderDirectives(list, box = $('#directives'), refresh = loadJobs) {
+  if (!box) return;
+  if (box.id === 'directives' && jobsFilter.archived) { box.hidden = true; box.innerHTML = ''; return; }
   box.hidden = false; box.innerHTML = '';
   if (!list.length) { // no directive yet: a one-line hint so the director is discoverable instead of invisible until first use
     box.innerHTML = `<div class="placeholder dir-hint">🎬 ${esc(t('No directives yet.'))} ${esc(t('Ask in the chat to run a team, e.g.'))} <q>${esc(t('research our top 3 competitors and draft a one-pager on each'))}</q>. <span class="muted">${esc(t('The director runs a worker role for each part, in parallel — the roles must already exist.'))}</span></div>`;
@@ -1207,9 +1208,9 @@ function renderDirectives(list) {
     m.innerHTML = `<div class="dir-budget-row"><b>${esc(t('Today’s budget'))}</b><span class="spacer"></span><span>$${b.today.toFixed(2)} ${esc(t('of'))} $${(+b.daily_limit).toFixed(2)}${lvl !== 'ok' ? ' · ' + esc(t(lvl === 'bad' ? 'budget reached' : 'budget low')) : ''}</span></div><div class="dir-budget-bar"><i style="width:${pct}%"></i></div>`;
     box.appendChild(m);
   }
-  for (const d of list) box.appendChild(dirRow(d));
+  for (const d of list) box.appendChild(dirRow(d, refresh));
 }
-function dirRow(d) {
+function dirRow(d, refresh = loadJobs) {
   const el = document.createElement('div');
   el.className = 'task dir';
   const total = d.workers.length;
@@ -1232,8 +1233,8 @@ function dirRow(d) {
   const act = el.querySelector('.dir-actions');
   const btn = (cls, label, title, fn) => { const b = document.createElement('button'); b.className = 'btn small ' + cls; b.textContent = label; if (title) b.title = title; b.onclick = fn; return b; };
   if (active) {
-    if (d.priority > 1) act.appendChild(btn('ghost', '↑ P' + (d.priority - 1), t('Raise priority'), async () => { try { await post(`api/directives/${d.id}/steer`, { action: 'prioritize', priority: d.priority - 1 }); loadJobs(); } catch (e) { toast(e.message); } }));
-    act.appendChild(btn('ghost', t('Cancel'), '', async () => { if (!confirm(t('Cancel this directive and stop its unfinished workers?'))) return; try { await post(`api/directives/${d.id}/steer`, { action: 'cancel' }); loadJobs(); } catch (e) { toast(e.message); } }));
+    if (d.priority > 1) act.appendChild(btn('ghost', '↑ P' + (d.priority - 1), t('Raise priority'), async () => { try { await post(`api/directives/${d.id}/steer`, { action: 'prioritize', priority: d.priority - 1 }); refresh(); } catch (e) { toast(e.message); } }));
+    act.appendChild(btn('ghost', t('Cancel'), '', async () => { if (!confirm(t('Cancel this directive and stop its unfinished workers?'))) return; try { await post(`api/directives/${d.id}/steer`, { action: 'cancel' }); refresh(); } catch (e) { toast(e.message); } }));
   } else if (d.status === 'done') {
     act.appendChild(btn('', '👍 ' + t('Accept'), t('The roles learn from what you accept'), async () => { try { await post(`api/directives/${d.id}/rate`, { accepted: true }); toast(t('Recorded — the roles learn from it')); } catch (e) { toast(e.message); } }));
     act.appendChild(btn('ghost', t('Not useful'), '', async () => { try { await post(`api/directives/${d.id}/rate`, { accepted: false }); toast(t('Recorded')); } catch (e) { toast(e.message); } }));
@@ -5037,7 +5038,67 @@ window.addEventListener('message', async e => {
   } catch (err) { reply({ error: err.message }); }
 });
 
-const VIEWS = { chat: null, notifications: loadNotifications, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, apps: loadApps, memory: loadMemory, settings: loadSettings, activity: loadActivity, privacy: loadPrivacy };
+// ---- Pilotage: the director's cockpit (agents · worksites · roles · knowledge) ----
+const PILOT_TABS = ['agents', 'chantiers', 'roles', 'kb'];
+function pilotTab() { try { const v = localStorage.getItem('pilotTab'); return PILOT_TABS.includes(v) ? v : 'agents'; } catch { return 'agents'; } }
+function showPilotTab(tab) {
+  if (!PILOT_TABS.includes(tab)) tab = 'agents';
+  try { localStorage.setItem('pilotTab', tab); } catch {}
+  document.querySelectorAll('#view-pilotage .ptab').forEach(b => b.setAttribute('aria-selected', b.dataset.ptab === tab ? 'true' : 'false'));
+  document.querySelectorAll('#view-pilotage .pilot-panel').forEach(p => p.hidden = p.dataset.ppanel !== tab);
+  ({ agents: pilotAgents, chantiers: pilotChantiers, roles: pilotRoles, kb: pilotKb }[tab])?.().catch(e => toast(e.message));
+}
+let pilotWired = false;
+async function loadPilotage() {
+  if (!pilotWired) {
+    pilotWired = true;
+    document.querySelectorAll('#view-pilotage .ptab').forEach(b => b.onclick = () => showPilotTab(b.dataset.ptab));
+    const sendPilot = () => { // route the dictated directive through the ordinary chat send(), so the director uses its own fleet tools
+      const src = $('#ptt-input'), text = src.value.trim();
+      if (!text) { src.focus(); return; }
+      $('#input').value = text; src.value = '';
+      location.hash = '#chat';
+      setTimeout(() => send(), 0);
+    };
+    $('#ptt-send').onclick = sendPilot;
+    $('#ptt-input').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendPilot(); } });
+  }
+  showPilotTab(pilotTab());
+}
+async function pilotAgents() {
+  const box = $('#pilot-agents');
+  await initOrchestratorPanel('pilot', info => {
+    const sum = (info.summary || '').trim();
+    box.innerHTML = sum ? `<div class="doc">${md(sum)}</div>`
+      : `<div class="placeholder">${esc(t('No fleet orchestrator is connected yet. Connect one above to run agents across your machines.'))}</div>`;
+  });
+}
+async function pilotChantiers() {
+  const box = $('#pilot-chantiers');
+  try {
+    const { directives } = await api('api/jobs');
+    renderDirectives(directives || [], box, pilotChantiers);
+  } catch (e) { box.innerHTML = `<div class="placeholder">${esc(e.message)}</div>`; }
+}
+async function pilotRoles() {
+  const box = $('#pilot-roles');
+  const { skills } = await api('api/skills');
+  const roles = (skills || []).filter(s => s.kind === 'role');
+  if (!roles.length) { box.innerHTML = `<div class="placeholder">${esc(t('No roles yet. The director and the fleet seed roles as they work; they will appear here as a managed catalogue.'))}</div>`; return; }
+  box.innerHTML = `<p class="muted small">${esc(t('The roles your assistant runs — the same registry the director and the fleet use, so improving one improves everywhere. Full metrics and lifecycle land in the next slices.'))}</p>`
+    + roles.map(r => `<div class="prole"><b>${esc(r.name)}</b><span class="muted small">${esc(r.description || '')}</span>${r.used ? `<span class="chip">${t('used {n}×', { n: r.used })}</span>` : ''}</div>`).join('');
+}
+async function pilotKb() {
+  const box = $('#pilot-kb');
+  const sp = state.spaces?.find(x => x.id === state.space);
+  const folder = sp?.folder || '/';
+  box.innerHTML = `<div class="card"><h3>${esc(t('Knowledge the director grounds on'))}</h3>`
+    + `<p class="muted small">${esc(t('The space’s library is what the director and its roles read from. Deep edits stay in Library.'))}</p>`
+    + `<p>${esc(t('Space'))}: <b class="no-i18n">${esc(sp?.name || '—')}</b> · ${esc(t('library root'))}: <code class="no-i18n">${esc(folder)}</code></p>`
+    + `<p><a href="#library">${esc(t('Open the Library'))} ▸</a></p></div>`;
+}
+
+const VIEWS = { chat: null, notifications: loadNotifications, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, apps: loadApps, memory: loadMemory, settings: loadSettings, activity: loadActivity, privacy: loadPrivacy, pilotage: loadPilotage };
 function route() {
   const fm = location.hash.match(/^#file\/(\d+)(?:\/p(\d+))?$/); // a document link from a mail
   if (fm) { openCited(+fm[1], +fm[2] || 0); return; }

@@ -285,9 +285,32 @@ const flows = {
     check('spaces: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#sp-orch-steps')));
     await page.click('#sp-cancel');
   },
+  async pilotage({ page, check }) {
+    // the director's cockpit: four tabs over machinery already shipped, voice-first
+    await go(page, 'pilotage');
+    check('pilotage: the view shows', await page.isVisible('#view-pilotage'));
+    check('pilotage: it is reachable from the rail', await page.isVisible('.rail a[data-view=pilotage]'));
+    // the Agents tab leads, with the push-to-talk composer and the orchestrator panel moved here
+    check('pilotage: Agents is the opening tab', await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-talk'));
+    check('pilotage: a mic sits on every input', (await page.$$('#view-pilotage .dictate-btn')).length >= 2);
+    await page.click('#pilot-orch-connect');
+    await page.waitForSelector('#pilot-orch-steps:not([hidden])', { timeout: 4000 });
+    check('pilotage: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#pilot-orch-steps')));
+    // tab switching reveals the Worksites/Chantiers board (the Director's directives)
+    await page.click('#view-pilotage .ptab[data-ptab=chantiers]'); await page.waitForTimeout(400);
+    check('pilotage: Worksites tab opens', await page.isVisible('.pilot-panel[data-ppanel=chantiers]'));
+    await page.click('#view-pilotage .ptab[data-ptab=roles]'); await page.waitForTimeout(400);
+    check('pilotage: Roles tab opens', await page.isVisible('.pilot-panel[data-ppanel=roles]'));
+    // "Parler au pilote": a dictated directive is routed through the ordinary chat send()
+    await page.click('#view-pilotage .ptab[data-ptab=agents]'); await page.waitForTimeout(300);
+    await page.fill('#ptt-input', 'run the weekly competitor scan');
+    await page.click('#ptt-send');
+    await page.waitForSelector('#thread :text("run the weekly competitor scan")', { timeout: 10000 });
+    check('pilotage: the pilot composer sends through the chat', (await page.textContent('#thread')).includes('run the weekly competitor scan'));
+  },
   async mobile({ page, check }) {
     await page.setViewportSize({ width: 400, height: 800 });
-    for (const v of ['chat', 'library', 'board', 'settings']) {
+    for (const v of ['chat', 'pilotage', 'library', 'board', 'settings']) {
       await go(page, v);
       check(`mobile: ${v} fits the screen`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     }

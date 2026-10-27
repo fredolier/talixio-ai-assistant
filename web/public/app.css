@@ -1422,3 +1422,26 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .rx-item .rx-pick{width:17px;height:17px;flex:none}
 #store-conn .tabs.alpha{flex-wrap:wrap;gap:4px;margin:6px 0}
 #store-conn .tabs.alpha .tab{padding:3px 8px;font-size:.8rem}
+/* Pilotage — the director's cockpit (0.29.0) */
+.pilot-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0}
+.ptab{font:inherit;font-size:.9rem;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:7px 15px;border-radius:99px;cursor:pointer}
+.ptab:hover{border-color:var(--accent)}
+.ptab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.pilot-panel{display:flex;flex-direction:column;gap:14px}
+.pilot-talk{border:1px solid var(--accent);background:var(--accent-soft)}
+.pilot-talk h3{color:var(--ink)}
+.ptt{display:flex;align-items:center;gap:14px}
+.ptt .micbig{width:66px;height:66px;border-radius:50%;flex:none;display:grid;place-items:center;padding:0}
+.ptt .micbig svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ptt p{margin:0}
+.pilot-composer{border-top:0;padding:0;background:transparent;flex-direction:row;align-items:flex-end;gap:8px}
+.pilot-composer textarea{resize:none;max-height:160px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface);flex:1;min-width:0;font:inherit;color:var(--ink)}
+.pilot-steps{max-height:320px;overflow:auto;background:var(--sunk);padding:10px 12px;border-radius:var(--r);font-size:.78rem;line-height:1.45;white-space:pre-wrap;word-break:break-word;margin:4px 0 0}
+.pilot-orch .row,.pilot-talk .row{display:flex;gap:8px;flex-wrap:wrap}
+#pilot-agents .doc{font-size:.9rem}
+#pilot-roles .prole{display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);margin-bottom:8px}
+#pilot-roles .prole b{flex:1;min-width:0}
+#pilot-roles .pspec{margin:14px 0 8px;font-size:.82rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+#pilot-roles .pspec:first-child{margin-top:0}
+.micbig.rec{color:var(--danger);animation:blink 1.2s infinite}
+@media (max-width:560px){.pilot-tabs{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}.ptab{flex:none}.ptt{flex-direction:column;align-items:stretch;text-align:center}.ptt .micbig{align-self:center}}
