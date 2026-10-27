@@ -190,15 +190,27 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
   the lifecycle actions (a shared `roleWritable` guard: 404 on a non-role, 403 on
   a protected one) — their lifecycle is the user's to manage directly.
 
-### Slice 5 — top-of-rail switch + KB glance (0.29.4) · *Small–Medium*
+### Slice 5 — top-of-rail switch + KB glance (0.29.4) · *Small–Medium* · *(shipped)*
 
-- Lift the **assistant** switch (0.28.40 one-sign-in) and the **space** switch
-  (`switchSpace`) to a dedicated block at the **top of the rail** — direct access,
-  not buried in the account menu. Assistant name on top, account (person) stays at
-  the bottom; per-space colour drives the space dot.
-- **KB** tab: a read-only summary of the space's grounding — library root, counts,
-  and any active hub pull (`Spaces::hubGrants`) — with a link into Library for
-  edits. No new storage.
+- **Top-of-rail switch** *(shipped)*: the **assistant** switch (0.28.40
+  one-sign-in) already lived at the top of the rail (the brand mark opens the
+  assistant menu); slice 5 adds the **space** switch there too, in a dedicated
+  `.rail-space-head` block directly under the assistant name — the current
+  space's own colour drives its dot, and it is reachable from **any** view, not
+  only the chat topbar. The account (sign-out) stays at the foot of the rail. The
+  homogeneity choice: the rail switch and the chat-topbar switch share **one
+  builder (`buildSpaceMenu`) and one close path (`closeSpaceMenus`)**, so both
+  steer the same spaces through the same `switchSpace` — no second switch logic.
+  On a phone the rail collapses to the bottom tab bar (`.rail-space-head` hidden)
+  and the topbar switch carries on, so nothing is lost.
+- **KB glance** *(shipped)*: the KB tab went from a one-line pointer to a
+  read-only glance backed by one new aggregate, **`GET /api/library/kb`**, which
+  reports the space's library root, the **recursive file count under that root**
+  (from `Library::tree`'s `total`), its **subfolder** count, the whole library's
+  size for context (`Library::stats`), and the active **hub pull** grant
+  (`Spaces::hubGrants`) — reusing shipped methods only and **writing nothing**. An
+  **"Open the Library"** link deep-links straight to the space's root folder
+  (segment-encoded to match `libGo`). No new storage, no new trust edge.
 
 ### Slice 6 — polish & naming settle (0.29.5) · *Small*
 

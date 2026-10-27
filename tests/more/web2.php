@@ -124,6 +124,14 @@ $im = $web('/api/roles/triage-y/improve', ['content' => 'anything']);
 check('web2 roles: Improve on a role with no golden cases explains why, promoting nothing',
     $im['_code'] === 200 && str_contains((string)($im['message'] ?? ''), 'golden case'), substr($im['_raw'], 0, 300));
 
+// ---- Pilotage slice 5: the KB glance aggregate (/api/library/kb) ----
+$app->library()->createFolder('/Dossier');
+$app->library()->saveNote('/Dossier', 'kb-note', 'A grounding note for the glance.');
+$kb = $web('/api/library/kb');
+check('web2 kb: the glance reports the space root, a recursive file count under it, a subfolder, the library size and the hub pull grant',
+    $kb['_code'] === 200 && $kb['root'] === '/' && (int)($kb['files'] ?? 0) >= 1 && (int)($kb['subfolders'] ?? 0) >= 1
+    && isset($kb['library']['bytes']) && ($kb['hub']['pull'] ?? null) === false, substr($kb['_raw'], 0, 300));
+
 // ---- the Europe-only card ----
 $sv = $web('/api/sovereign');
 check('web2 sovereign: lists the providers with their prices, not active', $sv['_code'] === 200 && in_array('mistral', array_column($sv['services'], 'id'), true) && $sv['active'] === false

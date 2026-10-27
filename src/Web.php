@@ -445,6 +445,36 @@ final class Web
         return $role;
     }
 
+    /**
+     * A read-only glance at the current space's grounding — its library root, the file count under that
+     * root, its subfolders, the whole library's size for context, and the hub pull grant. Pure view: it
+     * reuses Library::tree/stats and Spaces::hubGrants and writes nothing. Powers Pilotage's KB tab.
+     */
+    private function kbGlance(): array
+    {
+        $sp = (int)$this->app->space;
+        $space = $this->app->spaces()->get($sp) ?? $this->app->spaces()->general();
+        $root = Library::normalize(($space['folder'] ?? '') ?: '/');
+        $lib = $this->app->library();
+        $prefix = $root === '/' ? '/' : $root . '/';
+        $files = 0;
+        $subfolders = 0;
+        foreach ($lib->tree() as $node) {
+            if ($node['path'] === $root) $files = (int)$node['total'];
+            elseif ($node['path'] !== '/' && str_starts_with($node['path'], $prefix)) $subfolders++;
+        }
+        $stats = $lib->stats();
+        if ($root === '/') $files = (int)$stats['files']; // tree()'s root total skips nested files; the whole library is the count here
+        return [
+            'space' => $space['name'] ?? 'General',
+            'root' => $root,
+            'files' => $files,
+            'subfolders' => $subfolders,
+            'library' => ['files' => $stats['files'], 'bytes' => $stats['bytes'], 'pending' => $stats['pending']],
+            'hub' => $this->app->spaces()->hubGrants($sp),
+        ];
+    }
+
     /** The API of the library, files, shares and privacy. */
     private function routeLibrary(string $m, string $path, array $b): array
     {
@@ -460,6 +490,7 @@ final class Web
             (bool)preg_match('#^/api/shares/(\d+)/revoke$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->shares()->revoke((int)$mm[1])],
             (bool)preg_match('#^/api/shares/(\d+)/log$#', $path, $mm) => ['log' => $this->app->shares()->accessLog((int)$mm[1])],
             $path === '/api/library/tree' => ['tree' => $this->app->library()->tree(), 'stats' => $this->app->library()->stats()],
+            $path === '/api/library/kb' => $this->kbGlance(),
             // mode=quick: keywords only, at once; then the full search (with meaning) completes it. more: a full search would add something
             $path === '/api/library/find-regex' => $this->app->library()->findRegex((string)($_GET['q'] ?? ''), (string)($_GET['folder'] ?? '/')),
             $path === '/api/files/bulk' && $m === 'POST' => $this->bulkFiles(array_map('intval', (array)($b['ids'] ?? [])), (string)($b['action'] ?? ''), $b),

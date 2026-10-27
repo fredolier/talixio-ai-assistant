@@ -2865,5 +2865,13 @@ window.I18N.fr = {
 "Archived.": "Archivé.",
 "Reactivated.": "Réactivé.",
 "Delete this role for good? This cannot be undone. Only a role that was never run can be deleted.": "Supprimer définitivement ce rôle ? Action irréversible. Seul un rôle jamais exécuté peut être supprimé.",
-"Deleted.": "Supprimé."
+"Deleted.": "Supprimé.",
+"the whole library": "toute la bibliothèque",
+"across the whole library": "sur toute la bibliothèque",
+"This space pulls from the company knowledge base.": "Cet espace puise dans la base de connaissances de l’entreprise.",
+"No company knowledge-base pull is active for this space.": "Aucune lecture de la base de connaissances de l’entreprise n’est active pour cet espace.",
+"file under this root": "fichier sous cette racine",
+"files under this root": "fichiers sous cette racine",
+"subfolder": "sous-dossier",
+"subfolders": "sous-dossiers"
 };

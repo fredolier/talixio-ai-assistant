@@ -348,6 +348,22 @@ const flows = {
     await page.click('#ptt-send');
     await page.waitForSelector('#thread :text("run the weekly competitor scan")', { timeout: 10000 });
     check('pilotage: the pilot composer sends through the chat', (await page.textContent('#thread')).includes('run the weekly competitor scan'));
+    // slice 5: the KB tab is a read-only glance (counts + hub pull + a link into Library), not a one-line pointer
+    await go(page, 'pilotage');
+    await page.click('#view-pilotage .ptab[data-ptab=kb]');
+    await page.waitForSelector('#pilot-kb .pkb .pkb-grid', { timeout: 6000 });
+    check('pilotage: KB glance shows stat tiles and a link into Library',
+      (await page.$$('#pilot-kb .pkb-stat')).length === 3
+      && !!(await page.$('#pilot-kb .pkb-hub'))
+      && !!(await page.$('#pilot-kb a[href^="#library"]')));
+    // slice 5: the space switch lifted to the top of the rail shares the one builder and lists the spaces
+    check('pilotage: a space switch sits at the top of the rail', await page.isVisible('#rail-space-btn'));
+    await page.click('#rail-space-btn');
+    await page.waitForSelector('#rail-space-menu:not([hidden]) .space-item', { timeout: 4000 });
+    check('pilotage: the rail space switch opens the space menu',
+      (await page.$$('#rail-space-menu .space-item[data-id]')).length >= 1);
+    await page.click('#rail-space-btn'); // toggle the menu shut again (its anchor sits above the open menu)
+    await page.waitForSelector('#rail-space-menu', { state: 'hidden', timeout: 4000 });
   },
   async mobile({ page, check }) {
     await page.setViewportSize({ width: 400, height: 800 });

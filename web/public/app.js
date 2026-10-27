@@ -379,6 +379,16 @@ function renderSpaceHead() {
     try { await post(`api/spaces/${sp.id}`, { ...sp, archived: false }); await loadSpaces(); renderSpaceHead(); toast('Space restored.'); } catch (err) { toast(err.message); }
   };
   showOtherUnread(state.spaces.filter(x => x.id !== state.space).reduce((a, x) => a + (x.unread || 0), 0));
+  renderRailSpace();
+}
+/** The space switch lifted to the top of the rail: the current space's dot (its own colour) and name, reachable from any view. */
+function renderRailSpace() {
+  const btn = $('#rail-space-btn'); if (!btn) return;
+  const sp = spaceOf(state.space), general = !sp.id;
+  btn.querySelector('.space-dot').style.background = general ? 'var(--accent)' : (sp.color || 'var(--muted)');
+  const name = btn.querySelector('.rail-space-name');
+  name.textContent = general ? 'General' : sp.name;
+  name.classList.toggle('no-i18n', !general); // a space's own name is user content; "General" stays translatable
 }
 function showOtherUnread(n) { const b = $('#space-unread'); b.hidden = !n; b.textContent = n > 99 ? '99+' : n; b.title = n ? `${n} new answer(s) in other spaces` : ''; }
 async function switchSpace(id, opts = {}) {
@@ -396,11 +406,15 @@ async function switchSpace(id, opts = {}) {
   const s = state.spaces.find(x => x.id === id); if (s) s.unread = 0;
   showOtherUnread(first.unread);
 }
-$('#space-btn').onclick = async e => {
-  e.stopPropagation();
-  const menu = $('#space-menu');
-  if (!menu.hidden) { menu.hidden = true; $('#space-btn').setAttribute('aria-expanded', 'false'); return; }
-  await Promise.all([loadSpaces(), loadAiAccounts()]);
+/** Both space switches (chat topbar + top of rail) share one builder and one close path, so they steer the
+ *  same spaces through the same switchSpace — no second switch logic. */
+function closeSpaceMenus() {
+  for (const [b, m] of [['#space-btn', '#space-menu'], ['#rail-space-btn', '#rail-space-menu']]) {
+    const menu = $(m); if (menu) menu.hidden = true;
+    $(b)?.setAttribute('aria-expanded', 'false');
+  }
+}
+function buildSpaceMenu(menu) {
   const active = state.spaces.filter(x => !x.archived), archived = state.spaces.filter(x => x.archived);
   const item = x => `<button class="space-item${x.id === state.space ? ' current' : ''}" role="menuitem" type="button" data-id="${x.id}">
       <i style="background:${x.color || 'var(--muted)'}"></i><span class="name">${esc(x.id ? x.name : 'General')}${x.folder ? ` <span class="folder">${esc(x.folder)}</span>` : ''}</span>${x.unread ? `<span class="badge">${x.unread}</span>` : ''}</button>`;
@@ -411,10 +425,10 @@ $('#space-btn').onclick = async e => {
     + '<button class="space-item" type="button" data-act="new">+ New space</button>'
     + '<button class="space-item" type="button" data-act="import">Import a space…</button>'
     + (archived.length ? `<details><summary class="muted small" style="padding:6px 10px">Archived (${archived.length})</summary>${archived.map(item).join('')}</details>` : '');
-  menu.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { menu.hidden = true; switchSpace(+b.dataset.id); });
-  menu.querySelector('[data-act=new]').onclick = () => { menu.hidden = true; openSpaceEditor(null); };
-  menu.querySelector('[data-act=import]').onclick = () => { menu.hidden = true; $('#space-import').value = ''; $('#space-import').click(); };
-  menu.querySelector('[data-act=edit]')?.addEventListener('click', () => { menu.hidden = true; openSpaceEditor(spaceOf(state.space)); });
+  menu.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { closeSpaceMenus(); switchSpace(+b.dataset.id); });
+  menu.querySelector('[data-act=new]').onclick = () => { closeSpaceMenus(); openSpaceEditor(null); };
+  menu.querySelector('[data-act=import]').onclick = () => { closeSpaceMenus(); $('#space-import').value = ''; $('#space-import').click(); };
+  menu.querySelector('[data-act=edit]')?.addEventListener('click', () => { closeSpaceMenus(); openSpaceEditor(spaceOf(state.space)); });
   menu.querySelector('.gen-tier')?.addEventListener('click', e => e.stopPropagation());
   menu.querySelector('.gen-account select')?.addEventListener('change', async e => {
     try { await post('api/spaces/0/account', { account: e.target.value }); await loadSpaces(); toast(t('General now uses {account}.', { account: accountName(e.target.value) })); }
@@ -424,8 +438,16 @@ $('#space-btn').onclick = async e => {
     try { await post('api/spaces/0/tier', { tier: e.target.value }); await loadSpaces(); toast(t('General now answers with the {tier} model.', { tier: t(e.target.value) })); }
     catch (err) { toast(err.message); }
   });
-  menu.hidden = false; $('#space-btn').setAttribute('aria-expanded', 'true');
-};
+}
+async function toggleSpaceMenu(btn, menu) {
+  if (!menu.hidden) { closeSpaceMenus(); return; }
+  closeSpaceMenus();
+  await Promise.all([loadSpaces(), loadAiAccounts()]);
+  buildSpaceMenu(menu);
+  menu.hidden = false; btn.setAttribute('aria-expanded', 'true');
+}
+$('#space-btn').onclick = e => { e.stopPropagation(); toggleSpaceMenu($('#space-btn'), $('#space-menu')); };
+$('#rail-space-btn').onclick = e => { e.stopPropagation(); toggleSpaceMenu($('#rail-space-btn'), $('#rail-space-menu')); };
 /** The AI accounts a space can use (Settings → AI model); quietly empty when they cannot be read. */
 async function loadAiAccounts() {
   try { state.aiAccounts = (await api('api/accounts')).accounts; } catch { state.aiAccounts ||= []; }
@@ -436,7 +458,7 @@ function accountOptions(current) {
   return `<option value="">${esc(t('Main settings'))}</option>` + (state.aiAccounts || []).map(a =>
     `<option class="no-i18n" value="${esc(a.id)}"${a.id === current ? ' selected' : ''}>${esc(a.name)} · ${esc(t(a.label))}</option>`).join('');
 }
-document.addEventListener('click', e => { if (!e.target.closest('.space-head')) { $('#space-menu').hidden = true; $('#space-btn').setAttribute('aria-expanded', 'false'); } });
+document.addEventListener('click', e => { if (!e.target.closest('.space-head') && !e.target.closest('.rail-space-head')) closeSpaceMenus(); });
 
 /** One line of a space's history: "archived 10/10 14:02 (app)". */
 function spaceEvent(e) {
@@ -5239,12 +5261,27 @@ async function pilotRoles() {
 }
 async function pilotKb() {
   const box = $('#pilot-kb');
-  const sp = state.spaces?.find(x => x.id === state.space);
-  const folder = sp?.folder || '/';
-  box.innerHTML = `<div class="card"><h3>${esc(t('Knowledge the director grounds on'))}</h3>`
-    + `<p class="muted small">${esc(t('The space’s library is what the director and its roles read from. Deep edits stay in Library.'))}</p>`
-    + `<p>${esc(t('Space'))}: <b class="no-i18n">${esc(sp?.name || '—')}</b> · ${esc(t('library root'))}: <code class="no-i18n">${esc(folder)}</code></p>`
-    + `<p><a href="#library">${esc(t('Open the Library'))} ▸</a></p></div>`;
+  box.innerHTML = `<div class="placeholder">${esc(t('Loading…'))}</div>`;
+  let kb;
+  try { kb = await api('api/library/kb'); } catch (e) { box.innerHTML = `<div class="placeholder">${esc(e.message)}</div>`; return; }
+  const root = kb.root || '/', rootLabel = root === '/' ? t('the whole library') : root;
+  const folderLink = '#library' + (root === '/' ? '' : root.split('/').map(encodeURIComponent).join('/'));
+  const hub = kb.hub?.pull
+    ? `<p class="pkb-hub on"><span class="dot" aria-hidden="true"></span>${esc(t('This space pulls from the company knowledge base.'))}</p>`
+    : `<p class="pkb-hub muted small">${esc(t('No company knowledge-base pull is active for this space.'))}</p>`;
+  box.innerHTML = `<div class="card pkb">
+      <h3>${esc(t('Knowledge the director grounds on'))}</h3>
+      <p class="muted small">${esc(t('The space’s library is what the director and its roles read from. Deep edits stay in Library.'))}</p>
+      <p class="pkb-root">${esc(t('Space'))}: <b class="no-i18n">${esc(kb.space || '—')}</b> · ${esc(t('library root'))}: <code class="no-i18n">${esc(root)}</code></p>
+      <div class="pkb-grid">
+        <div class="pkb-stat"><b class="no-i18n">${nf.format(kb.files || 0)}</b><span>${esc(t(kb.files === 1 ? 'file under this root' : 'files under this root'))}</span></div>
+        <div class="pkb-stat"><b class="no-i18n">${nf.format(kb.subfolders || 0)}</b><span>${esc(t(kb.subfolders === 1 ? 'subfolder' : 'subfolders'))}</span></div>
+        <div class="pkb-stat"><b class="no-i18n">${esc(fmtSize(kb.library?.bytes || 0))}</b><span>${esc(t('across the whole library'))}</span></div>
+      </div>
+      ${kb.library?.pending ? `<p class="muted small">${esc(t('Reading {a} new file{b} to index…', { a: kb.library.pending, b: kb.library.pending > 1 ? 's' : '' }))}</p>` : ''}
+      ${hub}
+      <p><a href="${folderLink}">${esc(t('Open the Library'))} ▸</a> <span class="muted small no-i18n">(${esc(rootLabel)})</span></p>
+    </div>`;
 }
 
 const VIEWS = { chat: null, notifications: loadNotifications, board: loadBoard, library: loadLibrary, tasks: loadTasks, mail: loadMail, people: loadPeople, jobs: loadJobs, apps: loadApps, memory: loadMemory, settings: loadSettings, activity: loadActivity, privacy: loadPrivacy, pilotage: loadPilotage };
