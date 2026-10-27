@@ -83,7 +83,10 @@ small and listed per slice below.
 
 Sizes are relative to the shipped slices. Each slice ships behind the existing
 per-space privacy guard where it touches dispatch or publish; none opens a new
-network edge. Version numbers are **proposed** (continuing from 0.28.99).
+network edge. Version numbers continue from 0.28.99: slices 1 + 1a open the
+**0.29.x** line, and **1.0.0 is reserved for when Pilotage is complete** — the
+cockpit consolidated and voice-first throughout (i.e. after slice 6). 0.5.0 is
+not an option (versions only climb from 0.28.99).
 
 ### Slice 1 — the Pilotage shell + Chantiers + Agents (0.29.0) · *Small–Medium*
 
