@@ -5116,6 +5116,7 @@ function proleCard(r) {
     <p class="muted small prole-desc">${esc(r.description || '')}</p>
     <div class="prole-metrics small"><span>${esc(acc)}</span>${trend}<span class="muted">${esc(bits)}</span>${pSpark(r.series)}</div>
     ${overlap}
+    <form class="prole-spec" data-role-spec="${esc(r.name)}"><label class="muted small">${esc(t('Specialization'))}</label><input class="prole-spec-in no-i18n" value="${esc(r.specialization || '')}" placeholder="${esc(t('none'))}"><button type="submit" class="btn ghost small">${esc(t('Set'))}</button></form>
     <div class="prole-actions">
       <button class="btn ghost small" data-role-eval="${esc(r.name)}">${esc(t('Evaluate'))}</button>
       ${publish}
@@ -5130,16 +5131,55 @@ async function roleAction(btn, url) {
   catch (e) { toast(e.message); }
   finally { btn.disabled = false; }
 }
+// Overlap is a suggestion, never an auto-merge: compare the two briefs, then hand a draft to the pilot to approve.
+async function roleCompare(a, b) {
+  const panel = $('#prole-merge');
+  panel.hidden = false;
+  panel.innerHTML = `<div class="muted small">${esc(t('Loading…'))}</div>`;
+  panel.scrollIntoView({ block: 'nearest' });
+  try {
+    const [ca, cb] = await Promise.all([api(`api/skills/${encodeURIComponent(a)}`), api(`api/skills/${encodeURIComponent(b)}`)]);
+    panel.innerHTML = `<div class="prole-merge-head"><b>${esc(t('Compare & merge'))}</b><button class="btn icon" data-merge-close aria-label="${esc(t('Close'))}">✕</button></div>`
+      + `<div class="prole-merge-cols"><div><h4 class="no-i18n">${esc(a)}</h4><pre class="no-i18n">${esc(ca.content || '')}</pre></div>`
+      + `<div><h4 class="no-i18n">${esc(b)}</h4><pre class="no-i18n">${esc(cb.content || '')}</pre></div></div>`
+      + `<p class="muted small">${esc(t('Merging is never automatic. Hand the pilot a draft and approve it before anything is saved.'))}</p>`
+      + `<button class="btn primary small" data-merge-propose>${esc(t('Propose a merged role to the pilot'))}</button>`;
+    panel.querySelector('[data-merge-close]').onclick = () => { panel.hidden = true; panel.innerHTML = ''; };
+    panel.querySelector('[data-merge-propose]').onclick = () => {
+      $('#input').value = t('Roles "{a}" and "{b}" look like near-duplicates. Review both briefs; if they truly overlap, propose ONE merged role that covers both (keep the stronger brief, union their skills and tools) and tell me before saving. Do not change anything automatically.', { a, b });
+      location.hash = '#chat';
+      setTimeout(() => send(), 0);
+    };
+  } catch (e) { panel.innerHTML = `<div class="placeholder">${esc(e.message)}</div>`; }
+}
 async function pilotRoles() {
   const box = $('#pilot-roles');
-  const { roles } = await api('api/roles');
+  const { roles, overlaps } = await api('api/roles');
   if (!roles || !roles.length) { box.innerHTML = `<div class="placeholder">${esc(t('No roles yet. The director and the fleet seed roles as they work; they will appear here as a managed catalogue.'))}</div>`; return; }
+  const banner = overlaps && overlaps.length
+    ? `<div class="poverlap-banner"><b>${esc(t('Overlap detected'))}</b><ul>` + overlaps.map(o =>
+        `<li><span class="no-i18n">${esc(o.a)} ≈ ${esc(o.b)}</span> <span class="muted small">${esc(t('{p}% close', { p: Math.round(o.score * 100) }))}</span> <button class="btn ghost small" data-merge-a="${esc(o.a)}" data-merge-b="${esc(o.b)}">${esc(t('Compare'))}</button></li>`
+      ).join('') + `</ul></div>` : '';
+  // group by specialization; roles with none fall into a trailing "Unspecialized" group
+  const groups = new Map();
+  for (const r of roles) { const k = r.specialization || ''; (groups.get(k) || groups.set(k, []).get(k)).push(r); }
+  const keys = [...groups.keys()].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b));
+  const sections = keys.map(k =>
+    `<div class="pspec${k ? '' : ' none'} no-i18n">${esc(k || t('Unspecialized'))}</div>`
+    + `<div class="prole-grid">${groups.get(k).map(proleCard).join('')}</div>`).join('');
   box.innerHTML = `<p class="muted small">${esc(t('The roles your assistant runs — the same registry the director and the fleet use, drawing the Assessor’s own numbers, so improving one improves everywhere.'))}</p>`
-    + `<div class="prole-grid">${roles.map(proleCard).join('')}</div>`;
+    + banner + `<div id="prole-merge" hidden></div>` + sections;
   box.querySelectorAll('[data-role-eval]').forEach(b => b.onclick = () => roleAction(b, `api/roles/${encodeURIComponent(b.dataset.roleEval)}/evaluate`));
   box.querySelectorAll('[data-role-pub]').forEach(b => b.onclick = () => {
     if (!confirm(t('Send this role to the store for review, so other assistants can install it?'))) return;
     roleAction(b, `api/roles/${encodeURIComponent(b.dataset.rolePub)}/publish`);
+  });
+  box.querySelectorAll('[data-merge-a]').forEach(b => b.onclick = () => roleCompare(b.dataset.mergeA, b.dataset.mergeB));
+  box.querySelectorAll('form[data-role-spec]').forEach(f => f.onsubmit = async e => {
+    e.preventDefault();
+    const name = f.dataset.roleSpec, val = f.querySelector('.prole-spec-in').value.trim();
+    try { await post(`api/roles/${encodeURIComponent(name)}/specialization`, { specialization: val }); toast(t('Specialization saved')); pilotRoles().catch(() => {}); }
+    catch (err) { toast(err.message); }
   });
 }
 async function pilotKb() {

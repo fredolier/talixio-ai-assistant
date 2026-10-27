@@ -65,6 +65,32 @@ check('web2 roles: Evaluate wires to the assessor read, naming the role and its 
     $ev['_code'] === 200 && str_contains((string)($ev['message'] ?? ''), 'triage-x') && str_contains((string)($ev['message'] ?? ''), 'run'),
     substr($ev['_raw'], 0, 300));
 
+// ---- Pilotage slice 3: specialization grouping + the overlap/doublon signal ----
+// A near-twin of triage-x so the lexical overlap pass has a pair to surface.
+$app->skills()->save('triage-y', 'Sort incoming mail into the right next action', 'Read the mail and route it to the next action.',
+    ['kind' => 'role', 'tier' => 'standard', 'tools' => 'mailbox_list']);
+$ov = $app->skills()->overlaps(0.6);
+check('web2 roles: overlaps() surfaces the twin as a close pair, scored and ordered',
+    is_array($ov) && (bool)array_filter($ov, fn($p) => ($p['score'] ?? 0) >= 0.6
+        && (($p['a'] === 'triage-x' && $p['b'] === 'triage-y') || ($p['a'] === 'triage-y' && $p['b'] === 'triage-x'))),
+    json_encode($ov));
+$rc2 = $web('/api/roles');
+check('web2 roles: /api/roles carries the overlaps alongside the catalogue, no second call',
+    $rc2['_code'] === 200 && is_array($rc2['overlaps'] ?? null)
+    && (bool)array_filter($rc2['overlaps'], fn($p) => in_array('triage-x', [$p['a'] ?? '', $p['b'] ?? ''], true) && in_array('triage-y', [$p['a'] ?? '', $p['b'] ?? ''], true)),
+    substr($rc2['_raw'], 0, 400));
+$sp = $web('/api/roles/triage-x/specialization', ['specialization' => 'Inbox']);
+check('web2 roles: setting a specialization is an ok, and it lands in the header and the catalogue',
+    ($sp['ok'] ?? false) === true && ($app->skills()->meta('triage-x')['specialization'] ?? '') === 'Inbox'
+    && (($app->skills()->meta('triage-x')['version'] ?? '') === '2')  // the rest of the header survives the one-field write
+    && (array_column($web('/api/roles')['roles'] ?? [], 'specialization', 'name')['triage-x'] ?? '') === 'Inbox',
+    substr($sp['_raw'], 0, 300));
+$sp = $web('/api/roles/triage-x/specialization', ['specialization' => '']);
+check('web2 roles: clearing a specialization drops the field',
+    ($sp['ok'] ?? false) === true && !array_key_exists('specialization', $app->skills()->meta('triage-x')));
+$sp = $web('/api/roles/not-a-role/specialization', ['specialization' => 'x']);
+check('web2 roles: a specialization write to a non-role is a 404', $sp['_code'] === 404);
+
 // ---- the Europe-only card ----
 $sv = $web('/api/sovereign');
 check('web2 sovereign: lists the providers with their prices, not active', $sv['_code'] === 200 && in_array('mistral', array_column($sv['services'], 'id'), true) && $sv['active'] === false

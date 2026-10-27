@@ -18,7 +18,7 @@ final class Skills
     public function __construct(private App $app) {}
 
     /** Header keys written in this order; list-valued ones (skills, tools) are stored comma-joined on one line. */
-    private const ORDER = ['name', 'description', 'kind', 'tier', 'skills', 'tools', 'when_to_use', 'when_not', 'scope', 'version', 'uses'];
+    private const ORDER = ['name', 'description', 'kind', 'tier', 'skills', 'tools', 'when_to_use', 'when_not', 'scope', 'specialization', 'version', 'uses'];
 
     private function dir(): string
     {
@@ -134,6 +134,46 @@ final class Skills
         }
         usort($out, fn($a, $b) => $b['score'] <=> $a['score']);
         return array_slice($out, 0, $limit);
+    }
+
+    /**
+     * The duplicate signal, made pairwise: how close every pair of roles reads, over the same fields find() ranks on
+     * (name, description, skills, tools, when_to_use). A symmetric set-cosine in [0,1]; pairs at or above $threshold
+     * are the "doublons" Pilotage warns about. Computed on demand, never stored as truth — a suggestion, not a verdict.
+     * @return array<array{a:string,b:string,score:float}> unique unordered pairs, closest first
+     */
+    public function overlaps(float $threshold = 0.6): array
+    {
+        $bags = [];
+        foreach ($this->all() as $s) {
+            $meta = $this->meta($s['name']);
+            if (($meta['kind'] ?? 'skill') !== 'role') continue;
+            $toks = self::tokens($s['name'] . ' ' . $s['description'] . ' ' . ($meta['skills'] ?? '') . ' ' . ($meta['tools'] ?? '') . ' ' . ($meta['when_to_use'] ?? ''));
+            if ($toks) $bags[$s['name']] = array_flip($toks);
+        }
+        $names = array_keys($bags);
+        $out = [];
+        for ($i = 0; $i < count($names); $i++) for ($j = $i + 1; $j < count($names); $j++) {
+            $a = $bags[$names[$i]]; $b = $bags[$names[$j]];
+            $shared = count(array_intersect_key($a, $b));
+            if (!$shared) continue;
+            $score = round($shared / sqrt(count($a) * count($b)), 2);
+            if ($score >= $threshold) $out[] = ['a' => $names[$i], 'b' => $names[$j], 'score' => $score];
+        }
+        usort($out, fn($x, $y) => $y['score'] <=> $x['score']);
+        return $out;
+    }
+
+    /** Set (or clear, when empty) one header field of a role in place, keeping its brief and the rest of the header. */
+    public function setField(string $name, string $key, string $value): void
+    {
+        $raw = $this->raw($name);
+        if ($raw === null) throw new \InvalidArgumentException("no skill named '$name'");
+        [$meta, $body] = self::parse($raw);
+        $value = trim(preg_replace('/\s+/', ' ', $value));
+        if ($value === '') unset($meta[$key]); else $meta[$key] = $value;
+        $extra = $meta; unset($extra['name'], $extra['description']);
+        $this->save($meta['name'] ?? $name, $meta['description'] ?? 'role', $body, $extra);
     }
 
     /** @return string[] distinct lowercase word stems of length ≥ 3 (accents folded), for lexical matching. */

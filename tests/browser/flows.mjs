@@ -308,6 +308,17 @@ const flows = {
       && (await page.$$('#pilot-roles [data-role-eval]')).length >= 1);
     check('pilotage: the assessor (role #0) is in the catalogue, protected, so no Publish on it',
       (await page.textContent('#pilot-roles')).includes('assessor'));
+    // slice 3: the catalogue is grouped under specialization headers, with a one-field editor per card
+    check('pilotage: roles are grouped under specialization section headers',
+      (await page.$$('#pilot-roles .pspec')).length >= 1);
+    check('pilotage: each card carries an inline specialization editor',
+      (await page.$$('#pilot-roles form[data-role-spec]')).length >= 1);
+    // slice 3: setting a specialization regroups the catalogue under that heading
+    const specForm = await page.$('#pilot-roles form[data-role-spec]');
+    await specForm.$eval('.prole-spec-in', el => { el.value = 'QA'; });
+    await specForm.evaluate(f => f.requestSubmit());
+    await page.waitForSelector('#pilot-roles .pspec.no-i18n:text-is("QA")', { timeout: 6000 });
+    check('pilotage: a saved specialization becomes a group header', await page.isVisible('#pilot-roles .pspec:text-is("QA")'));
     // "Parler au pilote": a dictated directive is routed through the ordinary chat send()
     await page.click('#view-pilotage .ptab[data-ptab=agents]'); await page.waitForTimeout(300);
     await page.fill('#ptt-input', 'run the weekly competitor scan');

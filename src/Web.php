@@ -355,9 +355,14 @@ final class Web
             })(),
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
             $path === '/api/skills' => ['skills' => $this->app->skills()->all()],
-            $path === '/api/roles' && $m === 'GET' => ['roles' => $this->roleCatalog()],
+            $path === '/api/roles' && $m === 'GET' => ['roles' => $this->roleCatalog(), 'overlaps' => $this->app->skills()->overlaps()],
             (bool)preg_match('#^/api/roles/([\w-]+)/evaluate$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_evaluate', ['role' => $mm[1]])],
             (bool)preg_match('#^/api/roles/([\w-]+)/publish$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_publish', ['role' => $mm[1], 'note' => (string)($b['note'] ?? '')])],
+            (bool)preg_match('#^/api/roles/([\w-]+)/specialization$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
+                if (($this->app->skills()->meta($mm[1])['kind'] ?? '') !== 'role') $this->fail(404, 'no such role');
+                $this->app->skills()->setField($mm[1], 'specialization', (string)($b['specialization'] ?? ''));
+                return ['ok' => true];
+            })(),
             $path === '/api/mind' && $m === 'GET' => $this->app->mind()->overview(),
             (bool)preg_match('#^/api/mind/(\d+)$#', $path, $mm) && $m === 'GET' => ['evidence' => $this->app->mind()->evidence((int)$mm[1])],
             (bool)preg_match('#^/api/mind/(\d+)/forget$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->mind()->forget((int)$mm[1])],
@@ -403,6 +408,7 @@ final class Web
             $out[] = [
                 'name' => $s['name'], 'description' => $s['description'],
                 'tier' => $meta['tier'] ?? 'standard', 'scope' => $meta['scope'] ?? 'private',
+                'specialization' => trim((string)($meta['specialization'] ?? '')),
                 'version' => (int)($meta['version'] ?? 1),
                 'protected' => ($meta['protected'] ?? '') === '1' || $assessor->isProtected($s['name']),
                 'published' => ($meta['scope'] ?? 'private') === 'shared',

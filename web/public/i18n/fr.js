@@ -2844,5 +2844,16 @@ window.I18N.fr = {
 "Evaluate": "Évaluer",
 "Improve": "Améliorer",
 "Lands in a later slice.": "Arrive dans une tranche ultérieure.",
-"Send this role to the store for review, so other assistants can install it?": "Envoyer ce rôle au catalogue pour validation, afin que d’autres assistants puissent l’installer ?"
+"Send this role to the store for review, so other assistants can install it?": "Envoyer ce rôle au catalogue pour validation, afin que d’autres assistants puissent l’installer ?",
+"Specialization": "Spécialisation",
+"Set": "Définir",
+"Specialization saved": "Spécialisation enregistrée",
+"Unspecialized": "Sans spécialisation",
+"Overlap detected": "Chevauchement détecté",
+"{p}% close": "{p} % proches",
+"Compare": "Comparer",
+"Compare & merge": "Comparer et fusionner",
+"Merging is never automatic. Hand the pilot a draft and approve it before anything is saved.": "La fusion n’est jamais automatique. Confiez un brouillon au pilote et validez-le avant tout enregistrement.",
+"Propose a merged role to the pilot": "Proposer un rôle fusionné au pilote",
+"Roles \"{a}\" and \"{b}\" look like near-duplicates. Review both briefs; if they truly overlap, propose ONE merged role that covers both (keep the stronger brief, union their skills and tools) and tell me before saving. Do not change anything automatically.": "Les rôles « {a} » et « {b} » semblent quasi identiques. Examine les deux consignes ; s’ils se recoupent vraiment, propose UN seul rôle fusionné qui couvre les deux (garde la meilleure consigne, réunis leurs compétences et outils) et préviens-moi avant d’enregistrer. Ne change rien automatiquement."
 };

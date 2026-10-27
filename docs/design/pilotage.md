@@ -67,8 +67,8 @@ small and listed per slice below.
 | Pilotage element | Reuse (shipped) | New (this plan) |
 |---|---|---|
 | Rôles list + metrics card | `Skills::all/meta`, `Assessor::metrics/health/cases` | the view; a `/api/roles` aggregate |
-| Specialization grouping | — | a `scope`/`specialization` header field + grouping |
-| Overlap / "doublon" signal | `Skills::find` ranking (embeddings/`Meaning`) | a pairwise closeness pass + the banner/merge panel |
+| Specialization grouping | — | a new `specialization` header field + grouping |
+| Overlap / "doublon" signal | `Skills::find` ranking (lexical tokens) | `Skills::overlaps()` pairwise closeness + the banner/merge panel |
 | Archiver / Archivés… | `Skills` files; `Assessor` history kept | an `archived` header flag + filtered listing |
 | Supprimer (guarded) | `Skills::delete`, `Assessor` run counts | the "jamais exécuté" guard that steers to archive |
 | Évaluer / Améliorer / Publier | `Assessor::runEvaluation/improve`, `Catalog`/`AppStore` role publish | the buttons + panels |
@@ -149,18 +149,25 @@ The role registry gets its first screen.
 The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
 **grouping ≠ duplicate**).
 
-- **Specialization**: read the existing `scope` header field (or add an optional
-  `specialization` field, preserved by `Skills::save`'s header order) and group
-  the map by it. A role with none falls into "Sans spécialisation". Pure grouping
-  by shared topic/actions/goals — **no** behavioural coupling.
-- **Overlap** (the separate, finer signal): a pairwise closeness pass over role
-  briefs reusing `Skills::find`/`Meaning` embeddings; pairs above a threshold
-  surface the banner ("Overlap détecté — researcher ≈ web-researcher, consignes
-  ~87 % proches") and the inline hint on the detail card. Computed on demand /
-  cached, not stored as truth.
-- **Merge panel**: side-by-side brief compare + a "fusionner" action that drafts a
-  combined role via `role_improve` (human-approved, never automatic). Overlap is a
-  *suggestion*, never an auto-merge.
+- **Specialization** *(shipped)*: a new optional `specialization` header field
+  (preserved by `Skills::save`'s header order; set via `Skills::setField` behind
+  `POST /api/roles/<role>/specialization`), grouping the map by it. A role with
+  none falls into "Sans spécialisation". A one-field inline editor on each card
+  makes the map editable. `scope` was *not* reused — it already means the role's
+  visibility (private/shared/published). Pure grouping by shared topic — **no**
+  behavioural coupling.
+- **Overlap** (the separate, finer signal) *(shipped)*: `Skills::overlaps()`, a
+  pairwise set-cosine over the same lexical tokens `Skills::find` ranks on
+  (name, description, skills, tools, when-to-use), default threshold 0.6 — not
+  `Meaning`/embeddings, which are off in the test env, so the signal stays
+  consistent with the registry's own ranker. Pairs at/above the threshold surface
+  the banner ("Overlap détecté — researcher ≈ web-researcher, ~87 % proches") and
+  the inline hint on the card. Recomputed on demand, carried on the `/api/roles`
+  payload, never stored as truth.
+- **Merge panel** *(shipped)*: side-by-side brief compare + "Proposer un rôle
+  fusionné au pilote", which drafts a combined-role instruction into the ordinary
+  chat for the Director to run with its own tools (keep the stronger brief, union
+  skills + tools, confirm before saving). Human-approved, never an auto-merge.
 
 ### Slice 4 — role lifecycle: archive, delete-guard, improve (0.29.3) · *Medium*
 
@@ -195,11 +202,21 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
 
 ## 5. Open decisions (carry from the mockup)
 
-- `scope` reused vs. a new `specialization` field — lean: reuse `scope` if its
-  current meaning doesn't clash, else add `specialization`.
-- Overlap threshold + whether to cache the pairwise matrix or recompute per visit.
-- Merge default: always human-approved draft (lean yes) vs. allow auto-merge for
-  near-identical low-risk roles.
+- ~~`scope` reused vs. a new `specialization` field~~ — **settled (slice 3):**
+  added a new optional `specialization` header field. `scope` already means
+  private/shared/published (the visibility of a role), which clashes with a
+  topical grouping label, so reusing it would have overloaded one field with two
+  meanings.
+- ~~Overlap threshold + whether to cache the pairwise matrix or recompute per
+  visit~~ — **settled (slice 3):** recompute per visit (`Skills::overlaps()`,
+  default threshold 0.6), a symmetric set-cosine over the same lexical tokens
+  `Skills::find` ranks on — embeddings/`Meaning` are off in the test env, so the
+  signal stays consistent with the registry's own ranker and holds no second
+  similarity store to keep in sync. A suggestion, never stored as truth.
+- ~~Merge default~~ — **settled (slice 3):** always a human-approved draft. The
+  Compare panel drafts a merge instruction into the ordinary chat for the pilot
+  to run with its own tools; merging is never automatic, even for near-identical
+  roles.
 - Naming: confirm Automatisations / Travaux en arrière-plan and the single merged
   entry.
 - Does Chantiers fully replace the directive cards on Activity, or do both stay
