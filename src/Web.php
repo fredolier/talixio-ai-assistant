@@ -106,7 +106,7 @@ final class Web
             'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor' => $this->routeChat($m, $path, $b),
             'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
             'google', 'microsoft', 'spotify', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
-            'memory', 'mind', 'skills', 'scripts' => $this->routeMind($m, $path, $b),
+            'memory', 'mind', 'skills', 'roles', 'scripts' => $this->routeMind($m, $path, $b),
             'library', 'files', 'shares', 'privacy' => $this->routeLibrary($m, $path, $b),
             'board' => $this->board($m, $path, $b),
             'apps' => $this->apps($m, $path, $b),
@@ -355,6 +355,9 @@ final class Web
             })(),
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
             $path === '/api/skills' => ['skills' => $this->app->skills()->all()],
+            $path === '/api/roles' && $m === 'GET' => ['roles' => $this->roleCatalog()],
+            (bool)preg_match('#^/api/roles/([\w-]+)/evaluate$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_evaluate', ['role' => $mm[1]])],
+            (bool)preg_match('#^/api/roles/([\w-]+)/publish$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_publish', ['role' => $mm[1], 'note' => (string)($b['note'] ?? '')])],
             $path === '/api/mind' && $m === 'GET' => $this->app->mind()->overview(),
             (bool)preg_match('#^/api/mind/(\d+)$#', $path, $mm) && $m === 'GET' => ['evidence' => $this->app->mind()->evidence((int)$mm[1])],
             (bool)preg_match('#^/api/mind/(\d+)/forget$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->mind()->forget((int)$mm[1])],
@@ -379,6 +382,39 @@ final class Web
             (bool)preg_match('#^/api/scripts/([\w-]+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->scripts()->delete($mm[1])],
             default => $this->fail(404, 'not found'),
         };
+    }
+
+    /**
+     * One aggregate for the Rôles catalogue (Pilotage): every `kind: role` file, with its header
+     * (tier/scope/version/protected) joined to the Assessor's own numbers (acceptance, mean cost, run
+     * count, last run, trend + sparkline, golden cases, overlap). No new metrics are computed here —
+     * the same numbers the A/B gate uses — so improving a role improves everywhere.
+     */
+    private function roleCatalog(): array
+    {
+        $this->app->assessor()->seed(); // role #0 is always in the catalogue
+        $skills = $this->app->skills();
+        $assessor = $this->app->assessor();
+        $out = [];
+        foreach ($skills->all() as $s) {
+            $meta = $skills->meta($s['name']);
+            if (($meta['kind'] ?? 'skill') !== 'role') continue;
+            $h = $assessor->health($s['name']);
+            $out[] = [
+                'name' => $s['name'], 'description' => $s['description'],
+                'tier' => $meta['tier'] ?? 'standard', 'scope' => $meta['scope'] ?? 'private',
+                'version' => (int)($meta['version'] ?? 1),
+                'protected' => ($meta['protected'] ?? '') === '1' || $assessor->isProtected($s['name']),
+                'published' => ($meta['scope'] ?? 'private') === 'shared',
+                'skills' => array_values(array_filter(array_map('trim', explode(',', (string)($meta['skills'] ?? ''))))),
+                'tools' => array_values(array_filter(array_map('trim', explode(',', (string)($meta['tools'] ?? ''))))),
+                'runs' => $h['runs'], 'acceptance' => $h['acceptance'], 'cost_mean' => $h['cost_mean'],
+                'trend' => $h['trend'], 'series' => $h['series'], 'last' => $h['last'],
+                'cases' => $h['cases'], 'metrics' => $h['metrics'], 'overlap' => $h['duplicates'],
+            ];
+        }
+        usort($out, fn($a, $b) => $b['runs'] <=> $a['runs'] ?: strcmp($a['name'], $b['name']));
+        return $out;
     }
 
     /** The API of the library, files, shares and privacy. */

@@ -5080,13 +5080,67 @@ async function pilotChantiers() {
     renderDirectives(directives || [], box, pilotChantiers);
   } catch (e) { box.innerHTML = `<div class="placeholder">${esc(e.message)}</div>`; }
 }
+const PILOT_TREND = { up: '↑', down: '↓', flat: '→', new: '·' };
+function pRing(acc) { // acceptance 0..1 (or null) → a small donut showing the accept rate
+  if (acc == null) return `<span class="pring none no-i18n" title="${esc(t('no rated runs yet'))}">—</span>`;
+  const pct = Math.round(acc * 100), c = 2 * Math.PI * 15.9;
+  return `<svg class="pring" viewBox="0 0 36 36" aria-hidden="true"><circle class="pring-bg" cx="18" cy="18" r="15.9"/>`
+    + `<circle class="pring-fg" cx="18" cy="18" r="15.9" stroke-dasharray="${(pct / 100 * c).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 18 18)"/>`
+    + `<text class="pring-t no-i18n" x="18" y="22">${pct}</text></svg>`;
+}
+function pSpark(series) { // recent accepted (1) / rejected (0) runs, oldest→newest → a tiny bar strip
+  if (!series || !series.length) return '';
+  const w = 3, g = 1, h = 14, pts = series.slice(-24);
+  const bars = pts.map((v, i) => `<rect x="${i * (w + g)}" y="${v ? 0 : h - 3}" width="${w}" height="${v ? h : 3}" class="${v ? 'sp1' : 'sp0'}"/>`).join('');
+  const width = pts.length * (w + g) - g;
+  return `<svg class="pspark" viewBox="0 0 ${width} ${h}" width="${width}" height="${h}" aria-hidden="true">${bars}</svg>`;
+}
+function proleCard(r) {
+  const acc = r.acceptance == null ? t('no rated runs yet') : `${Math.round(r.acceptance * 100)}% ${t('accepted')}`;
+  const chips = [];
+  if (r.protected) chips.push(`<span class="chip proto">${esc(t('Protected'))}</span>`);
+  if (r.published) chips.push(`<span class="chip schedule">${esc(t('Published'))}</span>`);
+  chips.push(`<span class="chip tier no-i18n">${esc(r.tier)}</span>`);
+  const trendTitle = { up: 'rising', down: 'falling', flat: 'steady', new: 'too new to tell' }[r.trend] || '';
+  const trend = PILOT_TREND[r.trend] ? `<span class="ptrend t-${esc(r.trend)}" title="${esc(t(trendTitle))}">${PILOT_TREND[r.trend]}</span>` : '';
+  const bits = [
+    r.runs ? t('{n} runs', { n: r.runs }) : t('no runs yet'),
+    r.cost_mean != null ? t('{c}/run', { c: money(r.cost_mean) }) : '',
+    t('{n} cases', { n: r.cases }),
+  ].filter(Boolean).join(' · ');
+  const overlap = r.overlap && r.overlap.length
+    ? `<p class="poverlap small">${esc(t('Overlaps {names}', { names: r.overlap.join(', ') }))}</p>` : '';
+  const publish = r.protected ? '' : `<button class="btn ghost small" data-role-pub="${esc(r.name)}">${esc(t('Publish'))}</button>`;
+  return `<div class="prole-card">
+    <div class="prole-head">${pRing(r.acceptance)}<div class="prole-id"><b class="no-i18n">${esc(r.name)}</b> <span class="muted small no-i18n">v${r.version}</span><div class="prole-chips">${chips.join('')}</div></div></div>
+    <p class="muted small prole-desc">${esc(r.description || '')}</p>
+    <div class="prole-metrics small"><span>${esc(acc)}</span>${trend}<span class="muted">${esc(bits)}</span>${pSpark(r.series)}</div>
+    ${overlap}
+    <div class="prole-actions">
+      <button class="btn ghost small" data-role-eval="${esc(r.name)}">${esc(t('Evaluate'))}</button>
+      ${publish}
+      <button class="btn ghost small" disabled title="${esc(t('Lands in a later slice.'))}">${esc(t('Improve'))}</button>
+      <button class="btn ghost small" disabled title="${esc(t('Lands in a later slice.'))}">${esc(t('Archive'))}</button>
+    </div>
+  </div>`;
+}
+async function roleAction(btn, url) {
+  btn.disabled = true;
+  try { const r = await post(url, {}); toast(r.message || t('Done')); pilotRoles().catch(() => {}); }
+  catch (e) { toast(e.message); }
+  finally { btn.disabled = false; }
+}
 async function pilotRoles() {
   const box = $('#pilot-roles');
-  const { skills } = await api('api/skills');
-  const roles = (skills || []).filter(s => s.kind === 'role');
-  if (!roles.length) { box.innerHTML = `<div class="placeholder">${esc(t('No roles yet. The director and the fleet seed roles as they work; they will appear here as a managed catalogue.'))}</div>`; return; }
-  box.innerHTML = `<p class="muted small">${esc(t('The roles your assistant runs — the same registry the director and the fleet use, so improving one improves everywhere. Full metrics and lifecycle land in the next slices.'))}</p>`
-    + roles.map(r => `<div class="prole"><b>${esc(r.name)}</b><span class="muted small">${esc(r.description || '')}</span>${r.used ? `<span class="chip">${t('used {n}×', { n: r.used })}</span>` : ''}</div>`).join('');
+  const { roles } = await api('api/roles');
+  if (!roles || !roles.length) { box.innerHTML = `<div class="placeholder">${esc(t('No roles yet. The director and the fleet seed roles as they work; they will appear here as a managed catalogue.'))}</div>`; return; }
+  box.innerHTML = `<p class="muted small">${esc(t('The roles your assistant runs — the same registry the director and the fleet use, drawing the Assessor’s own numbers, so improving one improves everywhere.'))}</p>`
+    + `<div class="prole-grid">${roles.map(proleCard).join('')}</div>`;
+  box.querySelectorAll('[data-role-eval]').forEach(b => b.onclick = () => roleAction(b, `api/roles/${encodeURIComponent(b.dataset.roleEval)}/evaluate`));
+  box.querySelectorAll('[data-role-pub]').forEach(b => b.onclick = () => {
+    if (!confirm(t('Send this role to the store for review, so other assistants can install it?'))) return;
+    roleAction(b, `api/roles/${encodeURIComponent(b.dataset.rolePub)}/publish`);
+  });
 }
 async function pilotKb() {
   const box = $('#pilot-kb');

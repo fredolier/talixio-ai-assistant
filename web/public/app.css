@@ -1439,8 +1439,26 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .pilot-steps{max-height:320px;overflow:auto;background:var(--sunk);padding:10px 12px;border-radius:var(--r);font-size:.78rem;line-height:1.45;white-space:pre-wrap;word-break:break-word;margin:4px 0 0}
 .pilot-orch .row,.pilot-talk .row{display:flex;gap:8px;flex-wrap:wrap}
 #pilot-agents .doc{font-size:.9rem}
-#pilot-roles .prole{display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);margin-bottom:8px}
-#pilot-roles .prole b{flex:1;min-width:0}
+.prole-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.prole-card{display:flex;flex-direction:column;gap:8px;padding:13px 14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+.prole-head{display:flex;align-items:center;gap:11px}
+.prole-id{min-width:0;flex:1}
+.prole-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.chip.proto{border-color:var(--warn);color:var(--warn)}
+.chip.tier{text-transform:capitalize}
+.prole-desc{margin:0}
+.prole-metrics{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.prole-metrics .muted{flex:1;min-width:0}
+.pring{width:40px;height:40px;flex:none}
+.pring-bg{fill:none;stroke:var(--line);stroke-width:3}
+.pring-fg{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round}
+.pring-t{fill:var(--ink);font-size:11px;font-weight:600;text-anchor:middle}
+.pring.none{width:40px;height:40px;display:grid;place-items:center;color:var(--muted)}
+.ptrend{font-weight:700}.ptrend.t-up{color:var(--accent)}.ptrend.t-down{color:var(--danger)}.ptrend.t-flat,.ptrend.t-new{color:var(--muted)}
+.pspark rect.sp1{fill:var(--accent)}.pspark rect.sp0{fill:var(--danger)}
+.poverlap{margin:0;color:var(--warn)}
+.prole-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.btn.small{font-size:.78rem;padding:4px 10px}
 #pilot-roles .pspec{margin:14px 0 8px;font-size:.82rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 #pilot-roles .pspec:first-child{margin-top:0}
 .micbig.rec{color:var(--danger);animation:blink 1.2s infinite}

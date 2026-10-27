@@ -43,6 +43,28 @@ $priv = fn(string $m, ...$a) => (new ReflectionMethod(Web::class, $m))->invoke(n
 
 check('web2: signing in works', ($web('/api/login', ['password' => $pw])['ok'] ?? false) === true);
 
+// ---- Pilotage slice 2: the Rôles catalogue aggregate (/api/roles) — runs before the password tests rotate the session ----
+$app->skills()->save('triage-x', 'Sort incoming mail into the right next action', 'Read the mail and decide what happens next.',
+    ['kind' => 'role', 'tier' => 'standard', 'tools' => 'mailbox_list', 'version' => '2']);
+$app->assessor()->addCase('triage-x', 'An invoice arrives', '', 'files it and flags the due date');
+$app->assessor()->record('triage-x', true, 0.01);
+$app->assessor()->record('triage-x', false, 0.02);
+$app->assessor()->record('triage-x', true, 0.015);
+$rc = $web('/api/roles');
+$byName = array_column($rc['roles'] ?? [], null, 'name');
+$tx = $byName['triage-x'] ?? [];
+check('web2 roles: one aggregate joins the header with the Assessor numbers, no per-role round-trips',
+    $rc['_code'] === 200 && ($tx['runs'] ?? 0) === 3 && abs(($tx['acceptance'] ?? 0) - 0.67) < 0.01 && ($tx['cases'] ?? 0) === 1
+    && ($tx['tier'] ?? '') === 'standard' && ($tx['version'] ?? 0) === 2 && ($tx['protected'] ?? true) === false
+    && ($tx['published'] ?? true) === false && in_array('acceptance+cost', $tx['metrics'] ?? [], true) && is_array($tx['series'] ?? null),
+    substr($rc['_raw'], 0, 500));
+check('web2 roles: role #0 (the assessor) is in the catalogue and flagged protected',
+    isset($byName['assessor']) && ($byName['assessor']['protected'] ?? false) === true, substr($rc['_raw'], 0, 300));
+$ev = $web('/api/roles/triage-x/evaluate', []);
+check('web2 roles: Evaluate wires to the assessor read, naming the role and its runs',
+    $ev['_code'] === 200 && str_contains((string)($ev['message'] ?? ''), 'triage-x') && str_contains((string)($ev['message'] ?? ''), 'run'),
+    substr($ev['_raw'], 0, 300));
+
 // ---- the Europe-only card ----
 $sv = $web('/api/sovereign');
 check('web2 sovereign: lists the providers with their prices, not active', $sv['_code'] === 200 && in_array('mistral', array_column($sv['services'], 'id'), true) && $sv['active'] === false

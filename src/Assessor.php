@@ -161,7 +161,7 @@ final class Assessor
     public function health(string $role, int $window = 40): array
     {
         $slug = Skills::slug($role);
-        $rows = $this->app->store->q('SELECT accepted, cost_usd, score FROM role_runs WHERE role = ? ORDER BY id DESC LIMIT ?', [$slug, $window])->fetchAll();
+        $rows = $this->app->store->q('SELECT ts, accepted, cost_usd, score FROM role_runs WHERE role = ? ORDER BY id DESC LIMIT ?', [$slug, $window])->fetchAll();
         $rated = array_values(array_filter($rows, fn($r) => $r['accepted'] !== null));
         $acc = $rated ? array_sum(array_map(fn($r) => (int)$r['accepted'], $rated)) / count($rated) : null;
         $cost = $rows ? array_sum(array_map(fn($r) => (float)$r['cost_usd'], $rows)) / count($rows) : null;
@@ -172,6 +172,8 @@ final class Assessor
             'cost_mean' => $cost === null ? null : round($cost, 4), 'trend' => $this->trend($rated),
             'cases' => count($this->cases($role)), 'metrics' => array_keys($this->metrics($role)),
             'duplicates' => array_column($dupes, 'name'),
+            'last' => $rows ? (int)$rows[0]['ts'] : null, // rows are newest-first
+            'series' => array_reverse(array_map(fn($r) => (int)$r['accepted'], $rated)), // oldest→newest, for a sparkline
         ];
     }
 

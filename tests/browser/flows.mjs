@@ -299,8 +299,15 @@ const flows = {
     // tab switching reveals the Worksites/Chantiers board (the Director's directives)
     await page.click('#view-pilotage .ptab[data-ptab=chantiers]'); await page.waitForTimeout(400);
     check('pilotage: Worksites tab opens', await page.isVisible('.pilot-panel[data-ppanel=chantiers]'));
-    await page.click('#view-pilotage .ptab[data-ptab=roles]'); await page.waitForTimeout(400);
-    check('pilotage: Roles tab opens', await page.isVisible('.pilot-panel[data-ppanel=roles]'));
+    await page.click('#view-pilotage .ptab[data-ptab=roles]');
+    await page.waitForSelector('#pilot-roles .prole-card', { timeout: 6000 });
+    check('pilotage: Roles tab opens the metric catalogue (slice 2)', await page.isVisible('.pilot-panel[data-ppanel=roles]'));
+    check('pilotage: each role is a metric card with an acceptance ring and an Evaluate action',
+      (await page.$$('#pilot-roles .prole-card')).length >= 1
+      && (await page.$$('#pilot-roles .prole-card .pring')).length >= 1
+      && (await page.$$('#pilot-roles [data-role-eval]')).length >= 1);
+    check('pilotage: the assessor (role #0) is in the catalogue, protected, so no Publish on it',
+      (await page.textContent('#pilot-roles')).includes('assessor'));
     // "Parler au pilote": a dictated directive is routed through the ordinary chat send()
     await page.click('#view-pilotage .ptab[data-ptab=agents]'); await page.waitForTimeout(300);
     await page.fill('#ptt-input', 'run the weekly competitor scan');
