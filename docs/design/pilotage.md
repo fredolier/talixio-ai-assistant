@@ -20,6 +20,14 @@ roles, how well, and what do I change?"*
 assistant/space switch lifted to the top of the rail so the person always knows
 *who* they are steering and *where*.
 
+Pilotage is **voice-first**: you talk to a manager, you don't type at one. A mic
+sits on every input (role briefs, instructions, worksite goals, chat to a
+session) and a prominent **"Parler au pilote"** push-to-talk heads the agents tab,
+because dictating a directive to the orchestrator is the natural act. This reuses
+the dictation path already shipped (`toggleDictate` + `/api/transcribe` +
+`Transcriber`), so it is a wiring job, not a new capability — it ships with the
+shell (slice 1a).
+
 - **KB** — the knowledge the director grounds on (the space's library + any hub
   pull). Read-only glance; deep edits stay in Library.
 - **Pilote autonome (agents)** — the Conductor/Fleet: the delegated orchestrator
@@ -69,6 +77,7 @@ small and listed per slice below.
 | Top-of-rail assistant switch | 0.28.40 one-sign-in + `switchSpace` | direct assistant switch at top of rail |
 | Top-of-rail space switch | `switchSpace`, space menu | lift it to the top of the rail |
 | KB glance | `Library`/`Documents`, hub pull (`Spaces::hubGrants`) | a read-only summary tab |
+| Voice on every input + "Parler au pilote" | `toggleDictate`/`.dictate-btn`, `POST /api/transcribe`, `Transcriber` (sovereign/local), privacy `PURPOSE.transcription` | a `.dictate-btn[data-dictate-for]` on each Pilotage field + a push-to-talk composer |
 
 ## 4. Phased build
 
@@ -93,6 +102,29 @@ Stand up the menu and move what already exists into it, with **no new backend**.
   bar < 560 px; tabs → scrollable chips; drawers → full-height bottom sheets.
 
 *Ships value immediately (consolidation) with zero model/schema change.*
+
+### Slice 1a — voice-first input, everywhere (0.29.0, with the shell) · *Small*
+
+Voice is the headline interaction, so it lands with the shell, not later. **No new
+backend** — it reuses the shipped dictation path end to end.
+
+- A `.dictate-btn` with `data-dictate-for="<field id>"` on **every** Pilotage text
+  field — the orchestrator chat ("Parler au pilote"), a worksite goal, a role
+  brief, an instruction to a worker, a close-out note. The one-liner that wires
+  `toggleDictate` to `.dictate-btn` already exists in `app.js`; Pilotage's
+  dynamically-rendered drawers just re-run it after render (as the mockup does
+  with `wireMics`).
+- A prominent **push-to-talk** composer at the head of the **agents** tab:
+  press, speak a directive, it transcribes into the field, you read it back, then
+  send. Dictation is **transcribed and never kept** (the existing behaviour), and
+  honours the space's privacy level via `PURPOSE.transcription` — a Confidential
+  space routes transcription to the sovereign/local engine or asks, unchanged.
+- Degrades cleanly where the mic or `MediaRecorder` is unavailable (the existing
+  "needs a recent browser over HTTPS" / "microphone refused" toasts); the field
+  stays usable by keyboard.
+
+*The user's primary way in. Pure wiring over shipped `Transcriber` +
+`/api/transcribe`.*
 
 ### Slice 2 — Rôles catalogue, read-only (0.29.1) · *Medium*
 
@@ -169,3 +201,7 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
   entry.
 - Does Chantiers fully replace the directive cards on Activity, or do both stay
   (Activity as the superset)? Lean: both, Pilotage is the focused view.
+- Voice: keep the shipped record-then-transcribe (press, speak, release,
+  transcribe) — lean yes for slice 1a — or add live/streaming transcription later?
+  And: after transcribing a directive to the pilot, require a read-back-then-send
+  (lean yes, dictation is never auto-sent) vs. an opt-in "send on release".
