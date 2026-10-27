@@ -459,6 +459,12 @@ function accountOptions(current) {
     `<option class="no-i18n" value="${esc(a.id)}"${a.id === current ? ' selected' : ''}>${esc(a.name)} · ${esc(t(a.label))}</option>`).join('');
 }
 document.addEventListener('click', e => { if (!e.target.closest('.space-head') && !e.target.closest('.rail-space-head')) closeSpaceMenus(); });
+document.addEventListener('keydown', e => { // Escape closes an open space switch and returns focus to its button
+  if (e.key !== 'Escape') return;
+  for (const [b, m] of [['#space-btn', '#space-menu'], ['#rail-space-btn', '#rail-space-menu']]) {
+    if (!$(m)?.hidden) { closeSpaceMenus(); $(b)?.focus(); }
+  }
+});
 
 /** One line of a space's history: "archived 10/10 14:02 (app)". */
 function spaceEvent(e) {
@@ -1169,7 +1175,7 @@ async function loadTasks() {
     $('#brief-run').hidden = false; $('#brief-run').onclick = () => runTaskNow(brief, $('#brief-run'));
   }
   const box = $('#tasks'); box.innerHTML = '';
-  if (!tasks.length) { box.innerHTML = '<div class="placeholder">No scheduled tasks yet.</div>'; return; }
+  if (!tasks.length) { box.innerHTML = `<div class="placeholder">${esc(t('Nothing scheduled yet. Ask in chat, e.g.'))} <q>${esc(t('remind me tomorrow at 9 to call the bank'))}</q>.</div>`; return; }
   for (const t of tasks) {
     const el = document.createElement('div');
     el.className = 'task' + (t.enabled ? '' : ' paused');
@@ -5292,6 +5298,11 @@ function route() {
   const v = (h in VIEWS) ? h : 'chat';
   for (const k of Object.keys(VIEWS)) $('#view-' + k).hidden = k !== v;
   document.querySelectorAll('.rail a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
+  // Routines and Background jobs share one rail entry ("Automations") and switch via the in-page subtabs.
+  if (v === 'tasks' || v === 'jobs') document.querySelector('.rail a[data-view=tasks]')?.classList.add('active');
+  document.querySelectorAll('.subtabs a').forEach(a => {
+    const on = a.dataset.view === v; a.classList.toggle('active', on); a.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
   $('#more-btn').classList.toggle('active', ['notifications', 'jobs', 'apps', 'activity', 'settings', 'mail', 'people', 'tasks', 'privacy'].includes(v));
   $('#more-sheet').hidden = true;
   if (v !== 'library') closeViewer();

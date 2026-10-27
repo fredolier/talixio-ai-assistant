@@ -212,13 +212,29 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
   **"Open the Library"** link deep-links straight to the space's root folder
   (segment-encoded to match `libGo`). No new storage, no new trust edge.
 
-### Slice 6 — polish & naming settle (0.29.5) · *Small*
+### Slice 6 — polish & naming settle (0.29.5) · *Small* — **shipped**
 
-- Fold the settled naming: Routines → **Automatisations**, Jobs/Emploi → **Travaux
-  en arrière-plan**, merged into one entry with `[Programmées · Arrière-plan]`
-  tabs (pending the user's final nod).
-- Empty states, keyboard access, and the Activity ↔ Pilotage cross-links so the
-  two boards agree (Activity = everything; Pilotage = the director's slice).
+- **Naming folded (user confirmed "Yes, as planned").** Routines → **Automatisations**
+  (EN source "Automations"), Jobs/Emploi → **Travaux en arrière-plan** (the FR value
+  for "Background jobs", changed from "Jobs en arrière-plan"), merged into **one**
+  rail entry ("Automations") with `[Programmées · Arrière-plan]` subtabs — EN
+  "Scheduled" / "Background". Kept deliberately view-only: both boards keep their
+  hash (`#tasks`, `#jobs`), their views (`#view-tasks`, `#view-jobs`) and their
+  loaders (`loadTasks`, `loadJobs`) unchanged. A shared `.subtabs` strip sits at the
+  top of each view; `route()` lights the single rail entry (`.rail a[data-view=tasks]`)
+  for either hash and toggles `.active`/`aria-selected` on the subtab links. The
+  mobile "More" sheet folds the two old entries into the one.
+- **Cross-links (Activity ↔ Pilotage).** Pilotage's Worksites panel carries a
+  static link to **"See full activity and costs"** (→ `#activity`); the Activity
+  header carries one back to **"Steer agents, roles and worksites in Pilotage"**
+  (→ `#pilotage`). Activity stays the superset; Pilotage is the director's focused
+  slice — the open decision below is settled this way (both stay).
+- **Polish.** A friendlier empty state on the Scheduled board (invites a chat
+  example rather than "No scheduled tasks yet"). Keyboard access: the rail and
+  topbar space switches close on **Escape** and restore focus to their button; the
+  subtabs are `role="tab"` with `aria-selected` and a visible focus ring.
+- This completes the six Pilotage slices; **1.0.0** is reserved for the cut on the
+  user's confirmation.
 
 ## 5. Open decisions (carry from the mockup)
 
@@ -237,10 +253,13 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
   Compare panel drafts a merge instruction into the ordinary chat for the pilot
   to run with its own tools; merging is never automatic, even for near-identical
   roles.
-- Naming: confirm Automatisations / Travaux en arrière-plan and the single merged
-  entry.
-- Does Chantiers fully replace the directive cards on Activity, or do both stay
-  (Activity as the superset)? Lean: both, Pilotage is the focused view.
+- ~~Naming: confirm Automatisations / Travaux en arrière-plan and the single merged
+  entry.~~ — **settled (slice 6):** confirmed by the user ("Yes, as planned"); one
+  "Automations" rail entry with `[Programmées · Arrière-plan]` subtabs.
+- ~~Does Chantiers fully replace the directive cards on Activity, or do both stay
+  (Activity as the superset)?~~ — **settled (slice 6):** both stay, joined by
+  reciprocal cross-links. Activity is the whole picture; Pilotage is the director's
+  focused slice.
 - Voice: keep the shipped record-then-transcribe (press, speak, release,
   transcribe) — lean yes for slice 1a — or add live/streaming transcription later?
   And: after transcribing a directive to the pilot, require a read-back-then-send

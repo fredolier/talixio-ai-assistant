@@ -364,6 +364,18 @@ const flows = {
       (await page.$$('#rail-space-menu .space-item[data-id]')).length >= 1);
     await page.click('#rail-space-btn'); // toggle the menu shut again (its anchor sits above the open menu)
     await page.waitForSelector('#rail-space-menu', { state: 'hidden', timeout: 4000 });
+    // slice 6: Routines and Background jobs are one rail entry ("Automations") with [Scheduled · Background] subtabs
+    check('automations: the two boards share a single rail entry', (await page.$$('.rail a[data-view=tasks]')).length === 1
+      && (await page.$$('.rail a[data-view=jobs]')).length === 0);
+    await go(page, 'tasks');
+    check('automations: the Scheduled board shows with the rail entry and its subtab lit',
+      await page.isVisible('#view-tasks .subtabs a[data-view=tasks].active')
+      && await page.isVisible('.rail a[data-view=tasks].active'));
+    await page.click('#view-tasks .subtabs a[data-view=jobs]');
+    await page.waitForSelector('#view-jobs:not([hidden])', { timeout: 4000 });
+    check('automations: the Background subtab switches to the jobs board, rail entry still lit',
+      await page.isVisible('#view-jobs .subtabs a[data-view=jobs].active')
+      && await page.isVisible('.rail a[data-view=tasks].active'));
   },
   async mobile({ page, check }) {
     await page.setViewportSize({ width: 400, height: 800 });

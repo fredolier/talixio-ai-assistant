@@ -55,10 +55,9 @@
     <a href="#library" data-view="library"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Library</span></a>
     <a href="#apps" data-view="apps" class="secondary"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><path d="M16.75 13.5v6.5M13.5 16.75H20"/></svg><span>Apps</span></a>
     <a href="#notifications" data-view="notifications" class="secondary"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Notifications</span><b id="notif-count" class="rail-badge" hidden></b></a>
-    <a href="#tasks" data-view="tasks" class="secondary"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Routines</span></a>
+    <a href="#tasks" data-view="tasks" class="secondary"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Automations</span></a>
     <a href="#mail" data-view="mail" class="secondary"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>Mail</span></a>
     <a href="#people" data-view="people" class="secondary"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg><span>People</span></a>
-    <a href="#jobs" data-view="jobs" class="secondary"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Jobs</span></a>
     <a href="#memory" data-view="memory"><svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg><span>Memory</span></a>
     <a href="#settings" data-view="settings" class="secondary"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
     <a href="#privacy" data-view="privacy" class="secondary"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></svg><span>Privacy</span></a>
@@ -168,6 +167,7 @@
 
       <div class="pilot-panel" data-ppanel="chantiers" hidden>
         <div id="pilot-chantiers" class="list dir-list"></div>
+        <p class="muted small pilot-xlink"><a href="#activity">See full activity and costs</a> ▸ <span>every agent and tool, not only the director’s.</span></p>
       </div>
 
       <div class="pilot-panel" data-ppanel="roles" hidden>
@@ -237,7 +237,11 @@
     </section>
 
     <section id="view-tasks" class="view page" hidden>
-      <header class="page-head"><h2>Routines</h2>
+      <nav class="subtabs" role="tablist" aria-label="Automations">
+        <a href="#tasks" data-view="tasks" role="tab">Scheduled</a>
+        <a href="#jobs" data-view="jobs" role="tab">Background</a>
+      </nav>
+      <header class="page-head"><h2>Automations</h2>
         <p class="muted">What the assistant does on a schedule: reminders, briefings, recurring reports. (Things to do are on the <a href="#board">Tasks</a> board.) Ask in chat to create them: <q>remind me tomorrow at 9 to call the bank</q>, <q>every weekday at 8:00 send me a briefing</q>.</p></header>
       <div class="card briefing-card" id="briefing-card">
         <div><b>Morning briefing</b><p class="muted small">Your day at a glance: calendar, emails to handle, reminders, weather.</p></div>
@@ -301,6 +305,10 @@
     </section>
 
     <section id="view-jobs" class="view page" hidden>
+      <nav class="subtabs" role="tablist" aria-label="Automations">
+        <a href="#tasks" data-view="tasks" role="tab">Scheduled</a>
+        <a href="#jobs" data-view="jobs" role="tab">Background</a>
+      </nav>
       <header class="page-head"><h2>Background jobs</h2>
         <p class="muted" id="jobs-help">Sub-agents the assistant starts for research and multi-step work. Each one has its own model tier and a cost cap; results come back in the chat.</p></header>
       <div class="row wrap filters" id="jobs-filters">
@@ -675,7 +683,8 @@
       <p id="notif-empty" class="muted empty" hidden>No notifications yet.</p>
     </section>
     <section id="view-activity" class="view page" hidden>
-      <header class="page-head"><h2>Activity</h2><p class="muted">Spending, model usage and every tool the assistant used. Costs are estimates from list prices.</p></header>
+      <header class="page-head"><h2>Activity</h2><p class="muted">Spending, model usage and every tool the assistant used. Costs are estimates from list prices.</p>
+        <p class="muted small pilot-xlink"><a href="#pilotage">Steer agents, roles and worksites in Pilotage</a> ▸ <span>the director’s own slice of this activity.</span></p></header>
       <div id="budget" class="budget"></div>
       <details id="calib" class="calib"><summary class="muted small" id="calib-text"></summary>
         <div id="billing" class="billing" hidden><ul id="billing-list" class="small"></ul>
@@ -904,11 +913,10 @@
   <div class="sheet-card more-card" role="dialog" aria-label="More">
     <div id="more-assistants" class="more-assistants" hidden></div>
     <a href="#notifications" data-view="notifications">Notifications <b id="more-notif-count" class="badge" hidden></b></a>
-    <a href="#tasks" data-view="tasks">Routines</a>
+    <a href="#tasks" data-view="tasks">Automations</a>
     <a href="#mail" data-view="mail">Mail to handle</a>
     <a href="#people" data-view="people">People</a>
     <a href="#apps" data-view="apps">Apps</a>
-    <a href="#jobs" data-view="jobs">Background jobs</a>
     <a href="#activity" data-view="activity">Activity and costs</a>
     <a href="#privacy" data-view="privacy">Privacy</a>
     <a href="#settings" data-view="settings">Settings</a>
