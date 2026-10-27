@@ -74,6 +74,12 @@ final class Assessor
         return $this->app->store->q('SELECT id, title, input, rubric FROM role_cases WHERE role = ? ORDER BY id', [Skills::slug($role)])->fetchAll();
     }
 
+    /** Every outcome ever recorded for a role (not windowed): the delete-guard's "was this ever run?" test. */
+    public function runCount(string $role): int
+    {
+        return (int)$this->app->store->q('SELECT COUNT(*) FROM role_runs WHERE role = ?', [Skills::slug($role)])->fetchColumn();
+    }
+
     // ---------- the anchor signal ----------
 
     /** Record one outcome of a role run. accepted: true/false/null (unknown yet). */

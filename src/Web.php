@@ -355,12 +355,23 @@ final class Web
             })(),
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
             $path === '/api/skills' => ['skills' => $this->app->skills()->all()],
-            $path === '/api/roles' && $m === 'GET' => ['roles' => $this->roleCatalog(), 'overlaps' => $this->app->skills()->overlaps()],
+            $path === '/api/roles' && $m === 'GET' => ['roles' => $this->roleCatalog(), 'overlaps' => $this->app->skills()->overlaps(), 'archived' => $this->roleCatalog(true)],
             (bool)preg_match('#^/api/roles/([\w-]+)/evaluate$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_evaluate', ['role' => $mm[1]])],
             (bool)preg_match('#^/api/roles/([\w-]+)/publish$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_publish', ['role' => $mm[1], 'note' => (string)($b['note'] ?? '')])],
+            (bool)preg_match('#^/api/roles/([\w-]+)/improve$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_improve', ['role' => $mm[1], 'content' => (string)($b['content'] ?? '')])],
             (bool)preg_match('#^/api/roles/([\w-]+)/specialization$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
                 if (($this->app->skills()->meta($mm[1])['kind'] ?? '') !== 'role') $this->fail(404, 'no such role');
                 $this->app->skills()->setField($mm[1], 'specialization', (string)($b['specialization'] ?? ''));
+                return ['ok' => true];
+            })(),
+            (bool)preg_match('#^/api/roles/([\w-]+)/archive$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
+                $this->app->skills()->setField($this->roleWritable($mm[1]), 'archived', ($b['on'] ?? true) ? 'true' : '');
+                return ['ok' => true];
+            })(),
+            (bool)preg_match('#^/api/roles/([\w-]+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) {
+                $role = $this->roleWritable($mm[1]);
+                if ($this->app->assessor()->runCount($role) > 0) $this->fail(409, 'This role has history; archive it to keep that history instead of deleting it.');
+                $this->app->skills()->delete($role);
                 return ['ok' => true];
             })(),
             $path === '/api/mind' && $m === 'GET' => $this->app->mind()->overview(),
@@ -395,13 +406,14 @@ final class Web
      * count, last run, trend + sparkline, golden cases, overlap). No new metrics are computed here —
      * the same numbers the A/B gate uses — so improving a role improves everywhere.
      */
-    private function roleCatalog(): array
+    private function roleCatalog(bool $archived = false): array
     {
         $this->app->assessor()->seed(); // role #0 is always in the catalogue
         $skills = $this->app->skills();
         $assessor = $this->app->assessor();
         $out = [];
-        foreach ($skills->all() as $s) {
+        foreach ($skills->all(true) as $s) {
+            if (($s['archived'] ?? false) !== $archived) continue;
             $meta = $skills->meta($s['name']);
             if (($meta['kind'] ?? 'skill') !== 'role') continue;
             $h = $assessor->health($s['name']);
@@ -412,6 +424,7 @@ final class Web
                 'version' => (int)($meta['version'] ?? 1),
                 'protected' => ($meta['protected'] ?? '') === '1' || $assessor->isProtected($s['name']),
                 'published' => ($meta['scope'] ?? 'private') === 'shared',
+                'archived' => $archived,
                 'skills' => array_values(array_filter(array_map('trim', explode(',', (string)($meta['skills'] ?? ''))))),
                 'tools' => array_values(array_filter(array_map('trim', explode(',', (string)($meta['tools'] ?? ''))))),
                 'runs' => $h['runs'], 'acceptance' => $h['acceptance'], 'cost_mean' => $h['cost_mean'],
@@ -421,6 +434,15 @@ final class Web
         }
         usort($out, fn($a, $b) => $b['runs'] <=> $a['runs'] ?: strcmp($a['name'], $b['name']));
         return $out;
+    }
+
+    /** Guard shared by the write endpoints: 404 on a non-role, 403 on a protected one (the assessor). Returns the slug. */
+    private function roleWritable(string $role): string
+    {
+        $meta = $this->app->skills()->meta($role);
+        if (($meta['kind'] ?? '') !== 'role') $this->fail(404, 'no such role');
+        if (($meta['protected'] ?? '') === '1' || $this->app->assessor()->isProtected($role)) $this->fail(403, 'This role is protected; its lifecycle is yours to manage directly.');
+        return $role;
     }
 
     /** The API of the library, files, shares and privacy. */

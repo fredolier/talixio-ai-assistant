@@ -18,7 +18,7 @@ final class Skills
     public function __construct(private App $app) {}
 
     /** Header keys written in this order; list-valued ones (skills, tools) are stored comma-joined on one line. */
-    private const ORDER = ['name', 'description', 'kind', 'tier', 'skills', 'tools', 'when_to_use', 'when_not', 'scope', 'specialization', 'version', 'uses'];
+    private const ORDER = ['name', 'description', 'kind', 'tier', 'skills', 'tools', 'when_to_use', 'when_not', 'scope', 'specialization', 'version', 'uses', 'archived'];
 
     private function dir(): string
     {
@@ -34,18 +34,31 @@ final class Skills
         return substr($s, 0, 60);
     }
 
-    /** @return array<array{name:string,description:string,kind:string,updated:int,used:int}> */
-    public function all(): array
+    /**
+     * Every skill/role. Archived roles are dropped by default, so they fall out of the system-prompt index,
+     * role_find, the overlap pass and the catalogue map at once — their file and Assessor history stay on disk;
+     * pass $withArchived to list them (for the "Archivés" view and reactivation).
+     * @return array<array{name:string,description:string,kind:string,archived:bool,updated:int,used:int}>
+     */
+    public function all(bool $withArchived = false): array
     {
         $out = [];
         foreach (glob($this->dir() . '/*.md') ?: [] as $f) {
             [$meta] = self::parse((string)file_get_contents($f));
             $name = basename($f, '.md');
+            $archived = self::isArchived($meta);
+            if ($archived && !$withArchived) continue;
             $out[] = ['name' => $name, 'description' => $meta['description'] ?? '', 'kind' => $meta['kind'] ?? 'skill',
-                'updated' => filemtime($f), 'used' => (int)$this->app->store->get("skill_used_$name", '0')];
+                'archived' => $archived, 'updated' => filemtime($f), 'used' => (int)$this->app->store->get("skill_used_$name", '0')];
         }
         usort($out, fn($a, $b) => $b['used'] <=> $a['used'] ?: strcmp($a['name'], $b['name']));
         return $out;
+    }
+
+    /** True when a header carries the archive flag (set by Pilotage's Archiver). */
+    public static function isArchived(array $meta): bool
+    {
+        return ($meta['archived'] ?? '') === 'true';
     }
 
     /** One line per skill for the system prompt. */

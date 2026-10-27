@@ -285,8 +285,12 @@ const flows = {
     check('spaces: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#sp-orch-steps')));
     await page.click('#sp-cancel');
   },
-  async pilotage({ page, check }) {
+  async pilotage({ page, check, root, data }) {
     // the director's cockpit: four tabs over machinery already shipped, voice-first
+    // seed one non-protected role so the catalogue has a card to group, specialize and run the lifecycle on
+    execFileSync('php', ['-r', "require '" + join(root, 'src/autoload.php') + "';"
+      + "\\Talixio\\App::fromEnv()->skills()->save('browser-role','A role for the browser test','Do the browser thing.',['kind'=>'role']);"],
+      { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
     await go(page, 'pilotage');
     check('pilotage: the view shows', await page.isVisible('#view-pilotage'));
     check('pilotage: it is reachable from the rail', await page.isVisible('.rail a[data-view=pilotage]'));
@@ -319,6 +323,25 @@ const flows = {
     await specForm.evaluate(f => f.requestSubmit());
     await page.waitForSelector('#pilot-roles .pspec.no-i18n:text-is("QA")', { timeout: 6000 });
     check('pilotage: a saved specialization becomes a group header', await page.isVisible('#pilot-roles .pspec:text-is("QA")'));
+    // slice 4: lifecycle actions on every non-protected card
+    check('pilotage: non-protected cards carry Improve and Archive actions',
+      (await page.$$('#pilot-roles [data-role-improve]')).length >= 1 && (await page.$$('#pilot-roles [data-role-archive]')).length >= 1);
+    // slice 4: Archive moves a role into the Archived disclosure (history kept), and Reactivate brings it back
+    const archName = await page.$eval('#pilot-roles [data-role-archive]', b => b.dataset.roleArchive);
+    page.once('dialog', d => d.accept());
+    await page.click(`#pilot-roles [data-role-archive="${archName}"]`);
+    await page.waitForSelector('#pilot-roles .parchived', { timeout: 6000 });
+    check('pilotage: archiving drops the role out of the grid and lists it under Archived with Reactivate',
+      !(await page.$(`#pilot-roles .prole-card [data-role-archive="${archName}"]`))
+      && (await page.$$(`#pilot-roles .parchived [data-role-reactivate="${archName}"]`)).length === 1);
+    await page.$eval('#pilot-roles .parchived', d => { d.open = true; });
+    await page.click(`#pilot-roles [data-role-reactivate="${archName}"]`);
+    await page.waitForSelector(`#pilot-roles .prole-card [data-role-archive="${archName}"]`, { timeout: 6000 });
+    check('pilotage: Reactivate returns the role to the catalogue', !!(await page.$(`#pilot-roles [data-role-archive="${archName}"]`)));
+    // slice 4: Improve opens the candidate-brief editor that feeds the Assessor's A/B
+    await page.click('#pilot-roles [data-role-improve]');
+    await page.waitForSelector('#prole-improve:not([hidden]) .prole-imp-in', { timeout: 6000 });
+    check('pilotage: Improve opens a candidate-brief editor over the Assessor A/B', await page.isVisible('#prole-improve .prole-imp-in'));
     // "Parler au pilote": a dictated directive is routed through the ordinary chat send()
     await page.click('#view-pilotage .ptab[data-ptab=agents]'); await page.waitForTimeout(300);
     await page.fill('#ptt-input', 'run the weekly competitor scan');

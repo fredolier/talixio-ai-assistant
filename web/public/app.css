@@ -1474,5 +1474,14 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .prole-merge-cols h4{margin:0 0 4px}
 .prole-merge-cols pre{margin:0;max-height:260px;overflow:auto;background:var(--sunk);padding:8px 10px;border-radius:8px;font-size:.76rem;line-height:1.4;white-space:pre-wrap;word-break:break-word}
 @media (max-width:560px){.prole-merge-cols{grid-template-columns:1fr}}
+#prole-improve{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+#prole-improve .prole-imp-in{width:100%;box-sizing:border-box;font:inherit;font-size:.82rem;line-height:1.45;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--sunk);color:var(--ink);resize:vertical}
+#prole-improve [data-imp-run]{align-self:flex-start}
+.parchived{margin-top:4px;border-top:1px solid var(--line);padding-top:10px}
+.parchived summary{cursor:pointer;color:var(--muted);font-size:.85rem}
+.parch-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
+.parch-row:last-child{border-bottom:0}
+.parch-id p{margin:2px 0 0}
+.parch-actions{display:flex;gap:6px;flex-wrap:wrap;flex:none}
 .micbig.rec{color:var(--danger);animation:blink 1.2s infinite}
 @media (max-width:560px){.pilot-tabs{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}.ptab{flex:none}.ptt{flex-direction:column;align-items:stretch;text-align:center}.ptt .micbig{align-self:center}}

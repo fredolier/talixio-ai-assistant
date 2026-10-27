@@ -2855,5 +2855,15 @@ window.I18N.fr = {
 "Compare & merge": "Comparer et fusionner",
 "Merging is never automatic. Hand the pilot a draft and approve it before anything is saved.": "La fusion n’est jamais automatique. Confiez un brouillon au pilote et validez-le avant tout enregistrement.",
 "Propose a merged role to the pilot": "Proposer un rôle fusionné au pilote",
-"Roles \"{a}\" and \"{b}\" look like near-duplicates. Review both briefs; if they truly overlap, propose ONE merged role that covers both (keep the stronger brief, union their skills and tools) and tell me before saving. Do not change anything automatically.": "Les rôles « {a} » et « {b} » semblent quasi identiques. Examine les deux consignes ; s’ils se recoupent vraiment, propose UN seul rôle fusionné qui couvre les deux (garde la meilleure consigne, réunis leurs compétences et outils) et préviens-moi avant d’enregistrer. Ne change rien automatiquement."
+"Roles \"{a}\" and \"{b}\" look like near-duplicates. Review both briefs; if they truly overlap, propose ONE merged role that covers both (keep the stronger brief, union their skills and tools) and tell me before saving. Do not change anything automatically.": "Les rôles « {a} » et « {b} » semblent quasi identiques. Examine les deux consignes ; s’ils se recoupent vraiment, propose UN seul rôle fusionné qui couvre les deux (garde la meilleure consigne, réunis leurs compétences et outils) et préviens-moi avant d’enregistrer. Ne change rien automatiquement.",
+"The candidate runs against this role’s golden cases and is promoted only if it clearly beats the current brief. The result comes back in the chat.": "Le candidat est évalué sur les cas de référence de ce rôle et n’est promu que s’il bat nettement la consigne actuelle. Le résultat revient dans le fil.",
+"Candidate brief": "Consigne candidate",
+"Run the A/B": "Lancer l’A/B",
+"Reactivate": "Réactiver",
+"This role has history; archive keeps it. Delete is only for a role that never ran.": "Ce rôle a un historique ; l’archivage le conserve. La suppression n’est possible que pour un rôle jamais exécuté.",
+"Archive this role? It leaves the catalogue and the director’s search, but its file and all its history are kept — you can reactivate it any time.": "Archiver ce rôle ? Il quitte le catalogue et la recherche du directeur, mais son fichier et tout son historique sont conservés — vous pouvez le réactiver à tout moment.",
+"Archived.": "Archivé.",
+"Reactivated.": "Réactivé.",
+"Delete this role for good? This cannot be undone. Only a role that was never run can be deleted.": "Supprimer définitivement ce rôle ? Action irréversible. Seul un rôle jamais exécuté peut être supprimé.",
+"Deleted.": "Supprimé."
 };

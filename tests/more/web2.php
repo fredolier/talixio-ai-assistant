@@ -2,7 +2,7 @@
 declare(strict_types=1);
 // The web API's back half (src/Web.php from sovereign() on), the network drive (src/Dav.php) and links for people outside (src/Shares.php).
 require_once __DIR__ . '/../helpers.php';
-use Talixio\{App, Auth, Web, Files};
+use Talixio\{App, Auth, Web, Files, Skills};
 
 $d = test_dir('web2');
 $dw = "$d/w"; @mkdir($dw, 0777, true);
@@ -90,6 +90,39 @@ check('web2 roles: clearing a specialization drops the field',
     ($sp['ok'] ?? false) === true && !array_key_exists('specialization', $app->skills()->meta('triage-x')));
 $sp = $web('/api/roles/not-a-role/specialization', ['specialization' => 'x']);
 check('web2 roles: a specialization write to a non-role is a 404', $sp['_code'] === 404);
+
+// ---- Pilotage slice 4: role lifecycle — archive, delete-guard, improve ----
+$ar = $web('/api/roles/triage-y/archive', ['on' => true]);
+$rc3 = $web('/api/roles');
+check('web2 roles: archiving drops the role from the map, the overlap pass and the director’s reach, but keeps it under Archived',
+    ($ar['ok'] ?? false) === true
+    && !in_array('triage-y', array_column($rc3['roles'] ?? [], 'name'), true)
+    && in_array('triage-y', array_column($rc3['archived'] ?? [], 'name'), true)
+    && !array_filter($rc3['overlaps'] ?? [], fn($p) => in_array('triage-y', [$p['a'] ?? '', $p['b'] ?? ''], true))
+    && !in_array('triage-y', array_column($app->skills()->all(), 'name'), true)           // default list hides it
+    && in_array('triage-y', array_column($app->skills()->all(true), 'name'), true)          // the file is still there
+    && Skills::isArchived($app->skills()->meta('triage-y')),
+    substr($rc3['_raw'], 0, 400));
+check('web2 roles: an archived role is out of the director’s role_find', !in_array('triage-y', array_column($app->skills()->find('incoming mail next action', 5, 'role'), 'name'), true));
+$re = $web('/api/roles/triage-y/archive', ['on' => false]);
+check('web2 roles: reactivating brings it back into the map',
+    ($re['ok'] ?? false) === true && in_array('triage-y', array_column($web('/api/roles')['roles'] ?? [], 'name'), true)
+    && !Skills::isArchived($app->skills()->meta('triage-y')));
+$dx = $web('/api/roles/triage-x/delete', []);
+check('web2 roles: deleting a role that has history is refused (409), steering to archive', $dx['_code'] === 409 && $app->skills()->meta('triage-x') !== [], substr($dx['_raw'], 0, 200));
+$app->skills()->save('triage-z', 'A role that never ran', 'Do nothing yet.', ['kind' => 'role']);
+$dz = $web('/api/roles/triage-z/delete', []);
+check('web2 roles: a role that never ran deletes cleanly', ($dz['ok'] ?? false) === true && $app->skills()->meta('triage-z') === []);
+$pa = $web('/api/roles/assessor/archive', ['on' => true]);
+$pd = $web('/api/roles/assessor/delete', []);
+check('web2 roles: the protected assessor can be neither archived nor deleted (403)',
+    $pa['_code'] === 403 && $pd['_code'] === 403 && !Skills::isArchived($app->skills()->meta('assessor')));
+$im = $web('/api/roles/triage-x/improve', ['content' => 'Read the mail, decide the single next action, and state it in one line.']);
+check('web2 roles: Improve hands the candidate to the Assessor’s A/B job (triage-x has a golden case)',
+    $im['_code'] === 200 && str_contains((string)($im['message'] ?? ''), 'evaluation job'), substr($im['_raw'], 0, 300));
+$im = $web('/api/roles/triage-y/improve', ['content' => 'anything']);
+check('web2 roles: Improve on a role with no golden cases explains why, promoting nothing',
+    $im['_code'] === 200 && str_contains((string)($im['message'] ?? ''), 'golden case'), substr($im['_raw'], 0, 300));
 
 // ---- the Europe-only card ----
 $sv = $web('/api/sovereign');

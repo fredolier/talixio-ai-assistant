@@ -171,16 +171,24 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
 
 ### Slice 4 — role lifecycle: archive, delete-guard, improve (0.29.3) · *Medium*
 
-- **Archiver**: an `archived: true` header flag (via `Skills::save`); archived
-  roles drop out of the map and the Director's `role_find`, but their file and
-  **all Assessor history are kept**. **Archivés…** opens the filtered list with a
-  one-click *Réactiver*.
-- **Supprimer**, guarded: allowed only when `Assessor` run count is 0 (never
-  executed); otherwise the panel refuses and steers to Archiver — history must not
-  be lost silently. Reuses `Skills::delete`.
-- **Améliorer**: the before/after golden-case A/B panel over
-  `Assessor::improve`+`gate`, surfacing the same promotion decision the engine
-  already makes.
+- **Archiver** *(shipped)*: an `archived: true` header flag (set via
+  `Skills::setField`, the slice-3 one-field writer). `Skills::all()` drops
+  archived roles by default, so they fall out of the map, the system-prompt
+  index, the Director's `role_find` **and** the overlap pass at once — their file
+  and **all Assessor history are kept**. An **Archivés** disclosure at the foot of
+  the catalogue lists them with one-click *Réactiver* (clears the flag).
+- **Supprimer**, guarded *(shipped)*: `POST /api/roles/<role>/delete` is allowed
+  only when `Assessor::runCount` is 0 (never executed); otherwise it refuses with
+  409 and steers to Archiver — history must not be lost silently. The archived row
+  disables Delete for a role with runs. Reuses `Skills::delete`. (A `/delete`
+  POST, not a DELETE verb, to keep the app's one CSRF-guarded mutation path.)
+- **Améliorer** *(shipped)*: an editor pre-filled with the current brief; the
+  candidate is handed to `role_improve` — the Assessor's existing A/B eval job,
+  which runs both briefs on the golden cases, scores them, and promotes the
+  candidate only if it clearly wins. The same promotion decision the engine
+  already makes; the result comes back in the chat. Protected roles expose none of
+  the lifecycle actions (a shared `roleWritable` guard: 404 on a non-role, 403 on
+  a protected one) — their lifecycle is the user's to manage directly.
 
 ### Slice 5 — top-of-rail switch + KB glance (0.29.4) · *Small–Medium*
 
