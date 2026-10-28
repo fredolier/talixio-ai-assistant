@@ -5382,7 +5382,7 @@ function route() {
   document.querySelectorAll('.subtabs a').forEach(a => {
     const on = a.dataset.view === v; a.classList.toggle('active', on); a.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  $('#more-btn').classList.toggle('active', ['notifications', 'jobs', 'apps', 'activity', 'settings', 'mail', 'people', 'tasks', 'privacy'].includes(v));
+  $('#more-btn').classList.toggle('active', ['tasks', 'jobs', 'activity'].includes(v));
   $('#more-sheet').hidden = true;
   if (v !== 'library') closeViewer();
   if (v !== 'board') { clearTimeout(loadBoard.t); }
@@ -6013,7 +6013,7 @@ if (!navigator.onLine) onlineState();
 /** Badges: unread notifications in the menu; on the app icon, those plus the approvals waiting. */
 function setBadge() {
   const u = state.notifUnread || 0, n = u + (state.pendingApprovals || 0);
-  for (const id of ['#notif-count', '#more-count', '#more-notif-count']) { const b = $(id); b.textContent = u > 99 ? '99+' : u; b.hidden = !u; }
+  for (const id of ['#notif-count', '#more-count']) { const b = $(id); b.textContent = u > 99 ? '99+' : u; b.hidden = !u; }
   if (!('setAppBadge' in navigator)) return;
   (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
 }

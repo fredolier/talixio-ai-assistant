@@ -297,7 +297,7 @@ window.I18N.fr = {
 "Channels": "Canaux",
 "Channels used": "Canaux utilisés",
 "Character and values": "Caractère et valeurs",
-"Chat": "Discussion",
+"Chat": "Chat",
 "Check (doctor)": "Vérifier (doctor)",
 "Log": "Journal",
 "Log of {id}": "Journal de {id}",

@@ -385,18 +385,28 @@ const flows = {
       (await page.$$('#rail-space-menu .space-item[data-id]')).length >= 1);
     await page.click('#rail-space-btn'); // toggle the menu shut again (its anchor sits above the open menu)
     await page.waitForSelector('#rail-space-menu', { state: 'hidden', timeout: 4000 });
-    // slice 6: Routines and Background jobs are one rail entry ("Automations") with [Scheduled · Background] subtabs
-    check('automations: the two boards share a single rail entry', (await page.$$('.rail a[data-view=tasks]')).length === 1
-      && (await page.$$('.rail a[data-view=jobs]')).length === 0);
-    await go(page, 'tasks');
-    check('automations: the Scheduled board shows with the rail entry and its subtab lit',
+    // 1.5.0: the rail is eight entries with Pilotage last; the work surfaces that moved to the account chip
+    // (Settings, Privacy, Memory, Activity) and the "⋯ More" menu (Automations, Activity) are no longer rail entries
+    check('rail: Pilotage is the last rail entry', await page.$eval('.rail a:last-of-type', a => a.dataset.view) === 'pilotage');
+    check('rail: the library entry is labelled Files', (await page.textContent('.rail a[data-view=library]')).includes('Files'));
+    check('rail: Settings, Privacy, Memory, Activity and Automations left the rail',
+      (await page.$$('.rail a[data-view=settings], .rail a[data-view=privacy], .rail a[data-view=memory], .rail a[data-view=activity], .rail a[data-view=tasks], .rail a[data-view=jobs]')).length === 0);
+    // slice 6: Routines and Background jobs are one entry ("Automations") with [Scheduled · Background] subtabs, now in the More menu
+    await page.click('#more-btn');
+    await page.waitForSelector('#more-sheet:not([hidden])', { timeout: 4000 });
+    check('automations: the More menu holds a single Automations entry', (await page.$$('#more-sheet a[data-view=tasks]')).length === 1
+      && (await page.$$('#more-sheet a[data-view=jobs]')).length === 0);
+    check('more: the desktop More menu also holds Activity', (await page.$$('#more-sheet a[data-view=activity]')).length === 1);
+    await page.click('#more-sheet a[data-view=tasks]');
+    await page.waitForSelector('#view-tasks:not([hidden])', { timeout: 4000 });
+    check('automations: the Scheduled board shows with its subtab lit and the More entry lit',
       await page.isVisible('#view-tasks .subtabs a[data-view=tasks].active')
-      && await page.isVisible('.rail a[data-view=tasks].active'));
+      && await page.isVisible('#more-btn.active'));
     await page.click('#view-tasks .subtabs a[data-view=jobs]');
     await page.waitForSelector('#view-jobs:not([hidden])', { timeout: 4000 });
-    check('automations: the Background subtab switches to the jobs board, rail entry still lit',
+    check('automations: the Background subtab switches to the jobs board, More entry still lit',
       await page.isVisible('#view-jobs .subtabs a[data-view=jobs].active')
-      && await page.isVisible('.rail a[data-view=tasks].active'));
+      && await page.isVisible('#more-btn.active'));
   },
   async account({ page, check }) {
     await go(page, 'chat');

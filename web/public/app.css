@@ -479,7 +479,12 @@ tr:last-child td{border-bottom:0}
 .pp-title{flex:1;min-width:0;display:flex;flex-direction:column}
 .pp-title b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pp-frame{flex:1;width:100%;border:0;background:#fff}
-.rail .more{display:none}
+.rail .more{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border-radius:9px;border:0;background:none;color:var(--muted);font:inherit;cursor:pointer;text-align:left}
+.rail .more:hover{background:var(--sunk);color:var(--ink)}
+.rail .more.active{background:var(--accent-soft);color:var(--ink);font-weight:600}
+.shell.collapsed .rail .more{justify-content:center;width:44px;height:40px;padding:0}
+.shell.collapsed .rail .more span{display:none}
+@media (min-width:761px){.more-card .only-mobile{display:none}}
 .more-card a{padding:12px 4px;border-bottom:1px solid var(--line);color:var(--ink);text-decoration:none;font-weight:500}
 
 /* desktop: the menu folds down to its icons (remembered; folded by default on narrow screens) */
