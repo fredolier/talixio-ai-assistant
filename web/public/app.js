@@ -3313,6 +3313,7 @@ function mbRender() {
       <select id="mb-scope"><option value="global"${state.mb.scope === 'global' ? ' selected' : ''}>${esc(t('Global default (all spaces)'))}</option>
         <optgroup label="${esc(t('Override for a space'))}">${spaceOpts}</optgroup></select>
       <span class="muted small">${esc(state.mb.scope === 'global' ? t('Applied everywhere, unless a space overrides it.') : t('Inherited usages follow the global default; overridden ones are specific to this space.'))}</span>
+      <button class="btn sm" id="mb-refresh" style="margin-left:auto">↻ ${esc(t('Refresh now'))}</button>
     </div>
     <div class="usages" id="mb-usages"></div>
     <div class="filters">
@@ -3357,6 +3358,14 @@ function mbRender() {
   box.querySelectorAll('thead th[data-sort]').forEach(th => th.onclick = () => {
     const k = th.dataset.sort; state.mb.sort.dir = state.mb.sort.key === k ? -state.mb.sort.dir : (k === 'name' || k === 'type' ? 1 : -1); state.mb.sort.key = k; mbRenderRows();
   });
+  $('#mb-refresh').onclick = async e => {
+    const btn = e.currentTarget, old = btn.textContent; btn.disabled = true; btn.textContent = t('Refreshing…');
+    try {
+      state.mb.cat = await post('api/catalogue/refresh', {});
+      $('#mb-prov-c').textContent = state.mb.cat.providers.length;
+      mbRender(); toast(t('Catalogue refreshed.'));
+    } catch (err) { toast(err.message); btn.disabled = false; btn.textContent = old; }
+  };
 }
 function mbRenderUsages() {
   const box = $('#mb-usages'); if (!box) return; const P = mbProvMap(), global = state.mb.scope === 'global';

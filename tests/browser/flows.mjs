@@ -179,6 +179,10 @@ const flows = {
       !!document.querySelector('#view-settings .set-groups[data-groups="model"] .group-card[data-id="budget"]:not([hidden])')));
     await page.click('#mb-tabs .mb-tab[data-mtab="models"]');
     await page.waitForTimeout(200);
+    // "Actualiser maintenant" refreshes the catalogue in place (no provider is connected in echo mode, so it stays the seed).
+    await page.click('#mb-refresh');
+    await page.waitForSelector('#mb-models .mb-table tbody tr .mname', { timeout: 10000 });
+    check('cockpit: "Actualiser maintenant" refreshes the catalogue in place', (await page.$$('#mb-models .mb-table tbody tr .mname')).length > 0);
   },
   async notifications({ page, check }) {
     await go(page, 'notifications');

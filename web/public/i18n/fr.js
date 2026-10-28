@@ -2988,5 +2988,8 @@ window.I18N.fr = {
   "Europe lock on — selections already compliant": "Verrou Europe activé — sélections déjà conformes",
   "Cap": "Plafond",
   "Providers": "Fournisseurs",
-  "Budget": "Budget"
+  "Budget": "Budget",
+  "Refresh now": "Actualiser maintenant",
+  "Refreshing…": "Actualisation…",
+  "Catalogue refreshed.": "Catalogue actualisé."
 };

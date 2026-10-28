@@ -138,6 +138,7 @@ final class Web
             $path === '/api/routing' && $m === 'GET' => $this->routingView(isset($_GET['space']) && $_GET['space'] !== '' && $_GET['space'] !== 'global' ? (int)$_GET['space'] : null),
             $path === '/api/routing' && $m === 'POST' => $this->setRouting($b),
             $path === '/api/catalogue' && $m === 'GET' => $this->app->catalogue()->catalogue(),
+            $path === '/api/catalogue/refresh' && $m === 'POST' => $this->app->catalogue()->refresh(time()),
             $path === '/api/activity' => $this->activity(),
             $path === '/api/bill' && $m === 'POST' => (function () use ($b) {
                 try { return $this->app->calibration()->report((float)($b['amount'] ?? -1), (string)($b['currency'] ?? 'EUR'), (string)($b['month'] ?? '')); }

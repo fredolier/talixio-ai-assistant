@@ -8,8 +8,9 @@ namespace Talixio;
  * (LLM / vision / voice / image) and a trust level (TL). The Modèles table is built from this, and a model is picked
  * per usage through the routing engine (Routing).
  *
- * Today the list is a hand-kept seed. A connected provider (the main AI settings, or an AI account) is flagged
- * `connected` so the page can show "available" models first; a weekly job (slice 3) will fold in the live model lists.
+ * The list is a hand-kept seed, into which a weekly job (and the Modèles tab's "Actualiser maintenant") folds the
+ * live model lists of the connected providers (`refresh()`). A connected provider (the main AI settings, or an AI
+ * account) is flagged `connected` so the page can show "available" models first.
  *
  * Trust levels: 1 consumer (e.g. China) · 2 free / public · 3 business · 4 business, no retention · 5 sovereign (GDPR)
  * · 'L' local (on your own machine). 5 and 'L' are what the Europe (GDPR) lock keeps.
@@ -89,17 +90,87 @@ final class ModelCatalog
     /**
      * The whole catalogue for the page: providers (each with the `sources` that can serve it — the credentials a
      * model of that provider would be routed through — and a `connected` flag) and models (each flagged `available`
-     * when its provider has a source). A source is {account, name}: account '' is the main settings, else an AI
-     * account id. `updated`/`source` describe where the list came from.
+     * when its provider has a source). Every model carries an `id` (the API model string; it falls back to `name`
+     * for the providers whose display name is already the API string). A source is {account, name}: account '' is
+     * the main settings, else an AI account id. `updated`/`source` describe where the list came from.
      * @return array{providers:list<array>, models:list<array>, updated:int, source:string}
      */
     public function catalogue(): array
     {
         $sources = $this->sources();
+        $live = $this->liveModels();
         $providers = array_map(fn(array $p) => $p + ['sources' => $sources[$p['id']] ?? [], 'connected' => !empty($sources[$p['id']])], self::PROVIDERS);
-        $models = array_map(fn(array $m) => $m + ['available' => !empty($sources[$m['prov']])], self::MODELS);
+        $models = array_map(fn(array $m) => $m + ['id' => $m['name'], 'available' => !empty($sources[$m['prov']])], array_merge(self::MODELS, $live));
         return ['providers' => array_values($providers), 'models' => array_values($models),
-            'updated' => (int)$this->app->store->get('catalogue_updated', (string)time()), 'source' => 'seed'];
+            'updated' => (int)$this->app->store->get('catalogue_updated', (string)time()),
+            'source' => $live ? 'live' : 'seed'];
+    }
+
+    /**
+     * Models discovered on a last refresh (the connected providers' live `/models` lists), shaped like seed rows but
+     * flagged `live` and `est`, with no confirmed price or rank. Ids a seed row already covers are dropped so the
+     * hand-kept entry (with its real price and rank) wins. @return list<array>
+     */
+    private function liveModels(): array
+    {
+        $raw = json_decode($this->app->store->get('catalogue_live', ''), true);
+        $byProv = is_array($raw['models'] ?? null) ? $raw['models'] : [];
+        if (!$byProv) return [];
+        $seed = [];
+        foreach (self::MODELS as $m) $seed[$m['prov']][strtolower((string)($m['id'] ?? $m['name']))] = true;
+        $out = [];
+        foreach ($byProv as $prov => $ids) {
+            if (!is_array($ids)) continue;
+            foreach ($ids as $id) {
+                $id = (string)$id;
+                if (isset($seed[$prov][strtolower($id)])) continue;
+                $type = self::classify($id);
+                if ($type === null) continue; // embeddings, moderation, rerankers… nothing a usage runs on
+                $out[] = ['name' => $id, 'id' => $id, 'prov' => $prov, 'type' => $type, 'rank' => 5, 'est' => true, 'live' => true];
+            }
+        }
+        return $out;
+    }
+
+    /** What kind of model a live id is, so it lands in the right type (or is dropped when no usage can run on it). */
+    private static function classify(string $id): ?string
+    {
+        if (preg_match('/embed|moderation|rerank|guard|tokeniz|safety|classifier/i', $id)) return null;
+        if (preg_match('/whisper|voxtral|\btts\b|transcrib|speech|\bvoice\b|\baudio\b/i', $id)) return 'Voice';
+        if (preg_match('/dall-?e|flux|stable-?diffusion|sdxl|imagen|\bimage\b/i', $id)) return 'Image';
+        if (preg_match('/vision|pixtral|\bvl\b/i', $id)) return 'Vision';
+        return 'LLM';
+    }
+
+    /**
+     * Fold the connected providers' live `/models` lists into the catalogue and stamp it `catalogue_updated`. Run
+     * weekly by the worker and on demand from the Modèles tab's "Actualiser maintenant". Anthropic keeps its
+     * first-party seed (accurate prices, a different API); everything else is OpenAI-compatible (`GET /models`).
+     * Each provider is tried independently so one unreachable key can't blank the others. @return array the fresh catalogue
+     */
+    public function refresh(int $now): array
+    {
+        $live = [];
+        foreach ($this->sources() as $prov => $srcs) {
+            if ($prov === 'anthropic') continue; // first-party seed is accurate and the API differs
+            $c = $this->app->accountConfig($srcs[0]['account'] ?? '');
+            $url = $c?->openaiBaseUrl ?? '';
+            if ($c === null || $url === '') continue;
+            try {
+                [$code, $body] = Privacy::as('model', fn() => Http::request('GET', $url . '/models',
+                    $c->openaiKey !== '' ? ['Authorization: Bearer ' . $c->openaiKey] : [], null, 15));
+                $ids = array_values(array_filter(array_map(
+                    fn($r) => preg_replace('#^models/#', '', (string)($r['id'] ?? '')),
+                    json_decode($body, true)['data'] ?? [])));
+                if ($code >= 400 || !$ids) throw new \RuntimeException("HTTP $code");
+                $live[$prov] = array_values(array_unique($ids));
+            } catch (\Throwable $e) {
+                Log::warn("catalogue: could not list $prov models ({$e->getMessage()})");
+            }
+        }
+        $this->app->store->set('catalogue_live', json_encode(['ts' => $now, 'models' => $live]));
+        $this->app->store->set('catalogue_updated', (string)$now);
+        return $this->catalogue();
     }
 
     /**

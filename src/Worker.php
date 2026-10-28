@@ -125,6 +125,10 @@ final class Worker
             $this->lastMcp = $now;
             $this->guard('connectors', fn() => $app->mcp()->refresh());
         }
+        if ($now - (int)$store->get('catalogue_last', '0') >= 7 * 86400) { // the providers' live model lists, folded into the catalogue weekly
+            $store->set('catalogue_last', (string)$now);
+            $this->guard('catalogue', fn() => $app->catalogue()->refresh($now));
+        }
         $this->guard('embeddings', fn() => $app->recall()->embedPending());
         if ($now % 600 < 15) $this->guard('update', fn() => $app->updater()->notifyIfNew());
         if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));
