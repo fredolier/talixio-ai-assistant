@@ -564,6 +564,8 @@ button.mark:disabled{cursor:default}
   .rail .more.active{color:var(--ink);font-weight:600}
   /* on the mobile bottom bar the overflow flies up from its button, right-aligned to stay on screen */
   .rail .more-menu{top:auto;bottom:calc(100% + 10px);left:auto;right:0;width:min(280px,calc(100vw - 32px));max-height:60vh}
+  /* the bar is always collapsed here, so neutralise the desktop collapsed right-flyout that would push it off-screen */
+  .shell.collapsed .more-menu{top:auto;bottom:calc(100% + 10px);left:auto;right:0}
   .lib{grid-template-columns:1fr}
   .lib-tree{display:none}
   .lib-drop-hint{display:none}

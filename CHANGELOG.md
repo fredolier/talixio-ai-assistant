@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.5.3 (2026-10-28)
+
+- **On a phone, the "⋯ More" menu now opens fully on-screen instead of sliding off the right edge.** On the mobile bottom bar the shell is always in its `collapsed` state, and the collapsed desktop rule `.shell.collapsed .more-menu{left:calc(100% + 10px)}` (higher specificity than the mobile right-aligned rule) was still winning — so the menu was anchored just to the right of the ⋯ button and pushed almost entirely past the screen edge, leaving only a thin strip. Since the account chip is hidden on phones, that menu is the *only* way to reach **Settings, Privacy, Memory, Apps, Mail, People, Sign out** and the rest, so they were effectively unreachable. A same-specificity override inside the mobile block now neutralises the collapsed left offset, and the menu flies up from the button, right-aligned and on-screen. View-layer only; two browser tests now assert the mobile More menu is fully within the viewport and reaches the account surfaces.
+
 ## 1.5.2 (2026-10-28)
 
 - **The account menu (Settings, Privacy, Memory, Sign out…) opens again when you click your name at the bottom of the rail.** Since the 1.5.0 rail restructure the chip's menu was built correctly but rendered invisibly: its element carries both `space-menu` and `account-menu` classes, and `.space-menu`'s "open downward" positioning (defined later in the stylesheet, so it won at equal specificity) overrode `.account-menu`'s "open upward". With the chip pinned to the bottom of the rail, the menu was pushed off the bottom of the screen and crushed to a ~14px sliver — the empty bar with a faint chevron that appeared just under the chip, with no Réglages/Settings reachable. The positioning rule is now scoped `.rail .account-menu` so it outranks `.space-menu`, and the menu opens upward above the chip as intended. Same fix pattern as the More flyout in 1.5.1. View-layer only; a browser test now asserts the menu is visible and above the chip after clicking it.

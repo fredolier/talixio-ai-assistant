@@ -462,6 +462,21 @@ const flows = {
     await page.click('#view-pilotage .ptab[data-ptab=roles]');
     await page.waitForSelector('.pilot-panel[data-ppanel=roles]:not([hidden])', { timeout: 4000 });
     check('mobile: tapping a Pilotage tab switches panels', await page.isHidden('.pilot-panel[data-ppanel=agents]'));
+    // the account chip is hidden on mobile, so the "⋯ More" menu is the only path to Settings/Privacy/Sign out — it must stay on-screen
+    await go(page, 'chat');
+    await page.click('#more-btn');
+    await page.waitForSelector('#more-sheet:not([hidden])', { timeout: 4000 });
+    const moreGeom = await page.evaluate(() => {
+      const m = document.querySelector('#more-sheet'); const r = m.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height, vw: innerWidth, vh: innerHeight };
+    });
+    check('mobile: the More menu flies up fully on-screen (not pushed off the right edge)',
+      moreGeom.w > 120 && moreGeom.h > 120 && moreGeom.left >= 0 && moreGeom.right <= moreGeom.vw + 1
+      && moreGeom.top >= 0 && moreGeom.bottom <= moreGeom.vh + 1);
+    check('mobile: the More menu reaches the account surfaces (Settings, Privacy, Sign out)', await page.evaluate(() => {
+      const t = document.querySelector('#more-sheet').textContent;
+      return /Settings|Réglages/.test(t) && /Privacy|Confidentialité/.test(t) && /Sign out|déconnecter/i.test(t);
+    }));
     await page.setViewportSize({ width: 1280, height: 860 });
   },
 };
