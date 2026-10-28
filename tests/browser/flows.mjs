@@ -181,6 +181,14 @@ const flows = {
     await page.waitForTimeout(300);
     check('cockpit: the Fournisseurs tab shows the Europe card and hides the catalogue',
       await page.isVisible('#eu-card') && !(await page.isVisible('#mb-models')));
+    // The Fournisseurs tab leads with a provider-card grid (one card per catalogue provider, plus the add card).
+    await page.waitForSelector('#mb-pgrid .mb-pcard', { timeout: 10000 });
+    check('cockpit: the Fournisseurs tab leads with a provider-card grid',
+      (await page.$$('#mb-pgrid .mb-pcard:not(.add)')).length === cat.providers.length && await page.isVisible('#mb-pcard-add'));
+    // Clicking a provider card jumps to its real connection surface (the AI-account form for a non-sovereign provider).
+    await page.click('#mb-pcard-add');
+    await page.waitForTimeout(300);
+    check('cockpit: the add-provider card opens the AI-account form', await page.isVisible('#acc-form'));
     await page.click('#mb-tabs .mb-tab[data-mtab="budget"]');
     await page.waitForTimeout(300);
     check('cockpit: the Budget tab shows the budget card', await page.evaluate(() =>

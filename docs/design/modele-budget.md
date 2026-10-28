@@ -19,9 +19,18 @@ The section carries its own three tabs (`.mb-tab[data-mtab]`, wired once by
 `wireMbTabs`, shown by `mbApplyTab`):
 
 - **Modèles** (`#mb-models`, `data-mtab="models"`) — the catalogue. The heart.
-- **Fournisseurs** (`data-mtab="providers"`) — surfaces the existing `#eu-card`
-  (Europe-only switch), `#acc-card` (AI-account connect/sign-in cards) and the
-  `brain` group-card. No new UI: connecting a provider is the existing flow.
+- **Fournisseurs** (`data-mtab="providers"`) — leads with a **provider-card grid**
+  (`#mb-pgrid`, `mbRenderProviders`): one card per catalogue provider (flag, name,
+  connected status light, country · billing, and trust / kind / model-count chips),
+  plus a dashed **« + Ajouter un fournisseur sur mesure »** card. Each card's button
+  jumps to the real connection surface and pre-selects there (`mbConnectProvider`):
+  a sovereign/European provider (one listed in the Europe form's `#eu-service`)
+  pre-selects itself in `#eu-card` and focuses the key; any other opens the
+  `#acc-card` account form with its kind pre-chosen (`mbOpenAccountForm`). The
+  existing `#eu-card`, `#acc-card` and the `brain` group-card stay below the grid
+  under a **« Détails de connexion »** (`#mb-dh`) heading — they hold the actual
+  credentials, so the grid is a new *overview*, not a new trust edge: connecting a
+  provider is still the existing flow.
 - **Budget** (`data-mtab="budget"`) — the existing `budget` group-card, with a live
   « dépensé ce mois-ci » glance (`mbBudgetSnapshot`, from `state.status.budget`).
 
@@ -114,8 +123,10 @@ provider (Fournisseurs tab → Europe provider switch, or an AI account of kind
 ## Deliberate divergences from the concept mockup
 
 The mockup (`scratchpad/fleet-ui-mockups.html`; not in the repo) is a concept sketch.
-As shipped: the three tabs are **Modèles / Fournisseurs / Budget** (Fournisseurs and
-Budget reuse the existing cards rather than new panels); the per-usage picker is the
+As shipped: the three tabs are **Modèles / Fournisseurs / Budget** (Fournisseurs
+leads with the mockup's provider-card grid and keeps the existing credential cards
+below it under « Détails de connexion »; Budget reuses the existing card); the
+per-usage picker is the
 row's inline **F/S/A/V** buttons plus the live usage cards, not a separate drawer;
 and the Europe lock is a single toggle that both raises the filter floor and
 force-swaps live selections.

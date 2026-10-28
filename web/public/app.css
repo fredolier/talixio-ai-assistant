@@ -1674,3 +1674,21 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .mb-bsnap .krow{display:flex;gap:18px;flex-wrap:wrap}
 .mb-bsnap .krow .k{font-size:.78rem;color:var(--muted)}
 .mb-bsnap .krow .k b{display:block;color:var(--ink);font-size:1.05rem;font-family:var(--mono)}
+
+/* ---- Providers tab: the provider-card grid ---- */
+.mb-phelp{margin:2px 0 12px}
+.mb-dh{margin:20px 0 8px;font-size:1rem}
+.mb-pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:6px}
+.mb-pcard{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.mb-pcard .ptop{display:flex;align-items:center;gap:8px;min-width:0}
+.mb-pcard .flag{font-size:1.2rem;flex:none}
+.mb-pcard .pn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mb-pcard .led{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;margin-left:auto}
+.mb-pcard .led.off{background:var(--line)}
+.mb-pcard .pc{color:var(--muted);font-size:.78rem}
+.mb-pcard .pmeta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.mb-pcard .pchip{font-size:.66rem;font-weight:600;padding:2px 7px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.mb-pcard .pfoot{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:6px}
+.mb-pcard.add{border-style:dashed;align-items:center;justify-content:center;text-align:center;color:var(--muted);cursor:pointer;min-height:118px}
+.mb-pcard.add:hover,.mb-pcard.add:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
+.mb-pcard.add .plus{font-size:1.6rem;line-height:1}

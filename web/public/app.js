@@ -3245,11 +3245,15 @@ function mbApplyTab() {
   $('#mb-tabs')?.querySelectorAll('.mb-tab').forEach(b => b.classList.toggle('on', b.dataset.mtab === tab));
   const show = (sel, on) => document.querySelectorAll(sel).forEach(e => { e.hidden = !on; });
   show('#mb-models', tab === 'models');
+  show('#mb-phelp', tab === 'providers');
+  show('#mb-pgrid', tab === 'providers');
+  show('#mb-dh', tab === 'providers');
   show('#eu-card', tab === 'providers');
   show('#acc-card', tab === 'providers');
   document.querySelectorAll('#view-settings .set-groups[data-groups="model"] .group-card').forEach(c => {
     c.hidden = !(tab === 'providers' && c.dataset.id === 'brain') && !(tab === 'budget' && c.dataset.id === 'budget');
   });
+  if (tab === 'providers') mbRenderProviders();
   if (tab === 'budget') mbBudgetSnapshot();
 }
 /** A short budget glance above the budget fields, from the live status. */
@@ -3267,6 +3271,52 @@ function mbBudgetSnapshot() {
       ${b.monthly ? `<span class="k">${esc(t('Cap'))}<b class="no-i18n">$${(+b.monthly).toFixed(2)}</b></span>` : ''}
       ${b.day != null ? `<span class="k">${esc(t('Today'))}<b class="no-i18n">$${(+b.day).toFixed(2)}</b></span>` : ''}
     </div>`;
+}
+/** The Fournisseurs tab's provider-card grid (the mockup's centrepiece): one card per catalogue
+ *  provider — flag, status light, trust/kind/model-count chips — with a one-click jump to the real
+ *  connection surface below (the Europe form for sovereign providers, an AI account otherwise). */
+function mbRenderProviders() {
+  const grid = $('#mb-pgrid'); if (!grid || !state.mb?.cat) return;
+  const euIds = new Set((state.eu?.services || []).map(s => s.id)); // providers configurable through the Europe form
+  const models = state.mb.cat.models;
+  const cards = state.mb.cat.providers.map(p => {
+    const n = models.filter(m => m.prov === p.id).length;
+    const via = euIds.has(p.id) ? 'eu' : 'acc';
+    const label = p.connected ? t('Manage') : (p.auth === 'oauth' ? t('Sign in') : t('Connect'));
+    return `<div class="mb-pcard">
+      <div class="ptop"><span class="flag no-i18n">${esc(p.flag || '')}</span><span class="pn no-i18n">${esc(p.name)}</span><span class="led${p.connected ? '' : ' off'}" title="${esc(p.connected ? t('connected') : t('not connected'))}"></span></div>
+      <div class="pc"><span class="no-i18n">${esc(t(p.country))}</span> · ${esc(t(p.bill === 'usage' ? 'pay as you go' : p.bill))}</div>
+      <div class="pmeta"><span class="tl ${mbTlClass(p.tl)}">${esc(mbTlText(p.tl))}</span><span class="pchip">${esc(t(p.kind))}</span><span class="pchip no-i18n">${n} ${esc(n > 1 ? t('models') : t('model'))}</span></div>
+      <div class="pfoot"><button type="button" class="btn sm${p.connected ? '' : ' primary'}" data-pconn="${esc(p.id)}" data-via="${via}">${esc(label)}</button></div>
+    </div>`;
+  }).join('');
+  grid.innerHTML = cards + `<div class="mb-pcard add" id="mb-pcard-add" role="button" tabindex="0"><div><div class="plus" aria-hidden="true">+</div>${esc(t('Add a custom provider'))}</div></div>`;
+  grid.querySelectorAll('[data-pconn]').forEach(b => b.onclick = () => mbConnectProvider(b.dataset.pconn, b.dataset.via));
+  const add = $('#mb-pcard-add');
+  add.onclick = mbOpenAccountForm;
+  add.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); mbOpenAccountForm(); } };
+}
+/** Jump a provider card to its real connection surface and pre-select it there. */
+function mbConnectProvider(id, via) {
+  if (via === 'eu') {
+    const sel = $('#eu-service');
+    if (sel && [...sel.options].some(o => o.value === id)) { sel.value = id; euService(); }
+    $('#eu-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!$('#eu-key')?.value) $('#eu-key')?.focus();
+  } else {
+    mbOpenAccountForm(id);
+  }
+}
+/** Open the AI-account form (the custom-provider path), optionally pre-choosing the kind for a provider. */
+function mbOpenAccountForm(providerId) {
+  const kindFor = { anthropic: 'anthropic', claude: 'anthropic', openai: 'openai', google: 'gemini', gemini: 'gemini' };
+  const form = $('#acc-form');
+  if (form?.hidden) $('#acc-add')?.click(); // reuse the existing open-the-form flow
+  const kind = kindFor[providerId];
+  const ksel = $('#acc-kind');
+  if (kind && ksel && [...ksel.options].some(o => o.value === kind)) { ksel.value = kind; ksel.dispatchEvent(new Event('change')); }
+  $('#acc-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('#acc-name')?.focus();
 }
 
 function mbProvMap() { const m = {}; for (const p of state.mb.cat.providers) m[p.id] = p; return m; }
