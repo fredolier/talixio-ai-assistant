@@ -26,7 +26,7 @@ final class ModelCatalog
         ['id' => 'scaleway',   'name' => 'Scaleway',    'country' => 'France',        'flag' => '🇫🇷', 'tl' => 5,   'kind' => 'Sovereign (GDPR)',        'bill' => 'usage'],
         ['id' => 'ovhcloud',   'name' => 'OVHcloud AI', 'country' => 'France',        'flag' => '🇫🇷', 'tl' => 5,   'kind' => 'Sovereign (GDPR)',        'bill' => 'usage'],
         ['id' => 'infomaniak', 'name' => 'Infomaniak',  'country' => 'Switzerland',   'flag' => '🇨🇭', 'tl' => 5,   'kind' => 'Sovereign (GDPR)',        'bill' => 'usage'],
-        ['id' => 'aki',        'name' => 'AKI.IO',      'country' => 'Germany',       'flag' => '🇪🇺', 'tl' => 5,   'kind' => 'Sovereign, no retention', 'bill' => 'usage'],
+        ['id' => 'aki',        'name' => 'AKI.IO',      'country' => 'Germany',       'flag' => '🇩🇪', 'tl' => 5,   'kind' => 'Sovereign, no retention', 'bill' => 'usage'],
         ['id' => 'elevenlabs', 'name' => 'ElevenLabs',  'country' => 'United States', 'flag' => '🇺🇸', 'tl' => 3,   'kind' => 'Business',                'bill' => 'usage'],
         ['id' => 'deepseek',   'name' => 'DeepSeek',    'country' => 'China',         'flag' => '🇨🇳', 'tl' => 1,   'kind' => 'Consumer',                'bill' => 'usage'],
         ['id' => 'huggingface','name' => 'Hugging Face','country' => 'Multiple',      'flag' => '🤗', 'tl' => 2,    'kind' => 'Free / public',           'bill' => 'free'],

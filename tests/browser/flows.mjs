@@ -149,6 +149,14 @@ const flows = {
     const tableText = await page.textContent('#mb-models .mb-table');
     check('cockpit: the Modèles table lists real models from several providers',
       /Haiku|Sonnet|Opus/.test(tableText) && /Mistral|Apertus|Qwen|Llama/.test(tableText));
+    // AKI.IO (German sovereign, TL5) is in the catalogue and the provider filter can single it out.
+    check('cockpit: AKI.IO is offered as a sovereign (TL5) provider', !!cat.providers.find(p => p.id === 'aki' && p.tl === 5));
+    await page.selectOption('#mb-fprov', 'aki');
+    await page.waitForTimeout(300);
+    const akiRows = await page.$$eval('#mb-models .mb-table tbody tr .tl', els => els.map(e => e.textContent.trim()));
+    check('cockpit: the provider filter narrows the table to AKI.IO sovereign models', akiRows.length > 0 && akiRows.every(t => t === '5'));
+    await page.selectOption('#mb-fprov', '');
+    await page.waitForTimeout(300);
     check('cockpit: a row per usage shows the current selection', (await page.$$('#mb-usages .ucard')).length === 4);
     check('cockpit: the provider count badge is filled', (await page.textContent('#mb-prov-c')).trim() === String(cat.providers.length));
     // Filter the catalogue down to voice models, then clear it.

@@ -814,6 +814,16 @@ check('catalogue: the seed lists every known provider and model, Claude with its
     && !array_filter($cv['models'], fn($m) => !array_key_exists('available', $m)), count($cv['providers']) . '/' . count($cv['models']));
 check('catalogue: nothing is connected under the echo provider', $cat->connected() === []
     && !array_filter($cv['providers'], fn($p) => $p['connected']));
+// AKI.IO: a German sovereign (TL5) provider with EU-priced seed models, including one billed per image in euros
+$aki = current(array_filter($cv['providers'], fn($p) => $p['id'] === 'aki'));
+$akiModels = array_values(array_filter($cv['models'], fn($m) => $m['prov'] === 'aki'));
+$akiImg = current(array_filter($akiModels, fn($m) => $m['type'] === 'Image'));
+check('catalogue: AKI.IO is a German TL5 provider with EU-priced seed models (one per image in €)',
+    $aki && $aki['country'] === 'Germany' && $aki['tl'] === 5 && \Talixio\ModelCatalog::providerIds() && in_array('aki', \Talixio\ModelCatalog::providerIds(), true)
+    && count($akiModels) >= 4 && !array_filter($akiModels, fn($m) => empty($m['est']))          // every AKI row is an estimate
+    && $akiImg && ($akiImg['cur'] ?? '') === '€' && ($akiImg['unitKind'] ?? '') === 'img'       // the image model is billed per image in euros
+    && array_filter($akiModels, fn($m) => $m['type'] === 'LLM' && isset($m['pin'], $m['pout'])), // and it carries priced LLMs
+    count($akiModels) . ' models');
 $cacc = $app->accounts()->save(['name' => 'Cat OA', 'kind' => 'openai', 'key' => 'sk-c', 'models' => []]);
 $cv2 = $app->catalogue()->catalogue();
 $openai = current(array_filter($cv2['providers'], fn($p) => $p['id'] === 'openai'));
