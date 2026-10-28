@@ -143,7 +143,7 @@ final class Agent
         };
         try {
             $tools = $this->toolsFor($toolset, $history);
-            $text = $this->app->provider($tier)->complete($this->systemPrompt($role), in_array($role, ['summary', 'classify', 'mind'], true) ? '' : $this->context($tier, $extra, $toolset === 'chat' && $role === 'main'),
+            $text = $this->app->provider($tier, $cfg)->complete($this->systemPrompt($role), in_array($role, ['summary', 'classify', 'mind'], true) ? '' : $this->context($tier, $extra, $toolset === 'chat' && $role === 'main'),
                 $history, $tools, $onUsage, $onEvent);
             if ($toolset === 'chat' && ($groups = $tools->shownGroups())) $this->keepGroups($groups);
         } finally {

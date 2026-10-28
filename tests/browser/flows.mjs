@@ -137,6 +137,49 @@ const flows = {
     await page.selectOption('#theme-mode', '');
     if (await page.isVisible('#doctor-run')) { await page.click('#doctor-run'); await page.waitForTimeout(1500); }
   },
+  async modelCockpit({ page, check }) {
+    await go(page, 'settings');
+    await page.click('#set-nav a[data-sec="model"]');
+    await page.waitForSelector('#mb-models .mb-table', { timeout: 10000 });
+    const cat = await api(page, 'api/catalogue');
+    check('cockpit: the catalogue API returns providers and models', (cat.providers?.length || 0) >= 8 && (cat.models?.length || 0) >= 20);
+    // Nothing is "connected" in echo mode, so untick Available to see the whole seeded catalogue.
+    await page.click('#mb-avail');
+    await page.waitForSelector('#mb-models .mb-table tbody tr .mname', { timeout: 10000 });
+    const tableText = await page.textContent('#mb-models .mb-table');
+    check('cockpit: the Modèles table lists real models from several providers',
+      /Haiku|Sonnet|Opus/.test(tableText) && /Mistral|Apertus|Qwen|Llama/.test(tableText));
+    check('cockpit: a row per usage shows the current selection', (await page.$$('#mb-usages .ucard')).length === 4);
+    check('cockpit: the provider count badge is filled', (await page.textContent('#mb-prov-c')).trim() === String(cat.providers.length));
+    // Filter the catalogue down to voice models, then clear it.
+    const before = (await page.$$('#mb-models .mb-table tbody tr')).length;
+    await page.selectOption('#mb-ftype', 'Voice');
+    await page.waitForTimeout(300);
+    const voiceRows = await page.$$eval('#mb-models .mb-table tbody tr .ty', els => els.every(e => /voice|voix/i.test(e.textContent)));
+    check('cockpit: the type filter narrows the table to one type', voiceRows);
+    await page.selectOption('#mb-ftype', '');
+    await page.waitForTimeout(300);
+    check('cockpit: clearing the filter brings the models back', (await page.$$('#mb-models .mb-table tbody tr')).length === before);
+    // The Europe (GDPR) lock raises the trust floor to level 5.
+    await page.click('#mb-lock');
+    await page.waitForTimeout(400);
+    check('cockpit: the Europe lock sets the trust floor to 5', await page.inputValue('#mb-ftl') === '5');
+    const locked = await page.$$eval('#mb-models .mb-table tbody tr:not(.blocked) .tl', els => els.map(e => e.textContent.trim()));
+    check('cockpit: under the lock only sovereign/local models remain assignable', locked.every(t => t === '5' || /loc/i.test(t)));
+    await page.click('#mb-lock');
+    await page.waitForTimeout(300);
+    // The Providers tab reveals the provider/account cards; Budget reveals the budget card.
+    await page.click('#mb-tabs .mb-tab[data-mtab="providers"]');
+    await page.waitForTimeout(300);
+    check('cockpit: the Fournisseurs tab shows the Europe card and hides the catalogue',
+      await page.isVisible('#eu-card') && !(await page.isVisible('#mb-models')));
+    await page.click('#mb-tabs .mb-tab[data-mtab="budget"]');
+    await page.waitForTimeout(300);
+    check('cockpit: the Budget tab shows the budget card', await page.evaluate(() =>
+      !!document.querySelector('#view-settings .set-groups[data-groups="model"] .group-card[data-id="budget"]:not([hidden])')));
+    await page.click('#mb-tabs .mb-tab[data-mtab="models"]');
+    await page.waitForTimeout(200);
+  },
   async notifications({ page, check }) {
     await go(page, 'notifications');
     for (const b of ['#notif-all-read', '#notif-clear']) if (await page.isVisible(b) && await page.isEnabled(b)) await page.click(b);

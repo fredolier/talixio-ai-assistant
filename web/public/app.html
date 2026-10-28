@@ -448,6 +448,12 @@
 
           <div class="set-sec" data-sec="model" hidden>
             <header><h3>Model and budget</h3><p class="muted small">The assistant's brain, and how much it may spend.</p></header>
+            <div class="mb-tabs" id="mb-tabs" role="tablist">
+              <button type="button" class="mb-tab on" data-mtab="models" role="tab">Models</button>
+              <button type="button" class="mb-tab" data-mtab="providers" role="tab">Providers <span class="mb-c" id="mb-prov-c"></span></button>
+              <button type="button" class="mb-tab" data-mtab="budget" role="tab">Budget</button>
+            </div>
+            <div class="card set-card mb-models" id="mb-models"></div>
             <div class="card set-card" id="eu-card">
               <h4>Europe only <span id="eu-badge" class="muted small"></span></h4>
               <p class="muted small">Your messages, documents and recordings go to an AI provider hosted in Europe, under the GDPR, and nothing goes to the big American platforms. Paid by use, nothing to host.</p>

@@ -3063,9 +3063,11 @@ function renderGroups(groups) {
   page.oninput = page.onchange = e => { if (e.target.closest('.set-groups')) setDirty(); };
   setDirty(); setAccounts(); showMsMail(); sectionTabs(state.setSection);
   if ($('#set-search').value) setSearch();
+  if (state.mb?.cat) mbApplyTab(); // keep the Models/Providers/Budget tabs showing the right cards after a re-render
 }
 /** Each settings section: one tab per card, one card at a time (all of them while searching). */
 function sectionTabs(id, pick) {
+  if (id === 'model') return; // the model section has its own Models/Providers/Budget tabs (mb-tabs)
   const sec = $(`#view-settings .set-sec[data-sec="${id}"]`); if (!sec) return;
   const cards = [...sec.querySelectorAll(':scope > .set-card, .set-groups > .set-card')];
   const key = (c, i) => c.dataset.id || c.id || 'card' + i;
@@ -3183,6 +3185,7 @@ async function loadSettings() {
   loadSecurity();
   loadDav();
   loadEu(); loadAccCard();
+  loadModelCockpit().catch(e => { const b = $('#mb-models'); if (b) b.innerHTML = `<p class="bad small">${esc(e.message)}</p>`; });
   renderAppearance();
   loadConnectors();
   loadGoogle(); loadMicrosoft();
@@ -3191,6 +3194,257 @@ async function loadSettings() {
   refreshStatus().then(setHealth);
   if (!state.setGroups || $('#set-save').hidden) renderGroups((await api('api/settings')).groups);
 }
+// ---- Model & budget cockpit: the Models/Providers/Budget tabs, the catalogue table and per-usage routing ----
+const MB_USAGES = [
+  { id: 'fast', label: 'Fast', hint: 'short replies, sorting, routine' },
+  { id: 'standard', label: 'Standard', hint: 'conversation, everyday tasks' },
+  { id: 'deep', label: 'Deep', hint: 'analysis, long writing' },
+  { id: 'voice', label: 'Voice', hint: 'dictation and reading' },
+];
+/** Which usages a model type can serve (image generation is in the catalogue but not routed to a usage yet). */
+const MB_TYPE_USAGE = { LLM: ['fast', 'standard', 'deep'], Vision: ['fast', 'standard', 'deep'], Voice: ['voice'], Image: [] };
+state.mb = { tab: 'models', scope: 'global', cat: null, routing: null, lock: false, avail: true, sort: { key: 'rank', dir: -1 }, q: '', ftype: '', fprov: '', ftl: 0, sel: '' };
+const mbTlRank = tl => tl === 'L' ? 6 : +tl;                       // local counts as top trust for the Europe floor
+const mbTlClass = tl => tl === 'L' ? 'tlL' : 'tl' + tl;
+const mbTlText = tl => tl === 'L' ? t('loc') : String(tl);
+const mbCompliant = p => mbTlRank(p.tl) >= 5;                      // sovereign (GDPR) or local
+const mbMoney = v => v == null ? '—' : v === 0 ? t('free') : '$' + (+v).toFixed(2);
+const mbId = m => m.id || m.name;
+function mbUnit(m) {
+  if (m.unit == null) return null;
+  if (m.unit === 0) return t('free');
+  return (m.cur || '$') + (+m.unit).toFixed(m.unit < 0.1 ? 3 : 2) + '/' + (m.unitKind === 'img' ? t('img') : t('min'));
+}
+/** A rough "per message" cost (≈20k tokens in + 1k out), the same yardstick the budget uses. */
+function mbMsg(m) {
+  const u = mbUnit(m); if (u !== null) return u;
+  if (m.pin == null) return '—';
+  if (m.pin === 0) return t('free');
+  return '$' + (m.pin * 0.020 + m.pout * 0.001).toFixed(4);
+}
+
+async function loadModelCockpit() {
+  const [cat, routing] = await Promise.all([api('api/catalogue'), mbFetchRouting()]);
+  state.mb.cat = cat; state.mb.routing = routing;
+  $('#mb-prov-c').textContent = cat.providers.length;
+  wireMbTabs();
+  mbApplyTab();
+  mbRender();
+}
+function mbFetchRouting() {
+  const s = state.mb.scope;
+  return api('api/routing' + (s !== 'global' ? '?space=' + encodeURIComponent(s) : ''));
+}
+function wireMbTabs() {
+  if (wireMbTabs.done) return; wireMbTabs.done = true;
+  $('#mb-tabs').querySelectorAll('.mb-tab').forEach(b => b.onclick = () => { state.mb.tab = b.dataset.mtab; mbApplyTab(); });
+}
+/** The tabs show one face of the page: the catalogue, the provider cards, or the budget settings. */
+function mbApplyTab() {
+  const tab = state.mb.tab;
+  $('#mb-tabs')?.querySelectorAll('.mb-tab').forEach(b => b.classList.toggle('on', b.dataset.mtab === tab));
+  const show = (sel, on) => document.querySelectorAll(sel).forEach(e => { e.hidden = !on; });
+  show('#mb-models', tab === 'models');
+  show('#eu-card', tab === 'providers');
+  show('#acc-card', tab === 'providers');
+  document.querySelectorAll('#view-settings .set-groups[data-groups="model"] .group-card').forEach(c => {
+    c.hidden = !(tab === 'providers' && c.dataset.id === 'brain') && !(tab === 'budget' && c.dataset.id === 'budget');
+  });
+  if (tab === 'budget') mbBudgetSnapshot();
+}
+/** A short budget glance above the budget fields, from the live status. */
+function mbBudgetSnapshot() {
+  const card = document.querySelector('#view-settings .set-groups[data-groups="model"] .group-card[data-id="budget"]');
+  if (!card) return;
+  const b = state.status?.budget;
+  let snap = card.querySelector('.mb-bsnap');
+  if (!b) { snap?.remove(); return; }
+  if (!snap) { snap = document.createElement('div'); snap.className = 'mb-bsnap'; card.querySelector('h4')?.after(snap); }
+  const pct = b.monthly ? Math.min(100, Math.round(100 * (b.month || 0) / b.monthly)) : 0;
+  snap.innerHTML = `<div class="bbar"><i style="width:${pct}%"></i></div>
+    <div class="krow">
+      <span class="k">${esc(t('Spent this month'))}<b class="no-i18n">$${(b.month || 0).toFixed(2)}</b></span>
+      ${b.monthly ? `<span class="k">${esc(t('Cap'))}<b class="no-i18n">$${(+b.monthly).toFixed(2)}</b></span>` : ''}
+      ${b.day != null ? `<span class="k">${esc(t('Today'))}<b class="no-i18n">$${(+b.day).toFixed(2)}</b></span>` : ''}
+    </div>`;
+}
+
+function mbProvMap() { const m = {}; for (const p of state.mb.cat.providers) m[p.id] = p; return m; }
+/** The models that pass the current filters, sorted. */
+function mbVisible() {
+  const st = state.mb, P = mbProvMap();
+  const q = st.q.trim().toLowerCase();
+  let rows = st.cat.models.filter(m => {
+    const p = P[m.prov]; if (!p) return false;
+    if (st.avail && !m.available) return false;
+    if (q && !(mbId(m).toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))) return false;
+    if (st.ftype && m.type !== st.ftype) return false;
+    if (st.fprov && m.prov !== st.fprov) return false;
+    if (st.ftl && mbTlRank(p.tl) < st.ftl) return false;
+    return true;
+  });
+  const key = st.sort.key, dir = st.sort.dir;
+  const val = m => key === 'name' ? (m.name.toLowerCase())
+    : key === 'type' ? m.type : key === 'rank' ? m.rank
+    : key === 'tl' ? mbTlRank(P[m.prov].tl)
+    : key === 'pin' ? (m.pin ?? 1e9) : key === 'pout' ? (m.pout ?? 1e9)
+    : key === 'pmsg' ? (m.pin != null ? m.pin * 0.02 + m.pout * 0.001 : 1e9) : m.name;
+  rows.sort((a, b) => { const x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+  return rows;
+}
+/** What each usage resolves to in the current scope, from the server's routing view. */
+function mbEff(u) { return state.mb.routing?.effective?.[u] || { routed: false }; }
+/** The best (highest-rank) compliant + available model that can serve a usage — for the Europe lock's force-swap. */
+function mbBestCompliant(usageId) {
+  const P = mbProvMap();
+  return state.mb.cat.models.filter(m => m.available && mbCompliant(P[m.prov]) && MB_TYPE_USAGE[m.type].includes(usageId))
+    .sort((a, b) => b.rank - a.rank)[0] || null;
+}
+
+function mbRender() {
+  const box = $('#mb-models'); if (!box || !state.mb.cat) return;
+  const P = mbProvMap();
+  const spaceOpts = state.spaces.filter(s => !s.archived).map(s => `<option class="no-i18n" value="${s.id}"${String(state.mb.scope) === String(s.id) ? ' selected' : ''}>${esc(s.id ? s.name : t('General'))}</option>`).join('');
+  const provOpts = state.mb.cat.providers.map(p => `<option class="no-i18n" value="${esc(p.id)}"${state.mb.fprov === p.id ? ' selected' : ''}>${esc(p.name)}${p.connected ? '' : ' (' + t('not connected') + ')'}</option>`).join('');
+  const upd = state.mb.cat.updated ? new Date(state.mb.cat.updated * 1000).toLocaleDateString(window.LOCALE) : '';
+  box.innerHTML = `
+    <div class="scopebar">
+      <span class="muted small">${esc(t('Routing'))}</span>
+      <select id="mb-scope"><option value="global"${state.mb.scope === 'global' ? ' selected' : ''}>${esc(t('Global default (all spaces)'))}</option>
+        <optgroup label="${esc(t('Override for a space'))}">${spaceOpts}</optgroup></select>
+      <span class="muted small">${esc(state.mb.scope === 'global' ? t('Applied everywhere, unless a space overrides it.') : t('Inherited usages follow the global default; overridden ones are specific to this space.'))}</span>
+    </div>
+    <div class="usages" id="mb-usages"></div>
+    <div class="filters">
+      <input type="search" id="mb-q" placeholder="${esc(t('Search a model…'))}" value="${esc(state.mb.q)}">
+      <select id="mb-ftype">
+        <option value="">${esc(t('All types'))}</option>
+        <option value="LLM"${state.mb.ftype === 'LLM' ? ' selected' : ''}>${esc(t('LLM (text)'))}</option>
+        <option value="Vision"${state.mb.ftype === 'Vision' ? ' selected' : ''}>${esc(t('LLM vision'))}</option>
+        <option value="Voice"${state.mb.ftype === 'Voice' ? ' selected' : ''}>${esc(t('Voice'))}</option>
+        <option value="Image"${state.mb.ftype === 'Image' ? ' selected' : ''}>${esc(t('Text → image'))}</option>
+      </select>
+      <select id="mb-fprov"><option value="">${esc(t('All providers'))}</option>${provOpts}</select>
+      <select id="mb-ftl">
+        <option value="0">${esc(t('All trust levels'))}</option>
+        <option value="3"${state.mb.ftl === 3 ? ' selected' : ''}>${esc(t('Level ≥ 3 (pro)'))}</option>
+        <option value="4"${state.mb.ftl === 4 ? ' selected' : ''}>${esc(t('Level ≥ 4 (no retention)'))}</option>
+        <option value="5"${state.mb.ftl === 5 ? ' selected' : ''}>${esc(t('Level ≥ 5 (sovereign / local)'))}</option>
+      </select>
+      <label class="mb-lock ${state.mb.avail ? 'on' : 'off'}" id="mb-avail"><input type="checkbox" id="mb-avail-cb"${state.mb.avail ? ' checked' : ''}> ${esc(t('Available'))}</label>
+      <label class="mb-lock ${state.mb.lock ? 'on' : 'off'}" id="mb-lock"><input type="checkbox" id="mb-lock-cb"${state.mb.lock ? ' checked' : ''}> 🔒 ${esc(t('Europe lock (GDPR)'))}</label>
+    </div>
+    <p class="note small muted">${esc(t('Catalogue updated {d} — from connected providers + a seed.', { d: upd }))}</p>
+    <div class="tscroll"><table class="mb-table"><thead><tr>
+      <th data-sort="name">${esc(t('Model'))}</th><th data-sort="type">${esc(t('Type'))}</th>
+      <th data-sort="rank" class="num">${esc(t('Rank'))}</th><th data-sort="tl">${esc(t('Trust'))}</th>
+      <th data-sort="pin" class="num">${esc(t('Input'))}</th><th data-sort="pout" class="num">${esc(t('Output'))}</th>
+      <th data-sort="pmsg" class="num">${esc(t('≈ / message'))}</th><th>${esc(t('Assign to…'))}</th>
+    </tr></thead><tbody id="mb-rows"></tbody></table></div>
+    <div class="legend small muted">
+      <span><b>${esc(t('Rank'))}</b> ${esc(t('1 (basic) → 10 (flagship)'))}</span>
+      <span><b>${esc(t('Trust'))}</b> <span class="tl tl1">1</span> ${esc(t('consumer (China)'))} · <span class="tl tl2">2</span> ${esc(t('free/public'))} · <span class="tl tl3">3</span> ${esc(t('pro'))} · <span class="tl tl4">4</span> ${esc(t('no retention'))} · <span class="tl tl5">5</span> ${esc(t('sovereign (GDPR)'))} · <span class="tl tlL">${esc(t('loc'))}</span> ${esc(t('local'))}</span>
+    </div>
+    <p class="note small muted">${esc(t('Prices in $ per million tokens (voice: $/min, image: $/image). Indicative — check with the provider. “≈ / message”: ~20,000 tokens read + 1,000 written. “~” marks an estimated price.'))}</p>`;
+  mbRenderUsages(); mbRenderRows();
+  $('#mb-scope').onchange = async e => { state.mb.scope = e.target.value === 'global' ? 'global' : +e.target.value; state.mb.routing = await mbFetchRouting(); mbRender(); };
+  $('#mb-q').oninput = e => { state.mb.q = e.target.value; mbRenderRows(); };
+  $('#mb-ftype').onchange = e => { state.mb.ftype = e.target.value; mbRenderRows(); };
+  $('#mb-fprov').onchange = e => { state.mb.fprov = e.target.value; mbRenderRows(); };
+  $('#mb-ftl').onchange = e => { state.mb.ftl = +e.target.value; mbRenderRows(); };
+  $('#mb-avail-cb').onchange = e => { state.mb.avail = e.target.checked; $('#mb-avail').classList.toggle('on', state.mb.avail); $('#mb-avail').classList.toggle('off', !state.mb.avail); mbRenderRows(); };
+  $('#mb-lock-cb').onchange = mbToggleLock;
+  box.querySelectorAll('thead th[data-sort]').forEach(th => th.onclick = () => {
+    const k = th.dataset.sort; state.mb.sort.dir = state.mb.sort.key === k ? -state.mb.sort.dir : (k === 'name' || k === 'type' ? 1 : -1); state.mb.sort.key = k; mbRenderRows();
+  });
+}
+function mbRenderUsages() {
+  const box = $('#mb-usages'); if (!box) return; const P = mbProvMap(), global = state.mb.scope === 'global';
+  box.innerHTML = MB_USAGES.map(u => {
+    const e = mbEff(u.id);
+    const prov = e.routed ? state.mb.cat.providers.find(x => x.id === e.provider) : null;
+    const flag = prov ? prov.flag : '';
+    const name = e.routed ? (e.model || t('provider default')) : t('Default');
+    const tag = global ? '' : (e.overridden ? `<span class="utag ovr">${esc(t('overridden'))}</span>` : `<span class="utag inh">${esc(t('inherited'))}</span>`);
+    const reset = (!global && e.overridden) ? `<button class="ureset" data-reset="${u.id}">↺ ${esc(t('back to default'))}</button>` : '';
+    return `<div class="ucard${!global && !e.overridden ? ' inh' : ''}${state.mb.sel === u.id ? ' sel' : ''}" data-u="${u.id}">
+      <div class="uhead"><span class="ut">${esc(t(u.label))}</span>${tag}</div>
+      <div class="um"><span class="flag">${flag}</span><span class="nm no-i18n">${esc(name)}</span></div>
+      <div class="usub muted small">${prov ? `<span class="no-i18n">${esc(prov.name)}</span> · <span class="tl ${mbTlClass(prov.tl)}">${esc(mbTlText(prov.tl))}</span>` : esc(t('main settings or the space account'))}</div>
+      ${reset}</div>`;
+  }).join('');
+  box.querySelectorAll('.ureset').forEach(b => b.onclick = async e => {
+    e.stopPropagation(); const u = b.dataset.reset;
+    const body = { usage: u, clear: true }; if (state.mb.scope !== 'global') body.space = state.mb.scope;
+    state.mb.routing = await post('api/routing', body); mbRenderUsages(); mbRenderRows();
+    toast(t('“{u}”: back to the global default', { u: t(MB_USAGES.find(x => x.id === u).label) }));
+  });
+  box.querySelectorAll('.ucard').forEach(c => c.onclick = () => {
+    const u = c.dataset.u; state.mb.sel = state.mb.sel === u ? '' : u;
+    state.mb.ftype = state.mb.sel ? (u === 'voice' ? 'Voice' : 'LLM') : '';
+    const sel = $('#mb-ftype'); if (sel) sel.value = state.mb.ftype;
+    mbRenderUsages(); mbRenderRows();
+  });
+}
+function mbRenderRows() {
+  const tb = $('#mb-rows'); if (!tb) return; const P = mbProvMap();
+  const rows = mbVisible();
+  tb.innerHTML = rows.map(m => {
+    const p = P[m.prov], conn = p.connected, blocked = state.mb.lock && !mbCompliant(p);
+    const usable = MB_TYPE_USAGE[m.type] || [];
+    const btns = MB_USAGES.map(u => {
+      const ok = usable.includes(u.id) && !blocked && conn;
+      const on = mbEff(u.id).routed && mbEff(u.id).model === mbId(m);
+      return `<button data-m="${esc(mbId(m))}" data-prov="${esc(m.prov)}" data-u="${u.id}" class="${on ? 'on' : ''}"${ok ? '' : ' disabled'} title="${esc(t(u.label))}">${esc(t(u.label)[0])}</button>`;
+    }).join('');
+    const cell = conn ? `<div class="assign">${btns}</div>`
+      : `<button class="btn sm primary" data-connect="${esc(m.prov)}">${esc(t('Connect'))}</button>`;
+    const est = m.est ? '<span class="mb-est" title="' + esc(t('Estimated price')) + '">~</span>' : '';
+    return `<tr class="${blocked ? 'blocked' : ''} ${conn ? '' : 'offrow'}">
+      <td><div class="mname"><span class="flag">${p.flag}</span><span class="no-i18n">${esc(m.name)}${m.deprecated ? ' <span class="mb-dep" title="' + esc(t('Being retired')) + '">⚠</span>' : ''}<div class="prov muted small no-i18n">${esc(p.name)}${conn ? '' : ' · ' + t('not connected')}</div></span></div></td>
+      <td><span class="ty ${m.type.toLowerCase()}"><span class="g"></span>${esc(t(m.type === 'LLM' ? 'LLM' : m.type === 'Vision' ? 'Vision' : m.type === 'Voice' ? 'Voice' : 'Image'))}</span></td>
+      <td class="num"><span class="rank"><span class="rbar"><i style="width:${m.rank * 10}%"></i></span><span class="rnum no-i18n">${m.rank}</span></span></td>
+      <td><span class="tl ${mbTlClass(p.tl)}" title="${esc(t(p.kind))}">${esc(mbTlText(p.tl))}</span></td>
+      <td class="num no-i18n">${est}${esc(mbMoney(m.pin))}</td>
+      <td class="num no-i18n">${esc(mbMoney(m.pout))}</td>
+      <td class="num no-i18n">${est}${esc(mbMsg(m))}</td>
+      <td>${cell}</td></tr>`;
+  }).join('') || `<tr><td colspan="8" class="muted" style="padding:16px">${esc(t('No model matches. Widen the filters, or untick “Available” to see the whole catalogue.'))}</td></tr>`;
+  tb.querySelectorAll('.assign button:not(:disabled)').forEach(b => b.onclick = () => mbAssign(b.dataset.u, b.dataset.m, b.dataset.prov));
+  tb.querySelectorAll('[data-connect]').forEach(b => b.onclick = () => { state.mb.tab = 'providers'; mbApplyTab(); $('#eu-card')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+}
+/** Assign a model to a usage: route it through the first credential source of the model's provider. */
+async function mbAssign(usage, model, prov) {
+  const p = mbProvMap()[prov], src = p?.sources?.[0];
+  if (!src) { toast(t('Connect this provider first.')); return; }
+  const body = { usage, account: src.account, model }; if (state.mb.scope !== 'global') body.space = state.mb.scope;
+  try {
+    state.mb.routing = await post('api/routing', body);
+    mbRenderUsages(); mbRenderRows();
+    const where = state.mb.scope === 'global' ? t('global default') : t('space {n}', { n: (state.spaces.find(s => s.id === +state.mb.scope)?.name || state.mb.scope) });
+    toast(t('“{u}” → {m} · {w}', { u: t(MB_USAGES.find(u => u.id === usage).label), m: model, w: where }));
+  } catch (e) { toast(e.message); }
+}
+/** The Europe (GDPR) lock: raise the trust floor to 5 and force-swap any non-compliant current selection. */
+async function mbToggleLock(e) {
+  state.mb.lock = e.target.checked;
+  $('#mb-lock').classList.toggle('on', state.mb.lock); $('#mb-lock').classList.toggle('off', !state.mb.lock);
+  if (!state.mb.lock) { state.mb.ftl = 0; $('#mb-ftl').value = '0'; mbRenderRows(); return; }
+  state.mb.ftl = 5; $('#mb-ftl').value = '5';
+  const P = mbProvMap(), swaps = [];
+  for (const u of MB_USAGES) {
+    const eff = mbEff(u.id); if (!eff.routed || !eff.model) continue;
+    const cur = state.mb.cat.models.find(m => mbId(m) === eff.model); if (!cur) continue;
+    if (mbCompliant(P[cur.prov])) continue;
+    const repl = mbBestCompliant(u.id); if (!repl) continue;
+    const src = P[repl.prov].sources[0]; const body = { usage: u.id, account: src.account, model: mbId(repl) };
+    if (state.mb.scope !== 'global') body.space = state.mb.scope;
+    try { state.mb.routing = await post('api/routing', body); swaps.push(`${t(u.label)} → ${repl.name}`); } catch {}
+  }
+  mbRenderUsages(); mbRenderRows();
+  toast(swaps.length ? t('Europe lock · swapped: {s}', { s: swaps.join(' · ') }) : t('Europe lock on — selections already compliant'));
+}
+
 $('#doctor-run').onclick = async () => {
   const b = $('#doctor-run'); b.disabled = true; b.textContent = 'Checking…';
   const ul = $('#doctor'); ul.hidden = false; ul.innerHTML = '<li class="info">Running checks (this can take a few seconds)…</li>';

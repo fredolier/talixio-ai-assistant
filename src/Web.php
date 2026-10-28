@@ -103,7 +103,7 @@ final class Web
     {
         $area = explode('/', $path)[2] ?? '';
         return match ($area) {
-            'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'routing', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
+            'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'routing', 'catalogue', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
             'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor' => $this->routeChat($m, $path, $b),
             'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
             'google', 'microsoft', 'spotify', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
@@ -137,6 +137,7 @@ final class Web
             (bool)preg_match('#^/api/accounts/([a-z0-9-]+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->accounts()->delete($mm[1]); return ['ok' => true]; })(),
             $path === '/api/routing' && $m === 'GET' => $this->routingView(isset($_GET['space']) && $_GET['space'] !== '' && $_GET['space'] !== 'global' ? (int)$_GET['space'] : null),
             $path === '/api/routing' && $m === 'POST' => $this->setRouting($b),
+            $path === '/api/catalogue' && $m === 'GET' => $this->app->catalogue()->catalogue(),
             $path === '/api/activity' => $this->activity(),
             $path === '/api/bill' && $m === 'POST' => (function () use ($b) {
                 try { return $this->app->calibration()->report((float)($b['amount'] ?? -1), (string)($b['currency'] ?? 'EUR'), (string)($b['month'] ?? '')); }
