@@ -5434,12 +5434,93 @@ $('#assistant-btn').onclick = $('#brand-mark').onclick = e => {
 };
 document.addEventListener('click', e => { if (!e.target.closest('.brand')) { $('#assistant-menu').hidden = true; $('#assistant-btn').setAttribute('aria-expanded', 'false'); } });
 
+// ---- the account menu, bottom-left of the rail: who you are, plus the settings that belong to you, not to a space ----
+function langPref() { try { return localStorage.getItem(LSK + 'talixio.lang') || ''; } catch { return ''; } }
+function setLang(v) { try { if (v) localStorage.setItem(LSK + 'talixio.lang', v); else localStorage.removeItem(LSK + 'talixio.lang'); } catch {} location.reload(); }
+const THEME_LABEL = { '': 'System', light: 'Light', dark: 'Dark' };
+const LANG_LABEL = { '': 'Automatic', fr: 'Français', en: 'English' };
+/** The chip: the assistant you are signed in as. The brand at the top switches assistants; this is the same identity, down where an account lives. */
+function renderAccount() {
+  const me = state.status?.assistant || {}, name = me.name || state.status?.name || 'Talixio';
+  const a = avatarOf(me.id || name);
+  const av = $('#account-av'); if (av) { av.textContent = a.letters; av.style.setProperty('--h', a.hue); }
+  const nm = $('#account-name'); if (nm) nm.textContent = name;
+  const btn = $('#account-btn'); if (btn) btn.title = t('Account and settings');
+}
+const accountIcon = {
+  settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8M4.6 9a1.7 1.7 0 0 0-.3-1.8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
+  usage: '<svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>',
+  privacy: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></svg>',
+  memory: '<svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg>',
+  lang: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>',
+  theme: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>',
+  install: '<svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4M5 21h14"/></svg>',
+  help: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01"/></svg>',
+  logout: '<svg viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></svg>',
+  back: '<svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>',
+};
+function accountRow(icon, label, { hint = '', value = '', cls = '', attrs = '' } = {}) {
+  return `<button class="space-item${cls ? ' ' + cls : ''}" role="menuitem" type="button"${attrs}>`
+    + `<span class="ai-ic" aria-hidden="true">${accountIcon[icon] || ''}</span>`
+    + `<span class="ai-label">${esc(t(label))}</span>`
+    + (value ? `<span class="ai-value no-i18n">${esc(value)}</span>` : '')
+    + (hint ? `<span class="ai-hint no-i18n">${esc(hint)}</span>` : '')
+    + '</button>';
+}
+function closeAccountMenu() { const m = $('#account-menu'); if (m) m.hidden = true; $('#account-btn')?.setAttribute('aria-expanded', 'false'); }
+function openAccountMenu() {
+  const menu = $('#account-menu');
+  const installable = !$('#install-btn').hidden;
+  menu.innerHTML =
+    accountRow('settings', 'Settings', { attrs: ' data-go="settings"' })
+    + accountRow('usage', 'Usage', { attrs: ' data-go="activity"' })
+    + accountRow('privacy', 'Privacy', { attrs: ' data-go="privacy"' })
+    + accountRow('memory', 'Memory', { attrs: ' data-go="memory"' })
+    + '<hr>'
+    + accountRow('lang', 'Language', { value: t(LANG_LABEL[langPref()]), attrs: ' data-sub="lang"' })
+    + accountRow('theme', 'Theme', { value: t(THEME_LABEL[themePref().mode || '']), attrs: ' data-act="theme"' })
+    + (installable ? '<hr>' + accountRow('install', 'Install app', { attrs: ' data-act="install"' }) : '')
+    + '<hr>'
+    + accountRow('help', 'Get help', { attrs: ' data-go="library"' })
+    + accountRow('logout', 'Sign out', { cls: 'danger', attrs: ' data-act="logout"' });
+  menu.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { closeAccountMenu(); location.hash = '#' + b.dataset.go; });
+  menu.querySelector('[data-act=install]')?.addEventListener('click', () => { closeAccountMenu(); $('#install-btn').click(); });
+  menu.querySelector('[data-act=logout]')?.addEventListener('click', () => { closeAccountMenu(); $('#logout').click(); });
+  menu.querySelector('[data-act=theme]')?.addEventListener('click', e => {
+    e.stopPropagation();
+    const order = ['', 'light', 'dark'], next = order[(order.indexOf(themePref().mode || '') + 1) % order.length];
+    saveTheme({ ...themePref(), mode: next });
+    openAccountMenu(); // keep the menu open so you see the theme change under the pointer
+  });
+  menu.querySelector('[data-sub=lang]')?.addEventListener('click', e => { e.stopPropagation(); openLangMenu(); });
+  menu.hidden = false; $('#account-btn').setAttribute('aria-expanded', 'true');
+}
+function openLangMenu() {
+  const menu = $('#account-menu'), cur = langPref();
+  const opt = (v, label) => `<button class="space-item" role="menuitemradio" type="button" aria-checked="${cur === v}" data-lang="${v}">`
+    + `<span class="ai-ic" aria-hidden="true">${cur === v ? accountIcon.check : ''}</span>`
+    + `<span class="ai-label no-i18n">${esc(t(label))}</span></button>`;
+  menu.innerHTML = accountRow('back', 'Language', { cls: 'ai-head', attrs: ' data-back="1"' })
+    + '<hr>' + opt('', LANG_LABEL['']) + opt('fr', LANG_LABEL.fr) + opt('en', LANG_LABEL.en);
+  menu.querySelector('[data-back]')?.addEventListener('click', e => { e.stopPropagation(); openAccountMenu(); });
+  menu.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { if (b.dataset.lang === cur) { closeAccountMenu(); return; } setLang(b.dataset.lang); });
+}
+$('#account-btn').onclick = e => {
+  e.stopPropagation();
+  if (!$('#account-menu').hidden) { closeAccountMenu(); return; }
+  openAccountMenu();
+};
+document.addEventListener('click', e => { if (!e.target.closest('.account')) closeAccountMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#account-menu').hidden) { closeAccountMenu(); $('#account-btn').focus(); } });
+
 async function refreshStatus() {
   try {
     state.statusAt = Date.now();
     const s = state.status = await api('api/status');
     const bn = $('#brand-name'); bn.textContent = bn.title = s.name; bn.classList.toggle('long', s.name.length > 14); document.title = s.name;
     renderAssistants(s.assistants, s.assistant);
+    renderAccount();
     const ch = Object.entries(s.channels).filter(([, on]) => on).map(([k]) => k[0].toUpperCase() + k.slice(1)).join(', ');
     const b = s.budget, lim = b.daily_limit > 0 ? ` · $${b.today.toFixed(2)} of $${b.daily_limit.toFixed(2)} today` : '';
     $('#chat-sub').textContent = `${shortModel(s.model)} · ${ch}${lim}${b.state === 'low' ? ' · budget low' : b.state === 'blocked' ? ' · budget reached' : ''}`;

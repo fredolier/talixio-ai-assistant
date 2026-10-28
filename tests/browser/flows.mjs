@@ -206,6 +206,17 @@ const flows = {
     await p.evaluate(() => { location.hash = '#library'; }); await p.waitForTimeout(800);
     check('french: the interface is translated', /Bibliothèque|Corbeille|Nouveau/.test(await p.textContent('body')));
     await ctx.close();
+    // the account menu's "Langue" pins a language that persists: an English browser, pinned to French, must come up in French
+    const ctx2 = await browser.newContext({ locale: 'en-US' }), p2 = await ctx2.newPage();
+    await p2.goto(base + '/');
+    await p2.evaluate(() => { try { const b = new URL(document.baseURI).pathname.replace(/\/$/, ''); localStorage.setItem((b ? b.slice(1) + ':' : '') + 'talixio.lang', 'fr'); } catch {} });
+    await p2.goto(base + '/');
+    await p2.fill('#password', 'pw'); await p2.press('#password', 'Enter');
+    await p2.waitForSelector('#shell:not([hidden])');
+    await p2.evaluate(() => { location.hash = '#library'; }); await p2.waitForTimeout(800);
+    check('french: a pinned language overrides the browser default and persists across reloads',
+      /Bibliothèque|Corbeille|Nouveau/.test(await p2.textContent('body')));
+    await ctx2.close();
   },
   async files({ page, check }) {
     const closeAll = () => page.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close()));
@@ -386,6 +397,37 @@ const flows = {
     check('automations: the Background subtab switches to the jobs board, rail entry still lit',
       await page.isVisible('#view-jobs .subtabs a[data-view=jobs].active')
       && await page.isVisible('.rail a[data-view=tasks].active'));
+  },
+  async account({ page, check }) {
+    await go(page, 'chat');
+    check('account: a Claude-style account chip sits at the bottom-left of the rail', await page.isVisible('#account-btn .account-name'));
+    check('account: the chip shows the signed-in identity, not a placeholder',
+      (await page.textContent('#account-av')).trim() !== '?' && (await page.textContent('#account-name')).trim().length > 0);
+    await page.click('#account-btn');
+    await page.waitForSelector('#account-menu:not([hidden]) .space-item', { timeout: 4000 });
+    const items = await page.textContent('#account-menu');
+    check('account: the menu holds the account-level settings',
+      /Settings|Réglages/.test(items) && /Usage|Utilisation/.test(items)
+      && /Privacy|Confidentialité/.test(items) && /Sign out|déconnecter/.test(items));
+    check('account: the Claude-only entries (plans, guest passes, API keys) are left out',
+      !/forfaits|passes invités|clés d.API|API keys|guest passes/i.test(items));
+    const beforeTheme = await page.getAttribute('html', 'data-theme');
+    await page.click('#account-menu [data-act=theme]');
+    await page.waitForSelector('#account-menu:not([hidden]) [data-act=theme]', { timeout: 2000 });
+    check('account: the Theme row cycles the theme in place, menu staying open',
+      (await page.getAttribute('html', 'data-theme')) !== beforeTheme);
+    await page.click('#account-menu [data-sub=lang]');
+    await page.waitForSelector('#account-menu [data-lang]', { timeout: 2000 });
+    check('account: Language opens a sub-panel with the three choices (no reload until one is chosen)',
+      (await page.$$('#account-menu [data-lang]')).length === 3);
+    await page.click('#account-menu [data-back]');
+    await page.waitForSelector('#account-menu [data-act=theme]', { timeout: 2000 });
+    check('account: Back returns from the language sub-panel to the main menu', await page.isVisible('#account-menu [data-sub=lang]'));
+    await page.click('#account-menu [data-go=privacy]');
+    await page.waitForSelector('#account-menu', { state: 'hidden', timeout: 4000 });
+    check('account: a menu entry navigates (Confidentialité → Privacy) and closes the menu',
+      (await page.evaluate(() => location.hash)) === '#privacy');
+    await page.evaluate(() => { try { saveTheme({ ...themePref(), mode: '' }); } catch {} }); // leave the theme as later flows expect
   },
   async mobile({ page, check }) {
     await page.setViewportSize({ width: 400, height: 800 });

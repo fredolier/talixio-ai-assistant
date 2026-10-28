@@ -518,6 +518,28 @@ button.mark:disabled{cursor:default}
 .shell.collapsed .rail-toggle svg{transform:scaleX(-1)}
 .shell.collapsed .rail a{justify-content:center;width:44px;height:40px;padding:0}
 .shell.collapsed .rail-foot{align-items:center;padding:8px 0}
+/* account chip + its menu, bottom-left of the rail */
+.account{position:relative}
+.account-btn{display:flex;align-items:center;gap:9px;width:100%;border:1px solid transparent;background:transparent;color:inherit;font:inherit;padding:6px 8px;border-radius:10px;cursor:pointer;text-align:left}
+.account-btn:hover,.account-btn[aria-expanded=true]{background:var(--sunk);border-color:var(--line)}
+.account-av{width:28px;height:28px;border-radius:9px;font-size:.74rem}
+.account-who{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.2}
+.account-name{font-weight:600;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-sub{color:var(--muted);font-size:.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-btn .chev{width:15px;height:15px;color:var(--muted);flex:none}
+.account-menu{top:auto;bottom:calc(100% + 8px);left:0;width:min(280px,calc(100vw - 32px));font-size:.92rem}
+.account-menu .ai-ic{width:18px;height:18px;flex:none;display:grid;place-items:center;color:var(--muted)}
+.account-menu .ai-ic svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.account-menu .ai-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-menu .ai-value{color:var(--muted);font-size:.82rem;flex:none}
+.account-menu .ai-hint{color:var(--muted);font-size:.74rem;flex:none;font-variant-numeric:tabular-nums}
+.account-menu .space-item.danger{color:var(--danger,#c0392b)}
+.account-menu .space-item.danger .ai-ic{color:inherit}
+.account-menu .space-item.ai-head{font-weight:600;cursor:pointer}
+.account-menu .space-item[role=menuitemradio] .ai-ic{color:var(--accent)}
+.shell.collapsed .account-who,.shell.collapsed .account-btn .chev{display:none}
+.shell.collapsed .account-btn{justify-content:center;padding:6px}
+.shell.collapsed .account-menu{bottom:0;left:calc(100% + 10px)}
 @media (max-width:760px){
   .rail-toggle{display:none}
   .shell.collapsed{grid-template-columns:1fr}

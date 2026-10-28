@@ -10,8 +10,13 @@
  */
 (() => {
   const I18N = window.I18N || (window.I18N = {});
+  // The interface language can be pinned from the account menu, kept per instance in this browser (like the theme);
+  // without one it follows document.documentElement.dataset.lang, then the browser.
+  const pinned = () => {
+    try { const b = new URL(document.baseURI).pathname.replace(/\/$/, ''); return localStorage.getItem((b ? b.slice(1) + ':' : '') + 'talixio.lang') || ''; } catch { return ''; }
+  };
   const pick = () => {
-    const want = (document.documentElement.dataset.lang || 'auto').toLowerCase();
+    const want = (pinned() || document.documentElement.dataset.lang || 'auto').toLowerCase();
     const langs = want !== 'auto' ? [want] : (navigator.languages || [navigator.language || 'en']);
     for (const l of langs) { const k = String(l).toLowerCase().slice(0, 2); if (k === 'en' || I18N[k]) return k; }
     return 'en';

@@ -66,8 +66,15 @@
     <div class="rail-foot">
       <button id="install-btn" class="btn small primary" type="button" hidden>Install app</button>
       <div id="status" class="status" title="Background worker"><i></i><span>…</span></div>
-      <div id="app-version" class="app-version"></div>
-      <button id="logout" class="link" type="button"><svg viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></svg><span>Sign out</span></button>
+      <div class="account">
+        <button id="account-btn" class="account-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Account and settings" title="Account and settings">
+          <span class="account-av avatar no-i18n" id="account-av" aria-hidden="true">?</span>
+          <span class="account-who"><span class="account-name no-i18n" id="account-name">Talixio</span><span class="account-sub" id="app-version"></span></span>
+          <svg class="chev" viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></svg>
+        </button>
+        <div id="account-menu" class="space-menu account-menu" role="menu" hidden></div>
+      </div>
+      <button id="logout" class="link" type="button" hidden><svg viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></svg><span>Sign out</span></button>
     </div>
   </nav>
 
