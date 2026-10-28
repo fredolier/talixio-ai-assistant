@@ -4,8 +4,8 @@ namespace Talixio;
 
 /**
  * European AI providers reached through their OpenAI-compatible APIs: Mistral (France), Scaleway (France), OVHcloud
- * (France), Infomaniak (Switzerland). Data is processed in Europe under European law, by companies not subject to the
- * US CLOUD Act. One key serves the conversation model, search by meaning and transcription.
+ * (France), Infomaniak (Switzerland), AKI.IO (Germany). Data is processed in Europe under European law, by companies not
+ * subject to the US CLOUD Act. One key serves the conversation model, search by meaning and transcription.
  * Tier models are picked from the models the key can use (cached for a day); explicit TALIXIO_MODEL* settings win.
  */
 final class Sovereign
@@ -28,10 +28,15 @@ final class Sovereign
             'terms' => 'https://www.infomaniak.com/en/legal', 'embed' => 'bge_multilingual_gemma2', 'transcribe' => 'whisper', 'key' => true,
             'fallback' => ['fast' => 'mistral3', 'standard' => 'qwen3', 'deep' => 'qwen3'], 'note' => '',
             'keys' => 'https://manager.infomaniak.com/', 'about' => 'Open models hosted in Switzerland. Paste the address shown in your AI Tools dashboard (it holds your product id).'],
+        'aki' => ['name' => 'AKI.IO', 'country' => 'Germany', 'url' => 'https://aki.io/openai/v1', 'hosts' => ['aki.io'],
+            'terms' => 'https://aki.io/terms-of-use', 'embed' => 'bge-m3', 'transcribe' => 'whisper', 'key' => true, // no transcription endpoint: 'whisper' matches none of its models, so test() reports it unavailable
+            'fallback' => ['fast' => 'gpt-oss-20b', 'standard' => 'gpt-oss-120b', 'deep' => 'gpt-oss-120b'],
+            'keys' => 'https://aki.io/login', 'about' => 'Open models hosted in Germany (gpt-oss, Qwen, DeepSeek, Mistral…). Pay as you go.',
+            'note' => 'Only models tagged TL5 are processed in Germany; the others can be served from Alibaba Cloud in Singapore, which leaves Europe. Pick a TL5 model for Confidential spaces.'],
     ];
 
     /** The order they are offered in. */
-    public const ORDER = ['ovhcloud', 'mistral', 'scaleway', 'infomaniak'];
+    public const ORDER = ['ovhcloud', 'mistral', 'scaleway', 'infomaniak', 'aki'];
 
     /** Not a chat model: vectors, audio, moderation, OCR, code-only. */
     private const NOT_CHAT = '/embed|bge|e5-|minilm|rerank|whisper|voxtral|transcri|tts|audio|speech|guard|moderation|ocr|pixtral|codestral|devstral|diffusion|flux|stable|sdxl|image/i';

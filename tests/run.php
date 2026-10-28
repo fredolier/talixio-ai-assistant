@@ -3539,7 +3539,7 @@ $errs = [];
 foreach ([['nope', 'k', ''], ['mistral', '', ''], ['infomaniak', 'k', 'http://x']] as [$sv, $k, $u]) { try { \Talixio\Sovereign::test($sv, $k, $u); $errs[] = 'none'; } catch (\InvalidArgumentException $e) { $errs[] = $e->getMessage(); } }
 check('europe: a test refuses an unknown provider, a missing key, an address not in https', $errs === ['Unknown provider.', 'Paste your API key.', 'Give the provider\'s address (https://…).'], json_encode($errs));
 $cat = \Talixio\Sovereign::catalog();
-check('europe: OVHcloud first, every provider says where to get a key', $cat[0]['id'] === 'ovhcloud' && count(array_filter($cat, fn($x) => str_starts_with($x['keys'], 'https://'))) === 4 && isset($cat[0]['fallback']['standard']));
+check('europe: OVHcloud first, every provider says where to get a key', $cat[0]['id'] === 'ovhcloud' && count(array_filter($cat, fn($x) => str_starts_with($x['keys'], 'https://'))) === 5 && isset($cat[0]['fallback']['standard']));
 $out = \Talixio\Sovereign::outside($app);
 check('europe: what still leaves Europe is listed, with where to change it', $out && !array_filter($out, fn($o) => !str_starts_with($o['href'], '#settings/') || $o['why'] === ''), json_encode($out));
 $fl = new \Talixio\Fleet($dir . '/fleet');

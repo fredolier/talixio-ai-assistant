@@ -21,7 +21,7 @@ Settings → *AI model*:
 | Claude Pro/Max subscription | `--with-claude-code`, then `claude setup-token`; provider `claude-code` |
 | Gemini API | provider `gemini`, key `GEMINI_API_KEY` (https://aistudio.google.com/apikey) |
 | OpenAI | provider `openai`, key `OPENAI_API_KEY` |
-| European provider (OVHcloud, Mistral, Scaleway, Infomaniak) | *Europe only* card (see *Staying in Europe*); provider `sovereign` |
+| European provider (OVHcloud, Mistral, Scaleway, Infomaniak, AKI.IO) | *Europe only* card (see *Staying in Europe*); provider `sovereign` |
 | Local model (Ollama…) | provider `openai`, address `http://localhost:11434/v1`, model name |
 
 ## A different provider per space (AI accounts)

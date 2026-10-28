@@ -2217,7 +2217,7 @@ window.I18N.fr = {
 "At most 50 guests.": "50 invités au maximum.",
 "The provider refused the key (HTTP {a}).": "Le fournisseur a refusé la clé (HTTP {a}).",
 "The provider refused the key (HTTP {a}): make a new one in its console.": "Le fournisseur a refusé la clé (HTTP {a}) : créez-en une nouvelle dans sa console.",
-"Nothing to compute here. Uses the key of the European provider (Mistral, Scaleway, OVHcloud or Infomaniak): the texts stay in Europe; allowed for Confidential spaces.": "Rien à calculer ici. Utilise la clé du fournisseur européen (Mistral, Scaleway, OVHcloud ou Infomaniak) : les textes restent en Europe ; autorisé pour les espaces Confidentiels.",
+"Nothing to compute here. Uses the key of the European provider (Mistral, Scaleway, OVHcloud, Infomaniak or AKI.IO): the texts stay in Europe; allowed for Confidential spaces.": "Rien à calculer ici. Utilise la clé du fournisseur européen (Mistral, Scaleway, OVHcloud, Infomaniak ou AKI.IO) : les textes restent en Europe ; autorisé pour les espaces Confidentiels.",
 "Outlook / Microsoft 365": "Outlook / Microsoft 365",
 "Open <a href=\"https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade\" target=\"_blank\" rel=\"noopener\">entra.microsoft.com → App registrations</a> (sign in with your Outlook or Microsoft 365 account) and press <b>New registration</b>.": "Ouvrez <a href=\"https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade\" target=\"_blank\" rel=\"noopener\">entra.microsoft.com → Inscriptions d'applications</a> (connectez-vous avec votre compte Outlook ou Microsoft 365) et appuyez sur <b>Nouvelle inscription</b>.",
 "Name \"Talixio\"; supported accounts:": "Nom « Talixio » ; comptes pris en charge :",

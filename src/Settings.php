@@ -23,7 +23,7 @@ final class Settings
             ]],
             'brain' => ['AI model', 'The assistant\'s brain. "Check configuration" makes one test call per tier.', [
                 ['TALIXIO_PROVIDER', 'Provider', 'select', 'claude-code uses your Claude Pro/Max plan (installed with --with-claude-code).', ['anthropic' => 'Claude (API)', 'claude-code' => 'Claude Code (Pro/Max plan)', 'gemini' => 'Gemini (API)', 'openai' => 'OpenAI or compatible server (Ollama…)', 'sovereign' => 'European provider (OVHcloud, Mistral…)', 'echo' => 'Echo (test, no model)']],
-                ['TALIXIO_SOVEREIGN', 'European provider', 'select', 'Hosted in Europe, under the GDPR. One key also does transcription and memory search.', ['ovhcloud' => 'OVHcloud AI Endpoints (France)', 'mistral' => 'Mistral AI (France)', 'scaleway' => 'Scaleway (France)', 'infomaniak' => 'Infomaniak (Switzerland)']],
+                ['TALIXIO_SOVEREIGN', 'European provider', 'select', 'Hosted in Europe, under the GDPR. One key also does transcription and memory search.', ['ovhcloud' => 'OVHcloud AI Endpoints (France)', 'mistral' => 'Mistral AI (France)', 'scaleway' => 'Scaleway (France)', 'infomaniak' => 'Infomaniak (Switzerland)', 'aki' => 'AKI.IO (Germany)']],
                 ['TALIXIO_SOVEREIGN_KEY', 'European provider API key', 'secret', 'See "Europe only" above for where to get one.'],
                 ['TALIXIO_SOVEREIGN_URL', 'European provider address', 'url', 'Empty = the provider\'s usual address. Infomaniak: the address from your AI Tools dashboard.'],
                 ['TALIXIO_SOVEREIGN_ONLY', 'Europe only', 'bool', 'Never send anything to an AI or search service outside Europe: what has no European option is turned off.'],
