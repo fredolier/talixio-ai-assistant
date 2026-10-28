@@ -118,6 +118,42 @@ check('pricing: override', abs($p->cost(['model' => 'mymodel', 'in' => 1_000_000
 check('pricing: unknown model', $p->cost(['model' => 'mystery', 'in' => 1, 'out' => 1]) === null);
 check('pricing: reported cost wins', $p->cost(['model' => 'x', 'in' => 1, 'out' => 1, 'cost' => 0.42]) === 0.42);
 
+// ---- per-usage model routing (Routing): global default + per-space override, each usage to its own provider ----
+[$rc0, $rt0] = $app->tierFor('standard');
+check('routing: an empty map keeps today\'s path (the space\'s config)', $rc0 === $app->cfg && $rc0->provider === 'echo' && $rt0->name === 'standard');
+$oa = $app->accounts()->save(['name' => 'Route OA', 'kind' => 'openai', 'key' => 'sk-test', 'models' => ['fast' => 'oa-fast', 'standard' => 'oa-std', 'deep' => 'oa-deep']]);
+$oaId = $oa['id'];
+$app->routing()->set(null, 'standard', $oaId); // global default: standard → that OpenAI account
+[$rc1, $rt1] = $app->tierFor('standard');
+[$rcf, $rtf] = $app->tierFor('fast');
+check('routing: a global binding sends one usage to its provider, leaving the others untouched',
+    $rc1->provider === 'openai' && $rt1->model === 'oa-std' && $rcf->provider === 'echo', "{$rc1->provider}/{$rt1->model} fast={$rcf->provider}");
+$app->routing()->set(null, 'deep', $oaId, 'oa-deep-xl'); // a model override on top of the account's default
+[, $rtd] = $app->tierFor('deep');
+check('routing: a binding can override the model, not just the provider', $rtd->model === 'oa-deep-xl', $rtd->model);
+$rsp = $app->spaces()->save(['name' => 'Routeur']); $rspId = (int)$rsp['id'];
+$app->setSpace($rspId);
+[$rcs, $rts] = $app->tierFor('standard'); // the global binding still applies in a space with no account of its own
+check('routing: in a space without its own account the global default still applies', $rcs->provider === 'openai' && $rts->model === 'oa-std');
+$app->routing()->set($rspId, 'fast', $oaId, 'sp-fast'); // a per-space override
+[$rco, $rto] = $app->tierFor('fast');
+check('routing: a per-space override wins', $rco->provider === 'openai' && $rto->model === 'sp-fast', "{$rco->provider}/{$rto->model}");
+$app->routing()->set($rspId, 'fast', null); // clear it → falls back (no global fast binding → today's path)
+[$rcc] = $app->tierFor('fast');
+check('routing: clearing a per-space override falls back', $rcc === $app->cfg && $rcc->provider === 'echo');
+check('routing: a binding to a missing account is refused', (function () use ($app) { try { $app->routing()->set(null, 'fast', 'ghost'); return false; } catch (\InvalidArgumentException) { return true; } })());
+check('routing: an unknown usage is refused', (function () use ($app) { try { $app->routing()->set(null, 'nope', ''); return false; } catch (\InvalidArgumentException) { return true; } })());
+$rweb = new \Talixio\Web($app);
+$rSet = new ReflectionMethod(\Talixio\Web::class, 'setRouting'); $rSet->setAccessible(true);
+$rSet->invoke($rweb, ['usage' => 'standard', 'account' => $oaId, 'model' => 'via-route']);
+$rView = new ReflectionMethod(\Talixio\Web::class, 'routingView'); $rView->setAccessible(true);
+$rv = $rView->invoke($rweb, null);
+check('routing: the API sets a binding and reports what each usage resolves to', $app->routing()->resolve(0, 'standard')['model'] === 'via-route'
+    && $rv['effective']['standard']['provider'] === 'openai' && $rv['effective']['standard']['model'] === 'via-route' && in_array('voice', $rv['usages'], true), json_encode($rv['effective']['standard'] ?? null));
+check('routing: removing an account drops its bindings', (function () use ($app, $oaId) { $app->accounts()->delete($oaId); $m = $app->routing()->all();
+    return !array_filter($m['global'], fn($b) => $b['account'] === $oaId) && $app->tierFor('standard')[0]->provider === 'echo'; })());
+$app->store->set('model_routing', ''); $app->spaces()->delete($rspId); $app->setSpace(0);
+
 // tiers and runtime awareness
 $fake->calls = [];
 $app->agent()->chat('web', '/deep compare these two plans');

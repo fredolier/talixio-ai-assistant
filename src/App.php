@@ -70,15 +70,40 @@ final class App
     /** The configuration a space's model calls use: the main settings, or its AI account's. */
     public function configFor(int $space): Config
     {
-        $id = $this->spaces()->accountOf($space);
+        return $this->accountConfig($this->spaces()->accountOf($space)) ?? $this->mainCfg;
+    }
+
+    /** The Config an AI account runs on (built once from the main settings, then cached); null when it no longer exists. */
+    public function accountConfig(string $id): ?Config
+    {
         if ($id === '') return $this->mainCfg;
         if (isset($this->accountCfg[$id])) return $this->accountCfg[$id];
         $a = $this->accounts()->get($id, true);
-        if (!$a) return $this->mainCfg; // deleted meanwhile
+        if (!$a) return null; // deleted meanwhile
         $c = $this->mainCfg->forAccount($a);
         if ($c->provider === 'gemini') GeminiModels::apply($c, $this->store, "gemini_models_$id");
         if ($c->provider === 'sovereign') Sovereign::apply($c, $this->store, "sovereign_models_$id");
         return $this->accountCfg[$id] = $c;
+    }
+
+    /**
+     * The config and tier a usage runs on in the current space, honouring the routing map (Routing): a per-space
+     * override, then — when the space has no AI account of its own — the global default, else today's path (the
+     * space's config). An unset or unresolvable binding falls back, so an empty map behaves exactly as before.
+     * @return array{0:Config,1:Tier}
+     */
+    public function tierFor(string $usage): array
+    {
+        $name = in_array($usage, Tier::NAMES, true) ? $usage : 'standard';
+        $map = $this->routing()->all();
+        $b = $map['spaces'][(string)$this->space][$name] ?? null;
+        if ($b === null && $this->spaces()->accountOf($this->space) === '') $b = $map['global'][$name] ?? null;
+        if ($b !== null && ($c = $this->accountConfig($b['account'])) !== null) {
+            $tier = $c->tier($name);
+            if ($b['model'] !== '') { $tier = clone $tier; $tier->model = $b['model']; }
+            return [$c, $tier];
+        }
+        return [$this->cfg, $this->cfg->tier($name)];
     }
 
     /** Forget the account configurations built so far (an account was changed). */
@@ -86,10 +111,10 @@ final class App
 
     public static function fromEnv(): self { return new self(Config::fromEnv()); }
 
-    public function provider(Tier $tier): Provider
+    public function provider(Tier $tier, ?Config $cfg = null): Provider
     {
         if ($this->providerOverride) return $this->providerOverride;
-        $c = $this->cfg;
+        $c = $cfg ?? $this->cfg;
         return match ($c->provider) {
             'anthropic' => new AnthropicProvider($c->anthropicKey, $tier, $c->search === 'builtin' && $this->privacy()->effective() === 'internal', $c->anthropicBaseUrl), // the model's own search can't be checked here
             'openai', 'gemini' => new OpenAIProvider($c->openaiKey, $tier, $c->openaiBaseUrl),
@@ -110,7 +135,8 @@ final class App
     }
     public function billing(): Billing { return new Billing($this); }
     public function calibration(): Calibration { return new Calibration($this); }
-    public function pricing(): Pricing { return new Pricing($this->cfg->prices, $this->cfg->localModels() || $this->cfg->provider === 'echo'); }
+    public function pricing(): Pricing { return $this->pricingFor($this->cfg); }
+    public function pricingFor(Config $c): Pricing { return new Pricing($c->prices, $c->localModels() || $c->provider === 'echo'); }
     public function notifier(): Notifier { return new Notifier($this); }
     public function email(): Email { return new Email($this); }
     public function files(): Files { return new Files($this); }
@@ -137,6 +163,7 @@ final class App
     public function triage(): Triage { return new Triage($this); }
     public function accounts(): Accounts { return new Accounts($this); }
     public function spaces(): Spaces { return new Spaces($this); }
+    public function routing(): Routing { return new Routing($this); }
     public function links(): Links { return new Links($this); }
     public function routines(): Routines { return new Routines($this); }
     public function board(): Board { return $this->board ??= new Board($this); }

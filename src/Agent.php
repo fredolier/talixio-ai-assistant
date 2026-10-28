@@ -129,12 +129,12 @@ final class Agent
         $status = $budget->status();
         if ($status['state'] === 'blocked') throw new Abort('budget exhausted: ' . $budget->describe());
         if ($status['state'] === 'low') $tierName = 'fast';
-        $tier = $this->app->cfg->tier($tierName);
-        $pricing = $this->app->pricing();
+        [$cfg, $tier] = $this->app->tierFor($tierName); // routing may send this usage to another provider/model
+        $pricing = $this->app->pricingFor($cfg);
         $meta = ['tier' => $tier->name, 'model' => $tier->label(), 'in' => 0, 'out' => 0, 'cost' => 0.0, 'cost_known' => true];
-        $onUsage = function (array $u) use (&$meta, $pricing, $source, $tier, $jobId, $guard, $budget) {
+        $onUsage = function (array $u) use (&$meta, $pricing, $source, $tier, $cfg, $jobId, $guard, $budget) {
             $cost = $pricing->cost($u);
-            $this->app->store->addUsage($u, $cost, $source, $tier->name, $jobId, $this->app->cfg->account);
+            $this->app->store->addUsage($u, $cost, $source, $tier->name, $jobId, $cfg->account);
             $meta['in'] += $u['in'] + ($u['cache_read'] ?? 0) + ($u['cache_write'] ?? 0);
             $meta['out'] += $u['out'];
             if ($cost === null) $meta['cost_known'] = false; else $meta['cost'] += $cost;

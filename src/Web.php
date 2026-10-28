@@ -103,7 +103,7 @@ final class Web
     {
         $area = explode('/', $path)[2] ?? '';
         return match ($area) {
-            'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
+            'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'routing', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
             'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor' => $this->routeChat($m, $path, $b),
             'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
             'google', 'microsoft', 'spotify', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
@@ -135,6 +135,8 @@ final class Web
             $path === '/api/accounts/test' && $m === 'POST' => $this->app->accounts()->test($b, ($b['id'] ?? '') !== '' ? (string)$b['id'] : null),
             (bool)preg_match('#^/api/accounts/([a-z0-9-]+)$#', $path, $mm) && $m === 'POST' => ['account' => $this->app->accounts()->save($b, $mm[1])],
             (bool)preg_match('#^/api/accounts/([a-z0-9-]+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->accounts()->delete($mm[1]); return ['ok' => true]; })(),
+            $path === '/api/routing' && $m === 'GET' => $this->routingView(isset($_GET['space']) && $_GET['space'] !== '' && $_GET['space'] !== 'global' ? (int)$_GET['space'] : null),
+            $path === '/api/routing' && $m === 'POST' => $this->setRouting($b),
             $path === '/api/activity' => $this->activity(),
             $path === '/api/bill' && $m === 'POST' => (function () use ($b) {
                 try { return $this->app->calibration()->report((float)($b['amount'] ?? -1), (string)($b['currency'] ?? 'EUR'), (string)($b['month'] ?? '')); }
@@ -918,6 +920,22 @@ final class Web
         if ($errors) { return ['errors' => $errors, 'error' => 'Some values are not valid.']; }
         Settings::apply($this->app->cfg->dataDir);
         return ['ok' => true, 'groups' => Settings::describe($this->app->cfg->dataDir)];
+    }
+
+    /** The model-routing map plus what each usage resolves to in a scope (null = the global default). */
+    private function routingView(?int $space): array
+    {
+        $r = $this->app->routing();
+        return ['usages' => Routing::USAGES, 'scope' => $space ?? 'global', 'map' => $r->all(), 'effective' => $r->effective($space)];
+    }
+
+    /** Set or clear one binding. account null (or clear:true) falls back; '' is the main settings; else an AI account. */
+    private function setRouting(array $b): array
+    {
+        $space = isset($b['space']) && $b['space'] !== '' && $b['space'] !== 'global' ? (int)$b['space'] : null;
+        $account = !empty($b['clear']) ? null : (string)($b['account'] ?? '');
+        $this->app->routing()->set($space, (string)($b['usage'] ?? ''), $account, (string)($b['model'] ?? ''));
+        return $this->routingView($space);
     }
 
     /** The "Europe only" card: the providers, what is set, and what still leaves Europe. */
