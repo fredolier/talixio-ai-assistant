@@ -1512,4 +1512,4 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .parch-id p{margin:2px 0 0}
 .parch-actions{display:flex;gap:6px;flex-wrap:wrap;flex:none}
 .micbig.rec{color:var(--danger);animation:blink 1.2s infinite}
-@media (max-width:560px){.pilot-tabs{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}.ptab{flex:none}.ptt{flex-direction:column;align-items:stretch;text-align:center}.ptt .micbig{align-self:center}}
+@media (max-width:560px){.pilot-tabs{flex:none;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}.pilot-tabs::-webkit-scrollbar{display:none}.ptab{flex:none}.ptt{flex-direction:column;align-items:stretch;text-align:center}.ptt .micbig{align-self:center}}

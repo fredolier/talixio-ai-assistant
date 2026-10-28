@@ -383,6 +383,15 @@ const flows = {
       await go(page, v);
       check(`mobile: ${v} fits the screen`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     }
+    // the Pilotage tab row must keep its height on mobile (it's a flex child of the scrolling column; overflow-x:auto must not let it collapse to 0)
+    await go(page, 'pilotage');
+    check('mobile: the Pilotage tabs stay visible (all four, row not collapsed)',
+      await page.evaluate(() => document.querySelector('.pilot-tabs').getBoundingClientRect().height > 20
+        && [...document.querySelectorAll('.ptab')].every(b => b.getBoundingClientRect().height > 20))
+      && (await page.$$('.pilot-tabs .ptab')).length === 4);
+    await page.click('#view-pilotage .ptab[data-ptab=roles]');
+    await page.waitForSelector('.pilot-panel[data-ppanel=roles]:not([hidden])', { timeout: 4000 });
+    check('mobile: tapping a Pilotage tab switches panels', await page.isHidden('.pilot-panel[data-ppanel=agents]'));
     await page.setViewportSize({ width: 1280, height: 860 });
   },
 };
