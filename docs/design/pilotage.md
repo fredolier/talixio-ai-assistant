@@ -15,8 +15,12 @@
 > - **Rôles tab** renders the specialization "map" as a *grouped card grid*
 >   (`.pspec` headers + `.prole-grid`, each card carrying ring, metrics, sparkline,
 >   inline specialization editor, lifecycle actions), not the mockup's SVG
->   ring-cluster. Roles are seeded by the director and the fleet, so there is no
->   "+ Nouveau rôle" button; archived roles live in a trailing `<details>`.
+>   ring-cluster. Roles are authored conversationally (the assistant's `role_save`
+>   tool, which runs the same duplicate check the mockup's drawer promises),
+>   installed from the store (`role_install`), or seeded by the director and the
+>   fleet — so there is **no `POST /api/roles` create route and no inline
+>   "+ Nouveau rôle" form** in the catalogue (the mockup sketches one;
+>   it is not wired). Archived roles live in a trailing `<details>`.
 > - **Chantiers** are launched from the chat composer ("Parler au pilote"), so there
 >   is no "+ Nouveau chantier" header button.
 
