@@ -415,6 +415,14 @@ const flows = {
       (await page.textContent('#account-av')).trim() !== '?' && (await page.textContent('#account-name')).trim().length > 0);
     await page.click('#account-btn');
     await page.waitForSelector('#account-menu:not([hidden]) .space-item', { timeout: 4000 });
+    const menuGeom = await page.evaluate(() => {
+      const m = document.querySelector('#account-menu'), b = document.querySelector('#account-btn');
+      const mr = m.getBoundingClientRect(), br = b.getBoundingClientRect();
+      return { h: mr.height, w: mr.width, bottom: mr.bottom, chipTop: br.top, vh: innerHeight, left: mr.left };
+    });
+    check('account: the menu opens upward above the chip, fully on-screen (not crushed below it)',
+      menuGeom.h > 120 && menuGeom.w > 120 && menuGeom.bottom <= menuGeom.chipTop + 1
+      && menuGeom.bottom <= menuGeom.vh && menuGeom.left >= 0);
     const items = await page.textContent('#account-menu');
     check('account: the menu holds the account-level settings',
       /Settings|Réglages/.test(items) && /Usage|Utilisation/.test(items)

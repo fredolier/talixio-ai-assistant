@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.5.2 (2026-10-28)
+
+- **The account menu (Settings, Privacy, Memory, Sign out…) opens again when you click your name at the bottom of the rail.** Since the 1.5.0 rail restructure the chip's menu was built correctly but rendered invisibly: its element carries both `space-menu` and `account-menu` classes, and `.space-menu`'s "open downward" positioning (defined later in the stylesheet, so it won at equal specificity) overrode `.account-menu`'s "open upward". With the chip pinned to the bottom of the rail, the menu was pushed off the bottom of the screen and crushed to a ~14px sliver — the empty bar with a faint chevron that appeared just under the chip, with no Réglages/Settings reachable. The positioning rule is now scoped `.rail .account-menu` so it outranks `.space-menu`, and the menu opens upward above the chip as intended. Same fix pattern as the More flyout in 1.5.1. View-layer only; a browser test now asserts the menu is visible and above the chip after clicking it.
+
 ## 1.5.1 (2026-10-28)
 
 - **The "⋯ More" menu now opens as a flyout next to the rail, and its stray notification badge is gone.** In 1.5.0 the More button reused the old bottom-of-screen sheet, so on desktop its menu appeared as a card detached at the bottom of the window instead of beside the button — disconnected from where you clicked. It is now a small popover anchored to the button and flying out to the right, right next to the navbar (on a phone it flies up from the bottom bar, right-aligned), built and dismissed like the account chip's menu (click outside or Escape to close). The desktop menu holds just **Automations** and **Activity and costs**; the phone keeps the fuller overflow. Separately, the red count that sat on the More button has been removed: it was the unread-notifications number, which no longer belongs there now that **Notifications** is its own rail entry carrying its own badge. View-layer only.

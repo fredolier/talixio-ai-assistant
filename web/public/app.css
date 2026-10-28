@@ -540,7 +540,7 @@ button.mark:disabled{cursor:default}
 .account-name{font-weight:600;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .account-sub{color:var(--muted);font-size:.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .account-btn .chev{width:15px;height:15px;color:var(--muted);flex:none}
-.account-menu{top:auto;bottom:calc(100% + 8px);left:0;width:min(280px,calc(100vw - 32px));font-size:.92rem}
+.rail .account-menu{top:auto;bottom:calc(100% + 8px);left:0;width:min(280px,calc(100vw - 32px));font-size:.92rem}
 .account-menu .ai-ic{width:18px;height:18px;flex:none;display:grid;place-items:center;color:var(--muted)}
 .account-menu .ai-ic svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .account-menu .ai-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
