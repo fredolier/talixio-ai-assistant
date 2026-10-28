@@ -67,11 +67,23 @@ final class ModelCatalog
         // Infomaniak (Switzerland) — billed in CHF
         ['name' => 'Apertus 70B',    'prov' => 'infomaniak', 'type' => 'LLM', 'rank' => 6, 'pin' => 0.87, 'pout' => 3.10, 'est' => true],
         ['name' => 'Ministral 3 14B','prov' => 'infomaniak', 'type' => 'LLM', 'rank' => 5, 'pin' => 0.33, 'pout' => 0.44, 'est' => true],
-        // AKI.IO (Germany) — TL5 models processed in Germany
-        ['name' => 'GPT-OSS 120B',     'prov' => 'aki', 'type' => 'LLM',   'rank' => 7, 'pin' => 0.15, 'pout' => 0.55, 'est' => true],
-        ['name' => 'MiniMax M2.5 230B','prov' => 'aki', 'type' => 'LLM',   'rank' => 8, 'pin' => 0.25, 'pout' => 1.20, 'est' => true],
-        ['name' => 'Apertus 70B (AKI)','prov' => 'aki', 'type' => 'LLM',   'rank' => 6, 'pin' => 0.80, 'pout' => 3.00, 'est' => true],
-        ['name' => 'Flux.2 [klein]',   'prov' => 'aki', 'type' => 'Image', 'rank' => 5, 'unit' => 0.015, 'unitKind' => 'img', 'cur' => '€', 'est' => true],
+        // AKI.IO (Germany) — the provider's documented catalogue. `id` is the exact API model string. The `tl5` ids
+        // (Deepseek V4.1 Flash, Kolibri 1) are processed in Germany and kept by Sovereign::choose; the others can be
+        // served from Alibaba Cloud in Singapore. Embeddings (bge-m3, qwen3-vl-embedding-8b) are omitted — no usage
+        // runs on them. Prices are estimates. EOL models are flagged deprecated.
+        ['name' => 'GPT-OSS 120B',                     'id' => 'gpt-oss-120b',                 'prov' => 'aki', 'type' => 'LLM',   'rank' => 7, 'pin' => 0.15, 'pout' => 0.55, 'est' => true],
+        ['name' => 'Deepseek V4.1 Flash',              'id' => 'deepseek-v4.1-flash-1017-tl5', 'prov' => 'aki', 'type' => 'LLM',   'rank' => 8, 'pin' => 0.28, 'pout' => 0.42, 'est' => true],
+        ['name' => 'GLM 5.3 754B',                     'id' => 'glm5.3-754b',                  'prov' => 'aki', 'type' => 'LLM',   'rank' => 9, 'pin' => 0.40, 'pout' => 1.60, 'est' => true],
+        ['name' => 'Mistral 4 119B',                   'id' => 'mistral4-119b',                'prov' => 'aki', 'type' => 'LLM',   'rank' => 8, 'pin' => 0.25, 'pout' => 1.00, 'est' => true],
+        ['name' => 'Gemma 4 26B',                      'id' => 'gemma4-26b',                   'prov' => 'aki', 'type' => 'LLM',   'rank' => 6, 'pin' => 0.10, 'pout' => 0.30, 'est' => true],
+        ['name' => 'Qwen 3.8 27B',                     'id' => 'qwen3.8-27b',                  'prov' => 'aki', 'type' => 'LLM',   'rank' => 6, 'pin' => 0.12, 'pout' => 0.36, 'est' => true],
+        ['name' => 'Kolibri 1 TL5',                    'id' => 'kolibri-1-tl5',                'prov' => 'aki', 'type' => 'LLM',   'rank' => 5, 'pin' => 0.08, 'pout' => 0.24, 'est' => true],
+        ['name' => 'Qwen 3.6 35B A3B (EOL 31.10.26)',  'id' => 'qwen3.6-35b',                  'prov' => 'aki', 'type' => 'LLM',   'rank' => 6, 'pin' => 0.12, 'pout' => 0.36, 'est' => true, 'deprecated' => true],
+        ['name' => 'Apertus 70B (EOL 31.10.26)',       'id' => 'apertus-chat-70b',             'prov' => 'aki', 'type' => 'LLM',   'rank' => 6, 'pin' => 0.80, 'pout' => 3.00, 'est' => true, 'deprecated' => true],
+        ['name' => 'Flux.2 [klein]',                   'id' => 'flux2-klein',                  'prov' => 'aki', 'type' => 'Image', 'rank' => 5, 'unit' => 0.015, 'unitKind' => 'img', 'cur' => '€', 'est' => true],
+        ['name' => 'Qwen Image',                       'id' => 'qwen-image',                   'prov' => 'aki', 'type' => 'Image', 'rank' => 6, 'unit' => 0.02,  'unitKind' => 'img', 'cur' => '€', 'est' => true],
+        ['name' => 'Qwen Image Edit',                  'id' => 'qwen-image-edit',              'prov' => 'aki', 'type' => 'Image', 'rank' => 6, 'unit' => 0.02,  'unitKind' => 'img', 'cur' => '€', 'est' => true],
+        ['name' => 'Z-Image Turbo',                    'id' => 'z-image-turbo',                'prov' => 'aki', 'type' => 'Image', 'rank' => 5, 'unit' => 0.01,  'unitKind' => 'img', 'cur' => '€', 'est' => true],
         // DeepSeek (China) — peak/off-peak pricing; off-peak shown
         ['name' => 'deepseek-chat', 'prov' => 'deepseek', 'type' => 'LLM', 'rank' => 8, 'pin' => 0.28, 'pout' => 0.42, 'est' => true],
         // ElevenLabs — voice, billed per character (≈ per minute shown)

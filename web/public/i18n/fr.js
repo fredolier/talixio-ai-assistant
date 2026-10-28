@@ -2964,6 +2964,7 @@ window.I18N.fr = {
   "Available": "Disponible",
   "Europe lock (GDPR)": "Verrou Europe (RGPD)",
   "Catalogue updated {d} — from connected providers + a seed.": "Catalogue mis à jour le {d} — d’après les fournisseurs connectés + une base.",
+  "Base catalogue — connect a provider and click “Refresh now” to fold in its full model list.": "Catalogue de base — connectez un fournisseur et cliquez sur « Actualiser maintenant » pour intégrer toute sa liste de modèles.",
   "Type": "Type",
   "Rank": "Rang",
   "Trust": "Confiance",

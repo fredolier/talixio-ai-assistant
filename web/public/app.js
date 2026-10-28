@@ -3450,7 +3450,9 @@ function mbRender() {
       <label class="mb-lock ${state.mb.avail ? 'on' : 'off'}" id="mb-avail"><input type="checkbox" id="mb-avail-cb"${state.mb.avail ? ' checked' : ''}> ${esc(t('Available'))}</label>
       <label class="mb-lock ${state.mb.lock ? 'on' : 'off'}" id="mb-lock"><input type="checkbox" id="mb-lock-cb"${state.mb.lock ? ' checked' : ''}> 🔒 ${esc(t('Europe lock (GDPR)'))}</label>
     </div>
-    <p class="note small muted">${esc(t('Catalogue updated {d} — from connected providers + a seed.', { d: upd }))}</p>
+    <p class="note small muted">${esc(state.mb.cat.source === 'live' && upd
+      ? t('Catalogue updated {d} — from connected providers + a seed.', { d: upd })
+      : t('Base catalogue — connect a provider and click “Refresh now” to fold in its full model list.'))}</p>
     <div class="tscroll"><table class="mb-table"><thead><tr>
       <th data-sort="name">${esc(t('Model'))}</th><th data-sort="type">${esc(t('Type'))}</th>
       <th data-sort="rank" class="num">${esc(t('Rank'))}</th><th data-sort="tl">${esc(t('Trust'))}</th>

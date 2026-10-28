@@ -109,7 +109,11 @@ The table is seed + the connected providers' live `GET /models` lists, folded in
 `refresh($now)` runs **weekly** in the worker (`catalogue_last` guard) and on demand
 from the Modèles tab's **« Actualiser maintenant »** button
 (`POST /api/catalogue/refresh`), stamping `catalogue_updated` (the « mis à jour le »
-date). `source` is `live` once a refresh has stored a list, else `seed`.
+date). `source` is `live` once a refresh has stored a list, else `seed`. The header only
+shows a « mis à jour le » date when `source === 'live'`; while the list is still the
+pure seed it reads « Catalogue de base — … » instead of a misleading date, so a
+freshly-connected provider shows its seed rows (the full AKI catalogue, §6) at once and
+« Actualiser maintenant » folds in anything beyond the seed.
 
 ## 5. Filters and the Europe (GDPR) lock
 
@@ -143,11 +147,17 @@ Germany). Its subtlety: **only models tagged `tl5` are processed in Germany**; t
 rest can be served from Alibaba Cloud in Singapore, which leaves Europe. So
 `Sovereign::choose('aki', …)` keeps only the `tl5` ids when the key lists any, and
 falls back to TL5 ids otherwise — an AKI assistant stays in Germany by default. The
-catalogue seeds AKI with four EU-priced models (GPT-OSS 120B, MiniMax M2.5 230B,
-Apertus 70B, and the € image model Flux.2 [klein]); it is reached like any sovereign
-provider (Fournisseurs tab → the AKI card's inline Connect, which creates an AI
-account of kind `sovereign`, service `aki`), and it satisfies the Europe lock
-(trust 5).
+catalogue seeds AKI with its **full documented model list** (its OpenAI-compatible
+`GET /models` catalogue): nine LLMs (GPT-OSS 120B, Deepseek V4.1 Flash, GLM 5.3 754B,
+Mistral 4 119B, Gemma 4 26B, Qwen 3.8 27B, Kolibri 1 TL5, and the EOL-flagged
+Qwen 3.6 35B A3B and Apertus 70B) and four € image models (Flux.2 [klein], Qwen Image,
+Qwen Image Edit, Z-Image Turbo). Each seed row carries its **exact API model string**
+as `id` (e.g. `gpt-oss-120b`, `deepseek-v4.1-flash-1017-tl5`), so routing uses the
+real id and a live refresh dedups against the seed. Embedding models (bge-m3,
+qwen3-vl-embedding-8b) are left out — no usage runs on them. Prices are estimates
+(`est`). AKI is reached like any sovereign provider (Fournisseurs tab → the AKI card's
+inline Connect, which creates an AI account of kind `sovereign`, service `aki`), and it
+satisfies the Europe lock (trust 5).
 
 ## Deliberate divergences from the concept mockup
 

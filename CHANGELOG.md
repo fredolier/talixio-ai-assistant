@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.11.1 (2026-10-28)
+
+- **The AKI.IO catalogue now lists all of its models, not just four.** The Modèles table was hand-seeded with only four AKI rows; it now carries AKI's full documented catalogue — nine LLMs (GPT-OSS 120B, Deepseek V4.1 Flash, GLM 5.3 754B, Mistral 4 119B, Gemma 4 26B, Qwen 3.8 27B, Kolibri 1 TL5, and the end-of-life Qwen 3.6 35B A3B and Apertus 70B) and four euro-priced image models (Flux.2 [klein], Qwen Image, Qwen Image Edit, Z-Image Turbo). Each row now carries its exact API model string, so routing uses the real id and a live refresh folds in cleanly instead of duplicating a seed row.
+- **No more misleading "mis à jour le" date on the base catalogue.** The Modèles header only shows an update date once a live refresh has actually run; before that it reads "Catalogue de base — …" and points at "Actualiser maintenant" to fold in any models a provider lists beyond the seed.
+
 ## 1.11.0 (2026-10-28)
 
 - **Connect a provider right on its card, in one step.** The Fournisseurs tab of Modèle et budget is now a plain connect surface: each provider card shows **Connect** (or **Se connecter** when it needs no key, with a **Créer un compte** link to sign up), you paste the key inline on the card, and its models appear in the Modèles tab straight away. The old "Tout passer en Europe" one-click button, the separate "Comptes d'IA" card, and the brain/"Modèle d'IA" card are gone from this tab — connecting an account is the only thing you do here, and the key path is the same uniform account-creation one for every provider (sovereign, Claude, OpenAI, Gemini, and the exotic ones through the advanced form). Choosing which connected model answers each usage, and the Europe lock, now live in the Modèles tab.
