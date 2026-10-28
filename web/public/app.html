@@ -57,7 +57,23 @@
     <a href="#mail" data-view="mail" class="secondary"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>Mail</span></a>
     <a href="#people" data-view="people" class="secondary"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg><span>People</span></a>
     <a href="#pilotage" data-view="pilotage"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 12l5-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg><span>Pilotage</span></a>
-    <button id="more-btn" class="more" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>More</span><b id="more-count" class="rail-badge" hidden></b></button>
+    <div class="more-wrap">
+      <button id="more-btn" class="more" type="button" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>More</span></button>
+      <div id="more-sheet" class="space-menu more-menu" role="menu" aria-label="More" hidden>
+        <div id="more-assistants" class="more-assistants only-mobile" hidden></div>
+        <a href="#tasks" data-view="tasks">Automations</a>
+        <a href="#activity" data-view="activity">Activity and costs</a>
+        <a href="#apps" data-view="apps" class="only-mobile">Apps</a>
+        <a href="#mail" data-view="mail" class="only-mobile">Mail to handle</a>
+        <a href="#people" data-view="people" class="only-mobile">People</a>
+        <a href="#memory" data-view="memory" class="only-mobile">Memory</a>
+        <a href="#privacy" data-view="privacy" class="only-mobile">Privacy</a>
+        <a href="#settings" data-view="settings" class="only-mobile">Settings</a>
+        <button id="more-install" class="btn primary only-mobile" type="button" hidden>Install app</button>
+        <button id="more-logout" class="btn only-mobile" type="button">Sign out</button>
+        <p id="more-version" class="app-version only-mobile"></p>
+      </div>
+    </div>
     <div class="rail-foot">
       <button id="install-btn" class="btn small primary" type="button" hidden>Install app</button>
       <div id="status" class="status" title="Background worker"><i></i><span>…</span></div>
@@ -923,22 +939,6 @@
   <div id="viewer-body" class="viewer-body"></div>
 </aside>
 <datalist id="folder-list"></datalist>
-<div id="more-sheet" class="sheet" hidden>
-  <div class="sheet-card more-card" role="dialog" aria-label="More">
-    <div id="more-assistants" class="more-assistants only-mobile" hidden></div>
-    <a href="#tasks" data-view="tasks">Automations</a>
-    <a href="#activity" data-view="activity">Activity and costs</a>
-    <a href="#apps" data-view="apps" class="only-mobile">Apps</a>
-    <a href="#mail" data-view="mail" class="only-mobile">Mail to handle</a>
-    <a href="#people" data-view="people" class="only-mobile">People</a>
-    <a href="#memory" data-view="memory" class="only-mobile">Memory</a>
-    <a href="#privacy" data-view="privacy" class="only-mobile">Privacy</a>
-    <a href="#settings" data-view="settings" class="only-mobile">Settings</a>
-    <button id="more-install" class="btn primary only-mobile" type="button" hidden>Install app</button>
-    <button id="more-logout" class="btn only-mobile" type="button">Sign out</button>
-    <p id="more-version" class="app-version only-mobile"></p>
-  </div>
-</div>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="i18n/fr.js"></script>
 <script src="i18n.js"></script>

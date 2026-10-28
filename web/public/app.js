@@ -5383,7 +5383,7 @@ function route() {
     const on = a.dataset.view === v; a.classList.toggle('active', on); a.setAttribute('aria-selected', on ? 'true' : 'false');
   });
   $('#more-btn').classList.toggle('active', ['tasks', 'jobs', 'activity'].includes(v));
-  $('#more-sheet').hidden = true;
+  closeMore();
   if (v !== 'library') closeViewer();
   if (v !== 'board') { clearTimeout(loadBoard.t); }
   VIEWS[v]?.().catch(e => toast(e.message));
@@ -5938,10 +5938,18 @@ $('#viewer-ask').onclick = () => {
   closeViewer(); location.hash = '#chat';
   setTimeout(() => { autosize(); $('#input').focus(); }, 50); // the document is attached: the question is enough
 };
-$('#more-btn').onclick = () => { $('#more-sheet').hidden = false; $('#more-install').hidden = $('#install-btn').hidden; };
-$('#more-sheet').onclick = e => { if (e.target === $('#more-sheet') || e.target.closest('a')) $('#more-sheet').hidden = true; };
-$('#more-logout').onclick = () => $('#logout').click();
-$('#more-install').onclick = () => { $('#more-sheet').hidden = true; $('#install-btn').click(); };
+function closeMore() { $('#more-sheet').hidden = true; $('#more-btn').setAttribute('aria-expanded', 'false'); }
+$('#more-btn').onclick = e => {
+  e.stopPropagation();
+  if (!$('#more-sheet').hidden) { closeMore(); return; }
+  $('#more-install').hidden = $('#install-btn').hidden;
+  $('#more-sheet').hidden = false; $('#more-btn').setAttribute('aria-expanded', 'true');
+};
+$('#more-sheet').addEventListener('click', e => { if (e.target.closest('a')) closeMore(); });
+$('#more-logout').onclick = () => { closeMore(); $('#logout').click(); };
+$('#more-install').onclick = () => { closeMore(); $('#install-btn').click(); };
+document.addEventListener('click', e => { if (!e.target.closest('.more-wrap')) closeMore(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#more-sheet').hidden) { closeMore(); $('#more-btn').focus(); } });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 window.addEventListener('hashchange', route);
 
@@ -6013,7 +6021,7 @@ if (!navigator.onLine) onlineState();
 /** Badges: unread notifications in the menu; on the app icon, those plus the approvals waiting. */
 function setBadge() {
   const u = state.notifUnread || 0, n = u + (state.pendingApprovals || 0);
-  for (const id of ['#notif-count', '#more-count']) { const b = $(id); b.textContent = u > 99 ? '99+' : u; b.hidden = !u; }
+  { const b = $('#notif-count'); b.textContent = u > 99 ? '99+' : u; b.hidden = !u; }
   if (!('setAppBadge' in navigator)) return;
   (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
 }

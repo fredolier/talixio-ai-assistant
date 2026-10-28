@@ -390,7 +390,7 @@ const flows = {
     check('rail: Pilotage is the last rail entry', await page.$eval('.rail a:last-of-type', a => a.dataset.view) === 'pilotage');
     check('rail: the library entry is labelled Files', (await page.textContent('.rail a[data-view=library]')).includes('Files'));
     check('rail: Settings, Privacy, Memory, Activity and Automations left the rail',
-      (await page.$$('.rail a[data-view=settings], .rail a[data-view=privacy], .rail a[data-view=memory], .rail a[data-view=activity], .rail a[data-view=tasks], .rail a[data-view=jobs]')).length === 0);
+      (await page.$$('.rail > a[data-view=settings], .rail > a[data-view=privacy], .rail > a[data-view=memory], .rail > a[data-view=activity], .rail > a[data-view=tasks], .rail > a[data-view=jobs]')).length === 0);
     // slice 6: Routines and Background jobs are one entry ("Automations") with [Scheduled · Background] subtabs, now in the More menu
     await page.click('#more-btn');
     await page.waitForSelector('#more-sheet:not([hidden])', { timeout: 4000 });
