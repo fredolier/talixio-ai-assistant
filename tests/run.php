@@ -1342,6 +1342,14 @@ $beforeN = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn();
 [$rc, $rr] = $con->inbox(['type' => 'report', 'title' => 'Fleet progress', 'text' => 'Two sessions running, one done.'], $secret);
 check('fleet: an authenticated report is accepted and surfaced to the user',
     $rc === 200 && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeN + 1);
+// A keep-warm tick (roster/liveness refresh) must refresh the fleet without notifying — the orchestrator pings
+// every ~10 min, so notifying each time would spam the user.
+$beforeTick = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn();
+[$tc] = $con->inbox(['type' => 'report', 'tick' => true, 'text' => 'still warm', 'agents' => [['id' => 'mba', 'name' => 'mba', 'state' => 'idle']]], $secret);
+[$ec] = $con->inbox(['type' => 'report', 'title' => 'Fleet update'], $secret); // no text at all
+check('fleet: a silent tick and an empty report refresh the roster but never notify',
+    $tc === 200 && $ec === 200 && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeTick
+    && in_array('mba', array_map(fn($a) => (string)($a['id'] ?? ''), $con->statusInfo()['agents']), true));
 check('fleet: status shows the connected orchestrator once paired', str_contains($con->fleetStatus(), 'connected'));
 // the settings panel reads a secret-safe snapshot: connection + liveness, never the webhook URL or the inbox secret
 $si = $con->statusInfo();

@@ -238,6 +238,8 @@ final class Conductor
             . "    so my cockpit can list the fleet:\n"
             . "    \"agents\":[{\"id\":\"mba-m3.local\",\"name\":\"mba-m3.local\",\"task\":\"dossier conseil\",\n"
             . "    \"state\":\"active\",\"machine\":\"mba-m3.local\",\"ts\":<unix>}] (state: active|busy|idle|done|error).\n"
+            . "    A routine keep-warm tick with no news MUST be silent: either omit \"text\" or add \"tick\":true, so I\n"
+            . "    refresh the roster without notifying the user. Send \"text\" only when there is something to report.\n"
             . " 4. When an instruction carries an \"agent\" field, route it to that one session and report its reply\n"
             . "    back with the same \"agent\" set and the reply in \"text\" — the two-voice thread the user talks to.\n```\n\n"
             . "The code is good for 30 minutes and works once. I never see or store your account token — only the "
@@ -295,7 +297,11 @@ final class Conductor
             if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text);
             return [$b, null];
         });
-        $this->app->notifier()->notify($title, $text !== '' ? $text : '(the orchestrator sent an empty update)');
+        // A keep-warm tick (a roster/liveness refresh with no message) must NOT raise a notification — the orchestrator
+        // pings roughly every ~10 min to stay warm, and notifying each time spams the user. Notify only on a report that
+        // actually carries text, and never when it is explicitly flagged as a silent/liveness tick.
+        $silent = !empty($msg['tick']) || !empty($msg['silent']) || in_array((string)($msg['kind'] ?? ''), ['tick', 'liveness', 'heartbeat', 'keepalive'], true);
+        if ($text !== '' && !$silent) $this->app->notifier()->notify($title, $text);
         return [200, ['ok' => true]];
     }
 
