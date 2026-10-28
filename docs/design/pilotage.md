@@ -6,6 +6,19 @@
 > (`orchestration.md` §9.1–§9.5, all shipped through 0.28.99). Nothing here opens a
 > new trust edge; it surfaces, groups and governs what the services already expose.
 > Validated against the clickable mockup (`scratchpad/fleet-ui-mockups.html`, v7).
+>
+> **Deliberate divergences from the mockup** (the mockup is a concept sketch, not
+> the contract — these stay as shipped):
+> - **KB tab** surfaces a *library glance* (space, library root, file/subfolder/size
+>   stats, hub-pull state, "Open the Library" link), not the mockup's hub-resource
+>   document list — see Slice 5.
+> - **Rôles tab** renders the specialization "map" as a *grouped card grid*
+>   (`.pspec` headers + `.prole-grid`, each card carrying ring, metrics, sparkline,
+>   inline specialization editor, lifecycle actions), not the mockup's SVG
+>   ring-cluster. Roles are seeded by the director and the fleet, so there is no
+>   "+ Nouveau rôle" button; archived roles live in a trailing `<details>`.
+> - **Chantiers** are launched from the chat composer ("Parler au pilote"), so there
+>   is no "+ Nouveau chantier" header button.
 
 ## 1. Why — one place to steer the assistant's own work
 
