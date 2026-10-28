@@ -30,9 +30,9 @@ final class Sovereign
             'keys' => 'https://manager.infomaniak.com/', 'about' => 'Open models hosted in Switzerland. Paste the address shown in your AI Tools dashboard (it holds your product id).'],
         'aki' => ['name' => 'AKI.IO', 'country' => 'Germany', 'url' => 'https://aki.io/openai/v1', 'hosts' => ['aki.io'],
             'terms' => 'https://aki.io/terms-of-use', 'embed' => 'bge-m3', 'transcribe' => 'whisper', 'key' => true, // no transcription endpoint: 'whisper' matches none of its models, so test() reports it unavailable
-            'fallback' => ['fast' => 'gpt-oss-20b', 'standard' => 'gpt-oss-120b', 'deep' => 'gpt-oss-120b'],
-            'keys' => 'https://aki.io/login', 'about' => 'Open models hosted in Germany (gpt-oss, Qwen, DeepSeek, Mistral…). Pay as you go.',
-            'note' => 'Only models tagged TL5 are processed in Germany; the others can be served from Alibaba Cloud in Singapore, which leaves Europe. Pick a TL5 model for Confidential spaces.'],
+            'fallback' => ['fast' => 'kolibri-1-tl5', 'standard' => 'deepseek-v4.1-flash-1017-tl5', 'deep' => 'deepseek-v4.1-flash-1017-tl5'], // TL5 = processed in Germany
+            'keys' => 'https://aki.io/login', 'about' => 'Open models hosted in Germany. Talixio picks the TL5 (German-resident) models for you. Pay as you go.',
+            'note' => 'Only models tagged TL5 are processed in Germany, so those are the ones used by default — AKI\'s other models can be served from Alibaba Cloud in Singapore, which leaves Europe. Set a non-TL5 model only if you accept that.'],
     ];
 
     /** The order they are offered in. */
@@ -48,6 +48,9 @@ final class Sovereign
     {
         $fb = self::info($service)['fallback'];
         $chat = array_values(array_filter($ids, fn($i) => !preg_match(self::NOT_CHAT, $i)));
+        // AKI: only models tagged TL5 are processed in Germany; the rest can leave Europe (Alibaba Cloud, Singapore).
+        // When the key lists any TL5 model, keep the sovereign ones so an AKI assistant stays in Germany by default.
+        if ($service === 'aki') { $tl5 = array_values(array_filter($chat, fn($i) => stripos($i, 'tl5') !== false)); if ($tl5) $chat = $tl5; }
         if (!$chat) return $fb;
         if ($service === 'mistral') {
             $pick = function (string $family) use ($chat): ?string {

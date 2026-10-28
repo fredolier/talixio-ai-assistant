@@ -203,6 +203,15 @@ Given 5.1, Talixio cannot be a pure external API client. Two buildable shapes:
       anything but delivering a payload into that one session). It hands the URL to
       Talixio once; Talixio POSTs the (KB-grounded) instruction there to wake it on
       demand. **No account-wide token ever lives in the Talixio container.**
+    - **Inbound, poll fallback (1.4.0):** a *local* Claude Code session has no
+      `watch_url`, so it cannot be pushed to. It pairs instead with
+      `{"type":"pair","mode":"poll",…}`, receives the same steady Bearer secret, and
+      then **GETs `/api/conductor/pull`** on its own heartbeat to drain the
+      instructions Talixio has queued for it (the queue is drained atomically, so
+      each instruction is handed out exactly once). `fleet_dispatch` enqueues in poll
+      mode instead of POSTing; everything downstream — the KB grounding, the privacy
+      guard, the untrusted-reply posture — is identical. Push and poll are two shapes
+      of the same bridge and coexist; a binding is one or the other, never both.
     - **Outbound (orchestrator → Talixio):** an authenticated POST to a small
       Talixio endpoint (`/api/conductor/inbox`), surfaced in chat and the
       notifications inbox.

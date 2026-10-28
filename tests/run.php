@@ -1300,6 +1300,37 @@ $app->space = (int)$csp['id'];
 $setupConf = $con->setup();
 $app->space = 0;
 check('fleet: setup is allowed from any space (pairing sends nothing outward)', preg_match('/"code":"[0-9a-f]{32}"/', $setupConf) === 1);
+// ---- the poll-fallback transport (B): a local orchestrator with no watch_url pairs in poll mode and pulls a queue (orchestration.md §5.2-B) ----
+// the still-paired push orchestrator cannot pull — polling is only for poll-mode bindings
+[$plc] = $con->pull($secret);
+check('fleet(poll): a push-paired orchestrator is refused at the pull endpoint', $plc === 409);
+$setupP = $app->tools->run('fleet_setup', []);
+check('fleet(poll): setup advertises both transports — the webhook push and the poll pull',
+    str_contains($setupP, '/api/conductor/pull') && str_contains($setupP, '"mode":"poll"'));
+preg_match('/"code":"([0-9a-f]{32})"/', $setupP, $pmP); $pollCode = $pmP[1];
+[$pc, $pr] = $con->inbox(['type' => 'pair', 'code' => $pollCode, 'mode' => 'poll', 'session' => 'sess_poll', 'url' => 'https://claude.ai/code/sess_poll'], '');
+$pollSecret = (string)($pr['secret'] ?? '');
+check('fleet(poll): pairing with mode=poll needs no webhook and returns the secret, the mode and the pull URL',
+    $pc === 200 && strlen($pollSecret) === 64 && ($pr['mode'] ?? '') === 'poll' && str_contains((string)($pr['pull'] ?? ''), '/api/conductor/pull') && $con->connected());
+$sp = $con->statusInfo();
+check('fleet(poll): statusInfo reports poll mode and an empty queue, still leaking neither secret nor webhook',
+    $sp['mode'] === 'poll' && $sp['queued'] === 0 && !array_key_exists('secret', $sp) && !array_key_exists('webhook', $sp) && !in_array('https://orch.example/hook', $sp, true));
+[$plc] = $con->pull('wrong-secret');
+check('fleet(poll): a pull with the wrong secret is unauthorized', $plc === 401);
+// toFleet in poll mode enqueues instead of POSTing — the binding holds no webhook, so nothing reaches the orchestrator host
+$seen = null; $prevHook = Talixio\Http::$hook;
+Talixio\Http::$hook = function (string $url, int $bytes) use (&$seen) { if (str_contains($url, 'orch.example')) $seen = [$url, $bytes]; };
+$dispP = $con->toFleet('Plan the Friday release');
+Talixio\Http::$hook = $prevHook;
+check('fleet(poll): dispatch queues the grounded instruction (nothing is POSTed to the orchestrator) and says so',
+    $seen === null && str_contains($dispP, 'queued') && $con->statusInfo()['queued'] === 1);
+check('fleet(poll): the waiting instruction surfaces in the status line as a poll binding',
+    str_contains($con->fleetStatus(), '(poll)') && str_contains($con->fleetStatus(), 'waiting for the next poll'));
+[$plc, $plr] = $con->pull($pollSecret);
+check('fleet(poll): the right secret pulls the grounded instruction and empties the queue',
+    $plc === 200 && count($plr['instructions'] ?? []) === 1 && str_contains((string)$plr['instructions'][0]['instruction'], 'Friday release') && $con->statusInfo()['queued'] === 0);
+[$plc2, $plr2] = $con->pull($pollSecret);
+check('fleet(poll): a second pull hands out nothing — each instruction is delivered exactly once', $plc2 === 200 && ($plr2['instructions'] ?? null) === []);
 check('fleet: disconnect forgets the binding', str_contains($con->disconnect(), 'disconnected') && !$con->connected());
 @unlink($app->cfg->dataDir . '/conductor.json');
 
@@ -3562,6 +3593,11 @@ check('europe: the fast model is Mistral when the provider has one (it writes Fr
     $tiersEu === ['fast' => 'Mistral-Small-3.2-24B-Instruct-2506', 'standard' => 'gpt-oss-120b', 'deep' => 'qwen-3-5-397b']
     && str_contains((new \Talixio\Agent($app))->systemPrompt(), "answer in the language of the user's last message"), json_encode($tiersEu));
 
+$tiersAki = \Talixio\Sovereign::choose('aki', ['gpt-oss-120b', 'gemma4-26b', 'deepseek-v4.1-flash-1017-tl5', 'kolibri-1-tl5', 'bge-m3']);
+check('europe: AKI stays in Germany — only TL5 (German-resident) models are chosen when the key lists them',
+    count($tiersAki) === 3 && !array_filter($tiersAki, fn($m) => stripos($m, 'tl5') === false), json_encode($tiersAki));
+$tiersAkiNo = \Talixio\Sovereign::choose('aki', ['gpt-oss-120b', 'gemma4-26b']); // no TL5 in the list: fall back to what the key has, with the card's warning
+check('europe: AKI without any TL5 model still picks from what the key lists', count(array_filter($tiersAkiNo)) === 3, json_encode($tiersAkiNo));
 $tiersMi = \Talixio\Sovereign::choose('mistral', ['mistral-small-latest', 'mistral-medium-latest', 'mistral-large-latest', 'mistral-embed', 'ministral-3b-latest']);
 check('europe: on Mistral, Small does the everyday work and Medium takes over for the hard turns', $tiersMi === ['fast' => 'mistral-small-latest', 'standard' => 'mistral-small-latest', 'deep' => 'mistral-medium-latest'], json_encode($tiersMi));
 $escBefore = [$app->cfg->escalate, $app->cfg->tiers['standard']->model, $app->cfg->tiers['deep']->model];

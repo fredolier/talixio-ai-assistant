@@ -130,6 +130,24 @@ final class Conductor
         rename("$f.tmp", $f);
     }
 
+    /**
+     * Read-modify-write the binding under an exclusive lock, so the concurrent paths that touch the poll queue — a
+     * report coming in, an instruction being queued, the orchestrator draining its queue — cannot lose or resurrect
+     * each other's changes. $fn receives the fresh binding and returns [newBinding, result]; result is returned.
+     */
+    private function lockedUpdate(callable $fn)
+    {
+        $fh = @fopen($this->bindingFile() . '.lock', 'c');
+        if ($fh) flock($fh, LOCK_EX);
+        try {
+            [$b, $ret] = $fn($this->binding());
+            $this->saveBinding($b);
+            return $ret;
+        } finally {
+            if ($fh) { flock($fh, LOCK_UN); fclose($fh); }
+        }
+    }
+
     /** The address the orchestrator POSTs its reports to; it is told this (with the secret) once, at pairing. */
     public function inboxUrl(): string
     {
@@ -137,7 +155,22 @@ final class Conductor
         return ($base !== '' ? rtrim($base, '/') : '(your Talixio address)') . '/api/conductor/inbox';
     }
 
-    public function connected(): bool { return ($this->binding()['webhook'] ?? '') !== ''; }
+    /** The address a poll-mode orchestrator GETs (Bearer secret) to pull the instructions Talixio has queued for it. */
+    public function pullUrl(): string
+    {
+        $base = $this->app->shares()->baseUrl();
+        return ($base !== '' ? rtrim($base, '/') : '(your Talixio address)') . '/api/conductor/pull';
+    }
+
+    /** Push mode (the orchestrator minted a webhook) or poll mode (it pulls a queue); '' when not paired. */
+    private function mode(): string
+    {
+        $b = $this->binding();
+        if (($b['secret'] ?? '') === '') return '';
+        return ($b['webhook'] ?? '') !== '' ? 'push' : (($b['mode'] ?? '') === 'poll' ? 'poll' : '');
+    }
+
+    public function connected(): bool { return $this->mode() !== ''; }
 
     /**
      * A secret-safe snapshot for the settings UI: never the webhook URL or the inbox secret, only whether a binding
@@ -150,10 +183,13 @@ final class Conductor
         $machines = count(array_unique(array_filter(array_map(fn($a) => (string)($a['machine'] ?? ''), $agents))));
         return [
             'connected' => $this->connected(),
+            'mode' => $this->mode(), // 'push' (webhook) or 'poll' (the orchestrator pulls a queue); '' when not paired
             'inbox' => $this->inboxUrl(),
             'session' => (string)($b['session'] ?? ''),
             'url' => (string)($b['url'] ?? ''),
             'lastReport' => (int)($b['last_report'] ?? 0),
+            'lastPoll' => (int)($b['last_poll'] ?? 0),
+            'queued' => count($b['queue'] ?? []),
             'lastDispatch' => (int)($b['last_dispatch'] ?? 0),
             'agents' => $agents,
             'agentCount' => count($agents),
@@ -178,26 +214,34 @@ final class Conductor
         $b['pair'] = ['hash' => hash('sha256', $code), 'expires' => time() + self::PAIR_TTL];
         $this->saveBinding($b);
         $inbox = $this->inboxUrl();
-        return "To connect your code fleet, start a **Claude Code session with Remote Control on** — on your own host "
-            . "is fine (keep it running; restart it if it stops) — signed in to your account so it can see your sessions "
-            . "across machines (ListAgents / SendMessage) and mint an inbound webhook (watch_url). Give it this once:\n\n"
-            . "```\nYou are my fleet orchestrator. Do this once to pair with my Talixio assistant:\n"
-            . "1. Mint an inbound webhook for yourself (watch_url) — a URL plus a sealed credential I never see.\n"
-            . "2. POST this JSON to $inbox :\n"
-            . "   {\"type\":\"pair\",\"code\":\"$code\",\"webhook\":\"<the watch_url you got>\",\n"
+        $pull = $this->pullUrl();
+        return "To connect your code fleet, start a **Claude Code session signed in to your account** (so it can see "
+            . "your sessions across machines — ListAgents / SendMessage) and keep it running. Pair it one of two ways — "
+            . "whichever your session supports — and give it this once:\n\n"
+            . "```\nYou are my fleet orchestrator. Pair once with my Talixio assistant, then keep working my fleet.\n\n"
+            . "PAIRING — pick the transport your session can support:\n"
+            . " • PUSH (a cloud / Remote-Control session that can mint an inbound webhook with watch_url):\n"
+            . "   mint the webhook, then POST to $inbox :\n"
+            . "   {\"type\":\"pair\",\"code\":\"$code\",\"webhook\":\"<your watch_url>\",\n"
             . "    \"session\":\"<your session id>\",\"url\":\"<your claude.ai/code URL, if any>\"}\n"
-            . "3. Keep the \"secret\" from the response; send it as `Authorization: Bearer <secret>` on every\n"
-            . "   future report you POST to $inbox (JSON {\"type\":\"report\",\"title\":...,\"text\":...}).\n"
-            . "4. Keep yourself warm (a create_trigger / send_later heartbeat, ~10 min): each tick, enumerate my\n"
-            . "   sessions across machines, read their progress, and report completions and failures back to that\n"
-            . "   inbox. Include a structured roster on your reports so my cockpit can list the fleet:\n"
-            . "   \"agents\":[{\"id\":\"mba-m3.local\",\"name\":\"mba-m3.local\",\"task\":\"dossier conseil\",\n"
-            . "   \"state\":\"active\",\"machine\":\"mba-m3.local\",\"ts\":<unix>}] (state: active|busy|idle|done|error).\n"
-            . "5. When I POST an instruction to your webhook, act on it and report what you did. If it carries an\n"
-            . "   \"agent\" field, route it to that one session and report its reply back with the same \"agent\" set\n"
-            . "   and the reply in \"text\" — that is the two-voice thread the user talks to.\n```\n\n"
+            . " • POLL (a local session with no watch_url): POST to $inbox :\n"
+            . "   {\"type\":\"pair\",\"code\":\"$code\",\"mode\":\"poll\",\n"
+            . "    \"session\":\"<your session id>\",\"url\":\"<your claude.ai/code URL, if any>\"}\n\n"
+            . "Keep the \"secret\" from the response; send it as `Authorization: Bearer <secret>` on everything below.\n\n"
+            . "RUNNING — keep yourself warm (~10 min: create_trigger / send_later, or a /loop). Each tick:\n"
+            . " 1. Enumerate my sessions across machines and read their progress.\n"
+            . " 2. Get my pending instructions. If you paired with POLL, GET $pull\n"
+            . "    with the Bearer secret → {\"instructions\":[{\"instruction\":...,\"agent\"?:...}, ...]} (it empties the\n"
+            . "    queue, so act on every item). If you paired with PUSH, I deliver the same payloads to your webhook\n"
+            . "    instead — act on each when it arrives.\n"
+            . " 3. POST progress to $inbox as {\"type\":\"report\",\"title\":...,\"text\":...}, with a structured roster\n"
+            . "    so my cockpit can list the fleet:\n"
+            . "    \"agents\":[{\"id\":\"mba-m3.local\",\"name\":\"mba-m3.local\",\"task\":\"dossier conseil\",\n"
+            . "    \"state\":\"active\",\"machine\":\"mba-m3.local\",\"ts\":<unix>}] (state: active|busy|idle|done|error).\n"
+            . " 4. When an instruction carries an \"agent\" field, route it to that one session and report its reply\n"
+            . "    back with the same \"agent\" set and the reply in \"text\" — the two-voice thread the user talks to.\n```\n\n"
             . "The code is good for 30 minutes and works once. I never see or store your account token — only the "
-            . "webhook you hand me. After it pairs I'll confirm here.";
+            . "webhook you hand me (push), or nothing at all (poll). After it pairs I'll confirm here.";
     }
 
     /** Forget the binding entirely (the user disconnects the fleet, or re-pairs from scratch). */
@@ -220,33 +264,95 @@ final class Conductor
             if (!is_array($p) || time() > (int)($p['expires'] ?? 0) || !hash_equals((string)($p['hash'] ?? ''), hash('sha256', (string)($msg['code'] ?? ''))))
                 return [403, ['error' => 'pairing code invalid or expired — run fleet_setup again']];
             $webhook = (string)($msg['webhook'] ?? '');
-            if (!preg_match('#^https://[^\s]+$#', $webhook)) return [400, ['error' => 'a https webhook URL is required']];
+            $poll = (string)($msg['mode'] ?? '') === 'poll' || !empty($msg['poll']);
+            if (!$poll && !preg_match('#^https://[^\s]+$#', $webhook))
+                return [400, ['error' => 'a https webhook URL is required, or set "mode":"poll" to pull instructions instead']];
             $secret = bin2hex(random_bytes(32));
-            unset($b['pair']);
-            $this->saveBinding(['webhook' => $webhook, 'secret' => $secret, 'session' => mb_substr((string)($msg['session'] ?? ''), 0, 200),
-                'url' => mb_substr((string)($msg['url'] ?? ''), 0, 500), 'created' => time(), 'last_report' => time()] + $b);
+            // A fresh binding for this pairing; keep only the display-only roster/threads from any prior one, and make
+            // sure a mode switch (push→poll or back) never leaves a stale webhook or queue behind.
+            $keep = array_intersect_key($b, array_flip(['agents', 'agents_at', 'threads']));
+            $base = ['secret' => $secret, 'session' => mb_substr((string)($msg['session'] ?? ''), 0, 200),
+                'url' => mb_substr((string)($msg['url'] ?? ''), 0, 500), 'created' => time(), 'last_report' => time()];
+            $base += $poll ? ['mode' => 'poll', 'queue' => []] : ['webhook' => $webhook];
+            $this->saveBinding($base + $keep);
             $this->app->notifier()->notify('Fleet orchestrator connected',
-                'Your code-fleet orchestrator is paired. Ask me to send it work with fleet_dispatch, and watch its liveness with fleet_status.');
-            return [200, ['ok' => true, 'secret' => $secret, 'inbox' => $this->inboxUrl()]]; // the only time the secret is returned
+                'Your code-fleet orchestrator is paired' . ($poll ? ' (poll mode)' : '') . '. Ask me to send it work with fleet_dispatch, and watch its liveness with fleet_status.');
+            // the only time the secret is returned; a poll orchestrator also learns where to pull from
+            return [200, ['ok' => true, 'secret' => $secret, 'inbox' => $this->inboxUrl(), 'mode' => $poll ? 'poll' : 'push'] + ($poll ? ['pull' => $this->pullUrl()] : [])];
         }
         if (($b['secret'] ?? '') === '' || $bearer === '' || !hash_equals((string)$b['secret'], $bearer))
             return [401, ['error' => 'unauthorized']];
-        $b['last_report'] = time();
         $title = mb_substr(trim((string)($msg['title'] ?? '')) ?: 'Fleet update', 0, 120);
         $text = mb_substr(trim((string)($msg['text'] ?? '')), 0, 8000);
         // The orchestrator may carry a structured agent roster so the cockpit can list the fleet. Display data only —
         // bounded and surfaced, never executed here (orchestration.md §5.3).
-        if (isset($msg['agents']) && is_array($msg['agents'])) { $b['agents'] = $this->sanitizeAgents($msg['agents']); $b['agents_at'] = time(); }
+        $agents = isset($msg['agents']) && is_array($msg['agents']) ? $this->sanitizeAgents($msg['agents']) : null;
         // A report tagged with an `agent` is that one agent's reply in its two-voice thread (the "Discuter" drawer).
         $agent = mb_substr(trim((string)($msg['agent'] ?? '')), 0, 80);
-        if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text);
-        $this->saveBinding($b);
+        $this->lockedUpdate(function (array $b) use ($agents, $agent, $text) { // locked: never clobber a concurrent queue drain
+            $b['last_report'] = time();
+            if ($agents !== null) { $b['agents'] = $agents; $b['agents_at'] = time(); }
+            if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text);
+            return [$b, null];
+        });
         $this->app->notifier()->notify($title, $text !== '' ? $text : '(the orchestrator sent an empty update)');
         return [200, ['ok' => true]];
     }
 
     private const AGENT_CAP = 50;
     private const THREAD_CAP = 40;
+    /** How many undelivered instructions a poll-mode orchestrator's queue holds; oldest drop past this. */
+    private const QUEUE_CAP = 100;
+
+    /**
+     * A poll-mode orchestrator (no webhook) pulls its pending instructions here, authenticated by the steady secret.
+     * Draining is atomic, so each instruction is handed out exactly once. Returns [httpCode, responseArray].
+     */
+    public function pull(string $bearer): array
+    {
+        $b = $this->binding();
+        if (($b['secret'] ?? '') === '' || $bearer === '' || !hash_equals((string)$b['secret'], $bearer))
+            return [401, ['error' => 'unauthorized']];
+        if ($this->mode() !== 'poll')
+            return [409, ['error' => 'this orchestrator is paired for webhook push, not polling']];
+        $pending = $this->lockedUpdate(function (array $b) {
+            $q = array_values($b['queue'] ?? []);
+            $b['queue'] = [];
+            $b['last_poll'] = time(); // polling is a liveness signal even before the first report
+            return [$b, $q];
+        });
+        return [200, ['ok' => true, 'instructions' => $pending]];
+    }
+
+    /**
+     * Hand one instruction payload to the orchestrator: POST it to the webhook (push), or append it to the queue the
+     * orchestrator pulls (poll). Returns ['ok'=>bool] with 'error' ('unreachable'|'http'|'not-connected') on failure.
+     */
+    private function deliver(array $payload): array
+    {
+        $mode = $this->mode();
+        if ($mode === '') return ['ok' => false, 'error' => 'not-connected'];
+        if ($mode === 'poll') {
+            $this->lockedUpdate(function (array $b) use ($payload) {
+                $q = array_values($b['queue'] ?? []);
+                $q[] = $payload;
+                if (count($q) > self::QUEUE_CAP) $q = array_slice($q, -self::QUEUE_CAP);
+                $b['queue'] = $q;
+                $b['last_dispatch'] = time();
+                return [$b, null];
+            });
+            return ['ok' => true, 'queued' => true];
+        }
+        try {
+            [$code] = Http::request('POST', (string)$this->binding()['webhook'], ['Content-Type: application/json'],
+                json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 30);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'error' => 'unreachable', 'detail' => $e->getMessage()];
+        }
+        if ($code >= 300) return ['ok' => false, 'error' => 'http', 'code' => $code];
+        $this->lockedUpdate(fn(array $b) => [['last_dispatch' => time()] + $b, null]);
+        return ['ok' => true, 'queued' => false];
+    }
 
     /** Bound and clean the orchestrator's self-reported roster — display data, never executed (orchestration.md §5.3). */
     private function sanitizeAgents(array $raw): array
@@ -297,20 +403,14 @@ final class Conductor
         if ($id === '') return $fail('error: no agent.');
         if ($text === '') return $fail('error: nothing to send.');
         if (($g = $this->guard()) !== null) return $fail($g);
-        $b = $this->binding();
-        if (($b['webhook'] ?? '') === '') return $fail('error: no agents are connected yet — pair your pilote autonome first.');
-        $payload = ['from' => 'talixio', 'ts' => time(), 'agent' => $id, 'instruction' => $this->ground($text, $space)];
-        try {
-            [$code] = Http::request('POST', (string)$b['webhook'], ['Content-Type: application/json'],
-                json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 30);
-        } catch (\Throwable $e) {
-            return $fail("error: could not reach your pilote autonome ({$e->getMessage()}). It may be asleep — recreate it, then re-pair.");
-        }
-        if ($code >= 300) return $fail("error: the orchestrator's webhook returned HTTP $code.");
-        $b['last_dispatch'] = time();
-        $b = $this->appendThread($b, $id, 'user', $text);
-        $this->saveBinding($b);
-        return ['ok' => true, 'message' => 'sent to the agent; its reply will land here.', 'thread' => $this->agentThread($id)];
+        if (!$this->connected()) return $fail('error: no agents are connected yet — pair your pilote autonome first.');
+        $r = $this->deliver(['from' => 'talixio', 'ts' => time(), 'agent' => $id, 'instruction' => $this->ground($text, $space)]);
+        if (!$r['ok']) return $fail($r['error'] === 'http'
+            ? "error: the orchestrator's webhook returned HTTP {$r['code']}."
+            : "error: could not reach your pilote autonome ({$r['detail']}). It may be asleep — recreate it, then re-pair.");
+        $this->lockedUpdate(fn(array $b) => [$this->appendThread($b, $id, 'user', $text), null]);
+        return ['ok' => true, 'thread' => $this->agentThread($id),
+            'message' => !empty($r['queued']) ? 'queued for the agent; it will pick this up on its next poll and its reply will land here.' : 'sent to the agent; its reply will land here.'];
     }
 
     /**
@@ -324,19 +424,14 @@ final class Conductor
         if (($g = $this->guard()) !== null) return $g;
         $instruction = trim($instruction);
         if ($instruction === '') return 'error: nothing to send.';
-        $b = $this->binding();
-        if (($b['webhook'] ?? '') === '') return 'error: no fleet orchestrator is connected yet — run fleet_setup first.';
-        $payload = ['from' => 'talixio', 'ts' => time(), 'instruction' => $this->ground($instruction, $space)];
-        try {
-            [$code] = Http::request('POST', (string)$b['webhook'], ['Content-Type: application/json'],
-                json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 30);
-        } catch (\Throwable $e) {
-            return "error: could not reach the orchestrator ({$e->getMessage()}). It may have gone to sleep — recreate it, then fleet_setup again.";
-        }
-        if ($code >= 300) return "error: the orchestrator's webhook returned HTTP $code. If this persists, recreate the session and fleet_setup again.";
-        $b['last_dispatch'] = time();
-        $this->saveBinding($b);
-        return 'sent to the fleet orchestrator. It will work the fleet and report back here (notifications); check progress with fleet_status.';
+        if (!$this->connected()) return 'error: no fleet orchestrator is connected yet — run fleet_setup first.';
+        $r = $this->deliver(['from' => 'talixio', 'ts' => time(), 'instruction' => $this->ground($instruction, $space)]);
+        if (!$r['ok']) return $r['error'] === 'http'
+            ? "error: the orchestrator's webhook returned HTTP {$r['code']}. If this persists, recreate the session and fleet_setup again."
+            : "error: could not reach the orchestrator ({$r['detail']}). It may have gone to sleep — recreate it, then fleet_setup again.";
+        return !empty($r['queued'])
+            ? 'queued for the fleet orchestrator — it will pick this up on its next poll and report back here (notifications); check progress with fleet_status.'
+            : 'sent to the fleet orchestrator. It will work the fleet and report back here (notifications); check progress with fleet_status.';
     }
 
     /** Ground an instruction in the relevant knowledge, respecting privacy levels (search already filters them). */
@@ -355,13 +450,17 @@ final class Conductor
     public function fleetStatus(): string
     {
         $b = $this->binding();
-        if (($b['webhook'] ?? '') === '') return 'No fleet orchestrator is connected. Run fleet_setup to pair one.';
+        if (!$this->connected()) return 'No fleet orchestrator is connected. Run fleet_setup to pair one.';
+        $poll = $this->mode() === 'poll';
         $ago = fn(?int $t) => $t ? (($d = time() - $t) < 90 ? 'just now' : ($d < 3600 ? intdiv($d, 60) . ' min ago' : intdiv($d, 3600) . ' h ago')) : 'never';
-        $lastReport = (int)($b['last_report'] ?? 0); $lastDispatch = (int)($b['last_dispatch'] ?? 0);
-        $stale = $lastDispatch > 0 && (time() - max($lastReport, 0)) > self::LIVENESS_STALE && $lastReport < $lastDispatch;
-        $lines = ['Fleet orchestrator: **connected**' . (($b['url'] ?? '') !== '' ? " ([transcript]({$b['url']}))" : '') . '.'];
-        $lines[] = '- last sent: ' . $ago($lastDispatch ?: null) . '; last report: ' . $ago($lastReport ?: null) . '.';
-        if ($stale) $lines[] = '- ⚠️ nothing has reported back since the last dispatch — the session may have gone to sleep. Recreate it and run fleet_setup again.';
+        $lastReport = (int)($b['last_report'] ?? 0); $lastDispatch = (int)($b['last_dispatch'] ?? 0); $lastPoll = (int)($b['last_poll'] ?? 0);
+        $heard = max($lastReport, $lastPoll); // in poll mode a pull is a liveness signal too, even before the first report
+        $queued = count($b['queue'] ?? []);
+        $stale = $lastDispatch > 0 && (time() - $heard) > self::LIVENESS_STALE && $heard < $lastDispatch;
+        $lines = ['Fleet orchestrator: **connected**' . ($poll ? ' (poll)' : '') . (($b['url'] ?? '') !== '' ? " ([transcript]({$b['url']}))" : '') . '.'];
+        $lines[] = '- last sent: ' . $ago($lastDispatch ?: null) . '; last ' . ($poll ? 'poll' : 'report') . ': ' . $ago(($poll ? $heard : $lastReport) ?: null) . '.';
+        if ($poll && $queued > 0) $lines[] = "- $queued instruction(s) waiting for the next poll.";
+        if ($stale) $lines[] = '- ⚠️ nothing has ' . ($poll ? 'polled' : 'reported') . ' back since the last dispatch — the session may have gone to sleep. Recreate it and run fleet_setup again.';
         return implode("\n", $lines);
     }
 }

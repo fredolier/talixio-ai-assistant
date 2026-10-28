@@ -44,6 +44,7 @@ final class Web
         if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         if ($path === '/api/conductor/inbox') { $this->conductorInbox($method); return; } // the delegated cloud orchestrator reports in: its own secret, no session here
+        if ($path === '/api/conductor/pull') { $this->conductorPull($method); return; } // a poll-mode orchestrator pulls its queued instructions: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
         $this->startSession();
         try {
@@ -1649,6 +1650,24 @@ final class Web
             if (!is_array($msg)) $this->fail(400, 'JSON object expected');
             $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
             [$code, $resp] = $this->app->conductor()->inbox($msg, $bearer);
+            $this->json($resp, $code);
+        } catch (\Throwable $e) {
+            $this->json(['error' => self::internalError($e)], 500);
+        }
+    }
+
+    /**
+     * GET /api/conductor/pull: a poll-mode orchestrator (one that could not mint a webhook) pulls the instructions
+     * Talixio has queued for it, authenticated by the steady Bearer secret issued at pairing — never by the web
+     * session. The queue is drained atomically, so each instruction is handed out once.
+     */
+    private function conductorPull(string $method): void
+    {
+        ob_start();
+        try {
+            if ($method !== 'GET') $this->fail(405, 'GET only');
+            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+            [$code, $resp] = $this->app->conductor()->pull($bearer);
             $this->json($resp, $code);
         } catch (\Throwable $e) {
             $this->json(['error' => self::internalError($e)], 500);
