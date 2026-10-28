@@ -179,16 +179,21 @@ const flows = {
     // The Providers tab reveals the provider/account cards; Budget reveals the budget card.
     await page.click('#mb-tabs .mb-tab[data-mtab="providers"]');
     await page.waitForTimeout(300);
-    check('cockpit: the Fournisseurs tab shows the Europe card and hides the catalogue',
-      await page.isVisible('#eu-card') && !(await page.isVisible('#mb-models')));
+    check('cockpit: the Fournisseurs tab shows the provider grid and hides the catalogue, Europe form and brain card',
+      await page.isVisible('#mb-pgrid') && !(await page.isVisible('#mb-models')) && !(await page.isVisible('#eu-card')));
     // The Fournisseurs tab leads with a provider-card grid (one card per catalogue provider, plus the add card).
     await page.waitForSelector('#mb-pgrid .mb-pcard', { timeout: 10000 });
     check('cockpit: the Fournisseurs tab leads with a provider-card grid',
       (await page.$$('#mb-pgrid .mb-pcard:not(.add)')).length === cat.providers.length && await page.isVisible('#mb-pcard-add'));
-    // Clicking a provider card jumps to its real connection surface (the AI-account form for a non-sovereign provider).
+    // A known provider connects inline with just its key — clicking Connect reveals a key field on the card itself.
+    await page.click('#mb-pgrid .mb-pcard[data-pid="mistral"] [data-popen]');
+    await page.waitForTimeout(200);
+    check('cockpit: a provider card connects inline — Connect reveals a key field on the card',
+      await page.isVisible('#mb-pgrid .mb-pcard[data-pid="mistral"] .pconnect .pkey'));
+    // The add card still opens the advanced custom-provider form (the escape hatch for exotic providers).
     await page.click('#mb-pcard-add');
     await page.waitForTimeout(300);
-    check('cockpit: the add-provider card opens the AI-account form', await page.isVisible('#acc-form'));
+    check('cockpit: the add-provider card opens the advanced account form', await page.isVisible('#acc-form'));
     await page.click('#mb-tabs .mb-tab[data-mtab="budget"]');
     await page.waitForTimeout(300);
     check('cockpit: the Budget tab shows the budget card', await page.evaluate(() =>

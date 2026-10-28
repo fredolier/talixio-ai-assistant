@@ -3247,11 +3247,14 @@ function mbApplyTab() {
   show('#mb-models', tab === 'models');
   show('#mb-phelp', tab === 'providers');
   show('#mb-pgrid', tab === 'providers');
-  show('#mb-dh', tab === 'providers');
-  show('#eu-card', tab === 'providers');
-  show('#acc-card', tab === 'providers');
+  // The Europe form, the AI-accounts list and the brain card no longer live on this tab: each provider connects
+  // on its own card now. The account form stays, revealed only as the advanced editor for a custom provider.
+  show('#eu-card', false);
+  show('#acc-manage', false);
+  if (tab !== 'providers') accClose();
+  show('#acc-card', tab === 'providers' && !$('#acc-form').hidden);
   document.querySelectorAll('#view-settings .set-groups[data-groups="model"] .group-card').forEach(c => {
-    c.hidden = !(tab === 'providers' && c.dataset.id === 'brain') && !(tab === 'budget' && c.dataset.id === 'budget');
+    c.hidden = !(tab === 'budget' && c.dataset.id === 'budget');
   });
   if (tab === 'providers') mbRenderProviders();
   if (tab === 'budget') mbBudgetSnapshot();
@@ -3272,49 +3275,111 @@ function mbBudgetSnapshot() {
       ${b.day != null ? `<span class="k">${esc(t('Today'))}<b class="no-i18n">$${(+b.day).toFixed(2)}</b></span>` : ''}
     </div>`;
 }
-/** The Fournisseurs tab's provider-card grid (the mockup's centrepiece): one card per catalogue
- *  provider — flag, status light, trust/kind/model-count chips — with a one-click jump to the real
- *  connection surface below (the Europe form for sovereign providers, an AI account otherwise). */
+// How a catalogue provider maps to an AI-account: the account kind that reaches it, and where to get a key.
+// Sovereign providers (kind `sovereign`, their own service id) get their key page from the Europe catalogue.
+const MB_KEYS = { anthropic: 'https://console.anthropic.com/settings/keys', openai: 'https://platform.openai.com/api-keys', google: 'https://aistudio.google.com/apikey' };
+const MB_KIND = { anthropic: 'anthropic', openai: 'openai', google: 'gemini' };
+/** The connect recipe for a provider card, or null when it has no one-key path (local, or an exotic provider
+ *  that routes through the generic « custom provider » form). */
+function mbConnectSpec(p) {
+  const euIds = new Set((state.eu?.services || []).map(s => s.id));
+  if (euIds.has(p.id)) { const s = (state.eu?.services || []).find(x => x.id === p.id); return { kind: 'sovereign', service: p.id, keys: s?.keys || '' }; }
+  if (MB_KIND[p.id]) return { kind: MB_KIND[p.id], service: '', keys: MB_KEYS[p.id] || '' };
+  return null; // local / deepseek / huggingface / elevenlabs → the advanced custom form
+}
+/** The existing AI account that already reaches this provider, if any (so Connect becomes Manage). */
+function mbAccountFor(id) {
+  return (state.aiAccounts || []).find(a => mbAccProv(a) === id) || null;
+}
+/** The catalogue provider an AI account reaches. */
+function mbAccProv(a) {
+  if (a.kind === 'sovereign') return a.service;
+  if (a.kind === 'anthropic' || a.kind === 'claude-code') return 'anthropic';
+  if (a.kind === 'openai') return 'openai';
+  if (a.kind === 'gemini') return 'google';
+  return '';
+}
+/** The Fournisseurs tab's provider-card grid (the mockup's centrepiece): one card per catalogue provider —
+ *  flag, status light, trust/kind/model-count chips — and connect right here with just the key. */
 function mbRenderProviders() {
   const grid = $('#mb-pgrid'); if (!grid || !state.mb?.cat) return;
-  const euIds = new Set((state.eu?.services || []).map(s => s.id)); // providers configurable through the Europe form
   const models = state.mb.cat.models;
   const cards = state.mb.cat.providers.map(p => {
     const n = models.filter(m => m.prov === p.id).length;
-    const via = euIds.has(p.id) ? 'eu' : 'acc';
-    const label = p.connected ? t('Manage') : (p.auth === 'oauth' ? t('Sign in') : t('Connect'));
-    return `<div class="mb-pcard">
+    const spec = mbConnectSpec(p);
+    let foot;
+    if (p.connected) {
+      const acc = mbAccountFor(p.id);
+      foot = `<span class="pok">✓ ${esc(t('Connected'))}</span>` + (acc ? `<button type="button" class="btn sm ghost" data-pmanage="${esc(p.id)}">${esc(t('Manage'))}</button>` : '');
+    } else if (spec) {
+      const label = p.auth === 'oauth' ? t('Sign in') : t('Connect');
+      foot = `<button type="button" class="btn sm primary" data-popen="${esc(p.id)}">${esc(label)}</button>`;
+    } else {
+      foot = `<button type="button" class="btn sm" data-pcustom="${esc(p.id)}">${esc(t('Connect'))}</button>`;
+    }
+    const form = spec ? `<form class="pconnect" data-pform="${esc(p.id)}" hidden>
+        <input type="password" class="pkey" autocomplete="off" spellcheck="false" placeholder="${esc(t('API key'))}">
+        <div class="row wrap"><button type="submit" class="btn sm primary">${esc(t('Connect'))}</button>${spec.keys ? `<a class="btn sm ghost" target="_blank" rel="noopener" href="${esc(spec.keys)}">${esc(t('Sign up'))}</a>` : ''}<span class="spacer"></span><button type="button" class="btn sm ghost pcancel">${esc(t('Cancel'))}</button></div>
+        <p class="pcstate muted small"></p>
+      </form>` : '';
+    return `<div class="mb-pcard${p.connected ? ' on' : ''}" data-pid="${esc(p.id)}">
       <div class="ptop"><span class="flag no-i18n">${esc(p.flag || '')}</span><span class="pn no-i18n">${esc(p.name)}</span><span class="led${p.connected ? '' : ' off'}" title="${esc(p.connected ? t('connected') : t('not connected'))}"></span></div>
       <div class="pc"><span class="no-i18n">${esc(t(p.country))}</span> · ${esc(t(p.bill === 'usage' ? 'pay as you go' : p.bill))}</div>
       <div class="pmeta"><span class="tl ${mbTlClass(p.tl)}">${esc(mbTlText(p.tl))}</span><span class="pchip">${esc(t(p.kind))}</span><span class="pchip no-i18n">${n} ${esc(n > 1 ? t('models') : t('model'))}</span></div>
-      <div class="pfoot"><button type="button" class="btn sm${p.connected ? '' : ' primary'}" data-pconn="${esc(p.id)}" data-via="${via}">${esc(label)}</button></div>
+      <div class="pfoot">${foot}</div>
+      ${form}
     </div>`;
   }).join('');
   grid.innerHTML = cards + `<div class="mb-pcard add" id="mb-pcard-add" role="button" tabindex="0"><div><div class="plus" aria-hidden="true">+</div>${esc(t('Add a custom provider'))}</div></div>`;
-  grid.querySelectorAll('[data-pconn]').forEach(b => b.onclick = () => mbConnectProvider(b.dataset.pconn, b.dataset.via));
+  grid.querySelectorAll('[data-popen]').forEach(b => b.onclick = () => mbToggleConnect(b.dataset.popen, true));
+  grid.querySelectorAll('[data-pcustom]').forEach(b => b.onclick = () => mbOpenAccountForm(b.dataset.pcustom));
+  grid.querySelectorAll('[data-pmanage]').forEach(b => b.onclick = () => { const a = mbAccountFor(b.dataset.pmanage); if (a) mbOpenAccountForm(null, a); });
+  grid.querySelectorAll('.pconnect').forEach(f => {
+    f.querySelector('.pcancel').onclick = () => mbToggleConnect(f.dataset.pform, false);
+    f.onsubmit = e => { e.preventDefault(); mbProviderConnect(f.dataset.pform, f); };
+  });
   const add = $('#mb-pcard-add');
-  add.onclick = mbOpenAccountForm;
+  add.onclick = () => mbOpenAccountForm();
   add.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); mbOpenAccountForm(); } };
 }
-/** Jump a provider card to its real connection surface and pre-select it there. */
-function mbConnectProvider(id, via) {
-  if (via === 'eu') {
-    const sel = $('#eu-service');
-    if (sel && [...sel.options].some(o => o.value === id)) { sel.value = id; euService(); }
-    $('#eu-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (!$('#eu-key')?.value) $('#eu-key')?.focus();
-  } else {
-    mbOpenAccountForm(id);
-  }
+/** Re-read the catalogue after a connection changed, and repaint the grid + table (no-op before the cockpit loads). */
+async function mbRefreshProviders() {
+  if (!state.mb?.cat) return;
+  try { state.mb.cat = await api('api/catalogue'); $('#mb-prov-c').textContent = state.mb.cat.providers.length; mbRenderProviders(); mbRenderRows(); } catch { /* stale view is fine */ }
 }
-/** Open the AI-account form (the custom-provider path), optionally pre-choosing the kind for a provider. */
-function mbOpenAccountForm(providerId) {
-  const kindFor = { anthropic: 'anthropic', claude: 'anthropic', openai: 'openai', google: 'gemini', gemini: 'gemini' };
-  const form = $('#acc-form');
-  if (form?.hidden) $('#acc-add')?.click(); // reuse the existing open-the-form flow
-  const kind = kindFor[providerId];
-  const ksel = $('#acc-kind');
-  if (kind && ksel && [...ksel.options].some(o => o.value === kind)) { ksel.value = kind; ksel.dispatchEvent(new Event('change')); }
+/** Reveal (or hide) a card's inline key field. */
+function mbToggleConnect(id, open) {
+  const f = $(`.pconnect[data-pform="${CSS.escape(id)}"]`); if (!f) return;
+  f.hidden = !open;
+  if (open) f.querySelector('.pkey')?.focus();
+}
+/** Connect a provider straight from its card: save an AI account of the mapped kind with just this key. */
+async function mbProviderConnect(id, form) {
+  const p = state.mb.cat.providers.find(x => x.id === id), spec = mbConnectSpec(p); if (!spec) return;
+  const key = form.querySelector('.pkey').value.trim();
+  const st = form.querySelector('.pcstate');
+  if (!key) { st.className = 'pcstate bad small'; st.textContent = t('Enter the key first.'); return; }
+  st.className = 'pcstate muted small'; st.textContent = t('Connecting…');
+  const existing = mbAccountFor(id);
+  const body = { name: existing?.name || p.name, kind: spec.kind, service: spec.service, url: existing?.url || '', key,
+    token: '', paid: !!existing?.paid, admin_key: '', admin_clear: false, billing_scope: existing?.billing_scope || '', models: { fast: '', standard: '', deep: '' } };
+  try {
+    await post(existing ? `api/accounts/${encodeURIComponent(existing.id)}` : 'api/accounts', body);
+    toast(t('{p} connected.', { p: p.name }));
+    await Promise.all([loadAccCard(), loadSpaces()]);
+    await mbRefreshProviders();
+  } catch (e) { st.className = 'pcstate bad small'; st.textContent = e.message; }
+}
+/** Open the AI-account form as the advanced editor: a brand-new custom provider, or an existing account to manage. */
+function mbOpenAccountForm(providerId, account) {
+  const kindFor = { anthropic: 'anthropic', claude: 'anthropic', openai: 'openai', google: 'gemini', gemini: 'gemini', deepseek: 'openai', huggingface: 'openai' };
+  $('#acc-card').hidden = false;
+  accEdit(account || null);
+  if (!account) {
+    const kind = kindFor[providerId], ksel = $('#acc-kind');
+    if (kind && ksel && [...ksel.options].some(o => o.value === kind)) { ksel.value = kind; ksel.dispatchEvent(new Event('change')); }
+  }
+  $('#acc-form-h').hidden = false;
   $('#acc-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('#acc-name')?.focus();
 }
@@ -3470,7 +3535,12 @@ function mbRenderRows() {
       <td>${cell}</td></tr>`;
   }).join('') || `<tr><td colspan="8" class="muted" style="padding:16px">${esc(t('No model matches. Widen the filters, or untick “Available” to see the whole catalogue.'))}</td></tr>`;
   tb.querySelectorAll('.assign button:not(:disabled)').forEach(b => b.onclick = () => mbAssign(b.dataset.u, b.dataset.m, b.dataset.prov));
-  tb.querySelectorAll('[data-connect]').forEach(b => b.onclick = () => { state.mb.tab = 'providers'; mbApplyTab(); $('#eu-card')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+  tb.querySelectorAll('[data-connect]').forEach(b => b.onclick = () => {
+    state.mb.tab = 'providers'; mbApplyTab();
+    const card = $(`.mb-pcard[data-pid="${CSS.escape(b.dataset.connect)}"]`) || $('#mb-pgrid');
+    card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card?.querySelector('[data-popen]')?.click();
+  });
 }
 /** Assign a model to a usage: route it through the first credential source of the model's provider. */
 async function mbAssign(usage, model, prov) {
@@ -3484,10 +3554,12 @@ async function mbAssign(usage, model, prov) {
     toast(t('“{u}” → {m} · {w}', { u: t(MB_USAGES.find(u => u.id === usage).label), m: model, w: where }));
   } catch (e) { toast(e.message); }
 }
-/** The Europe (GDPR) lock: raise the trust floor to 5 and force-swap any non-compliant current selection. */
+/** The Europe (GDPR) lock: the real server-side lock (nothing leaves Europe, enforced at runtime) *and* a trust
+ *  floor of 5 that filters out non-compliant models and force-swaps any non-compliant current selection. */
 async function mbToggleLock(e) {
   state.mb.lock = e.target.checked;
   $('#mb-lock').classList.toggle('on', state.mb.lock); $('#mb-lock').classList.toggle('off', !state.mb.lock);
+  try { showEu(await post('api/sovereign/lock', { only: state.mb.lock })); } catch (err) { toast(err.message); }
   if (!state.mb.lock) { state.mb.ftl = 0; $('#mb-ftl').value = '0'; mbRenderRows(); return; }
   state.mb.ftl = 5; $('#mb-ftl').value = '5';
   const P = mbProvMap(), swaps = [];
@@ -4051,6 +4123,17 @@ function showEu(d) {
   st.title = d.outside.length ? d.outside.map(o => o.name).join(', ')
     : t('Everything stays in Europe: {provider}, under the GDPR.', { provider: svc ? `${window.t(svc.name)} (${window.t(svc.country)})` : '' }) + (d.only ? ' ' + t('Locked: nothing can be sent outside Europe.') : '');
   euService(); euFields();
+  mbSyncLock(); // the model table's Europe lock mirrors this real server lock
+}
+/** Reflect the server-side Europe lock (state.eu.only) in the Models tab's lock toggle. */
+function mbSyncLock() {
+  if (!state.mb) return;
+  const only = !!state.eu?.only; state.mb.lock = only;
+  const cb = $('#mb-lock-cb'); if (!cb) return;
+  cb.checked = only;
+  $('#mb-lock')?.classList.toggle('on', only); $('#mb-lock')?.classList.toggle('off', !only);
+  if (only && state.mb.ftl < 5) { state.mb.ftl = 5; const f = $('#mb-ftl'); if (f) f.value = '5'; }
+  if (state.mb.cat) mbRenderRows();
 }
 function euService() {
   const s = (state.eu?.services || []).find(x => x.id === $('#eu-service').value); if (!s) return;
@@ -4152,7 +4235,11 @@ const accBody = () => ({ name: $('#acc-name').value.trim(), kind: $('#acc-kind')
   key: $('#acc-key').value.trim(), token: $('#acc-token').value.trim(), paid: $('#acc-paid').checked,
   admin_key: $('#acc-admin').value.trim(), admin_clear: $('#acc-admin-clear').checked, billing_scope: $('#acc-scope').value.trim(),
   models: { fast: $('#acc-m-fast').value.trim(), standard: $('#acc-m-standard').value.trim(), deep: $('#acc-m-deep').value.trim() } });
-const accClose = () => { $('#acc-form').hidden = true; $('#acc-add').hidden = false; state.accEditing = null; $('#acc-key').value = $('#acc-token').value = $('#acc-admin').value = ''; };
+const accClose = () => {
+  $('#acc-form').hidden = true; $('#acc-add').hidden = false; $('#acc-form-h').hidden = true; state.accEditing = null;
+  $('#acc-key').value = $('#acc-token').value = $('#acc-admin').value = '';
+  if (state.mb?.tab === 'providers') $('#acc-card').hidden = true; // on the Providers tab the form is the only part shown
+};
 $('#acc-add').onclick = () => accEdit(null);
 $('#acc-cancel').onclick = accClose;
 $('#acc-kind').onchange = $('#acc-service').onchange = accKind;
@@ -4170,13 +4257,14 @@ $('#acc-form').onsubmit = async e => {
   try {
     await post(id ? `api/accounts/${encodeURIComponent(id)}` : 'api/accounts', accBody());
     accClose(); toast(t('Account saved. Choose it in a space\'s settings.')); await loadAccCard();
+    await mbRefreshProviders();
   } catch (err) { st.className = 'bad small'; st.textContent = err.message; }
   finally { b.disabled = false; }
 };
 $('#acc-delete').onclick = async e => {
   const b = e.currentTarget, a = state.accEditing; if (!a) return;
   if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Delete it? Its spaces go back to the main settings'); return; }
-  try { await post(`api/accounts/${encodeURIComponent(a.id)}/delete`); accClose(); toast(t('Account deleted.')); await Promise.all([loadAccCard(), loadSpaces()]); }
+  try { await post(`api/accounts/${encodeURIComponent(a.id)}/delete`); accClose(); toast(t('Account deleted.')); await Promise.all([loadAccCard(), loadSpaces()]); await mbRefreshProviders(); }
   catch (err) { $('#acc-state').className = 'bad small'; $('#acc-state').textContent = err.message; }
 };
 

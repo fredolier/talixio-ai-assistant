@@ -454,9 +454,8 @@
               <button type="button" class="mb-tab" data-mtab="budget" role="tab">Budget</button>
             </div>
             <div class="card set-card mb-models" id="mb-models"></div>
-            <p class="muted small mb-phelp" id="mb-phelp" hidden>All your access to AI services: paid, free, sovereign, or a model running on your own machine. Known providers connect with one button; the models of each connected provider appear in the Models tab.</p>
+            <p class="muted small mb-phelp" id="mb-phelp" hidden>All your access to AI services: paid, free, sovereign, or a model running on your own machine. Connect a provider with its key right on its card; its models then appear in the Models tab, where you choose which one answers. The Europe lock lives there too.</p>
             <div class="mb-pgrid" id="mb-pgrid" hidden></div>
-            <h4 class="mb-dh" id="mb-dh" hidden>Connection details</h4>
             <div class="card set-card" id="eu-card">
               <h4>Europe only <span id="eu-badge" class="muted small"></span></h4>
               <p class="muted small">Your messages, documents and recordings go to an AI provider hosted in Europe, under the GDPR, and nothing goes to the big American platforms. Paid by use, nothing to host.</p>
@@ -476,10 +475,13 @@
               </form>
             </div>
             <div class="card set-card" id="acc-card">
+              <div id="acc-manage">
               <h4>AI accounts <span id="acc-badge" class="muted small"></span></h4>
               <p class="muted small">Other providers or subscriptions a space can use instead of the main settings: a client's space on a European provider, another on a second Claude subscription. Each account has its own limits. Choose the account in the space's settings (General: in the space menu).</p>
               <div id="acc-list"></div>
               <div class="row"><button id="acc-add" class="btn" type="button">+ Add an account</button></div>
+              </div>
+              <h4 id="acc-form-h" hidden>Connection details</h4>
               <form id="acc-form" class="fields" hidden>
                 <label for="acc-name">Name</label><input id="acc-name" maxlength="60" placeholder="Claude Pro, Mistral for clients…">
                 <label for="acc-kind">Kind</label>

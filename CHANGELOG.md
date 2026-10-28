@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.11.0 (2026-10-28)
+
+- **Connect a provider right on its card, in one step.** The Fournisseurs tab of Modèle et budget is now a plain connect surface: each provider card shows **Connect** (or **Se connecter** when it needs no key, with a **Créer un compte** link to sign up), you paste the key inline on the card, and its models appear in the Modèles tab straight away. The old "Tout passer en Europe" one-click button, the separate "Comptes d'IA" card, and the brain/"Modèle d'IA" card are gone from this tab — connecting an account is the only thing you do here, and the key path is the same uniform account-creation one for every provider (sovereign, Claude, OpenAI, Gemini, and the exotic ones through the advanced form). Choosing which connected model answers each usage, and the Europe lock, now live in the Modèles tab.
+- **The Europe lock moved to the Modèles tab.** The lock that keeps everything inside Europe is now the Modèles-table toggle: turning it on both filters out non-compliant models/providers in the table and sets the server-side guard (new `POST /api/sovereign/lock`), so Privacy refuses any non-European AI or search service. It is a standalone guard — it no longer forces which provider answers, so you can lock to Europe without switching your main model.
+
 ## 1.10.1 (2026-10-28)
 
 - **The fleet orchestrator's keep-warm tick no longer notifies you.** The orchestrator pings back roughly every ten minutes to stay warm and refresh its roster; until now every one of those pings raised a notification, so the fleet spammed the notifications inbox even when nothing had happened. The inbox endpoint now notifies only on a report that actually carries text, and never on one flagged as a silent/liveness tick (`"tick":true`, `"silent":true`, or a `kind` of tick/liveness/heartbeat/keepalive) — the roster and liveness still refresh, you just stop getting pinged for no news. The pairing instructions sent to the orchestrator now spell this out: a routine keep-warm tick with no news must omit `text` or set `"tick":true`.

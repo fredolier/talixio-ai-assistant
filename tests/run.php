@@ -861,6 +861,18 @@ $routed = $croute->invoke(new \Talixio\Web($app), 'POST', '/api/catalogue/refres
 check('catalogue: POST /api/catalogue/refresh returns the fresh catalogue',
     isset($routed['providers'], $routed['models'], $routed['updated']) && $routed['source'] === 'seed');
 $app->store->set('catalogue_live', ''); $app->store->set('catalogue_updated', '');
+// The model table's Europe lock toggles the standalone server-side lock without touching which provider answers.
+// The route re-reads config from TALIXIO_DATA_DIR, which the running app always keeps equal to its own dir; an earlier
+// test left the env pointing at a sub-dir, so align them here as production does.
+$dirBefore = getenv('TALIXIO_DATA_DIR'); putenv("TALIXIO_DATA_DIR=$dir");
+$onlyBefore = getenv('TALIXIO_SOVEREIGN_ONLY');
+$lockOn = $croute->invoke(new \Talixio\Web($app), 'POST', '/api/sovereign/lock', ['only' => true]);
+$lockOff = $croute->invoke(new \Talixio\Web($app), 'POST', '/api/sovereign/lock', ['only' => false]);
+check('sovereign: POST /api/sovereign/lock flips the Europe lock on its own',
+    ($lockOn['ok'] ?? false) === true && ($lockOn['only'] ?? null) === true && ($lockOff['only'] ?? null) === false);
+putenv($onlyBefore === false ? 'TALIXIO_SOVEREIGN_ONLY' : "TALIXIO_SOVEREIGN_ONLY=$onlyBefore"); // leave the env as we found it
+\Talixio\Settings::save($dir, [], ['TALIXIO_SOVEREIGN_ONLY']);
+putenv($dirBefore === false ? 'TALIXIO_DATA_DIR' : "TALIXIO_DATA_DIR=$dirBefore");
 
 // ---- streaming, attachments, audio ----
 putenv("TALIXIO_FAKE_LOG=$dir/fake-llm.log");

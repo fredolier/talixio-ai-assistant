@@ -1692,3 +1692,8 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .mb-pcard.add{border-style:dashed;align-items:center;justify-content:center;text-align:center;color:var(--muted);cursor:pointer;min-height:118px}
 .mb-pcard.add:hover,.mb-pcard.add:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
 .mb-pcard.add .plus{font-size:1.6rem;line-height:1}
+.mb-pcard.on{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.mb-pcard .pok{font-size:.8rem;font-weight:600;color:var(--accent);display:inline-flex;align-items:center}
+.mb-pcard .pconnect{display:flex;flex-direction:column;gap:7px;margin-top:4px;padding-top:9px;border-top:1px solid var(--line)}
+.mb-pcard .pconnect .pkey{width:100%;min-width:0}
+.mb-pcard .pcstate{margin:0}

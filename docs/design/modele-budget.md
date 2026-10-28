@@ -1,6 +1,8 @@
 # Modèle et budget — the model cockpit
 
-> Status: shipped, Oct 2026 (slices 1–4, versions 1.7.0–1.9.x). This is the
+> Status: shipped, Oct 2026 (slices 1–5, versions 1.7.0–1.11.0; 1.11.0 made the
+> Fournisseurs tab an inline per-card connect surface and moved the Europe lock to
+> the Modèles tab). This is the
 > **human-facing UI and routing engine** over the providers and AI-accounts the
 > assistant already reaches. Nothing here opens a new trust edge: a model is only
 > ever reached through a credential source the person already configured (the main
@@ -19,18 +21,31 @@ The section carries its own three tabs (`.mb-tab[data-mtab]`, wired once by
 `wireMbTabs`, shown by `mbApplyTab`):
 
 - **Modèles** (`#mb-models`, `data-mtab="models"`) — the catalogue. The heart.
-- **Fournisseurs** (`data-mtab="providers"`) — leads with a **provider-card grid**
-  (`#mb-pgrid`, `mbRenderProviders`): one card per catalogue provider (flag, name,
-  connected status light, country · billing, and trust / kind / model-count chips),
-  plus a dashed **« + Ajouter un fournisseur sur mesure »** card. Each card's button
-  jumps to the real connection surface and pre-selects there (`mbConnectProvider`):
-  a sovereign/European provider (one listed in the Europe form's `#eu-service`)
-  pre-selects itself in `#eu-card` and focuses the key; any other opens the
-  `#acc-card` account form with its kind pre-chosen (`mbOpenAccountForm`). The
-  existing `#eu-card`, `#acc-card` and the `brain` group-card stay below the grid
-  under a **« Détails de connexion »** (`#mb-dh`) heading — they hold the actual
-  credentials, so the grid is a new *overview*, not a new trust edge: connecting a
-  provider is still the existing flow.
+  It also holds the **Europe lock** (§5).
+- **Fournisseurs** (`data-mtab="providers"`) — a plain **connect surface**: the
+  **provider-card grid** (`#mb-pgrid`, `mbRenderProviders`), one card per catalogue
+  provider (flag, name, country · billing, trust / kind / model-count chips using
+  `.pchip`, never the red `.badge`), plus a dashed **« + Ajouter un fournisseur sur
+  mesure »** card. Each card connects **inline**, on the card itself:
+  - A connected provider shows **✓ Connecté** (and a **Gérer** link when it maps to
+    an editable account) — no lifecycle clutter.
+  - A mappable provider (sovereign/European, Claude, OpenAI, Gemini) shows
+    **Se connecter** / **Connect**; the button (`[data-popen]`, `mbToggleConnect`)
+    reveals an inline `<form class="pconnect">` right on the card with a single key
+    field, a **Créer un compte** sign-up link, and Connect/Cancel. Submitting
+    (`mbProviderConnect`) POSTs through the one uniform account path
+    (`POST /api/accounts`, kind from `MB_KIND` / sovereign service), then refreshes
+    the grid and the Modèles table (`mbRefreshProviders`).
+  - An exotic provider (local, DeepSeek, HuggingFace, ElevenLabs) falls back to the
+    advanced account form (`#acc-card`, `[data-pcustom]` → `mbOpenAccountForm`); the
+    **+ sur mesure** card opens the same form with no kind pre-chosen.
+
+  The `#eu-card` (Europe provider switch) and the `brain`/« Modèle d'IA » group-card
+  are **no longer shown on this tab** (`mbApplyTab` hides `#eu-card`, `#acc-manage`,
+  and the brain card); the separate « Comptes d'IA » management card and the old
+  **« Tout passer en Europe »** one-click button are gone from here. Connecting an
+  account is the only thing this tab does — still the existing credential flow, so no
+  new trust edge; choosing which connected model answers each usage lives in Modèles.
 - **Budget** (`data-mtab="budget"`) — the existing `budget` group-card, with a live
   « dépensé ce mois-ci » glance (`mbBudgetSnapshot`, from `state.status.budget`).
 
@@ -102,11 +117,24 @@ Filters (`mbVisible`): free-text search, type, provider, trust floor, and an
 **Available** toggle (on by default — untick to see the whole catalogue). The table
 sorts on any column.
 
-The **Verrou Europe (RGPD)** (`mbToggleLock`) raises the trust floor to 5 and
-force-swaps any current non-compliant selection to the best (highest-rank)
-compliant + available model that can serve the usage (`mbBestCompliant`), reporting
-each swap in a toast. Compliance is `mbCompliant` (trust ≥ 5, i.e. sovereign or
-local).
+The **Verrou Europe (RGPD)** lives in the Modèles tab (`mbToggleLock`, `#mb-lock-cb`).
+It does three things at once:
+
+1. raises the table's trust floor to 5 (`mbCompliant`: trust ≥ 5, sovereign or local);
+2. force-swaps any current non-compliant selection to the best (highest-rank)
+   compliant + available model that can serve the usage (`mbBestCompliant`), reporting
+   each swap in a toast;
+3. sets the **standalone server-side guard** via `POST /api/sovereign/lock`
+   (`Web::sovereignLock` → `Settings::save` of `TALIXIO_SOVEREIGN_ONLY`), so Privacy
+   refuses any non-European AI or search service at runtime.
+
+This is where the Europe lock moved from the old Fournisseurs « Tout passer en
+Europe » button — but it is now a *standalone* guard: it no longer forces
+`TALIXIO_PROVIDER=sovereign`, so you can lock to Europe without changing which
+provider answers (that is what the old one-click switch, `POST /api/sovereign/apply`,
+still does when you deliberately switch your main model). `showEu` / `mbSyncLock`
+keep the table checkbox and `state.eu.only` mirrored so the lock reads the same
+whichever way it was last set.
 
 ## 6. AKI.IO — German-resident by default
 
@@ -117,16 +145,19 @@ rest can be served from Alibaba Cloud in Singapore, which leaves Europe. So
 falls back to TL5 ids otherwise — an AKI assistant stays in Germany by default. The
 catalogue seeds AKI with four EU-priced models (GPT-OSS 120B, MiniMax M2.5 230B,
 Apertus 70B, and the € image model Flux.2 [klein]); it is reached like any sovereign
-provider (Fournisseurs tab → Europe provider switch, or an AI account of kind
-`sovereign`, service `aki`), and it satisfies the Europe lock (trust 5).
+provider (Fournisseurs tab → the AKI card's inline Connect, which creates an AI
+account of kind `sovereign`, service `aki`), and it satisfies the Europe lock
+(trust 5).
 
 ## Deliberate divergences from the concept mockup
 
 The mockup (`scratchpad/fleet-ui-mockups.html`; not in the repo) is a concept sketch.
-As shipped: the three tabs are **Modèles / Fournisseurs / Budget** (Fournisseurs
-leads with the mockup's provider-card grid and keeps the existing credential cards
-below it under « Détails de connexion »; Budget reuses the existing card); the
-per-usage picker is the
-row's inline **F/S/A/V** buttons plus the live usage cards, not a separate drawer;
-and the Europe lock is a single toggle that both raises the filter floor and
-force-swaps live selections.
+As shipped: the three tabs are **Modèles / Fournisseurs / Budget**. Fournisseurs is
+the mockup's provider-card grid, but each card now **connects inline** (key field on
+the card itself) — the separate credential cards, the « Comptes d'IA » management
+card and the « Tout passer en Europe » button that earlier sat below it are gone from
+this tab; Budget reuses the existing card. The per-usage picker is the row's inline
+**F/S/A/V** buttons plus the live usage cards, not a separate drawer. The Europe lock
+is a single Modèles-tab toggle that raises the filter floor, force-swaps live
+selections, **and** sets the standalone server-side guard
+(`POST /api/sovereign/lock`).

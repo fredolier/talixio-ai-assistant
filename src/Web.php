@@ -151,6 +151,7 @@ final class Web
             $path === '/api/sovereign' && $m === 'GET' => $this->sovereign($this->app),
             $path === '/api/sovereign/test' && $m === 'POST' => $this->withPrices(Sovereign::test((string)($b['service'] ?? ''), $this->sovereignKey($b), (string)($b['url'] ?? ''))),
             $path === '/api/sovereign/apply' && $m === 'POST' => $this->sovereignApply($b),
+            $path === '/api/sovereign/lock' && $m === 'POST' => $this->sovereignLock($b),
             $path === '/api/settings/password' && $m === 'POST' => $this->changePassword($b),
             $path === '/api/security' => ['totp' => $this->auth()->totpEnabled()],
             (bool)preg_match('#^/api/security/totp/(setup|enable|disable)$#', $path, $mm) && $m === 'POST' => $this->totp($mm[1], $b),
@@ -986,6 +987,15 @@ final class Web
         $this->app->store->set('sovereign_models', json_encode(['id' => $service . '|' . rtrim($url !== '' ? $url : Sovereign::SERVICES[$service]['url'], '/'), 'ts' => time(), 'tiers' => $test['tiers']]));
         $app = new App(Config::fromEnv()); // the new settings, to say what still leaves Europe
         return ['ok' => true, 'test' => $test] + $this->sovereign($app);
+    }
+
+    // Just the Europe lock, on its own: the model table's lock toggles it without touching which provider answers.
+    // It is a standalone runtime guard (Privacy refuses any non-European AI/search service when it is on).
+    private function sovereignLock(array $b): array
+    {
+        $errors = Settings::save($this->app->cfg->dataDir, ['TALIXIO_SOVEREIGN_ONLY' => empty($b['only']) ? '0' : '1'], []);
+        if ($errors) { return ['errors' => $errors, 'error' => 'Could not save the Europe lock.']; }
+        return ['ok' => true] + $this->sovereign(new App(Config::fromEnv()));
     }
 
     private function changePassword(array $b): array
