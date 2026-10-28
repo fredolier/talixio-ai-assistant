@@ -362,6 +362,20 @@ final class Web
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
             $path === '/api/skills' => ['skills' => $this->app->skills()->all()],
             $path === '/api/roles' && $m === 'GET' => ['roles' => $this->roleCatalog(), 'overlaps' => $this->app->skills()->overlaps(), 'archived' => $this->roleCatalog(true)],
+            $path === '/api/roles' && $m === 'POST' => (function () use ($b) {
+                // Create a new role from the catalogue — the same path (and duplicate check) as the assistant's role_save tool.
+                $name = trim((string)($b['name'] ?? ''));
+                $purpose = trim((string)($b['purpose'] ?? ''));
+                $content = trim((string)($b['content'] ?? ''));
+                if ($name === '' || $purpose === '' || $content === '') $this->fail(422, 'A new role needs a name, a one-line purpose and a brief.');
+                if (($this->app->skills()->meta($name)['kind'] ?? '') === 'role') $this->fail(409, 'A role by that name already exists — open it to improve it, or choose another name.');
+                $args = ['name' => $name, 'purpose' => $purpose, 'content' => $content];
+                foreach (['tier', 'skills', 'tools'] as $k) if (trim((string)($b[$k] ?? '')) !== '') $args[$k] = (string)$b[$k];
+                $msg = $this->app->tools->run('role_save', $args);
+                $spec = trim((string)($b['specialization'] ?? ''));
+                if ($spec !== '' && ($this->app->skills()->meta($name)['kind'] ?? '') === 'role') $this->app->skills()->setField(Skills::slug($name), 'specialization', $spec);
+                return ['message' => $msg, 'role' => Skills::slug($name)];
+            })(),
             (bool)preg_match('#^/api/roles/([\w-]+)/evaluate$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_evaluate', ['role' => $mm[1]])],
             (bool)preg_match('#^/api/roles/([\w-]+)/publish$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_publish', ['role' => $mm[1], 'note' => (string)($b['note'] ?? '')])],
             (bool)preg_match('#^/api/roles/([\w-]+)/improve$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_improve', ['role' => $mm[1], 'content' => (string)($b['content'] ?? '')])],

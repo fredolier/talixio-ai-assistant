@@ -17,10 +17,11 @@
 >   inline specialization editor, lifecycle actions), not the mockup's SVG
 >   ring-cluster. Roles are authored conversationally (the assistant's `role_save`
 >   tool, which runs the same duplicate check the mockup's drawer promises),
->   installed from the store (`role_install`), or seeded by the director and the
->   fleet — so there is **no `POST /api/roles` create route and no inline
->   "+ Nouveau rôle" form** in the catalogue (the mockup sketches one;
->   it is not wired). Archived roles live in a trailing `<details>`.
+>   installed from the store (`role_install`), seeded by the director and the
+>   fleet, or — since 1.6.0 — created from the catalogue's **+ Nouveau rôle**
+>   header button, an inline form (name, one-line purpose, optional
+>   specialization, brief) wired to `POST /api/roles` → the same `role_save`
+>   tool and its duplicate check. Archived roles live in a trailing `<details>`.
 > - **Chantiers** are launched from the chat composer ("Parler au pilote"), so there
 >   is no "+ Nouveau chantier" header button.
 

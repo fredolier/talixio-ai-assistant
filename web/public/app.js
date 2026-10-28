@@ -5286,10 +5286,49 @@ async function roleImprove(name) {
     };
   } catch (e) { panel.innerHTML = `<div class="placeholder">${esc(e.message)}</div>`; }
 }
+async function roleNew() {
+  const panel = $('#prole-new');
+  panel.hidden = false;
+  panel.scrollIntoView({ block: 'nearest' });
+  // offer the specializations already in use, so a new role joins an existing cluster rather than spawning a near-duplicate one
+  let specs = [];
+  try { const r = await api('api/roles'); specs = [...new Set((r.roles || []).map(x => (x.specialization || '').trim()).filter(Boolean))].sort(); } catch {}
+  const opts = specs.map(s => `<option value="${esc(s)}"></option>`).join('');
+  panel.innerHTML = `<div class="prole-merge-head"><b>${esc(t('New role'))}</b><button class="btn icon" data-new-close aria-label="${esc(t('Close'))}">✕</button></div>`
+    + `<label class="muted small">${esc(t('Name'))}</label><input class="prole-new-name no-i18n" placeholder="${esc(t('e.g. meeting-notes'))}">`
+    + `<label class="muted small">${esc(t('Purpose (one line)'))}</label><input class="prole-new-purpose" placeholder="${esc(t('what this role is for, in one line'))}">`
+    + `<label class="muted small">${esc(t('Specialization'))}</label><input class="prole-new-spec no-i18n" list="prole-new-specs" placeholder="${esc(t('optional'))}"><datalist id="prole-new-specs">${opts}</datalist>`
+    + `<label class="muted small">${esc(t('Brief'))}</label><textarea class="prole-new-brief no-i18n" rows="8" placeholder="${esc(t('Describe the role: what it does, its standards, its guardrails…'))}"></textarea>`
+    + `<p class="muted small">${esc(t('On creation the pilot checks for duplicates and warns if a close role already exists.'))}</p>`
+    + `<button class="btn primary small" data-new-save>${esc(t('Create the role'))}</button>`;
+  panel.querySelector('[data-new-close]').onclick = () => { panel.hidden = true; panel.innerHTML = ''; };
+  panel.querySelector('[data-new-save]').onclick = async e => {
+    const btn = e.currentTarget;
+    const name = panel.querySelector('.prole-new-name').value.trim();
+    const purpose = panel.querySelector('.prole-new-purpose').value.trim();
+    const content = panel.querySelector('.prole-new-brief').value.trim();
+    const specialization = panel.querySelector('.prole-new-spec').value.trim();
+    if (!name || !purpose || !content) { toast(t('A role needs a name, a one-line purpose and a brief.')); return; }
+    btn.disabled = true;
+    try {
+      const r = await post('api/roles', { name, purpose, content, specialization });
+      toast(r.message || t('Role created'));
+      panel.hidden = true; panel.innerHTML = '';
+      pilotRoles().catch(() => {}); pilotBadges().catch(() => {});
+    } catch (err) { toast(err.message); btn.disabled = false; }
+  };
+}
 async function pilotRoles() {
   const box = $('#pilot-roles');
   const { roles, overlaps, archived } = await api('api/roles');
-  if (!roles || !roles.length) { box.innerHTML = `<div class="placeholder">${esc(t('No roles yet. The director and the fleet seed roles as they work; they will appear here as a managed catalogue.'))}</div>`; return; }
+  const header = `<div class="prole-toolbar"><p class="muted small">${esc(t('The roles your assistant runs — the same registry the director and the fleet use, drawing the Assessor’s own numbers, so improving one improves everywhere.'))}</p>`
+    + `<button class="btn primary small" id="prole-new-btn">+ ${esc(t('New role'))}</button></div>`
+    + `<div id="prole-new" hidden></div>`;
+  const wireNew = () => { const b = $('#prole-new-btn'); if (b) b.onclick = () => roleNew(); };
+  if (!roles || !roles.length) {
+    box.innerHTML = header + `<div class="placeholder">${esc(t('No roles yet. The director and the fleet seed roles as they work; they will appear here as a managed catalogue.'))}</div>`;
+    wireNew(); return;
+  }
   const banner = overlaps && overlaps.length
     ? `<div class="poverlap-banner"><b>${esc(t('Overlap detected'))}</b><ul>` + overlaps.map(o =>
         `<li><span class="no-i18n">${esc(o.a)} ≈ ${esc(o.b)}</span> <span class="muted small">${esc(t('{p}% close', { p: Math.round(o.score * 100) }))}</span> <button class="btn ghost small" data-merge-a="${esc(o.a)}" data-merge-b="${esc(o.b)}">${esc(t('Compare'))}</button></li>`
@@ -5311,8 +5350,9 @@ async function pilotRoles() {
           : `<button class="btn ghost small danger" data-role-delete="${esc(a.name)}">${esc(t('Delete'))}</button>`)
         + `</div></div>`).join('')
       + `</details>` : '';
-  box.innerHTML = `<p class="muted small">${esc(t('The roles your assistant runs — the same registry the director and the fleet use, drawing the Assessor’s own numbers, so improving one improves everywhere.'))}</p>`
+  box.innerHTML = header
     + banner + `<div id="prole-merge" hidden></div><div id="prole-improve" hidden></div>` + sections + archivedBlock;
+  wireNew();
   box.querySelectorAll('[data-role-eval]').forEach(b => b.onclick = () => roleAction(b, `api/roles/${encodeURIComponent(b.dataset.roleEval)}/evaluate`));
   box.querySelectorAll('[data-role-pub]').forEach(b => b.onclick = () => {
     if (!confirm(t('Send this role to the store for review, so other assistants can install it?'))) return;

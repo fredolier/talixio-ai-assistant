@@ -1580,6 +1580,14 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 #prole-improve{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 #prole-improve .prole-imp-in{width:100%;box-sizing:border-box;font:inherit;font-size:.82rem;line-height:1.45;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--sunk);color:var(--ink);resize:vertical}
 #prole-improve [data-imp-run]{align-self:flex-start}
+.prole-toolbar{display:flex;align-items:flex-start;gap:12px;margin-bottom:8px}
+.prole-toolbar p{margin:0;flex:1;min-width:0}
+.prole-toolbar #prole-new-btn{flex:none}
+#prole-new{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+#prole-new label{margin-top:4px}
+#prole-new input,#prole-new textarea{width:100%;box-sizing:border-box;font:inherit;font-size:.82rem;line-height:1.45;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--sunk);color:var(--ink)}
+#prole-new textarea{resize:vertical}
+#prole-new [data-new-save]{align-self:flex-start;margin-top:4px}
 .parchived{margin-top:4px;border-top:1px solid var(--line);padding-top:10px}
 .parchived summary{cursor:pointer;color:var(--muted);font-size:.85rem}
 .parch-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}

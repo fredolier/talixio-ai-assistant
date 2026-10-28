@@ -363,6 +363,19 @@ const flows = {
     await page.click('#pilot-roles [data-role-improve]');
     await page.waitForSelector('#prole-improve:not([hidden]) .prole-imp-in', { timeout: 6000 });
     check('pilotage: Improve opens a candidate-brief editor over the Assessor A/B', await page.isVisible('#prole-improve .prole-imp-in'));
+    // "+ New role": the catalogue header opens a create form wired to role_save (same duplicate check)
+    await page.click('#prole-new-btn');
+    await page.waitForSelector('#prole-new:not([hidden]) .prole-new-name', { timeout: 6000 });
+    check('pilotage: "+ New role" opens a create form with name, purpose, specialization and brief',
+      await page.isVisible('#prole-new .prole-new-purpose') && await page.isVisible('#prole-new .prole-new-brief'));
+    await page.fill('#prole-new .prole-new-name', 'meeting-notes');
+    await page.fill('#prole-new .prole-new-purpose', 'summarise a meeting into decisions and actions');
+    await page.fill('#prole-new .prole-new-spec', 'Veille');
+    await page.fill('#prole-new .prole-new-brief', 'Summarise meetings: list decisions and actions with an owner, stay factual.');
+    await page.click('#prole-new [data-new-save]');
+    await page.waitForSelector('#pilot-roles .pspec:text-is("Veille")', { timeout: 8000 });
+    check('pilotage: a created role lands in the catalogue as a card under its specialization header',
+      (await page.textContent('#pilot-roles')).includes('meeting-notes') && await page.isVisible('#pilot-roles .pspec:text-is("Veille")'));
     // "Parler au pilote": a dictated directive is routed through the ordinary chat send()
     await page.click('#view-pilotage .ptab[data-ptab=agents]'); await page.waitForTimeout(300);
     await page.fill('#ptt-input', 'run the weekly competitor scan');
