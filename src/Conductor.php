@@ -291,17 +291,22 @@ final class Conductor
         $agents = isset($msg['agents']) && is_array($msg['agents']) ? $this->sanitizeAgents($msg['agents']) : null;
         // A report tagged with an `agent` is that one agent's reply in its two-voice thread (the "Discuter" drawer).
         $agent = mb_substr(trim((string)($msg['agent'] ?? '')), 0, 80);
-        $this->lockedUpdate(function (array $b) use ($agents, $agent, $text) { // locked: never clobber a concurrent queue drain
+        // A keep-warm tick (a roster/liveness refresh, with no news) must NOT raise a notification — the orchestrator
+        // pings roughly every ~10 min to stay warm, and notifying each time spams the user. We notify only on a report
+        // that carries text, isn't explicitly flagged as a silent/liveness tick, AND isn't a verbatim repeat of the last
+        // line we notified. The flag is a courtesy the orchestrator may forget; the repeat-check is the backstop, so a
+        // chatty orchestrator re-sending the same status every tick goes quiet after the first and only genuinely new
+        // text breaks through. The check-and-mark lives inside the lock so two concurrent reports can't both notify.
+        $silent = !empty($msg['tick']) || !empty($msg['silent']) || in_array((string)($msg['kind'] ?? ''), ['tick', 'liveness', 'heartbeat', 'keepalive'], true);
+        $notify = $this->lockedUpdate(function (array $b) use ($agents, $agent, $text, $silent) { // locked: never clobber a concurrent queue drain
             $b['last_report'] = time();
             if ($agents !== null) { $b['agents'] = $agents; $b['agents_at'] = time(); }
             if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text);
-            return [$b, null];
+            $fresh = $text !== '' && !$silent && $text !== (string)($b['last_notified'] ?? '');
+            if ($fresh) $b['last_notified'] = $text; // only a notified line updates the mark; silent ticks never poison it
+            return [$b, $fresh];
         });
-        // A keep-warm tick (a roster/liveness refresh with no message) must NOT raise a notification — the orchestrator
-        // pings roughly every ~10 min to stay warm, and notifying each time spams the user. Notify only on a report that
-        // actually carries text, and never when it is explicitly flagged as a silent/liveness tick.
-        $silent = !empty($msg['tick']) || !empty($msg['silent']) || in_array((string)($msg['kind'] ?? ''), ['tick', 'liveness', 'heartbeat', 'keepalive'], true);
-        if ($text !== '' && !$silent) $this->app->notifier()->notify($title, $text);
+        if ($notify) $this->app->notifier()->notify($title, $text);
         return [200, ['ok' => true]];
     }
 

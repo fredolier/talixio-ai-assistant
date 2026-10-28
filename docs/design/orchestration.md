@@ -214,7 +214,13 @@ Given 5.1, Talixio cannot be a pure external API client. Two buildable shapes:
       of the same bridge and coexist; a binding is one or the other, never both.
     - **Outbound (orchestrator → Talixio):** an authenticated POST to a small
       Talixio endpoint (`/api/conductor/inbox`), surfaced in chat and the
-      notifications inbox.
+      notifications inbox. A keep-warm tick must carry no `text` (or set
+      `"tick":true` / `"silent":true` / a `kind` of `tick|liveness|heartbeat|keepalive`)
+      so it refreshes the roster without notifying. Because the ~10-min heartbeat is
+      easy to send with a stray status line and would then notify (and e-mail) every
+      tick, the inbox also **drops a report whose `text` is a verbatim repeat of the
+      last one it notified** — the flag is the courtesy, the repeat-check is the
+      backstop; only genuinely new text raises a notification.
     - **The monitor loop:** the orchestrator keeps itself warm with its own
       `create_trigger` / `send_later` heartbeat; each tick it polls `get_session` /
       `list_sessions`, reads results with `list_events`, and re-dispatches —

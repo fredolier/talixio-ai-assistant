@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.11.2 (2026-10-28)
+
+- **The pilote autonome stops spamming you every ten minutes.** Its keep-warm pings are meant to be silent, but an orchestrator that re-sends the same status line each tick (without the silent flag) made Talixio notify — and e-mail — you every ~10 minutes. The inbox now drops a report whose text is a verbatim repeat of the last one it notified, so a repeated keep-warm line notifies once instead of forever; genuinely new text still comes through, and the explicit `tick`/`silent` flags still work as before.
+
 ## 1.11.1 (2026-10-28)
 
 - **The AKI.IO catalogue now lists all of its models, not just four.** The Modèles table was hand-seeded with only four AKI rows; it now carries AKI's full documented catalogue — nine LLMs (GPT-OSS 120B, Deepseek V4.1 Flash, GLM 5.3 754B, Mistral 4 119B, Gemma 4 26B, Qwen 3.8 27B, Kolibri 1 TL5, and the end-of-life Qwen 3.6 35B A3B and Apertus 70B) and four euro-priced image models (Flux.2 [klein], Qwen Image, Qwen Image Edit, Z-Image Turbo). Each row now carries its exact API model string, so routing uses the real id and a live refresh folds in cleanly instead of duplicating a seed row.

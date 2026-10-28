@@ -1362,6 +1362,14 @@ $beforeTick = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn();
 check('fleet: a silent tick and an empty report refresh the roster but never notify',
     $tc === 200 && $ec === 200 && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeTick
     && in_array('mba', array_map(fn($a) => (string)($a['id'] ?? ''), $con->statusInfo()['agents']), true));
+// Backstop for a chatty orchestrator that forgets the tick flag: a report whose text repeats the last one we notified
+// is dropped, so a keep-warm line re-sent every ~10 min notifies once, not forever; new text still breaks through.
+$beforeDup = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn();
+[$d1] = $con->inbox(['type' => 'report', 'title' => 'Fleet', 'text' => 'still alive, 2 agents'], $secret);
+[$d2] = $con->inbox(['type' => 'report', 'title' => 'Fleet', 'text' => 'still alive, 2 agents'], $secret); // verbatim repeat
+[$d3] = $con->inbox(['type' => 'report', 'title' => 'Fleet', 'text' => 'build #412 failed'], $secret);      // genuinely new
+check('fleet: an unflagged report that repeats the last notified line is dropped, new text still notifies',
+    $d1 === 200 && $d2 === 200 && $d3 === 200 && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeDup + 2);
 check('fleet: status shows the connected orchestrator once paired', str_contains($con->fleetStatus(), 'connected'));
 // the settings panel reads a secret-safe snapshot: connection + liveness, never the webhook URL or the inbox secret
 $si = $con->statusInfo();
