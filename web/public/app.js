@@ -5067,7 +5067,7 @@ window.addEventListener('message', async e => {
 });
 
 // ---- Pilotage: the director's cockpit (agents · worksites · roles · knowledge) ----
-const PILOT_TABS = ['agents', 'chantiers', 'roles', 'kb'];
+const PILOT_TABS = ['kb', 'agents', 'roles', 'chantiers'];
 function pilotTab() { try { const v = localStorage.getItem('pilotTab'); return PILOT_TABS.includes(v) ? v : 'agents'; } catch { return 'agents'; } }
 function showPilotTab(tab) {
   if (!PILOT_TABS.includes(tab)) tab = 'agents';
@@ -5092,14 +5092,93 @@ async function loadPilotage() {
     $('#ptt-input').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendPilot(); } });
   }
   showPilotTab(pilotTab());
+  pilotBadges();
 }
+// counts and the knowledge-base source shown on the Pilotage tabs themselves
+async function pilotBadges() {
+  const setN = (sel, v) => { const el = $(sel); if (el) el.textContent = v > 0 ? ' ' + v : ''; };
+  api('api/roles').then(({ roles }) => setN('#pilot-tab-roles', (roles || []).length)).catch(() => {});
+  api('api/jobs').then(({ directives }) => setN('#pilot-tab-chantiers', (directives || []).length)).catch(() => {});
+  api('api/library/kb').then(kb => { const el = $('#pilot-tab-kbsrc'), src = (kb.space || '').trim(); if (el) el.textContent = src ? ' · ' + src : ''; }).catch(() => {});
+}
+function pilotAgo(ts) {
+  if (!ts) return t('never');
+  const d = Math.max(0, Date.now() / 1000 - ts);
+  return d < 90 ? t('just now') : d < 3600 ? t('{n} min ago', { n: Math.floor(d / 60) })
+    : d < 86400 ? t('{n} h ago', { n: Math.floor(d / 3600) }) : t('{n} d ago', { n: Math.floor(d / 86400) });
+}
+const PSTATE = { active: 'active', busy: 'busy', idle: 'idle', done: 'done', error: 'error' };
+const pStateLabel = s => ({ active: t('active'), busy: t('busy'), idle: t('idle'), done: t('done'), error: t('error') }[s] || t('idle'));
+// one plural helper for the pilot roster strings
+const pN = (one, many, v) => t(v === 1 ? one : many, { n: v });
 async function pilotAgents() {
-  const box = $('#pilot-agents');
+  const box = $('#pilot-agents'), nTag = $('#pilot-agents-n');
   await initOrchestratorPanel('pilot', info => {
-    const sum = (info.summary || '').trim();
-    box.innerHTML = sum ? `<div class="doc">${md(sum)}</div>`
-      : `<div class="placeholder">${esc(t('No fleet orchestrator is connected yet. Connect one above to run agents across your machines.'))}</div>`;
+    const on = !!info.connected;
+    const agents = info.agents || [];
+    // status card: dot + "Autonomous pilot — connected/disconnected", then one grounded line
+    const title = $('#pilot-conn-title');
+    if (title) title.innerHTML = `<span class="pilot-dot${on ? ' on' : ''}" id="pilot-conn-dot"></span>`
+      + esc(`${t('Autonomous pilot')} — ${on ? t('connected') : t('disconnected')}`);
+    const parts = [];
+    if (info.session) parts.push(t('session {s}', { s: info.session }));
+    parts.push(t('last report {a}', { a: pilotAgo(info.lastReport) }));
+    if (on) parts.push(t('sees {a} on {b}', { a: pN('1 agent', '{n} agents', info.agentCount || 0), b: pN('1 machine', '{n} machines', info.machines || 0) }));
+    $('#pilot-orch-status').textContent = on ? parts.join(' · ')
+      : t('Not paired yet. Pair your autonomous pilot to delegate work across your machines.');
+    // the roster of agents the pilot sees
+    if (nTag) nTag.textContent = agents.length ? ' · ' + agents.length : '';
+    if (!on) { box.innerHTML = `<div class="placeholder">${esc(t('Pair your autonomous pilot above, then the agents it runs across your machines appear here.'))}</div>`; return; }
+    if (!agents.length) { box.innerHTML = `<div class="placeholder">${esc(t('No agents are running yet. Talk to the pilot above to put one to work.'))}</div>`; return; }
+    box.innerHTML = agents.map(a => {
+      const st = PSTATE[a.state] || 'idle';
+      const task = (a.task || '').trim();
+      return `<div class="pilot-agent" data-agent="${esc(a.id)}">
+        <span class="pilot-dot pstate-${st}" title="${esc(pStateLabel(a.state))}"></span>
+        <div class="pilot-agent-body">
+          <div class="pilot-agent-name no-i18n">${esc(a.name || a.id)}${task ? ` <span class="muted">— « ${esc(task)} »</span>` : ''}</div>
+          <div class="pilot-agent-meta muted small no-i18n">${esc(pStateLabel(a.state))} · ${esc(pilotAgo(a.ts))}${a.machine ? ' · ' + esc(a.machine) : ''}</div>
+        </div>
+        <button type="button" class="btn ghost small" data-discuss="${esc(a.id)}">${esc(t('Discuss'))}</button>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('[data-discuss]').forEach(b => b.onclick = () => openAgentDialog(agents.find(x => x.id === b.dataset.discuss) || { id: b.dataset.discuss }));
   });
+}
+let pilotAgentWired = false, pilotAgentCur = null;
+function renderAgentThread(turns) {
+  const box = $('#pilot-agent-thread');
+  if (!turns || !turns.length) { box.innerHTML = `<p class="muted small">${esc(t('No messages yet. Send the first one below.'))}</p>`; return; }
+  box.innerHTML = turns.map(m => `<div class="pa-turn ${m.role === 'user' ? 'me' : 'them'}"><div class="pa-bubble no-i18n">${md(m.text || '')}</div><div class="pa-when muted small no-i18n">${esc(pilotAgo(m.ts))}</div></div>`).join('');
+  box.scrollTop = box.scrollHeight;
+}
+async function openAgentDialog(agent) {
+  const dlg = $('#pilot-agent-dialog');
+  pilotAgentCur = agent.id;
+  $('#pa-title').textContent = agent.name || agent.id;
+  $('#pilot-agent-sub').textContent = (agent.task ? '« ' + agent.task + ' »' : '') + (agent.machine ? (agent.task ? ' · ' : '') + agent.machine : '');
+  $('#pilot-agent-input').value = '';
+  $('#pilot-agent-thread').innerHTML = `<p class="muted small">${esc(t('Loading…'))}</p>`;
+  if (!pilotAgentWired) {
+    pilotAgentWired = true;
+    $('#pilot-agent-close').onclick = () => dlg.close();
+    const send = async () => {
+      const inp = $('#pilot-agent-input'), text = inp.value.trim();
+      if (!text || !pilotAgentCur) { inp.focus(); return; }
+      const btn = $('#pilot-agent-send'); btn.disabled = true;
+      try {
+        const r = await post(`api/conductor/agents/${encodeURIComponent(pilotAgentCur)}/say?space=${state.space}`, { text });
+        if (r.ok) { inp.value = ''; renderAgentThread(r.thread); }
+        else { toast(r.message || t('Could not send.')); if (r.thread) renderAgentThread(r.thread); }
+      } catch (err) { toast(err.message); }
+      finally { btn.disabled = false; }
+    };
+    $('#pilot-agent-send').onclick = send;
+    $('#pilot-agent-input').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } });
+  }
+  dlg.showModal();
+  try { const r = await api(`api/conductor/agents/${encodeURIComponent(agent.id)}/thread`); renderAgentThread(r.thread); }
+  catch (err) { $('#pilot-agent-thread').innerHTML = `<p class="muted small">${esc(err.message)}</p>`; }
 }
 async function pilotChantiers() {
   const box = $('#pilot-chantiers');

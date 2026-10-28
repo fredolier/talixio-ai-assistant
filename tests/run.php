@@ -1266,12 +1266,35 @@ check('fleet: dispatch posts a grounded instruction to the orchestrator webhook'
     $seen !== null && $seen[0] === 'https://orch.example/hook' && $seen[1] > 0);
 check('fleet: dispatch reports gracefully when the orchestrator is unreachable',
     str_contains($disp, 'could not reach') || str_contains($disp, 'returned HTTP') || str_contains($disp, 'sent to the fleet'));
+// the cockpit roster (1.1.0): the orchestrator may report a structured agent list; bounded and surfaced, never executed (§5.3)
+$many = []; for ($i = 0; $i < 60; $i++) $many[] = ['id' => "a$i", 'name' => "Agent $i", 'task' => str_repeat('x', 400), 'state' => 'active', 'machine' => $i % 2 ? 'mba.local' : 'srv.local', 'ts' => time()];
+[$rrc] = $con->inbox(['type' => 'report', 'title' => 'Roster', 'text' => 'here is the fleet', 'agents' => $many], $secret);
+$sr = $con->statusInfo();
+check('fleet: an agent roster is accepted, capped at 50, counted by machine, with fields bounded',
+    $rrc === 200 && $sr['agentCount'] === 50 && count($sr['agents']) === 50 && $sr['machines'] === 2 && mb_strlen($sr['agents'][0]['task']) === 160);
+$con->inbox(['type' => 'report', 'text' => 'x', 'agents' => [['task' => 'no id here'], ['id' => 'ok1', 'name' => 'Keep']]], $secret);
+$sr = $con->statusInfo();
+check('fleet: a roster entry with no id is dropped', $sr['agentCount'] === 1 && $sr['agents'][0]['id'] === 'ok1');
+// a report tagged with an agent is that agent's reply in its two-voice thread (the "Discuter" drawer)
+$con->inbox(['type' => 'report', 'agent' => 'ok1', 'text' => 'I finished the refactor.'], $secret);
+$th = $con->agentThread('ok1');
+check('fleet: an agent-tagged report lands in that agent\'s thread as an agent turn',
+    count($th) === 1 && $th[0]['role'] === 'agent' && $th[0]['text'] === 'I finished the refactor.');
+check('fleet: agentSay refuses an empty message without posting', $con->agentSay('ok1', '   ')['ok'] === false);
+$seen = null; $prevHook = Talixio\Http::$hook;
+Talixio\Http::$hook = function (string $url, int $bytes) use (&$seen) { $seen = [$url, $bytes]; };
+$say = $con->agentSay('ok1', 'Please add a test.');
+Talixio\Http::$hook = $prevHook;
+check('fleet: agentSay posts a grounded line to the orchestrator webhook, tagged for one agent, and returns the thread',
+    $seen !== null && $seen[0] === 'https://orch.example/hook' && $seen[1] > 0 && array_key_exists('thread', $say));
 // privacy choke: a confidential space may not reach outside the assistant
 $csp = $app->spaces()->save(['name' => 'Fleet Conf', 'privacy' => 'confidential']);
 $app->space = (int)$csp['id'];
 $ref = $app->conductor()->toFleet('leak this');
+$refSay = $app->conductor()->agentSay('ok1', 'leak this too');
 $app->space = 0;
 check('fleet: a confidential space is refused at the outbound choke point', str_contains($ref, 'Confidential') && str_contains($ref, 'internal space'));
+check('fleet: a confidential space may not message a single agent either', $refSay['ok'] === false && str_contains((string)$refSay['message'], 'Confidential'));
 // pairing leaks nothing outward, so it is NOT gated by the privacy guard — only dispatch (toFleet) is
 $app->space = (int)$csp['id'];
 $setupConf = $con->setup();

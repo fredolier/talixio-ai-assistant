@@ -184,6 +184,11 @@ final class Web
             $path === '/api/conductor' && $m === 'GET' => $this->app->conductor()->statusInfo(),
             $path === '/api/conductor/setup' && $m === 'POST' => ['instruction' => $this->app->conductor()->setup()],
             $path === '/api/conductor/disconnect' && $m === 'POST' => ['message' => $this->app->conductor()->disconnect()] + $this->app->conductor()->statusInfo(),
+            (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/thread$#', $path, $mm) && $m === 'GET' => ['thread' => $this->app->conductor()->agentThread($mm[1])],
+            (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/say$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
+                if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space']; // ground + guard against the dispatching space
+                return $this->app->conductor()->agentSay($mm[1], (string)($b['text'] ?? ''), (int)$this->app->space);
+            })(),
             $path === '/api/spaces' && $m === 'GET' => ['spaces' => $this->app->spaces()->all(true), 'colors' => Spaces::COLORS],
             $path === '/api/spaces' && $m === 'POST' => ['space' => $this->app->spaces()->save($b)],
             (bool)preg_match('#^/api/spaces/(\d+)$#', $path, $mm) && $m === 'POST' => ['space' => $this->app->spaces()->save($b, (int)$mm[1])],

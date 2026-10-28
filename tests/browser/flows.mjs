@@ -300,6 +300,16 @@ const flows = {
     await page.click('#pilot-orch-connect');
     await page.waitForSelector('#pilot-orch-steps:not([hidden])', { timeout: 4000 });
     check('pilotage: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#pilot-orch-steps')));
+    // 1.1.0: the agents tab is the three mockup cards — status, talk, roster — with a per-agent thread dialog
+    check('pilotage: the agents tab shows the status, talk and roster cards',
+      await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-status')
+      && await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-talk')
+      && await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-agents-card'));
+    check('pilotage: the status card names the autonomous pilot', /pilot/i.test(await page.textContent('#pilot-conn-title')));
+    check('pilotage: with nothing paired, the roster invites pairing instead of listing agents',
+      (await page.textContent('#pilot-agents')).trim().length > 0 && (await page.$$('#pilot-agents [data-discuss]')).length === 0);
+    check('pilotage: a per-agent Discuter dialog is in the page', (await page.$$('#pilot-agent-dialog')).length === 1);
+    check('pilotage: the Knowledge-base tab carries a source badge slot', (await page.$$('.ptab[data-ptab=kb] .ptab-src')).length === 1);
     // tab switching reveals the Worksites/Chantiers board (the Director's directives)
     await page.click('#view-pilotage .ptab[data-ptab=chantiers]'); await page.waitForTimeout(400);
     check('pilotage: Worksites tab opens', await page.isVisible('.pilot-panel[data-ppanel=chantiers]'));

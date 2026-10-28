@@ -131,15 +131,26 @@
         <p class="muted small">Steer your assistant’s own work — its agents, roles and worksites — in one place. Speak to it; it’s more natural.</p>
       </header>
       <nav class="pilot-tabs" role="tablist" aria-label="Pilotage">
-        <button type="button" class="ptab" data-ptab="agents" role="tab">Agents</button>
-        <button type="button" class="ptab" data-ptab="chantiers" role="tab">Worksites</button>
-        <button type="button" class="ptab" data-ptab="roles" role="tab">Roles</button>
-        <button type="button" class="ptab" data-ptab="kb" role="tab">Knowledge</button>
+        <button type="button" class="ptab" data-ptab="kb" role="tab"><span>Knowledge base</span><span class="ptab-src no-i18n" id="pilot-tab-kbsrc"></span></button>
+        <button type="button" class="ptab" data-ptab="agents" role="tab">Your autonomous pilot</button>
+        <button type="button" class="ptab" data-ptab="roles" role="tab"><span>Roles</span><span class="ptab-n no-i18n" id="pilot-tab-roles"></span></button>
+        <button type="button" class="ptab" data-ptab="chantiers" role="tab"><span>Worksites</span><span class="ptab-n no-i18n" id="pilot-tab-chantiers"></span></button>
       </nav>
 
       <div class="pilot-panel" data-ppanel="agents" hidden>
+        <div class="card pilot-orch pilot-status">
+          <div class="pilot-status-head">
+            <h3 class="no-i18n" id="pilot-conn-title"><span class="pilot-dot" id="pilot-conn-dot"></span></h3>
+            <div class="row">
+              <button type="button" id="pilot-orch-connect" class="btn ghost small">Connect…</button>
+              <button type="button" id="pilot-orch-disconnect" class="btn ghost small danger" hidden>Disconnect</button>
+            </div>
+          </div>
+          <div id="pilot-orch-status" class="muted small no-i18n"></div>
+          <pre id="pilot-orch-steps" class="pilot-steps" hidden></pre>
+        </div>
         <div class="card pilot-talk">
-          <h3>Talk to the pilot</h3>
+          <h3>Talk to the pilot <span class="muted pilot-scale">· at the assistant’s scale</span></h3>
           <div class="ptt">
             <button type="button" class="btn primary micbig dictate-btn" data-dictate-for="ptt-input" aria-label="Speak to the pilot" title="Speak to the pilot"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
             <p class="muted small">Speak it — dictate a directive to the pilot. It’s transcribed, you read it back, then send.</p>
@@ -150,18 +161,9 @@
             <button type="button" id="ptt-send" class="btn primary">Send</button>
           </div>
         </div>
-        <div class="card pilot-orch">
-          <h3>Fleet orchestrator</h3>
-          <div id="pilot-orch-status" class="muted small"></div>
-          <pre id="pilot-orch-steps" class="pilot-steps" hidden></pre>
-          <div class="row">
-            <button type="button" id="pilot-orch-connect" class="btn">Connect…</button>
-            <button type="button" id="pilot-orch-disconnect" class="btn ghost danger" hidden>Disconnect</button>
-          </div>
-        </div>
-        <div class="card">
-          <h3>Agents across your machines</h3>
-          <div id="pilot-agents" class="muted small"></div>
+        <div class="card pilot-agents-card">
+          <h3>The agents<span class="pilot-agents-n no-i18n" id="pilot-agents-n"></span></h3>
+          <div id="pilot-agents" class="pilot-agent-list"></div>
         </div>
       </div>
 
@@ -864,6 +866,16 @@
   <p class="muted small">Links to your documents for people outside. Anyone with a link can open it until it ends or you revoke it.</p>
   <div id="shs-list" class="shs-list"></div>
   <div class="row"><span class="spacer"></span><button id="shs-close" class="btn" type="button">Close</button></div>
+</dialog>
+<dialog id="pilot-agent-dialog" class="dialog pilot-agent-dialog" aria-labelledby="pa-title">
+  <div class="row between pa-head"><h3 id="pa-title" class="no-i18n">Agent</h3><button id="pilot-agent-close" class="btn icon" type="button" aria-label="Close">✕</button></div>
+  <p class="muted small pa-sub no-i18n" id="pilot-agent-sub"></p>
+  <div id="pilot-agent-thread" class="pilot-thread"></div>
+  <div class="composer pilot-composer">
+    <textarea id="pilot-agent-input" rows="2" placeholder="Message this agent…"></textarea>
+    <button type="button" class="btn ghost icon dictate-btn" data-dictate-for="pilot-agent-input" aria-label="Dictate" title="Dictate: speak and I type it here">🎙️</button>
+    <button type="button" id="pilot-agent-send" class="btn primary">Send</button>
+  </div>
 </dialog>
 <dialog id="move-sheet" class="dialog msheet" aria-label="Move a task"></dialog>
 <dialog id="board-side" class="dialog">

@@ -146,6 +146,8 @@ final class Conductor
     public function statusInfo(): array
     {
         $b = $this->binding();
+        $agents = array_values($b['agents'] ?? []);
+        $machines = count(array_unique(array_filter(array_map(fn($a) => (string)($a['machine'] ?? ''), $agents))));
         return [
             'connected' => $this->connected(),
             'inbox' => $this->inboxUrl(),
@@ -153,6 +155,10 @@ final class Conductor
             'url' => (string)($b['url'] ?? ''),
             'lastReport' => (int)($b['last_report'] ?? 0),
             'lastDispatch' => (int)($b['last_dispatch'] ?? 0),
+            'agents' => $agents,
+            'agentCount' => count($agents),
+            'machines' => $machines,
+            'agentsAt' => (int)($b['agents_at'] ?? 0),
             'summary' => $this->fleetStatus(),
         ];
     }
@@ -184,7 +190,12 @@ final class Conductor
             . "   future report you POST to $inbox (JSON {\"type\":\"report\",\"title\":...,\"text\":...}).\n"
             . "4. Keep yourself warm (a create_trigger / send_later heartbeat, ~10 min): each tick, enumerate my\n"
             . "   sessions across machines, read their progress, and report completions and failures back to that\n"
-            . "   inbox. When I POST an instruction to your webhook, act on it and report what you did.\n```\n\n"
+            . "   inbox. Include a structured roster on your reports so my cockpit can list the fleet:\n"
+            . "   \"agents\":[{\"id\":\"mba-m3.local\",\"name\":\"mba-m3.local\",\"task\":\"dossier conseil\",\n"
+            . "   \"state\":\"active\",\"machine\":\"mba-m3.local\",\"ts\":<unix>}] (state: active|busy|idle|done|error).\n"
+            . "5. When I POST an instruction to your webhook, act on it and report what you did. If it carries an\n"
+            . "   \"agent\" field, route it to that one session and report its reply back with the same \"agent\" set\n"
+            . "   and the reply in \"text\" — that is the two-voice thread the user talks to.\n```\n\n"
             . "The code is good for 30 minutes and works once. I never see or store your account token — only the "
             . "webhook you hand me. After it pairs I'll confirm here.";
     }
@@ -221,11 +232,85 @@ final class Conductor
         if (($b['secret'] ?? '') === '' || $bearer === '' || !hash_equals((string)$b['secret'], $bearer))
             return [401, ['error' => 'unauthorized']];
         $b['last_report'] = time();
-        $this->saveBinding($b);
         $title = mb_substr(trim((string)($msg['title'] ?? '')) ?: 'Fleet update', 0, 120);
         $text = mb_substr(trim((string)($msg['text'] ?? '')), 0, 8000);
+        // The orchestrator may carry a structured agent roster so the cockpit can list the fleet. Display data only —
+        // bounded and surfaced, never executed here (orchestration.md §5.3).
+        if (isset($msg['agents']) && is_array($msg['agents'])) { $b['agents'] = $this->sanitizeAgents($msg['agents']); $b['agents_at'] = time(); }
+        // A report tagged with an `agent` is that one agent's reply in its two-voice thread (the "Discuter" drawer).
+        $agent = mb_substr(trim((string)($msg['agent'] ?? '')), 0, 80);
+        if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text);
+        $this->saveBinding($b);
         $this->app->notifier()->notify($title, $text !== '' ? $text : '(the orchestrator sent an empty update)');
         return [200, ['ok' => true]];
+    }
+
+    private const AGENT_CAP = 50;
+    private const THREAD_CAP = 40;
+
+    /** Bound and clean the orchestrator's self-reported roster — display data, never executed (orchestration.md §5.3). */
+    private function sanitizeAgents(array $raw): array
+    {
+        $out = [];
+        foreach (array_slice(array_values($raw), 0, self::AGENT_CAP) as $a) {
+            if (!is_array($a)) continue;
+            $id = mb_substr(trim((string)($a['id'] ?? $a['name'] ?? '')), 0, 80);
+            if ($id === '') continue;
+            $out[] = [
+                'id' => $id,
+                'name' => mb_substr(trim((string)($a['name'] ?? $id)) ?: $id, 0, 80),
+                'task' => mb_substr(trim((string)($a['task'] ?? '')), 0, 160),
+                'state' => mb_substr(trim((string)($a['state'] ?? '')), 0, 24),
+                'machine' => mb_substr(trim((string)($a['machine'] ?? '')), 0, 80),
+                'ts' => (int)($a['ts'] ?? time()),
+            ];
+        }
+        return $out;
+    }
+
+    /** Append one turn to an agent's two-voice thread, keeping only the last THREAD_CAP turns. Returns the new binding. */
+    private function appendThread(array $b, string $id, string $role, string $text): array
+    {
+        $t = $b['threads'][$id] ?? [];
+        $t[] = ['role' => $role === 'agent' ? 'agent' : 'user', 'text' => mb_substr(trim($text), 0, 4000), 'ts' => time()];
+        if (count($t) > self::THREAD_CAP) $t = array_slice($t, -self::THREAD_CAP);
+        $b['threads'][$id] = array_values($t);
+        return $b;
+    }
+
+    /** The stored two-voice thread with one agent (what the cockpit's "Discuter" drawer shows). */
+    public function agentThread(string $id): array
+    {
+        return array_values($this->binding()['threads'][mb_substr(trim($id), 0, 80)] ?? []);
+    }
+
+    /**
+     * Send one line to a single agent — a targeted dispatch through the same outbound choke as toFleet (the privacy
+     * guard runs; the line is KB-grounded here). The orchestrator routes it to that agent and reports the reply back
+     * tagged with the same id, which lands in the thread. Returns {ok, message, thread}; never throws.
+     */
+    public function agentSay(string $id, string $text, int $space = 0): array
+    {
+        $id = mb_substr(trim($id), 0, 80);
+        $text = trim($text);
+        $fail = fn(string $m) => ['ok' => false, 'message' => $m, 'thread' => $this->agentThread($id)];
+        if ($id === '') return $fail('error: no agent.');
+        if ($text === '') return $fail('error: nothing to send.');
+        if (($g = $this->guard()) !== null) return $fail($g);
+        $b = $this->binding();
+        if (($b['webhook'] ?? '') === '') return $fail('error: no agents are connected yet — pair your pilote autonome first.');
+        $payload = ['from' => 'talixio', 'ts' => time(), 'agent' => $id, 'instruction' => $this->ground($text, $space)];
+        try {
+            [$code] = Http::request('POST', (string)$b['webhook'], ['Content-Type: application/json'],
+                json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 30);
+        } catch (\Throwable $e) {
+            return $fail("error: could not reach your pilote autonome ({$e->getMessage()}). It may be asleep — recreate it, then re-pair.");
+        }
+        if ($code >= 300) return $fail("error: the orchestrator's webhook returned HTTP $code.");
+        $b['last_dispatch'] = time();
+        $b = $this->appendThread($b, $id, 'user', $text);
+        $this->saveBinding($b);
+        return ['ok' => true, 'message' => 'sent to the agent; its reply will land here.', 'thread' => $this->agentThread($id)];
     }
 
     /**
