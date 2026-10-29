@@ -393,42 +393,56 @@ const flows = {
     await page.click('#view-pilotage .ptab[data-ptab=chantiers]'); await page.waitForTimeout(400);
     check('pilotage: Worksites tab opens', await page.isVisible('.pilot-panel[data-ppanel=chantiers]'));
     await page.click('#view-pilotage .ptab[data-ptab=roles]');
-    await page.waitForSelector('#pilot-roles .prole-card', { timeout: 6000 });
-    check('pilotage: Roles tab opens the metric catalogue (slice 2)', await page.isVisible('.pilot-panel[data-ppanel=roles]'));
-    check('pilotage: each role is a metric card with an acceptance ring and an Evaluate action',
-      (await page.$$('#pilot-roles .prole-card')).length >= 1
-      && (await page.$$('#pilot-roles .prole-card .pring')).length >= 1
-      && (await page.$$('#pilot-roles [data-role-eval]')).length >= 1);
-    check('pilotage: the assessor (role #0) is in the catalogue, protected, so no Publish on it',
+    await page.waitForSelector('#pilot-roles .pnode', { timeout: 6000 });
+    check('pilotage: Roles tab opens the specialization map (slice 2)', await page.isVisible('.pilot-panel[data-ppanel=roles]'));
+    check('pilotage: each role is a clickable node carrying an acceptance ring',
+      (await page.$$('#pilot-roles .pnode')).length >= 1
+      && (await page.$$('#pilot-roles .pnode .pring')).length >= 1);
+    // master → detail: a role is auto-selected, opening a detail card with its metrics and an Evaluate action
+    await page.waitForSelector('#pilot-roles .prole-detail-card', { timeout: 6000 });
+    check('pilotage: selecting a role opens a detail card with its ring and an Evaluate action',
+      (await page.$$('#pilot-roles .prole-detail-card .pring')).length >= 1
+      && (await page.$$('#pilot-roles .prole-detail-card [data-role-eval]')).length >= 1);
+    check('pilotage: the assessor (role #0) is in the map, protected, so no Publish on it',
       (await page.textContent('#pilot-roles')).includes('assessor'));
-    // slice 3: the catalogue is grouped under specialization headers, with a one-field editor per card
-    check('pilotage: roles are grouped under specialization section headers',
-      (await page.$$('#pilot-roles .pspec')).length >= 1);
-    check('pilotage: each card carries an inline specialization editor',
-      (await page.$$('#pilot-roles form[data-role-spec]')).length >= 1);
-    // slice 3: setting a specialization regroups the catalogue under that heading
+    // slice 3: roles are grouped into bordered specialization cards
+    check('pilotage: roles are grouped into specialization cards',
+      (await page.$$('#pilot-roles .pspec-card')).length >= 1);
+    // pick an editable (non-protected) role, open its detail, and use the inline specialization editor
+    const editable = await page.$$eval('#pilot-roles [data-role-select]',
+      els => { const b = els.find(e => e.dataset.roleSelect !== 'assessor'); return b ? b.dataset.roleSelect : null; });
+    await page.click(`#pilot-roles [data-role-select="${editable}"]`);
+    await page.waitForSelector('#pilot-roles .prole-detail-card form[data-role-spec]', { timeout: 6000 });
+    check('pilotage: the detail card carries an inline specialization editor',
+      (await page.$$('#pilot-roles .prole-detail-card form[data-role-spec]')).length >= 1);
+    // slice 3: setting a specialization regroups the map under that heading
     const specForm = await page.$('#pilot-roles form[data-role-spec]');
     await specForm.$eval('.prole-spec-in', el => { el.value = 'QA'; });
     await specForm.evaluate(f => f.requestSubmit());
-    await page.waitForSelector('#pilot-roles .pspec.no-i18n:text-is("QA")', { timeout: 6000 });
-    check('pilotage: a saved specialization becomes a group header', await page.isVisible('#pilot-roles .pspec:text-is("QA")'));
-    // slice 4: lifecycle actions on every non-protected card
-    check('pilotage: non-protected cards carry Improve and Archive actions',
-      (await page.$$('#pilot-roles [data-role-improve]')).length >= 1 && (await page.$$('#pilot-roles [data-role-archive]')).length >= 1);
-    // slice 4: Archive moves a role into the Archived disclosure (history kept), and Reactivate brings it back
-    const archName = await page.$eval('#pilot-roles [data-role-archive]', b => b.dataset.roleArchive);
+    await page.waitForSelector('#pilot-roles .pspec-name:text-is("QA")', { timeout: 6000 });
+    check('pilotage: a saved specialization becomes a group-card header', await page.isVisible('#pilot-roles .pspec-name:text-is("QA")'));
+    // slice 4: lifecycle actions on a non-protected role's detail card
+    check('pilotage: a non-protected detail card carries Improve and Archive actions',
+      (await page.$$('#pilot-roles .prole-detail-card [data-role-improve]')).length >= 1
+      && (await page.$$('#pilot-roles .prole-detail-card [data-role-archive]')).length >= 1);
+    // slice 4: Archive drops the role out of the map and into the Archived panel (history kept); Reactivate brings it back
+    const archName = await page.$eval('#pilot-roles .prole-detail-card [data-role-archive]', b => b.dataset.roleArchive);
     page.once('dialog', d => d.accept());
     await page.click(`#pilot-roles [data-role-archive="${archName}"]`);
-    await page.waitForSelector('#pilot-roles .parchived', { timeout: 6000 });
-    check('pilotage: archiving drops the role out of the grid and lists it under Archived with Reactivate',
-      !(await page.$(`#pilot-roles .prole-card [data-role-archive="${archName}"]`))
-      && (await page.$$(`#pilot-roles .parchived [data-role-reactivate="${archName}"]`)).length === 1);
-    await page.$eval('#pilot-roles .parchived', d => { d.open = true; });
+    await page.waitForSelector('#prole-arch-btn', { timeout: 6000 });
+    check('pilotage: archiving drops the role out of the map',
+      !(await page.$(`#pilot-roles .pnode[data-role-select="${archName}"]`)));
+    await page.click('#prole-arch-btn');
+    await page.waitForSelector(`#pilot-roles #prole-arch:not([hidden]) [data-role-reactivate="${archName}"]`, { timeout: 6000 });
+    check('pilotage: the archived role is listed under Archived with Reactivate',
+      (await page.$$(`#pilot-roles .parchived [data-role-reactivate="${archName}"]`)).length === 1);
     await page.click(`#pilot-roles [data-role-reactivate="${archName}"]`);
-    await page.waitForSelector(`#pilot-roles .prole-card [data-role-archive="${archName}"]`, { timeout: 6000 });
-    check('pilotage: Reactivate returns the role to the catalogue', !!(await page.$(`#pilot-roles [data-role-archive="${archName}"]`)));
+    await page.waitForSelector(`#pilot-roles .pnode[data-role-select="${archName}"]`, { timeout: 6000 });
+    check('pilotage: Reactivate returns the role to the map', !!(await page.$(`#pilot-roles .pnode[data-role-select="${archName}"]`)));
     // slice 4: Improve opens the candidate-brief editor that feeds the Assessor's A/B
-    await page.click('#pilot-roles [data-role-improve]');
+    await page.click(`#pilot-roles [data-role-select="${editable}"]`);
+    await page.waitForSelector('#pilot-roles .prole-detail-card [data-role-improve]', { timeout: 6000 });
+    await page.click('#pilot-roles .prole-detail-card [data-role-improve]');
     await page.waitForSelector('#prole-improve:not([hidden]) .prole-imp-in', { timeout: 6000 });
     check('pilotage: Improve opens a candidate-brief editor over the Assessor A/B', await page.isVisible('#prole-improve .prole-imp-in'));
     // "+ New role": the catalogue header opens a create form wired to role_save (same duplicate check)
@@ -441,9 +455,9 @@ const flows = {
     await page.fill('#prole-new .prole-new-spec', 'Veille');
     await page.fill('#prole-new .prole-new-brief', 'Summarise meetings: list decisions and actions with an owner, stay factual.');
     await page.click('#prole-new [data-new-save]');
-    await page.waitForSelector('#pilot-roles .pspec:text-is("Veille")', { timeout: 8000 });
-    check('pilotage: a created role lands in the catalogue as a card under its specialization header',
-      (await page.textContent('#pilot-roles')).includes('meeting-notes') && await page.isVisible('#pilot-roles .pspec:text-is("Veille")'));
+    await page.waitForSelector('#pilot-roles .pspec-name:text-is("Veille")', { timeout: 8000 });
+    check('pilotage: a created role lands in the map as a node under its specialization card',
+      (await page.textContent('#pilot-roles')).includes('meeting-notes') && await page.isVisible('#pilot-roles .pspec-name:text-is("Veille")'));
     // "Parler au pilote": a dictated directive is routed through the ordinary chat send()
     await page.click('#view-pilotage .ptab[data-ptab=agents]'); await page.waitForTimeout(300);
     await page.fill('#ptt-input', 'run the weekly competitor scan');

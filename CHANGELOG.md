@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.12.0 (2026-10-29)
+
+- **The Rôles tab now looks and works like the concept map.** Roles are grouped into bordered specialization cards (each with a "· N rôles" count), and every role is a clickable node whose ring shows its acceptance rate and whose size scales with how much it runs. **Clicking a role now opens its detail below** — ring, metrics, trend, sparkline, the specialization editor and the lifecycle actions — instead of every card being fully expanded at once. Archived roles open from an "Archivés…" button in the toolbar. (No local-vs-corporate split yet: there is no such field on a role, so the mockup's "géré par Acme" group and legend are not shown.)
+
 ## 1.11.3 (2026-10-29)
 
 - **The Modèles table now lists embedding models.** Embeddings run real work — library search, the latent classifier, Mind — but they were left out of the catalogue. They now appear as their own **Embedding** type (OpenAI text-embedding-3-small, Google gemini-embedding-001, AKI bge-m3 and qwen3-vl-embedding-8b, and the local qwen3-embedding:0.6b / embeddinggemma), priced per million input tokens, with an **Embeddings** filter option. Like the image models, they are listed to compare on price, trust and provider — you still choose the embedding backend and model in Réglages, not from this table. A live catalogue refresh now keeps and types embedding models it discovers (while still dropping moderation, rerankers, guards and tokenizers, which no usage runs on).

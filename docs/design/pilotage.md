@@ -12,16 +12,22 @@
 > - **KB tab** surfaces a *library glance* (space, library root, file/subfolder/size
 >   stats, hub-pull state, "Open the Library" link), not the mockup's hub-resource
 >   document list — see Slice 5.
-> - **Rôles tab** renders the specialization "map" as a *grouped card grid*
->   (`.pspec` headers + `.prole-grid`, each card carrying ring, metrics, sparkline,
->   inline specialization editor, lifecycle actions), not the mockup's SVG
+> - **Rôles tab** renders the specialization "map" close to the mockup: bordered
+>   per-specialization **group cards** (`.pspec-card`, header + `· N rôles` count)
+>   holding clickable **role nodes** (`.pnode` — an accept-rate ring whose size
+>   scales with run volume), and clicking a node opens a **detail card** below
+>   (`#prole-detail` → `roleDetail`: ring, metrics, sparkline, inline specialization
+>   editor, lifecycle actions). Archived roles open from an **Archivés…** toolbar
+>   button, not a trailing `<details>`. What stays divergent from the mockup: there
+>   is **no local-vs-corporate split** (no such field in `/api/roles`), so no
+>   corporate group or legend; and the node is a ring, not the mockup's SVG
 >   ring-cluster. Roles are authored conversationally (the assistant's `role_save`
 >   tool, which runs the same duplicate check the mockup's drawer promises),
 >   installed from the store (`role_install`), seeded by the director and the
 >   fleet, or — since 1.6.0 — created from the catalogue's **+ Nouveau rôle**
 >   header button, an inline form (name, one-line purpose, optional
 >   specialization, brief) wired to `POST /api/roles` → the same `role_save`
->   tool and its duplicate check. Archived roles live in a trailing `<details>`.
+>   tool and its duplicate check.
 > - **Chantiers** are launched from the chat composer ("Parler au pilote"), so there
 >   is no "+ Nouveau chantier" header button.
 

@@ -5607,7 +5607,17 @@ function pSpark(series) { // recent accepted (1) / rejected (0) runs, oldest→n
   const width = pts.length * (w + g) - g;
   return `<svg class="pspark" viewBox="0 0 ${width} ${h}" width="${width}" height="${h}" aria-hidden="true">${bars}</svg>`;
 }
-function proleCard(r) {
+// A role in the specialization map: a compact, clickable node (ring sized by run volume) that opens the detail card below.
+function roleNode(r, scale) {
+  const meta = r.runs ? t('{n} runs', { n: r.runs }) : t('no runs yet');
+  const proto = r.protected ? ` <span class="chip proto">${esc(t('Protected'))}</span>` : '';
+  return `<button type="button" class="pnode" data-role-select="${esc(r.name)}" aria-pressed="false">
+    <span class="pnode-ring" style="--s:${scale.toFixed(2)}">${pRing(r.acceptance)}</span>
+    <span class="pnode-id"><b class="no-i18n">${esc(r.name)}</b><span class="muted small no-i18n">${esc(meta)}${proto}</span></span>
+  </button>`;
+}
+// The detail card shown at the bottom for the selected role: ring, metrics, sparkline, specialization editor, lifecycle actions.
+function roleDetail(r) {
   const acc = r.acceptance == null ? t('no rated runs yet') : `${Math.round(r.acceptance * 100)}% ${t('accepted')}`;
   const chips = [];
   if (r.protected) chips.push(`<span class="chip proto">${esc(t('Protected'))}</span>`);
@@ -5627,7 +5637,7 @@ function proleCard(r) {
   const lifecycle = r.protected ? '' :
     `<button class="btn ghost small" data-role-improve="${esc(r.name)}">${esc(t('Improve'))}</button>`
     + `<button class="btn ghost small" data-role-archive="${esc(r.name)}">${esc(t('Archive'))}</button>`;
-  return `<div class="prole-card">
+  return `<div class="prole-detail-card">
     <div class="prole-head">${pRing(r.acceptance)}<div class="prole-id"><b class="no-i18n">${esc(r.name)}</b> <span class="muted small no-i18n">v${r.version}</span><div class="prole-chips">${chips.join('')}</div></div></div>
     <p class="muted small prole-desc">${esc(r.description || '')}</p>
     <div class="prole-metrics small"><span>${esc(acc)}</span>${trend}<span class="muted">${esc(bits)}</span>${pSpark(r.series)}</div>
@@ -5726,9 +5736,16 @@ async function roleNew() {
 async function pilotRoles() {
   const box = $('#pilot-roles');
   const { roles, overlaps, archived } = await api('api/roles');
-  const header = `<div class="prole-toolbar"><p class="muted small">${esc(t('The roles your assistant runs — the same registry the director and the fleet use, drawing the Assessor’s own numbers, so improving one improves everywhere.'))}</p>`
-    + `<button class="btn primary small" id="prole-new-btn">+ ${esc(t('New role'))}</button></div>`
-    + `<div id="prole-new" hidden></div>`;
+  const archBtn = archived && archived.length
+    ? `<button class="btn ghost small" id="prole-arch-btn">${esc(t('Archived'))} (${archived.length})</button>` : '';
+  const header = `<div class="prole-toolbar">
+      <div class="prole-toolbar-txt">
+        <h3>${esc(t('Roles by specialization'))}</h3>
+        <p class="muted small">${esc(t('A specialization groups roles on a close topic — not necessarily duplicates. The ring shows each role’s accept rate, its size how much it runs. Click a role to see its detail.'))}</p>
+      </div>
+      <div class="prole-toolbar-btns"><button class="btn primary small" id="prole-new-btn">+ ${esc(t('New role'))}</button>${archBtn}</div>
+    </div>
+    <div id="prole-new" hidden></div>`;
   const wireNew = () => { const b = $('#prole-new-btn'); if (b) b.onclick = () => roleNew(); };
   if (!roles || !roles.length) {
     box.innerHTML = header + `<div class="placeholder">${esc(t('No roles yet. The director and the fleet seed roles as they work; they will appear here as a managed catalogue.'))}</div>`;
@@ -5738,38 +5755,71 @@ async function pilotRoles() {
     ? `<div class="poverlap-banner"><b>${esc(t('Overlap detected'))}</b><ul>` + overlaps.map(o =>
         `<li><span class="no-i18n">${esc(o.a)} ≈ ${esc(o.b)}</span> <span class="muted small">${esc(t('{p}% close', { p: Math.round(o.score * 100) }))}</span> <button class="btn ghost small" data-merge-a="${esc(o.a)}" data-merge-b="${esc(o.b)}">${esc(t('Compare'))}</button></li>`
       ).join('') + `</ul></div>` : '';
-  // group by specialization; roles with none fall into a trailing "Unspecialized" group
+  // group by specialization; roles with none fall into a trailing "Unspecialized" group. Ring size scales with run volume.
   const groups = new Map();
   for (const r of roles) { const k = r.specialization || ''; (groups.get(k) || groups.set(k, []).get(k)).push(r); }
   const keys = [...groups.keys()].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b));
-  const sections = keys.map(k =>
-    `<div class="pspec${k ? '' : ' none'} no-i18n">${esc(k || t('Unspecialized'))}</div>`
-    + `<div class="prole-grid">${groups.get(k).map(proleCard).join('')}</div>`).join('');
+  const maxRuns = Math.max(1, ...roles.map(r => r.runs || 0));
+  const scaleOf = n => 0.82 + 0.5 * Math.sqrt((n || 0) / maxRuns);
+  const sections = keys.map(k => {
+    const list = groups.get(k);
+    const count = t(list.length === 1 ? '{n} role' : '{n} roles', { n: list.length });
+    return `<div class="pspec-card${k ? '' : ' none'}">
+      <div class="pspec-head"><span class="pspec-name no-i18n">${esc(k || t('Unspecialized'))}</span><span class="pspec-count muted small">· ${esc(count)}</span></div>
+      <div class="pnode-row">${list.map(r => roleNode(r, scaleOf(r.runs))).join('')}</div>
+    </div>`;
+  }).join('');
   // archived roles keep their file and all their Assessor history; they are just out of the map and the director's search
   const archivedBlock = archived && archived.length
-    ? `<details class="parchived"><summary>${esc(t('Archived'))} (${archived.length})</summary>`
+    ? `<div id="prole-arch" class="parchived" hidden><div class="pspec-name muted small">${esc(t('Archived'))}</div>`
       + archived.map(a => `<div class="parch-row"><div class="parch-id"><b class="no-i18n">${esc(a.name)}</b> <span class="muted small">${esc(a.runs ? t('{n} runs', { n: a.runs }) : t('no runs yet'))}</span><p class="muted small no-i18n">${esc(a.description || '')}</p></div>`
         + `<div class="parch-actions"><button class="btn ghost small" data-role-reactivate="${esc(a.name)}">${esc(t('Reactivate'))}</button>`
         + (a.runs
           ? `<button class="btn ghost small" disabled title="${esc(t('This role has history; archive keeps it. Delete is only for a role that never ran.'))}">${esc(t('Delete'))}</button>`
           : `<button class="btn ghost small danger" data-role-delete="${esc(a.name)}">${esc(t('Delete'))}</button>`)
         + `</div></div>`).join('')
-      + `</details>` : '';
-  box.innerHTML = header
-    + banner + `<div id="prole-merge" hidden></div><div id="prole-improve" hidden></div>` + sections + archivedBlock;
+      + `</div>` : '';
+  box.innerHTML = header + banner
+    + `<div id="prole-merge" hidden></div><div id="prole-improve" hidden></div>`
+    + `<div class="pspec-grid">${sections}</div>`
+    + `<div id="prole-detail" class="prole-detail"></div>`
+    + archivedBlock;
   wireNew();
-  box.querySelectorAll('[data-role-eval]').forEach(b => b.onclick = () => roleAction(b, `api/roles/${encodeURIComponent(b.dataset.roleEval)}/evaluate`));
-  box.querySelectorAll('[data-role-pub]').forEach(b => b.onclick = () => {
-    if (!confirm(t('Send this role to the store for review, so other assistants can install it?'))) return;
-    roleAction(b, `api/roles/${encodeURIComponent(b.dataset.rolePub)}/publish`);
-  });
-  box.querySelectorAll('[data-role-improve]').forEach(b => b.onclick = () => roleImprove(b.dataset.roleImprove));
-  box.querySelectorAll('[data-role-archive]').forEach(b => b.onclick = async () => {
-    if (!confirm(t('Archive this role? It leaves the catalogue and the director’s search, but its file and all its history are kept — you can reactivate it any time.'))) return;
-    b.disabled = true;
-    try { await post(`api/roles/${encodeURIComponent(b.dataset.roleArchive)}/archive`, { on: true }); toast(t('Archived.')); pilotRoles().catch(() => {}); }
-    catch (err) { toast(err.message); b.disabled = false; }
-  });
+  const ab = $('#prole-arch-btn');
+  if (ab) ab.onclick = () => { const p = $('#prole-arch'); if (p) { p.hidden = !p.hidden; if (!p.hidden) p.scrollIntoView({ block: 'nearest' }); } };
+  // wire the lifecycle controls that live inside the currently-rendered detail card (scoped so a re-render re-wires cleanly)
+  function wireDetail(scope) {
+    scope.querySelectorAll('[data-role-eval]').forEach(b => b.onclick = () => roleAction(b, `api/roles/${encodeURIComponent(b.dataset.roleEval)}/evaluate`));
+    scope.querySelectorAll('[data-role-pub]').forEach(b => b.onclick = () => {
+      if (!confirm(t('Send this role to the store for review, so other assistants can install it?'))) return;
+      roleAction(b, `api/roles/${encodeURIComponent(b.dataset.rolePub)}/publish`);
+    });
+    scope.querySelectorAll('[data-role-improve]').forEach(b => b.onclick = () => roleImprove(b.dataset.roleImprove));
+    scope.querySelectorAll('[data-role-archive]').forEach(b => b.onclick = async () => {
+      if (!confirm(t('Archive this role? It leaves the catalogue and the director’s search, but its file and all its history are kept — you can reactivate it any time.'))) return;
+      b.disabled = true;
+      try { await post(`api/roles/${encodeURIComponent(b.dataset.roleArchive)}/archive`, { on: true }); toast(t('Archived.')); pilotRoles().catch(() => {}); }
+      catch (err) { toast(err.message); b.disabled = false; }
+    });
+    scope.querySelectorAll('form[data-role-spec]').forEach(f => f.onsubmit = async e => {
+      e.preventDefault();
+      const name = f.dataset.roleSpec, val = f.querySelector('.prole-spec-in').value.trim();
+      try { await post(`api/roles/${encodeURIComponent(name)}/specialization`, { specialization: val }); toast(t('Specialization saved')); pilotRoles().catch(() => {}); }
+      catch (err) { toast(err.message); }
+    });
+  }
+  // master → detail: clicking a node renders its card below and marks it selected; the choice survives a refresh
+  const byName = new Map(roles.map(r => [r.name, r]));
+  const detail = $('#prole-detail');
+  const showDetail = name => {
+    const r = byName.get(name); if (!r) return;
+    pilotRoles._sel = name;
+    box.querySelectorAll('.pnode').forEach(n => { const on = n.dataset.roleSelect === name; n.classList.toggle('sel', on); n.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    detail.innerHTML = roleDetail(r);
+    wireDetail(detail);
+  };
+  box.querySelectorAll('[data-role-select]').forEach(b => b.onclick = () => { showDetail(b.dataset.roleSelect); detail.scrollIntoView({ block: 'nearest' }); });
+  // the archived controls and the overlap "Compare" buttons live outside the detail card
   box.querySelectorAll('[data-role-reactivate]').forEach(b => b.onclick = async () => {
     b.disabled = true;
     try { await post(`api/roles/${encodeURIComponent(b.dataset.roleReactivate)}/archive`, { on: false }); toast(t('Reactivated.')); pilotRoles().catch(() => {}); }
@@ -5782,12 +5832,8 @@ async function pilotRoles() {
     catch (err) { toast(err.message); b.disabled = false; }
   });
   box.querySelectorAll('[data-merge-a]').forEach(b => b.onclick = () => roleCompare(b.dataset.mergeA, b.dataset.mergeB));
-  box.querySelectorAll('form[data-role-spec]').forEach(f => f.onsubmit = async e => {
-    e.preventDefault();
-    const name = f.dataset.roleSpec, val = f.querySelector('.prole-spec-in').value.trim();
-    try { await post(`api/roles/${encodeURIComponent(name)}/specialization`, { specialization: val }); toast(t('Specialization saved')); pilotRoles().catch(() => {}); }
-    catch (err) { toast(err.message); }
-  });
+  // open the previously-selected role if it still exists, else the first one, so the detail card is never empty
+  showDetail(byName.has(pilotRoles._sel) ? pilotRoles._sel : roles[0].name);
 }
 async function pilotKb() {
   const box = $('#pilot-kb');
