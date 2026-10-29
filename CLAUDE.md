@@ -39,6 +39,10 @@ step for the frontend — the files are served as-is. UI language is **French**
   the space after the version is required by the test. History is forward-only
   (new patch/minor versions, never amend past ones). Feature → minor bump,
   fix → patch.
+- **FAQ (`docs/faq/English` + `docs/faq/Français`):** user-facing documentation, indexed in the
+  library. Any delivery that changes what a user sees or does (a page, tab, menu, setting, behaviour)
+  updates the matching FAQ page **in both languages** in the same commit; a new feature area gets a
+  new page. "What's new" pages are generated from `CHANGELOG.md`, but the how-to pages are not.
 - **i18n:** every user-facing string goes through `t('English')`. When you add
   one, add `"English": "Français"` to `web/public/i18n/fr.js` with the **exact**
   English key; `{placeholders}` must match on both sides (a test checks this).

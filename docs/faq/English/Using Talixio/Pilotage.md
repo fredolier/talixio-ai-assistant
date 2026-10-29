@@ -1,0 +1,33 @@
+# Pilotage
+
+**Pilotage** (last entry of the menu) is the director's cockpit: it shows what runs on your behalf beyond the chat. It has
+four tabs.
+
+## Knowledge base
+A glance at the library of the current space: how much it holds and how it is doing. Search and filing stay in *Files*.
+
+## Your autonomous pilot
+The pilot is an orchestrator (a Claude Code session) that supervises agents on your machines and reports to Talixio.
+- The **status card** says whether it is connected, when it last reported and how many agents it sees on how many machines.
+  **Re-pair…** and **Disconnect** are there. Pairing works either by a webhook the orchestrator creates, or, for a plain
+  local session, by *polling* Talixio on its own timer.
+- **Talk to the pilot** sends it an instruction, by typing or dictating. It passes the same privacy checks as every other dispatch.
+- **Agents** lists each agent with its state (active, busy, idle, finished, error), its task, its age and its machine;
+  **Discuss** opens a two-way thread with that agent. What the orchestrator and agents answer is shown, never executed.
+- **Fleet reports**: how the pilot's reports reach you (see *Channels and notifications*): an in-app badge by default,
+  the **Recent reports** card, and optionally push + e-mail.
+
+## Roles
+The catalogue of the roles your assistant can take, grouped into one card per specialization. Each role is a node whose ring shows
+its acceptance rate and whose size follows how much it runs; **click one** to open its detail: metrics, trend, its
+specialization and the actions *evaluate, publish, improve (A/B), archive, delete*. Roles that look nearly identical are flagged.
+- **+ New role** creates one (name, purpose, optional specialization, brief); a name already in use is refused, and the
+  assistant checks for near-duplicates.
+- A role can also be created by asking the assistant, or installed from the store.
+- **Archived…** reopens archived roles. The *assessor* role is protected: it has no lifecycle actions.
+
+## Worksites
+The director's directives: open worksites, their progress and steering. They are launched from the chat box, with
+*Talk to the pilot*.
+
+On a phone, the tabs scroll sideways.

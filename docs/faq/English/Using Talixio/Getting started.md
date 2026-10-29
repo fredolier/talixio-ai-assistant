@@ -9,7 +9,7 @@
 ## What it can do
 - Answer live, search the web, read web pages.
 - Remember you (editable memory on the Memory page) and find what was said.
-- File and find your documents (Library), citing the page.
+- File and find your documents (Files), citing the page.
 - Manage your tasks, reminders and routines (morning briefing…).
 - Transcribe and summarise your meetings and voice notes.
 - Read your email and calendar, and draft replies; anything that acts outside
@@ -21,9 +21,13 @@
 - **Stop** an answer in progress: the send button turns into *Stop*.
 - **Edit** your last message or ask for **another answer**.
 
-## The pages
-Chat, Tasks, Library, Routines, Jobs (background work), Mail, People, Memory,
-Activity (spending and log), Privacy, Settings.
+## The menu
+The menu on the left (the bottom bar on a phone) has eight entries: **Chat**, **Tasks**, **Files** (the library), **Apps**,
+**Notifications**, **Mail**, **People** and, last, **Pilotage** (see *Pilotage*).
+- **⋯ More** holds **Automations** (scheduled tasks and background work) and **Activity and costs**.
+- Your name at the bottom opens the **account menu**: Settings, Usage (Activity and costs), Privacy, Memory, Language,
+  Theme, *Install the app* when your browser offers it, *Get help* (this FAQ) and Sign out. On a phone, these are in *More*.
 
 ## Is the interface in the wrong language?
-Settings → Assistant → *Interface language*. The assistant itself answers in the language you write to it in.
+Account menu → **Language** (Automatic / Français / English): the choice is remembered in this browser.
+The assistant itself answers in the language you write to it in. The **Theme** entry cycles System → Light → Dark.

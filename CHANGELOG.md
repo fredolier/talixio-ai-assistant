@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.13.1 (2026-10-29)
+
+- **The FAQ catches up with releases 1.4.0 to 1.13.0.** The how-to pages had not been touched since 1.3.0, so they described a menu and a Model page that no longer exist. In English and French: the new **Pilotage** page (the autonomous pilot, agents, roles, worksites); *Getting started* now describes the eight-entry menu, the account menu and the remembered language; *Choosing the model* documents the Models / Providers / Budget tabs, per-usage routing, the catalogue refresh, embedding rows and AKI.IO's TL5 default; *Staying in Europe* now follows connect-on-the-card plus the Europe lock in the Models tab (the removed « Switch everything to Europe » flow is gone), and lists AKI.IO; *Search by meaning* explains the embedding rows and the link to Settings; *Channels and notifications* explains the fleet-report badge and its three modes. CLAUDE.md now says a user-visible change updates the FAQ in both languages in the same commit.
+
 ## 1.13.0 (2026-10-29)
 
 - **Fleet reports are quiet by default now — a badge, not a push for every tick.** Your autonomous pilot's progress reports used to arrive as a push notification and e-mail each time; they now surface **in-app by default**: an unread count badges the **Pilotage** menu entry and the **« Votre pilote autonome »** sub-tab, and the reports themselves land in a new **« Rapports récents »** card there. A **« Rapports de la flotte »** toggle on the pilot's status card lets you choose how they reach you — **Pastille dans l'app** (default), **Push + e-mail** (the previous behaviour), or **Off** — and the badge clears when you open « Votre pilote autonome ». The keep-warm/repeat suppression is unchanged, so only genuinely new text ever counts.

@@ -1,16 +1,13 @@
 # Staying in Europe ("Europe only")
 
-To keep your invoices, contacts, emails and documents away from the big American platforms:
-**Settings → Model and budget → Europe only**. A single European provider, paid by use, with nothing to
-host, then does all the AI work.
+To keep your invoices, contacts, emails and documents away from the big American platforms, use a European
+provider, paid by use, with nothing to host: **Settings → Model and budget**.
 
 ## Getting started
-1. Choose the provider (OVHcloud by default).
-2. Create a key with them (the link is under the field) and paste it.
-3. **Test**: it checks the key and shows the models picked for each tier (fast, standard,
-   deep), and whether transcription and search by meaning are available.
-4. Tick **the lock** if nothing must leave Europe.
-5. **Switch everything to Europe**.
+1. **Providers** tab: on a European provider's card (OVHcloud, Mistral, Scaleway, Infomaniak, AKI.IO), press **Connect**,
+   create a key with them (the *Create an account* link) and paste it on the card. Its models appear in the Models tab.
+2. **Models** tab: send each usage (fast, standard, deep, voice) to a European model, with the **F / S / A / V** buttons.
+3. Turn on the **Europe lock (GDPR)** if nothing must leave Europe.
 
 ## Which provider?
 
@@ -20,21 +17,27 @@ host, then does all the AI work.
 | Mistral AI | France | Mistral models | mistral-embed | Voxtral |
 | Scaleway | Paris | open models | Qwen3-Embedding 8B | Whisper |
 | Infomaniak | Switzerland | open models | BGE Multilingual Gemma2 | Whisper |
+| AKI.IO | Germany | open models (use the **TL5** ones) | bge-m3 | — |
 
 - **OVHcloud** is the recommended choice: hosted in France, you pay per amount of text processed, and
   you can try it **without a key** (low limits).
 - **Mistral**: take a **paid plan**. On the free *Experiment* plan, Mistral may use
   your data to train its models.
+- **AKI.IO**: only models tagged **TL5** are processed in Germany; the others can be served from Singapore. Talixio picks the TL5 ones for you when your key lists any.
 - **Infomaniak** also asks for the address of your AI product (it contains its number).
 - The open European models are good for everyday use, a little behind the best
   American models on hard reasoning.
 
-## What switches over
-One click on *Switch everything to Europe* sets:
-- **the conversation** (all three tiers, chosen automatically from the provider's models);
-- **the transcription** of voice messages and meetings (unless it already runs on this server);
-- **search by meaning** (unless it already runs on this server, with Ollama). Changing the model
-  re-indexes the memory in the background.
+## What you choose, and what the lock does
+Connecting a provider no longer switches everything at once; you choose where each job goes:
+- **the conversation**: per usage, in the *Models* tab (several providers can be mixed);
+- **search by meaning**: Settings → *Search by meaning* (a model on this server, or the European provider's).
+  Changing the model re-indexes the memory in the background;
+- **transcription** of voice messages and meetings: it stays on this server if it is installed there.
+
+The **Europe lock** is a guard on its own. Turning it on in the *Models* tab filters the table to compliant models and
+providers, and **swaps** any non-compliant selection for the best sovereign or local model (the swaps are
+reported). It does not force which provider answers, so you can lock to Europe without changing your main model.
 
 ## Half price for background work (Mistral)
 With Mistral, summaries of past conversations and the assistant's own reflection go through Mistral's
@@ -45,18 +48,16 @@ Turn it off with **Mistral: background work at half price** in Settings (`TALIXI
 In Activity, these calls show as *summary (batch)* or *mind (batch)*, at half the estimated cost.
 
 ## The lock
-With the lock (`TALIXIO_SOVEREIGN_ONLY=1`), anything without a European equivalent is **turned off** instead
+With the lock (**Europe lock (GDPR)** in the *Models* tab, `TALIXIO_SOVEREIGN_ONLY=1`), anything without a European equivalent is **turned off** instead
 of going elsewhere:
 - web search, unless you use your own SearXNG;
 - search by meaning and transcription at a service outside Europe (word search is kept, and
   transcription on this server if it is installed).
 
 ## A smaller server
-By default, what already runs on your server stays there: search by meaning with Ollama, and
-local transcription. Tick **Also move search by meaning and transcription from this server to the
-provider** before *Switch everything to Europe*: these two jobs then go to the European provider
-(at OVHcloud: bge-m3 and whisper-large-v3), and the server no longer has a model to run.
-The library and memory are re-indexed in the background with the new model. With several people,
+By default, what already runs on your server stays there: search by meaning with Ollama, and local transcription.
+To free the memory, choose the European provider's embedding model in Settings → *Search by meaning*: the library and memory
+are re-indexed in the background with it, and the server no longer has a model to run. With several people,
 then untick Ollama in the admin page: it is what uses the most memory.
 
 ## Are keys for providers outside Europe really unused?
@@ -71,8 +72,7 @@ is explicitly set to that provider.
   orange and says how many services still go outside.
 - **Run checks** adds an *EU · GDPR* step: it confirms that everything stays in Europe, with
   which provider, and whether the lock is on; otherwise it flags in red what still goes outside.
-- In *AI model*, the keys for providers outside Europe (Claude, OpenAI, Gemini) are hidden:
-  they stay saved but are not used. *Show them* brings them back.
+- With the lock on, the Models table hides the non-compliant models and providers: their keys stay saved but are not used.
 
 ## What still leaves Europe
 The card lists them, with a link to change each one. The usual cases:

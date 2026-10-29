@@ -11,6 +11,13 @@ are unread; the app icon counts them too, with the approvals waiting. Tap one to
 mark it read, or *Mark all read*. Opening the page also clears them from the phone's lock screen.
 The last 200 are kept, for 60 days. In a Secret space, the list only says where to look.
 
+## Reports from your autonomous pilot
+Progress reports from the autonomous pilot (see *Pilotage*) are quiet by default: no push, no email. A red count shows on
+the **Pilotage** entry and on the **Your autonomous pilot** tab, and the reports are in the **Recent reports** card there; the
+count clears when you open the tab. The **Fleet reports** switch on the pilot's status card lets you choose:
+**In-app badge** (default), **Push + e-mail**, or **Off** (nothing is shown). A report that merely repeats the previous
+one, or a routine keep-warm ping, never counts.
+
 ## Telegram
 Create a bot with @BotFather, put its token in Settings → Telegram, then message the bot: it replies
 with your id, which you add to the *Allowed chat ids* list.

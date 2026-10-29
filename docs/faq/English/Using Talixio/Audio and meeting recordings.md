@@ -31,7 +31,7 @@ Left empty, the choice is automatic, and that is the right setting in most cases
 | `gemini-2.5-flash` | The default choice. Good quality, speaker names, cheap. |
 | `gemini-2.5-flash-lite` | The cheapest. Enough for voice notes; a little less reliable on long meetings with several voices. |
 | `gemini-2.5-pro` | More expensive and slower, rarely better for a transcription. |
-| `gemini-3-flash-preview`, … | Newer models available with your key work too (the list is in Settings → AI model). |
+| `gemini-3-flash-preview`, … | Newer models available with your key work too (the list is in Settings → Model and budget). |
 
 Empty: Gemini's "standard" model if Gemini is your provider, otherwise `gemini-2.5-flash`.
 A whisper model name left in this field is ignored by Gemini.

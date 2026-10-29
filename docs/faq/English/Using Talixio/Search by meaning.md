@@ -13,6 +13,8 @@ must be turned into a vector: that computation is what you choose in **Settings 
 | European provider | online, in Europe | nothing here | the European provider's key (see *Staying in Europe*) |
 | Off | — | — | search by words only |
 
+- Settings → *Model and budget* → *Models* also lists the embedding models, to compare price, trust and provider. The one in
+  use shows **✓ Active**; the others link to **Choose in Settings**, which brings you back here. They are not routed per usage.
 - **Changing the choice re-indexes everything** in the background (the vectors depend on the model). Meanwhile,
   search by words stays available; the progress is shown under the choices.
 - **Measure on this server** gives the time for one search, for indexing (per passage) and for

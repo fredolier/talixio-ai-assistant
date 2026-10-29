@@ -32,5 +32,5 @@ except on public holidays".
 
 ## If the assistant describes its plan without doing it
 Reply "yes, go ahead": it must then use its tools, and say clearly what it cannot do.
-If this happens again, check the model in use (Settings → *AI model*): small "fast" models
+If this happens again, check the model in use (Settings → *Model and budget*): small "fast" models
 are worse at chaining actions; use the standard tier for these requests.
