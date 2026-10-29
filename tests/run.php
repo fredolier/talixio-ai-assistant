@@ -835,7 +835,7 @@ check('catalogue: an OpenAI account makes that provider connected and its seed m
 // so the dedup probe is 'Whisper (local)' — a model the 'local' seed already carries.
 $mport = $freePort();
 file_put_contents("$dir/models.php", '<?php header("Content-Type: application/json");
-echo json_encode(["data" => [["id" => "gpt-6-turbo"], ["id" => "text-embedding-5"], ["id" => "tts-2"], ["id" => "Whisper (local)"]]]);');
+echo json_encode(["data" => [["id" => "gpt-6-turbo"], ["id" => "text-embedding-5"], ["id" => "tts-2"], ["id" => "omni-moderation-latest"], ["id" => "Whisper (local)"]]]);');
 $mp = proc_open([PHP_BINARY, '-S', "127.0.0.1:$mport", "$dir/models.php"], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp);
 $waitPort($mport);
 $app->accounts()->save(['name' => 'Cat OA', 'kind' => 'openai', 'key' => 'sk-c', 'url' => "http://127.0.0.1:$mport/v1", 'models' => []], $cacc['id']);
@@ -846,12 +846,14 @@ proc_terminate($mp); proc_close($mp);
 $ids = array_column($fresh['models'], 'id');
 $new = current(array_filter($fresh['models'], fn($m) => ($m['id'] ?? '') === 'gpt-6-turbo'));
 $tts = current(array_filter($fresh['models'], fn($m) => ($m['id'] ?? '') === 'tts-2'));
-check('catalogue: a refresh folds the live model list in, classifies it and drops what no usage runs on',
+$emb = current(array_filter($fresh['models'], fn($m) => ($m['id'] ?? '') === 'text-embedding-5'));
+check('catalogue: a refresh folds the live model list in, classifies it (embeddings kept) and drops what no usage runs on',
     $fresh['source'] === 'live' && $new && ($new['live'] ?? false) && $new['available'] && $new['type'] === 'LLM'
     && $tts && $tts['type'] === 'Voice'                                            // the voice model is kept and typed…
-    && !in_array('text-embedding-5', $ids, true)                                   // …the embedding model is dropped…
+    && $emb && $emb['type'] === 'Embedding'                                        // …the embedding model is now kept and typed…
+    && !in_array('omni-moderation-latest', $ids, true)                             // …moderation/rerankers are still dropped…
     && count(array_filter($ids, fn($i) => $i === 'Whisper (local)')) === 1,        // …and a seed row for a known id is not duplicated
-    json_encode([$new, $tts, in_array('text-embedding-5', $ids, true)]));
+    json_encode([$new, $tts, $emb, in_array('omni-moderation-latest', $ids, true)]));
 check('catalogue: a refresh stamps the update time', (int)$app->store->get('catalogue_updated', '0') >= $before);
 $app->accounts()->delete($cacc['id']); $app->accountsChanged();
 $app->store->set('catalogue_live', ''); $app->store->set('catalogue_updated', '');

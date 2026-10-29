@@ -92,6 +92,15 @@ final class ModelCatalog
         ['name' => 'Llama 3.1 8B (local)', 'prov' => 'local', 'type' => 'LLM',   'rank' => 3, 'pin' => 0, 'pout' => 0],
         ['name' => 'Qwen2.5 7B (local)',   'prov' => 'local', 'type' => 'LLM',   'rank' => 4, 'pin' => 0, 'pout' => 0],
         ['name' => 'Whisper (local)',      'prov' => 'local', 'type' => 'Voice', 'rank' => 3, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$'],
+        // Embeddings (library search, the latent classifier, Mind) — priced per Mtok of input. Chosen via the
+        // embeddings presets in Settings (backend + model), not the per-usage router, so they are listed to compare,
+        // never assigned from the table. Prices are estimates; the local ones have no marginal cost.
+        ['name' => 'text-embedding-3-small',       'id' => 'text-embedding-3-small', 'prov' => 'openai', 'type' => 'Embedding', 'rank' => 6, 'unit' => 0.02, 'unitKind' => 'Mtok', 'cur' => '$', 'est' => true],
+        ['name' => 'gemini-embedding-001',         'id' => 'gemini-embedding-001',   'prov' => 'google', 'type' => 'Embedding', 'rank' => 7, 'unit' => 0.15, 'unitKind' => 'Mtok', 'cur' => '$', 'est' => true],
+        ['name' => 'BGE-M3',                       'id' => 'bge-m3',                 'prov' => 'aki',    'type' => 'Embedding', 'rank' => 6, 'unit' => 0.01, 'unitKind' => 'Mtok', 'cur' => '€', 'est' => true],
+        ['name' => 'Qwen 3 VL Embedding 8B',       'id' => 'qwen3-vl-embedding-8b',  'prov' => 'aki',    'type' => 'Embedding', 'rank' => 7, 'unit' => 0.05, 'unitKind' => 'Mtok', 'cur' => '€', 'est' => true],
+        ['name' => 'Qwen3-Embedding 0.6B (local)', 'id' => 'qwen3-embedding:0.6b',   'prov' => 'local',  'type' => 'Embedding', 'rank' => 5, 'unit' => 0, 'unitKind' => 'Mtok', 'cur' => '$'],
+        ['name' => 'EmbeddingGemma (local)',       'id' => 'embeddinggemma',         'prov' => 'local',  'type' => 'Embedding', 'rank' => 4, 'unit' => 0, 'unitKind' => 'Mtok', 'cur' => '$'],
     ];
 
     /** Which seed-provider id a Config (main settings or an AI account) counts as being connected to. */
@@ -147,7 +156,10 @@ final class ModelCatalog
     /** What kind of model a live id is, so it lands in the right type (or is dropped when no usage can run on it). */
     private static function classify(string $id): ?string
     {
-        if (preg_match('/embed|moderation|rerank|guard|tokeniz|safety|classifier/i', $id)) return null;
+        // Embeddings are a real usage (library search, the latent classifier, Mind), so they are kept and typed;
+        // moderation, rerankers, guards and tokenizers still have no usage and are dropped.
+        if (preg_match('/embed|\bbge\b|\bgte\b|\be5\b|nomic|mxbai/i', $id)) return 'Embedding';
+        if (preg_match('/moderation|rerank|guard|tokeniz|safety|classifier/i', $id)) return null;
         if (preg_match('/whisper|voxtral|\btts\b|transcrib|speech|\bvoice\b|\baudio\b/i', $id)) return 'Voice';
         if (preg_match('/dall-?e|flux|stable-?diffusion|sdxl|imagen|\bimage\b/i', $id)) return 'Image';
         if (preg_match('/vision|pixtral|\bvl\b/i', $id)) return 'Vision';

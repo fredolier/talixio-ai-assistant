@@ -1646,7 +1646,7 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .mb-est{color:var(--muted);margin-right:1px} .mb-dep{color:var(--warn)}
 .ty{display:inline-flex;align-items:center;gap:5px;font-size:.74rem;color:var(--muted)}
 .ty .g{width:8px;height:8px;border-radius:2px;flex:none}
-.ty.llm .g{background:var(--accent)} .ty.voice .g{background:var(--corp,#6a4bd6)} .ty.image .g{background:var(--warn)} .ty.vision .g{background:#1f78c4}
+.ty.llm .g{background:var(--accent)} .ty.voice .g{background:var(--corp,#6a4bd6)} .ty.image .g{background:var(--warn)} .ty.vision .g{background:#1f78c4} .ty.embedding .g{background:#13a89e}
 .rank{display:inline-flex;align-items:center;gap:6px}
 .rbar{width:46px;height:6px;border-radius:999px;background:var(--sunk);overflow:hidden;flex:none}
 .rbar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--corp,#6a4bd6))}

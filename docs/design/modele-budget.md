@@ -64,7 +64,7 @@ filters + table), `mbRenderUsages`, `mbRenderRows`.
   (§4). Each carries `name`, a canonical **`id`** (the API model string; it falls
   back to `name` for the providers whose display name already *is* the API string —
   only Anthropic keeps a separate display name and API id), `prov`, `type`
-  (LLM / Vision / Voice / Image), `rank` (1 basic → 10 flagship), a price
+  (LLM / Vision / Voice / Image / Embedding), `rank` (1 basic → 10 flagship), a price
   (`pin`/`pout` per Mtok, or `unit`+`unitKind` for voice/image), `est` when the
   price is an estimate, and `available` when its provider has a source.
 - The frontend keys model identity on `mbId = m => m.id || m.name`; the canonical
@@ -100,8 +100,9 @@ The table is seed + the connected providers' live `GET /models` lists, folded in
   other provider is OpenAI-compatible.
 - A live id the seed already covers (same provider, case-insensitive on id-or-name)
   is dropped so the hand-kept row (real price/rank) wins.
-- A folded id is `classify()`-d by name into Voice / Image / Vision / LLM;
-  embeddings, moderation, rerankers and the like are dropped (no usage runs on them).
+- A folded id is `classify()`-d by name into Voice / Image / Vision / Embedding / LLM;
+  moderation, rerankers, guards and tokenizers are dropped (no usage runs on them),
+  but embeddings are kept (§7).
   A folded model is `est` (no confirmed price/rank) and `available`.
 - Each provider is fetched independently (one bad key can't blank the others); the
   fetch is tagged a model call for the privacy journal (`Privacy::as('model', …)`).
@@ -117,9 +118,9 @@ freshly-connected provider shows its seed rows (the full AKI catalogue, §6) at 
 
 ## 5. Filters and the Europe (GDPR) lock
 
-Filters (`mbVisible`): free-text search, type, provider, trust floor, and an
-**Available** toggle (on by default — untick to see the whole catalogue). The table
-sorts on any column.
+Filters (`mbVisible`): free-text search, type (LLM / Vision / Voice / Image /
+**Embedding**, §7), provider, trust floor, and an **Available** toggle (on by default —
+untick to see the whole catalogue). The table sorts on any column.
 
 The **Verrou Europe (RGPD)** lives in the Modèles tab (`mbToggleLock`, `#mb-lock-cb`).
 It does three things at once:
@@ -154,10 +155,29 @@ Qwen 3.6 35B A3B and Apertus 70B) and four € image models (Flux.2 [klein], Qwe
 Qwen Image Edit, Z-Image Turbo). Each seed row carries its **exact API model string**
 as `id` (e.g. `gpt-oss-120b`, `deepseek-v4.1-flash-1017-tl5`), so routing uses the
 real id and a live refresh dedups against the seed. Embedding models (bge-m3,
-qwen3-vl-embedding-8b) are left out — no usage runs on them. Prices are estimates
-(`est`). AKI is reached like any sovereign provider (Fournisseurs tab → the AKI card's
+qwen3-vl-embedding-8b) are now listed too, as the **Embedding** type (§7). Prices are
+estimates (`est`). AKI is reached like any sovereign provider (Fournisseurs tab → the AKI card's
 inline Connect, which creates an AI account of kind `sovereign`, service `aki`), and it
 satisfies the Europe lock (trust 5).
+
+## 7. Embeddings in the catalogue
+
+Embeddings are a real usage — library search, the latent classifier and Mind all
+run on them — so the catalogue lists them as their own **Embedding** type
+(`MB_TYPE_USAGE.Embedding = []`, like Image). They are priced per **Mtok** of input
+(`unit` + `unitKind: 'Mtok'`), shown in the «≈ / message» column with «—» for
+input/output, and the type filter gains an **Embeddings** option. The seed carries the
+options the assistant can actually use — OpenAI `text-embedding-3-small`, Google
+`gemini-embedding-001`, AKI `bge-m3` and `qwen3-vl-embedding-8b`, and the local
+`qwen3-embedding:0.6b` / `embeddinggemma` — and `classify()` now types live-discovered
+embedding ids as Embedding (while still dropping moderation, rerankers, guards and
+tokenizers).
+
+Unlike the chat usages, an embedding model is **not assigned from this table**: the
+embedding backend + model is chosen by the `Embeddings` presets in `Réglages`
+(`$c->embeddings` / `$c->embeddingsModel`), which also set memory and dimensions. The
+table lists embeddings to *compare* (price, trust, provider), so their F/S/A/V buttons
+stay disabled — the catalogue surfaces them, Settings selects them.
 
 ## Deliberate divergences from the concept mockup
 

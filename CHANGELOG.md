@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.11.3 (2026-10-29)
+
+- **The Modèles table now lists embedding models.** Embeddings run real work — library search, the latent classifier, Mind — but they were left out of the catalogue. They now appear as their own **Embedding** type (OpenAI text-embedding-3-small, Google gemini-embedding-001, AKI bge-m3 and qwen3-vl-embedding-8b, and the local qwen3-embedding:0.6b / embeddinggemma), priced per million input tokens, with an **Embeddings** filter option. Like the image models, they are listed to compare on price, trust and provider — you still choose the embedding backend and model in Réglages, not from this table. A live catalogue refresh now keeps and types embedding models it discovers (while still dropping moderation, rerankers, guards and tokenizers, which no usage runs on).
+
 ## 1.11.2 (2026-10-28)
 
 - **The pilote autonome stops spamming you every ten minutes.** Its keep-warm pings are meant to be silent, but an orchestrator that re-sends the same status line each tick (without the silent flag) made Talixio notify — and e-mail — you every ~10 minutes. The inbox now drops a report whose text is a verbatim repeat of the last one it notified, so a repeated keep-warm line notifies once instead of forever; genuinely new text still comes through, and the explicit `tick`/`silent` flags still work as before.

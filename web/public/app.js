@@ -3201,8 +3201,9 @@ const MB_USAGES = [
   { id: 'deep', label: 'Deep', hint: 'analysis, long writing' },
   { id: 'voice', label: 'Voice', hint: 'dictation and reading' },
 ];
-/** Which usages a model type can serve (image generation is in the catalogue but not routed to a usage yet). */
-const MB_TYPE_USAGE = { LLM: ['fast', 'standard', 'deep'], Vision: ['fast', 'standard', 'deep'], Voice: ['voice'], Image: [] };
+/** Which usages a model type can serve (image generation and embeddings are in the catalogue to compare, not routed
+ *  to a usage: image isn't wired yet, embeddings are chosen via the embeddings presets in Settings). */
+const MB_TYPE_USAGE = { LLM: ['fast', 'standard', 'deep'], Vision: ['fast', 'standard', 'deep'], Voice: ['voice'], Image: [], Embedding: [] };
 state.mb = { tab: 'models', scope: 'global', cat: null, routing: null, lock: false, avail: true, sort: { key: 'rank', dir: -1 }, q: '', ftype: '', fprov: '', ftl: 0, sel: '' };
 const mbTlRank = tl => tl === 'L' ? 6 : +tl;                       // local counts as top trust for the Europe floor
 const mbTlClass = tl => tl === 'L' ? 'tlL' : 'tl' + tl;
@@ -3213,7 +3214,7 @@ const mbId = m => m.id || m.name;
 function mbUnit(m) {
   if (m.unit == null) return null;
   if (m.unit === 0) return t('free');
-  return (m.cur || '$') + (+m.unit).toFixed(m.unit < 0.1 ? 3 : 2) + '/' + (m.unitKind === 'img' ? t('img') : t('min'));
+  return (m.cur || '$') + (+m.unit).toFixed(m.unit < 0.1 ? 3 : 2) + '/' + (m.unitKind === 'img' ? t('img') : m.unitKind === 'Mtok' ? 'Mtok' : t('min'));
 }
 /** A rough "per message" cost (≈20k tokens in + 1k out), the same yardstick the budget uses. */
 function mbMsg(m) {
@@ -3439,6 +3440,7 @@ function mbRender() {
         <option value="Vision"${state.mb.ftype === 'Vision' ? ' selected' : ''}>${esc(t('LLM vision'))}</option>
         <option value="Voice"${state.mb.ftype === 'Voice' ? ' selected' : ''}>${esc(t('Voice'))}</option>
         <option value="Image"${state.mb.ftype === 'Image' ? ' selected' : ''}>${esc(t('Text → image'))}</option>
+        <option value="Embedding"${state.mb.ftype === 'Embedding' ? ' selected' : ''}>${esc(t('Embeddings'))}</option>
       </select>
       <select id="mb-fprov"><option value="">${esc(t('All providers'))}</option>${provOpts}</select>
       <select id="mb-ftl">
@@ -3463,7 +3465,7 @@ function mbRender() {
       <span><b>${esc(t('Rank'))}</b> ${esc(t('1 (basic) → 10 (flagship)'))}</span>
       <span><b>${esc(t('Trust'))}</b> <span class="tl tl1">1</span> ${esc(t('consumer (China)'))} · <span class="tl tl2">2</span> ${esc(t('free/public'))} · <span class="tl tl3">3</span> ${esc(t('pro'))} · <span class="tl tl4">4</span> ${esc(t('no retention'))} · <span class="tl tl5">5</span> ${esc(t('sovereign (GDPR)'))} · <span class="tl tlL">${esc(t('loc'))}</span> ${esc(t('local'))}</span>
     </div>
-    <p class="note small muted">${esc(t('Prices in $ per million tokens (voice: $/min, image: $/image). Indicative — check with the provider. “≈ / message”: ~20,000 tokens read + 1,000 written. “~” marks an estimated price.'))}</p>`;
+    <p class="note small muted">${esc(t('Prices in $ per million tokens (voice: $/min, image: $/image, embeddings: $/Mtok). Indicative — check with the provider. “≈ / message”: ~20,000 tokens read + 1,000 written. “~” marks an estimated price.'))}</p>`;
   mbRenderUsages(); mbRenderRows();
   $('#mb-scope').onchange = async e => { state.mb.scope = e.target.value === 'global' ? 'global' : +e.target.value; state.mb.routing = await mbFetchRouting(); mbRender(); };
   $('#mb-q').oninput = e => { state.mb.q = e.target.value; mbRenderRows(); };
@@ -3528,7 +3530,7 @@ function mbRenderRows() {
     const est = m.est ? '<span class="mb-est" title="' + esc(t('Estimated price')) + '">~</span>' : '';
     return `<tr class="${blocked ? 'blocked' : ''} ${conn ? '' : 'offrow'}">
       <td><div class="mname"><span class="flag">${p.flag}</span><span class="no-i18n">${esc(m.name)}${m.deprecated ? ' <span class="mb-dep" title="' + esc(t('Being retired')) + '">⚠</span>' : ''}<div class="prov muted small no-i18n">${esc(p.name)}${conn ? '' : ' · ' + t('not connected')}</div></span></div></td>
-      <td><span class="ty ${m.type.toLowerCase()}"><span class="g"></span>${esc(t(m.type === 'LLM' ? 'LLM' : m.type === 'Vision' ? 'Vision' : m.type === 'Voice' ? 'Voice' : 'Image'))}</span></td>
+      <td><span class="ty ${m.type.toLowerCase()}"><span class="g"></span>${esc(t(m.type === 'LLM' ? 'LLM' : m.type === 'Vision' ? 'Vision' : m.type === 'Voice' ? 'Voice' : m.type === 'Image' ? 'Image' : 'Embeddings'))}</span></td>
       <td class="num"><span class="rank"><span class="rbar"><i style="width:${m.rank * 10}%"></i></span><span class="rnum no-i18n">${m.rank}</span></span></td>
       <td><span class="tl ${mbTlClass(p.tl)}" title="${esc(t(p.kind))}">${esc(mbTlText(p.tl))}</span></td>
       <td class="num no-i18n">${est}${esc(mbMoney(m.pin))}</td>
