@@ -3204,7 +3204,7 @@ const MB_USAGES = [
 /** Which usages a model type can serve (image generation and embeddings are in the catalogue to compare, not routed
  *  to a usage: image isn't wired yet, embeddings are chosen via the embeddings presets in Settings). */
 const MB_TYPE_USAGE = { LLM: ['fast', 'standard', 'deep'], Vision: ['fast', 'standard', 'deep'], Voice: ['voice'], Image: [], Embedding: [] };
-state.mb = { tab: 'models', scope: 'global', cat: null, routing: null, lock: false, avail: true, sort: { key: 'rank', dir: -1 }, q: '', ftype: '', fprov: '', ftl: 0, sel: '' };
+state.mb = { tab: 'models', scope: 'global', cat: null, routing: null, emb: null, lock: false, avail: true, sort: { key: 'rank', dir: -1 }, q: '', ftype: '', fprov: '', ftl: 0, sel: '' };
 const mbTlRank = tl => tl === 'L' ? 6 : +tl;                       // local counts as top trust for the Europe floor
 const mbTlClass = tl => tl === 'L' ? 'tlL' : 'tl' + tl;
 const mbTlText = tl => tl === 'L' ? t('loc') : String(tl);
@@ -3225,8 +3225,8 @@ function mbMsg(m) {
 }
 
 async function loadModelCockpit() {
-  const [cat, routing] = await Promise.all([api('api/catalogue'), mbFetchRouting()]);
-  state.mb.cat = cat; state.mb.routing = routing;
+  const [cat, routing, emb] = await Promise.all([api('api/catalogue'), mbFetchRouting(), api('api/meaning').catch(() => null)]);
+  state.mb.cat = cat; state.mb.routing = routing; state.mb.emb = emb;
   $('#mb-prov-c').textContent = cat.providers.length;
   wireMbTabs();
   mbApplyTab();
@@ -3525,8 +3525,19 @@ function mbRenderRows() {
       const on = mbEff(u.id).routed && mbEff(u.id).model === mbId(m);
       return `<button data-m="${esc(mbId(m))}" data-prov="${esc(m.prov)}" data-u="${u.id}" class="${on ? 'on' : ''}"${ok ? '' : ' disabled'} title="${esc(t(u.label))}">${esc(t(u.label)[0])}</button>`;
     }).join('');
-    const cell = conn ? `<div class="assign">${btns}</div>`
-      : `<button class="btn sm primary" data-connect="${esc(m.prov)}">${esc(t('Connect'))}</button>`;
+    let cell;
+    if (m.type === 'Embedding') {
+      // Embeddings aren't routed per usage — they're chosen in Settings → “Recherche par le sens” (switching re-indexes
+      // all memory). So instead of the disabled chat buttons, show which one is live and link the rest to that chooser.
+      const active = !!state.mb.emb && state.mb.emb.backend !== 'off'
+        && (state.mb.emb.model || '').toLowerCase() === mbId(m).toLowerCase();
+      cell = active
+        ? `<span class="mb-emb-active" title="${esc(t('In use for search by meaning'))}">✓ ${esc(t('Active'))}</span>`
+        : `<a href="#" class="mb-emb-pick" data-emb-pick title="${esc(t('Embeddings are chosen in Settings → Search by meaning'))}">${esc(t('Choose in Settings'))}</a>`;
+    } else {
+      cell = conn ? `<div class="assign">${btns}</div>`
+        : `<button class="btn sm primary" data-connect="${esc(m.prov)}">${esc(t('Connect'))}</button>`;
+    }
     const est = m.est ? '<span class="mb-est" title="' + esc(t('Estimated price')) + '">~</span>' : '';
     return `<tr class="${blocked ? 'blocked' : ''} ${conn ? '' : 'offrow'}">
       <td><div class="mname"><span class="flag">${p.flag}</span><span class="no-i18n">${esc(m.name)}${m.deprecated ? ' <span class="mb-dep" title="' + esc(t('Being retired')) + '">⚠</span>' : ''}<div class="prov muted small no-i18n">${esc(p.name)}${conn ? '' : ' · ' + t('not connected')}</div></span></div></td>
@@ -3539,6 +3550,11 @@ function mbRenderRows() {
       <td>${cell}</td></tr>`;
   }).join('') || `<tr><td colspan="8" class="muted" style="padding:16px">${esc(t('No model matches. Widen the filters, or untick “Available” to see the whole catalogue.'))}</td></tr>`;
   tb.querySelectorAll('.assign button:not(:disabled)').forEach(b => b.onclick = () => mbAssign(b.dataset.u, b.dataset.m, b.dataset.prov));
+  tb.querySelectorAll('[data-emb-pick]').forEach(a => a.onclick = e => {
+    e.preventDefault();
+    showSection('library');
+    setTimeout(() => $('#meaning')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  });
   tb.querySelectorAll('[data-connect]').forEach(b => b.onclick = () => {
     state.mb.tab = 'providers'; mbApplyTab();
     const card = $(`.mb-pcard[data-pid="${CSS.escape(b.dataset.connect)}"]`) || $('#mb-pgrid');

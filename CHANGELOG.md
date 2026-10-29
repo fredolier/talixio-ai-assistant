@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.12.1 (2026-10-29)
+
+- **The Modèles table no longer shows dead chat buttons on embedding rows.** Embeddings aren't routed per usage (fast/standard/deep) — they power library search and are chosen in Réglages → « Recherche par le sens », where switching re-indexes all memory. The table now says so plainly: the embedding model currently in use carries a ✓ **Actif** chip, and the other embedding rows link to « **Choisir dans Réglages** » instead of showing the four disabled routing buttons. You compare embeddings in the table and choose them in Réglages; nothing was removed from Réglages.
+
 ## 1.12.0 (2026-10-29)
 
 - **The Rôles tab now looks and works like the concept map.** Roles are grouped into bordered specialization cards (each with a "· N rôles" count), and every role is a clickable node whose ring shows its acceptance rate and whose size scales with how much it runs. **Clicking a role now opens its detail below** — ring, metrics, trend, sparkline, the specialization editor and the lifecycle actions — instead of every card being fully expanded at once. Archived roles open from an "Archivés…" button in the toolbar. (No local-vs-corporate split yet: there is no such field on a role, so the mockup's "géré par Acme" group and legend are not shown.)
