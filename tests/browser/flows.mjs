@@ -217,6 +217,20 @@ const flows = {
     await page.waitForSelector('#mb-models .mb-table tbody tr .mname', { timeout: 10000 });
     check('cockpit: "Actualiser maintenant" refreshes the catalogue in place', (await page.$$('#mb-models .mb-table tbody tr .mname')).length > 0);
   },
+  async libraryMemory({ page, check }) {
+    await go(page, 'settings');
+    // Bibliothèque et mémoire: Search, Documents, Network drive; the knowledge graph lives in its own Learning section.
+    await page.evaluate(() => { location.hash = '#settings/library'; }); await page.waitForTimeout(700);
+    const libTabs = await page.$$eval('.set-sec[data-sec="library"] .set-tabs .tab', els => els.map(e => e.textContent.trim()));
+    check('settings: Library and memory has Search, Documents and Network drive tabs', libTabs.length === 3 && /search|recherche/i.test(libTabs[0]) && /documents/i.test(libTabs[1]) && /drive|réseau/i.test(libTabs[2]), libTabs.join('|'));
+    check('settings: Search shows the model in use and a way to choose it, not the old list of presets',
+      await page.isVisible('#meaning [data-a="choose"]') && (await page.$$('#meaning .meaning-opt')).length === 0);
+    await page.click('.set-sec[data-sec="library"] .set-tabs .tab:nth-child(2)');
+    check('settings: Documents holds filing and image reading, and no transcription fields',
+      await page.isVisible('#set-TALIXIO_AUTO_FILE') && await page.isVisible('#set-TALIXIO_VISION_INDEX') && !(await page.isVisible('#set-TALIXIO_TRANSCRIBE')));
+    await page.evaluate(() => { location.hash = '#settings/learning'; }); await page.waitForTimeout(700);
+    check('settings: the knowledge graph is in the Learning section', await page.isVisible('#set-TALIXIO_GRAPH') || await page.isVisible('.set-sec[data-sec="learning"] [data-key="TALIXIO_GRAPH"]'));
+  },
   async notifications({ page, check }) {
     await go(page, 'notifications');
     for (const b of ['#notif-all-read', '#notif-clear']) if (await page.isVisible(b) && await page.isEnabled(b)) await page.click(b);

@@ -106,4 +106,4 @@ recreated to pick it up.
 - *The provider refused the key*: wrong or expired key, or not a key for this provider.
 - *Could not reach the provider*: the server cannot reach the Internet (firewall, proxy).
 - The test says search by meaning is not available: the model name may have changed
-  at the provider; set it in `TALIXIO_EMBEDDINGS_MODEL`.
+  at the provider; choose another model with the **E** button in Settings → Model and budget → Models.

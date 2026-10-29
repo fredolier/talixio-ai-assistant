@@ -211,6 +211,17 @@ before an embedding is routed it follows the model in Settings. Embedding button
 settings that are *not* a model (meeting tier + threshold; the vision on/off link; vector size + index + measure), saved
 immediately through `POST /api/settings`; selecting « Images » also filters the table to rows that can read an image.
 
+## 9. Library and memory after the move (1.16.0)
+
+Once Voice, Images and Embeddings are chosen from the table, the Library section keeps only what is not a model. Its tabs are
+**Search and memory** (the model in use + « Choose the model… » (opens the Embeddings card), the index, « Mesurer sur ce
+serveur », the Confidential/Secret note; then web search, with the Voyage key and Ollama address folded as advanced),
+**Documents** (`documents` group: filing of the Inbox, image reading switch) and **Network drive (WebDAV)**. The old preset
+cards are gone; « Turn off search by meaning » lives on the Embeddings card. The knowledge graph moved to a new **Learning**
+section (`learning` group → section `learning`, with Character and values and Learn from tasks). The transcription /
+meeting / embeddings keys remain settings, in a `models` group mapped to the `model` section whose card the page never shows:
+they are the fallback while nothing is chosen in the table and what the strips read and write.
+
 ## Deliberate divergences from the concept mockup
 
 The mockup (`scratchpad/fleet-ui-mockups.html`; not in the repo) is a concept sketch.

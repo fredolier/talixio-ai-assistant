@@ -11,17 +11,21 @@
 ## Pourquoi une transcription séparée ?
 Claude ne prend pas l'audio en entrée : la transcription est une étape à part.
 
-## Les choix de transcription (Réglages → Audio → Transcription)
+## Les choix de transcription (Réglages → Modèle et budget → Modèles → carte *Voix*)
+Choisissez le modèle avec le bouton **V** d'une ligne du tableau : Whisper ou Voxtral chez un fournisseur européen, OpenAI, Gemini, ou
+**Whisper (local)** sur ce serveur. La carte *Voix* contient aussi les réglages des réunions : le niveau des résumés et la durée
+à partir de laquelle un enregistrement est une réunion. Les possibilités :
 - **Gemini** : environ 0,15 $ par heure d'enregistrement, avec les noms des intervenants. Avec une
   clé gratuite, Google peut utiliser les données pour entraîner ses modèles ; avec la facturation
   activée, non. Indiquez-le dans Réglages (« Ma clé Gemini est sur une offre payante »).
 - **OpenAI** : gpt-4o-transcribe.
 - **Local (whisper.cpp)** : l'audio ne quitte pas le serveur, c'est gratuit, mais plus lent (environ la
   moitié de la durée de l'enregistrement sur 4 cœurs) et sans noms d'intervenants.
-- **auto** : Gemini si une clé est renseignée, sinon local si whisper.cpp est installé.
+- **Fournisseurs européens** (OVHcloud, Scaleway, Infomaniak : Whisper ; Mistral : Voxtral) : l'audio reste en Europe.
+- **Aucun modèle choisi** : automatique. Gemini si une clé est renseignée, sinon local si whisper.cpp est installé.
 - Dans un espace **Confidentiel**, la transcription se fait toujours en local.
 
-## Quel modèle choisir ? (Réglages → Audio → Modèle de transcription)
+## Quel modèle Gemini ? (Réglages → Modèle et budget → Modèles → carte *Voix*)
 Laissé vide, le choix est automatique, et c'est le bon réglage dans la plupart des cas.
 
 **Gemini** (le nom commence par `gemini`) :
@@ -31,7 +35,7 @@ Laissé vide, le choix est automatique, et c'est le bon réglage dans la plupart
 | `gemini-2.5-flash` | Le choix par défaut. Bonne qualité, noms des intervenants, peu cher. |
 | `gemini-2.5-flash-lite` | Le moins cher. Suffit pour les notes vocales ; un peu moins fiable sur les longues réunions à plusieurs voix. |
 | `gemini-2.5-pro` | Plus cher et plus lent, rarement meilleur pour une transcription. |
-| `gemini-3-flash-preview`, … | Les modèles plus récents de votre clé marchent aussi (la liste est dans Réglages → Modèle IA). |
+| `gemini-3-flash-preview`, … | Les modèles plus récents de votre clé marchent aussi (la liste est dans Réglages → Modèle et budget). |
 
 Vide : le modèle « standard » de Gemini si Gemini est votre fournisseur, sinon `gemini-2.5-flash`.
 Un nom de modèle whisper laissé dans ce champ est ignoré par Gemini.

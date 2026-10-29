@@ -36,7 +36,7 @@ Les espaces sans compte utilisent les réglages principaux.
   Un espace sur un compte européen peut recevoir des conversations *confidentielles* même si le modèle principal est un abonnement.
 - Chaque compte a ses propres limites chez le fournisseur : la charge se répartit entre eux.
 - *Tester* vérifie le compte avant de l'enregistrer. Les clés et jetons ne quittent jamais le serveur ; laissez le champ vide pour garder celui enregistré.
-- La transcription et la recherche par le sens gardent les réglages principaux.
+- La transcription, la lecture des images et la recherche par le sens se choisissent dans le tableau des modèles (voir plus bas) ; les modèles d'un compte ne servent que les trois niveaux de conversation.
 - Supprimer un compte remet ses espaces sur les réglages principaux.
 
 ## La page Modèle et budget

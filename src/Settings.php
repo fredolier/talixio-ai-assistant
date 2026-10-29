@@ -119,30 +119,32 @@ final class Settings
                 ['TALIXIO_TELEGRAM_TOKEN', 'Bot token', 'secret', 'From @BotFather.'],
                 ['TALIXIO_TELEGRAM_ALLOWED_IDS', 'Allowed chat ids', 'list', 'Message the bot: it replies with your id.'],
             ]],
-            'search' => ['Web search and memory', '', [
+            'search' => ['Search and memory', 'Web search, and the settings behind search by meaning. Which model computes the vectors is chosen in Model and budget → Models → Embeddings.', [
                 ['TALIXIO_SEARCH', 'Web search', 'select', 'auto: Claude\'s or Gemini\'s built-in search, otherwise the service set below.', ['auto' => 'auto', 'builtin' => 'built-in (Claude)', 'gemini' => 'Google via Gemini', 'brave' => 'Brave', 'tavily' => 'Tavily', 'searxng' => 'SearXNG', 'off' => 'off']],
                 ['BRAVE_API_KEY', 'Brave Search key', 'secret', ''],
                 ['TAVILY_API_KEY', 'Tavily key', 'secret', ''],
                 ['SEARXNG_URL', 'SearXNG address', 'url', ''],
-                ['TALIXIO_EMBEDDINGS', 'Search by meaning (embeddings)', 'select', 'Keyword search always works. After a change, memory is re-indexed in the background.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'voyage' => 'Voyage', 'ollama' => 'Ollama (local)', 'sovereign' => 'European provider', 'off' => 'off']],
-                ['TALIXIO_EMBEDDINGS_MODEL', 'Embeddings model', 'text', 'Empty = the service\'s default. Ollama: qwen3-embedding:0.6b (recommended, multilingual), embeddinggemma, bge-m3. Install with install.sh --with-ollama; a new model must be pulled first (ollama pull …).'],
-                ['TALIXIO_EMBEDDINGS_DIMS', 'Vector size', 'number', 'Empty = automatic (512 for models built for it: faster search, nearly the same quality). 0 = full size. Changing it re-indexes memory in the background.'],
                 ['VOYAGE_API_KEY', 'Voyage key', 'secret', ''],
                 ['TALIXIO_OLLAMA_URL', 'Ollama address', 'url', ''],
-                ['TALIXIO_GRAPH', 'Knowledge graph of the library', 'bool', 'Notes the people, companies, projects and places each document mentions, so the assistant can gather everything about a name and what is linked to a file. One fast-model call per new or changed document, in the background; never for a folder the model may not read.'],
-                ['TALIXIO_GRAPH_DAILY', 'Documents added to the graph per day (max)', 'number', 'Caps the cost: the rest waits for the next days.'],
             ]],
             'tasks' => ['Tasks', 'The tasks board of each space.', [
                 ['TALIXIO_TASK_REMINDER', 'Reminder the day before a due date', 'text', 'At this time (e.g. 18:00), a notification lists the tasks due tomorrow, per space. Empty = off.'],
                 ['TALIXIO_TASKS_GOOGLE', 'Tasks marked "show in my calendar" go to Google Calendar or Outlook', 'select', 'When Google Calendar or Outlook is connected: added as all-day events (start to due date) and kept up to date. Otherwise use the private calendar link (Tasks → Calendar).', ['1' => 'on', '0' => 'off']],
             ]],
-            'audio' => ['Audio, meetings and library', '', [
+            'documents' => ['Documents', 'How new documents are filed and read.', [
+                ['TALIXIO_AUTO_FILE', 'Filing new documents (Inbox)', 'select', 'The folder is guessed from your documents already filed (free), the fast model helps when unsure or to give a clear name.', ['suggest' => 'suggest, I confirm', 'auto' => 'file the obvious ones myself', 'off' => 'off']],
+                ['TALIXIO_VISION_INDEX', 'Read images and scanned PDFs', 'select', 'Library: the fast model describes photos and transcribes scans so they can be searched (small cost per image or page).', ['1' => 'on', '0' => 'off']],
+            ]],
+            // Chosen from the table in Model and budget (Voice, Embeddings): kept as settings so the file and the table's own
+            // strips can read and write them, and as the fallback while no model is chosen there. The card is never shown.
+            'models' => ['Models chosen in the table', 'Transcription, search by meaning and meetings: set from Model and budget → Models.', [
                 ['TALIXIO_TRANSCRIBE', 'Transcription', 'select', 'auto: Gemini when its key is set, else local when whisper.cpp is installed. Local: the audio never leaves this server, but it is slower (about half the recording\'s length) and has no speaker names (install with sudo ./install.sh --with-whisper). European provider: the audio stays in Europe (Whisper or Voxtral at Mistral, Scaleway, OVHcloud or Infomaniak), with its key.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'local' => 'Local (whisper.cpp, on this server)', 'sovereign' => 'European provider', 'off' => 'off']],
                 ['TALIXIO_TRANSCRIBE_MODEL', 'Transcription model', 'text', 'Empty = automatic. Local: large-v3-turbo-q5_0 (default), medium, small, or the path of a model file.'],
                 ['TALIXIO_MEETING_TIER', 'Tier for meeting summaries', 'select', '', ['standard' => 'standard', 'deep' => 'deep', 'fast' => 'fast']],
                 ['TALIXIO_VOICE_NOTE_MAX_SECONDS', 'Longer than this (seconds) = a meeting', 'number', ''],
-                ['TALIXIO_AUTO_FILE', 'Filing new documents (Inbox)', 'select', 'The folder is guessed from your documents already filed (free), the fast model helps when unsure or to give a clear name.', ['suggest' => 'suggest, I confirm', 'auto' => 'file the obvious ones myself', 'off' => 'off']],
-                ['TALIXIO_VISION_INDEX', 'Read images and scanned PDFs', 'select', 'Library: the fast model describes photos and transcribes scans so they can be searched (small cost per image or page).', ['1' => 'on', '0' => 'off']],
+                ['TALIXIO_EMBEDDINGS', 'Search by meaning (embeddings)', 'select', 'Keyword search always works. After a change, memory is re-indexed in the background.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'voyage' => 'Voyage', 'ollama' => 'Ollama (local)', 'sovereign' => 'European provider', 'off' => 'off']],
+                ['TALIXIO_EMBEDDINGS_MODEL', 'Embeddings model', 'text', 'Empty = the service\'s default. Ollama: qwen3-embedding:0.6b (recommended, multilingual), embeddinggemma, bge-m3. Install with install.sh --with-ollama; a new model must be pulled first (ollama pull …).'],
+                ['TALIXIO_EMBEDDINGS_DIMS', 'Vector size', 'number', 'Empty = automatic (512 for models built for it: faster search, nearly the same quality). 0 = full size. Changing it re-indexes memory in the background.'],
             ]],
             'browser' => ['Browser and approvals', '', [
                 ['TALIXIO_BROWSER', 'Browser', 'select', 'Installed with install.sh --with-browser.', ['auto' => 'on when installed', 'off' => 'off']],
@@ -159,10 +161,12 @@ final class Settings
                 ['TALIXIO_SHELL_NETWORK', 'Internet access in the sandbox', 'bool', 'To install Python packages (pip) or download data. Off is safer: with it on, a command can send out what it reads, so commands count as going outside (approval in Confidential spaces, never in Secret ones).'],
                 ['TALIXIO_SHELL_TIMEOUT', 'Time limit per command (seconds)', 'number', ''],
             ]],
-            'learning' => ['Learning', 'What the assistant learns by itself from your history.', [
+            'learning' => ['Learning', 'What the assistant learns by itself: from your history, from tasks, and from your documents.', [
                 ['TALIXIO_MIND', 'Character and values', 'bool', 'Learns by itself from your history what matters to you, how you decide, and what kind of assistant to be; it weighs this in its choices (Memory page). A few cents a day.'],
                 ['TALIXIO_LEARN', 'Learn from tasks (skills)', 'bool', 'After a multi-step task, a small agent decides whether to keep it (max $0.05).'],
                 ['TALIXIO_LEARN_MIN_STEPS', 'Minimum steps to learn', 'number', ''],
+                ['TALIXIO_GRAPH', 'Knowledge graph of the library', 'bool', 'Notes the people, companies, projects and places each document mentions, so the assistant can gather everything about a name and what is linked to a file. One fast-model call per new or changed document, in the background; never for a folder the model may not read.'],
+                ['TALIXIO_GRAPH_DAILY', 'Documents added to the graph per day (max)', 'number', 'Caps the cost: the rest waits for the next days.'],
             ]],
             'maintenance' => ['Backups and updates', '', [
                 ['TALIXIO_BACKUP_KEEP', 'Backups kept', 'number', 'One per night. 0 = no backups.'],
@@ -185,7 +189,7 @@ final class Settings
         'brain' => 'model', 'budget' => 'model',
         'notify' => 'channels', 'email' => 'channels', 'signal' => 'channels', 'telegram' => 'channels',
         'mailbox' => 'accounts', 'calendar' => 'accounts', 'spotify' => 'accounts', 'legifrance' => 'accounts',
-        'search' => 'library', 'audio' => 'library', 'learning' => 'library',
+        'search' => 'library', 'documents' => 'library', 'models' => 'model', 'learning' => 'learning',
         'browser' => 'security', 'shell' => 'security',
         'maintenance' => 'system', 'advanced' => 'system',
     ];

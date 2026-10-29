@@ -9,7 +9,7 @@
 ## Ranger
 - L'app propose un dossier et un nom clair pour chaque nouveau document de `/Inbox`
   (« scan_0012.pdf → /Admin/Factures/Facture EDF 2026-10.pdf ») : *Ranger*, *Modifier…* ou *Tout ranger*.
-  Elle apprend de vos rangements. Réglages → *Rangement des nouveaux documents* : proposer, ranger
+  Elle apprend de vos rangements. Réglages → *Bibliothèque et mémoire* → *Documents* → *Rangement des nouveaux documents* : proposer, ranger
   les évidents, ou désactivé.
 - Dossiers : créer, renommer, déplacer, supprimer (à la corbeille) ; un dossier se télécharge en ZIP.
 - L'arborescence se **plie et se déplie** (la flèche devant chaque dossier ; le bouton en haut replie tout).

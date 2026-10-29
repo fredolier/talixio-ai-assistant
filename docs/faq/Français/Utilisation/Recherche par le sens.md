@@ -2,20 +2,18 @@
 
 La recherche par **les mots** marche toujours. La recherche par **le sens** retrouve aussi un document qui ne
 contient pas vos mots (« assurance habitation » trouve « contrat multirisque »). Il faut pour cela transformer
-chaque passage en vecteur : c'est ce calcul qu'on choisit dans **Réglages → Recherche web et mémoire**.
+chaque passage en vecteur : le modèle qui le fait se choisit dans **Réglages → Modèle et budget → Modèles**, avec le bouton **E** d'un modèle
+d'embeddings (la carte *Embeddings*). **Réglages → Bibliothèque et mémoire → Recherche et mémoire** montre le modèle utilisé et l'index.
 
-| Choix | Où ça calcule | Mémoire | Remarques |
+| Choix du modèle | Où ça calcule | Mémoire | Remarques |
 |---|---|---|---|
 | Sur ce serveur : très léger | Ollama, multilingual-e5-small | ≈ 0,3 Go | 5 fois plus léger que « qualité », un peu moins précis |
 | Sur ce serveur : léger | Ollama, EmbeddingGemma | ≈ 0,7 Go | 2 fois plus léger, presque aussi bon |
 | Sur ce serveur : meilleure qualité | Ollama, Qwen3-Embedding 0.6B | ≈ 1,5 Go | le plus précis ; veut un processeur récent (AVX2) |
 | Google Gemini, OpenAI, Voyage | en ligne | rien ici | il faut la clé ; Gemini gratuit peut utiliser les textes |
 | Fournisseur européen | en ligne, en Europe | rien ici | la clé du fournisseur européen (voir *Rester en Europe*) |
-| Désactivée | — | — | recherche par les mots seulement |
+| Désactivée | — | — | recherche par les mots seulement (*Désactiver la recherche par le sens* sur la carte *Embeddings*) |
 
-- Réglages → *Modèle et budget* → *Modèles* liste aussi les modèles d'embeddings : comparez-y prix, confiance et fournisseur, et
-  choisissez-en un avec son bouton **E** (la carte *Embeddings* montre la taille des vecteurs et l'index). Un choix fait là
-  remplace celui fait ici, et inversement.
 - **Changer de choix réindexe tout** en arrière-plan (les vecteurs dépendent du modèle). Pendant ce temps,
   la recherche par les mots reste disponible ; l'avancement s'affiche sous les choix.
 - **Mesurer sur ce serveur** donne le temps d'une recherche, d'une indexation (par passage) et de la
@@ -39,7 +37,7 @@ Sur un petit processeur, l'indexation d'une grande bibliothèque peut occuper la
 Prenez *léger* ou *très léger*, ou un service en ligne si les espaces confidentiels peuvent se contenter des mots.
 
 ## Graphe de connaissances (optionnel)
-Réglages → Recherche web et mémoire → *Graphe de connaissances de la bibliothèque* (désactivé par défaut). Activé,
+Réglages → *Apprentissage* → *Graphe de connaissances de la bibliothèque* (désactivé par défaut). Activé,
 l'assistant note en arrière-plan les personnes, sociétés, projets et lieux cités par chaque document.
 Il peut alors rassembler **tout ce qui concerne un nom** (« tout sur Dupont ») ou **ce qui est lié à un
 fichier**, en plus de la recherche par les mots et par le sens.

@@ -2,20 +2,18 @@
 
 Search by **words** always works. Search by **meaning** also finds a document that does not
 contain your words ("home insurance" finds "comprehensive household policy"). For this, each passage
-must be turned into a vector: that computation is what you choose in **Settings → Web search and memory**.
+must be turned into a vector: the model that does it is chosen in **Settings → Model and budget → Models**, with the **E** button of an
+embedding model (the *Embeddings* card). **Settings → Library and memory → Search and memory** shows the model in use and the index.
 
-| Choice | Where it is computed | Memory | Notes |
+| Choice of model | Where it is computed | Memory | Notes |
 |---|---|---|---|
 | On this server: very light | Ollama, multilingual-e5-small | ≈ 0.3 GB | 5 times lighter than "best quality", a little less accurate |
 | On this server: light | Ollama, EmbeddingGemma | ≈ 0.7 GB | 2 times lighter, nearly as good |
 | On this server: best quality | Ollama, Qwen3-Embedding 0.6B | ≈ 1.5 GB | the most accurate; needs a recent processor (AVX2) |
 | Google Gemini, OpenAI, Voyage | online | nothing here | needs the key; free Gemini may use the texts |
 | European provider | online, in Europe | nothing here | the European provider's key (see *Staying in Europe*) |
-| Off | — | — | search by words only |
+| Off | — | — | search by words only (*Turn off search by meaning* on the *Embeddings* card) |
 
-- Settings → *Model and budget* → *Models* also lists the embedding models: compare price, trust and provider there and choose
-  one with its **E** button (the *Embeddings* card shows the vector size and the index). Choosing a model there replaces the
-  choice made here, and the other way round.
 - **Changing the choice re-indexes everything** in the background (the vectors depend on the model). Meanwhile,
   search by words stays available; the progress is shown under the choices.
 - **Measure on this server** gives the time for one search, for indexing (per passage) and for
@@ -39,7 +37,7 @@ On a small processor, indexing a large library can keep the machine busy for hou
 Choose *light* or *very light*, or an online service if confidential spaces can make do with words.
 
 ## Knowledge graph (optional)
-Settings → *Web search and memory* → *Knowledge graph of the library* (off by default). When it is on, the assistant
+Settings → *Learning* → *Knowledge graph of the library* (off by default). When it is on, the assistant
 notes in the background the people, companies, projects and places each document mentions. It can
 then gather **everything about a name** ("everything about Dupont") or **what is linked to a file**,
 on top of the search by words and meaning.

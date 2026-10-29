@@ -11,18 +11,22 @@
 ## Why a separate transcription?
 Claude does not take audio as input: transcription is a separate step.
 
-## Transcription options (Settings → Audio, meetings and library → Transcription)
+## Transcription options (Settings → Model and budget → Models → the *Voice* card)
+Pick the model with the **V** button of a row in the table: Whisper or Voxtral at a European provider, OpenAI, Gemini, or
+**Whisper (local)** on this server. The *Voice* card also holds the meeting settings: the tier for the summaries and the
+length from which a recording counts as a meeting. The options:
 - **Gemini**: about $0.15 per hour of recording, with speaker names. With a
   free key, Google may use the data to train its models; with billing
   turned on, it does not. Say so in Settings ("My Gemini key is on a paid plan").
 - **OpenAI**: gpt-4o-transcribe.
 - **Local (whisper.cpp)**: the audio never leaves the server, and it is free, but slower (about
   half the length of the recording on 4 cores) and without speaker names.
-- **auto**: Gemini if a key is set, otherwise local if whisper.cpp is installed.
+- **European providers** (OVHcloud, Scaleway, Infomaniak: Whisper; Mistral: Voxtral): the audio stays in Europe.
+- **No model chosen**: automatic. Gemini if a key is set, otherwise local if whisper.cpp is installed.
 - In a **Confidential** space, transcription is always done locally.
 
-## Which model to choose? (Settings → Audio, meetings and library → Transcription model)
-Left empty, the choice is automatic, and that is the right setting in most cases.
+## Which Gemini model? (Settings → Model and budget → Models → *Voice*)
+With Gemini chosen, the model is the row you pick; with none chosen, the choice is automatic, which is the right setting in most cases.
 
 **Gemini** (the name starts with `gemini`):
 

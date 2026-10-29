@@ -9,8 +9,9 @@
 ## Filing
 - The app suggests a folder and a clear name for each new document in `/Inbox`
   ("scan_0012.pdf → /Admin/Invoices/EDF invoice 2026-10.pdf"): *File it*, *Change…* or *File them all*.
-  It learns from how you file. Settings → *Filing new documents (Inbox)*: suggest, file
-  the obvious ones, or off.
+  It learns from how you file. Settings → *Library and memory* → *Documents* → *Filing new documents (Inbox)*: suggest, file
+  the obvious ones, or off. The same tab switches the reading of images and scanned PDFs on or off; the model that does it
+  is chosen in *Model and budget* → *Models* → the *Images* card (until then, the fast model).
 - Folders: create, rename, move, delete (to the trash); a folder can be downloaded as a ZIP.
 - The folder tree **collapses and expands** (the arrow in front of each folder; the button at the top collapses everything).
   The path of the open folder stays expanded, and the state is remembered on this device. While dragging a file,

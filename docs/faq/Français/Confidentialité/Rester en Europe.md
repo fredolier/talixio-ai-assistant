@@ -110,4 +110,4 @@ recréés pour la prendre en compte.
 - *The provider refused the key* : clé erronée ou expirée, ou pas pour ce fournisseur.
 - *Could not reach the provider* : le serveur n'atteint pas Internet (pare-feu, proxy).
 - Le test dit que la recherche par le sens n'est pas disponible : le nom du modèle a peut-être changé
-  chez le fournisseur ; réglez-le dans `TALIXIO_EMBEDDINGS_MODEL`.
+  chez le fournisseur ; choisissez un autre modèle avec le bouton **E** dans Réglages → Modèle et budget → Modèles.

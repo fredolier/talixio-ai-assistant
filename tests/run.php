@@ -1667,8 +1667,18 @@ $desc = \Talixio\Settings::describe($sd);
 $fields = array_merge(...array_map(fn($g) => $g['fields'], $desc));
 $byKey = array_column($fields, null, 'key');
 check('settings: secrets never sent back, only masked', $byKey['TALIXIO_SMTP_PASSWORD']['value'] === '' && $byKey['TALIXIO_SMTP_PASSWORD']['set'] === true && !str_contains(json_encode($desc), 'file-secret'));
-check('settings: every group has a section of the page, advanced keys exist', !array_diff(array_column($desc, 'section'), ['essentials', 'model', 'channels', 'accounts', 'library', 'security', 'system'])
-    && count(array_unique(array_column($desc, 'section'))) === 7 && !array_diff(\Talixio\Settings::ADVANCED, array_keys($byKey)) && $byKey['TALIXIO_PRICES']['advanced'] && !$byKey['TALIXIO_NAME']['advanced']);
+check('settings: every group has a section of the page, advanced keys exist', !array_diff(array_column($desc, 'section'), ['essentials', 'model', 'channels', 'accounts', 'library', 'learning', 'security', 'system'])
+    && count(array_unique(array_column($desc, 'section'))) === 8 && !array_diff(\Talixio\Settings::ADVANCED, array_keys($byKey)) && $byKey['TALIXIO_PRICES']['advanced'] && !$byKey['TALIXIO_NAME']['advanced']);
+$grp = array_column($desc, null, 'id');
+$inGroup = fn(string $g, string $k) => in_array($k, array_column($grp[$g]['fields'] ?? [], 'key'), true);
+check('settings: the knowledge graph is part of Learning, with its own section', $grp['learning']['section'] === 'learning' && $inGroup('learning', 'TALIXIO_GRAPH') && $inGroup('learning', 'TALIXIO_GRAPH_DAILY') && !$inGroup('search', 'TALIXIO_GRAPH'));
+check('settings: Library has Search (web + memory) and Documents (filing, image reading) only',
+    $inGroup('search', 'TALIXIO_SEARCH') && $inGroup('search', 'VOYAGE_API_KEY') && $inGroup('documents', 'TALIXIO_AUTO_FILE') && $inGroup('documents', 'TALIXIO_VISION_INDEX')
+    && !$inGroup('search', 'TALIXIO_EMBEDDINGS') && !$inGroup('documents', 'TALIXIO_TRANSCRIBE') && !isset($grp['audio']));
+check('settings: transcription, meetings and embeddings are chosen in the Models table; their keys stay settings (a group the page never shows)',
+    $grp['models']['section'] === 'model' && $inGroup('models', 'TALIXIO_TRANSCRIBE') && $inGroup('models', 'TALIXIO_EMBEDDINGS_DIMS') && $inGroup('models', 'TALIXIO_MEETING_TIER')
+    && \Talixio\Settings::save($sd, ['TALIXIO_EMBEDDINGS_DIMS' => '512', 'TALIXIO_MEETING_TIER' => 'deep']) === []);
+\Talixio\Settings::save($sd, [], ['TALIXIO_EMBEDDINGS_DIMS', 'TALIXIO_MEETING_TIER']);
 check('settings: source shown', $byKey['TALIXIO_NAME']['source'] === 'app' && $byKey['TALIXIO_SMTP_PASSWORD']['source'] === 'file');
 \Talixio\Settings::save($sd, [], ['TALIXIO_NAME']);
 check('settings: reset goes back to the file value in the same process', \Talixio\Config::fromEnv()->name === 'FromFile');

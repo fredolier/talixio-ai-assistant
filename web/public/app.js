@@ -2859,35 +2859,29 @@ function initialValue(f) {
   if (f.type === 'select') return eff;
   return f.value;
 }
-/** Settings → Search by meaning: pick who computes the vectors, see the index and what it costs here. */
+/** Settings → Library → Search: which model is in use for search by meaning, the index, and what it costs here.
+ *  The model itself is chosen in Model and budget → Models (Embeddings). */
 async function loadMeaning(box = $('#meaning')) {
   if (!box) return;
   const m = await api('api/meaning');
-  const problem = p => ({ 'no-key': t('needs its key'), 'no-ollama': m.shared ? t('the server\'s Ollama is off: ask the administrator') : t('Ollama is not installed (sudo ./install.sh --with-ollama)'),
-    'not-downloaded': m.shared ? t('not downloaded on the server: ask the administrator') : t('downloaded when chosen') }[p] || '');
-  const mem = p => p.local ? t('≈ {gb} GB while it computes', { gb: new Intl.NumberFormat(document.documentElement.lang || undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(p.memory_mb / 1024) }) : '';
   const idx = m.backend !== 'off' && m.index.total ? Math.round(100 * m.index.done / m.index.total) : 100;
   const pull = m.pull && m.pull.state === 'running' ? t('Downloading {model}…', { model: m.pull.model }) : m.pull?.state === 'failed' ? t('Download of {model} failed: {error}', { model: m.pull.model, error: m.pull.error || '' }) : '';
   const ms = m.measure;
+  const where = m.backend === 'off' ? '' : m.backend === 'ollama' ? t('on this server') : t('online');
   box.innerHTML = `<b>${esc(t('Search by meaning'))}</b>
-    <p class="muted small">${esc(t('Finds documents and past conversations by what they mean, not only their words. Who turns texts into vectors:'))}</p>
-    <div class="meaning-list" role="radiogroup">${m.presets.map(p => `<button type="button" class="meaning-opt${p.id === m.current ? ' on' : ''}" role="radio" aria-checked="${p.id === m.current}" data-p="${p.id}" ${p.problem && (p.problem !== 'not-downloaded' || m.shared) && p.id !== m.current ? 'aria-disabled="true"' : ''}>
-        <span class="mo-head"><b>${esc(t(p.label))}</b>${p.local ? `<span class="pill">${esc(t('private'))}</span>` : p.backend !== 'off' ? `<span class="pill out">${esc(t('online'))}</span>` : ''}</span>
-        <small>${esc(t(p.about))}</small>
-        <small class="muted">${esc([mem(p), p.problem ? problem(p.problem) : ''].filter(Boolean).join(' · '))}</small></button>`).join('')}</div>
-    ${m.current === 'custom' ? `<p class="small">${esc(t('Now: {backend} {model} (set below).', { backend: m.backend, model: m.model }))}</p>` : ''}
+    <p class="muted small">${esc(t('Finds documents and past conversations by what they mean, not only their words.'))}</p>
+    <p class="small">${m.backend === 'off' ? esc(t('Off: search by words only. Nothing is computed or sent.'))
+      : `${esc(t('Model in use:'))} <b class="no-i18n">${esc(m.model)}</b> <span class="pill${m.backend === 'ollama' ? '' : ' out'}">${esc(where)}</span>`}
+      <button type="button" class="btn sm" data-a="choose">${esc(t('Choose the model…'))}</button></p>
     ${m.backend !== 'off' ? `<p class="small">${esc(idx < 100 ? t('Index: {done} of {total} passages ready ({pct} %); the rest is done in the background.', { done: nf.format(m.index.done), total: nf.format(m.index.total), pct: idx }) : t('Index: everything is ready ({total} passages).', { total: nf.format(m.index.total) }))}</p>` : ''}
     ${pull ? `<p class="small">${esc(pull)}</p>` : ''}
     <div class="row wrap"><button class="btn small" type="button" data-a="measure" ${m.backend === 'off' ? 'disabled' : ''}>${esc(t('Measure on this server'))}</button>
       <span class="muted small" data-a="out">${ms ? esc(t('A search: {s} ms (question {q} ms + comparing {n} vectors {c} ms, {engine}). Indexing: {p} ms per passage. First call after a pause: {f} ms.', { s: nf.format(ms.search_ms), q: nf.format(ms.query_ms), n: nf.format(ms.vectors), c: nf.format(ms.scan_ms), engine: ms.engine, p: nf.format(ms.passage_ms), f: nf.format(ms.first_ms) })) : ''}</span></div>
     <p class="muted small">${esc(t('Confidential and Secret spaces are only indexed by a model on this server; with an online service they are searched by words.'))} ${esc(t('Comparison engine: {engine}.', { engine: m.engine === 'php' ? t('PHP (slower; sqlite-vec is in the Docker image)') : m.engine }))}</p>`;
-  box.querySelectorAll('[data-p]').forEach(b => b.onclick = async () => {
-    if (b.dataset.p === m.current) return;
-    if (b.getAttribute('aria-disabled') === 'true') { toast(problem(m.presets.find(p => p.id === b.dataset.p).problem)); return; }
-    if (b.dataset.confirm !== '1') { box.querySelectorAll('[data-confirm]').forEach(x => { delete x.dataset.confirm; x.classList.remove('ask'); }); b.dataset.confirm = '1'; b.classList.add('ask'); toast(t('Click again to switch: everything is indexed again in the background.')); return; }
-    try { const r = await post('api/meaning/choose', { preset: b.dataset.p }); toast(r.pulling ? t('Chosen. The model is downloading; indexing starts after.') : t('Chosen. Indexing again in the background.')); loadMeaning(box); refreshStatus(); }
-    catch (e) { toast(e.message); }
-  });
+  box.querySelector('[data-a=choose]').onclick = () => { // the Embeddings card of the table
+    showSection('model');
+    setTimeout(() => { if (state.mb.sel !== 'embedding') $('#mb-usages .ucard[data-u="embedding"]')?.click(); }, 250);
+  };
   box.querySelector('[data-a=measure]').onclick = async e => {
     const b = e.currentTarget; b.disabled = true; box.querySelector('[data-a=out]').textContent = t('Measuring… (up to a minute if the model has to load)');
     try { await post('api/meaning/measure'); await loadMeaning(box); } catch (err) { box.querySelector('[data-a=out]').textContent = err.message; b.disabled = false; }
@@ -2902,11 +2896,12 @@ const SET_SECTIONS = [
   ['channels', 'Channels', 'M4 5h16v11H8l-4 4z'],
   ['accounts', 'Connected accounts', 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'],
   ['library', 'Library and memory', 'M4 4h5v16H4zM10 4h5v16h-5zM16 5l4 1-3 14-4-1'],
+  ['learning', 'Learning', 'M12 3a6 6 0 0 0-3.5 10.9V17h7v-3.1A6 6 0 0 0 12 3zM9.5 20h5M10.5 22.5h3'],
   ['security', 'Security', 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],
   ['system', 'System', 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2'],
 ];
 /** Old links (#settings/brain, #settings/memory…) and names used in messages: which section they mean. */
-const SET_ALIAS = { brain: 'model', budget: 'model', memory: 'library', search: 'library', connectors: 'accounts', google: 'accounts', calendar: 'accounts',
+const SET_ALIAS = { brain: 'model', budget: 'model', memory: 'library', search: 'library', mind: 'learning', learn: 'learning', skills: 'learning', graph: 'learning', connectors: 'accounts', google: 'accounts', calendar: 'accounts',
   spotify: 'accounts', legifrance: 'accounts', mcp: 'accounts', mailbox: 'accounts', notify: 'channels', update: 'system', backups: 'system', totp: 'security' };
 /** Fields only useful with a given choice; shown anyway once they hold a value. */
 const SHOW_IF = {
@@ -3567,12 +3562,12 @@ function mbRenderStrip() {
         <label>${esc(t('Tier for meeting summaries'))}<select${set('TALIXIO_MEETING_TIER')}>${['standard', 'deep', 'fast'].map(o => `<option value="${o}"${mbSetVal('TALIXIO_MEETING_TIER') === o ? ' selected' : ''}>${esc(t(o))}</option>`).join('')}</select></label>
         <label>${esc(t('Longer than this (seconds) = a meeting'))}<input type="number" min="0"${set('TALIXIO_VOICE_NOTE_MAX_SECONDS')} value="${esc(mbSetVal('TALIXIO_VOICE_NOTE_MAX_SECONDS'))}"></label>
       </div>
-      <p class="muted small">${esc(t('“Whisper (local)” runs whisper.cpp on this server: the audio never leaves it. With no model chosen, the setting in Settings → Audio applies.'))}</p>`;
+      <p class="muted small">${esc(t('“Whisper (local)” runs whisper.cpp on this server: the audio never leaves it. With no model chosen, the assistant picks one itself: whisper.cpp if it is installed, else Gemini.'))}</p>`;
   } else if (u === 'vision') {
     const on = mbSetVal('TALIXIO_VISION_INDEX') !== '0';
     h = `<h4>${esc(t('Images · reading photos and scanned PDFs'))}</h4>
       <p class="muted small">${esc(t('The model is chosen in the table below (the I button, for models that can read an image). Until you choose one, the fast model does it.'))}</p>
-      <p class="small">${esc(on ? t('Reading images and scanned PDFs is on.') : t('Reading images and scanned PDFs is off.'))} <a href="#" data-goto="library">${esc(t('Change it in Settings → Library'))}</a></p>`;
+      <p class="small">${esc(on ? t('Reading images and scanned PDFs is on.') : t('Reading images and scanned PDFs is off.'))} <a href="#" data-goto="library" data-tab="documents">${esc(t('Change it in Settings → Library → Documents'))}</a></p>`;
   } else {
     const ix = em?.index;
     h = `<h4>${esc(t('Embeddings · search by meaning'))}</h4>
@@ -3581,6 +3576,7 @@ function mbRenderStrip() {
         <label>${esc(t('Vector size'))}<input type="number" min="0"${set('TALIXIO_EMBEDDINGS_DIMS')} placeholder="${esc(t('automatic'))}" value="${esc(mbSetField('TALIXIO_EMBEDDINGS_DIMS').value)}"></label>
         <div class="mb-strip-idx"><span class="small">${esc(ix ? t('Index: {done} of {total} passages', { done: ix.done, total: ix.total }) : '')}</span>
           <button class="btn sm" type="button" data-act="measure"${em && em.backend === 'off' ? ' disabled' : ''}>${esc(t('Measure on this server'))}</button> <span class="muted small" data-out></span></div>
+        ${em && em.backend !== 'off' ? `<button class="btn sm ghost" type="button" data-act="off">${esc(t('Turn off search by meaning'))}</button>` : `<span class="muted small">${esc(t('Search by meaning is off: search by words only. Choose a model in the table to turn it on.'))}</span>`}
       </div>
       <p class="muted small">${esc(t('Empty = automatic (512 for models built for it: faster search, nearly the same quality). 0 = full size.'))}</p>
       ${em && !em.routed ? `<p class="muted small">${esc(t('Search by meaning is currently set in Settings; choosing a model in the table replaces that choice.'))}</p>` : ''}
@@ -3596,7 +3592,14 @@ function mbRenderStrip() {
       toast(t('Saved.'));
     } catch (e) { toast(e.message); }
   });
-  box.querySelector('[data-goto]')?.addEventListener('click', e => { e.preventDefault(); showSection(e.currentTarget.dataset.goto); });
+  box.querySelector('[data-goto]')?.addEventListener('click', e => { e.preventDefault(); showSection(e.currentTarget.dataset.goto); if (e.currentTarget.dataset.tab) sectionTabs(e.currentTarget.dataset.goto, e.currentTarget.dataset.tab); });
+  box.querySelector('[data-act=off]')?.addEventListener('click', async () => {
+    try {
+      await post('api/meaning/choose', { preset: 'off' });
+      state.mb.routing = await mbFetchRouting(); state.mb.emb = await api('api/meaning').catch(() => state.mb.emb);
+      mbRenderUsages(); mbRenderRows(); toast(t('Search by meaning is off.'));
+    } catch (e) { toast(e.message); }
+  });
   box.querySelector('[data-act=measure]')?.addEventListener('click', async e => {
     const b = e.currentTarget, out = box.querySelector('[data-out]'); b.disabled = true; out.textContent = t('Measuring…');
     try { const r = await post('api/meaning/measure'); out.textContent = t('A search takes about {ms} ms ({n} vectors, {e}).', { ms: r.search_ms, n: r.vectors, e: r.engine }); }

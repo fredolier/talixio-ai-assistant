@@ -36,7 +36,7 @@ Spaces without an account use the main settings.
   A space on a European account may hold *confidential* conversations even when the main model is a subscription.
 - Each account has its own limits on the provider's side, so the load is shared between them.
 - *Test* checks the account before saving. Keys and tokens never leave the server; leave the field empty to keep the saved one.
-- Transcription and search by meaning keep the main settings.
+- Transcription, image reading and search by meaning are chosen from the Models table (see below); an account's own models only serve the three chat tiers.
 - Deleting an account puts its spaces back on the main settings.
 
 ## The Model and budget page
