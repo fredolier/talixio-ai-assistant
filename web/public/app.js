@@ -3199,12 +3199,43 @@ const MB_USAGES = [
   { id: 'fast', label: 'Fast', hint: 'short replies, sorting, routine' },
   { id: 'standard', label: 'Standard', hint: 'conversation, everyday tasks' },
   { id: 'deep', label: 'Deep', hint: 'analysis, long writing' },
-  { id: 'voice', label: 'Voice', hint: 'dictation and reading' },
+  { id: 'voice', label: 'Voice', hint: 'transcription of recordings and dictation' },
+  { id: 'vision', label: 'Images', hint: 'reading photos and scanned PDFs' },
+  { id: 'embedding', label: 'Embeddings', hint: 'search by meaning' },
 ];
-/** Which usages a model type can serve (image generation and embeddings are in the catalogue to compare, not routed
- *  to a usage: image isn't wired yet, embeddings are chosen via the embeddings presets in Settings). */
-const MB_TYPE_USAGE = { LLM: ['fast', 'standard', 'deep'], Vision: ['fast', 'standard', 'deep'], Voice: ['voice'], Image: [], Embedding: [] };
-state.mb = { tab: 'models', scope: 'global', cat: null, routing: null, emb: null, lock: false, avail: true, sort: { key: 'rank', dir: -1 }, q: '', ftype: '', fprov: '', ftl: 0, sel: '' };
+/** Which usages a model type can serve (image generation is in the catalogue to compare, not routed to a usage). */
+const MB_TYPE_USAGE = { LLM: ['fast', 'standard', 'deep'], Vision: ['fast', 'standard', 'deep', 'vision'], Voice: ['voice'], Image: [], Embedding: ['embedding'] };
+/** The providers whose chat models also read images, so they can serve the « Images » usage. */
+const MB_SEES = ['anthropic', 'openai', 'google'];
+/** The usages a catalogue row can be assigned to. A Voice or Embedding row the server marks unreachable (no `via`) cannot. */
+function mbUsable(m) {
+  if ((m.type === 'Voice' || m.type === 'Embedding') && !m.via) return [];
+  const u = [...(MB_TYPE_USAGE[m.type] || [])];
+  if (m.type === 'LLM' && MB_SEES.includes(m.prov)) u.push('vision');
+  return u;
+}
+/** The letter on a row's assign button: F/S/A/V in English, R/S/A/V in French; Images and Embeddings are I and E. */
+const mbLetter = u => u.id === 'vision' ? 'I' : u.id === 'embedding' ? 'E' : t(u.label)[0];
+/** Whether a row is the model a usage currently runs on (same model id on the same credentials), or — for search by
+ *  meaning not yet routed — the model set in Settings. */
+function mbRowOn(u, m) {
+  const e = mbEff(u);
+  if (e.routed) {
+    if (e.model !== mbId(m)) return false;
+    const srcs = m.src ? [m.src] : (mbProvMap()[m.prov]?.sources || []);
+    return srcs.some(x => x.account === e.account);
+  }
+  const em = state.mb.emb;
+  if (u === 'embedding' && em && em.backend !== 'off' && (em.model || '').toLowerCase() === mbId(m).toLowerCase()) {
+    const via = em.backend === 'ollama' ? 'local' : em.backend;
+    return m.via === via && (via !== 'sovereign' || m.prov === em.service);
+  }
+  return false;
+}
+const mbConnected = (m, p) => !!(p.connected || m.src);
+/** A row's credential source: the built-in one for whisper.cpp / Ollama on this server, else the provider's first. */
+const mbSource = (m, p) => m.src || p?.sources?.[0];
+state.mb = { tab: 'models', scope: 'global', cat: null, routing: null, emb: null, setv: {}, lock: false, avail: true, sort: { key: 'rank', dir: -1 }, q: '', ftype: '', fprov: '', ftl: 0, sel: '' };
 const mbTlRank = tl => tl === 'L' ? 6 : +tl;                       // local counts as top trust for the Europe floor
 const mbTlClass = tl => tl === 'L' ? 'tlL' : 'tl' + tl;
 const mbTlText = tl => tl === 'L' ? t('loc') : String(tl);
@@ -3225,8 +3256,9 @@ function mbMsg(m) {
 }
 
 async function loadModelCockpit() {
-  const [cat, routing, emb] = await Promise.all([api('api/catalogue'), mbFetchRouting(), api('api/meaning').catch(() => null)]);
+  const [cat, routing, emb, sets] = await Promise.all([api('api/catalogue'), mbFetchRouting(), api('api/meaning').catch(() => null), api('api/settings').catch(() => null)]);
   state.mb.cat = cat; state.mb.routing = routing; state.mb.emb = emb;
+  state.mb.setv = {}; for (const g of (sets?.groups || [])) for (const f of g.fields) state.mb.setv[f.key] = f;
   $('#mb-prov-c').textContent = cat.providers.length;
   wireMbTabs();
   mbApplyTab();
@@ -3397,6 +3429,7 @@ function mbVisible() {
     if (st.ftype && m.type !== st.ftype) return false;
     if (st.fprov && m.prov !== st.fprov) return false;
     if (st.ftl && mbTlRank(p.tl) < st.ftl) return false;
+    if (st.sel === 'vision' && !mbUsable(m).includes('vision')) return false; // « Images » : only the models that can read an image
     return true;
   });
   const key = st.sort.key, dir = st.sort.dir;
@@ -3413,7 +3446,7 @@ function mbEff(u) { return state.mb.routing?.effective?.[u] || { routed: false }
 /** The best (highest-rank) compliant + available model that can serve a usage — for the Europe lock's force-swap. */
 function mbBestCompliant(usageId) {
   const P = mbProvMap();
-  return state.mb.cat.models.filter(m => m.available && mbCompliant(P[m.prov]) && MB_TYPE_USAGE[m.type].includes(usageId))
+  return state.mb.cat.models.filter(m => m.available && mbCompliant(P[m.prov]) && mbUsable(m).includes(usageId))
     .sort((a, b) => b.rank - a.rank)[0] || null;
 }
 
@@ -3432,6 +3465,7 @@ function mbRender() {
       <button class="btn sm" id="mb-refresh" style="margin-left:auto">↻ ${esc(t('Refresh now'))}</button>
     </div>
     <div class="usages" id="mb-usages"></div>
+    <div id="mb-strip"></div>
     <div class="filters">
       <input type="search" id="mb-q" placeholder="${esc(t('Search a model…'))}" value="${esc(state.mb.q)}">
       <select id="mb-ftype">
@@ -3492,13 +3526,15 @@ function mbRenderUsages() {
     const e = mbEff(u.id);
     const prov = e.routed ? state.mb.cat.providers.find(x => x.id === e.provider) : null;
     const flag = prov ? prov.flag : '';
-    const name = e.routed ? (e.model || t('provider default')) : t('Default');
-    const tag = global ? '' : (e.overridden ? `<span class="utag ovr">${esc(t('overridden'))}</span>` : `<span class="utag inh">${esc(t('inherited'))}</span>`);
-    const reset = (!global && e.overridden) ? `<button class="ureset" data-reset="${u.id}">↺ ${esc(t('back to default'))}</button>` : '';
+    const em = state.mb.emb;
+    const name = e.routed ? (e.model || t('provider default'))
+      : u.id === 'embedding' ? (em && em.backend !== 'off' ? em.model : t('Off')) : t('Default');
+    const tag = global ? '' : u.id === 'embedding' ? `<span class="utag inh">${esc(t('global'))}</span>` : (e.overridden ? `<span class="utag ovr">${esc(t('overridden'))}</span>` : `<span class="utag inh">${esc(t('inherited'))}</span>`);
+    const reset = ((!global && e.overridden) || (global && u.id === 'embedding' && e.routed)) ? `<button class="ureset" data-reset="${u.id}">↺ ${esc(t('back to default'))}</button>` : '';
     return `<div class="ucard${!global && !e.overridden ? ' inh' : ''}${state.mb.sel === u.id ? ' sel' : ''}" data-u="${u.id}">
       <div class="uhead"><span class="ut">${esc(t(u.label))}</span>${tag}</div>
       <div class="um"><span class="flag">${flag}</span><span class="nm no-i18n">${esc(name)}</span></div>
-      <div class="usub muted small">${prov ? `<span class="no-i18n">${esc(prov.name)}</span> · <span class="tl ${mbTlClass(prov.tl)}">${esc(mbTlText(prov.tl))}</span>` : esc(t('main settings or the space account'))}</div>
+      <div class="usub muted small">${prov ? `<span class="no-i18n">${esc(prov.name)}</span> · <span class="tl ${mbTlClass(prov.tl)}">${esc(mbTlText(prov.tl))}</span>` : esc(u.id === 'embedding' ? t('set in Settings → Search by meaning') : t('main settings or the space account'))}</div>
       ${reset}</div>`;
   }).join('');
   box.querySelectorAll('.ureset').forEach(b => b.onclick = async e => {
@@ -3509,35 +3545,81 @@ function mbRenderUsages() {
   });
   box.querySelectorAll('.ucard').forEach(c => c.onclick = () => {
     const u = c.dataset.u; state.mb.sel = state.mb.sel === u ? '' : u;
-    state.mb.ftype = state.mb.sel ? (u === 'voice' ? 'Voice' : 'LLM') : '';
+    state.mb.ftype = state.mb.sel ? (u === 'voice' ? 'Voice' : u === 'embedding' ? 'Embedding' : u === 'vision' ? '' : 'LLM') : '';
     const sel = $('#mb-ftype'); if (sel) sel.value = state.mb.ftype;
     mbRenderUsages(); mbRenderRows();
+  });
+  mbRenderStrip();
+}
+/** What a selected Voice / Images / Embeddings card still needs hand-set: the settings that are not a model. */
+const mbSetField = key => state.mb.setv[key] || { key, value: '', default: '' };
+const mbSetVal = key => { const f = mbSetField(key); return f.value !== '' ? f.value : (f.default ?? ''); };
+function mbRenderStrip() {
+  const box = $('#mb-strip'); if (!box) return;
+  const u = state.mb.sel, em = state.mb.emb;
+  if (!['voice', 'vision', 'embedding'].includes(u)) { box.innerHTML = ''; return; }
+  const set = key => ` data-set="${key}"`;
+  let h = '';
+  if (u === 'voice') {
+    h = `<h4>${esc(t('Voice · transcription and meetings'))}</h4>
+      <p class="muted small">${esc(t('The model is chosen in the table below (the V button). What remains here are settings that are not a model:'))}</p>
+      <div class="mb-strip-grid">
+        <label>${esc(t('Tier for meeting summaries'))}<select${set('TALIXIO_MEETING_TIER')}>${['standard', 'deep', 'fast'].map(o => `<option value="${o}"${mbSetVal('TALIXIO_MEETING_TIER') === o ? ' selected' : ''}>${esc(t(o))}</option>`).join('')}</select></label>
+        <label>${esc(t('Longer than this (seconds) = a meeting'))}<input type="number" min="0"${set('TALIXIO_VOICE_NOTE_MAX_SECONDS')} value="${esc(mbSetVal('TALIXIO_VOICE_NOTE_MAX_SECONDS'))}"></label>
+      </div>
+      <p class="muted small">${esc(t('“Whisper (local)” runs whisper.cpp on this server: the audio never leaves it. With no model chosen, the setting in Settings → Audio applies.'))}</p>`;
+  } else if (u === 'vision') {
+    const on = mbSetVal('TALIXIO_VISION_INDEX') !== '0';
+    h = `<h4>${esc(t('Images · reading photos and scanned PDFs'))}</h4>
+      <p class="muted small">${esc(t('The model is chosen in the table below (the I button, for models that can read an image). Until you choose one, the fast model does it.'))}</p>
+      <p class="small">${esc(on ? t('Reading images and scanned PDFs is on.') : t('Reading images and scanned PDFs is off.'))} <a href="#" data-goto="library">${esc(t('Change it in Settings → Library'))}</a></p>`;
+  } else {
+    const ix = em?.index;
+    h = `<h4>${esc(t('Embeddings · search by meaning'))}</h4>
+      <p class="muted small">${esc(t('The model is chosen in the table below (the E button); changing it re-indexes the memory in the background. What remains here:'))}</p>
+      <div class="mb-strip-grid">
+        <label>${esc(t('Vector size'))}<input type="number" min="0"${set('TALIXIO_EMBEDDINGS_DIMS')} placeholder="${esc(t('automatic'))}" value="${esc(mbSetField('TALIXIO_EMBEDDINGS_DIMS').value)}"></label>
+        <div class="mb-strip-idx"><span class="small">${esc(ix ? t('Index: {done} of {total} passages', { done: ix.done, total: ix.total }) : '')}</span>
+          <button class="btn sm" type="button" data-act="measure"${em && em.backend === 'off' ? ' disabled' : ''}>${esc(t('Measure on this server'))}</button> <span class="muted small" data-out></span></div>
+      </div>
+      <p class="muted small">${esc(t('Empty = automatic (512 for models built for it: faster search, nearly the same quality). 0 = full size.'))}</p>
+      ${em && !em.routed ? `<p class="muted small">${esc(t('Search by meaning is currently set in Settings; choosing a model in the table replaces that choice.'))}</p>` : ''}
+      ${em && em.ollama && !em.ollama.up ? `<p class="muted small">${esc(t('Ollama is not running on this server: the local models are unavailable.'))}</p>` : ''}`;
+  }
+  box.innerHTML = `<div class="mb-strip">${h}</div>`;
+  box.querySelectorAll('[data-set]').forEach(el => el.onchange = async () => {
+    const key = el.dataset.set;
+    try {
+      const r = await post('api/settings', { changes: { [key]: el.value } });
+      for (const g of (r.groups || [])) for (const f of g.fields) state.mb.setv[f.key] = f;
+      if (key === 'TALIXIO_EMBEDDINGS_DIMS') state.mb.emb = await api('api/meaning').catch(() => state.mb.emb);
+      toast(t('Saved.'));
+    } catch (e) { toast(e.message); }
+  });
+  box.querySelector('[data-goto]')?.addEventListener('click', e => { e.preventDefault(); showSection(e.currentTarget.dataset.goto); });
+  box.querySelector('[data-act=measure]')?.addEventListener('click', async e => {
+    const b = e.currentTarget, out = box.querySelector('[data-out]'); b.disabled = true; out.textContent = t('Measuring…');
+    try { const r = await post('api/meaning/measure'); out.textContent = t('A search takes about {ms} ms ({n} vectors, {e}).', { ms: r.search_ms, n: r.vectors, e: r.engine }); }
+    catch (err) { out.textContent = err.message; }
+    b.disabled = false;
   });
 }
 function mbRenderRows() {
   const tb = $('#mb-rows'); if (!tb) return; const P = mbProvMap();
   const rows = mbVisible();
   tb.innerHTML = rows.map(m => {
-    const p = P[m.prov], conn = p.connected, blocked = state.mb.lock && !mbCompliant(p);
-    const usable = MB_TYPE_USAGE[m.type] || [];
+    const p = P[m.prov], conn = mbConnected(m, p), blocked = state.mb.lock && !mbCompliant(p);
+    const usable = mbUsable(m);
     const btns = MB_USAGES.map(u => {
-      const ok = usable.includes(u.id) && !blocked && conn;
-      const on = mbEff(u.id).routed && mbEff(u.id).model === mbId(m);
-      return `<button data-m="${esc(mbId(m))}" data-prov="${esc(m.prov)}" data-u="${u.id}" class="${on ? 'on' : ''}"${ok ? '' : ' disabled'} title="${esc(t(u.label))}">${esc(t(u.label)[0])}</button>`;
+      let why = '';
+      if (u.id === 'embedding' && state.mb.scope !== 'global') why = t('Embeddings are shared by every space: set them in the global default');
+      else if (u.id === 'embedding' && m.via === 'local' && state.mb.emb && !state.mb.emb.ollama?.up) why = t('Ollama is not running on this server');
+      const ok = usable.includes(u.id) && !blocked && conn && !why;
+      const on = mbRowOn(u.id, m);
+      return `<button data-m="${esc(mbId(m))}" data-prov="${esc(m.prov)}" data-u="${u.id}" class="${on ? 'on' : ''}"${ok ? '' : ' disabled'} title="${esc(why || t(u.label))}">${esc(mbLetter(u))}</button>`;
     }).join('');
-    let cell;
-    if (m.type === 'Embedding') {
-      // Embeddings aren't routed per usage — they're chosen in Settings → “Recherche par le sens” (switching re-indexes
-      // all memory). So instead of the disabled chat buttons, show which one is live and link the rest to that chooser.
-      const active = !!state.mb.emb && state.mb.emb.backend !== 'off'
-        && (state.mb.emb.model || '').toLowerCase() === mbId(m).toLowerCase();
-      cell = active
-        ? `<span class="mb-emb-active" title="${esc(t('In use for search by meaning'))}">✓ ${esc(t('Active'))}</span>`
-        : `<a href="#" class="mb-emb-pick" data-emb-pick title="${esc(t('Embeddings are chosen in Settings → Search by meaning'))}">${esc(t('Choose in Settings'))}</a>`;
-    } else {
-      cell = conn ? `<div class="assign">${btns}</div>`
-        : `<button class="btn sm primary" data-connect="${esc(m.prov)}">${esc(t('Connect'))}</button>`;
-    }
+    const cell = conn ? `<div class="assign">${btns}</div>`
+      : `<button class="btn sm primary" data-connect="${esc(m.prov)}">${esc(t('Connect'))}</button>`;
     const est = m.est ? '<span class="mb-est" title="' + esc(t('Estimated price')) + '">~</span>' : '';
     return `<tr class="${blocked ? 'blocked' : ''} ${conn ? '' : 'offrow'}">
       <td><div class="mname"><span class="flag">${p.flag}</span><span class="no-i18n">${esc(m.name)}${m.deprecated ? ' <span class="mb-dep" title="' + esc(t('Being retired')) + '">⚠</span>' : ''}<div class="prov muted small no-i18n">${esc(p.name)}${conn ? '' : ' · ' + t('not connected')}</div></span></div></td>
@@ -3550,11 +3632,6 @@ function mbRenderRows() {
       <td>${cell}</td></tr>`;
   }).join('') || `<tr><td colspan="8" class="muted" style="padding:16px">${esc(t('No model matches. Widen the filters, or untick “Available” to see the whole catalogue.'))}</td></tr>`;
   tb.querySelectorAll('.assign button:not(:disabled)').forEach(b => b.onclick = () => mbAssign(b.dataset.u, b.dataset.m, b.dataset.prov));
-  tb.querySelectorAll('[data-emb-pick]').forEach(a => a.onclick = e => {
-    e.preventDefault();
-    showSection('library');
-    setTimeout(() => $('#meaning')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
-  });
   tb.querySelectorAll('[data-connect]').forEach(b => b.onclick = () => {
     state.mb.tab = 'providers'; mbApplyTab();
     const card = $(`.mb-pcard[data-pid="${CSS.escape(b.dataset.connect)}"]`) || $('#mb-pgrid');
@@ -3564,12 +3641,15 @@ function mbRenderRows() {
 }
 /** Assign a model to a usage: route it through the first credential source of the model's provider. */
 async function mbAssign(usage, model, prov) {
-  const p = mbProvMap()[prov], src = p?.sources?.[0];
+  const p = mbProvMap()[prov], m = state.mb.cat.models.find(x => mbId(x) === model && x.prov === prov), src = mbSource(m || {}, p);
   if (!src) { toast(t('Connect this provider first.')); return; }
   const body = { usage, account: src.account, model }; if (state.mb.scope !== 'global') body.space = state.mb.scope;
+  if ((usage === 'voice' || usage === 'embedding') && m?.via) body.via = m.via; // how a transcription or embedding model is reached
   try {
     state.mb.routing = await post('api/routing', body);
+    if (usage === 'embedding') state.mb.emb = await api('api/meaning').catch(() => state.mb.emb);
     mbRenderUsages(); mbRenderRows();
+    if (usage === 'embedding') { toast(t('Search by meaning → {m}. The memory is re-indexed in the background.', { m: model })); return; }
     const where = state.mb.scope === 'global' ? t('global default') : t('space {n}', { n: (state.spaces.find(s => s.id === +state.mb.scope)?.name || state.mb.scope) });
     toast(t('“{u}” → {m} · {w}', { u: t(MB_USAGES.find(u => u.id === usage).label), m: model, w: where }));
   } catch (e) { toast(e.message); }
@@ -3588,7 +3668,9 @@ async function mbToggleLock(e) {
     const cur = state.mb.cat.models.find(m => mbId(m) === eff.model); if (!cur) continue;
     if (mbCompliant(P[cur.prov])) continue;
     const repl = mbBestCompliant(u.id); if (!repl) continue;
-    const src = P[repl.prov].sources[0]; const body = { usage: u.id, account: src.account, model: mbId(repl) };
+    if (u.id === 'embedding' && state.mb.scope !== 'global') continue; // shared by every space: swapped from the global default
+    const src = mbSource(repl, P[repl.prov]); const body = { usage: u.id, account: src.account, model: mbId(repl) };
+    if ((u.id === 'voice' || u.id === 'embedding') && repl.via) body.via = repl.via;
     if (state.mb.scope !== 'global') body.space = state.mb.scope;
     try { state.mb.routing = await post('api/routing', body); swaps.push(`${t(u.label)} → ${repl.name}`); } catch {}
   }

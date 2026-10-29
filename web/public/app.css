@@ -1641,7 +1641,7 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 
 .scopebar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .scopebar select{font:inherit;font-size:.85rem;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:600}
-.usages{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.usages{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px;margin-bottom:14px}
 @media (max-width:720px){.usages{grid-template-columns:repeat(2,1fr)}}
 .ucard{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:10px 12px;cursor:pointer}
 .ucard:hover{border-color:var(--accent)}
@@ -1696,9 +1696,13 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .assign button:hover:not(:disabled){background:var(--sunk);color:var(--ink)}
 .assign button.on{background:var(--accent);color:var(--accent-ink)}
 .assign button:disabled{opacity:.3;cursor:default}
-.mb-emb-active{display:inline-flex;align-items:center;gap:3px;font-size:.68rem;font-weight:700;color:var(--ok,#2a9d6f);background:color-mix(in srgb,var(--ok,#2a9d6f) 14%,transparent);border:1px solid color-mix(in srgb,var(--ok,#2a9d6f) 40%,transparent);border-radius:8px;padding:3px 9px}
-.mb-emb-pick{font-size:.68rem;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap}
-.mb-emb-pick:hover{text-decoration:underline}
+.mb-strip{border:1px solid var(--accent);background:var(--surface);border-radius:12px;padding:12px 14px;margin:-4px 0 14px}
+.mb-strip h4{margin:0 0 4px;font-size:.92rem}
+.mb-strip p{margin:4px 0}
+.mb-strip-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:8px 0}
+.mb-strip-grid label{display:flex;flex-direction:column;gap:3px;font-size:.78rem;font-weight:700;min-width:0}
+.mb-strip-grid input,.mb-strip-grid select{font:inherit;font-weight:400;font-size:.84rem;min-width:0}
+.mb-strip-idx{display:flex;flex-direction:column;gap:6px;align-items:flex-start;justify-content:flex-end}
 .btn.sm{font-size:.72rem;padding:3px 9px}
 .legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px} .legend b{color:var(--ink)}
 .mb-models .note{margin:8px 0}

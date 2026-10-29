@@ -202,6 +202,15 @@ Catalogue rows of type Voice / Embedding carry `via` (empty = can't be chosen fo
 Ollama rows carry a built-in source (`account ''`) and are available when whisper is installed / always (the UI greys
 Ollama rows while Ollama is down). European Whisper and embedding models were added to the seed with no invented prices.
 
+**UI (1.15.0).** `MB_USAGES` has six cards (fast, standard, deep, voice, **vision** = « Images », **embedding**); the row
+buttons are F/S/A/V/I/E (`mbLetter`: R/S/A/V in French, I and E fixed). `mbUsable(m)` decides what a row can serve: Voice and
+Embedding rows need the server's `via`; chat LLMs of Anthropic/OpenAI/Google (and every Vision row) also serve « Images ».
+`mbRowOn` marks the active row by model id **and** credentials (so the same `bge-m3` at AKI and OVHcloud isn't both on);
+before an embedding is routed it follows the model in Settings. Embedding buttons are disabled in a per-space scope
+(global only) and for local models while Ollama is down. Selecting Voice / Images / Embeddings opens `#mb-strip` with the
+settings that are *not* a model (meeting tier + threshold; the vision on/off link; vector size + index + measure), saved
+immediately through `POST /api/settings`; selecting « Images » also filters the table to rows that can read an image.
+
 ## Deliberate divergences from the concept mockup
 
 The mockup (`scratchpad/fleet-ui-mockups.html`; not in the repo) is a concept sketch.

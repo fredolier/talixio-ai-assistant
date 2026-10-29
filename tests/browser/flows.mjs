@@ -157,7 +157,7 @@ const flows = {
     check('cockpit: the provider filter narrows the table to AKI.IO sovereign models', akiRows.length > 0 && akiRows.every(t => t === '5'));
     await page.selectOption('#mb-fprov', '');
     await page.waitForTimeout(300);
-    check('cockpit: a row per usage shows the current selection', (await page.$$('#mb-usages .ucard')).length === 4);
+    check('cockpit: a card per usage (fast, standard, deep, voice, images, embeddings)', (await page.$$('#mb-usages .ucard')).length === 6);
     check('cockpit: the provider count badge is filled', (await page.textContent('#mb-prov-c')).trim() === String(cat.providers.length));
     // Filter the catalogue down to voice models, then clear it.
     const before = (await page.$$('#mb-models .mb-table tbody tr')).length;
@@ -168,6 +168,18 @@ const flows = {
     await page.selectOption('#mb-ftype', '');
     await page.waitForTimeout(300);
     check('cockpit: clearing the filter brings the models back', (await page.$$('#mb-models .mb-table tbody tr')).length === before);
+    // Voice, Images and Embeddings are chosen from the table like the chat usages; their cards open what is left to set by hand.
+    await page.click('#mb-usages .ucard[data-u="voice"]');
+    check('cockpit: the Voice card opens the meeting settings (the model is picked in the table)',
+      await page.isVisible('#mb-strip [data-set="TALIXIO_MEETING_TIER"]') && await page.isVisible('#mb-strip [data-set="TALIXIO_VOICE_NOTE_MAX_SECONDS"]'));
+    await page.click('#mb-usages .ucard[data-u="embedding"]');
+    check('cockpit: the Embeddings card filters the table to embedding models, each with an E button',
+      (await page.$$eval('#mb-models .mb-table tbody tr', rs => rs.length > 0 && rs.every(r => /embed|recherche/i.test(r.querySelector('.ty')?.textContent || '')) && rs.filter(r => !r.classList.contains('offrow')).length > 0 && rs.filter(r => !r.classList.contains('offrow')).every(r => !!r.querySelector('button[data-u="embedding"]')))) && await page.isVisible('#mb-strip [data-set="TALIXIO_EMBEDDINGS_DIMS"]'));
+    await page.click('#mb-usages .ucard[data-u="vision"]');
+    check('cockpit: the Images card shows only models that can read an image, with an I button',
+      (await page.$$eval('#mb-models .mb-table tbody tr', rs => rs.length > 0 && rs.every(r => !!r.querySelector('button[data-u="vision"]:not([disabled])') || r.classList.contains('offrow')))) && await page.isVisible('#mb-strip'));
+    await page.click('#mb-usages .ucard[data-u="vision"]'); // deselect: back to the full table
+    check('cockpit: deselecting the card clears the extra settings', !(await page.isVisible('#mb-strip .mb-strip')));
     // The Europe (GDPR) lock raises the trust floor to level 5.
     await page.click('#mb-lock');
     await page.waitForTimeout(400);

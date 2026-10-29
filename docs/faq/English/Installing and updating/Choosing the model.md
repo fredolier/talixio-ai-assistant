@@ -53,16 +53,23 @@ Settings → *Model and budget* has three tabs.
 - **Budget**: the limits (see below) and what was spent this month.
 
 ### Each usage on its own model
-The cards above the table show what each usage currently uses: **fast**, **standard**, **deep** and **voice**. The small
-**F / S / A / V** buttons on a row send that usage to that model, so quick work can run on a small European model while
+The cards above the table show what each usage currently uses: **fast**, **standard**, **deep**, **voice**, **images** and
+**embeddings**. The small **F / S / A / V / I / E** buttons on a row send that usage to that model, so quick work can run on a small European model while
 hard reasoning goes to a flagship, each on a different provider. The *Routing* selector switches between the **global
 default** and a **per-space override** (overridden usages are marked; reset returns to the global default). With nothing
 set, everything behaves as before.
 
-### Embedding models
-Embedding models (library search, the classifier, Mind) are in the table to compare on price, trust and provider, but
-they are not routed per usage. The one in use shows **✓ Active**; the others link to **Choose in Settings**, which
-opens Settings → *Search by meaning* (see that page). Changing it there re-indexes the memory.
+### Voice, images and embeddings
+Three more jobs are chosen from the same table; **click their card** to filter the table and see what is left to set:
+- **Voice** (button **V**): transcription of recordings, meetings and dictation, at a European provider (Whisper, Voxtral),
+  OpenAI or Gemini, or **Whisper (local)** on this server, where the audio never leaves it. A model from a provider that
+  cannot transcribe is not offered. The card keeps the meeting settings: the summary tier, and the length from which a
+  recording counts as a meeting.
+- **Images** (**I**): reading photos and scanned PDFs so the library can search them. Any model that can read an image
+  will do; until you choose one, the fast model does it. The on/off switch stays in Settings → Library.
+- **Embeddings** (**E**): search by meaning. All spaces share one index, so this one is only set in the *global default*.
+  Changing it re-indexes the memory in the background, and a local model is downloaded if it is missing. The card keeps
+  the vector size, the index status and *Measure on this server*; a Voyage key stays in Settings.
 
 ### The catalogue keeps itself up to date
 Once a week, and when you press **Refresh now**, the assistant asks each connected provider for its model list and adds

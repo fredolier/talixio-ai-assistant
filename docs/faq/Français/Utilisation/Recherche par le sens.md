@@ -13,8 +13,9 @@ chaque passage en vecteur : c'est ce calcul qu'on choisit dans **Réglages → R
 | Fournisseur européen | en ligne, en Europe | rien ici | la clé du fournisseur européen (voir *Rester en Europe*) |
 | Désactivée | — | — | recherche par les mots seulement |
 
-- Réglages → *Modèle et budget* → *Modèles* liste aussi les modèles d'embeddings, pour comparer prix, confiance et fournisseur.
-  Celui qui sert affiche **✓ Actif** ; les autres renvoient à **Choisir dans Réglages**, qui ramène ici. Ils ne sont pas routés par usage.
+- Réglages → *Modèle et budget* → *Modèles* liste aussi les modèles d'embeddings : comparez-y prix, confiance et fournisseur, et
+  choisissez-en un avec son bouton **E** (la carte *Embeddings* montre la taille des vecteurs et l'index). Un choix fait là
+  remplace celui fait ici, et inversement.
 - **Changer de choix réindexe tout** en arrière-plan (les vecteurs dépendent du modèle). Pendant ce temps,
   la recherche par les mots reste disponible ; l'avancement s'affiche sous les choix.
 - **Mesurer sur ce serveur** donne le temps d'une recherche, d'une indexation (par passage) et de la

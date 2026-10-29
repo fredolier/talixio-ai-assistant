@@ -35,7 +35,7 @@ final class Meaning
         $docs = (int)$st->q('SELECT COUNT(*) FROM docs')->fetchColumn();
         $done = $ec->embeddings === 'off' ? 0 : (int)$st->q('SELECT COUNT(*) FROM embeddings WHERE model = ?', [$model])->fetchColumn();
         return [
-            'current' => Embeddings::presetOf($ec), 'backend' => $ec->embeddings, 'model' => $ec->embeddingsModel, 'routed' => $this->app->binding('embedding') !== null,
+            'current' => Embeddings::presetOf($ec), 'backend' => $ec->embeddings, 'model' => $ec->embeddingsModel, 'routed' => $this->app->binding('embedding') !== null, 'service' => $ec->sovereign,
             'presets' => $presets, 'shared' => self::shared(), 'ollama' => $ollama,
             'index' => ['done' => min($done, $docs), 'total' => $docs],
             'engine' => Recall::vecEngine($st->path),

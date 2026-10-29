@@ -54,16 +54,24 @@ Réglages → *Modèle et budget* a trois onglets.
 - **Budget** : les limites (voir plus bas) et ce qui a été dépensé ce mois-ci.
 
 ### Chaque usage sur son propre modèle
-Les cartes au-dessus du tableau montrent ce que chaque usage utilise : **rapide**, **standard**, **approfondi** et **voix**.
-Les petits boutons **F / S / A / V** d'une ligne envoient cet usage vers ce modèle : le travail courant peut tourner sur
+Les cartes au-dessus du tableau montrent ce que chaque usage utilise : **rapide**, **standard**, **approfondi**, **voix**,
+**images** et **embeddings**. Les petits boutons **R / S / A / V / I / E** d'une ligne envoient cet usage vers ce modèle : le travail courant peut tourner sur
 un petit modèle européen pendant que le raisonnement difficile va vers un modèle haut de gamme, chacun chez un fournisseur
 différent. Le sélecteur *Routage* bascule entre le **défaut global** et un **réglage propre à l'espace** (les usages
 modifiés sont marqués ; la réinitialisation revient au défaut global). Sans rien de réglé, tout se comporte comme avant.
 
-### Les modèles d'embeddings
-Les modèles d'embeddings (recherche dans la bibliothèque, classifieur, Mind) figurent dans le tableau pour comparer prix,
-confiance et fournisseur, mais ils ne sont pas routés par usage. Celui qui sert affiche **✓ Actif** ; les autres renvoient à
-**Choisir dans Réglages**, qui ouvre Réglages → *Recherche par le sens* (voir cette page). Le changer là réindexe la mémoire.
+### Voix, images et embeddings
+Trois autres tâches se choisissent dans le même tableau ; **cliquez leur carte** pour filtrer le tableau et voir ce qu'il reste à régler :
+- **Voix** (bouton **V**) : transcription des enregistrements, réunions et dictées, chez un fournisseur européen (Whisper,
+  Voxtral), OpenAI ou Gemini, ou **Whisper (local)** sur ce serveur, où l'audio ne le quitte pas. Un modèle d'un fournisseur
+  qui ne sait pas transcrire n'est pas proposé. La carte garde les réglages des réunions : le niveau des résumés, et la durée
+  à partir de laquelle un enregistrement est une réunion.
+- **Images** (**I**) : lecture des photos et des PDF scannés pour que la bibliothèque puisse les chercher. Tout modèle qui sait
+  lire une image convient ; tant que vous n'en choisissez pas, c'est le modèle rapide qui le fait. L'interrupteur reste dans
+  Réglages → Bibliothèque.
+- **Embeddings** (**E**) : la recherche par le sens. Tous les espaces partagent un même index : ce choix se fait donc
+  uniquement dans le *défaut global*. Le changer réindexe la mémoire en arrière-plan, et un modèle local est téléchargé s'il
+  manque. La carte garde la taille des vecteurs, l'état de l'index et *Mesurer sur ce serveur* ; une clé Voyage reste dans Réglages.
 
 ### Le catalogue se tient à jour
 Une fois par semaine, et quand vous appuyez sur **Actualiser maintenant**, l'assistant demande à chaque fournisseur connecté
