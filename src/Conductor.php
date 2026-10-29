@@ -196,6 +196,9 @@ final class Conductor
             'machines' => $machines,
             'agentsAt' => (int)($b['agents_at'] ?? 0),
             'summary' => $this->fleetStatus(),
+            'notify' => self::modeOf($b),             // how reports surface: inapp | push | off
+            'unread' => (int)($b['unread'] ?? 0),     // reports since the user last opened Votre pilote autonome
+            'reports' => array_values($b['reports'] ?? []), // the recent-reports feed (the "details")
         ];
     }
 
@@ -298,20 +301,60 @@ final class Conductor
         // chatty orchestrator re-sending the same status every tick goes quiet after the first and only genuinely new
         // text breaks through. The check-and-mark lives inside the lock so two concurrent reports can't both notify.
         $silent = !empty($msg['tick']) || !empty($msg['silent']) || in_array((string)($msg['kind'] ?? ''), ['tick', 'liveness', 'heartbeat', 'keepalive'], true);
-        $notify = $this->lockedUpdate(function (array $b) use ($agents, $agent, $text, $silent) { // locked: never clobber a concurrent queue drain
+        // How a fresh report surfaces is the user's choice (fleet_notify, default 'inapp' — see orchestration.md §5.4):
+        //   off   — surfaced nowhere: no feed line, no badge, no push.
+        //   inapp — a feed line in "Votre pilote autonome" and a badge count on the Pilotage menu; no push/e-mail.
+        //   push  — the same feed line and badge, plus the push+e-mail notification (the pre-1.12 behaviour).
+        $push = $this->lockedUpdate(function (array $b) use ($agents, $agent, $title, $text, $silent) { // locked: never clobber a concurrent queue drain
             $b['last_report'] = time();
             if ($agents !== null) { $b['agents'] = $agents; $b['agents_at'] = time(); }
             if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text);
             $fresh = $text !== '' && !$silent && $text !== (string)($b['last_notified'] ?? '');
-            if ($fresh) $b['last_notified'] = $text; // only a notified line updates the mark; silent ticks never poison it
-            return [$b, $fresh];
+            if (!$fresh) return [$b, false];
+            $b['last_notified'] = $text; // only a notified line updates the mark; silent ticks never poison it
+            $mode = self::modeOf($b);
+            if ($mode !== 'off') {       // record the report for the in-app feed + badge
+                $feed = $b['reports'] ?? [];
+                $feed[] = ['ts' => time(), 'title' => $title, 'text' => $text, 'agent' => $agent];
+                if (count($feed) > self::REPORT_CAP) $feed = array_slice($feed, -self::REPORT_CAP);
+                $b['reports'] = array_values($feed);
+                $b['unread'] = (int)($b['unread'] ?? 0) + 1;
+            }
+            return [$b, $mode === 'push'];
         });
-        if ($notify) $this->app->notifier()->notify($title, $text);
+        if ($push) $this->app->notifier()->notify($title, $text);
         return [200, ['ok' => true]];
     }
 
     private const AGENT_CAP = 50;
     private const THREAD_CAP = 40;
+    /** How many recent fleet reports the in-app feed keeps (the "details" in Votre pilote autonome). */
+    private const REPORT_CAP = 30;
+
+    /** How fleet reports surface: 'inapp' (badge + feed, default), 'push' (badge + feed + push/e-mail) or 'off'. */
+    private static function modeOf(array $b): string
+    {
+        $m = (string)($b['fleet_notify'] ?? 'inapp');
+        return in_array($m, ['inapp', 'push', 'off'], true) ? $m : 'inapp';
+    }
+    public function notifyMode(): string { return self::modeOf($this->binding()); }
+    public function unread(): int { return (int)($this->binding()['unread'] ?? 0); }
+    public function reports(): array { return array_values($this->binding()['reports'] ?? []); }
+
+    /** Set how fleet reports surface (the toggle in Votre pilote autonome). Returns the fresh status snapshot. */
+    public function setNotify(string $mode): array
+    {
+        $mode = in_array($mode, ['inapp', 'push', 'off'], true) ? $mode : 'inapp';
+        $this->lockedUpdate(fn(array $b) => [['fleet_notify' => $mode] + $b, null]);
+        return $this->statusInfo();
+    }
+
+    /** Clear the unread badge (called when the user opens Votre pilote autonome). */
+    public function markRead(): array
+    {
+        $this->lockedUpdate(fn(array $b) => [['unread' => 0] + $b, null]);
+        return ['unread' => 0];
+    }
     /** How many undelivered instructions a poll-mode orchestrator's queue holds; oldest drop past this. */
     private const QUEUE_CAP = 100;
 

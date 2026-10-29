@@ -389,6 +389,24 @@ const flows = {
       (await page.textContent('#pilot-agents')).trim().length > 0 && (await page.$$('#pilot-agents [data-discuss]')).length === 0);
     check('pilotage: a per-agent Discuter dialog is in the page', (await page.$$('#pilot-agent-dialog')).length === 1);
     check('pilotage: the Knowledge-base tab carries a source badge slot', (await page.$$('.ptab[data-ptab=kb] .ptab-src')).length === 1);
+    // 1.13.0: pair the pilot and file one report, then check the fleet-reports toggle + feed (details live here, badge in the menu)
+    execFileSync('php', ['-r', "require '" + join(root, 'src/autoload.php') + "';"
+      + "$con=\\Talixio\\App::fromEnv()->conductor();"
+      + "preg_match('/\"code\":\"([0-9a-f]+)\"/',$con->setup(),$m);"
+      + "[$c,$r]=$con->inbox(['type'=>'pair','code'=>$m[1],'webhook'=>'https://orch.example/hook','session'=>'sess_browser'],'');"
+      + "$con->setNotify('inapp');"
+      + "$con->inbox(['type'=>'report','title'=>'Build','text'=>'browser fleet report'],$r['secret']);"],
+      { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
+    await page.click('#view-pilotage .ptab[data-ptab=roles]'); await page.waitForTimeout(200);
+    await page.click('#view-pilotage .ptab[data-ptab=agents]'); await page.waitForSelector('#pilot-notify-row:not([hidden])', { timeout: 6000 });
+    check('pilotage: once paired, the fleet-reports toggle appears with three modes, one selected',
+      (await page.$$('#pilot-notify [data-notify]')).length === 3 && (await page.$$('#pilot-notify [data-notify].on')).length === 1);
+    check('pilotage: the recent-reports feed shows the pilot’s report (the “details” the badge points at)',
+      await page.isVisible('#pilot-reports-card') && /browser fleet report/.test(await page.textContent('#pilot-reports')));
+    await page.click('#pilot-notify [data-notify=off]'); await page.waitForTimeout(300);
+    check('pilotage: switching fleet reports to Off hides the recent-reports feed',
+      await page.isHidden('#pilot-reports-card') && (await page.$$('#pilot-notify [data-notify=off].on')).length === 1);
+    await page.click('#pilot-notify [data-notify=inapp]'); await page.waitForTimeout(200);
     // tab switching reveals the Worksites/Chantiers board (the Director's directives)
     await page.click('#view-pilotage .ptab[data-ptab=chantiers]'); await page.waitForTimeout(400);
     check('pilotage: Worksites tab opens', await page.isVisible('.pilot-panel[data-ppanel=chantiers]'));

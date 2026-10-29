@@ -1352,6 +1352,10 @@ check('fleet: the right code pairs once and returns the steady secret', $ic === 
 check('fleet: a pairing code is single-use', $ic2 === 403);
 [$rc] = $con->inbox(['type' => 'report', 'title' => 'Fleet progress', 'text' => 'Two sessions running, one done.'], 'wrong-secret');
 check('fleet: a report with the wrong secret is unauthorized', $rc === 401);
+check('fleet: reports surface in-app by default (badge + feed, no push)', $con->notifyMode() === 'inapp');
+// The push+e-mail path below is the opt-in mode; select it so these assertions test that path. The default (in-app)
+// mode and the silent 'off' mode get their own block further down.
+$con->setNotify('push');
 $beforeN = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn();
 [$rc, $rr] = $con->inbox(['type' => 'report', 'title' => 'Fleet progress', 'text' => 'Two sessions running, one done.'], $secret);
 check('fleet: an authenticated report is accepted and surfaced to the user',
@@ -1372,6 +1376,26 @@ $beforeDup = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn();
 [$d3] = $con->inbox(['type' => 'report', 'title' => 'Fleet', 'text' => 'build #412 failed'], $secret);      // genuinely new
 check('fleet: an unflagged report that repeats the last notified line is dropped, new text still notifies',
     $d1 === 200 && $d2 === 200 && $d3 === 200 && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeDup + 2);
+// fleet_notify = inapp (the default): a fresh report is recorded in the feed and bumps the unread badge, but sends no push.
+$con->setNotify('inapp'); $con->markRead();
+$beforeIn = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn(); $u0 = $con->unread();
+[$ia] = $con->inbox(['type' => 'report', 'title' => 'Build', 'text' => 'in-app only line'], $secret);
+$rep = $con->reports();
+check('fleet: in-app mode records the report and bumps the badge, with no push',
+    $ia === 200 && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeIn
+    && $con->unread() === $u0 + 1 && end($rep)['text'] === 'in-app only line');
+$si2 = $con->statusInfo();
+check('fleet: statusInfo exposes the notify mode, the unread count and the reports feed',
+    $si2['notify'] === 'inapp' && $si2['unread'] === $u0 + 1 && count($si2['reports']) >= 1);
+check('fleet: markRead clears the unread badge', $con->markRead()['unread'] === 0 && $con->unread() === 0);
+// fleet_notify = off: a fresh report surfaces nowhere — no push, no feed line, no badge.
+$con->setNotify('off');
+$beforeOff = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn(); $roff = count($con->reports());
+[$io] = $con->inbox(['type' => 'report', 'title' => 'Quiet', 'text' => 'off-mode line'], $secret);
+check('fleet: off mode surfaces nothing — no push, no feed, no badge',
+    $io === 200 && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeOff
+    && $con->unread() === 0 && count($con->reports()) === $roff);
+check('fleet: an unknown notify mode falls back to in-app', $con->setNotify('bogus')['notify'] === 'inapp');
 check('fleet: status shows the connected orchestrator once paired', str_contains($con->fleetStatus(), 'connected'));
 // the settings panel reads a secret-safe snapshot: connection + liveness, never the webhook URL or the inbox secret
 $si = $con->statusInfo();

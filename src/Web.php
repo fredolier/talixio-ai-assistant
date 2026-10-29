@@ -190,6 +190,8 @@ final class Web
             $path === '/api/conductor' && $m === 'GET' => $this->app->conductor()->statusInfo(),
             $path === '/api/conductor/setup' && $m === 'POST' => ['instruction' => $this->app->conductor()->setup()],
             $path === '/api/conductor/disconnect' && $m === 'POST' => ['message' => $this->app->conductor()->disconnect()] + $this->app->conductor()->statusInfo(),
+            $path === '/api/conductor/notify' && $m === 'POST' => $this->app->conductor()->setNotify((string)($b['mode'] ?? '')),
+            $path === '/api/conductor/read' && $m === 'POST' => $this->app->conductor()->markRead(),
             (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/thread$#', $path, $mm) && $m === 'GET' => ['thread' => $this->app->conductor()->agentThread($mm[1])],
             (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/say$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
                 if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space']; // ground + guard against the dispatching space
@@ -786,7 +788,7 @@ final class Web
             'tiers' => array_map(fn(Tier $t) => $t->label(), $c->tiers), 'budget' => $this->app->budget()->status(),
             'embeddings' => $c->embeddings, 'max_parallel_jobs' => $c->maxParallelJobs, 'job_max_usd' => $c->jobMaxUsd, 'job_max_usd_limit' => $c->jobMaxUsdLimit, 'job_effort' => $c->jobEffort,
             'version' => Version::get()['number'], 'version_label' => Version::get()['label'],
-            'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()), 'notifications_unread' => $this->app->notifier()->unread(),
+            'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()), 'notifications_unread' => $this->app->notifier()->unread(), 'fleet_unread' => $this->app->conductor()->unread(),
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store),

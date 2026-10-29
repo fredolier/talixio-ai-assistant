@@ -56,7 +56,7 @@
     <a href="#notifications" data-view="notifications"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Notifications</span><b id="notif-count" class="rail-badge" hidden></b></a>
     <a href="#mail" data-view="mail" class="secondary"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>Mail</span></a>
     <a href="#people" data-view="people" class="secondary"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg><span>People</span></a>
-    <a href="#pilotage" data-view="pilotage"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 12l5-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg><span>Pilotage</span></a>
+    <a href="#pilotage" data-view="pilotage"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 12l5-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg><span>Pilotage</span><span class="badge rail-badge" id="pilot-rail-badge" hidden></span></a>
     <div class="more-wrap">
       <button id="more-btn" class="more" type="button" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>More</span></button>
       <div id="more-sheet" class="space-menu more-menu" role="menu" aria-label="More" hidden>
@@ -150,7 +150,7 @@
       </header>
       <nav class="pilot-tabs" role="tablist" aria-label="Pilotage">
         <button type="button" class="ptab" data-ptab="kb" role="tab"><span>Knowledge base</span><span class="ptab-src no-i18n" id="pilot-tab-kbsrc"></span></button>
-        <button type="button" class="ptab" data-ptab="agents" role="tab">Your autonomous pilot</button>
+        <button type="button" class="ptab" data-ptab="agents" role="tab"><span>Your autonomous pilot</span><span class="ptab-badge no-i18n" id="pilot-tab-agents" hidden></span></button>
         <button type="button" class="ptab" data-ptab="roles" role="tab"><span>Roles</span><span class="ptab-n no-i18n" id="pilot-tab-roles"></span></button>
         <button type="button" class="ptab" data-ptab="chantiers" role="tab"><span>Worksites</span><span class="ptab-n no-i18n" id="pilot-tab-chantiers"></span></button>
       </nav>
@@ -166,6 +166,18 @@
           </div>
           <div id="pilot-orch-status" class="muted small no-i18n"></div>
           <pre id="pilot-orch-steps" class="pilot-steps" hidden></pre>
+          <div class="pilot-notify" id="pilot-notify-row" hidden>
+            <span class="muted small">Fleet reports</span>
+            <div class="seg" id="pilot-notify" role="radiogroup" aria-label="Fleet reports">
+              <button type="button" data-notify="inapp" role="radio" title="A badge in Pilotage and the details here — no push">In-app badge</button>
+              <button type="button" data-notify="push" role="radio" title="A badge here, plus a push notification and e-mail">Push + e-mail</button>
+              <button type="button" data-notify="off" role="radio" title="Nothing — don’t surface fleet reports">Off</button>
+            </div>
+          </div>
+        </div>
+        <div class="card pilot-reports-card" id="pilot-reports-card" hidden>
+          <h3>Recent reports<span class="pilot-agents-n no-i18n" id="pilot-reports-n"></span></h3>
+          <div id="pilot-reports" class="pilot-reports"></div>
         </div>
         <div class="card pilot-talk">
           <h3>Talk to the pilot <span class="muted pilot-scale">· at the assistant’s scale</span></h3>

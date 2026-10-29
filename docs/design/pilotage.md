@@ -56,7 +56,11 @@ shell (slice 1a).
   pull). Read-only glance; deep edits stay in Library.
 - **Pilote autonome (agents)** — the Conductor/Fleet: the delegated orchestrator
   session and the Tier-D agents it runs across machines. (Renamed from "flotte"
-  → **agents**, decided with the mockup.)
+  → **agents**, decided with the mockup.) Fleet reports surface here quietly by
+  default: a **"Rapports de la flotte"** toggle (in-app badge · push+e-mail · off,
+  default in-app) sits on the status card, a **"Rapports récents"** card shows the
+  last reports, and an unread count badges both the Pilotage rail entry and this
+  sub-tab, clearing when the tab is opened. Backend + modes: orchestration.md §5.2.
 - **Rôles** — the role registry as a managed catalogue: grouped by
   **specialization**, each with its Assessor metrics, an **overlap** signal, and
   the lifecycle actions (Évaluer / Améliorer / Publier / Archiver / Supprimer /

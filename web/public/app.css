@@ -1506,6 +1506,9 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 /* tab count/source badges */
 .ptab-n,.ptab-src{opacity:.7;font-variant-numeric:tabular-nums}
 .ptab[aria-selected="true"] .ptab-n,.ptab[aria-selected="true"] .ptab-src{opacity:.85}
+.ptab{display:inline-flex;align-items:center;gap:6px}
+.ptab-badge{min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:var(--danger);color:#fff;font-size:.66rem;font-weight:700;display:inline-grid;place-items:center;line-height:1}
+.ptab[aria-selected="true"] .ptab-badge{background:var(--accent-ink);color:var(--accent)}
 .pilot-scale{font-weight:400;font-size:.85rem}
 /* pilot status card */
 .pilot-status-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -1517,6 +1520,15 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .pstate-idle{background:var(--warn,#c99a2e)}
 .pstate-done{background:var(--accent)}
 .pstate-error{background:var(--danger)}
+/* fleet-reports toggle + feed */
+.pilot-notify{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.pilot-notify .seg button{font-size:.78rem;padding:5px 11px}
+.pilot-reports{display:flex;flex-direction:column;gap:10px}
+.pilot-report{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:var(--surface)}
+.pilot-report-head{display:flex;align-items:baseline;gap:6px}
+.pilot-report-when{margin-left:auto;white-space:nowrap}
+.pilot-report-text{margin-top:3px;font-size:.9rem}
+.pilot-report-text p:first-child{margin-top:0} .pilot-report-text p:last-child{margin-bottom:0}
 /* agents roster */
 .pilot-agent-list{display:flex;flex-direction:column;gap:2px}
 .pilot-agent-list .placeholder{margin:0}

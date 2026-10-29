@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.13.0 (2026-10-29)
+
+- **Fleet reports are quiet by default now — a badge, not a push for every tick.** Your autonomous pilot's progress reports used to arrive as a push notification and e-mail each time; they now surface **in-app by default**: an unread count badges the **Pilotage** menu entry and the **« Votre pilote autonome »** sub-tab, and the reports themselves land in a new **« Rapports récents »** card there. A **« Rapports de la flotte »** toggle on the pilot's status card lets you choose how they reach you — **Pastille dans l'app** (default), **Push + e-mail** (the previous behaviour), or **Off** — and the badge clears when you open « Votre pilote autonome ». The keep-warm/repeat suppression is unchanged, so only genuinely new text ever counts.
+
 ## 1.12.1 (2026-10-29)
 
 - **The Modèles table no longer shows dead chat buttons on embedding rows.** Embeddings aren't routed per usage (fast/standard/deep) — they power library search and are chosen in Réglages → « Recherche par le sens », where switching re-indexes all memory. The table now says so plainly: the embedding model currently in use carries a ✓ **Actif** chip, and the other embedding rows link to « **Choisir dans Réglages** » instead of showing the four disabled routing buttons. You compare embeddings in the table and choose them in Réglages; nothing was removed from Réglages.

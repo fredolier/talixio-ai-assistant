@@ -220,7 +220,16 @@ Given 5.1, Talixio cannot be a pure external API client. Two buildable shapes:
       easy to send with a stray status line and would then notify (and e-mail) every
       tick, the inbox also **drops a report whose `text` is a verbatim repeat of the
       last one it notified** — the flag is the courtesy, the repeat-check is the
-      backstop; only genuinely new text raises a notification.
+      backstop; only genuinely new text raises a notification. **How a fresh
+      report then surfaces is the user's choice** (`fleet_notify`, stored in the
+      binding, toggled in *Votre pilote autonome*; default `inapp`): `off` surfaces
+      nothing; `inapp` records the report in a short in-app feed (the "Recent
+      reports" card) and bumps an unread count shown as a badge on the Pilotage menu
+      and the *Votre pilote autonome* sub-tab, but sends no push; `push` does the
+      same **and** fires the push+e-mail notification (the pre-1.12 behaviour). The
+      badge clears when the user opens *Votre pilote autonome* (`/api/conductor/read`).
+      The keep-warm/repeat suppression above runs first, so only genuinely new text
+      ever reaches any of these three paths.
     - **The monitor loop:** the orchestrator keeps itself warm with its own
       `create_trigger` / `send_later` heartbeat; each tick it polls `get_session` /
       `list_sessions`, reads results with `list_events`, and re-dispatches —

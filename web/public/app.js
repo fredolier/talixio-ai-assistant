@@ -5532,6 +5532,38 @@ const PSTATE = { active: 'active', busy: 'busy', idle: 'idle', done: 'done', err
 const pStateLabel = s => ({ active: t('active'), busy: t('busy'), idle: t('idle'), done: t('done'), error: t('error') }[s] || t('idle'));
 // one plural helper for the pilot roster strings
 const pN = (one, many, v) => t(v === 1 ? one : many, { n: v });
+// the fleet-reports toggle: badge-only (default), push+e-mail, or off — lives in Votre pilote autonome
+let pilotNotifyWired = false;
+function renderPilotNotify(info) {
+  const row = $('#pilot-notify-row'); if (!row) return;
+  row.hidden = !info.connected;
+  if (!info.connected) return;
+  const mode = info.notify || 'inapp';
+  row.querySelectorAll('[data-notify]').forEach(b => b.classList.toggle('on', b.dataset.notify === mode));
+  if (!pilotNotifyWired) {
+    pilotNotifyWired = true;
+    row.querySelectorAll('[data-notify]').forEach(b => b.onclick = async () => {
+      if (b.classList.contains('on')) return;
+      try {
+        const r = await post('api/conductor/notify', { mode: b.dataset.notify });
+        renderPilotNotify(r); renderPilotReports(r); // reflect the new mode (and hide the feed when turned off)
+        toast(t('Fleet reports: {m}', { m: t({ inapp: 'In-app badge', push: 'Push + e-mail', off: 'Off' }[b.dataset.notify]) }));
+      } catch (e) { toast(e.message); }
+    });
+  }
+}
+// the recent-reports feed — the "details" the Pilotage badge points at
+function renderPilotReports(info) {
+  const card = $('#pilot-reports-card'), box = $('#pilot-reports'), nTag = $('#pilot-reports-n'); if (!card || !box) return;
+  const reports = (info.reports || []).slice().reverse(); // newest first
+  card.hidden = !info.connected || info.notify === 'off';
+  if (card.hidden) return;
+  if (nTag) nTag.textContent = reports.length ? ' · ' + reports.length : '';
+  if (!reports.length) { box.innerHTML = `<div class="placeholder">${esc(t('No reports yet. When your pilot reports progress, it shows up here.'))}</div>`; return; }
+  box.innerHTML = reports.map(r => `<div class="pilot-report">
+    <div class="pilot-report-head"><b class="no-i18n">${esc(r.title || t('Fleet update'))}</b>${r.agent ? ` <span class="muted small no-i18n">— ${esc(r.agent)}</span>` : ''}<span class="pilot-report-when muted small no-i18n">${esc(pilotAgo(r.ts))}</span></div>
+    <div class="pilot-report-text no-i18n">${md(r.text || '')}</div></div>`).join('');
+}
 async function pilotAgents() {
   const box = $('#pilot-agents'), nTag = $('#pilot-agents-n');
   await initOrchestratorPanel('pilot', info => {
@@ -5547,6 +5579,8 @@ async function pilotAgents() {
     if (on) parts.push(t('sees {a} on {b}', { a: pN('1 agent', '{n} agents', info.agentCount || 0), b: pN('1 machine', '{n} machines', info.machines || 0) }));
     $('#pilot-orch-status').textContent = on ? parts.join(' · ')
       : t('Not paired yet. Pair your autonomous pilot to delegate work across your machines.');
+    renderPilotNotify(info);
+    renderPilotReports(info);
     // the roster of agents the pilot sees
     if (nTag) nTag.textContent = agents.length ? ' · ' + agents.length : '';
     if (!on) { box.innerHTML = `<div class="placeholder">${esc(t('Pair your autonomous pilot above, then the agents it runs across your machines appear here.'))}</div>`; return; }
@@ -5565,6 +5599,15 @@ async function pilotAgents() {
     }).join('');
     box.querySelectorAll('[data-discuss]').forEach(b => b.onclick = () => openAgentDialog(agents.find(x => x.id === b.dataset.discuss) || { id: b.dataset.discuss }));
   });
+  // opening Votre pilote autonome is reading the reports: clear the badge
+  if (state.fleetUnread) { state.fleetUnread = 0; setFleetBadge(); post('api/conductor/read', {}).catch(() => {}); }
+}
+// the Pilotage menu badge + the Agents-subtab badge, both counting unread fleet reports
+function setFleetBadge() {
+  const n = state.fleetUnread || 0, txt = n > 99 ? '99+' : String(n);
+  for (const sel of ['#pilot-rail-badge', '#pilot-tab-agents']) {
+    const el = $(sel); if (!el) continue; el.hidden = !n; el.textContent = n ? txt : '';
+  }
 }
 let pilotAgentWired = false, pilotAgentCur = null;
 function renderAgentThread(turns) {
@@ -6036,6 +6079,7 @@ async function refreshStatus() {
     st.title = s.worker_online ? 'Background worker is running: schedules and chat apps work.' : 'Background worker is not running: schedules and Telegram are paused. Check: systemctl status talixio-worker';
     for (const el of [$('#app-version'), $('#more-version')]) { el.textContent = 'Talixio ' + s.version; el.title = s.version_label; }
     if (s.notifications_unread !== state.notifUnread) { state.notifUnread = s.notifications_unread; setBadge(); if (!$('#view-notifications').hidden) loadNotifications(); }
+    if (s.fleet_unread !== state.fleetUnread) { const open = !$('#view-pilotage').hidden && $('.ptab[data-ptab="agents"]')?.getAttribute('aria-selected') === 'true'; state.fleetUnread = s.fleet_unread; if (open) pilotAgents().catch(() => {}); else setFleetBadge(); }
     $('#setup-model').hidden = !s.model_problem;
     $('#setup-claude').hidden = !s.claude_code;
     if (JSON.stringify(s.paused || null) !== $('#paused').dataset.p) { $('#paused').dataset.p = JSON.stringify(s.paused || null); renderPaused(s.paused); }
