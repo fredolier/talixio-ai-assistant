@@ -57,7 +57,7 @@ final class ModelCatalog
         ['name' => 'mistral-medium-latest', 'prov' => 'mistral', 'type' => 'LLM',    'rank' => 7, 'pin' => 1.50, 'pout' => 7.50, 'est' => true],
         ['name' => 'mistral-large-latest',  'prov' => 'mistral', 'type' => 'LLM',    'rank' => 8, 'pin' => 0.50, 'pout' => 1.50, 'est' => true],
         ['name' => 'pixtral-large',         'prov' => 'mistral', 'type' => 'Vision', 'rank' => 7, 'pin' => 2.00, 'pout' => 6.00, 'est' => true, 'deprecated' => true],
-        ['name' => 'Voxtral',               'prov' => 'mistral', 'type' => 'Voice',  'rank' => 5, 'unit' => 0.003, 'unitKind' => 'min', 'cur' => '$', 'est' => true],
+        ['name' => 'Voxtral',               'id' => 'voxtral-mini-latest', 'prov' => 'mistral', 'type' => 'Voice',  'rank' => 5, 'unit' => 0.003, 'unitKind' => 'min', 'cur' => '$', 'est' => true],
         // Scaleway (France) — billed in EUR
         ['name' => 'Llama 3.3 70B',  'prov' => 'scaleway', 'type' => 'LLM',   'rank' => 7, 'pin' => 0.90, 'pout' => 0.90, 'est' => true],
         ['name' => 'FLUX.1 [pro]',   'prov' => 'scaleway', 'type' => 'Image', 'rank' => 7, 'unit' => 0.05, 'unitKind' => 'img', 'cur' => '$', 'est' => true],
@@ -91,7 +91,11 @@ final class ModelCatalog
         // Local (Ollama / llama.cpp) — no marginal cost
         ['name' => 'Llama 3.1 8B (local)', 'prov' => 'local', 'type' => 'LLM',   'rank' => 3, 'pin' => 0, 'pout' => 0],
         ['name' => 'Qwen2.5 7B (local)',   'prov' => 'local', 'type' => 'LLM',   'rank' => 4, 'pin' => 0, 'pout' => 0],
-        ['name' => 'Whisper (local)',      'prov' => 'local', 'type' => 'Voice', 'rank' => 3, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$'],
+        ['name' => 'Whisper (local)',      'id' => 'whisper.cpp', 'prov' => 'local', 'type' => 'Voice', 'rank' => 3, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$'],
+        // Transcription at the European providers (OpenAI-compatible audio API). No price is invented: they show « — ».
+        ['name' => 'Whisper large v3', 'id' => 'whisper-large-v3', 'prov' => 'ovhcloud',   'type' => 'Voice', 'rank' => 6, 'est' => true],
+        ['name' => 'Whisper large v3', 'id' => 'whisper-large-v3', 'prov' => 'scaleway',   'type' => 'Voice', 'rank' => 6, 'est' => true],
+        ['name' => 'Whisper',          'id' => 'whisper',          'prov' => 'infomaniak', 'type' => 'Voice', 'rank' => 6, 'est' => true],
         // Embeddings (library search, the latent classifier, Mind) — priced per Mtok of input. Chosen via the
         // embeddings presets in Settings (backend + model), not the per-usage router, so they are listed to compare,
         // never assigned from the table. Prices are estimates; the local ones have no marginal cost.
@@ -100,6 +104,11 @@ final class ModelCatalog
         ['name' => 'BGE-M3',                       'id' => 'bge-m3',                 'prov' => 'aki',    'type' => 'Embedding', 'rank' => 6, 'unit' => 0.01, 'unitKind' => 'Mtok', 'cur' => '€', 'est' => true],
         ['name' => 'Qwen 3 VL Embedding 8B',       'id' => 'qwen3-vl-embedding-8b',  'prov' => 'aki',    'type' => 'Embedding', 'rank' => 7, 'unit' => 0.05, 'unitKind' => 'Mtok', 'cur' => '€', 'est' => true],
         ['name' => 'Qwen3-Embedding 0.6B (local)', 'id' => 'qwen3-embedding:0.6b',   'prov' => 'local',  'type' => 'Embedding', 'rank' => 5, 'unit' => 0, 'unitKind' => 'Mtok', 'cur' => '$'],
+        ['name' => 'multilingual-e5-small (local)', 'id' => 'hf.co/TwinSunsLLC/multilingual-e5-small-gguf:Q8_0', 'prov' => 'local', 'type' => 'Embedding', 'rank' => 3, 'unit' => 0, 'unitKind' => 'Mtok', 'cur' => '$'],
+        ['name' => 'mistral-embed',                'id' => 'mistral-embed',          'prov' => 'mistral',    'type' => 'Embedding', 'rank' => 6, 'unit' => 0.10, 'unitKind' => 'Mtok', 'cur' => '$', 'est' => true],
+        ['name' => 'Qwen3-Embedding 8B',           'id' => 'qwen3-embedding-8b',     'prov' => 'scaleway',   'type' => 'Embedding', 'rank' => 7, 'est' => true],
+        ['name' => 'BGE-M3',                       'id' => 'bge-m3',                 'prov' => 'ovhcloud',   'type' => 'Embedding', 'rank' => 6, 'est' => true],
+        ['name' => 'BGE Multilingual Gemma2',      'id' => 'bge_multilingual_gemma2','prov' => 'infomaniak', 'type' => 'Embedding', 'rank' => 6, 'est' => true],
         ['name' => 'EmbeddingGemma (local)',       'id' => 'embeddinggemma',         'prov' => 'local',  'type' => 'Embedding', 'rank' => 4, 'unit' => 0, 'unitKind' => 'Mtok', 'cur' => '$'],
     ];
 
@@ -121,7 +130,18 @@ final class ModelCatalog
         $sources = $this->sources();
         $live = $this->liveModels();
         $providers = array_map(fn(array $p) => $p + ['sources' => $sources[$p['id']] ?? [], 'connected' => !empty($sources[$p['id']])], self::PROVIDERS);
-        $models = array_map(fn(array $m) => $m + ['id' => $m['name'], 'available' => !empty($sources[$m['prov']])], array_merge(self::MODELS, $live));
+        $whisper = Transcriber::whisperReady();
+        $models = array_map(function (array $m) use ($sources, $whisper) {
+            $m += ['id' => $m['name'], 'available' => !empty($sources[$m['prov']])];
+            if (in_array($m['type'], ['Voice', 'Embedding'], true)) {
+                // how a Voice (transcription) or Embedding row is reached; '' = it cannot be chosen for that job (a speech-synthesis service)
+                $m['via'] = $m['prov'] === 'local' ? 'local' : match (true) {
+                    $m['prov'] === 'openai' => 'openai', $m['prov'] === 'google' => 'gemini', isset(Sovereign::SERVICES[$m['prov']]) => 'sovereign', default => '' };
+                // whisper.cpp and Ollama run on this server, with no account: the main settings stand for them
+                if ($m['prov'] === 'local') { $m['available'] = $m['type'] === 'Voice' ? $whisper : true; $m['src'] = ['account' => '', 'name' => 'This server']; }
+            }
+            return $m;
+        }, array_merge(self::MODELS, $live));
         return ['providers' => array_values($providers), 'models' => array_values($models),
             'updated' => (int)$this->app->store->get('catalogue_updated', (string)time()),
             'source' => $live ? 'live' : 'seed'];

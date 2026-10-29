@@ -34,13 +34,14 @@ final class Doctor
             else $this->out[] = ['status' => 'eu', 'text' => "Everything stays in Europe: {$eu['name']} ({$eu['country']}), under the GDPR" . ($c->sovereignOnly ? ', locked' : ''),
                     'provider' => "{$eu['name']} ({$eu['country']})", 'locked' => $c->sovereignOnly];
         }
-        if ($c->embeddings !== 'off') {
-            $this->attempt("search by meaning ({$c->embeddings}: {$c->embeddingsModel})", function () use ($app, $c) {
-                if ($c->embeddings === 'ollama') {
-                    [$code, $body] = Http::request('GET', $c->ollamaUrl . '/api/tags', [], null, 10);
+        $ec = $app->embedCfg(); $vc = $app->voiceCfg();
+        if ($ec->embeddings !== 'off') {
+            $this->attempt("search by meaning ({$ec->embeddings}: {$ec->embeddingsModel})", function () use ($app, $ec) {
+                if ($ec->embeddings === 'ollama') {
+                    [$code, $body] = Http::request('GET', $ec->ollamaUrl . '/api/tags', [], null, 10);
                     $names = array_column(json_decode($body, true)['models'] ?? [], 'name');
-                    if (!in_array($c->embeddingsModel, $names, true) && !in_array($c->embeddingsModel . ':latest', $names, true)) {
-                        throw new \RuntimeException("model not installed in Ollama: run \"ollama pull {$c->embeddingsModel}\"");
+                    if (!in_array($ec->embeddingsModel, $names, true) && !in_array($ec->embeddingsModel . ':latest', $names, true)) {
+                        throw new \RuntimeException("model not installed in Ollama: run \"ollama pull {$ec->embeddingsModel}\"");
                     }
                 }
                 $t = microtime(true);
@@ -49,10 +50,10 @@ final class Doctor
                 return sprintf('%d dimensions, %.0f ms; %d of %d memory items indexed', strlen($v) / 4, (microtime(true) - $t) * 1000, $done, $total);
             });
         }
-        if ($c->transcribe === 'local') {
-            [$bin, $model] = Transcriber::whisper($c);
+        if ($vc->transcribe === 'local') {
+            [$bin, $model] = Transcriber::whisper($vc);
             $this->line($bin !== '' && is_file($model), 'transcription: local, ' . ($bin === '' ? 'whisper.cpp not installed (' . Transcriber::whisperHint() . ')' : (is_file($model) ? basename($model) : "model missing: $model (" . Transcriber::whisperHint() . ')')));
-        } elseif ($c->transcribe !== 'off') $this->info("transcription: {$c->transcribe}");
+        } elseif ($vc->transcribe !== 'off') $this->info("transcription: {$vc->transcribe}");
         if ($app->email()->canSend()) $this->attempt("SMTP {$c->smtpHost}:{$c->smtpPort}", fn() => $app->email()->smtp()->check() ?? 'login OK');
         if ($c->imapHost !== '') {
             $this->attempt("IMAP {$c->imapHost}:{$c->imapPort}", fn() => $app->email()->imap()->fetchUnseen(0) === [] ? 'login OK' : '');

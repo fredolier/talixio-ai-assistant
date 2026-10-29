@@ -152,6 +152,45 @@ check('routing: the API sets a binding and reports what each usage resolves to',
     && $rv['effective']['standard']['provider'] === 'openai' && $rv['effective']['standard']['model'] === 'via-route' && in_array('voice', $rv['usages'], true), json_encode($rv['effective']['standard'] ?? null));
 check('routing: removing an account drops its bindings', (function () use ($app, $oaId) { $app->accounts()->delete($oaId); $m = $app->routing()->all();
     return !array_filter($m['global'], fn($b) => $b['account'] === $oaId) && $app->tierFor('standard')[0]->provider === 'echo'; })());
+// vision (reading images and scanned PDFs): its own usage, falling back to the fast tier
+$oa2 = $app->accounts()->save(['name' => 'Vis OA', 'kind' => 'openai', 'key' => 'sk-test', 'models' => ['fast' => 'oa2-fast', 'standard' => 'oa2-std', 'deep' => 'oa2-deep']]);
+[$rcv0, $rtv0] = $app->tierFor('vision');
+check('routing: with no vision binding, reading images uses the fast tier as before', $rcv0 === $app->cfg && $rtv0->name === 'fast');
+$app->routing()->set(null, 'vision', $oa2['id'], 'vis-x');
+[$rcv, $rtv] = $app->tierFor('vision');
+check('routing: a vision binding sends image reading to its own model, other usages untouched', $rcv->provider === 'openai' && $rtv->model === 'vis-x' && $app->tierFor('fast')[0]->provider === 'echo', "{$rcv->provider}/{$rtv->model}");
+check('routing: vision is in the routable usages', in_array('vision', \Talixio\Routing::USAGES, true) && in_array('embedding', \Talixio\Routing::USAGES, true));
+// voice (transcription): the binding decides where recordings go
+check('routing: with no voice binding transcription keeps the main settings', $app->voiceCfg() === $app->mainCfg);
+$soAcc = $app->accounts()->save(['name' => 'Route OVH', 'kind' => 'sovereign', 'service' => 'ovhcloud', 'key' => 'k-ovh']);
+$app->routing()->set(null, 'voice', $soAcc['id'], 'whisper-large-v3', 'sovereign');
+$vc = $app->voiceCfg();
+check('routing: a voice binding on a European account transcribes there, with that model', $vc->transcribe === 'sovereign' && $vc->transcribeModel === 'whisper-large-v3' && $vc->sovereign === 'ovhcloud' && $vc->sovereignKey === 'k-ovh', "{$vc->transcribe}/{$vc->transcribeModel}/{$vc->sovereign}");
+check('routing: the voice binding keeps its way of being reached', ($app->routing()->all()['global']['voice']['via'] ?? '') === 'sovereign');
+$app->routing()->set(null, 'voice', '', 'whisper.cpp', 'local');
+check('routing: a local voice binding means whisper.cpp on this server', $app->voiceCfg()->transcribe === 'local');
+$app->routing()->set(null, 'voice', $oa2['id'], 'gpt-4o-transcribe');
+$vo = $app->voiceCfg();
+check('routing: a voice binding on an OpenAI account uses OpenAI transcription', $vo->transcribe === 'openai' && $vo->transcribeModel === 'gpt-4o-transcribe' && $vo->openaiKey === 'sk-test');
+$ant = $app->accounts()->save(['name' => 'Route Claude', 'kind' => 'anthropic', 'key' => 'sk-ant-x']);
+$app->routing()->set(null, 'voice', $ant['id'], 'whatever');
+check('routing: a voice binding on a provider that cannot transcribe is ignored', $app->voiceCfg() === $app->mainCfg);
+$app->routing()->set(null, 'voice', null);
+// embeddings: global only, and the index follows the model
+check('routing: embeddings cannot be set for one space only', (function () use ($app) { $sp = $app->spaces()->save(['name' => 'EmbSp']); try { $app->routing()->set((int)$sp['id'], 'embedding', ''); return false; } catch (\InvalidArgumentException) { return true; } finally { $app->spaces()->delete((int)$sp['id']); } })());
+check('routing: with no embedding binding search by meaning keeps the main settings', $app->embedCfg() === $app->mainCfg);
+$app->routing()->set(null, 'embedding', $soAcc['id'], 'bge-m3', 'sovereign');
+$app->routingChanged();
+$ec = $app->embedCfg();
+check('routing: an embedding binding on a European account embeds there, with that model and key', $ec->embeddings === 'sovereign' && $ec->embeddingsModel === 'bge-m3' && $ec->sovereignKey === 'k-ovh', "{$ec->embeddings}/{$ec->embeddingsModel}");
+check('routing: the index is keyed by the routed model (it is rebuilt when the model changes)', str_starts_with($app->embeddings->model(), 'sovereign:bge-m3'), $app->embeddings->model());
+check('routing: the meaning status reports the routed model', (new \Talixio\Meaning($app))->status()['model'] === 'bge-m3' && (new \Talixio\Meaning($app))->status()['routed'] === true);
+$app->routing()->set(null, 'embedding', '', 'embeddinggemma', 'local');
+check('routing: a local embedding binding runs in Ollama on this server', $app->embedCfg()->embeddings === 'ollama' && $app->embedCfg()->embeddingsModel === 'embeddinggemma');
+(new \Talixio\Meaning($app))->choose('off');
+check('routing: choosing a preset in Settings replaces a model picked in the table', $app->binding('embedding') === null);
+foreach ([$oa2['id'], $soAcc['id'], $ant['id']] as $xid) $app->accounts()->delete($xid);
+$app->routingChanged();
 $app->store->set('model_routing', ''); $app->spaces()->delete($rspId); $app->setSpace(0);
 
 // tiers and runtime awareness

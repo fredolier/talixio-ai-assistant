@@ -145,8 +145,8 @@ final class Sovereign
         $c = $app->cfg; $out = [];
         $eu = fn(string $x) => in_array($x, ['local', 'off', 'ollama', 'sovereign', 'searxng'], true);
         if ($c->provider !== 'sovereign' && !in_array($c->provider, ['echo'], true) && !$c->localModels()) $out[] = ['name' => 'AI model', 'why' => 'The conversation model is not a European provider.', 'href' => '#settings/model'];
-        if (!$eu($c->transcribe)) $out[] = ['name' => 'Transcription', 'why' => 'Recordings go to a provider outside Europe.', 'href' => '#settings/library'];
-        if (!$eu($c->embeddings)) $out[] = ['name' => 'Search by meaning', 'why' => 'Your texts are indexed by a provider outside Europe.', 'href' => '#settings/library'];
+        if (!$eu($app->voiceCfg()->transcribe)) $out[] = ['name' => 'Transcription', 'why' => 'Recordings go to a provider outside Europe.', 'href' => '#settings/library'];
+        if (!$eu($app->embedCfg()->embeddings)) $out[] = ['name' => 'Search by meaning', 'why' => 'Your texts are indexed by a provider outside Europe.', 'href' => '#settings/library'];
         if (!$eu($c->search)) $out[] = ['name' => 'Web search', 'why' => 'Search queries go to a service outside Europe. Use your own SearXNG, or turn it off.', 'href' => '#settings/library'];
         if (in_array('telegram', $c->notify, true) && $c->telegramToken !== '') $out[] = ['name' => 'Telegram', 'why' => 'Telegram\'s servers can read the messages. Signal or email are better choices.', 'href' => '#settings/channels'];
         if ($app->google()->connected()) $out[] = ['name' => 'Google Calendar', 'why' => 'Your events are held by Google. A European calendar (Infomaniak, OVHcloud, Nextcloud…) can be added by its link instead.', 'href' => '#settings/accounts'];

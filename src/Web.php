@@ -308,7 +308,7 @@ final class Web
             $path === '/api/legifrance/test' && $m === 'POST' => ['ok' => true, 'message' => $this->app->legifrance()->test()],
             $path === '/api/meaning' && $m === 'GET' => (new Meaning($this->app))->status(),
             $path === '/api/meaning/choose' && $m === 'POST' => (new Meaning($this->app))->choose((string)($b['preset'] ?? '')),
-            $path === '/api/meaning/pull' && $m === 'POST' => (function () { $mn = new Meaning($this->app); $mn->startPull($this->app->cfg->embeddingsModel); return ['ok' => true]; })(),
+            $path === '/api/meaning/pull' && $m === 'POST' => (function () { $mn = new Meaning($this->app); $mn->startPull($this->app->embedCfg()->embeddingsModel); return ['ok' => true]; })(),
             $path === '/api/meaning/measure' && $m === 'POST' => (function () { set_time_limit(0); return (new Meaning($this->app))->measure(); })(),
             $path === '/api/connectors/packages' => ['packages' => (new ConnectorPackage($this->app))->packages()],
             $path === '/api/connectors/inspect' => (new ConnectorPackage($this->app))->inspect((int)($_GET['file'] ?? 0)),
@@ -939,7 +939,16 @@ final class Web
     {
         $space = isset($b['space']) && $b['space'] !== '' && $b['space'] !== 'global' ? (int)$b['space'] : null;
         $account = !empty($b['clear']) ? null : (string)($b['account'] ?? '');
-        $this->app->routing()->set($space, (string)($b['usage'] ?? ''), $account, (string)($b['model'] ?? ''));
+        $usage = (string)($b['usage'] ?? '');
+        $this->app->routing()->set($space, $usage, $account, (string)($b['model'] ?? ''), (string)($b['via'] ?? ''));
+        if ($usage === 'embedding') { // search by meaning now runs on another model: have a local one downloaded, and rebuild the index
+            $this->app->routingChanged();
+            $ec = $this->app->embedCfg();
+            if ($account !== null && $ec->embeddings === 'ollama' && !Meaning::shared()) {
+                $mn = new Meaning($this->app); $o = $mn->ollama();
+                if ($o['up'] && !Meaning::installed($ec->embeddingsModel, $o['models'])) $mn->startPull($ec->embeddingsModel);
+            }
+        }
         return $this->routingView($space);
     }
 

@@ -17,6 +17,7 @@ final class Meaning
     public function status(): array
     {
         $c = $this->app->mainCfg; $st = $this->app->store;
+        $ec = $this->app->embedCfg(); // the routing may point search by meaning at another model than the main settings
         $ollama = $this->ollama();
         $presets = [];
         foreach (Embeddings::PRESETS as $k => $p) {
@@ -32,9 +33,9 @@ final class Meaning
         }
         $model = $this->app->embeddings->model();
         $docs = (int)$st->q('SELECT COUNT(*) FROM docs')->fetchColumn();
-        $done = $c->embeddings === 'off' ? 0 : (int)$st->q('SELECT COUNT(*) FROM embeddings WHERE model = ?', [$model])->fetchColumn();
+        $done = $ec->embeddings === 'off' ? 0 : (int)$st->q('SELECT COUNT(*) FROM embeddings WHERE model = ?', [$model])->fetchColumn();
         return [
-            'current' => Embeddings::presetOf($c), 'backend' => $c->embeddings, 'model' => $c->embeddingsModel,
+            'current' => Embeddings::presetOf($ec), 'backend' => $ec->embeddings, 'model' => $ec->embeddingsModel, 'routed' => $this->app->binding('embedding') !== null,
             'presets' => $presets, 'shared' => self::shared(), 'ollama' => $ollama,
             'index' => ['done' => min($done, $docs), 'total' => $docs],
             'engine' => Recall::vecEngine($st->path),
@@ -75,6 +76,7 @@ final class Meaning
         if ($p['backend'] === 'sovereign') $p['model'] = Sovereign::info($c->sovereign)['embed'];
         $err = Settings::save($c->dataDir, ['TALIXIO_EMBEDDINGS' => $p['backend'], 'TALIXIO_EMBEDDINGS_MODEL' => $p['model']], ['TALIXIO_EMBEDDINGS_DIMS']);
         if ($err) throw new \RuntimeException(implode(' ', $err));
+        $this->app->routing()->set(null, 'embedding', null); // this choice replaces a model picked in the Models table
         $this->app->store->set('meaning_measure', ''); // measured with the previous one
         Log::info("search by meaning: now $id ({$p['backend']} {$p['model']})");
         $pulling = false;

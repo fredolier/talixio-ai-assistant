@@ -159,7 +159,7 @@ final class Privacy
     public function noOutsideEmbedding(): array
     {
         $strict = $this->strictSpaces();
-        if ($this->app->cfg->embeddings === 'sovereign') $strict = array_values(array_filter($strict, fn($s) => $s['privacy'] === 'secret'));
+        if ($this->app->embedCfg()->embeddings === 'sovereign') $strict = array_values(array_filter($strict, fn($s) => $s['privacy'] === 'secret'));
         if (!$strict) return [];
         $ids = [];
         $spaceIds = array_column($strict, 'id');
@@ -407,6 +407,7 @@ final class Privacy
     public function flows(): array
     {
         $c = $this->app->mainCfg; $out = [];
+        $v = $this->app->voiceCfg(); $ec = $this->app->embedCfg(); // what transcription and search by meaning really run on (the routing may differ from the main settings)
         $add = function (string $id, string $name, string $what, string $status, string $why, array $fix = [], string $terms = '') use (&$out) {
             $out[] = compact('id', 'name', 'what', 'status', 'why', 'fix', 'terms');
         };
@@ -429,19 +430,19 @@ final class Privacy
         };
 
         // transcription
-        if ($c->transcribe === 'local') $add('transcription', 'Transcription (whisper.cpp)', 'Voice notes and meeting recordings.', 'local', 'Runs on this server.');
-        elseif ($c->transcribe === 'gemini') $add('transcription', 'Transcription (Google Gemini)', 'Voice notes and meeting recordings.', $c->geminiPaid ? 'good' : 'bad',
-            $c->geminiPaid ? 'Paid plan: not used to train models.' : 'Free tier: Google may use the recordings to improve its products.',
+        if ($v->transcribe === 'local') $add('transcription', 'Transcription (whisper.cpp)', 'Voice notes and meeting recordings.', 'local', 'Runs on this server.');
+        elseif ($v->transcribe === 'gemini') $add('transcription', 'Transcription (Google Gemini)', 'Voice notes and meeting recordings.', $v->geminiPaid ? 'good' : 'bad',
+            $v->geminiPaid ? 'Paid plan: not used to train models.' : 'Free tier: Google may use the recordings to improve its products.',
             $whisperReady ? [['label' => 'Transcribe on this server', 'set' => ['TALIXIO_TRANSCRIBE' => 'local']]] : [['label' => 'My Gemini key is on a paid plan', 'set' => ['TALIXIO_GEMINI_PAID' => '1']]], $terms('gemini'));
-        elseif ($c->transcribe === 'openai') $add('transcription', 'Transcription (OpenAI)', 'Voice notes and meeting recordings.', 'good', 'API terms: not used to train models.', [], $terms('openai'));
-        elseif ($c->transcribe === 'sovereign') $add('transcription', 'Transcription (' . Sovereign::info($c->sovereign)['name'] . ')', 'Voice notes and meeting recordings.', 'good', $eu($c->sovereign), [], $terms($c->sovereign));
+        elseif ($v->transcribe === 'openai') $add('transcription', 'Transcription (OpenAI)', 'Voice notes and meeting recordings.', 'good', 'API terms: not used to train models.', [], $terms('openai'));
+        elseif ($v->transcribe === 'sovereign') $add('transcription', 'Transcription (' . Sovereign::info($v->sovereign)['name'] . ')', 'Voice notes and meeting recordings.', 'good', $eu($v->sovereign), [], $terms($v->sovereign));
 
         // search by meaning
-        $e = $c->embeddings;
+        $e = $ec->embeddings;
         if ($e === 'ollama') $add('embeddings', 'Search by meaning (Ollama)', 'Text of your memory and documents, to index them.', 'local', 'Runs on this server.');
-        elseif ($e === 'gemini') $add('embeddings', 'Search by meaning (Google Gemini)', 'Text of your memory and documents, to index them.', $c->geminiPaid ? 'good' : 'bad',
-            $c->geminiPaid ? 'Paid plan: not used to train models.' : 'Free tier: Google may use the text to improve its products.', [['label' => 'Use Ollama on this server', 'href' => '#settings/memory']], $terms('gemini'));
-        elseif ($e === 'sovereign') $add('embeddings', 'Search by meaning (' . Sovereign::info($c->sovereign)['name'] . ')', 'Text of your memory and documents, to index them.', 'good', $eu($c->sovereign), [], $terms($c->sovereign));
+        elseif ($e === 'gemini') $add('embeddings', 'Search by meaning (Google Gemini)', 'Text of your memory and documents, to index them.', $ec->geminiPaid ? 'good' : 'bad',
+            $ec->geminiPaid ? 'Paid plan: not used to train models.' : 'Free tier: Google may use the text to improve its products.', [['label' => 'Use Ollama on this server', 'href' => '#settings/memory']], $terms('gemini'));
+        elseif ($e === 'sovereign') $add('embeddings', 'Search by meaning (' . Sovereign::info($ec->sovereign)['name'] . ')', 'Text of your memory and documents, to index them.', 'good', $eu($ec->sovereign), [], $terms($ec->sovereign));
         elseif (in_array($e, ['openai', 'voyage'], true)) $add('embeddings', 'Search by meaning (' . ($e === 'openai' ? 'OpenAI' : 'Voyage AI') . ')', 'Text of your memory and documents, to index them.', 'good', 'API terms: not used to train models.', [], $terms($e));
 
         // web search
@@ -493,8 +494,8 @@ final class Privacy
         $outside = array_filter($flows, fn($f) => $f['status'] !== 'local');
         $issues = array_values(array_filter($flows, fn($f) => in_array($f['status'], ['bad', 'warn'], true) && ($f['status'] === 'bad' || $f['fix'])));
         $level = !$outside ? 'local' : (array_filter($flows, fn($f) => $f['status'] === 'bad') ? 'personal' : 'business');
-        $c = $this->app->cfg;
-        $ai = array_filter([$this->modelService(), $c->transcribe === 'sovereign' ? $c->sovereign : $c->transcribe, $c->embeddings === 'sovereign' ? $c->sovereign : $c->embeddings],
+        $v = $this->app->voiceCfg(); $ec = $this->app->embedCfg();
+        $ai = array_filter([$this->modelService(), $v->transcribe === 'sovereign' ? $v->sovereign : $v->transcribe, $ec->embeddings === 'sovereign' ? $ec->sovereign : $ec->embeddings],
             fn($x) => !in_array($x, ['local', 'off', 'ollama'], true));
         $european = $level !== 'personal' && !array_filter($ai, fn($x) => !self::isSovereign($x)); // every AI service is local or European
         $auth = new Auth($this->app);

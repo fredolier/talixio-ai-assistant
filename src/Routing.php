@@ -3,12 +3,15 @@ declare(strict_types=1);
 namespace Talixio;
 
 /**
- * Per-usage model routing: which provider and model answer each usage (fast, standard, deep, voice), as a global
+ * Per-usage model routing: which provider and model answer each usage (fast, standard, deep, voice, vision, embedding), as a global
  * default plus per-space overrides. It lets one assistant mix providers — a European small model for quick work,
  * a stronger one for hard reasoning — instead of a single provider for everything.
  *
  * A binding is ['account' => id, 'model' => name]: the account ('' = the main settings) names the provider and its
  * credentials (Accounts / Config::forAccount), the model overrides that account's default tier model ('' = keep it).
+ * voice (transcription) and embedding bindings also carry 'via', how the model is reached when the account alone does
+ * not say ('local' = whisper.cpp / Ollama on this server). embedding is global only: the vectors of one index must
+ * all come from the same model, so a space cannot have its own.
  * A usage with no binding falls back to the space's AI account (Spaces::accountOf) or the main settings, so an empty
  * map behaves exactly like before this feature. Resolution (App::tierFor) is: per-space override, then — when the
  * space has no AI account of its own — the global default, then today's path.
@@ -16,8 +19,10 @@ namespace Talixio;
 final class Routing
 {
     private const KEY = 'model_routing';
-    /** The usages that can be routed: the three chat tiers plus voice (transcription). */
-    public const USAGES = ['fast', 'standard', 'deep', 'voice'];
+    /** The usages that can be routed: the three chat tiers, voice (transcription), vision (images, scanned PDFs) and embedding. */
+    public const USAGES = ['fast', 'standard', 'deep', 'voice', 'vision', 'embedding'];
+    /** The usages whose binding says how the model is reached (see the class comment). */
+    private const VIA = ['voice', 'embedding'];
 
     public function __construct(private App $app) {}
 
@@ -49,19 +54,20 @@ final class Routing
      * Set or clear one binding. $space null = the global default, else that space's override. $account null clears
      * the binding (fall back); '' is the main settings; anything else must be an existing AI account.
      */
-    public function set(?int $space, string $usage, ?string $account, string $model = ''): array
+    public function set(?int $space, string $usage, ?string $account, string $model = '', string $via = ''): array
     {
         if (!in_array($usage, self::USAGES, true)) throw new \InvalidArgumentException('usage: ' . implode(', ', self::USAGES));
         if ($account !== null && $account !== '' && !$this->app->accounts()->get($account)) throw new \InvalidArgumentException('no such AI account');
         if ($space !== null && $this->app->spaces()->get($space) === null) throw new \InvalidArgumentException('no such space');
+        if ($space !== null && $usage === 'embedding') throw new \InvalidArgumentException('embeddings are shared by every space: set them in the global default');
         $all = $this->all();
         if ($space === null) {
             if ($account === null) unset($all['global'][$usage]);
-            else $all['global'][$usage] = self::binding($account, $model);
+            else $all['global'][$usage] = self::binding($usage, $account, $model, $via);
         } else {
             $box = $all['spaces'][(string)$space] ?? [];
             if ($account === null) unset($box[$usage]);
-            else $box[$usage] = self::binding($account, $model);
+            else $box[$usage] = self::binding($usage, $account, $model, $via);
             if ($box) $all['spaces'][(string)$space] = $box; else unset($all['spaces'][(string)$space]);
         }
         return $this->write($all);
@@ -86,26 +92,33 @@ final class Routing
         $all = $this->all();
         $out = [];
         foreach (self::USAGES as $u) {
-            $b = $space === null ? ($all['global'][$u] ?? null) : ($all['spaces'][(string)$space][$u] ?? $all['global'][$u] ?? null);
-            $overridden = $space !== null && isset($all['spaces'][(string)$space][$u]);
+            $b = $space === null || $u === 'embedding' ? ($all['global'][$u] ?? null) : ($all['spaces'][(string)$space][$u] ?? $all['global'][$u] ?? null);
+            $overridden = $space !== null && $u !== 'embedding' && isset($all['spaces'][(string)$space][$u]);
             if ($b === null) { $out[$u] = ['routed' => false, 'overridden' => false]; continue; }
             $cfg = $this->app->accountConfig($b['account']);
-            $model = $b['model'] !== '' ? $b['model'] : ($u === 'voice' ? ($cfg->transcribeModel ?? '') : ($cfg?->tier($u)->model ?? ''));
+            $model = $b['model'] !== '' ? $b['model'] : match ($u) {
+                'voice' => $cfg->transcribeModel ?? '',
+                'embedding' => $cfg->embeddingsModel ?? '',
+                'vision' => $cfg?->tier('fast')->model ?? '',
+                default => $cfg?->tier($u)->model ?? '',
+            };
             $out[$u] = ['routed' => true, 'overridden' => $overridden, 'account' => $b['account'],
-                'provider' => $cfg?->provider ?? '', 'model' => $model];
+                'provider' => $cfg?->provider ?? '', 'model' => $model] + (isset($b['via']) ? ['via' => $b['via']] : []);
         }
         return $out;
     }
 
-    private static function binding(string $account, string $model): array
+    private static function binding(string $usage, string $account, string $model, string $via = ''): array
     {
-        return ['account' => $account, 'model' => trim(mb_substr($model, 0, 120))];
+        $b = ['account' => $account, 'model' => trim(mb_substr($model, 0, 120))];
+        if (in_array($usage, self::VIA, true) && in_array($via, ['local', 'ollama', 'openai', 'gemini', 'sovereign'], true)) $b['via'] = $via;
+        return $b;
     }
 
     private static function clean(string $usage, mixed $bind): ?array
     {
         if (!in_array($usage, self::USAGES, true) || !is_array($bind) || !array_key_exists('account', $bind)) return null;
-        return self::binding((string)$bind['account'], (string)($bind['model'] ?? ''));
+        return self::binding($usage, (string)$bind['account'], (string)($bind['model'] ?? ''), (string)($bind['via'] ?? ''));
     }
 
     private function write(array $all): array

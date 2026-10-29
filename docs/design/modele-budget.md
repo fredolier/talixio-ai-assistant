@@ -173,11 +173,34 @@ options the assistant can actually use — OpenAI `text-embedding-3-small`, Goog
 embedding ids as Embedding (while still dropping moderation, rerankers, guards and
 tokenizers).
 
-Unlike the chat usages, an embedding model is **not assigned from this table**: the
-embedding backend + model is chosen by the `Embeddings` presets in `Réglages`
-(`$c->embeddings` / `$c->embeddingsModel`), which also set memory and dimensions. The
-table lists embeddings to *compare* (price, trust, provider), so their F/S/A/V buttons
-stay disabled — the catalogue surfaces them, Settings selects them.
+> **Superseded in 1.14.0 / 1.15.0.** Embeddings (and image reading, and transcription) are now
+> assigned from the table like any other usage — see §8.
+
+## 8. Voice, vision and embedding are routed usages (1.14.0)
+
+`Routing::USAGES` is now `fast, standard, deep, voice, vision, embedding`. A binding is
+`{account, model}`; `voice` and `embedding` add `via` (`local | ollama | openai | gemini | sovereign`),
+how the model is reached when the account alone doesn't say (`local` = whisper.cpp / Ollama on this server,
+which has no AI account — the main settings stand for it).
+
+- **voice** — *this is transcription.* `App::voiceCfg()` derives a Config from the binding (European account →
+  OpenAI-compatible audio API; OpenAI; Gemini; `local` → whisper.cpp) and `Transcriber` reads it instead of the main
+  settings. Before 1.14.0 the **V** button stored a binding that nothing read. A binding on a provider that cannot
+  transcribe (Claude, a speech-synthesis service) is ignored: the main settings keep working. Privacy, the Europe
+  checks and the doctor read `voiceCfg()` too, so they report where recordings really go. The meeting-summary tier and
+  the 180 s threshold stay plain settings (they are not a model).
+- **vision** — reading photos and scanned PDFs (`Files::vision`) goes through `App::tierFor('vision')`: the vision
+  binding's model, else the **fast** tier, i.e. exactly what it did before. The on/off switch stays `TALIXIO_VISION_INDEX`.
+- **embedding** — `App::embedCfg()` derives the config search by meaning runs on (binding → backend by `via` or by the
+  account's provider; dims, Ollama address and Voyage key still come from the main settings). **Global only**: one
+  index needs one model, so a space can't have its own (`Routing::set` refuses it). `Embeddings::model()` already keys
+  the index by backend + model + size, so changing the binding rebuilds it in the background; `App::routingChanged()`
+  swaps the live `Embeddings`. A local model not yet downloaded is pulled (this server's own Ollama only). Choosing a
+  preset in Settings (`Meaning::choose`) clears the binding, so there is one source of truth at a time.
+
+Catalogue rows of type Voice / Embedding carry `via` (empty = can't be chosen for that job); the local whisper.cpp and
+Ollama rows carry a built-in source (`account ''`) and are available when whisper is installed / always (the UI greys
+Ollama rows while Ollama is down). European Whisper and embedding models were added to the seed with no invented prices.
 
 ## Deliberate divergences from the concept mockup
 

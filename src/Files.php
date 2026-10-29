@@ -270,15 +270,14 @@ final class Files
         return trim(preg_replace("/\n{3,}/", "\n\n", implode("\n\n", $out)));
     }
 
-    /** One short vision call (fast tier) when allowed and affordable; null otherwise. */
+    /** One short vision call when allowed and affordable (the vision binding's model, else the fast tier); null otherwise. */
     private function vision(array $parts, string $instruction): ?string
     {
-        $c = $this->app->cfg;
-        if (!$c->visionIndex || $c->provider === 'echo' || $this->app->budget()->status()['state'] !== 'ok') return null;
-        $tier = $c->tier('fast');
+        if (!$this->app->cfg->visionIndex || $this->app->cfg->provider === 'echo' || $this->app->budget()->status()['state'] !== 'ok') return null;
+        [$c, $tier] = $this->app->tierFor('vision');
         try {
-            $text = $this->app->provider($tier)->complete($instruction, '', [['role' => 'user', 'content' => $parts]], $this->app->tools->only('none'),
-                function (array $u) use ($tier) { $this->app->store->addUsage($u, $this->app->pricing()->cost($u), 'indexing', $tier->name, null, $this->app->cfg->account); });
+            $text = $this->app->provider($tier, $c)->complete($instruction, '', [['role' => 'user', 'content' => $parts]], $this->app->tools->only('none'),
+                function (array $u) use ($tier, $c) { $this->app->store->addUsage($u, $this->app->pricingFor($c)->cost($u), 'indexing', $tier->name, null, $c->account); });
         } catch (Abort $e) {
             throw $e;
         } catch (\Throwable $e) {
