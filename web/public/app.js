@@ -5613,8 +5613,8 @@ function pilotAgo(ts) {
   return d < 90 ? t('just now') : d < 3600 ? t('{n} min ago', { n: Math.floor(d / 60) })
     : d < 86400 ? t('{n} h ago', { n: Math.floor(d / 3600) }) : t('{n} d ago', { n: Math.floor(d / 86400) });
 }
-const PSTATE = { active: 'active', busy: 'busy', idle: 'idle', done: 'done', error: 'error' };
-const pStateLabel = s => ({ active: t('active'), busy: t('busy'), idle: t('idle'), done: t('done'), error: t('error') }[s] || t('idle'));
+const PSTATE = { active: 'active', busy: 'busy', waiting: 'waiting', idle: 'idle', done: 'done', error: 'error' };
+const pStateLabel = s => ({ active: t('active'), busy: t('busy'), waiting: t('waiting for you'), idle: t('idle'), done: t('done'), error: t('error') }[s] || t('idle'));
 // one plural helper for the pilot roster strings
 const pN = (one, many, v) => t(v === 1 ? one : many, { n: v });
 // the fleet-reports toggle: badge-only (default), push+e-mail, or off — lives in Votre pilote autonome
@@ -5662,6 +5662,7 @@ async function pilotAgents() {
     if (info.session) parts.push(t('session {s}', { s: info.session }));
     parts.push(t('last report {a}', { a: pilotAgo(info.lastReport) }));
     if (on) parts.push(t('sees {a} on {b}', { a: pN('1 agent', '{n} agents', info.agentCount || 0), b: pN('1 machine', '{n} machines', info.machines || 0) }));
+    if (on && info.waiting) parts.push(pN('1 waiting for you', '{n} waiting for you', info.waiting));
     $('#pilot-orch-status').textContent = on ? parts.join(' · ')
       : t('Not paired yet. Pair your autonomous pilot to delegate work across your machines.');
     renderPilotNotify(info);
@@ -5670,19 +5671,40 @@ async function pilotAgents() {
     if (nTag) nTag.textContent = agents.length ? ' · ' + agents.length : '';
     if (!on) { box.innerHTML = `<div class="placeholder">${esc(t('Pair your autonomous pilot above, then the agents it runs across your machines appear here.'))}</div>`; return; }
     if (!agents.length) { box.innerHTML = `<div class="placeholder">${esc(t('No agents are running yet. Talk to the pilot above to put one to work.'))}</div>`; return; }
-    box.innerHTML = agents.map(a => {
-      const st = PSTATE[a.state] || 'idle';
+    // the sessions that wait for the user come first, each with the question as the orchestrator copied it
+    const ordered = [...agents].sort((x, y) => !!y.waiting - !!x.waiting);
+    box.innerHTML = ordered.map(a => {
+      const st = a.waiting ? 'waiting' : (PSTATE[a.state] || 'idle');
       const task = (a.task || '').trim();
+      const w = a.waiting;
+      const wk = w ? { decision: t('Decision needed'), approval: t('Approval needed'), instruction: t('Instruction needed') }[w.kind] || t('Decision needed') : '';
+      const wBlock = w ? `<div class="pilot-waiting kind-${esc(w.kind)}">
+          <div class="pw-head"><b>${esc(wk)}</b>${w.type ? `<span class="pill no-i18n">${esc(w.type)}</span>` : ''}</div>
+          <div class="pw-q no-i18n">${esc(w.question)}</div>
+          ${w.options?.length && w.kind !== 'approval' ? `<div class="pw-opts">${w.options.map(o => `<button type="button" class="btn small no-i18n" data-answer="${esc(o)}" data-agent-id="${esc(a.id)}">${esc(o)}</button>`).join('')}</div>` : ''}
+          ${w.cost ? `<div class="muted small"><span>${esc(t('If it goes wrong:'))}</span> <span class="no-i18n">${esc(w.cost)}</span></div>` : ''}
+          ${w.kind === 'approval' ? `<p class="muted small">${esc(t('Only you can do this, in that session: open it and give the approval. Nothing can be done from here.'))}</p>` : ''}
+        </div>` : '';
       return `<div class="pilot-agent" data-agent="${esc(a.id)}">
         <span class="pilot-dot pstate-${st}" title="${esc(pStateLabel(a.state))}"></span>
         <div class="pilot-agent-body">
           <div class="pilot-agent-name no-i18n">${esc(a.name || a.id)}${task ? ` <span class="muted">— « ${esc(task)} »</span>` : ''}</div>
-          <div class="pilot-agent-meta muted small no-i18n">${esc(pStateLabel(a.state))} · ${esc(pilotAgo(a.ts))}${a.machine ? ' · ' + esc(a.machine) : ''}</div>
+          <div class="pilot-agent-meta muted small no-i18n">${esc(pStateLabel(w ? 'waiting' : a.state))} · ${esc(pilotAgo(a.ts))}${a.machine ? ' · ' + esc(a.machine) : ''}</div>
+          ${wBlock}
         </div>
         <button type="button" class="btn ghost small" data-discuss="${esc(a.id)}">${esc(t('Discuss'))}</button>
       </div>`;
     }).join('');
     box.querySelectorAll('[data-discuss]').forEach(b => b.onclick = () => openAgentDialog(agents.find(x => x.id === b.dataset.discuss) || { id: b.dataset.discuss }));
+    box.querySelectorAll('[data-answer]').forEach(b => b.onclick = async () => { // an option answers the session through its thread
+      const name = agents.find(x => x.id === b.dataset.agentId)?.name || b.dataset.agentId;
+      b.disabled = true;
+      try {
+        const r = await post(`api/conductor/agents/${encodeURIComponent(b.dataset.agentId)}/say?space=${state.space}`, { text: b.dataset.answer });
+        toast(r.ok ? t('Sent to {a}.', { a: name }) : (r.message || t('Could not send.')));
+      } catch (err) { toast(err.message); }
+      b.disabled = false;
+    });
   });
   // opening Votre pilote autonome is reading the reports: clear the badge
   if (state.fleetUnread) { state.fleetUnread = 0; setFleetBadge(); post('api/conductor/read', {}).catch(() => {}); }

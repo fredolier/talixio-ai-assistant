@@ -1434,6 +1434,31 @@ $beforeOff = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn(); $r
 check('fleet: off mode surfaces nothing — no push, no feed, no badge',
     $io === 200 && (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn() === $beforeOff
     && $con->unread() === 0 && count($con->reports()) === $roff);
+// a blocked session's question: the text itself reaches the cockpit, bounded, and a new question is news even on a tick
+$con->setNotify('inapp'); $con->markRead();
+$wq = ['type' => 'report', 'tick' => true, 'agents' => [
+    ['id' => 'a1', 'name' => 'dossier-conseil', 'task' => 'x', 'state' => 'waiting', 'waiting' => ['kind' => 'decision', 'type' => 'T3', 'question' => str_repeat('Q', 2000), 'options' => ['Garder A', 'Garder B', '', ['x'], 'C', 'D', 'E', 'F', 'G'], 'cost' => 'two days of rework']],
+    ['id' => 'a2', 'name' => 'deploy', 'state' => 'waiting', 'waiting' => ['kind' => 'approval', 'question' => 'Token revoked: re-authorise the session.']],
+    ['id' => 'a3', 'name' => 'idle one', 'state' => 'idle', 'question' => 'Which folder?'],
+    ['id' => 'a4', 'name' => 'quiet', 'state' => 'active', 'waiting' => ['question' => '   ']]]];
+$con->inbox($wq, $secret);
+$wi = $con->statusInfo(); $wa = array_column($wi['agents'], null, 'id');
+check('fleet: a blocked session carries its question text, bounded (question 1500, six options, kind and type kept)',
+    mb_strlen($wa['a1']['waiting']['question']) === 1500 && count($wa['a1']['waiting']['options']) === 6 && $wa['a1']['waiting']['kind'] === 'decision' && $wa['a1']['waiting']['type'] === 'T3' && $wa['a1']['waiting']['cost'] === 'two days of rework');
+check('fleet: an approval keeps its kind, and a bare `question` string is read as a decision to take',
+    $wa['a2']['waiting']['kind'] === 'approval' && $wa['a3']['waiting']['kind'] === 'decision' && $wa['a3']['waiting']['question'] === 'Which folder?' && !isset($wa['a4']['waiting']));
+check('fleet: the status counts the agents waiting for the user', $wi['waiting'] === 3);
+check('fleet: a question that appears is news even on a keep-warm tick (one feed line, one unread)', $con->unread() === 1 && str_contains(end($wi['reports'])['text'], 'dossier-conseil') && str_contains(end($wi['reports'])['text'], 'Token revoked'));
+$con->inbox($wq, $secret);
+check('fleet: the same questions on the next tick do not notify again', $con->unread() === 1);
+$wq['agents'][0]['waiting']['question'] = 'A different question?';
+$con->inbox($wq, $secret);
+check('fleet: a changed question is news again', $con->unread() === 2);
+$con->inbox(['type' => 'report', 'tick' => true, 'agents' => [['id' => 'a1', 'name' => 'dossier-conseil', 'state' => 'active']]], $secret);
+check('fleet: a roster without the question clears it', empty($con->statusInfo()['agents'][0]['waiting']) && $con->statusInfo()['waiting'] === 0);
+check('fleet: the pairing brief tells the orchestrator to copy blocked sessions\' questions verbatim from the inbox files',
+    str_contains($con->setup(), 'QUESTION-<session>.md') && str_contains($con->setup(), '"waiting":{"kind"') && str_contains($con->setup(), 'VERBATIM'));
+$con->markRead();
 check('fleet: an unknown notify mode falls back to in-app', $con->setNotify('bogus')['notify'] === 'inapp');
 check('fleet: status shows the connected orchestrator once paired', str_contains($con->fleetStatus(), 'connected'));
 // the settings panel reads a secret-safe snapshot: connection + liveness, never the webhook URL or the inbox secret

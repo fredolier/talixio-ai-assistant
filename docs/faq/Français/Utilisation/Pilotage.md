@@ -17,6 +17,12 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
 - **Les agents** : chaque agent avec son état (actif, occupé, inactif, terminé, en erreur), sa tâche, son ancienneté et sa
   machine ; **Discuter** ouvre un fil à deux sens avec cet agent. Ce que répondent l'orchestrateur et les agents est affiché,
   jamais exécuté.
+- **Quand un agent est bloqué**, le roster le met en tête avec la question elle-même : une **décision** (répondez avec un de ses
+  boutons d'option, ou ouvrez *Discuter*), une **validation** (un clic que vous seul pouvez donner, dans cette session : ouvrez-la ;
+  rien ne peut se faire d'ici) ou une **instruction**. Pour cela, le pilote recopie, à chaque point, la question que chaque session
+  bloquée écrit dans `./.claude/talixio-code/inbox/QUESTION-<session>.md` (type, question, options, coût d'un mauvais choix). Une
+  nouvelle question compte comme une nouveauté : elle apparaît dans les rapports et la pastille, même lors d'un point silencieux. Un
+  pilote jumelé avant cette version a besoin de la convention une fois : reconnectez-le, ou envoyez-lui les consignes du message de jumelage.
 - **Rapports de la flotte** : comment les rapports du pilote vous parviennent (voir *Canaux et notifications*) : une pastille dans
   l'app par défaut, la carte **Rapports récents**, et en option push + e-mail.
 

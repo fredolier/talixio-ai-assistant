@@ -14,6 +14,12 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
 - **Talk to the pilot** sends it an instruction, by typing or dictating. It passes the same privacy checks as every other dispatch.
 - **Agents** lists each agent with its state (active, busy, idle, finished, error), its task, its age and its machine;
   **Discuss** opens a two-way thread with that agent. What the orchestrator and agents answer is shown, never executed.
+- **When an agent is blocked**, the roster puts it first with the question itself: a **decision** (answer with one of its
+  option buttons, or open *Discuss*), an **approval** (a click only you can give, in that session: open it; nothing can be done
+  from here) or an **instruction**. For that, the pilot copies, at each check-in, the question each blocked session writes to
+  `./.claude/talixio-code/inbox/QUESTION-<session>.md` (type, question, options, cost of a wrong choice). A new question counts as
+  news: it shows in the reports and the badge even on a quiet check-in. A pilot paired before this existed needs the convention
+  once: re-pair it, or send it the instructions of the pairing message.
 - **Fleet reports**: how the pilot's reports reach you (see *Channels and notifications*): an in-app badge by default,
   the **Recent reports** card, and optionally push + e-mail.
 

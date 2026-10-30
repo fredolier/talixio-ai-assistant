@@ -478,3 +478,18 @@ its first slice is the small documented-surface piece, not the imagined board.*
   one-to-one first?
 - Does the session conductor belong in the Activity page (directives + jobs +
   sessions as siblings) or its own board? Lean: its own board, linked from Activity.
+
+### 5.5 A blocked session's question (1.17.0)
+
+A roster entry carries `state` and `task`, which never said *what* a blocked session is waiting for — the orchestrator sees a
+session's state, not the text of its question, and would report « nothing is waiting » next to a session stuck on a revoked token.
+`agents[].waiting` fixes that: `{kind: decision|approval|instruction, type (free, ≤24: the user's own ladder), question (≤1500),
+options (≤6 × 120), cost (≤240)}`; a bare `question` string on the entry is read as a decision. It is display data like the rest of
+the roster — bounded, shown, never executed. The pairing brief gives the orchestrator a convention that depends on a plain `cat`
+rather than on reading transcripts: every blocked session writes `./.claude/talixio-code/inbox/QUESTION-<session>.md` (type,
+question, options, cost of a wrong choice) and, at each tick, the orchestrator copies those files **verbatim** into `waiting`.
+Three cases are told apart: `decision` (the user arbitrates, via the question's text), `approval` (a click only the user can give
+in that session — nothing can be done remotely, and the cockpit says so), `instruction` (the orchestrator can write to it).
+A question that *appears* (agent id + text hash not in the previous roster) is news even on a keep-warm tick: it makes a feed line
+and an unread, and a push in push mode. The cockpit lists waiting sessions first, with the question, the option buttons (an option
+answers through the agent's thread, `POST /api/conductor/agents/<id>/say`), the cost line, and counts them in the status line.

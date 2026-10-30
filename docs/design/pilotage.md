@@ -292,3 +292,8 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
   transcribe) — lean yes for slice 1a — or add live/streaming transcription later?
   And: after transcribing a directive to the pilot, require a read-back-then-send
   (lean yes, dictation is never auto-sent) vs. an opt-in "send on release".
+
+> **1.17.0 — what a blocked agent asks.** The agents roster lists the sessions that wait for the user first, each with the
+> question as the orchestrator copied it (kind: decision / approval / instruction, the user's own type tag, options as answer
+> buttons, the cost of a wrong choice). An approval (a click only the user can give, e.g. a revoked token) offers no buttons and
+> says so. See `orchestration.md` §5.5.

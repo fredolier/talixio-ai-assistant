@@ -193,6 +193,7 @@ final class Conductor
             'lastDispatch' => (int)($b['last_dispatch'] ?? 0),
             'agents' => $agents,
             'agentCount' => count($agents),
+            'waiting' => count(array_filter($agents, fn($a) => !empty($a['waiting']))),
             'machines' => $machines,
             'agentsAt' => (int)($b['agents_at'] ?? 0),
             'summary' => $this->fleetStatus(),
@@ -240,9 +241,19 @@ final class Conductor
             . " 3. POST progress to $inbox as {\"type\":\"report\",\"title\":...,\"text\":...}, with a structured roster\n"
             . "    so my cockpit can list the fleet:\n"
             . "    \"agents\":[{\"id\":\"mba-m3.local\",\"name\":\"mba-m3.local\",\"task\":\"dossier conseil\",\n"
-            . "    \"state\":\"active\",\"machine\":\"mba-m3.local\",\"ts\":<unix>}] (state: active|busy|idle|done|error).\n"
+            . "    \"state\":\"active\",\"machine\":\"mba-m3.local\",\"ts\":<unix>}] (state: active|busy|waiting|idle|done|error).\n"
             . "    A routine keep-warm tick with no news MUST be silent: either omit \"text\" or add \"tick\":true, so I\n"
             . "    refresh the roster without notifying the user. Send \"text\" only when there is something to report.\n"
+            . " 3b. WHEN A SESSION IS BLOCKED, I need the TEXT of what it is waiting for — its state alone tells me nothing.\n"
+            . "    Convention: any blocked session writes its question to ./.claude/talixio-code/inbox/QUESTION-<session>.md\n"
+            . "    (create the folder) with a fixed template: type (my own ladder, e.g. T1–T7), question, options, cost of a\n"
+            . "    wrong choice. At every tick, read those files (a plain cat) and put each one VERBATIM, without summarising or\n"
+            . "    interpreting, in that agent's roster entry: \"state\":\"waiting\",\"waiting\":{\"kind\":\"decision\",\n"
+            . "    \"type\":\"T3\",\"question\":\"...\",\"options\":[\"A\",\"B\"],\"cost\":\"...\"}. Use kind \"approval\" for a session\n"
+            . "    stuck on a click or a permission (e.g. a revoked token) that only I can give in that session, and kind\n"
+            . "    \"instruction\" when it just needs you to tell it what to do next (you may write to it yourself). If you cannot\n"
+            . "    find the question, still send \"waiting\" with what you do know. Never tell me nothing is waiting while a\n"
+            . "    session is blocked: my cockpit lists every agent that carries a \"waiting\" entry as needing me.\n"
             . " 4. When an instruction carries an \"agent\" field, route it to that one session and report its reply\n"
             . "    back with the same \"agent\" set and the reply in \"text\" — the two-voice thread the user talks to.\n```\n\n"
             . "The code is good for 30 minutes and works once. I never see or store your account token — only the "
@@ -305,10 +316,12 @@ final class Conductor
         //   off   — surfaced nowhere: no feed line, no badge, no push.
         //   inapp — a feed line in "Votre pilote autonome" and a badge count on the Pilotage menu; no push/e-mail.
         //   push  — the same feed line and badge, plus the push+e-mail notification (the pre-1.12 behaviour).
-        $push = $this->lockedUpdate(function (array $b) use ($agents, $agent, $title, $text, $silent) { // locked: never clobber a concurrent queue drain
+        $push = $this->lockedUpdate(function (array $b) use ($agents, $agent, &$title, $text, $silent) { // locked: never clobber a concurrent queue drain
             $b['last_report'] = time();
+            $asks = self::newQuestions($b['agents'] ?? [], $agents); // a session that now waits for the user is news, even on a keep-warm tick
             if ($agents !== null) { $b['agents'] = $agents; $b['agents_at'] = time(); }
             if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text);
+            if ($asks !== '') { $text = trim($text . "\n\n" . $asks); $silent = false; $title = 'An agent needs you'; }
             $fresh = $text !== '' && !$silent && $text !== (string)($b['last_notified'] ?? '');
             if (!$fresh) return [$b, false];
             $b['last_notified'] = $text; // only a notified line updates the mark; silent ticks never poison it
@@ -423,9 +436,43 @@ final class Conductor
                 'state' => mb_substr(trim((string)($a['state'] ?? '')), 0, 24),
                 'machine' => mb_substr(trim((string)($a['machine'] ?? '')), 0, 80),
                 'ts' => (int)($a['ts'] ?? time()),
-            ];
+            ] + (($w = self::sanitizeWaiting($a['waiting'] ?? ($a['question'] ?? null))) !== null ? ['waiting' => $w] : []);
         }
         return $out;
+    }
+
+    /**
+     * What a blocked session is waiting for, as the orchestrator copied it (the question's own text, verbatim — a
+     * session's state alone never says what it asks). Bounded display data: kind decision|approval|instruction (an
+     * approval is a click only the user can make in that session), a short free `type` (the user's own ladder, e.g.
+     * T1–T7), the question, up to six options, and what a wrong choice costs. A bare string is taken as the question.
+     */
+    private static function sanitizeWaiting(mixed $w): ?array
+    {
+        if (is_string($w)) $w = ['question' => $w];
+        if (!is_array($w)) return null;
+        $q = mb_substr(trim((string)($w['question'] ?? '')), 0, 1500);
+        if ($q === '') return null;
+        $opts = [];
+        foreach ((array)($w['options'] ?? []) as $o) if (is_scalar($o) && ($o = mb_substr(trim((string)$o), 0, 120)) !== '') $opts[] = $o;
+        $opts = array_slice($opts, 0, 6);
+        $kind = (string)($w['kind'] ?? 'decision');
+        return ['kind' => in_array($kind, ['decision', 'approval', 'instruction'], true) ? $kind : 'decision',
+            'type' => mb_substr(trim((string)($w['type'] ?? '')), 0, 24), 'question' => $q, 'options' => $opts,
+            'cost' => mb_substr(trim((string)($w['cost'] ?? '')), 0, 240)];
+    }
+
+    /** One line per agent whose question is new since the previous roster (same session, same text = already seen). */
+    private static function newQuestions(array $prev, ?array $now): string
+    {
+        $seen = [];
+        foreach ($prev as $a) if (!empty($a['waiting'])) $seen[$a['id'] . '|' . sha1($a['waiting']['question'])] = true;
+        $out = [];
+        foreach ($now ?? [] as $a) {
+            if (empty($a['waiting']) || isset($seen[$a['id'] . '|' . sha1($a['waiting']['question'])])) continue;
+            $out[] = "**{$a['name']}** is waiting for you" . ($a['waiting']['kind'] === 'approval' ? ' (a click in its own session)' : '') . ': ' . mb_substr(trim(preg_replace('/\s+/u', ' ', $a['waiting']['question'])), 0, 300);
+        }
+        return implode("\n", $out);
     }
 
     /** Append one turn to an agent's two-voice thread, keeping only the last THREAD_CAP turns. Returns the new binding. */

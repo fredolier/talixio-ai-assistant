@@ -1511,6 +1511,14 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .pstate-idle{background:var(--warn,#c99a2e)}
 .pstate-done{background:var(--accent)}
 .pstate-error{background:var(--danger)}
+.pstate-waiting{background:#d9730d;box-shadow:0 0 0 3px color-mix(in srgb,#d9730d 25%,transparent)}
+.pilot-waiting{margin-top:7px;padding:9px 11px;border:1px solid color-mix(in srgb,#d9730d 45%,var(--line));border-left:3px solid #d9730d;border-radius:9px;background:color-mix(in srgb,#d9730d 7%,var(--surface));display:flex;flex-direction:column;gap:6px;min-width:0}
+.pilot-waiting.kind-approval{border-left-color:var(--danger)}
+.pilot-waiting .pw-head{display:flex;align-items:center;gap:7px;font-size:.78rem}
+.pilot-waiting .pw-head .pill{background:var(--sunk);color:var(--muted)}
+.pilot-waiting .pw-q{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.9rem}
+.pilot-waiting .pw-opts{display:flex;flex-wrap:wrap;gap:6px}
+.pilot-waiting p{margin:0}
 /* fleet-reports toggle + feed */
 .pilot-notify{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .pilot-notify .seg button{font-size:.78rem;padding:5px 11px}
