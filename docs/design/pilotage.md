@@ -296,4 +296,4 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
 > **1.17.0 — what a blocked agent asks.** The agents roster lists the sessions that wait for the user first, each with the
 > question as the orchestrator copied it (kind: decision / approval / instruction, the user's own type tag, options as answer
 > buttons, the cost of a wrong choice). An approval (a click only the user can give, e.g. a revoked token) offers no buttons and
-> says so. See `orchestration.md` §5.5.
+> says so. See `orchestration.md` §5.5 (1.17.1: questions reach the pilot through the « route questions » hook, not files).

@@ -1437,14 +1437,14 @@ check('fleet: off mode surfaces nothing — no push, no feed, no badge',
 // a blocked session's question: the text itself reaches the cockpit, bounded, and a new question is news even on a tick
 $con->setNotify('inapp'); $con->markRead();
 $wq = ['type' => 'report', 'tick' => true, 'agents' => [
-    ['id' => 'a1', 'name' => 'dossier-conseil', 'task' => 'x', 'state' => 'waiting', 'waiting' => ['kind' => 'decision', 'type' => 'T3', 'question' => str_repeat('Q', 2000), 'options' => ['Garder A', 'Garder B', '', ['x'], 'C', 'D', 'E', 'F', 'G'], 'cost' => 'two days of rework']],
+    ['id' => 'a1', 'name' => 'dossier-conseil', 'task' => 'x', 'state' => 'waiting', 'waiting' => ['kind' => 'decision', 'type' => 'L3', 'question' => str_repeat('Q', 2000), 'options' => ['Garder A', 'Garder B', '', ['x'], 'C', 'D', 'E', 'F', 'G'], 'cost' => 'two days of rework']],
     ['id' => 'a2', 'name' => 'deploy', 'state' => 'waiting', 'waiting' => ['kind' => 'approval', 'question' => 'Token revoked: re-authorise the session.']],
     ['id' => 'a3', 'name' => 'idle one', 'state' => 'idle', 'question' => 'Which folder?'],
     ['id' => 'a4', 'name' => 'quiet', 'state' => 'active', 'waiting' => ['question' => '   ']]]];
 $con->inbox($wq, $secret);
 $wi = $con->statusInfo(); $wa = array_column($wi['agents'], null, 'id');
 check('fleet: a blocked session carries its question text, bounded (question 1500, six options, kind and type kept)',
-    mb_strlen($wa['a1']['waiting']['question']) === 1500 && count($wa['a1']['waiting']['options']) === 6 && $wa['a1']['waiting']['kind'] === 'decision' && $wa['a1']['waiting']['type'] === 'T3' && $wa['a1']['waiting']['cost'] === 'two days of rework');
+    mb_strlen($wa['a1']['waiting']['question']) === 1500 && count($wa['a1']['waiting']['options']) === 6 && $wa['a1']['waiting']['kind'] === 'decision' && $wa['a1']['waiting']['type'] === 'L3' && $wa['a1']['waiting']['cost'] === 'two days of rework');
 check('fleet: an approval keeps its kind, and a bare `question` string is read as a decision to take',
     $wa['a2']['waiting']['kind'] === 'approval' && $wa['a3']['waiting']['kind'] === 'decision' && $wa['a3']['waiting']['question'] === 'Which folder?' && !isset($wa['a4']['waiting']));
 check('fleet: the status counts the agents waiting for the user', $wi['waiting'] === 3);
@@ -1456,8 +1456,11 @@ $con->inbox($wq, $secret);
 check('fleet: a changed question is news again', $con->unread() === 2);
 $con->inbox(['type' => 'report', 'tick' => true, 'agents' => [['id' => 'a1', 'name' => 'dossier-conseil', 'state' => 'active']]], $secret);
 check('fleet: a roster without the question clears it', empty($con->statusInfo()['agents'][0]['waiting']) && $con->statusInfo()['waiting'] === 0);
-check('fleet: the pairing brief tells the orchestrator to copy blocked sessions\' questions verbatim from the inbox files',
-    str_contains($con->setup(), 'QUESTION-<session>.md') && str_contains($con->setup(), '"waiting":{"kind"') && str_contains($con->setup(), 'VERBATIM'));
+$brief = $con->setup();
+check('fleet: the pairing brief has the orchestrator relay routed questions verbatim, with an agent tag, and mark the agent waiting',
+    str_contains($brief, 'route questions') && str_contains($brief, 'VERBATIM') && str_contains($brief, '"decision_id"') && str_contains($brief, '"waiting":{"kind"') && str_contains($brief, 'L1–L5'));
+check('fleet: the file convention is gone from the brief, and so are the T1–T7 levels', !str_contains($brief, 'QUESTION-') && !str_contains($brief, 'talixio-code/inbox') && !str_contains($brief, 'T1'));
+check('fleet: approvals are never routed — the brief says only the user gives them', str_contains($brief, 'Approvals and permission prompts') && str_contains($brief, 'only I can give them'));
 $con->markRead();
 check('fleet: an unknown notify mode falls back to in-app', $con->setNotify('bogus')['notify'] === 'inapp');
 check('fleet: status shows the connected orchestrator once paired', str_contains($con->fleetStatus(), 'connected'));
@@ -1541,6 +1544,21 @@ check('fleet(poll): the right secret pulls the grounded instruction and empties 
     $plc === 200 && count($plr['instructions'] ?? []) === 1 && str_contains((string)$plr['instructions'][0]['instruction'], 'Friday release') && $con->statusInfo()['queued'] === 0);
 [$plc2, $plr2] = $con->pull($pollSecret);
 check('fleet(poll): a second pull hands out nothing — each instruction is delivered exactly once', $plc2 === 200 && ($plr2['instructions'] ?? null) === []);
+// the « route questions » circuit (1.17.1): a routed question arrives tagged with its agent; the answer goes back to that agent with the decision id
+$con->inbox(['type' => 'report', 'agent' => 'sess-9', 'decision_id' => 'd-42 <b>', 'text' => 'Garder A ou B ?'], $pollSecret);
+check('fleet(poll): a routed question lands in that agent\'s thread, its decision id cleaned', ($con->agentThread('sess-9')[0]['text'] ?? '') === 'Garder A ou B ?' && ($con->agentThread('sess-9')[0]['decision_id'] ?? '') === 'd-42b');
+$ans = $con->toFleet('Garder B.', 0, 'sess-9', 'd-42');
+[, $pa] = $con->pull($pollSecret);
+$thr = $con->agentThread('sess-9'); $tq = $thr[count($thr) - 1];
+check('fleet(poll): the answer reaches the orchestrator addressed to that agent and tagged with the decision',
+    str_contains($ans, 'queued') && count($pa['instructions'] ?? []) === 1 && ($pa['instructions'][0]['agent'] ?? '') === 'sess-9' && ($pa['instructions'][0]['decision_id'] ?? '') === 'd-42' && str_contains((string)$pa['instructions'][0]['instruction'], 'Garder B.'));
+check('fleet(poll): the answer is kept in the agent\'s thread with its decision id', $tq['role'] === 'user' && $tq['text'] === 'Garder B.' && ($tq['decision_id'] ?? '') === 'd-42');
+$ans2 = $con->toFleet('General note for the fleet.');
+[, $pb] = $con->pull($pollSecret);
+check('fleet(poll): an instruction with no agent stays a fleet-wide one (no agent, no decision id)', !isset($pb['instructions'][0]['agent']) && !isset($pb['instructions'][0]['decision_id']));
+$ans3 = $con->toFleet('No agent, so the id is dropped.', 0, '', 'd-1');
+[, $pc3] = $con->pull($pollSecret);
+check('fleet(poll): a decision id without an agent is not sent', !isset($pc3['instructions'][0]['decision_id']));
 check('fleet: disconnect forgets the binding', str_contains($con->disconnect(), 'disconnected') && !$con->connected());
 @unlink($app->cfg->dataDir . '/conductor.json');
 

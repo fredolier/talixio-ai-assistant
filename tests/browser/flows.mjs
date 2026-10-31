@@ -422,7 +422,7 @@ const flows = {
       + "[$c,$r]=$con->inbox(['type'=>'pair','code'=>$m[1],'webhook'=>'https://orch.example/hook','session'=>'sess_browser'],'');"
       + "$con->setNotify('inapp');"
       + "$con->inbox(['type'=>'report','title'=>'Build','text'=>'browser fleet report','agents'=>["
-      + "['id'=>'w1','name'=>'dossier-conseil','state'=>'waiting','waiting'=>['kind'=>'decision','type'=>'T3','question'=>'Garder le plan A ou B ?','options'=>['Plan A','Plan B'],'cost'=>'deux jours de reprise']],"
+      + "['id'=>'w1','name'=>'dossier-conseil','state'=>'waiting','waiting'=>['kind'=>'decision','type'=>'L3','question'=>'Garder le plan A ou B ?','options'=>['Plan A','Plan B'],'cost'=>'deux jours de reprise']],"
       + "['id'=>'w2','name'=>'deploy','state'=>'waiting','waiting'=>['kind'=>'approval','question'=>'Token revoked']],"
       + "['id'=>'w3','name'=>'calme','state'=>'active']]],$r['secret']);"],
       { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });

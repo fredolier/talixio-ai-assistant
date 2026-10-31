@@ -479,17 +479,25 @@ its first slice is the small documented-surface piece, not the imagined board.*
 - Does the session conductor belong in the Activity page (directives + jobs +
   sessions as siblings) or its own board? Lean: its own board, linked from Activity.
 
-### 5.5 A blocked session's question (1.17.0)
+### 5.5 A session's question reaches the cockpit as text (1.17.0, circuit changed in 1.17.1)
 
 A roster entry carries `state` and `task`, which never said *what* a blocked session is waiting for — the orchestrator sees a
-session's state, not the text of its question, and would report « nothing is waiting » next to a session stuck on a revoked token.
-`agents[].waiting` fixes that: `{kind: decision|approval|instruction, type (free, ≤24: the user's own ladder), question (≤1500),
-options (≤6 × 120), cost (≤240)}`; a bare `question` string on the entry is read as a decision. It is display data like the rest of
-the roster — bounded, shown, never executed. The pairing brief gives the orchestrator a convention that depends on a plain `cat`
-rather than on reading transcripts: every blocked session writes `./.claude/talixio-code/inbox/QUESTION-<session>.md` (type,
-question, options, cost of a wrong choice) and, at each tick, the orchestrator copies those files **verbatim** into `waiting`.
-Three cases are told apart: `decision` (the user arbitrates, via the question's text), `approval` (a click only the user can give
-in that session — nothing can be done remotely, and the cockpit says so), `instruction` (the orchestrator can write to it).
-A question that *appears* (agent id + text hash not in the previous roster) is news even on a keep-warm tick: it makes a feed line
-and an unread, and a push in push mode. The cockpit lists waiting sessions first, with the question, the option buttons (an option
-answers through the agent's thread, `POST /api/conductor/agents/<id>/say`), the cost line, and counts them in the status line.
+session's state, not the text of its question. Two things fix that.
+
+**The `waiting` roster field.** `agents[].waiting` = `{kind: decision|approval|instruction, type (free, ≤24: the user's ladder level,
+e.g. L1–L5), question (≤1500), options (≤6 × 120), cost (≤240)}`; a bare `question` string is read as a decision. Display data like
+the rest of the roster — bounded, shown, never executed. The cockpit lists waiting sessions first with the question, option buttons
+that answer through the agent's thread, the cost and a count in the status line. A question that *appears* (agent id + text hash not
+in the previous roster) is news even on a keep-warm tick: a feed line, an unread, a push in push mode.
+
+**The circuit (the « route questions » hook).** 1.17.0 asked blocked sessions to write `QUESTION-<session>.md` files for the
+orchestrator to `cat`; that convention is **abandoned** — companions run on other machines, a blocked session can write nothing,
+and nothing carried the answer back. Now the hook, active per session (`/autopilot-on|off|status`, OFF by default, so the question
+goes to the user as before), blocks the question and the session sends it to the orchestrator itself (SendMessage) with the full
+text, options, ladder level and cost of a wrong choice. The orchestrator pastes it **verbatim** in a report to the inbox with
+`"agent":"<session>"` (it lands in that agent's thread and the feed). The assistant decides and answers with `fleet_dispatch`
+`{agent, instruction, decision_id}`: the payload carries the agent and the `decision_id` (cleaned, ≤64 chars), the answer is kept in
+the thread with it, and the orchestrator delivers it and reports the session's next step with the same `agent`/`decision_id`.
+Approvals and permission prompts are never routed — only the user can give them in that session (kind `approval`: no buttons).
+Which decisions the assistant may take (ladder L1–L3) and which stay with the user (L4, L5; pushes, deploys, deletions, e-mail,
+credentials) is policy of the user's own roles, not of this code.

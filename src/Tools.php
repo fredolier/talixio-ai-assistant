@@ -608,8 +608,10 @@ final class Tools
             [], [], fn() => $this->sharedWrite('skills') ?? $this->app->conductor()->setup());
         $this->register('fleet_dispatch',
             "Send a KB-grounded instruction to the connected fleet orchestrator (set up with fleet_setup). It works the fleet and reports back here. The instruction is grounded in this space's knowledge and gated by privacy before it leaves. Use for 'ask the orchestrator to...', 'have the fleet...'.",
-            ['instruction' => ['type' => 'string', 'description' => 'what the orchestrator should do with the fleet']], ['instruction'],
-            fn(array $a) => $this->sharedWrite('skills') ?? $this->app->conductor()->toFleet((string)$a['instruction'], (int)$this->app->space));
+            ['instruction' => ['type' => 'string', 'description' => 'what the orchestrator should do with the fleet'],
+             'agent' => ['type' => 'string', 'description' => 'optional: send it to this one session (the id the orchestrator reported it under), e.g. to answer the question that session routed'],
+             'decision_id' => ['type' => 'string', 'description' => 'optional, with agent: the id of the decision this answers, echoed back with that session\'s next report']], ['instruction'],
+            fn(array $a) => $this->sharedWrite('skills') ?? $this->app->conductor()->toFleet((string)$a['instruction'], (int)$this->app->space, (string)($a['agent'] ?? ''), (string)($a['decision_id'] ?? '')));
         $this->register('fleet_status', 'Is a fleet orchestrator connected, which session, and is it still alive (when it last reported vs. when last sent to). Suggests recreating it if it has gone quiet.',
             [], [], fn() => $this->app->conductor()->fleetStatus());
         $this->register('fleet_disconnect', 'Forget the connected fleet orchestrator (its webhook and secret). Use when re-pairing or when the user wants to disconnect the fleet.',

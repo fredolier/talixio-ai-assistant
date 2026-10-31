@@ -244,16 +244,16 @@ final class Conductor
             . "    \"state\":\"active\",\"machine\":\"mba-m3.local\",\"ts\":<unix>}] (state: active|busy|waiting|idle|done|error).\n"
             . "    A routine keep-warm tick with no news MUST be silent: either omit \"text\" or add \"tick\":true, so I\n"
             . "    refresh the roster without notifying the user. Send \"text\" only when there is something to report.\n"
-            . " 3b. WHEN A SESSION IS BLOCKED, I need the TEXT of what it is waiting for — its state alone tells me nothing.\n"
-            . "    Convention: any blocked session writes its question to ./.claude/talixio-code/inbox/QUESTION-<session>.md\n"
-            . "    (create the folder) with a fixed template: type (my own ladder, e.g. T1–T7), question, options, cost of a\n"
-            . "    wrong choice. At every tick, read those files (a plain cat) and put each one VERBATIM, without summarising or\n"
-            . "    interpreting, in that agent's roster entry: \"state\":\"waiting\",\"waiting\":{\"kind\":\"decision\",\n"
-            . "    \"type\":\"T3\",\"question\":\"...\",\"options\":[\"A\",\"B\"],\"cost\":\"...\"}. Use kind \"approval\" for a session\n"
-            . "    stuck on a click or a permission (e.g. a revoked token) that only I can give in that session, and kind\n"
-            . "    \"instruction\" when it just needs you to tell it what to do next (you may write to it yourself). If you cannot\n"
-            . "    find the question, still send \"waiting\" with what you do know. Never tell me nothing is waiting while a\n"
-            . "    session is blocked: my cockpit lists every agent that carries a \"waiting\" entry as needing me.\n"
+            . " 3b. QUESTIONS FROM SESSIONS. A session that is blocked on a question can route it to you instead of to me\n"
+            . "    (the « route questions » hook: /autopilot-on, /autopilot-off, /autopilot-status per session, OFF by default — then\n"
+            . "    the question stays with me). When one reaches you, post a report with \"agent\":\"<session>\" and the question\n"
+            . "    VERBATIM in \"text\" — the full text, its options, its ladder level (L1–L5) and the cost of a wrong choice; never\n"
+            . "    summarise or interpret it. Also mark that agent in the roster so my cockpit lists it first:\n"
+            . "    \"state\":\"waiting\",\"waiting\":{\"kind\":\"decision\",\"type\":\"L3\",\"question\":\"...\",\"options\":[\"A\",\"B\"],\"cost\":\"...\"}.\n"
+            . "    I answer with {\"agent\":\"<session>\",\"instruction\":\"<answer>\",\"decision_id\":\"...\"}: deliver it to that session,\n"
+            . "    and report its next step with the same \"agent\" and \"decision_id\". Approvals and permission prompts (a revoked\n"
+            . "    token, a click) are never routed: only I can give them in that session — report such a session as\n"
+            . "    \"waiting\" with kind \"approval\" and what you know. Never tell me nothing is waiting while a session is.\n"
             . " 4. When an instruction carries an \"agent\" field, route it to that one session and report its reply\n"
             . "    back with the same \"agent\" set and the reply in \"text\" — the two-voice thread the user talks to.\n```\n\n"
             . "The code is good for 30 minutes and works once. I never see or store your account token — only the "
@@ -305,6 +305,7 @@ final class Conductor
         $agents = isset($msg['agents']) && is_array($msg['agents']) ? $this->sanitizeAgents($msg['agents']) : null;
         // A report tagged with an `agent` is that one agent's reply in its two-voice thread (the "Discuter" drawer).
         $agent = mb_substr(trim((string)($msg['agent'] ?? '')), 0, 80);
+        $decision = self::decisionId($msg['decision_id'] ?? '');
         // A keep-warm tick (a roster/liveness refresh, with no news) must NOT raise a notification — the orchestrator
         // pings roughly every ~10 min to stay warm, and notifying each time spams the user. We notify only on a report
         // that carries text, isn't explicitly flagged as a silent/liveness tick, AND isn't a verbatim repeat of the last
@@ -316,11 +317,11 @@ final class Conductor
         //   off   — surfaced nowhere: no feed line, no badge, no push.
         //   inapp — a feed line in "Votre pilote autonome" and a badge count on the Pilotage menu; no push/e-mail.
         //   push  — the same feed line and badge, plus the push+e-mail notification (the pre-1.12 behaviour).
-        $push = $this->lockedUpdate(function (array $b) use ($agents, $agent, &$title, $text, $silent) { // locked: never clobber a concurrent queue drain
+        $push = $this->lockedUpdate(function (array $b) use ($agents, $agent, $decision, &$title, $text, $silent) { // locked: never clobber a concurrent queue drain
             $b['last_report'] = time();
             $asks = self::newQuestions($b['agents'] ?? [], $agents); // a session that now waits for the user is news, even on a keep-warm tick
             if ($agents !== null) { $b['agents'] = $agents; $b['agents_at'] = time(); }
-            if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text);
+            if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text, $decision);
             if ($asks !== '') { $text = trim($text . "\n\n" . $asks); $silent = false; $title = 'An agent needs you'; }
             $fresh = $text !== '' && !$silent && $text !== (string)($b['last_notified'] ?? '');
             if (!$fresh) return [$b, false];
@@ -444,8 +445,8 @@ final class Conductor
     /**
      * What a blocked session is waiting for, as the orchestrator copied it (the question's own text, verbatim — a
      * session's state alone never says what it asks). Bounded display data: kind decision|approval|instruction (an
-     * approval is a click only the user can make in that session), a short free `type` (the user's own ladder, e.g.
-     * T1–T7), the question, up to six options, and what a wrong choice costs. A bare string is taken as the question.
+     * approval is a click only the user can make in that session), a short free `type` (the user's ladder level, e.g.
+     * L1–L5), the question, up to six options, and what a wrong choice costs. A bare string is taken as the question.
      */
     private static function sanitizeWaiting(mixed $w): ?array
     {
@@ -476,10 +477,10 @@ final class Conductor
     }
 
     /** Append one turn to an agent's two-voice thread, keeping only the last THREAD_CAP turns. Returns the new binding. */
-    private function appendThread(array $b, string $id, string $role, string $text): array
+    private function appendThread(array $b, string $id, string $role, string $text, string $decision = ''): array
     {
         $t = $b['threads'][$id] ?? [];
-        $t[] = ['role' => $role === 'agent' ? 'agent' : 'user', 'text' => mb_substr(trim($text), 0, 4000), 'ts' => time()];
+        $t[] = ['role' => $role === 'agent' ? 'agent' : 'user', 'text' => mb_substr(trim($text), 0, 4000), 'ts' => time()] + ($decision !== '' ? ['decision_id' => $decision] : []);
         if (count($t) > self::THREAD_CAP) $t = array_slice($t, -self::THREAD_CAP);
         $b['threads'][$id] = array_values($t);
         return $b;
@@ -520,19 +521,30 @@ final class Conductor
      * orchestrator never touches raw knowledge. The account token is never in this container: this is just a POST to
      * the webhook the orchestrator minted for itself.
      */
-    public function toFleet(string $instruction, int $space = 0): string
+    public function toFleet(string $instruction, int $space = 0, string $agent = '', string $decisionId = ''): string
     {
         if (($g = $this->guard()) !== null) return $g;
         $instruction = trim($instruction);
         if ($instruction === '') return 'error: nothing to send.';
         if (!$this->connected()) return 'error: no fleet orchestrator is connected yet — run fleet_setup first.';
-        $r = $this->deliver(['from' => 'talixio', 'ts' => time(), 'instruction' => $this->ground($instruction, $space)]);
+        // An answer to one session's routed question: aimed at that agent, tagged with the decision it settles. The
+        // orchestrator hands it to the session and reports the next step with the same agent and decision_id.
+        $agent = mb_substr(trim($agent), 0, 80); $decision = self::decisionId($decisionId);
+        $r = $this->deliver(['from' => 'talixio', 'ts' => time(), 'instruction' => $this->ground($instruction, $space)]
+            + ($agent !== '' ? ['agent' => $agent] : []) + ($agent !== '' && $decision !== '' ? ['decision_id' => $decision] : []));
         if (!$r['ok']) return $r['error'] === 'http'
             ? "error: the orchestrator's webhook returned HTTP {$r['code']}. If this persists, recreate the session and fleet_setup again."
             : "error: could not reach the orchestrator ({$r['detail']}). It may have gone to sleep — recreate it, then fleet_setup again.";
+        if ($agent !== '') $this->lockedUpdate(fn(array $b) => [$this->appendThread($b, $agent, 'user', $instruction, $decision), null]);
         return !empty($r['queued'])
             ? 'queued for the fleet orchestrator — it will pick this up on its next poll and report back here (notifications); check progress with fleet_status.'
             : 'sent to the fleet orchestrator. It will work the fleet and report back here (notifications); check progress with fleet_status.';
+    }
+
+    /** A decision id the orchestrator echoes back: short, no spaces or markup. */
+    private static function decisionId(mixed $v): string
+    {
+        return is_scalar($v) ? mb_substr(preg_replace('/[^A-Za-z0-9._:\-]/', '', (string)$v), 0, 64) : '';
     }
 
     /** Ground an instruction in the relevant knowledge, respecting privacy levels (search already filters them). */

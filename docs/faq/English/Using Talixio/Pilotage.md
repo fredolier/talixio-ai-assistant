@@ -16,10 +16,12 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
   **Discuss** opens a two-way thread with that agent. What the orchestrator and agents answer is shown, never executed.
 - **When an agent is blocked**, the roster puts it first with the question itself: a **decision** (answer with one of its
   option buttons, or open *Discuss*), an **approval** (a click only you can give, in that session: open it; nothing can be done
-  from here) or an **instruction**. For that, the pilot copies, at each check-in, the question each blocked session writes to
-  `./.claude/talixio-code/inbox/QUESTION-<session>.md` (type, question, options, cost of a wrong choice). A new question counts as
-  news: it shows in the reports and the badge even on a quiet check-in. A pilot paired before this existed needs the convention
-  once: re-pair it, or send it the instructions of the pairing message.
+  from here) or an **instruction**. A session can route its questions to the pilot with the « route questions » hook
+  (`/autopilot-on`, `/autopilot-off`, `/autopilot-status`, per session; off by default, and then the question comes to you as
+  usual). The pilot pastes the question as it is, with its ladder level (L1–L5) and the cost of a wrong choice; the assistant
+  answers with the agent and a decision id, and the pilot delivers it and reports the session's next step. Approvals and permission
+  prompts are never routed: only you can give them. A new question counts as news: it shows in the reports and the badge even on a
+  quiet check-in. A pilot paired before this needs the new instructions once: re-pair it, or send it those of the pairing message.
 - **Fleet reports**: how the pilot's reports reach you (see *Channels and notifications*): an in-app badge by default,
   the **Recent reports** card, and optionally push + e-mail.
 
