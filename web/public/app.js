@@ -5613,8 +5613,8 @@ function pilotAgo(ts) {
   return d < 90 ? t('just now') : d < 3600 ? t('{n} min ago', { n: Math.floor(d / 60) })
     : d < 86400 ? t('{n} h ago', { n: Math.floor(d / 3600) }) : t('{n} d ago', { n: Math.floor(d / 86400) });
 }
-const PSTATE = { active: 'active', busy: 'busy', waiting: 'waiting', idle: 'idle', done: 'done', error: 'error' };
-const pStateLabel = s => ({ active: t('active'), busy: t('busy'), waiting: t('waiting for you'), idle: t('idle'), done: t('done'), error: t('error') }[s] || t('idle'));
+const PSTATE = { active: 'active', busy: 'busy', waiting: 'waiting', idle: 'idle', done: 'done', error: 'error', offline: 'offline' };
+const pStateLabel = s => ({ active: t('active'), busy: t('busy'), waiting: t('waiting for you'), idle: t('idle'), done: t('done'), error: t('error'), offline: t('offline') }[s] || t('idle'));
 // one plural helper for the pilot roster strings
 const pN = (one, many, v) => t(v === 1 ? one : many, { n: v });
 // the fleet-reports toggle: badge-only (default), push+e-mail, or off — lives in Votre pilote autonome
@@ -5631,29 +5631,209 @@ function renderPilotNotify(info) {
       if (b.classList.contains('on')) return;
       try {
         const r = await post('api/conductor/notify', { mode: b.dataset.notify });
-        renderPilotNotify(r); renderPilotReports(r); // reflect the new mode (and hide the feed when turned off)
+        renderPilotNotify(r); plRender(r); // reflect the new mode
         toast(t('Fleet reports: {m}', { m: t({ inapp: 'In-app badge', push: 'Push + e-mail', off: 'Off' }[b.dataset.notify]) }));
       } catch (e) { toast(e.message); }
     });
   }
 }
-// the recent-reports feed — the "details" the Pilotage badge points at
-function renderPilotReports(info) {
-  const card = $('#pilot-reports-card'), box = $('#pilot-reports'), nTag = $('#pilot-reports-n'); if (!card || !box) return;
-  const reports = (info.reports || []).slice().reverse(); // newest first
-  card.hidden = !info.connected || info.notify === 'off';
-  if (card.hidden) return;
-  if (nTag) nTag.textContent = reports.length ? ' · ' + reports.length : '';
-  if (!reports.length) { box.innerHTML = `<div class="placeholder">${esc(t('No reports yet. When your pilot reports progress, it shows up here.'))}</div>`; return; }
-  box.innerHTML = reports.map(r => `<div class="pilot-report">
-    <div class="pilot-report-head"><b class="no-i18n">${esc(r.title || t('Fleet update'))}</b>${r.agent ? ` <span class="muted small no-i18n">— ${esc(r.agent)}</span>` : ''}<span class="pilot-report-when muted small no-i18n">${esc(pilotAgo(r.ts))}</span></div>
-    <div class="pilot-report-text no-i18n">${md(r.text || '')}</div></div>`).join('');
+// ---- Votre pilote autonome (1.18.0): three tabs — Needs you / Agents / Journal. Each is a list and a pane that scrolls
+// on its own, so the page never grows with the number of messages (docs/design/pilotage.md). ----
+const PL = { tab: 'need', f: 'all', q: '', group: false, sel: null, nsel: null, jf: 'all', jq: '', jsel: null, jmax: 50, info: null, threads: {}, shown: {}, draft: {}, loaded: null, wired: false };
+const plGroupOf = a => a.waiting ? 'waiting' : ['active', 'busy'].includes(a.state) ? 'active' : ['offline', 'error'].includes(a.state) ? 'offline' : 'idle';
+const plDot = a => `<span class="pilot-dot pstate-${a.waiting ? 'waiting' : (PSTATE[a.state] || 'idle')}"></span>`;
+const plKind = w => ({ decision: t('Decision needed'), approval: t('Approval needed'), instruction: t('Instruction needed') }[w.kind] || t('Decision needed'));
+const plWho = by => by === 'assistant' ? t('the assistant') : t('you');
+const plClip = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+function plDay(ts) {
+  const d = new Date(ts * 1000), n = new Date(), y = new Date(Date.now() - 86400000), same = (a, b) => a.toDateString() === b.toDateString();
+  return same(d, n) ? t('Today') : same(d, y) ? t('Yesterday') : d.toLocaleDateString(window.LOCALE, { day: 'numeric', month: 'long' });
 }
+const plBadge = (sel, n) => { const el = $(sel); if (el) { el.hidden = !n; el.textContent = n ? (n > 99 ? '99+' : String(n)) : ''; } };
+const plBack = `<button type="button" class="btn small pl-back" data-plback>‹ ${'__BACK__'}</button>`;
+const plBackBtn = () => plBack.replace('__BACK__', esc(t('Back')));
+
+function plRender(info) {
+  PL.info = info;
+  const on = !!info.connected, agents = info.agents || [];
+  $('#pl-tabs').hidden = !on;
+  document.querySelectorAll('.pl-panel').forEach(p => { p.hidden = !on || p.dataset.plp !== PL.tab; });
+  if (!on) return;
+  plBadge('#pl-bd-need', info.waiting || 0);
+  plBadge('#pl-bd-agents', agents.reduce((n, a) => n + (a.unread || 0), 0));
+  plBadge('#pl-bd-journal', info.journalUnread || 0);
+  $('#pl-n-agents').textContent = agents.length || ''; $('#pl-n-journal').textContent = (info.reports || []).length || '';
+  document.querySelectorAll('#pl-tabs .pl-tab').forEach(b => { b.classList.toggle('on', b.dataset.pl === PL.tab); b.setAttribute('aria-selected', String(b.dataset.pl === PL.tab)); });
+  plRenderNeed(); plRenderAgents(); plRenderJournal();
+}
+function plShowTab(name) {
+  PL.tab = name;
+  if (name === 'journal' && PL.info?.journalUnread) { // opening the journal reads it
+    PL.info.journalUnread = 0; plBadge('#pl-bd-journal', 0);
+    post('api/conductor/read', {}).then(() => refreshStatus()).catch(() => {});
+  }
+  plRender(PL.info || { connected: false });
+}
+// a detail pane in a narrow window replaces its list; « Back » returns
+const plOpen = id => $(id)?.classList.add('detail');
+
+// -- Needs you: what waits for the user, and what was decided (who answered what) --
+function plRenderNeed() {
+  const info = PL.info, list = $('#pl-need-list'), det = $('#pl-need-detail'); if (!list) return;
+  const waiting = (info.agents || []).filter(a => a.waiting).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const decided = info.decisions || [];
+  const dKey = d => `d:${d.ts}:${d.agent}`;
+  const keys = [...waiting.map(a => 'w:' + a.id), ...decided.map(dKey)];
+  if (!keys.includes(PL.nsel)) PL.nsel = keys[0] || null;
+  list.innerHTML = `<div class="pl-grp">${esc(t('Waiting for you'))} · <span class="no-i18n">${waiting.length}</span></div>`
+    + (waiting.length ? waiting.map(a => `<div class="pl-rw${PL.nsel === 'w:' + a.id ? ' sel' : ''}" data-nsel="w:${esc(a.id)}">${plDot(a)}
+        <div><div class="pl-n no-i18n">${esc(a.name)}</div><div class="pl-s">${esc(plKind(a.waiting))}${a.waiting.type ? ' · ' + esc(a.waiting.type) : ''} · <span class="no-i18n">${esc(plClip(a.waiting.question, 60))}</span></div></div>
+        <div class="pl-r">${esc(pilotAgo(a.ts))}</div></div>`).join('')
+      : `<div class="pl-empty">${esc(t('Nothing is waiting for you.'))}</div>`)
+    + (decided.length ? `<div class="pl-grp">${esc(t('Decided recently'))}</div>` + decided.map(d => `<div class="pl-rw${PL.nsel === dKey(d) ? ' sel' : ''}" data-nsel="${esc(dKey(d))}"><span class="pilot-dot pstate-active"></span>
+        <div><div class="pl-n no-i18n">${esc(d.name || d.agent)}</div><div class="pl-s"><span>${esc(t('by {w}', { w: plWho(d.by) }))}</span> · <span class="no-i18n">${esc(plClip(d.answer, 50))}</span></div></div>
+        <div class="pl-r">${esc(pilotAgo(d.ts))}</div></div>`).join('') : '');
+  const wa = waiting.find(a => 'w:' + a.id === PL.nsel), de = decided.find(d => dKey(d) === PL.nsel);
+  if (wa) {
+    const w = wa.waiting;
+    det.innerHTML = `<div class="pl-ph">${plBackBtn()}<span class="pl-t no-i18n">${esc(wa.name)}</span><span class="pl-pill">${esc(plKind(w))}</span>${w.type ? `<span class="pl-pill no-i18n">${esc(w.type)}</span>` : ''}${w.decision_id ? `<span class="pl-pill no-i18n" title="${esc(t('Decision id'))}">${esc(w.decision_id)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(wa.ts))}</span></div>
+      <div class="pl-det"><div class="pl-q no-i18n">${esc(w.question)}</div>
+        ${w.cost ? `<p class="muted small"><span>${esc(t('If it goes wrong:'))}</span> <span class="no-i18n">${esc(w.cost)}</span></p>` : ''}
+        ${w.options?.length && w.kind !== 'approval' ? `<div class="pl-opts">${w.options.map(o => `<button type="button" class="btn primary no-i18n" data-answer="${esc(o)}" data-agent-id="${esc(wa.id)}">${esc(o)}</button>`).join('')}</div>` : ''}
+        ${w.kind === 'approval' ? `<p class="muted small">${esc(t('Only you can do this, in that session: open it and give the approval. Nothing can be done from here.'))}</p>${wa.url ? `<a class="btn small" href="${esc(wa.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : ''}`
+          : `<p class="muted small">${esc(t('Your answer goes to the agent through the pilot, with the decision id, and is written in the journal of decisions: who answered what.'))}</p><button type="button" class="btn small" data-open-agent="${esc(wa.id)}">${esc(t('Answer another way…'))}</button>`}</div>`;
+  } else if (de) {
+    det.innerHTML = `<div class="pl-ph">${plBackBtn()}<span class="pl-t no-i18n">${esc(de.name || de.agent)}</span><span class="pl-pill">${esc(t('by {w}', { w: plWho(de.by) }))}</span>${de.id ? `<span class="pl-pill no-i18n">${esc(de.id)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(de.ts))}</span></div>
+      <div class="pl-det"><h5>${esc(t('Question'))}</h5><div class="pl-q no-i18n">${esc(de.question || '—')}</div><h5>${esc(t('Answer'))}</h5><div class="pl-q no-i18n">${esc(de.answer)}</div></div>`;
+  } else det.innerHTML = `<div class="pl-empty pl-center">${esc(t('Nothing is waiting for you. Decisions will show here, with who answered what.'))}</div>`;
+}
+
+// -- Agents: the roster, and one conversation at a time --
+function plRenderAgents() {
+  const info = PL.info, list = $('#pl-ag-list'), det = $('#pl-ag-detail'); if (!list) return;
+  const agents = info.agents || [], q = PL.q.trim().toLowerCase();
+  document.querySelectorAll('#pl-ag-f .pl-chip').forEach(c => {
+    const f = c.dataset.f, n = f === 'all' ? agents.length : agents.filter(a => plGroupOf(a) === f).length;
+    c.classList.toggle('on', PL.f === f); let s = c.querySelector('.pl-cn'); if (!s) { s = document.createElement('span'); s.className = 'pl-cn no-i18n'; c.append(s); } s.textContent = ' · ' + n;
+  });
+  $('#pl-ag-group')?.classList.toggle('on', PL.group);
+  const L = agents.filter(a => (PL.f === 'all' || plGroupOf(a) === PL.f) && (!q || `${a.name} ${a.task || ''} ${a.machine || ''}`.toLowerCase().includes(q)))
+    .sort((a, b) => (!!b.waiting - !!a.waiting) || ((b.unread || 0) - (a.unread || 0)) || ((b.ts || 0) - (a.ts || 0)));
+  if (!agents.some(a => a.id === PL.sel)) PL.sel = (L[0] || agents[0])?.id || null;
+  const row = a => `<div class="pl-rw${a.id === PL.sel ? ' sel' : ''}" data-asel="${esc(a.id)}">${plDot(a)}
+      <div><div class="pl-n no-i18n">${esc(a.name)}</div><div class="pl-s no-i18n">${esc(a.task && a.task !== '—' ? a.task + ' · ' : '')}${esc(a.machine || '')}</div></div>
+      <div class="pl-r">${esc(pilotAgo(a.ts))}${a.unread ? `<span class="pl-bd no-i18n">${a.unread}</span>` : ''}</div></div>`;
+  list.innerHTML = !L.length ? `<div class="pl-empty">${esc(agents.length ? t('No agent matches.') : t('No agents are running yet. Talk to the pilot below to put one to work.'))}</div>`
+    : PL.group ? [...new Set(L.map(a => a.machine || '—'))].map(m => `<div class="pl-grp no-i18n">🖥 ${esc(m)}</div>` + L.filter(a => (a.machine || '—') === m).map(row).join('')).join('')
+    : L.map(row).join('');
+  const a = agents.find(x => x.id === PL.sel);
+  if (!a) { det.innerHTML = `<div class="pl-empty pl-center">${esc(t('Pick an agent to read its conversation.'))}</div>`; return; }
+  if (PL.tab === 'agents') plLoadThread(a);
+  else if (PL.threads[a.id]) plPaintAgent(a);
+}
+async function plLoadThread(a) {
+  try {
+    const r = await api(`api/conductor/agents/${encodeURIComponent(a.id)}/thread`);
+    PL.threads[a.id] = r.thread || [];
+  } catch (err) { PL.threads[a.id] = PL.threads[a.id] || []; }
+  if (PL.sel !== a.id) return;
+  plPaintAgent(a);
+  if (a.unread && PL.tab === 'agents') { // reading a conversation clears its unread count
+    a.unread = 0; plBadge('#pl-bd-agents', (PL.info.agents || []).reduce((n, x) => n + (x.unread || 0), 0));
+    post(`api/conductor/agents/${encodeURIComponent(a.id)}/read`, {}).then(() => refreshStatus()).catch(() => {});
+    plRenderAgentsList();
+  }
+}
+function plRenderAgentsList() { // only the list, after a read (the open conversation stays as it is)
+  const sel = PL.sel; document.querySelectorAll('#pl-ag-list .pl-rw').forEach(r => { if (r.dataset.asel === sel) r.querySelector('.pl-bd')?.remove(); });
+}
+function plPaintAgent(a) {
+  const det = $('#pl-ag-detail'), old = $('#pl-msgs'), oldIn = $('#pl-ag-input');
+  if (oldIn && PL.loaded) PL.draft[PL.loaded] = oldIn.value;
+  const atBottom = !old || PL.loaded !== a.id || old.scrollHeight - old.scrollTop - old.clientHeight < 40, keep = old?.scrollTop || 0;
+  const turns = PL.threads[a.id] || [], shown = PL.shown[a.id] || 40, vis = turns.slice(-shown), w = a.waiting;
+  let last = '';
+  const bubbles = vis.map(x => {
+    const day = plDay(x.ts), sep = day !== last ? `<div class="pl-day">${esc(day)}</div>` : ''; last = day;
+    const mine = x.role !== 'agent', who = !mine ? a.name : x.by === 'assistant' ? t('Assistant') : t('You');
+    return sep + `<div class="pl-b ${mine ? 'me' : 'them'}"><div class="pl-bt no-i18n${(x.text || '').length > 500 ? ' clamp' : ''}">${md(x.text || '')}</div>${(x.text || '').length > 500 ? `<a href="#" class="small" data-more>${esc(t('Show all'))}</a>` : ''}
+      <div class="pl-bm muted"><span class="no-i18n">${esc(who)}</span> · ${esc(pilotAgo(x.ts))}${x.decision_id ? ` · <span class="no-i18n">${esc(x.decision_id)}</span>` : ''}</div></div>`;
+  }).join('');
+  det.innerHTML = `<div class="pl-ph">${plBackBtn()}${plDot(a)}<span class="pl-t no-i18n">${esc(a.name)}</span><span class="pl-sp muted small no-i18n">${esc((a.task && a.task !== '—' ? a.task + ' · ' : '') + (a.machine || '') + ' · ' + pilotAgo(a.ts))}</span>${a.url ? `<a class="btn small" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : ''}</div>
+    ${w ? `<div class="pl-pin kind-${esc(w.kind)}"><div class="small"><b>${esc(plKind(w))}${w.type ? ' · ' + esc(w.type) : ''}</b> · ${esc(t('waiting for you'))}</div><div class="pl-pq no-i18n">${esc(w.question)}</div>${w.question.length > 220 ? `<a href="#" class="small" data-more-pin>${esc(t('Show all'))}</a>` : ''}
+      ${w.options?.length && w.kind !== 'approval' ? `<div class="pl-opts">${w.options.map(o => `<button type="button" class="btn small primary no-i18n" data-answer="${esc(o)}" data-agent-id="${esc(a.id)}">${esc(o)}</button>`).join('')}</div>` : ''}
+      ${w.cost ? `<div class="muted small"><span>${esc(t('If it goes wrong:'))}</span> <span class="no-i18n">${esc(w.cost)}</span></div>` : ''}
+      ${w.kind === 'approval' ? `<div class="muted small">${esc(t('Only you can do this, in that session: open it and give the approval. Nothing can be done from here.'))}</div>` : ''}</div>` : ''}
+    <div class="pl-msgs" id="pl-msgs">${turns.length > shown ? `<button type="button" class="btn small pl-older" data-older="${esc(a.id)}">↑ ${esc(t('{n} older messages', { n: turns.length - shown }))}</button>` : ''}${bubbles || `<div class="pl-empty pl-center">${esc(t('No messages yet. Send the first one below.'))}</div>`}</div>
+    <div class="pl-comp"><textarea id="pl-ag-input" rows="2" placeholder="${esc(t('Message this agent…'))}"></textarea>
+      <button type="button" class="btn ghost icon dictate-btn" id="pl-ag-mic" aria-label="${esc(t('Dictate'))}" title="${esc(t('Dictate: speak and I type it here'))}">🎙️</button>
+      <button type="button" class="btn primary" id="pl-ag-send" data-agent-id="${esc(a.id)}">${esc(t('Send'))}</button></div>`;
+  const inp = $('#pl-ag-input'), box = $('#pl-msgs');
+  inp.value = PL.draft[a.id] || ''; PL.loaded = a.id;
+  $('#pl-ag-mic').onclick = e => toggleDictate(inp, e.currentTarget);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $('#pl-ag-send').click(); } });
+  box.scrollTop = atBottom ? box.scrollHeight : keep;
+}
+async function plSay(id, text, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await post(`api/conductor/agents/${encodeURIComponent(id)}/say?space=${state.space}`, { text });
+    toast(r.ok ? t('Sent to {a}.', { a: (PL.info.agents || []).find(x => x.id === id)?.name || id }) : (r.message || t('Could not send.')));
+    if (r.ok) { PL.draft[id] = ''; PL.threads[id] = r.thread || PL.threads[id]; plRender(await api('api/conductor')); }
+  } catch (err) { toast(err.message); }
+  if (btn) btn.disabled = false;
+}
+
+// -- Journal: the fleet-wide reports and alerts (an agent's own replies are in its conversation) --
+function plRenderJournal() {
+  const list = $('#pl-jr-list'), det = $('#pl-jr-detail'); if (!list) return;
+  const q = PL.jq.trim().toLowerCase();
+  document.querySelectorAll('#pl-jr-f .pl-chip').forEach(c => c.classList.toggle('on', PL.jf === c.dataset.f));
+  const all = (PL.info.reports || []).slice().reverse().filter(r => (PL.jf === 'all' || (r.kind || 'summary') === PL.jf) && (!q || `${r.title} ${r.text}`.toLowerCase().includes(q)));
+  const rows = all.slice(0, PL.jmax), key = r => `${r.ts}:${r.title}`;
+  if (!rows.some(r => key(r) === PL.jsel)) PL.jsel = rows[0] ? key(rows[0]) : null;
+  let last = '';
+  list.innerHTML = rows.map(r => {
+    const day = plDay(r.ts), sep = day !== last ? `<div class="pl-grp">${esc(day)}</div>` : ''; last = day;
+    const alert = (r.kind || 'summary') === 'alert';
+    return sep + `<div class="pl-rw pl-jr${key(r) === PL.jsel ? ' sel' : ''}" data-jsel="${esc(key(r))}"><span class="pl-pill${alert ? ' alert' : ''}">${esc(alert ? t('Alert') : t('Summary'))}</span>
+      <div><div class="pl-n no-i18n">${esc(r.title || t('Fleet update'))}</div><div class="pl-s no-i18n">${esc(plClip(r.text, 70))}</div></div><div class="pl-r">${esc(pilotAgo(r.ts))}</div></div>`;
+  }).join('') + (all.length > rows.length ? `<div class="pl-more"><button type="button" class="btn small" data-jmore>${esc(t('Show more ({n} older)', { n: all.length - rows.length }))}</button></div>` : '')
+    || `<div class="pl-empty">${esc(t('No reports yet. When your pilot reports progress, it shows up here.'))}</div>`;
+  const r = rows.find(x => key(x) === PL.jsel);
+  det.innerHTML = r ? `<div class="pl-ph">${plBackBtn()}<span class="pl-t no-i18n">${esc(r.title || t('Fleet update'))}</span><span class="pl-pill${(r.kind || 'summary') === 'alert' ? ' alert' : ''}">${esc((r.kind || 'summary') === 'alert' ? t('Alert') : t('Summary'))}</span><span class="pl-sp muted small">${esc(pilotAgo(r.ts))}</span></div><div class="pl-det no-i18n">${md(r.text || '')}</div>`
+    : `<div class="pl-empty pl-center">${esc(t('Pick a report to read it.'))}</div>`;
+}
+
+function plWire() {
+  if (PL.wired) return; PL.wired = true;
+  $('#pl-tabs').addEventListener('click', e => { const b = e.target.closest('.pl-tab'); if (b) plShowTab(b.dataset.pl); });
+  $('#pl-ag-f').addEventListener('click', e => { const c = e.target.closest('.pl-chip'); if (c) { PL.f = c.dataset.f; plRenderAgents(); } });
+  $('#pl-ag-group').onclick = () => { PL.group = !PL.group; plRenderAgents(); };
+  $('#pl-ag-q').oninput = e => { PL.q = e.target.value; plRenderAgents(); };
+  $('#pl-jr-f').addEventListener('click', e => { const c = e.target.closest('.pl-chip'); if (c) { PL.jf = c.dataset.f; plRenderJournal(); } });
+  $('#pl-jr-q').oninput = e => { PL.jq = e.target.value; plRenderJournal(); };
+  $('.pilot-panel[data-ppanel=agents]').addEventListener('click', e => {
+    const t0 = e.target;
+    let el;
+    if ((el = t0.closest('[data-plback]'))) { el.closest('.pl-split').classList.remove('detail'); return; }
+    if ((el = t0.closest('[data-answer]'))) { plSay(el.dataset.agentId, el.dataset.answer, el); return; }
+    if ((el = t0.closest('[data-open-agent]'))) { PL.sel = el.dataset.openAgent; plShowTab('agents'); plOpen('#pl-split-agents'); setTimeout(() => $('#pl-ag-input')?.focus(), 250); return; }
+    if ((el = t0.closest('[data-more]'))) { e.preventDefault(); const b = el.closest('.pl-b'); b.classList.toggle('open'); el.textContent = b.classList.contains('open') ? t('Show less') : t('Show all'); return; }
+    if ((el = t0.closest('[data-more-pin]'))) { e.preventDefault(); const p = el.closest('.pl-pin'); p.classList.toggle('open'); el.textContent = p.classList.contains('open') ? t('Show less') : t('Show all'); return; }
+    if ((el = t0.closest('[data-older]'))) { const box = $('#pl-msgs'), h = box.scrollHeight; PL.shown[el.dataset.older] = (PL.shown[el.dataset.older] || 40) + 40; plPaintAgent((PL.info.agents || []).find(x => x.id === el.dataset.older)); const nb = $('#pl-msgs'); nb.scrollTop = nb.scrollHeight - h; return; }
+    if ((el = t0.closest('[data-jmore]'))) { PL.jmax += 50; plRenderJournal(); return; }
+    if ((el = t0.closest('#pl-ag-send'))) { const inp = $('#pl-ag-input'), text = inp.value.trim(); if (!text) { inp.focus(); return; } plSay(el.dataset.agentId, text, el); return; }
+    if ((el = t0.closest('[data-nsel]'))) { PL.nsel = el.dataset.nsel; plOpen('#pl-split-need'); plRenderNeed(); return; }
+    if ((el = t0.closest('[data-asel]'))) { PL.sel = el.dataset.asel; plOpen('#pl-split-agents'); plRenderAgents(); return; }
+    if ((el = t0.closest('[data-jsel]'))) { PL.jsel = el.dataset.jsel; plOpen('#pl-split-journal'); plRenderJournal(); return; }
+  });
+}
+
 async function pilotAgents() {
-  const box = $('#pilot-agents'), nTag = $('#pilot-agents-n');
+  plWire();
   await initOrchestratorPanel('pilot', info => {
     const on = !!info.connected;
-    const agents = info.agents || [];
     // status card: dot + "Autonomous pilot — connected/disconnected", then one grounded line
     const title = $('#pilot-conn-title');
     if (title) title.innerHTML = `<span class="pilot-dot${on ? ' on' : ''}" id="pilot-conn-dot"></span>`
@@ -5666,48 +5846,8 @@ async function pilotAgents() {
     $('#pilot-orch-status').textContent = on ? parts.join(' · ')
       : t('Not paired yet. Pair your autonomous pilot to delegate work across your machines.');
     renderPilotNotify(info);
-    renderPilotReports(info);
-    // the roster of agents the pilot sees
-    if (nTag) nTag.textContent = agents.length ? ' · ' + agents.length : '';
-    if (!on) { box.innerHTML = `<div class="placeholder">${esc(t('Pair your autonomous pilot above, then the agents it runs across your machines appear here.'))}</div>`; return; }
-    if (!agents.length) { box.innerHTML = `<div class="placeholder">${esc(t('No agents are running yet. Talk to the pilot above to put one to work.'))}</div>`; return; }
-    // the sessions that wait for the user come first, each with the question as the orchestrator copied it
-    const ordered = [...agents].sort((x, y) => !!y.waiting - !!x.waiting);
-    box.innerHTML = ordered.map(a => {
-      const st = a.waiting ? 'waiting' : (PSTATE[a.state] || 'idle');
-      const task = (a.task || '').trim();
-      const w = a.waiting;
-      const wk = w ? { decision: t('Decision needed'), approval: t('Approval needed'), instruction: t('Instruction needed') }[w.kind] || t('Decision needed') : '';
-      const wBlock = w ? `<div class="pilot-waiting kind-${esc(w.kind)}">
-          <div class="pw-head"><b>${esc(wk)}</b>${w.type ? `<span class="pill no-i18n">${esc(w.type)}</span>` : ''}</div>
-          <div class="pw-q no-i18n">${esc(w.question)}</div>
-          ${w.options?.length && w.kind !== 'approval' ? `<div class="pw-opts">${w.options.map(o => `<button type="button" class="btn small no-i18n" data-answer="${esc(o)}" data-agent-id="${esc(a.id)}">${esc(o)}</button>`).join('')}</div>` : ''}
-          ${w.cost ? `<div class="muted small"><span>${esc(t('If it goes wrong:'))}</span> <span class="no-i18n">${esc(w.cost)}</span></div>` : ''}
-          ${w.kind === 'approval' ? `<p class="muted small">${esc(t('Only you can do this, in that session: open it and give the approval. Nothing can be done from here.'))}</p>` : ''}
-        </div>` : '';
-      return `<div class="pilot-agent" data-agent="${esc(a.id)}">
-        <span class="pilot-dot pstate-${st}" title="${esc(pStateLabel(a.state))}"></span>
-        <div class="pilot-agent-body">
-          <div class="pilot-agent-name no-i18n">${esc(a.name || a.id)}${task ? ` <span class="muted">— « ${esc(task)} »</span>` : ''}</div>
-          <div class="pilot-agent-meta muted small no-i18n">${esc(pStateLabel(w ? 'waiting' : a.state))} · ${esc(pilotAgo(a.ts))}${a.machine ? ' · ' + esc(a.machine) : ''}</div>
-          ${wBlock}
-        </div>
-        <button type="button" class="btn ghost small" data-discuss="${esc(a.id)}">${esc(t('Discuss'))}</button>
-      </div>`;
-    }).join('');
-    box.querySelectorAll('[data-discuss]').forEach(b => b.onclick = () => openAgentDialog(agents.find(x => x.id === b.dataset.discuss) || { id: b.dataset.discuss }));
-    box.querySelectorAll('[data-answer]').forEach(b => b.onclick = async () => { // an option answers the session through its thread
-      const name = agents.find(x => x.id === b.dataset.agentId)?.name || b.dataset.agentId;
-      b.disabled = true;
-      try {
-        const r = await post(`api/conductor/agents/${encodeURIComponent(b.dataset.agentId)}/say?space=${state.space}`, { text: b.dataset.answer });
-        toast(r.ok ? t('Sent to {a}.', { a: name }) : (r.message || t('Could not send.')));
-      } catch (err) { toast(err.message); }
-      b.disabled = false;
-    });
+    plRender(info);
   });
-  // opening Votre pilote autonome is reading the reports: clear the badge
-  if (state.fleetUnread) { state.fleetUnread = 0; setFleetBadge(); post('api/conductor/read', {}).catch(() => {}); }
 }
 // the Pilotage menu badge + the Agents-subtab badge, both counting unread fleet reports
 function setFleetBadge() {
@@ -5715,41 +5855,6 @@ function setFleetBadge() {
   for (const sel of ['#pilot-rail-badge', '#pilot-tab-agents']) {
     const el = $(sel); if (!el) continue; el.hidden = !n; el.textContent = n ? txt : '';
   }
-}
-let pilotAgentWired = false, pilotAgentCur = null;
-function renderAgentThread(turns) {
-  const box = $('#pilot-agent-thread');
-  if (!turns || !turns.length) { box.innerHTML = `<p class="muted small">${esc(t('No messages yet. Send the first one below.'))}</p>`; return; }
-  box.innerHTML = turns.map(m => `<div class="pa-turn ${m.role === 'user' ? 'me' : 'them'}"><div class="pa-bubble no-i18n">${md(m.text || '')}</div><div class="pa-when muted small no-i18n">${esc(pilotAgo(m.ts))}</div></div>`).join('');
-  box.scrollTop = box.scrollHeight;
-}
-async function openAgentDialog(agent) {
-  const dlg = $('#pilot-agent-dialog');
-  pilotAgentCur = agent.id;
-  $('#pa-title').textContent = agent.name || agent.id;
-  $('#pilot-agent-sub').textContent = (agent.task ? '« ' + agent.task + ' »' : '') + (agent.machine ? (agent.task ? ' · ' : '') + agent.machine : '');
-  $('#pilot-agent-input').value = '';
-  $('#pilot-agent-thread').innerHTML = `<p class="muted small">${esc(t('Loading…'))}</p>`;
-  if (!pilotAgentWired) {
-    pilotAgentWired = true;
-    $('#pilot-agent-close').onclick = () => dlg.close();
-    const send = async () => {
-      const inp = $('#pilot-agent-input'), text = inp.value.trim();
-      if (!text || !pilotAgentCur) { inp.focus(); return; }
-      const btn = $('#pilot-agent-send'); btn.disabled = true;
-      try {
-        const r = await post(`api/conductor/agents/${encodeURIComponent(pilotAgentCur)}/say?space=${state.space}`, { text });
-        if (r.ok) { inp.value = ''; renderAgentThread(r.thread); }
-        else { toast(r.message || t('Could not send.')); if (r.thread) renderAgentThread(r.thread); }
-      } catch (err) { toast(err.message); }
-      finally { btn.disabled = false; }
-    };
-    $('#pilot-agent-send').onclick = send;
-    $('#pilot-agent-input').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } });
-  }
-  dlg.showModal();
-  try { const r = await api(`api/conductor/agents/${encodeURIComponent(agent.id)}/thread`); renderAgentThread(r.thread); }
-  catch (err) { $('#pilot-agent-thread').innerHTML = `<p class="muted small">${esc(err.message)}</p>`; }
 }
 async function pilotChantiers() {
   const box = $('#pilot-chantiers');

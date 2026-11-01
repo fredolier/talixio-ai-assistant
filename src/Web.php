@@ -193,6 +193,7 @@ final class Web
             $path === '/api/conductor/notify' && $m === 'POST' => $this->app->conductor()->setNotify((string)($b['mode'] ?? '')),
             $path === '/api/conductor/read' && $m === 'POST' => $this->app->conductor()->markRead(),
             (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/thread$#', $path, $mm) && $m === 'GET' => ['thread' => $this->app->conductor()->agentThread($mm[1])],
+            (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/read$#', $path, $mm) && $m === 'POST' => $this->app->conductor()->markAgentRead($mm[1]),
             (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/say$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
                 if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space']; // ground + guard against the dispatching space
                 return $this->app->conductor()->agentSay($mm[1], (string)($b['text'] ?? ''), (int)$this->app->space);

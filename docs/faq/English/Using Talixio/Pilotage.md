@@ -8,22 +8,32 @@ A glance at the library of the current space: how much it holds and how it is do
 
 ## Your autonomous pilot
 The pilot is an orchestrator (a Claude Code session) that supervises agents on your machines and reports to Talixio.
-- The **status card** says whether it is connected, when it last reported and how many agents it sees on how many machines.
-  **Re-pair…** and **Disconnect** are there. Pairing works either by a webhook the orchestrator creates, or, for a plain
-  local session, by *polling* Talixio on its own timer.
-- **Talk to the pilot** sends it an instruction, by typing or dictating. It passes the same privacy checks as every other dispatch.
-- **Agents** lists each agent with its state (active, busy, idle, finished, error), its task, its age and its machine;
-  **Discuss** opens a two-way thread with that agent. What the orchestrator and agents answer is shown, never executed.
-- **When an agent is blocked**, the roster puts it first with the question itself: a **decision** (answer with one of its
-  option buttons, or open *Discuss*), an **approval** (a click only you can give, in that session: open it; nothing can be done
-  from here) or an **instruction**. A session can route its questions to the pilot with the « route questions » hook
-  (`/autopilot-on`, `/autopilot-off`, `/autopilot-status`, per session; off by default, and then the question comes to you as
-  usual). The pilot pastes the question as it is, with its ladder level (L1–L5) and the cost of a wrong choice; the assistant
-  answers with the agent and a decision id, and the pilot delivers it and reports the session's next step. Approvals and permission
-  prompts are never routed: only you can give them. A new question counts as news: it shows in the reports and the badge even on a
-  quiet check-in. A pilot paired before this needs the new instructions once: re-pair it, or send it those of the pairing message.
-- **Fleet reports**: how the pilot's reports reach you (see *Channels and notifications*): an in-app badge by default,
-  the **Recent reports** card, and optionally push + e-mail.
+- The **status card** says whether it is connected, when it last reported and how many agents it sees on how many machines,
+  and how many wait for you. **Re-pair…** and **Disconnect** are there, with the **Fleet reports** switch (In-app badge, Push +
+  e-mail, Off). Pairing works either by a webhook the orchestrator creates, or, for a plain local session, by *polling* Talixio.
+- **Talk to the pilot** (below the tabs) sends it an instruction, typed or dictated. It passes the same privacy checks as every
+  other dispatch.
+- Three tabs, each with a list on the left and a pane on the right that scrolls on its own — the page never grows with the number
+  of messages. On a phone the pane replaces the list, with « ‹ Back ». Each tab carries a count:
+  - **Needs you**: the sessions that wait for you, each with the question as it was asked, its level (L1–L5), the options as
+    buttons and the cost of a wrong choice. A **decision** you answer with a button (or *Answer another way…*, which opens the
+    agent's conversation); an **approval** (a click only you can give, in that session, e.g. a revoked token) has no button:
+    open the session; an **instruction** is for you to tell the agent what to do next. Under *Decided recently* you see **who
+    answered what**: you, or the assistant on your behalf.
+  - **Agents**: the roster with a search, the filters Waiting / Active / Idle / Offline, and *Group by machine*. Pick one to read
+    its conversation: the question it waits on stays pinned on top, a message that is too long is cut with *Show all*, older
+    messages load with « ↑ n older messages », and the box at the bottom writes to that agent (or dictate). A red number on a row
+    counts its replies you have not read; it clears when you open the conversation. Each agent's replies stay in its own
+    conversation.
+  - **Journal**: only the fleet-wide reports, grouped by day, filtered All / Alerts / Summaries, with a search; click one to read
+    it in full. A session that starts waiting for you adds an alert.
+- A session can route its questions to the pilot with the « route questions » hook (`/autopilot-on`, `/autopilot-off`,
+  `/autopilot-status`, per session; off by default, and then the question comes to you as usual). The pilot pastes the question as
+  it is; your answer goes back with a decision id, and the pilot reports the session's next step. Approvals and permission
+  prompts are never routed: only you can give them. A new question counts as news: it shows in the badge even on a quiet
+  check-in. A pilot paired before this needs the instructions of the pairing message once: re-pair it, or send it those.
+- **Fleet reports**: how the pilot's reports reach you (see *Channels and notifications*): an in-app badge by default, the
+  Journal and the conversations, and optionally push + e-mail.
 
 ## Roles
 The catalogue of the roles your assistant can take, grouped into one card per specialization. Each role is a node whose ring shows

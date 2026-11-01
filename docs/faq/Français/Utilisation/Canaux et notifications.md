@@ -14,8 +14,8 @@ Secret, la liste dit seulement où regarder.
 
 ## Rapports de votre pilote autonome
 Les rapports d'avancement du pilote autonome (voir *Pilotage*) sont discrets par défaut : ni push, ni e-mail. Un nombre rouge
-s'affiche sur l'entrée **Pilotage** et sur l'onglet **Votre pilote autonome**, et les rapports sont dans la carte **Rapports
-récents** ; le nombre disparaît quand vous ouvrez l'onglet. L'interrupteur **Rapports de la flotte** de la carte d'état du
+s'affiche sur l'entrée **Pilotage** et sur les onglets de **Votre pilote autonome** : les réponses des agents sont dans la conversation
+de chaque agent (un compteur par agent, effacé quand vous l'ouvrez) et les rapports d'ensemble dans le **Journal** (effacé quand vous l'ouvrez). L'interrupteur **Rapports de la flotte** de la carte d'état du
 pilote permet de choisir : **Pastille dans l'app** (par défaut), **Push + e-mail**, ou **Désactivée** (rien n'est affiché).
 Un rapport qui répète le précédent, ou un simple signal de maintien, n'est jamais compté.
 

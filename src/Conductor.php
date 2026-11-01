@@ -179,7 +179,8 @@ final class Conductor
     public function statusInfo(): array
     {
         $b = $this->binding();
-        $agents = array_values($b['agents'] ?? []);
+        $unreadBy = $b['agent_unread'] ?? [];
+        $agents = array_map(fn($a) => $a + ['unread' => (int)($unreadBy[$a['id']] ?? 0)], array_values($b['agents'] ?? []));
         $machines = count(array_unique(array_filter(array_map(fn($a) => (string)($a['machine'] ?? ''), $agents))));
         return [
             'connected' => $this->connected(),
@@ -198,8 +199,10 @@ final class Conductor
             'agentsAt' => (int)($b['agents_at'] ?? 0),
             'summary' => $this->fleetStatus(),
             'notify' => self::modeOf($b),             // how reports surface: inapp | push | off
-            'unread' => (int)($b['unread'] ?? 0),     // reports since the user last opened Votre pilote autonome
-            'reports' => array_values($b['reports'] ?? []), // the recent-reports feed (the "details")
+            'unread' => self::unreadOf($b),           // journal lines + agent replies the user has not opened yet
+            'journalUnread' => self::journalUnread($b),
+            'reports' => array_values($b['reports'] ?? []), // the fleet journal (fleet-wide reports and alerts)
+            'decisions' => array_reverse(array_values($b['decisions'] ?? [])), // answered questions, newest first
         ];
     }
 
@@ -241,7 +244,7 @@ final class Conductor
             . " 3. POST progress to $inbox as {\"type\":\"report\",\"title\":...,\"text\":...}, with a structured roster\n"
             . "    so my cockpit can list the fleet:\n"
             . "    \"agents\":[{\"id\":\"mba-m3.local\",\"name\":\"mba-m3.local\",\"task\":\"dossier conseil\",\n"
-            . "    \"state\":\"active\",\"machine\":\"mba-m3.local\",\"ts\":<unix>}] (state: active|busy|waiting|idle|done|error).\n"
+            . "    \"state\":\"active\",\"machine\":\"mba-m3.local\",\"ts\":<unix>}] (state: active|busy|waiting|idle|done|offline|error).\n"
             . "    A routine keep-warm tick with no news MUST be silent: either omit \"text\" or add \"tick\":true, so I\n"
             . "    refresh the roster without notifying the user. Send \"text\" only when there is something to report.\n"
             . " 3b. QUESTIONS FROM SESSIONS. A session that is blocked on a question can route it to you instead of to me\n"
@@ -314,36 +317,42 @@ final class Conductor
         // text breaks through. The check-and-mark lives inside the lock so two concurrent reports can't both notify.
         $silent = !empty($msg['tick']) || !empty($msg['silent']) || in_array((string)($msg['kind'] ?? ''), ['tick', 'liveness', 'heartbeat', 'keepalive'], true);
         // How a fresh report surfaces is the user's choice (fleet_notify, default 'inapp' — see orchestration.md §5.4):
-        //   off   — surfaced nowhere: no feed line, no badge, no push.
-        //   inapp — a feed line in "Votre pilote autonome" and a badge count on the Pilotage menu; no push/e-mail.
-        //   push  — the same feed line and badge, plus the push+e-mail notification (the pre-1.12 behaviour).
-        $push = $this->lockedUpdate(function (array $b) use ($agents, $agent, $decision, &$title, $text, $silent) { // locked: never clobber a concurrent queue drain
+        //   off   — surfaced nowhere: no journal line, no badge, no push.
+        //   inapp — a badge and the cockpit; no push/e-mail.
+        //   push  — the same, plus the push+e-mail notification (the pre-1.12 behaviour).
+        // Where a report lands (1.18.0): one tagged with an `agent` is that agent's reply — in its thread, with an unread
+        // count on that agent; an untagged one is a fleet-wide report — a line in the journal (kind alert or summary,
+        // the orchestrator may say "level":"alert"); a session that now waits for the user is an alert line of its own.
+        $alert = in_array((string)($msg['level'] ?? ''), ['alert', 'error'], true);
+        $push = $this->lockedUpdate(function (array $b) use ($agents, $agent, $decision, $title, $text, $silent, $alert) { // locked: never clobber a concurrent queue drain
             $b['last_report'] = time();
             $asks = self::newQuestions($b['agents'] ?? [], $agents); // a session that now waits for the user is news, even on a keep-warm tick
             if ($agents !== null) { $b['agents'] = $agents; $b['agents_at'] = time(); }
             if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text, $decision);
-            if ($asks !== '') { $text = trim($text . "\n\n" . $asks); $silent = false; $title = 'An agent needs you'; }
             $fresh = $text !== '' && !$silent && $text !== (string)($b['last_notified'] ?? '');
-            if (!$fresh) return [$b, false];
-            $b['last_notified'] = $text; // only a notified line updates the mark; silent ticks never poison it
+            if ($fresh) $b['last_notified'] = $text; // only a notified line updates the mark; silent ticks never poison it
             $mode = self::modeOf($b);
-            if ($mode !== 'off') {       // record the report for the in-app feed + badge
-                $feed = $b['reports'] ?? [];
-                $feed[] = ['ts' => time(), 'title' => $title, 'text' => $text, 'agent' => $agent];
-                if (count($feed) > self::REPORT_CAP) $feed = array_slice($feed, -self::REPORT_CAP);
-                $b['reports'] = array_values($feed);
-                $b['unread'] = (int)($b['unread'] ?? 0) + 1;
+            if ($mode === 'off' || ($asks === '' && !$fresh)) return [$b, []];
+            $out = [];
+            if ($asks !== '') { $b = $this->journalAdd($b, 'alert', 'An agent needs you', $asks); $out[] = ['An agent needs you', $asks]; }
+            if ($fresh && $agent === '') { $b = $this->journalAdd($b, $alert ? 'alert' : 'summary', $title, $text); $out[] = [$title, $text]; }
+            if ($fresh && $agent !== '') {
+                $b['agent_unread'][$agent] = (int)($b['agent_unread'][$agent] ?? 0) + 1;
+                if (count($b['agent_unread']) > 100) $b['agent_unread'] = array_slice($b['agent_unread'], -100, null, true);
+                $out[] = [$agent, $text];
             }
-            return [$b, $mode === 'push'];
+            return [$b, $mode === 'push' ? $out : []];
         });
-        if ($push) $this->app->notifier()->notify($title, $text);
+        foreach ($push as [$t, $x]) $this->app->notifier()->notify($t, $x);
         return [200, ['ok' => true]];
     }
 
     private const AGENT_CAP = 50;
-    private const THREAD_CAP = 40;
+    private const THREAD_CAP = 200;
     /** How many recent fleet reports the in-app feed keeps (the "details" in Votre pilote autonome). */
-    private const REPORT_CAP = 30;
+    private const REPORT_CAP = 100;
+    /** How many answered questions the decision journal keeps. */
+    private const DECISION_CAP = 60;
 
     /** How fleet reports surface: 'inapp' (badge + feed, default), 'push' (badge + feed + push/e-mail) or 'off'. */
     private static function modeOf(array $b): string
@@ -352,7 +361,41 @@ final class Conductor
         return in_array($m, ['inapp', 'push', 'off'], true) ? $m : 'inapp';
     }
     public function notifyMode(): string { return self::modeOf($this->binding()); }
-    public function unread(): int { return (int)($this->binding()['unread'] ?? 0); }
+    /** Unread things: journal lines since the journal was last opened + replies not yet read, per agent. */
+    public function unread(): int { return self::unreadOf($this->binding()); }
+    private static function journalUnread(array $b): int { return (int)($b['journal_unread'] ?? $b['unread'] ?? 0); }
+    private static function unreadOf(array $b): int { return self::journalUnread($b) + array_sum(array_map('intval', $b['agent_unread'] ?? [])); }
+
+    /** One line in the fleet journal (fleet-wide reports and alerts; an agent's own replies live in its thread). */
+    private function journalAdd(array $b, string $kind, string $title, string $text): array
+    {
+        $feed = $b['reports'] ?? [];
+        $feed[] = ['ts' => time(), 'kind' => $kind === 'alert' ? 'alert' : 'summary', 'title' => $title, 'text' => $text];
+        if (count($feed) > self::REPORT_CAP) $feed = array_slice($feed, -self::REPORT_CAP);
+        $b['reports'] = array_values($feed);
+        $b['journal_unread'] = self::journalUnread($b) + 1;
+        unset($b['unread']);
+        return $b;
+    }
+
+    /** One answered question in the decision journal: who answered what, and when. */
+    private function decisionAdd(array $b, array $agent, string $answer, string $by, string $decisionId): array
+    {
+        $w = $agent['waiting'] ?? [];
+        $log = $b['decisions'] ?? [];
+        $log[] = ['id' => $decisionId, 'ts' => time(), 'agent' => $agent['id'], 'name' => $agent['name'] ?? $agent['id'], 'kind' => $w['kind'] ?? 'decision',
+            'type' => $w['type'] ?? '', 'question' => $w['question'] ?? '', 'answer' => mb_substr($answer, 0, 1000), 'by' => $by === 'assistant' ? 'assistant' : 'user'];
+        if (count($log) > self::DECISION_CAP) $log = array_slice($log, -self::DECISION_CAP);
+        $b['decisions'] = array_values($log);
+        return $b;
+    }
+
+    /** The roster entry of one agent, when the orchestrator reported it. */
+    private static function agentOf(array $b, string $id): ?array
+    {
+        foreach ($b['agents'] ?? [] as $a) if (($a['id'] ?? '') === $id) return $a;
+        return null;
+    }
     public function reports(): array { return array_values($this->binding()['reports'] ?? []); }
 
     /** Set how fleet reports surface (the toggle in Votre pilote autonome). Returns the fresh status snapshot. */
@@ -366,8 +409,16 @@ final class Conductor
     /** Clear the unread badge (called when the user opens Votre pilote autonome). */
     public function markRead(): array
     {
-        $this->lockedUpdate(fn(array $b) => [['unread' => 0] + $b, null]);
-        return ['unread' => 0];
+        $this->lockedUpdate(function (array $b) { $b['journal_unread'] = 0; unset($b['unread']); return [$b, null]; });
+        return ['unread' => $this->unread()];
+    }
+
+    /** The user opened an agent's thread: its replies count as read. */
+    public function markAgentRead(string $id): array
+    {
+        $id = mb_substr(trim($id), 0, 80);
+        $this->lockedUpdate(function (array $b) use ($id) { unset($b['agent_unread'][$id]); return [$b, null]; });
+        return ['unread' => $this->unread()];
     }
     /** How many undelivered instructions a poll-mode orchestrator's queue holds; oldest drop past this. */
     private const QUEUE_CAP = 100;
@@ -437,7 +488,7 @@ final class Conductor
                 'state' => mb_substr(trim((string)($a['state'] ?? '')), 0, 24),
                 'machine' => mb_substr(trim((string)($a['machine'] ?? '')), 0, 80),
                 'ts' => (int)($a['ts'] ?? time()),
-            ] + (($w = self::sanitizeWaiting($a['waiting'] ?? ($a['question'] ?? null))) !== null ? ['waiting' => $w] : []);
+            ] + (preg_match('#^https?://\S{1,200}$#', (string)($a['url'] ?? '')) ? ['url' => (string)$a['url']] : []) + (($w = self::sanitizeWaiting($a['waiting'] ?? ($a['question'] ?? null))) !== null ? ['waiting' => $w] : []);
         }
         return $out;
     }
@@ -460,7 +511,7 @@ final class Conductor
         $kind = (string)($w['kind'] ?? 'decision');
         return ['kind' => in_array($kind, ['decision', 'approval', 'instruction'], true) ? $kind : 'decision',
             'type' => mb_substr(trim((string)($w['type'] ?? '')), 0, 24), 'question' => $q, 'options' => $opts,
-            'cost' => mb_substr(trim((string)($w['cost'] ?? '')), 0, 240)];
+            'cost' => mb_substr(trim((string)($w['cost'] ?? '')), 0, 240)] + (($d = self::decisionId($w['decision_id'] ?? '')) !== '' ? ['decision_id' => $d] : []);
     }
 
     /** One line per agent whose question is new since the previous roster (same session, same text = already seen). */
@@ -477,10 +528,10 @@ final class Conductor
     }
 
     /** Append one turn to an agent's two-voice thread, keeping only the last THREAD_CAP turns. Returns the new binding. */
-    private function appendThread(array $b, string $id, string $role, string $text, string $decision = ''): array
+    private function appendThread(array $b, string $id, string $role, string $text, string $decision = '', string $by = ''): array
     {
         $t = $b['threads'][$id] ?? [];
-        $t[] = ['role' => $role === 'agent' ? 'agent' : 'user', 'text' => mb_substr(trim($text), 0, 4000), 'ts' => time()] + ($decision !== '' ? ['decision_id' => $decision] : []);
+        $t[] = ['role' => $role === 'agent' ? 'agent' : 'user', 'text' => mb_substr(trim($text), 0, 4000), 'ts' => time()] + ($decision !== '' ? ['decision_id' => $decision] : []) + ($by === 'assistant' ? ['by' => 'assistant'] : []);
         if (count($t) > self::THREAD_CAP) $t = array_slice($t, -self::THREAD_CAP);
         $b['threads'][$id] = array_values($t);
         return $b;
@@ -506,11 +557,19 @@ final class Conductor
         if ($text === '') return $fail('error: nothing to send.');
         if (($g = $this->guard()) !== null) return $fail($g);
         if (!$this->connected()) return $fail('error: no agents are connected yet — pair your pilote autonome first.');
-        $r = $this->deliver(['from' => 'talixio', 'ts' => time(), 'agent' => $id, 'instruction' => $this->ground($text, $space)]);
+        // Answering a session that waits for the user settles a decision: tag it (the orchestrator echoes the id back with
+        // the session's next report) and write it in the decision journal — who answered what.
+        $ag = self::agentOf($this->binding(), $id);
+        $dec = !empty($ag['waiting']) ? ($ag['waiting']['decision_id'] ?? 'd-' . bin2hex(random_bytes(3))) : '';
+        $r = $this->deliver(['from' => 'talixio', 'ts' => time(), 'agent' => $id, 'instruction' => $this->ground($text, $space)] + ($dec !== '' ? ['decision_id' => $dec] : []));
         if (!$r['ok']) return $fail($r['error'] === 'http'
             ? "error: the orchestrator's webhook returned HTTP {$r['code']}."
             : "error: could not reach your pilote autonome ({$r['detail']}). It may be asleep — recreate it, then re-pair.");
-        $this->lockedUpdate(fn(array $b) => [$this->appendThread($b, $id, 'user', $text), null]);
+        $this->lockedUpdate(function (array $b) use ($id, $text, $dec, $ag) {
+            $b = $this->appendThread($b, $id, 'user', $text, $dec);
+            if ($dec !== '' && $ag) $b = $this->decisionAdd($b, $ag, $text, 'user', $dec);
+            return [$b, null];
+        });
         return ['ok' => true, 'thread' => $this->agentThread($id),
             'message' => !empty($r['queued']) ? 'queued for the agent; it will pick this up on its next poll and its reply will land here.' : 'sent to the agent; its reply will land here.'];
     }
@@ -530,12 +589,18 @@ final class Conductor
         // An answer to one session's routed question: aimed at that agent, tagged with the decision it settles. The
         // orchestrator hands it to the session and reports the next step with the same agent and decision_id.
         $agent = mb_substr(trim($agent), 0, 80); $decision = self::decisionId($decisionId);
+        $ag = $agent !== '' ? self::agentOf($this->binding(), $agent) : null;
+        if ($agent !== '' && $decision === '' && !empty($ag['waiting'])) $decision = $ag['waiting']['decision_id'] ?? 'd-' . bin2hex(random_bytes(3));
         $r = $this->deliver(['from' => 'talixio', 'ts' => time(), 'instruction' => $this->ground($instruction, $space)]
             + ($agent !== '' ? ['agent' => $agent] : []) + ($agent !== '' && $decision !== '' ? ['decision_id' => $decision] : []));
         if (!$r['ok']) return $r['error'] === 'http'
             ? "error: the orchestrator's webhook returned HTTP {$r['code']}. If this persists, recreate the session and fleet_setup again."
             : "error: could not reach the orchestrator ({$r['detail']}). It may have gone to sleep — recreate it, then fleet_setup again.";
-        if ($agent !== '') $this->lockedUpdate(fn(array $b) => [$this->appendThread($b, $agent, 'user', $instruction, $decision), null]);
+        if ($agent !== '') $this->lockedUpdate(function (array $b) use ($agent, $instruction, $decision, $ag) {
+            $b = $this->appendThread($b, $agent, 'user', $instruction, $decision, 'assistant'); // sent by the assistant's tool, not typed by the user
+            if ($decision !== '' && $ag && !empty($ag['waiting'])) $b = $this->decisionAdd($b, $ag, $instruction, 'assistant', $decision); // the assistant answered on the user's behalf
+            return [$b, null];
+        });
         return !empty($r['queued'])
             ? 'queued for the fleet orchestrator — it will pick this up on its next poll and report back here (notifications); check progress with fleet_status.'
             : 'sent to the fleet orchestrator. It will work the fleet and report back here (notifications); check progress with fleet_status.';

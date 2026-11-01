@@ -501,3 +501,22 @@ the thread with it, and the orchestrator delivers it and reports the session's n
 Approvals and permission prompts are never routed — only the user can give them in that session (kind `approval`: no buttons).
 Which decisions the assistant may take (ladder L1–L3) and which stay with the user (L4, L5; pushes, deploys, deletions, e-mail,
 credentials) is policy of the user's own roles, not of this code.
+
+### 5.6 The cockpit for a fleet (1.18.0)
+
+« Votre pilote autonome » was one long list: every report, whichever agent it came from, above the roster. It is now three tabs,
+each a list and a pane that scroll on their own (so the page never grows with the number of messages): **Needs you**, **Agents**,
+**Journal** (`pilotage.md`). What changed in the data:
+
+- **Where a report lands.** A report tagged with an `agent` is that agent's reply: it goes to its thread (kept to the last 200
+  turns), with an **unread count per agent** (`agent_unread`, shown on the roster entry as `unread`, cleared by
+  `POST /api/conductor/agents/<id>/read` when its conversation is opened). An untagged report is fleet-wide: a line in the
+  **journal** (`reports`, 100 kept) with a `kind` — `alert` when the orchestrator sends `"level":"alert"|"error"` or when a
+  session starts waiting for the user, else `summary`. `POST /api/conductor/read` clears the journal count only. The Pilotage badge
+  counts both (`unread`).
+- **Who answers what.** Answering a session that waits (from the cockpit, `agentSay`, or by the assistant, `fleet_dispatch` with
+  an `agent`) is a *decision*: it carries a `decision_id` (the roster's `waiting.decision_id`, else generated) which the
+  orchestrator echoes back, and it is written in the **decision journal** (`decisions`, 60 kept): the agent, the question as it
+  was, the answer, and **by whom** (`user` or `assistant`). Turns sent by the assistant's tool are marked `by: assistant` in the
+  thread. This is the raw material of the learning described in the roadmap (predictions compared with the user's real answers).
+- A roster entry may also carry `url` (the session's own link, http(s) only), and its `state` may be `offline`.

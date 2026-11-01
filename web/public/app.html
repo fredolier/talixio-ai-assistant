@@ -175,10 +175,31 @@
             </div>
           </div>
         </div>
-        <div class="card pilot-reports-card" id="pilot-reports-card" hidden>
-          <h3>Recent reports<span class="pilot-agents-n no-i18n" id="pilot-reports-n"></span></h3>
-          <div id="pilot-reports" class="pilot-reports"></div>
+        <div class="pl-tabs" id="pl-tabs" role="tablist" aria-label="Your autonomous pilot">
+          <button type="button" class="pl-tab on" role="tab" data-pl="need">Needs you<span class="pl-bd no-i18n" id="pl-bd-need" hidden></span></button>
+          <button type="button" class="pl-tab" role="tab" data-pl="agents">Agents<span class="pl-pill no-i18n" id="pl-n-agents"></span><span class="pl-bd no-i18n" id="pl-bd-agents" hidden></span></button>
+          <button type="button" class="pl-tab" role="tab" data-pl="journal">Journal<span class="pl-pill no-i18n" id="pl-n-journal"></span><span class="pl-bd no-i18n" id="pl-bd-journal" hidden></span></button>
         </div>
+        <div class="pl-panel on" data-plp="need"><div class="pl-split" id="pl-split-need">
+          <div class="pl-lst"><div class="pl-rows" id="pl-need-list"></div></div>
+          <div class="pl-pane" id="pl-need-detail"></div></div></div>
+        <div class="pl-panel" data-plp="agents" hidden><div class="pl-split" id="pl-split-agents">
+          <div class="pl-lst"><div class="pl-top">
+            <input type="search" id="pl-ag-q" placeholder="Search an agent…" aria-label="Search an agent">
+            <div class="pl-chips" id="pl-ag-f" role="group" aria-label="Filter agents">
+              <button type="button" class="pl-chip on" data-f="all">All</button><button type="button" class="pl-chip" data-f="waiting">Waiting</button><button type="button" class="pl-chip" data-f="active">Active</button><button type="button" class="pl-chip" data-f="idle">Idle</button><button type="button" class="pl-chip" data-f="offline">Offline</button>
+            </div>
+            <div class="pl-chips"><button type="button" class="pl-chip" id="pl-ag-group">Group by machine</button></div></div>
+            <div class="pl-rows" id="pl-ag-list"></div></div>
+          <div class="pl-pane" id="pl-ag-detail"></div></div></div>
+        <div class="pl-panel" data-plp="journal" hidden><div class="pl-split" id="pl-split-journal">
+          <div class="pl-lst"><div class="pl-top">
+            <input type="search" id="pl-jr-q" placeholder="Search the journal…" aria-label="Search the journal">
+            <div class="pl-chips" id="pl-jr-f" role="group" aria-label="Filter the journal">
+              <button type="button" class="pl-chip on" data-f="all">All</button><button type="button" class="pl-chip" data-f="alert">Alerts</button><button type="button" class="pl-chip" data-f="summary">Summaries</button>
+            </div></div>
+            <div class="pl-rows" id="pl-jr-list"></div></div>
+          <div class="pl-pane" id="pl-jr-detail"></div></div></div>
         <div class="card pilot-talk">
           <h3>Talk to the pilot <span class="muted pilot-scale">· at the assistant’s scale</span></h3>
           <div class="ptt">
@@ -190,10 +211,6 @@
             <button type="button" class="btn ghost icon dictate-btn" data-dictate-for="ptt-input" aria-label="Dictate" title="Dictate: speak and I type it here">🎙️</button>
             <button type="button" id="ptt-send" class="btn primary">Send</button>
           </div>
-        </div>
-        <div class="card pilot-agents-card">
-          <h3>The agents<span class="pilot-agents-n no-i18n" id="pilot-agents-n"></span></h3>
-          <div id="pilot-agents" class="pilot-agent-list"></div>
         </div>
       </div>
 
@@ -912,16 +929,6 @@
   <p class="muted small">Links to your documents for people outside. Anyone with a link can open it until it ends or you revoke it.</p>
   <div id="shs-list" class="shs-list"></div>
   <div class="row"><span class="spacer"></span><button id="shs-close" class="btn" type="button">Close</button></div>
-</dialog>
-<dialog id="pilot-agent-dialog" class="dialog pilot-agent-dialog" aria-labelledby="pa-title">
-  <div class="row between pa-head"><h3 id="pa-title" class="no-i18n">Agent</h3><button id="pilot-agent-close" class="btn icon" type="button" aria-label="Close">✕</button></div>
-  <p class="muted small pa-sub no-i18n" id="pilot-agent-sub"></p>
-  <div id="pilot-agent-thread" class="pilot-thread"></div>
-  <div class="composer pilot-composer">
-    <textarea id="pilot-agent-input" rows="2" placeholder="Message this agent…"></textarea>
-    <button type="button" class="btn ghost icon dictate-btn" data-dictate-for="pilot-agent-input" aria-label="Dictate" title="Dictate: speak and I type it here">🎙️</button>
-    <button type="button" id="pilot-agent-send" class="btn primary">Send</button>
-  </div>
 </dialog>
 <dialog id="move-sheet" class="dialog msheet" aria-label="Move a task"></dialog>
 <dialog id="board-side" class="dialog">

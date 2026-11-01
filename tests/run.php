@@ -1559,6 +1559,50 @@ check('fleet(poll): an instruction with no agent stays a fleet-wide one (no agen
 $ans3 = $con->toFleet('No agent, so the id is dropped.', 0, '', 'd-1');
 [, $pc3] = $con->pull($pollSecret);
 check('fleet(poll): a decision id without an agent is not sent', !isset($pc3['instructions'][0]['decision_id']));
+// the cockpit rebuilt for a fleet (1.18.0): replies per agent with their own unread count, a journal of fleet-wide reports and alerts, a decision journal
+$con->setNotify('inapp'); $con->markRead(); foreach (['u1', 'u2', 'sess-9'] as $xid) $con->markAgentRead($xid);
+$con->inbox(['type' => 'report', 'agent' => 'u1', 'text' => 'First reply from u1.'], $pollSecret);
+$con->inbox(['type' => 'report', 'agent' => 'u1', 'text' => 'Second reply from u1.'], $pollSecret);
+$con->inbox(['type' => 'report', 'agent' => 'u2', 'text' => 'A reply from u2.'], $pollSecret);
+$ui = $con->statusInfo();
+check('fleet(poll): an agent\'s replies are in its thread, with an unread count per agent, not in the journal',
+    count($con->agentThread('u1')) === 2 && $ui['unread'] === 3 && $ui['journalUnread'] === 0 && !array_filter($ui['reports'], fn($r) => str_contains($r['text'], 'reply from u')));
+$con->inbox(['type' => 'report', 'agents' => [['id' => 'u1', 'name' => 'u1'], ['id' => 'u2', 'name' => 'u2'], ['id' => 'sess-9', 'name' => 'planet']]], $pollSecret);
+$ua = array_column($con->statusInfo()['agents'], null, 'id');
+check('fleet(poll): the roster carries each agent\'s unread count', $ua['u1']['unread'] === 2 && $ua['u2']['unread'] === 1 && $ua['sess-9']['unread'] === 0);
+$con->markAgentRead('u1');
+check('fleet(poll): opening an agent\'s conversation clears only its own count', $con->unread() === 1 && ($con->statusInfo()['agents'][0]['unread'] ?? -1) === 0);
+$con->inbox(['type' => 'report', 'title' => 'Evening round', 'text' => 'Three sessions finished.'], $pollSecret);
+$con->inbox(['type' => 'report', 'title' => 'Build broke', 'text' => 'The build #7 failed.', 'level' => 'alert'], $pollSecret);
+$jr = $con->statusInfo()['reports'];
+check('fleet(poll): fleet-wide reports go to the journal as a summary, or an alert when the orchestrator says so',
+    $jr[count($jr) - 2]['kind'] === 'summary' && $jr[count($jr) - 1]['kind'] === 'alert' && $con->statusInfo()['journalUnread'] === 2);
+$con->markRead();
+check('fleet(poll): opening the journal clears the journal count and leaves the agents\' counts alone', $con->statusInfo()['journalUnread'] === 0 && $con->unread() === 1);
+for ($i = 0; $i < 210; $i++) $con->inbox(['type' => 'report', 'agent' => 'long', 'text' => "turn $i"], $pollSecret);
+check('fleet(poll): a conversation keeps its last 200 turns', count($con->agentThread('long')) === 200 && $con->agentThread('long')[199]['text'] === 'turn 209');
+// who answers what: a question the user answers from the cockpit, and one the assistant answers, both end in the decision journal
+$con->inbox(['type' => 'report', 'agents' => [
+    ['id' => 'q1', 'name' => 'planet-visas-v2', 'url' => 'https://claude.ai/code/q1', 'state' => 'waiting', 'waiting' => ['kind' => 'decision', 'type' => 'L3', 'question' => 'Plan A or B?', 'options' => ['A', 'B'], 'decision_id' => 'd-7 x']],
+    ['id' => 'q2', 'name' => 'deploy', 'url' => 'javascript:alert(1)', 'state' => 'waiting', 'waiting' => ['kind' => 'decision', 'question' => 'Which folder?']],
+    ['id' => 'q3', 'name' => 'calm', 'state' => 'active']]], $pollSecret);
+$qa = array_column($con->statusInfo()['agents'], null, 'id');
+check('fleet(poll): a roster entry may carry the session link (only http(s)) and the id of its decision (cleaned)',
+    $qa['q1']['url'] === 'https://claude.ai/code/q1' && !isset($qa['q2']['url']) && $qa['q1']['waiting']['decision_id'] === 'd-7x');
+$con->pull($pollSecret);
+$say1 = $con->agentSay('q1', 'A');
+[, $pq1] = $con->pull($pollSecret);
+$dj = $con->statusInfo()['decisions'];
+check('fleet(poll): answering a waiting agent from the cockpit is sent with its decision id and written in the decision journal, by the user',
+    $say1['ok'] && ($pq1['instructions'][0]['decision_id'] ?? '') === 'd-7x' && ($dj[0]['by'] ?? '') === 'user' && ($dj[0]['answer'] ?? '') === 'A' && ($dj[0]['question'] ?? '') === 'Plan A or B?' && ($dj[0]['agent'] ?? '') === 'q1');
+$con->toFleet('Use the main folder.', 0, 'q2');
+[, $pq2] = $con->pull($pollSecret);
+$dj = $con->statusInfo()['decisions'];
+$thq = $con->agentThread('q2');
+check('fleet(poll): the assistant answering a waiting agent gets a generated decision id and is recorded as the assistant',
+    str_starts_with((string)($pq2['instructions'][0]['decision_id'] ?? ''), 'd-') && ($dj[0]['by'] ?? '') === 'assistant' && ($dj[0]['answer'] ?? '') === 'Use the main folder.' && ($thq[count($thq) - 1]['by'] ?? '') === 'assistant');
+$con->agentSay('q3', 'Keep going.');
+check('fleet(poll): a message to an agent that is not waiting is not a decision', count($con->statusInfo()['decisions']) === count($dj));
 check('fleet: disconnect forgets the binding', str_contains($con->disconnect(), 'disconnected') && !$con->connected());
 @unlink($app->cfg->dataDir . '/conductor.json');
 

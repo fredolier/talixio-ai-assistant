@@ -405,15 +405,11 @@ const flows = {
     await page.click('#pilot-orch-connect');
     await page.waitForSelector('#pilot-orch-steps:not([hidden])', { timeout: 4000 });
     check('pilotage: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#pilot-orch-steps')));
-    // 1.1.0: the agents tab is the three mockup cards — status, talk, roster — with a per-agent thread dialog
-    check('pilotage: the agents tab shows the status, talk and roster cards',
-      await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-status')
-      && await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-talk')
-      && await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-agents-card'));
+    // the agents tab: the status card, the pilot's three tabs (hidden until paired) and the push-to-talk card
+    check('pilotage: the agents tab shows the status and talk cards',
+      await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-status') && await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-talk'));
     check('pilotage: the status card names the autonomous pilot', /pilot/i.test(await page.textContent('#pilot-conn-title')));
-    check('pilotage: with nothing paired, the roster invites pairing instead of listing agents',
-      (await page.textContent('#pilot-agents')).trim().length > 0 && (await page.$$('#pilot-agents [data-discuss]')).length === 0);
-    check('pilotage: a per-agent Discuter dialog is in the page', (await page.$$('#pilot-agent-dialog')).length === 1);
+    check('pilotage: with nothing paired, the three tabs are not shown (the status invites pairing)', await page.isHidden('#pl-tabs') && /pair/i.test(await page.textContent('#pilot-orch-status')));
     check('pilotage: the Knowledge-base tab carries a source badge slot', (await page.$$('.ptab[data-ptab=kb] .ptab-src')).length === 1);
     // 1.13.0: pair the pilot and file one report, then check the fleet-reports toggle + feed (details live here, badge in the menu)
     execFileSync('php', ['-r', "require '" + join(root, 'src/autoload.php') + "';"
@@ -424,24 +420,54 @@ const flows = {
       + "$con->inbox(['type'=>'report','title'=>'Build','text'=>'browser fleet report','agents'=>["
       + "['id'=>'w1','name'=>'dossier-conseil','state'=>'waiting','waiting'=>['kind'=>'decision','type'=>'L3','question'=>'Garder le plan A ou B ?','options'=>['Plan A','Plan B'],'cost'=>'deux jours de reprise']],"
       + "['id'=>'w2','name'=>'deploy','state'=>'waiting','waiting'=>['kind'=>'approval','question'=>'Token revoked']],"
-      + "['id'=>'w3','name'=>'calme','state'=>'active']]],$r['secret']);"],
+      + "['id'=>'w3','name'=>'calme','state'=>'active']]],$r['secret']);"
+      + "$con->inbox(['type'=>'report','agent'=>'w3','text'=>'calm reply'],$r['secret']);"],
       { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
     await page.click('#view-pilotage .ptab[data-ptab=roles]'); await page.waitForTimeout(200);
     await page.click('#view-pilotage .ptab[data-ptab=agents]'); await page.waitForSelector('#pilot-notify-row:not([hidden])', { timeout: 6000 });
     check('pilotage: once paired, the fleet-reports toggle appears with three modes, one selected',
       (await page.$$('#pilot-notify [data-notify]')).length === 3 && (await page.$$('#pilot-notify [data-notify].on')).length === 1);
-    check('pilotage: the recent-reports feed shows the pilot’s report (the “details” the badge points at)',
-      await page.isVisible('#pilot-reports-card') && /browser fleet report/.test(await page.textContent('#pilot-reports')));
-    // 1.17.0: a blocked session shows the question itself, first in the roster, with its options
-    check('pilotage: sessions waiting for the user come first, each with the question text',
-      (await page.$$('#pilot-agents .pilot-agent')).length === 3 && (await page.$$('#pilot-agents .pilot-agent:nth-child(-n+2) .pilot-waiting')).length === 2
-      && /Garder le plan A ou B/.test(await page.textContent('#pilot-agents')) && /deux jours de reprise/.test(await page.textContent('#pilot-agents')));
-    check('pilotage: a decision offers its options as buttons, an approval only says it is yours to give',
-      (await page.$$('#pilot-agents [data-answer]')).length === 2 && (await page.$$('#pilot-agents .pilot-waiting.kind-approval [data-answer]')).length === 0);
+    // 1.18.0: three tabs, each a list and a pane that scrolls on its own
+    check('pilotage: once paired the pilot has three tabs — Needs you, Agents, Journal', (await page.$$('#pl-tabs .pl-tab')).length === 3 && await page.isVisible('#pl-tabs'));
+    check('pilotage: the Needs you tab counts the two sessions waiting', (await page.textContent('#pl-bd-need')).trim() === '2');
+    check('pilotage: Needs you lists them, the decision first with its question and its options as buttons',
+      (await page.$$('#pl-need-list .pl-rw[data-nsel^="w:"]')).length === 2 && /Garder le plan A ou B/.test(await page.textContent('#pl-need-detail'))
+      && (await page.$$('#pl-need-detail [data-answer]')).length === 2 && /deux jours de reprise/.test(await page.textContent('#pl-need-detail')));
+    await page.click('#pl-need-list .pl-rw[data-nsel="w:w2"]');
+    check('pilotage: an approval offers no answer buttons, and says only the user can give it',
+      (await page.$$('#pl-need-detail [data-answer]')).length === 0 && /Token revoked/.test(await page.textContent('#pl-need-detail')));
+    await page.click('#pl-tabs .pl-tab[data-pl=agents]'); await page.waitForSelector('#pl-ag-list .pl-rw', { timeout: 6000 });
+    const rows = await page.$$eval('#pl-ag-list .pl-rw .pl-n', e => e.map(x => x.textContent.trim()));
+    check('pilotage: Agents lists the three agents, those waiting first', rows.length === 3 && rows.slice(0, 2).sort().join() === 'deploy,dossier-conseil' && rows[2] === 'calme', rows.join('|'));
+    check('pilotage: the unread replies of an agent show on its row and on the tab',
+      (await page.textContent('#pl-bd-agents')).trim() === '1' && (await page.$$eval('#pl-ag-list .pl-rw', r => r.find(x => /calme/.test(x.textContent))?.querySelector('.pl-bd')?.textContent)) === '1');
+    await page.click('#pl-ag-list .pl-rw[data-asel="w3"]'); await page.waitForSelector('#pl-msgs .pl-b', { timeout: 6000 });
+    check('pilotage: opening an agent shows its conversation and a composer, and reading it clears its count',
+      /calm reply/.test(await page.textContent('#pl-msgs')) && await page.isVisible('#pl-ag-input') && await page.isVisible('#pl-ag-send'));
+    await page.waitForTimeout(500);
+    check('pilotage: the unread badge on the Agents tab is gone once the conversation is read', await page.isHidden('#pl-bd-agents'));
+    check('pilotage: the conversation pane scrolls on its own (the page does not grow with the messages)',
+      (await page.$eval('#pl-msgs', e => getComputedStyle(e).overflowY)) === 'auto' && (await page.$eval('#pl-split-agents', e => e.getBoundingClientRect().height)) < 700);
+    await page.click('#pl-ag-list .pl-rw[data-asel="w1"]'); await page.waitForSelector('#pl-ag-detail .pl-pin', { timeout: 6000 });
+    check('pilotage: a waiting agent has its question pinned above the conversation, with the options',
+      /Garder le plan A ou B/.test(await page.textContent('#pl-ag-detail .pl-pin')) && (await page.$$('#pl-ag-detail .pl-pin [data-answer]')).length === 2);
+    await page.fill('#pl-ag-q', 'calme'); await page.waitForTimeout(150);
+    check('pilotage: the agent search narrows the list', (await page.$$('#pl-ag-list .pl-rw')).length === 1);
+    await page.fill('#pl-ag-q', '');
+    await page.click('#pl-ag-f [data-f=waiting]');
+    check('pilotage: the Waiting filter keeps the two blocked agents', (await page.$$('#pl-ag-list .pl-rw')).length === 2);
+    await page.click('#pl-ag-f [data-f=all]');
+    await page.click('#pl-tabs .pl-tab[data-pl=journal]'); await page.waitForSelector('#pl-jr-list .pl-rw', { timeout: 6000 });
+    const jr = await page.textContent('#pl-jr-list');
+    check('pilotage: the Journal holds the fleet-wide report and the alert for the blocked sessions, not the agents’ own replies',
+      /Build/.test(jr) && /needs you/i.test(jr) && !/calm reply/.test(jr) && (await page.$$('#pl-jr-list .pl-pill.alert')).length >= 1);
+    check('pilotage: a journal line opens its full text in the pane', /browser fleet report/.test(await page.textContent('#pl-jr-detail')) || (await page.$$('#pl-jr-list .pl-rw')).length >= 2);
+    await page.click('#pl-jr-f [data-f=alert]');
+    check('pilotage: the Alerts filter keeps only alerts', (await page.$$eval('#pl-jr-list .pl-rw .pl-pill', e => e.every(x => x.classList.contains('alert')))));
+    await page.click('#pl-jr-f [data-f=all]');
     check('pilotage: the status line counts what waits for the user', /2 /.test(await page.textContent('#pilot-orch-status')) && /wait|attend/i.test(await page.textContent('#pilot-orch-status')));
     await page.click('#pilot-notify [data-notify=off]'); await page.waitForTimeout(300);
-    check('pilotage: switching fleet reports to Off hides the recent-reports feed',
-      await page.isHidden('#pilot-reports-card') && (await page.$$('#pilot-notify [data-notify=off].on')).length === 1);
+    check('pilotage: switching fleet reports to Off is kept', (await page.$$('#pilot-notify [data-notify=off].on')).length === 1);
     await page.click('#pilot-notify [data-notify=inapp]'); await page.waitForTimeout(200);
     // tab switching reveals the Worksites/Chantiers board (the Director's directives)
     await page.click('#view-pilotage .ptab[data-ptab=chantiers]'); await page.waitForTimeout(400);

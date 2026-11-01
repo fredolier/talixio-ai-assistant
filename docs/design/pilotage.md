@@ -297,3 +297,13 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
 > question as the orchestrator copied it (kind: decision / approval / instruction, the user's own type tag, options as answer
 > buttons, the cost of a wrong choice). An approval (a click only the user can give, e.g. a revoked token) offers no buttons and
 > says so. See `orchestration.md` §5.5 (1.17.1: questions reach the pilot through the « route questions » hook, not files).
+
+> **1.18.0 — the cockpit for a fleet.** « Votre pilote autonome » keeps its status card (pairing, fleet-reports switch) and the
+> push-to-talk card, and between them three tabs (`#pl-tabs`, `PL` in `app.js`): **Needs you** (the sessions that wait, each with
+> its question, options and cost; an approval has no buttons; then *Decided recently* — who answered what), **Agents** (a list with
+> search, filters Waiting/Active/Idle/Offline and « Group by machine », and the selected agent's conversation in a pane of fixed
+> height: the question pinned on top, older messages loaded by « ↑ n older messages », a composer pinned at the bottom with
+> dictation, a draft kept per agent), **Journal** (fleet-wide reports and alerts, grouped by day, filter All/Alerts/Summaries,
+> search, full text in the pane). Each tab has a count badge. On a narrow screen the list and the pane replace each other
+> (« ‹ Back »). The old inline roster, the long « Recent reports » feed and the « Discuss » dialog are gone. See
+> `orchestration.md` §5.6 for the data.

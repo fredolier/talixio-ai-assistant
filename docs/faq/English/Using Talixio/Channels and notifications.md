@@ -13,8 +13,8 @@ The last 200 are kept, for 60 days. In a Secret space, the list only says where 
 
 ## Reports from your autonomous pilot
 Progress reports from the autonomous pilot (see *Pilotage*) are quiet by default: no push, no email. A red count shows on
-the **Pilotage** entry and on the **Your autonomous pilot** tab, and the reports are in the **Recent reports** card there; the
-count clears when you open the tab. The **Fleet reports** switch on the pilot's status card lets you choose:
+the **Pilotage** entry and on the tabs of **Your autonomous pilot**: the agents' replies are in each agent's conversation (a count per
+agent, cleared when you open it) and the fleet-wide reports in the **Journal** (cleared when you open it). The **Fleet reports** switch on the pilot's status card lets you choose:
 **In-app badge** (default), **Push + e-mail**, or **Off** (nothing is shown). A report that merely repeats the previous
 one, or a routine keep-warm ping, never counts.
 
