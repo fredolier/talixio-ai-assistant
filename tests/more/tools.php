@@ -638,7 +638,8 @@ $aapp->spaces()->setForChannel('signal', 0);
 $aapp->store->q('INSERT INTO usage(ts,model,input_tokens,output_tokens,cost_usd,source) VALUES(?,?,?,?,?,?)', [strtotime('first day of last month 12:00'), 'claude-sonnet-4-5', 10, 10, 1.25, 'chat']);
 $anext = fn() => 'Sure.';
 $ag->chat('web', 'hello again');
-check('agent: once a month the turn asks for the real bill', str_contains(end($afm->calls)['context'], 'Cost calibration: after answering') && (int)$aapp->store->get('bill_asked', '0') > 0);
+// the ask only starts on the 3rd of the month (Calibration::due), so on the 1st and 2nd the turn rightly stays quiet
+check('agent: once a month the turn asks for the real bill', (int)date('j') < 3 ? !str_contains(end($afm->calls)['context'], 'Cost calibration') : (str_contains(end($afm->calls)['context'], 'Cost calibration: after answering') && (int)$aapp->store->get('bill_asked', '0') > 0));
 $aapp->store->q('DELETE FROM usage');
 $aapp->cfg->anthropicKey = '';
 check('agent: no key says how to set one up', str_starts_with($ag->chat('web', 'hello'), 'No AI model is set up yet'));

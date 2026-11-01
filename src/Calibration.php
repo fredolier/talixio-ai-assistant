@@ -94,11 +94,11 @@ final class Calibration
     }
 
     /** The note added to the turn context when a bill is due; asking counts once the note is sent. */
-    public function ask(): string
+    public function ask(?int $now = null): string
     {
-        $month = $this->due();
+        $month = $this->due($now);
         if ($month === null) return '';
-        $this->app->store->set('bill_asked', (string)time());
+        $this->app->store->set('bill_asked', (string)($now ?? time()));
         $label = date('F Y', strtotime("$month-01"));
         return "Cost calibration: after answering, ask the user in one short sentence how much their AI provider actually billed for $label "
             . "(the figure in the provider's console, e.g. Mistral's Billing page), so your cost estimates get closer to the real bill. "

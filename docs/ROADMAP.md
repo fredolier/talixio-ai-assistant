@@ -70,3 +70,39 @@ goes through the Talixio page or the server, never straight from the app.**
 - Reading another space.
 - Public sharing of a live app.
 - Writing through a connector.
+
+## The autonomous pilot — towards a fleet that decides like you do
+
+The goal: the pilot and the assistant **learn how you decide**, so that when an agent comes back with a question or a
+blocker, the system can take the decision itself and unblock the situation — within limits you set, and getting more
+autonomous as it proves it understands you.
+
+### Who does what
+
+- The **assistant decides**: it has the memory of your decisions (Mind), the budget, the priorities and the roles.
+- The **orchestrator relays and executes**: it puts the question to the agents, pastes their answers verbatim and
+  delivers the decision. For speed the assistant may hand it *standing rules* (« if an agent asks to continue on a task
+  already approved, say yes »); the orchestrator applies them without asking, but they always come from the assistant.
+- **You** keep every decision the assistant is not trusted with yet — and always the top ladder levels (L4 values and
+  business, L5), pushes, deploys, deletions, e-mails and credentials; approvals are never routed.
+
+### Steps
+
+1. **Done (1.17.x)**: a blocked agent's question reaches the cockpit as text; the « route questions » circuit (hook per
+   session, off by default → pilot pastes the question verbatim → answer back with `agent` and `decision_id`).
+2. **Next**: the cockpit rebuilt for a fleet — tabs *À vous / Agents / Journal*, one conversation per agent in its own
+   scrolling pane, so the page never grows with the number of messages.
+3. **Then**: `fleet_inbox` — the assistant can *read* the pending questions and the agents' threads (today it can only
+   send and check status, so the deciding step cannot close by itself) — and a **decision journal**: for each question,
+   the options, what was chosen, by whom, why, and whether you corrected it afterwards.
+4. **Learning**: before asking, the assistant **writes down what it expects you to answer, with a confidence**, then
+   compares with your real answer. That gives an accuracy per ladder level, and similar past decisions are retrieved as
+   precedents for new questions.
+5. **Graded autonomy**: per level, ask → decide and tell you afterwards once the accuracy is reliable → standing rules
+   for the orchestrator. You can take it back at any time. A rule or decision that was corrected lowers the level again.
+6. **Constraints and priorities**: « the agents may spend only X % of the quota per day », an ordered list of priorities
+   the assistant consults to arbitrate between agents. This needs the orchestrator to report each agent's consumption
+   (a field in the roster); the assistant already refuses to dispatch when its own budget is exhausted.
+
+Open point: what wakes the assistant when a question arrives (a routine that checks the inbox every few minutes, or a
+trigger on arrival).

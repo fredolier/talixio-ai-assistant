@@ -659,7 +659,7 @@ check('calibration: factor 1 and no ask without a bill (echo provider)', $cal->f
 $prov = $app->cfg->provider; $app->cfg->provider = 'sovereign';
 $fourth = strtotime(date('Y-m-04 10:00'));
 check('calibration: last month is due from the 3rd, not before', $cal->due($fourth) === $lm && $cal->due(strtotime(date('Y-m-02 10:00'))) === null);
-check('calibration: the ask is sent once a week at most', str_contains($cal->ask(), 'usage_bill') && $cal->ask() === '');
+check('calibration: the ask is sent once a week at most', str_contains($cal->ask($fourth), 'usage_bill') && $cal->ask($fourth) === ''); // dated: the ask only starts on the 3rd of the month
 $out = $app->tools->run('usage_bill', ['amount' => 3.0, 'currency' => 'USD']);
 $s->set('bill_asked', '0');
 check('calibration: a bill gives the ratio to the estimate, and is not asked again', str_contains($out, 'ratio 1.50') && abs($cal->factor() - 1.5) < 1e-9 && $cal->due($fourth) === null, $out);
