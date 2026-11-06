@@ -262,6 +262,15 @@ const flows = {
     await page.click('.lib-pop [data-clear]'); await page.click('.lib-pop [data-group=""]'); await page.waitForTimeout(150);
     check('explorer: clearing removes the chip and the groups', !(await page.isVisible('.lib-chip')) && !(await page.isVisible('#lib-list .lib-group')));
     await page.keyboard.press('Escape');
+    await page.click('.lib-views [data-view=tiles]'); await page.waitForTimeout(150);
+    check('explorer: Tiles view lays the files out as a grid without a column header',
+      await page.evaluate(() => getComputedStyle(document.querySelector('#lib-list')).display === 'grid') && !(await page.isVisible('.lib-cols')) && (await page.$$('#lib-list .lib-row[data-id]')).length === 2);
+    await page.click('.lib-views [data-view=list]'); await page.waitForTimeout(150);
+    check('explorer: Compact list view hides Type and By', !(await page.isVisible('#lib-list .c-by')) && (await page.$$('#lib-list .lib-row[data-id]')).length === 2);
+    await page.reload(); await page.waitForTimeout(900);
+    check('explorer: the layout is remembered', await page.evaluate(() => document.querySelector('.lib-views [data-view=list]').classList.contains('on')));
+    await page.click('.lib-views [data-view=details]'); await page.waitForTimeout(150);
+    check('explorer: Details brings the column header back', await page.isVisible('.lib-cols'));
     await page.setViewportSize({ width: 390, height: 780 }); await page.waitForTimeout(200);
     check('explorer mobile: no column header, list starts under 130 px', !(await page.isVisible('.lib-cols')) && (await page.evaluate(() => document.querySelector('#lib-list').getBoundingClientRect().top)) < 190);
     await page.click('#lib-list .lib-row[data-id] .ico'); await page.waitForTimeout(150);

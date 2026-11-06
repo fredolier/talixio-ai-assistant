@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.21.0 (2026-11-06)
+
+- **Library: Details, List and Tiles views.** Three icons next to the View button (and a *Layout* section in the View panel) switch the folder between **Details** (the table), **Compact list** (one thin line per file: name, size, date, no Type or By) and **Tiles** (a grid with a thumbnail for images and PDFs, the selection tick and the ⋮ menu on each tile). Selection, sorting, filters and grouping work in all three; the choice is remembered on the device. On a phone the rows stay two-line, and Tiles show two per row. The FAQ page Library follows in both languages.
+
 ## 1.20.0 (2026-11-06)
 
 - **Library: filters and grouping.** A **View** button on the toolbar (a sliders icon with a count on a phone, where the panel rises from the bottom like a sheet) opens one panel for **Sort by**, **Group** (none, by type, by date: Today / This week / This month / Earlier), and filters on **Type** (PDF, Office, Text and notes, Images, Audio, Video, Other), **Modified** (today, 7 days, 30 days, a year) and **State** (shared by link, unreadable or being read, with a suggested place). The panel stays open while you change things, the list follows at once, and its button *Show n files* closes it. An active filter appears on the toolbar as a chip with a ✕ (hidden on a phone, where the button shows the count); a filter that leaves nothing says so and offers *Clear the filters*. Filters belong to the folder they were set in; the grouping is remembered on the device. The FAQ page Library follows in both languages.

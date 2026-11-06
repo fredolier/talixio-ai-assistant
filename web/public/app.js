@@ -4573,6 +4573,7 @@ lib.sort = (() => { try { const v = JSON.parse(localStorage.getItem(LSK + 'talix
 /** Filters on the folder's files (this visit only) and the grouping (kept on this device). */
 lib.filter = { kind: '', when: '', state: '' };
 lib.group = (() => { try { const g = localStorage.getItem(LSK + 'talixio.lib.group'); return ['kind', 'date'].includes(g) ? g : ''; } catch { return ''; } })();
+lib.view = (() => { try { const v = localStorage.getItem(LSK + 'talixio.lib.view'); return ['list', 'tiles'].includes(v) ? v : 'details'; } catch { return 'details'; } })();
 const isPhone = () => matchMedia('(max-width:760px)').matches;
 const libSearch = { ctl: null, q: '', folder: '/', results: null, phase: '' };
 
@@ -4961,7 +4962,7 @@ function fileRow(f, sub) {
     if (cols && (e.ctrlKey || e.metaKey)) return libPick(f.id, !lib.picked.has(f.id), false); // explorer: Ctrl/Cmd-click selects
     if (cols && e.shiftKey && lib.last != null) return libPick(f.id, true, true);
     if (cols && lib.picked.size && isPhone()) return libPick(f.id, !lib.picked.has(f.id), false); // phone: once selecting, a tap selects
-    if (cols && isPhone() && e.target.closest('.ico')) return libPick(f.id, !lib.picked.has(f.id), false); // phone: the icon selects
+    if (cols && isPhone() && lib.view !== 'tiles' && e.target.closest('.ico')) return libPick(f.id, !lib.picked.has(f.id), false); // phone: the icon selects
     openFile(f.id);
   };
   el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (e.key === ' ' && cols) libPick(f.id, !lib.picked.has(f.id), false); else openFile(f.id); } };
@@ -4977,6 +4978,7 @@ const kindOf = f => isVideo(f) ? 'video' : f.kind || 'other';
 const LIB_KINDS = [['', 'All types'], ['pdf', 'PDF'], ['office', 'Office'], ['text', 'Text and notes'], ['image', 'Images'], ['audio', 'Audio'], ['video', 'Video'], ['other', 'Other']];
 const LIB_WHEN = [['', 'Any date'], ['1', 'Today'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['365', 'Last year']];
 const LIB_STATE = [['', 'Any state'], ['shared', 'Shared by link'], ['problem', 'Unreadable or being read'], ['suggested', 'With a suggested place']];
+const LIB_VIEWS = [['details', 'Details'], ['list', 'Compact list'], ['tiles', 'Tiles']];
 const LIB_GROUP = [['', 'No grouping'], ['kind', 'By type'], ['date', 'By date']];
 const LIB_SORTS = [['name', 'Name'], ['kind', 'Type'], ['size', 'Size'], ['changed', 'Modified'], ['by', 'By']];
 const libFiltered = () => lib.filter.kind || lib.filter.when || lib.filter.state;
@@ -5012,11 +5014,13 @@ function libOrdered(list) {
 function renderList(list) {
   lib.data = list;
   const box = $('#lib-list'); box.innerHTML = '';
+  box.classList.remove('v-details', 'v-list', 'v-tiles'); box.classList.add('v-' + lib.view);
+  document.querySelectorAll('.lib-views [data-view]').forEach(b => { b.classList.toggle('on', b.dataset.view === lib.view); b.setAttribute('aria-pressed', b.dataset.view === lib.view); });
   const { folders, files } = libOrdered(list);
   const groups = libGroups(files);
   lib.rows = groups.flatMap(([, g]) => g.map(f => f.id));
   for (const id of [...lib.picked]) if (!lib.rows.includes(id)) lib.picked.delete(id); // gone, moved or deleted
-  if (folders.length || files.length) {
+  if ((folders.length || files.length) && lib.view === 'details') {
     const head = document.createElement('div'); head.className = 'lib-cols'; head.setAttribute('role', 'row');
     head.innerHTML = `<span class="c-pick"><input type="checkbox" id="lib-pick-all" aria-label="${esc(t('Select all'))}"></span><span></span>`
       + SORT_COLS.map(([k, label]) => `<button type="button" class="col-${k}${lib.sort.k === k ? ' on' : ''}" data-sort="${k}" aria-sort="${lib.sort.k === k ? (lib.sort.d === 1 ? 'ascending' : 'descending') : 'none'}">${esc(t(label))}<i aria-hidden="true">${lib.sort.k === k ? (lib.sort.d === 1 ? '▲' : '▼') : ''}</i></button>`).join('') + '<span></span>';
@@ -5057,6 +5061,8 @@ function renderList(list) {
   libSelUpdate();
 }
 
+function libSetView(v) { lib.view = v; try { localStorage.setItem(LSK + 'talixio.lib.view', v); } catch {} libViewRefresh(); }
+document.querySelectorAll('.lib-views [data-view]').forEach(b => b.onclick = () => libSetView(b.dataset.view));
 function libClearFilters() { lib.filter = { kind: '', when: '', state: '' }; libViewRefresh(); }
 const libFilterCount = () => ['kind', 'when', 'state'].filter(k => lib.filter[k]).length;
 function libChips() {
@@ -5073,12 +5079,14 @@ function libPanelFill() {
   if (!libPanel) return;
   const opt = (name, list, cur) => list.map(([v, l]) => `<button type="button" class="lib-opt${cur === v ? ' on' : ''}" data-${name}="${esc(v)}" aria-pressed="${cur === v}">${esc(t(l))}</button>`).join('');
   const shown = lib.data ? lib.data.files.filter(libKeep).length : 0;
-  libPanel.innerHTML = `<div class="lib-pop-sec"><b>${esc(t('Sort by'))}</b><div class="lib-opts">${LIB_SORTS.map(([k, l]) => `<button type="button" class="lib-opt${lib.sort.k === k ? ' on' : ''}" data-sortk="${k}" aria-pressed="${lib.sort.k === k}">${esc(t(l))}${lib.sort.k === k ? (lib.sort.d === 1 ? ' ▲' : ' ▼') : ''}</button>`).join('')}</div></div>`
+  libPanel.innerHTML = `<div class="lib-pop-sec"><b>${esc(t('Layout'))}</b><div class="lib-opts">${opt('view', LIB_VIEWS, lib.view)}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('Sort by'))}</b><div class="lib-opts">${LIB_SORTS.map(([k, l]) => `<button type="button" class="lib-opt${lib.sort.k === k ? ' on' : ''}" data-sortk="${k}" aria-pressed="${lib.sort.k === k}">${esc(t(l))}${lib.sort.k === k ? (lib.sort.d === 1 ? ' ▲' : ' ▼') : ''}</button>`).join('')}</div></div>`
     + `<div class="lib-pop-sec"><b>${esc(t('Group'))}</b><div class="lib-opts">${opt('group', LIB_GROUP, lib.group)}</div></div>`
     + `<div class="lib-pop-sec"><b>${esc(t('Type'))}</b><div class="lib-opts">${opt('kind', LIB_KINDS, lib.filter.kind)}</div></div>`
     + `<div class="lib-pop-sec"><b>${esc(t('Modified'))}</b><div class="lib-opts">${opt('when', LIB_WHEN, lib.filter.when)}</div></div>`
     + `<div class="lib-pop-sec"><b>${esc(t('State'))}</b><div class="lib-opts">${opt('state', LIB_STATE, lib.filter.state)}</div></div>`
     + `<div class="lib-pop-foot"><button type="button" class="btn small ghost" data-clear${libFilterCount() ? '' : ' disabled'}>${esc(t('Clear the filters'))}</button><span class="spacer"></span><button type="button" class="btn small primary" data-close>${esc(shown === 1 ? t('Show 1 file') : t('Show {n} files', { n: shown }))}</button></div>`;
+  libPanel.querySelectorAll('[data-view]').forEach(b => b.onclick = () => libSetView(b.dataset.view));
   libPanel.querySelectorAll('[data-sortk]').forEach(b => b.onclick = () => libSortBy(b.dataset.sortk, lib.sort.k === b.dataset.sortk ? -lib.sort.d : 1));
   libPanel.querySelectorAll('[data-group]').forEach(b => b.onclick = () => { lib.group = b.dataset.group; try { localStorage.setItem(LSK + 'talixio.lib.group', lib.group); } catch {} libViewRefresh(); });
   for (const k of ['kind', 'when', 'state']) libPanel.querySelectorAll(`[data-${k}]`).forEach(b => b.onclick = () => { lib.filter[k] = b.dataset[k]; libViewRefresh(); });

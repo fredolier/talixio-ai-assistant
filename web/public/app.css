@@ -369,6 +369,31 @@ tr:last-child td{border-bottom:0}
 .lib-view-btn{display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:38px;flex:none}
 .lib-view-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
 .lib-view-btn b{min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:#fff;font-size:.72rem;display:grid;place-items:center;padding:0 5px}
+.lib-views{display:flex;flex:none;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.lib-views button{all:unset;cursor:pointer;width:34px;height:36px;display:grid;place-items:center;color:var(--muted)}
+.lib-views button+button{border-left:1px solid var(--line)}
+.lib-views button.on{background:var(--accent-soft);color:var(--accent)}
+.lib-views button:hover:not(.on){background:var(--sunk)}
+.lib-views button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.lib-views svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* compact list: one thin line per file, no header */
+#lib-list.v-list .lib-row{grid-template-columns:30px 24px minmax(0,1fr) 84px 120px 76px;padding:3px 14px;gap:10px}
+#lib-list.v-list .c-type,#lib-list.v-list .c-by{display:none}
+#lib-list.v-list .lib-row .ico{width:22px;height:22px;border-radius:6px;font-size:.5rem}
+#lib-list.v-list .lib-row .ico svg{width:14px;height:14px}
+/* tiles: a thumbnail and a name */
+#lib-list.v-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:10px;background:var(--surface)}
+#lib-list.v-tiles .lib-group,#lib-list.v-tiles .suggest-bar{grid-column:1/-1}
+#lib-list.v-tiles .lib-row{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:8px;border:1px solid var(--line);border-radius:12px;min-height:0;width:auto}
+#lib-list.v-tiles .lib-row:last-child{border-bottom:1px solid var(--line)}
+#lib-list.v-tiles .lib-row .ico{width:100%;height:96px;border-radius:8px;font-size:.9rem}
+#lib-list.v-tiles .lib-row .ico svg{width:38px;height:38px}
+#lib-list.v-tiles .lib-row .name span{display:block}
+#lib-list.v-tiles .c-type,#lib-list.v-tiles .c-size,#lib-list.v-tiles .c-mod,#lib-list.v-tiles .c-by{display:none}
+#lib-list.v-tiles .c-pick{position:absolute;top:12px;left:12px;z-index:1;background:var(--surface);border-radius:5px;padding:2px}
+#lib-list.v-tiles .lib-row .row-end{position:absolute;top:12px;right:12px;background:var(--surface);border-radius:8px}
+#lib-list.v-tiles .lib-row .row-end .btn.dl{display:none}
+#lib-list.v-tiles .suggest-file{margin:0}
 .lib-chips{display:flex;gap:6px;flex:none;max-width:40%;overflow:hidden}
 .lib-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:99px;background:var(--accent-soft);border:1px solid var(--accent);font-size:.8rem;white-space:nowrap}
 .lib-chip button{all:unset;cursor:pointer;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:.7rem;color:var(--muted)}
@@ -621,9 +646,12 @@ button.mark:disabled{cursor:default}
   .lib-view-btn{width:38px;padding:0;justify-content:center;position:relative}
   .lib-view-btn b{position:absolute;top:-4px;right:-4px}
   .lib-pop{left:0!important;right:0!important;top:auto!important;bottom:0;width:auto;max-height:80vh;border-radius:16px 16px 0 0;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
-  .lib-cols,.c-pick,.c-type,.c-size,.c-mod,.c-by{display:none!important}
-  .lib-row,.lib-row.lib-folder{grid-template-columns:auto 1fr auto!important}
+  .lib-cols,.c-pick,.c-type,.c-size,.c-mod,.c-by,.lib-views{display:none!important}
+  #lib-list:not(.v-tiles) .lib-row,#lib-list:not(.v-tiles) .lib-row.lib-folder{grid-template-columns:auto 1fr auto!important;padding:10px 14px!important}
+  #lib-list:not(.v-tiles) .lib-row .ico{width:34px!important;height:34px!important;font-size:.62rem!important}
   .lib-row .name span{display:block!important}
+  #lib-list.v-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #lib-list.v-tiles .c-pick{display:flex!important}
   .stats-full{display:none}
   .stats-short{display:inline}
   .lib-status #lib-stats{display:none}

@@ -12,6 +12,8 @@
   d'un fichier. La ligne du haut devient la barre de sélection : **Déplacer vers…**, **Télécharger le zip**,
   **Supprimer** (redemande une fois). Échap ou ✕ efface la sélection. Glisser l'un des fichiers sélectionnés vers un
   dossier les déplace tous.
+- **Détails / Liste compacte / Tuiles** (les trois icônes à côté d'Affichage) : le tableau, une ligne fine par fichier,
+  ou une grille avec vignettes. Le reste (sélection, tris, filtres) fonctionne pareil ; le choix est mémorisé.
 - **Affichage** (à côté de ⋮) : trier, **regrouper** (par type ou par date) et **filtrer** par type, date ou état (partagé
   par lien, illisible ou en cours de lecture, avec un rangement suggéré). La liste suit à chaque clic ; un filtre actif
   s'affiche en pastille sur la barre (✕ pour le retirer), un filtre appartient au dossier où on l'a posé, et le
