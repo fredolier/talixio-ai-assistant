@@ -49,7 +49,7 @@ const flows = {
   },
   async library({ page, check }) {
     await go(page, 'library');
-    await page.click('#lib-newfolder');
+    await page.click('#lib-add'); await page.click('.row-menu-item >> text=New folder');
     await page.fill('#lib-inline-input', '/Clients/Alex');
     await page.press('#lib-inline-input', 'Enter');
     await page.waitForTimeout(800);
@@ -60,12 +60,12 @@ const flows = {
     await page.waitForTimeout(200);
     check('library: a row action menu opens', await page.isVisible('.row-menu') && (await page.textContent('.row-menu')).includes('New file here'));
     await page.keyboard.press('Escape');
-    await page.click('#lib-newnote');
+    await page.click('#lib-add'); await page.click('.row-menu-item >> text=New note');
     await page.waitForTimeout(1000);
     check('library: a new note opens', await page.isVisible('#viewer-body'));
     await page.keyboard.press('Escape');
     await go(page, 'library');
-    await page.check('#lib-regex');
+    await page.click('#lib-q'); await page.check('#lib-regex');
     await page.fill('#lib-q', '\\.md$');
     await page.click('#lib-search button[type=submit]');
     await page.waitForTimeout(600);
@@ -87,17 +87,18 @@ const flows = {
     check('library: after bulk delete the regex results refresh (no stale rows)', (await page.$$eval('#lib-results .rx-item', e => e.length)) === 0);
     await page.fill('#lib-q', '');
     await page.click('#lib-search button[type=submit]'); // empty: closes the search and shows the folder again
-    await page.uncheck('#lib-regex');
+    await page.click('#lib-q'); await page.uncheck('#lib-regex');
     await page.waitForTimeout(300);
     await go(page, 'library');
     await page.fill('#lib-q', 'note');
     await page.waitForTimeout(800);
-    for (const b of ['#lib-tree [data-trash]', '#lib-recent', '#lib-shares']) {
-      await page.click(b); await page.waitForTimeout(500); await page.keyboard.press('Escape');
+    await page.click('#lib-tree [data-trash]'); await page.waitForTimeout(500); await page.keyboard.press('Escape');
+    for (const label of ['Recent changes', 'Shares']) {
+      await page.click('#lib-folder-menu'); await page.click('.row-menu-item >> text=' + label); await page.waitForTimeout(500); await page.keyboard.press('Escape');
     }
     check('library: trash, recent and shares open', true);
     await page.setViewportSize({ width: 390, height: 780 }); await page.waitForTimeout(150);
-    check('library mobile: toolbar is one + button', await page.isVisible('#lib-add') && !(await page.isVisible('#lib-upload')));
+    check('library mobile: toolbar is one + button', await page.isVisible('#lib-add') && !(await page.isVisible('.lib-cols')));
     await page.click('#lib-add'); await page.waitForTimeout(150);
     check('library mobile: the + opens every action', await page.isVisible('.row-menu') && (await page.textContent('.row-menu')).includes('New folder'));
     await page.keyboard.press('Escape');
@@ -216,6 +217,46 @@ const flows = {
     await page.click('#mb-refresh');
     await page.waitForSelector('#mb-models .mb-table tbody tr .mname', { timeout: 10000 });
     check('cockpit: "Actualiser maintenant" refreshes the catalogue in place', (await page.$$('#mb-models .mb-table tbody tr .mname')).length > 0);
+  },
+  async libraryExplorer({ page, check }) {
+    await page.evaluate(async () => {
+      for (const [n, body] of [['b-medium.md', 'x'.repeat(500)], ['a-small.md', 'x'], ['c-large.md', 'x'.repeat(5000)]]) {
+        const fd = new FormData(); fd.append('file', new File([body], n)); fd.append('folder', '/Explorer');
+        await fetch('api/files', { method: 'POST', headers: { 'X-Talixio': '1' }, body: fd });
+      }
+    });
+    await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.endsWith('talixio.lib.sort')) localStorage.removeItem(k); });
+    await page.evaluate(() => { location.hash = '#library/Explorer'; }); await page.waitForTimeout(900);
+    const names = () => page.$$eval('#lib-list .lib-row[data-id] .name b', e => e.map(x => x.textContent));
+    check('explorer: files are listed by name', JSON.stringify(await names()) === JSON.stringify(['a-small.md', 'b-medium.md', 'c-large.md']));
+    check('explorer: the page above the list is one slim toolbar (< 70 px)', (await page.evaluate(() => document.querySelector('#lib-list').getBoundingClientRect().top - document.querySelector('#view-library').getBoundingClientRect().top)) < 130);
+    await page.click('.lib-cols [data-sort=size]'); await page.waitForTimeout(150);
+    check('explorer: a click on Size sorts by size', JSON.stringify(await names()) === JSON.stringify(['a-small.md', 'b-medium.md', 'c-large.md']));
+    await page.click('.lib-cols [data-sort=size]'); await page.waitForTimeout(150);
+    check('explorer: a second click reverses the order', JSON.stringify(await names()) === JSON.stringify(['c-large.md', 'b-medium.md', 'a-small.md']) && (await page.getAttribute('.lib-cols [data-sort=size]', 'aria-sort')) === 'descending');
+    await page.reload(); await page.waitForTimeout(900);
+    check('explorer: the sort is remembered', (await page.getAttribute('.lib-cols [data-sort=size]', 'aria-sort')) === 'descending');
+    await page.click('.lib-cols [data-sort=name]'); await page.waitForTimeout(150);
+    await page.hover('#lib-list .lib-row[data-id]');
+    await page.check('#lib-list .lib-row[data-id] .pick');
+    check('explorer: ticking a file replaces the toolbar with the selection bar', await page.isVisible('#lib-selbar') && !(await page.isVisible('#lib-toolbar')) && (await page.textContent('#lib-sel-n')).includes('1'));
+    await page.click('#lib-list .lib-row[data-id]:nth-of-type(4) .name', { modifiers: ['Shift'] });
+    await page.waitForTimeout(150);
+    check('explorer: Shift-click selects the range', (await page.textContent('#lib-sel-n')).includes('3'));
+    check('explorer: the zip link carries the selected ids', /ids=\d+,\d+,\d+/.test(await page.getAttribute('#lib-sel-zip', 'href')));
+    await page.click('#lib-sel-clear'); await page.waitForTimeout(100);
+    check('explorer: clearing brings the toolbar back', await page.isVisible('#lib-toolbar') && !(await page.isVisible('#lib-selbar')));
+    await page.click('#lib-list .lib-row[data-id]', { modifiers: ['Control'] });
+    await page.click('#lib-sel-del'); await page.waitForTimeout(100);
+    check('explorer: delete asks for a second click', await page.isVisible('.lib-confirm'));
+    await page.click('.lib-confirm [data-y]'); await page.waitForTimeout(800);
+    check('explorer: the selection is deleted', (await names()).length === 2);
+    await page.setViewportSize({ width: 390, height: 780 }); await page.waitForTimeout(200);
+    check('explorer mobile: no column header, list starts under 130 px', !(await page.isVisible('.lib-cols')) && (await page.evaluate(() => document.querySelector('#lib-list').getBoundingClientRect().top)) < 190);
+    await page.click('#lib-list .lib-row[data-id] .ico'); await page.waitForTimeout(150);
+    check('explorer mobile: tapping the icon selects', await page.isVisible('#lib-selbar'));
+    await page.click('#lib-sel-clear');
+    await page.setViewportSize({ width: 1280, height: 860 }); await page.waitForTimeout(100);
   },
   async libraryMemory({ page, check }) {
     await go(page, 'settings');

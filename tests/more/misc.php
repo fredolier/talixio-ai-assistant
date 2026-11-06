@@ -300,18 +300,19 @@ $rec = $bd->recent((int)$spB['id']);
 check('board: recent changes of one space', count($rec) >= 1 && array_unique(array_column($rec, 'space')) === [(int)$spB['id']] && count($bd->recent(null, 3)) === 3);
 check('board: dates of a space', array_column($bd->inRange('2026-11-01', '2026-12-31', (int)$spB['id']), 'id') === [$c2['id']] && count($bd->inRange('2026-11-01', '2026-12-31')) >= 3);
 // lines and full description
-$full = $bd->create(['title' => 'Everything', 'start_date' => '2026-11-02', 'due_date' => '2026-11-03', 'start_time' => '09:00', 'end_time' => '10:00', 'estimate_hours' => '3h', 'tags' => 'a,b',
+$dS = date('Y-m-d', strtotime('+30 days')); $dD = date('Y-m-d', strtotime('+31 days')); // never overdue, whatever the day
+$full = $bd->create(['title' => 'Everything', 'start_date' => $dS, 'due_date' => $dD, 'start_time' => '09:00', 'end_time' => '10:00', 'estimate_hours' => '3h', 'tags' => 'a,b',
     'in_calendar' => true, 'location' => 'Room 1', 'attendees' => 'ann@acme.example', 'body' => "Notes\n- [x] one\n- [ ] two", 'links' => [['label' => 'Spec', 'type' => 'url', 'ref' => 'https://acme.example/spec']],
     'depends_on' => [$e1['code']]], $A);
 $bd->addTime($full['id'], 1);
 $bd->setGlobalOrder([$full['code']]);
 $blk = $bd->create(['title' => 'After everything', 'depends_on' => [$full['id']]], $A);
 $desc = $bd->describeCard($bd->get($full['id']));
-check('board: a card described with every field', str_contains($desc, 'start 2026-11-02, due 2026-11-03, from 09:00 to 10:00, workload 3h, spent 1h, checklist 1/2, #a #b, waits for ' . $e1['code'] . ', space Maison, overall #1, in calendar, at Room 1, guests ann@acme.example (invitation not sent yet)')
+check('board: a card described with every field', str_contains($desc, "start $dS, due $dD, from 09:00 to 10:00, workload 3h, spent 1h, checklist 1/2, #a #b, waits for {$e1['code']}, space Maison, overall #1, in calendar, at Room 1, guests ann@acme.example (invitation not sent yet)")
     && str_contains($desc, "\nNotes\n") && str_contains($desc, "Blocks: {$blk['code']} After everything") && str_contains($desc, 'Links: Spec (url https://acme.example/spec)') && str_contains($desc, '⚠ Waits for'), $desc);
 $bd->update($e1['id'], ['status' => 'done']);
 $ics = $bd->ics();
-check('board: calendar feed: a timed task with its place; a done one is ticked', str_contains($ics, 'LOCATION:Room 1') && str_contains($ics, 'DTSTART:' . gmdate('Ymd\THis\Z', strtotime('2026-11-02 09:00'))) && str_contains($ics, 'TRANSP:OPAQUE'));
+check('board: calendar feed: a timed task with its place; a done one is ticked', str_contains($ics, 'LOCATION:Room 1') && str_contains($ics, 'DTSTART:' . gmdate('Ymd\THis\Z', strtotime("$dS 09:00"))) && str_contains($ics, 'TRANSP:OPAQUE'));
 $bd->update($e1['id'], ['in_calendar' => true, 'due_date' => '2026-11-01']);
 check('board: a done task in the feed is ticked', str_contains($bd->ics(), 'SUMMARY:✓ ' . $e1['code']));
 $tok = $bd->icsToken();

@@ -229,33 +229,37 @@
     </section>
 
     <section id="view-library" class="view page wide" hidden>
-      <header class="page-head lib-head">
-        <div><h2>Library</h2><p class="muted" id="lib-stats">Your documents, notes and recordings. Everything is searchable, by you and by the assistant.</p></div>
-        <div class="lib-actions">
-          <input id="lib-upload-input" type="file" multiple hidden>
-          <button id="lib-add" class="btn primary lib-add" type="button" aria-haspopup="menu" aria-label="Add">＋ Add</button>
-          <button id="lib-upload" class="btn primary lib-sec" type="button">Upload</button>
-          <button id="lib-newnote" class="btn lib-sec" type="button">New note</button>
-          <button id="lib-newfolder" class="btn lib-sec" type="button">New folder</button>
-          <button id="lib-shares" class="btn lib-sec" type="button" title="Links to your documents for people outside">Shares</button>
-          <button id="lib-recent" class="btn lib-sec" type="button" title="Files created or changed lately, and by whom">Recent changes</button>
-          <button id="lib-trash" class="btn lib-trash-btn lib-sec" type="button" title="Deleted files, restorable for 30 days">Trash</button>
-        </div>
-      </header>
-      <form id="lib-search" class="search" role="search">
-        <input id="lib-q" type="search" placeholder="Search your library…" aria-label="Search the library">
-        <label class="scope"><input id="lib-scope" type="checkbox"> <span id="lib-scope-label">this folder only</span></label>
-        <label class="scope" title="Match file and folder names with a regular expression"><input id="lib-regex" type="checkbox"> <span>Regex</span></label>
-        <button class="btn" type="submit">Search</button>
-      </form>
+      <h2 class="sr-only">Library</h2>
+      <input id="lib-upload-input" type="file" multiple hidden>
+      <div class="lib-toolbar" id="lib-toolbar">
+        <ol id="lib-crumbs" class="crumbs" aria-label="Current folder"></ol>
+        <form id="lib-search" class="search" role="search">
+          <button id="lib-search-toggle" class="btn ghost icon lib-search-toggle" type="button" aria-label="Search" title="Search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg></button>
+          <input id="lib-q" type="search" placeholder="Search your library…" aria-label="Search the library">
+          <button class="btn icon lib-search-go" type="submit" aria-label="Search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg></button>
+          <div class="search-opts">
+            <label class="scope"><input id="lib-scope" type="checkbox"> <span id="lib-scope-label">this folder only</span></label>
+            <label class="scope" title="Match file and folder names with a regular expression"><input id="lib-regex" type="checkbox"> <span>Regex</span></label>
+          </div>
+        </form>
+        <button id="lib-folder-menu" class="btn ghost icon" type="button" aria-haspopup="menu" aria-label="This folder" title="This folder"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
+        <button id="lib-add" class="btn primary lib-add" type="button" aria-haspopup="menu" aria-label="Add">＋ <span>New</span></button>
+      </div>
+      <div class="lib-toolbar lib-selbar" id="lib-selbar" hidden>
+        <button id="lib-sel-clear" class="btn ghost icon" type="button" aria-label="Clear the selection" title="Clear the selection">✕</button>
+        <b id="lib-sel-n"></b>
+        <span class="spacer"></span>
+        <button id="lib-sel-move" class="btn small" type="button">Move to…</button>
+        <a id="lib-sel-zip" class="btn small">Download zip</a>
+        <button id="lib-sel-del" class="btn small ghost danger" type="button">Delete</button>
+      </div>
       <div class="lib">
         <nav id="lib-tree" class="lib-tree" aria-label="Folders"></nav>
         <div id="lib-main" class="lib-main">
-          <div class="lib-bar"><ol id="lib-crumbs" class="crumbs" aria-label="Current folder"></ol><div id="lib-folder-actions" class="row"></div></div>
           <form id="lib-inline" class="lib-inline" hidden><input id="lib-inline-input" required><button class="btn primary small" type="submit">OK</button><button id="lib-inline-cancel" class="btn small" type="button">Cancel</button></form>
           <div id="lib-results" class="results" hidden></div>
           <div id="lib-list" class="lib-list"></div>
-          <p class="muted small lib-drop-hint">Drop files here to add them to this folder.</p>
+          <div class="lib-status"><span id="lib-count" aria-live="polite"></span><span class="lib-drop-hint">Drop files here to add them to this folder.</span><span id="lib-stats" class="muted">Your documents, notes and recordings. Everything is searchable, by you and by the assistant.</span></div>
         </div>
       </div>
     </section>

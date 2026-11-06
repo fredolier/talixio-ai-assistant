@@ -4567,7 +4567,10 @@ const FOLDER_SVG = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8
 const fmtSize = b => b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b / 1024) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
 const fmtDate = ts => new Date(ts * 1000).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' });
 const joinPath = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
-const lib = { folder: '/', tree: [], timer: null, file: null, inline: null };
+const lib = { folder: '/', tree: [], timer: null, file: null, inline: null, picked: new Set(), last: null, rows: [] };
+/** Column sort of the folder view (this browser). k: name | kind | size | changed | by; d: 1 up, -1 down. */
+lib.sort = (() => { try { const v = JSON.parse(localStorage.getItem(LSK + 'talixio.lib.sort') || ''); if (['name', 'kind', 'size', 'changed', 'by'].includes(v.k)) return { k: v.k, d: v.d === -1 ? -1 : 1 }; } catch {} return { k: 'name', d: 1 }; })();
+const isPhone = () => matchMedia('(max-width:760px)').matches;
 const libSearch = { ctl: null, q: '', folder: '/', results: null, phase: '' };
 
 function libFolderFromHash() {
@@ -4584,9 +4587,9 @@ async function loadLibrary() {
   if (was !== undefined && was !== lib.folder && (libSearch.phase || libRegex.on)) libSearchClose(); // another folder: its content, not old results
   const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
   lib.tree = tree.tree; lib.trash = tree.stats.trash || 0; lib.shared = list.shared;
-  $('#lib-trash').textContent = lib.trash ? `${t('Trash')} (${lib.trash})` : t('Trash'); lib.level = list.level || 'internal';
+  lib.level = list.level || 'internal';
   lib.folder = list.folder; lib.readonly = !!list.readonly;
-  for (const b of ['#lib-upload', '#lib-newnote', '#lib-newfolder']) $(b).hidden = lib.readonly;
+  $('#lib-add').hidden = lib.readonly;
   const st = list.stats;
   if (st.files) {
     const full = `${nf.format(st.files)} files · ${fmtSize(st.bytes)}${st.failed ? ' ' + t('· {a} unreadable', { a: st.failed }) : ''}. ${st.pending ? t('Reading {a} new file{b} to index…', { a: st.pending, b: st.pending > 1 ? 's' : '' }) : t('Everything is searchable, by you and by the assistant.')}`;
@@ -4595,7 +4598,7 @@ async function loadLibrary() {
     $('#lib-stats').setAttribute('aria-label', full);
   } else { $('#lib-stats').textContent = t('Your documents, notes and recordings. Everything is searchable, by you and by the assistant.'); $('#lib-stats').removeAttribute('aria-label'); }
   $('#folder-list').innerHTML = lib.tree.map(t => `<option value="${esc(t.path)}">`).join('');
-  renderTree(); renderCrumbs(); renderList(list);
+  renderTree(); renderCrumbs(); renderList(list); libSelUpdate();
   if (!libSearch.phase && !libRegex.on) { $('#lib-results').hidden = true; $('#lib-list').hidden = false; } // no search: show the folder
   // the Library tab reopens the last folder; the breadcrumb's "Library" goes to the top
   document.querySelectorAll('a[data-view=library]').forEach(a => { a.href = '#library' + (lib.folder === '/' ? '' : lib.folder.split('/').map(encodeURIComponent).join('/')); });
@@ -4645,31 +4648,52 @@ function renderCrumbs() {
   $('#lib-crumbs').innerHTML = items.map(([path, name]) => `<li><a href="#" data-path="${esc(path)}">${esc(name)}</a></li>`).join('');
   $('#lib-crumbs').querySelectorAll('a').forEach(a => { a.onclick = e => { e.preventDefault(); libGo(a.dataset.path); }; dropTarget(a, a.dataset.path); });
   if (lib.level && lib.level !== 'internal') $('#lib-crumbs').insertAdjacentHTML('beforeend', `<li class="lvl-crumb"><span class="privacy-badge ${lib.level}">${SHIELD_SVG}<span>${LEVELS[lib.level].label}</span></span></li>`);
-  const fa = $('#lib-folder-actions');
-  const zipName = (lib.folder === '/' ? 'Library' : lib.folder.split('/').pop()) + '-' + new Date().toLocaleDateString('sv-SE') + '.zip';
-  const zip = `<a class="btn small" href="api/library/zip?folder=${encodeURIComponent(lib.folder)}" download="${esc(zipName)}" title="Download this folder and its subfolders as a ZIP">Download zip</a>`;
-  const ask = `<button class="btn small primary" data-a="ask" type="button" title="Ask the assistant about the documents in this folder">Ask about ${lib.folder === '/' ? 'my library' : 'this folder'}</button>`;
-  const owner = lib.folder !== '/' && state.spaces.find(x => x.id && x.folder === lib.folder);
-  const spaceBtn = lib.folder === '/' ? '' : owner ? `<a class="btn small" href="#chat/${esc(owner.slug)}" title="Open the conversation of this folder's space"><i class="space-dot" style="background:${esc(owner.color)};width:9px;height:9px;display:inline-block;margin-right:6px"></i>Open space</a>`
-    : '<button class="btn small" data-a="space" type="button" title="A separate conversation about this folder">New space here</button>';
-  if (lib.readonly) { // read-only: ask and download, nothing that changes it
-    fa.innerHTML = `<span class="pill" title="${esc(t('Kept up to date with each version of Talixio.'))}">${esc(t('Read-only'))}</span>` + ask + zip;
-    fa.querySelector('[data-a=ask]').addEventListener('click', () => { location.hash = '#chat'; const i = $('#input'); i.value = `From my documents in ${lib.folder}: `; autosize(); i.focus(); saveDraft(); });
-    return;
-  }
-  fa.innerHTML = ask + spaceBtn + zip + (lib.folder === '/' ? '' : '<button class="btn small" data-a="share" type="button" title="A link to this folder for people outside">Share</button><button class="btn small" data-a="rename" type="button" title="Rename or move this folder">Rename</button><button class="btn small ghost danger" data-a="delete" type="button" title="Delete this folder">Delete</button>');
-  fa.querySelector('[data-a=share]')?.addEventListener('click', () => openShare({ folder: lib.folder }, lib.folder.split('/').pop()));
-  fa.querySelector('[data-a=space]')?.addEventListener('click', () => openSpaceEditor(null, { folder: lib.folder, name: lib.folder.split('/').pop() }));
-  fa.querySelector('[data-a=ask]').addEventListener('click', () => {
-    location.hash = '#chat';
-    const i = $('#input'); i.value = lib.folder === '/' ? 'From my library: ' : `From my documents in ${lib.folder}: `; autosize(); i.focus(); saveDraft();
-  });
-  fa.querySelector('[data-a=rename]')?.addEventListener('click', () => libInline(lib.folder, 'Folder path', async v => { const { folder } = await post('api/library/folder/move', { from: lib.folder, to: v }); toast('Folder renamed'); libGo(folder); }));
-  fa.querySelector('[data-a=delete]')?.addEventListener('click', async e => {
-    const b = e.currentTarget, node = lib.tree.find(t => t.path === lib.folder), n = node ? node.total : 0;
-    if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = n ? `Delete with its ${n} file${n > 1 ? 's' : ''}?` : 'Confirm delete'; return; }
-    try { const r = await post('api/library/folder/delete', { path: lib.folder, recursive: true }); toast(r.deleted_files ? t('Folder moved to the trash: restorable for {n} days', { n: 30 }) : 'Folder deleted'); libGo(lib.folder.split('/').slice(0, -1).join('/') || '/'); } catch (err) { toast(err.message); }
-  });
+}
+
+/** The ⋮ of the toolbar: what you can do with the folder you are in, and how its list is ordered. */
+function libFolderToolsMenu(btn) {
+  const folder = lib.folder, name = folder === '/' ? 'Library' : folder.split('/').pop();
+  const zipName = name + '-' + new Date().toLocaleDateString('sv-SE') + '.zip';
+  const owner = folder !== '/' && state.spaces.find(x => x.id && x.folder === folder);
+  const ask = () => { location.hash = '#chat'; const i = $('#input'); i.value = folder === '/' ? 'From my library: ' : `From my documents in ${folder}: `; autosize(); i.focus(); saveDraft(); };
+  const sortItem = (k, label) => ({ label: (lib.sort.k === k ? '✓ ' : '') + t(label), run: () => libSortBy(k, lib.sort.k === k ? lib.sort.d : 1) });
+  const items = [
+    { label: folder === '/' ? t('Ask about my library') : t('Ask about this folder'), run: ask },
+    ...(folder === '/' || lib.readonly ? [] : [owner ? { label: t('Open space'), run: () => { location.hash = '#chat/' + owner.slug; } } : { label: t('New space here'), run: () => openSpaceEditor(null, { folder, name }) }]),
+    { label: t('Download zip'), href: `api/library/zip?folder=${encodeURIComponent(folder)}`, download: zipName },
+    ...(folder === '/' || lib.readonly ? [] : [
+      { label: t('Share…'), run: () => openShare({ folder }, name) },
+      { label: t('Rename or move'), run: () => libInline(folder, t('Folder path'), async v => { const { folder: nf } = await post('api/library/folder/move', { from: folder, to: v }); toast(t('Folder renamed')); libGo(nf); }) },
+    ]),
+    { sep: true },
+    { label: t('Sort by'), head: true },
+    sortItem('name', 'Name'), sortItem('kind', 'Type'), sortItem('size', 'Size'), sortItem('changed', 'Modified'),
+    { sep: true },
+    { label: t('Shares'), run: () => openSharesManager() },
+    { label: t('Recent changes'), run: () => showLibRecent() },
+    { label: lib.trash ? t('Trash ({n})', { n: lib.trash }) : t('Trash'), run: () => showLibTrash() },
+    ...(folder === '/' || lib.readonly ? [] : [{ sep: true }, { label: t('Delete this folder'), danger: true, run: () => {
+      const node = lib.tree.find(x => x.path === folder), n = node ? node.total : 0;
+      libConfirm(btn, n ? t('Delete {name} with its {n} files?', { name, n }) : t('Delete {name}?', { name }), async () => {
+        try { const r = await post('api/library/folder/delete', { path: folder, recursive: true }); toast(r.deleted_files ? t('Folder moved to the trash: restorable for {n} days', { n: 30 }) : t('Folder deleted')); libGo(folder.split('/').slice(0, -1).join('/') || '/'); } catch (err) { toast(err.message); }
+      });
+    } }]),
+  ];
+  openRowMenu(btn, items);
+}
+/** A destructive action needs a second, explicit click: a small bar under the toolbar. */
+function libConfirm(anchor, message, onYes) {
+  document.querySelector('.lib-confirm')?.remove();
+  const bar = document.createElement('div'); bar.className = 'lib-confirm'; bar.setAttribute('role', 'alertdialog');
+  bar.innerHTML = `<span></span><span class="spacer"></span><button class="btn small danger" type="button" data-y>${esc(t('Delete'))}</button><button class="btn small" type="button" data-n>${esc(t('Cancel'))}</button>`;
+  bar.firstElementChild.textContent = message;
+  bar.querySelector('[data-n]').onclick = () => bar.remove();
+  bar.querySelector('[data-y]').onclick = () => { bar.remove(); onYes(); };
+  $('#lib-toolbar').after(bar); bar.querySelector('[data-n]').focus();
+}
+function libSortBy(k, d) {
+  lib.sort = { k, d }; try { localStorage.setItem(LSK + 'talixio.lib.sort', JSON.stringify(lib.sort)); } catch {}
+  if (lib.data) renderList(lib.data);
 }
 
 const TRASH_SVG = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
@@ -4832,9 +4856,6 @@ async function openSharesManager() {
   await refresh().catch(e => toast(e.message));
   dlg.showModal();
 }
-$('#lib-shares').onclick = () => openSharesManager();
-$('#lib-trash').onclick = () => showLibTrash();
-$('#lib-recent').onclick = () => showLibRecent();
 $('#viewer-share').onclick = () => lib.file && openShare({ file: lib.file.id }, lib.file.name);
 const isVideo = f => (f.mime || '').startsWith('video/');
 const Library_join = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
@@ -4848,6 +4869,7 @@ function openRowMenu(btn, items) {
   const m = document.createElement('div'); m.className = 'row-menu'; m.setAttribute('role', 'menu'); m._btn = btn;
   for (const it of items) {
     if (it.sep) { const s = document.createElement('div'); s.className = 'row-menu-sep'; m.append(s); continue; }
+    if (it.head) { const h = document.createElement('div'); h.className = 'row-menu-head'; h.textContent = it.label; m.append(h); continue; }
     const a = document.createElement(it.href ? 'a' : 'button');
     if (it.href) { a.href = it.href; if (it.download) a.setAttribute('download', it.download); } else a.type = 'button';
     a.className = 'row-menu-item' + (it.danger ? ' danger' : ''); a.setAttribute('role', 'menuitem'); a.textContent = it.label;
@@ -4891,13 +4913,22 @@ function libFolderMenu(btn, folder, total) {
 }
 const KEBAB_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
 
+function fileLabel(f) {
+  const ext = (f.name.match(/\.([a-z0-9]{1,4})$/i) || [])[1];
+  return f.note ? 'NOTE' : isVideo(f) ? 'VID' : ['text', 'office'].includes(f.kind) && ext ? ext.toUpperCase() : KIND_LABEL[f.kind] || 'FILE';
+}
+const fmtDayTime = ts => new Date(ts * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
 function fileRow(f, sub) {
   const el = document.createElement('div'); el.className = 'lib-row'; el.draggable = true; el.tabIndex = 0; el.setAttribute('role', 'button');
-  const ext = (f.name.match(/\.([a-z0-9]{1,4})$/i) || [])[1];
-  const label = f.note ? 'NOTE' : isVideo(f) ? 'VID' : ['text', 'office'].includes(f.kind) && ext ? ext.toUpperCase() : KIND_LABEL[f.kind] || 'FILE';
+  const label = fileLabel(f), cols = !sub; // search results keep their own layout
+  if (cols) el.dataset.id = f.id;
   const ico = f.kind === 'image' || f.kind === 'pdf' ? `<img src="api/files/${f.id}/thumb" alt="" loading="lazy">` : label;
   const status = f.status === 'pending' || f.status === 'processing' ? '<span class="pill pending">reading…</span>' : f.status === 'failed' ? '<span class="pill failed">unreadable</span>' : '';
-  el.innerHTML = `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>`
+  const who = f.changed_by ? t(RECENT_BY[f.changed_by] || f.changed_by) : '';
+  el.innerHTML = (cols ? `<span class="c-pick"><input type="checkbox" class="pick" aria-label="${esc(t('Select {name}', { name: f.name }))}"></span>` : '')
+    + `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.changed || f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>`
+    + (cols ? `<span class="c-type">${esc(label)}</span><span class="c-size">${esc(fmtSize(f.size))}</span><span class="c-mod" title="${esc(fmtDayTime(f.changed || f.created))}">${esc(fmtDate(f.changed || f.created))}</span><span class="c-by no-i18n">${esc(who)}</span>` : '')
     + `<span class="row-end">${status}${lib.shared?.files?.includes(f.id) ? `<span class="shared-mark" title="${esc(t('Shared by link'))}">${LINK_SVG}</span>` : ''}<a class="btn ghost icon dl" href="api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a>`
     + (lib.readonly ? '' : `<button type="button" class="btn ghost icon kebab" aria-label="${esc(t('Actions'))}" aria-haspopup="menu" title="${esc(t('Actions'))}">${KEBAB_SVG}</button>`) + `</span>`;
   el.querySelector('.dl').onclick = e => e.stopPropagation();
@@ -4918,33 +4949,112 @@ function fileRow(f, sub) {
     el.classList.add('has-suggestion'); el.append(box);
   }
   const th = el.querySelector('.ico img'); if (th) th.onerror = () => th.replaceWith(label);
-  el.onclick = () => openFile(f.id);
-  el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFile(f.id); } };
-  el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/x-talixio-file', String(f.id)); e.dataTransfer.effectAllowed = 'move'; });
+  if (cols) {
+    const cb = el.querySelector('.pick'); cb.checked = lib.picked.has(f.id);
+    cb.onclick = e => { e.stopPropagation(); libPick(f.id, cb.checked, e.shiftKey); };
+  }
+  el.onclick = e => {
+    if (cols && (e.ctrlKey || e.metaKey)) return libPick(f.id, !lib.picked.has(f.id), false); // explorer: Ctrl/Cmd-click selects
+    if (cols && e.shiftKey && lib.last != null) return libPick(f.id, true, true);
+    if (cols && lib.picked.size && isPhone()) return libPick(f.id, !lib.picked.has(f.id), false); // phone: once selecting, a tap selects
+    if (cols && isPhone() && e.target.closest('.ico')) return libPick(f.id, !lib.picked.has(f.id), false); // phone: the icon selects
+    openFile(f.id);
+  };
+  el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (e.key === ' ' && cols) libPick(f.id, !lib.picked.has(f.id), false); else openFile(f.id); } };
+  el.addEventListener('dragstart', e => {
+    const ids = cols && lib.picked.has(f.id) && lib.picked.size > 1 ? [...lib.picked] : [f.id]; // drag the whole selection
+    e.dataTransfer.setData('text/x-talixio-file', String(f.id)); e.dataTransfer.setData('text/x-talixio-files', ids.join(',')); e.dataTransfer.effectAllowed = 'move';
+  });
   return el;
 }
 
+const SORT_COLS = [['name', 'Name'], ['kind', 'Type'], ['size', 'Size'], ['changed', 'Modified'], ['by', 'By']];
+function libOrdered(list) {
+  const { k, d } = lib.sort, cmp = (x, y) => (typeof x === 'string' ? x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }) : x - y);
+  const key = { name: f => f.name, kind: f => fileLabel(f), size: f => f.size, changed: f => f.changed || f.created, by: f => f.changed_by || '' }[k];
+  const files = [...list.files].sort((a, b) => (cmp(key(a), key(b)) || cmp(a.name, b.name)) * d);
+  const folders = [...list.folders].sort((a, b) => k === 'size' ? (a.total - b.total || cmp(a.name, b.name)) * d : cmp(a.name, b.name) * (k === 'name' ? d : 1)); // folders stay on top
+  return { folders, files };
+}
+
 function renderList(list) {
+  lib.data = list;
   const box = $('#lib-list'); box.innerHTML = '';
-  for (const t of list.folders) {
-    const el = document.createElement('a'); el.href = '#'; el.className = 'lib-row';
-    el.innerHTML = `<span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(t.name)}</b><span>${t.total} file${t.total === 1 ? '' : 's'}</span></span><span class="row-end">${lib.shared?.folders?.includes(t.path) ? `<span class="shared-mark" title="${esc(window.t('Shared by link'))}">${LINK_SVG}</span>` : ''}`
+  const { folders, files } = libOrdered(list);
+  lib.rows = files.map(f => f.id);
+  for (const id of [...lib.picked]) if (!lib.rows.includes(id)) lib.picked.delete(id); // gone, moved or deleted
+  if (folders.length || files.length) {
+    const head = document.createElement('div'); head.className = 'lib-cols'; head.setAttribute('role', 'row');
+    head.innerHTML = `<span class="c-pick"><input type="checkbox" id="lib-pick-all" aria-label="${esc(t('Select all'))}"></span><span></span>`
+      + SORT_COLS.map(([k, label]) => `<button type="button" class="col-${k}${lib.sort.k === k ? ' on' : ''}" data-sort="${k}" aria-sort="${lib.sort.k === k ? (lib.sort.d === 1 ? 'ascending' : 'descending') : 'none'}">${esc(t(label))}<i aria-hidden="true">${lib.sort.k === k ? (lib.sort.d === 1 ? '▲' : '▼') : ''}</i></button>`).join('') + '<span></span>';
+    head.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => libSortBy(b.dataset.sort, lib.sort.k === b.dataset.sort ? -lib.sort.d : 1));
+    head.querySelector('#lib-pick-all').onclick = e => { lib.picked = new Set(e.target.checked ? lib.rows : []); lib.last = null; libSelUpdate(); };
+    box.append(head);
+  }
+  for (const t of folders) {
+    const el = document.createElement('a'); el.href = '#'; el.className = 'lib-row lib-folder';
+    el.innerHTML = `<span class="c-pick"></span><span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(t.name)}</b><span>${t.total} file${t.total === 1 ? '' : 's'}</span></span>`
+      + `<span class="c-type">${esc(window.t('Folder'))}</span><span class="c-size">${esc(t.total === 1 ? window.t('1 file') : window.t('{n} files', { n: t.total }))}</span><span class="c-mod"></span><span class="c-by"></span>`
+      + `<span class="row-end">${lib.shared?.folders?.includes(t.path) ? `<span class="shared-mark" title="${esc(window.t('Shared by link'))}">${LINK_SVG}</span>` : ''}`
       + (lib.readonly ? '' : `<button type="button" class="btn ghost icon kebab" aria-label="${esc(window.t('Actions'))}" aria-haspopup="menu" title="${esc(window.t('Actions'))}">${KEBAB_SVG}</button>`) + `</span>`;
     el.onclick = e => { e.preventDefault(); libGo(t.path); };
     el.querySelector('.kebab')?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); libFolderMenu(e.currentTarget, t.path, t.total); });
     dropTarget(el, t.path);
     box.append(el);
   }
-  const ready = list.files.filter(f => f.suggestion);
+  const ready = files.filter(f => f.suggestion);
   if (lib.folder === '/Inbox' && ready.length > 1) {
     const bar = document.createElement('div'); bar.className = 'suggest-bar';
     bar.innerHTML = `<span>${ready.length} documents have a suggested place.</span><button class="btn small primary" type="button">File them all</button>`;
     bar.querySelector('button').onclick = async () => { try { const r = await post('api/library/file-all'); toast(`${r.filed} documents filed`); loadLibrary(); } catch (e) { toast(e.message); } };
     box.append(bar);
   }
-  for (const f of list.files) box.append(fileRow(f));
-  if (!list.folders.length && !list.files.length) box.innerHTML = `<div class="placeholder">${lib.folder === '/' ? 'Your library is empty. Upload documents, or attach them in the chat: they land in Inbox.' : 'This folder is empty. Drop files here or use Upload.'}</div>`;
+  for (const f of files) box.append(fileRow(f));
+  if (!folders.length && !files.length) box.innerHTML = `<div class="placeholder">${lib.folder === '/' ? 'Your library is empty. Upload documents, or attach them in the chat: they land in Inbox.' : 'This folder is empty. Drop files here or use Upload.'}</div>`;
+  const bytes = files.reduce((a, f) => a + f.size, 0), parts = [];
+  if (folders.length) parts.push(folders.length === 1 ? t('1 folder') : t('{n} folders', { n: folders.length }));
+  if (files.length) parts.push((files.length === 1 ? t('1 file') : t('{n} files', { n: files.length })) + ' · ' + fmtSize(bytes));
+  $('#lib-count').textContent = parts.join(' · ');
+  libSelUpdate();
 }
+
+/** Select or deselect a file; with Shift, the whole range from the last one touched. */
+function libPick(id, on, range) {
+  if (range && lib.last != null && lib.rows.includes(lib.last)) {
+    const a = lib.rows.indexOf(lib.last), b = lib.rows.indexOf(id);
+    for (const x of lib.rows.slice(Math.min(a, b), Math.max(a, b) + 1)) on ? lib.picked.add(x) : lib.picked.delete(x);
+  } else on ? lib.picked.add(id) : lib.picked.delete(id);
+  lib.last = id; libSelUpdate();
+}
+/** The selection replaces the toolbar (same height) and ticks the rows. */
+function libSelUpdate() {
+  const n = lib.picked.size;
+  $('#lib-toolbar').hidden = !!n; $('#lib-selbar').hidden = !n;
+  document.querySelector('.lib-confirm')?.remove();
+  $('#lib-view-wrap')?.classList.toggle('selecting', !!n);
+  $('#lib-list').classList.toggle('selecting', !!n);
+  $('#lib-list').querySelectorAll('.lib-row[data-id]').forEach(r => { const on = lib.picked.has(+r.dataset.id); r.classList.toggle('sel', on); r.querySelector('.pick').checked = on; });
+  const all = $('#lib-pick-all');
+  if (all) { all.checked = n > 0 && n === lib.rows.length; all.indeterminate = n > 0 && n < lib.rows.length; }
+  if (n) {
+    $('#lib-sel-n').textContent = n === 1 ? t('1 selected') : t('{n} selected', { n });
+    const zip = $('#lib-sel-zip'); zip.href = `api/library/zip?folder=/&ids=${[...lib.picked].join(',')}`; zip.setAttribute('download', 'library-selection.zip');
+    $('#lib-sel-move').hidden = $('#lib-sel-del').hidden = !!lib.readonly;
+  }
+}
+$('#lib-sel-clear').onclick = () => { lib.picked.clear(); lib.last = null; libSelUpdate(); };
+$('#lib-sel-move').onclick = () => libInline(lib.folder, t('Move {n} files to which folder?', { n: lib.picked.size }), async v => {
+  const r = await post('api/files/bulk', { ids: [...lib.picked], action: 'move', folder: v });
+  toast(t('{n} moved', { n: r.done }) + (r.failed?.length ? ' · ' + r.failed.length + ' ' + t('failed') : '')); lib.picked.clear(); loadLibrary();
+}, true);
+$('#lib-sel-del').onclick = e => libConfirm(e.currentTarget, t('Delete {n}?', { n: lib.picked.size }), async () => {
+  try { const r = await post('api/files/bulk', { ids: [...lib.picked], action: 'delete' }); toast(t('{n} moved to the trash', { n: r.done })); lib.picked.clear(); loadLibrary(); } catch (err) { toast(err.message); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !lib.picked.size || $('#view-library').hidden || document.querySelector('dialog[open]') || !$('#viewer').hidden || rowMenuEl) return;
+  if (document.activeElement?.closest?.('input,textarea,select')) return;
+  lib.picked.clear(); lib.last = null; libSelUpdate();
+});
 
 /** Folders accept files dragged from the list (move) or from the computer (upload). */
 function dropTarget(el, path) {
@@ -4952,6 +5062,8 @@ function dropTarget(el, path) {
   el.addEventListener('dragleave', () => el.classList.remove('drop'));
   el.addEventListener('drop', async e => {
     e.preventDefault(); e.stopPropagation(); el.classList.remove('drop'); $('#lib-main').classList.remove('drag');
+    const ids = (e.dataTransfer.getData('text/x-talixio-files') || '').split(',').filter(Boolean);
+    if (ids.length > 1) { try { const r = await post('api/files/bulk', { ids: ids.map(Number), action: 'move', folder: path }); toast(t('{n} moved', { n: r.done }) + (r.failed?.length ? ' · ' + r.failed.length + ' ' + t('failed') : '')); lib.picked.clear(); loadLibrary(); } catch (err) { toast(err.message); } return; }
     const id = e.dataTransfer.getData('text/x-talixio-file');
     if (id) { try { if (await withReplace(r => post(`api/files/${id}/move`, { folder: path, ...r }))) { toast('Moved to ' + path); loadLibrary(); } } catch (err) { toast(err.message); } return; }
     libUpload([...(e.dataTransfer.files || [])], path);
@@ -6450,26 +6562,24 @@ $('#mem-save').onclick = async () => {
 document.querySelectorAll('.rail a[data-view=library]').forEach(a => a.addEventListener('click', e => {
   if (!$('#view-library').hidden) { e.preventDefault(); libGo('/'); }
 }));
-$('#lib-upload').onclick = () => $('#lib-upload-input').click();
 $('#lib-upload-input').onchange = e => { libUpload([...e.target.files]); e.target.value = ''; };
-$('#lib-newnote').onclick = newNote;
-// mobile: one "+" opens every library action, so the toolbar is a single row
+// one "＋ New" menu: everything that adds something to the folder
+const libNewFolder = () => libInline(lib.folder === '/' ? '/' : lib.folder + '/', 'New folder path, e.g. /Clients/Alice', async v => {
+  const { folder } = await post('api/library/folder', { path: v }); toast('Folder created'); libGo(folder);
+});
 $('#lib-add').onclick = e => {
   e.stopPropagation();
   if (lib.readonly) return;
   openRowMenu(e.currentTarget, [
     { label: t('Upload'), run: () => $('#lib-upload-input').click() },
     { label: t('New note'), run: () => newNote() },
-    { label: t('New folder'), run: () => $('#lib-newfolder').click() },
-    { sep: true },
-    { label: t('Shares'), run: () => openSharesManager() },
-    { label: t('Recent changes'), run: () => showLibRecent() },
-    { label: lib.trash ? t('Trash ({n})', { n: lib.trash }) : t('Trash'), run: () => showLibTrash() },
+    { label: t('New folder'), run: libNewFolder },
   ]);
 };
-$('#lib-newfolder').onclick = () => libInline(lib.folder === '/' ? '/' : lib.folder + '/', 'New folder path, e.g. /Clients/Alice', async v => {
-  const { folder } = await post('api/library/folder', { path: v }); toast('Folder created'); libGo(folder);
-});
+$('#lib-folder-menu').onclick = e => { e.stopPropagation(); libFolderToolsMenu(e.currentTarget); };
+// the search field: a magnifier on a phone that opens over the toolbar; on a computer always there, its options shown while it is used
+$('#lib-search-toggle').onclick = () => { $('#lib-search').classList.add('open'); $('#lib-q').focus(); };
+$('#lib-q').addEventListener('blur', () => setTimeout(() => { const f = $('#lib-search'); if (!f.contains(document.activeElement) && !$('#lib-q').value) f.classList.remove('open'); }, 150));
 $('#lib-inline-cancel').onclick = () => { $('#lib-inline').hidden = true; };
 ['dragover', 'dragenter'].forEach(t => $('#lib-main').addEventListener(t, e => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); $('#lib-main').classList.add('drag'); } }));
 $('#lib-main').addEventListener('dragleave', e => { if (!$('#lib-main').contains(e.relatedTarget)) $('#lib-main').classList.remove('drag'); });
