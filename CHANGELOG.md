@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.22.0 (2026-11-06)
+
+- **Library: explorer navigation — tree toggle, Back / Up, right-click menu, keyboard.** Three buttons at the left of the path: **Folder tree** (shows or hides the tree; it starts hidden on a window narrower than 1100 px and your choice is remembered), **Back** and **Up one folder**. **Right click** on a file, a folder or the empty part of the list opens the same actions as its ⋮ menu where the pointer is (a right click on a selection offers Download zip / Move / Delete for all of it; on the empty area: new file, new folder, upload, select all). Keyboard: **Ctrl/Cmd+A** selects everything, **Delete** deletes the selection (asks once more), **F2** renames the selected file, **arrow keys / Home / End** move between rows (**Shift+arrow** extends the selection), **Enter** opens, **Alt+←** goes back, **Alt+↑** or **Backspace** goes up. The FAQ page Library follows in both languages.
+
 ## 1.21.0 (2026-11-06)
 
 - **Library: Details, List and Tiles views.** Three icons next to the View button (and a *Layout* section in the View panel) switch the folder between **Details** (the table), **Compact list** (one thin line per file: name, size, date, no Type or By) and **Tiles** (a grid with a thumbnail for images and PDFs, the selection tick and the ⋮ menu on each tile). Selection, sorting, filters and grouping work in all three; the choice is remembered on the device. On a phone the rows stay two-line, and Tiles show two per row. The FAQ page Library follows in both languages.

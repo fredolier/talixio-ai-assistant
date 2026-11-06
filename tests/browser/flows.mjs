@@ -271,6 +271,28 @@ const flows = {
     check('explorer: the layout is remembered', await page.evaluate(() => document.querySelector('.lib-views [data-view=list]').classList.contains('on')));
     await page.click('.lib-views [data-view=details]'); await page.waitForTimeout(150);
     check('explorer: Details brings the column header back', await page.isVisible('.lib-cols'));
+    // slice 4: tree toggle, up/back, context menu, keyboard
+    check('explorer: the folder tree is shown on a wide screen', await page.isVisible('#lib-tree'));
+    await page.click('#lib-tree-btn'); await page.waitForTimeout(100);
+    check('explorer: the tree toggle hides the tree', !(await page.isVisible('#lib-tree')));
+    await page.click('#lib-tree-btn'); await page.waitForTimeout(100);
+    check('explorer: and brings it back', await page.isVisible('#lib-tree'));
+    check('explorer: Up is enabled in a sub-folder', await page.isEnabled('#lib-up'));
+    await page.click('#lib-up'); await page.waitForTimeout(700);
+    check('explorer: Up goes to the parent folder', (await page.evaluate(() => location.hash)) === '#library' && !(await page.isEnabled('#lib-up')));
+    check('explorer: Back is enabled after navigating', await page.isEnabled('#lib-back'));
+    await page.click('#lib-back'); await page.waitForTimeout(700);
+    check('explorer: Back returns to the folder', (await page.evaluate(() => location.hash)).startsWith('#library/Explorer'));
+    await page.click('#lib-list .lib-row[data-id]', { button: 'right' }); await page.waitForTimeout(150);
+    check('explorer: right click opens the file menu and selects the row', await page.isVisible('.row-menu') && (await page.textContent('.row-menu')).includes('Rename') && await page.isVisible('#lib-selbar'));
+    await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+    await page.click('#lib-sel-clear');
+    await page.click('#lib-list', { button: 'right', position: { x: 5, y: 3 } }).catch(() => {}); await page.keyboard.press('Escape');
+    await page.focus('#lib-list .lib-row[data-id]'); await page.keyboard.press('Control+a'); await page.waitForTimeout(150);
+    check('explorer: Ctrl+A selects every file', (await page.textContent('#lib-sel-n')).startsWith('2'));
+    await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+    await page.keyboard.press('ArrowDown'); await page.waitForTimeout(100);
+    check('explorer: arrow keys move between rows', await page.evaluate(() => document.activeElement.classList.contains('lib-row')));
     await page.setViewportSize({ width: 390, height: 780 }); await page.waitForTimeout(200);
     check('explorer mobile: no column header, list starts under 130 px', !(await page.isVisible('.lib-cols')) && (await page.evaluate(() => document.querySelector('#lib-list').getBoundingClientRect().top)) < 190);
     await page.click('#lib-list .lib-row[data-id] .ico'); await page.waitForTimeout(150);

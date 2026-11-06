@@ -21,7 +21,7 @@ user; the mockup itself is not in the repo). It ships in slices, each pushed on 
    one-line toolbar.
 2. **1.20.0 — filters and grouping** (done). One **View** panel (popover; bottom sheet on a phone) instead of separate Filters/Display buttons: sort, group (type/date), filters type/date/state; chips on the toolbar. Deviation from the mockup: one button, not two.
 3. **1.21.0 — Details / Compact list / Tiles** (done). Icons next to View plus a Layout section in the panel; key `talixio.lib.view`. On a phone the rows stay two-line (List = Details); Tiles are two per row.
-4. Explorer toolbar details: tree toggle, back/up, context menu (right click), keyboard shortcuts.
+4. **1.22.0 — explorer navigation** (done). Tree toggle (`talixio.lib.tree`, default hidden under 1100 px), Back (own depth counter over `history.back()`), Up, right-click menus reusing `libFileMenu`/`libFolderMenu` through a pointer anchor, keyboard shortcuts in one `keydown` handler that stands down when a field, dialog, menu, panel or regex search is open.
 5. Preview pane.
 
 ## Decisions and open points

@@ -354,6 +354,12 @@ tr:last-child td{border-bottom:0}
 }
 .search .scope{display:flex;align-items:center;gap:6px;white-space:nowrap;color:var(--muted);font-size:.83rem}
 /* Library explorer: one-line toolbar, details columns, selection bar, status line */
+.lib-navbtns{display:flex;flex:none;gap:2px}
+.lib-navbtns .btn.icon[aria-pressed=true]{background:var(--accent-soft);color:var(--accent)}
+.lib-navbtns .btn.icon:disabled{opacity:.35}
+.lib-navbtns svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.lib.no-tree{grid-template-columns:1fr}
+.lib.no-tree .lib-tree{display:none}
 .lib-toolbar{display:flex;align-items:center;gap:8px;min-height:46px;margin-bottom:10px}
 .lib-toolbar .crumbs{flex:1;min-width:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;white-space:nowrap}
 .lib-toolbar .crumbs::-webkit-scrollbar{display:none}
@@ -639,6 +645,7 @@ button.mark:disabled{cursor:default}
   .shell.collapsed .more-menu{top:auto;bottom:calc(100% + 10px);left:auto;right:0}
   .lib{grid-template-columns:1fr}
   .lib-tree{display:none}
+  #lib-tree-btn{display:none}
   .lib-drop-hint{display:none}
   /* one 48px toolbar: folder, search, ⋮ and ＋ ; the details columns give way to two-line rows */
   .lib-toolbar{min-height:48px}

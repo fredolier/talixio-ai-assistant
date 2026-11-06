@@ -11,6 +11,10 @@
   select the range, **Ctrl/Cmd-click** to add one, or on a phone tap a file's icon. The line at the top becomes the
   selection bar: **Move to…**, **Download zip**, **Delete** (asks once more). Esc or ✕ clears the selection.
   Dragging one of the selected files to a folder moves them all.
+- **Navigating like an explorer**: at the left of the path, **Folder tree** shows or hides the tree (hidden by default on a
+  narrow window), **Back** and **Up one folder**. **Right click** a file, a folder or the empty list for the same actions
+  as ⋮. Keys: **Ctrl/Cmd+A** select all, **Delete**, **F2** rename, **arrows** move, **Enter** open, **Alt+←** back,
+  **Alt+↑** or **Backspace** up.
 - **Details / Compact list / Tiles** (the three icons next to View): the table, one thin line per file, or a grid
   with thumbnails. Everything else (selection, sorting, filters) works the same; the choice is remembered.
 - **View** (next to ⋮): sort, **group** (by type or by date) and **filter** by type, date or state (shared by link,

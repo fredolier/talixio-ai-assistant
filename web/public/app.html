@@ -232,6 +232,11 @@
       <h2 class="sr-only">Library</h2>
       <input id="lib-upload-input" type="file" multiple hidden>
       <div class="lib-toolbar" id="lib-toolbar">
+        <div class="lib-navbtns">
+          <button id="lib-tree-btn" class="btn ghost icon" type="button" aria-pressed="true" aria-label="Folder tree" title="Folder tree"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15"/></svg></button>
+          <button id="lib-back" class="btn ghost icon" type="button" aria-label="Back" title="Back (Alt+←)" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <button id="lib-up" class="btn ghost icon" type="button" aria-label="Up one folder" title="Up one folder (Alt+↑)" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg></button>
+        </div>
         <ol id="lib-crumbs" class="crumbs" aria-label="Current folder"></ol>
         <form id="lib-search" class="search" role="search">
           <button id="lib-search-toggle" class="btn ghost icon lib-search-toggle" type="button" aria-label="Search" title="Search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg></button>

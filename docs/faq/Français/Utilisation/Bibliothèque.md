@@ -12,6 +12,10 @@
   d'un fichier. La ligne du haut devient la barre de sélection : **Déplacer vers…**, **Télécharger le zip**,
   **Supprimer** (redemande une fois). Échap ou ✕ efface la sélection. Glisser l'un des fichiers sélectionnés vers un
   dossier les déplace tous.
+- **Naviguer comme dans un explorateur** : à gauche du chemin, **Arborescence** affiche ou masque l'arbre (masqué par défaut
+  sur une fenêtre étroite), **Retour** et **Dossier parent**. Le **clic droit** sur un fichier, un dossier ou la zone vide
+  donne les mêmes actions que ⋮. Touches : **Ctrl/Cmd+A** tout sélectionner, **Suppr**, **F2** renommer, **flèches** se
+  déplacer, **Entrée** ouvrir, **Alt+←** retour, **Alt+↑** ou **Retour arrière** dossier parent.
 - **Détails / Liste compacte / Tuiles** (les trois icônes à côté d'Affichage) : le tableau, une ligne fine par fichier,
   ou une grille avec vignettes. Le reste (sélection, tris, filtres) fonctionne pareil ; le choix est mémorisé.
 - **Affichage** (à côté de ⋮) : trier, **regrouper** (par type ou par date) et **filtrer** par type, date ou état (partagé

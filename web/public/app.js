@@ -4583,17 +4583,28 @@ function libFolderFromHash() {
 }
 /** /FAQ and below: the notes about Talixio, kept up to date by each version. */
 const isReadonly = p => p === '/FAQ' || (p || '').startsWith('/FAQ/');
+lib.depth = 0; lib.goingBack = false;
+const libTreeShown = () => { let v = null; try { v = localStorage.getItem(LSK + 'talixio.lib.tree'); } catch {} return v === null ? innerWidth >= 1100 : v === '1'; };
+function libTreeApply() { const on = libTreeShown() && !isPhone(); document.querySelector('#view-library .lib')?.classList.toggle('no-tree', !on); const b = $('#lib-tree-btn'); b.setAttribute('aria-pressed', on); b.classList.toggle('on', on); }
+$('#lib-tree-btn').onclick = () => { try { localStorage.setItem(LSK + 'talixio.lib.tree', libTreeShown() ? '0' : '1'); } catch {} libTreeApply(); };
+window.addEventListener('resize', () => { if (!$('#view-library').hidden) libTreeApply(); });
+function libUp() { if (lib.folder !== '/') libGo(lib.folder.split('/').slice(0, -1).join('/') || '/'); }
+$('#lib-up').onclick = libUp;
+$('#lib-back').onclick = () => { if (lib.depth > 0) { lib.goingBack = true; history.back(); } };
+function libNavUpdate() { $('#lib-up').disabled = lib.folder === '/'; $('#lib-back').disabled = lib.depth <= 0; libTreeApply(); }
 function libGo(folder) { location.hash = '#library' + (folder === '/' ? '' : folder.split('/').map(encodeURIComponent).join('/')); }
 
 async function loadLibrary() {
   const was = lib.folder;
   lib.folder = libFolderFromHash() || '/';
+  if (was !== undefined && was !== lib.folder) { lib.depth = Math.max(0, lib.depth + (lib.goingBack ? -1 : 1)); } lib.goingBack = false;
   if (was !== undefined && was !== lib.folder && (libSearch.phase || libRegex.on)) libSearchClose(); // another folder: its content, not old results
   const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
   lib.tree = tree.tree; lib.trash = tree.stats.trash || 0; lib.shared = list.shared;
   lib.level = list.level || 'internal';
   if (was !== lib.folder) lib.filter = { kind: '', when: '', state: '' }; // a filter belongs to the folder it was set in
   lib.folder = list.folder; lib.readonly = !!list.readonly;
+  libNavUpdate();
   $('#lib-add').hidden = lib.readonly;
   const st = list.stats;
   if (st.files) {
@@ -4894,9 +4905,10 @@ window.addEventListener('scroll', closeRowMenu, true);
 
 // Redraw whatever the library is showing: the regex results when a name search is open, else the folder.
 function libRefresh() { if (libRegex.on) { libRegexSearch(libRegex.q, libRegex.folder); loadLibrary().catch(() => {}); } else loadLibrary(); }
+const libRename = f => libInline(f.name, t('New name'), async v => { if (await withReplace(r => post(`api/files/${f.id}/rename`, { name: v, ...r }))) { toast(t('Renamed')); libRefresh(); } }, false);
 function libFileMenu(btn, f) {
   openRowMenu(btn, [
-    { label: t('Rename'), run: () => libInline(f.name, t('New name'), async v => { if (await withReplace(r => post(`api/files/${f.id}/rename`, { name: v, ...r }))) { toast(t('Renamed')); libRefresh(); } }, false) },
+    { label: t('Rename'), run: () => libRename(f) },
     { label: t('Move to…'), run: () => libInline(f.folder, t('Folder'), async v => { if (await withReplace(r => post(`api/files/${f.id}/move`, { folder: v, ...r }))) { toast(t('Moved to {folder}', { folder: v })); libRefresh(); } }, true) },
     { label: t('Download'), href: `api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1`, download: f.name },
     { label: t('Share…'), run: () => openShare({ file: f.id }, f.name) },
@@ -5034,6 +5046,7 @@ function renderList(list) {
       + `<span class="c-type">${esc(window.t('Folder'))}</span><span class="c-size">${esc(t.total === 1 ? window.t('1 file') : window.t('{n} files', { n: t.total }))}</span><span class="c-mod"></span><span class="c-by"></span>`
       + `<span class="row-end">${lib.shared?.folders?.includes(t.path) ? `<span class="shared-mark" title="${esc(window.t('Shared by link'))}">${LINK_SVG}</span>` : ''}`
       + (lib.readonly ? '' : `<button type="button" class="btn ghost icon kebab" aria-label="${esc(window.t('Actions'))}" aria-haspopup="menu" title="${esc(window.t('Actions'))}">${KEBAB_SVG}</button>`) + `</span>`;
+    el.dataset.path = t.path; el.dataset.total = t.total;
     el.onclick = e => { e.preventDefault(); libGo(t.path); };
     el.querySelector('.kebab')?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); libFolderMenu(e.currentTarget, t.path, t.total); });
     dropTarget(el, t.path);
@@ -5144,6 +5157,55 @@ document.addEventListener('keydown', e => {
   if (document.activeElement?.closest?.('input,textarea,select')) return;
   lib.picked.clear(); lib.last = null; libSelUpdate();
 });
+
+/** Right click: the same menus as the ⋮ of a row, opened where the pointer is. */
+const pointAnchor = e => ({ getBoundingClientRect: () => ({ top: e.clientY, bottom: e.clientY - 4, left: e.clientX, right: e.clientX, width: 0, height: 0 }) });
+function openMenuAt(e, items) { closeRowMenu(); openRowMenu(pointAnchor(e), items); }
+$('#lib-main').addEventListener('contextmenu', e => {
+  if (e.target.closest('input,textarea,#lib-inline,#lib-results')) return;
+  const row = e.target.closest('#lib-list .lib-row');
+  e.preventDefault();
+  if (row && row.dataset.id) {
+    const id = +row.dataset.id, f = lib.data?.files?.find(x => x.id === id) || lib.files?.find(x => x.id === id);
+    if (!f) return;
+    if (!lib.picked.has(id)) { lib.picked.clear(); libPick(id, true, false); }
+    const n = lib.picked.size;
+    if (n > 1) return openMenuAt(e, [
+      { label: t('{n} selected', { n }), head: true },
+      { label: t('Download zip'), href: $('#lib-sel-zip').href, download: 'library-selection.zip' },
+      ...(lib.readonly ? [] : [{ label: t('Move to…'), run: () => $('#lib-sel-move').click() }, { sep: true }, { label: t('Delete'), danger: true, run: () => $('#lib-sel-del').click() }]),
+    ]);
+    closeRowMenu(); return libFileMenu(pointAnchor(e), f);
+  }
+  if (row && row.classList.contains('lib-folder')) { if (lib.readonly) return; closeRowMenu(); return libFolderMenu(pointAnchor(e), row.dataset.path, +row.dataset.total || 0); }
+  openMenuAt(e, [
+    ...(lib.readonly ? [] : [{ label: t('New file here'), run: () => newNote(lib.folder) }, { label: t('New folder'), run: () => libNewFolder() }, { label: t('Upload files'), run: () => $('#lib-upload-input').click() }]),
+    ...(lib.folder !== '/' ? [{ label: t('Up one folder'), run: libUp }] : []),
+    { label: t('Select all'), run: () => libSelectAll() },
+  ]);
+});
+/** Keyboard in the explorer: Ctrl/Cmd+A, Delete, F2, arrows, Enter, Alt+←/↑, Backspace. */
+document.addEventListener('keydown', e => {
+  if ($('#view-library').hidden || document.querySelector('dialog[open]') || !$('#viewer').hidden || rowMenuEl || libPanel || libRegex.on) return;
+  if (e.target.closest?.('input,textarea,select,[contenteditable]')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'a') { e.preventDefault(); libSelectAll(); return; }
+  if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); $('#lib-back').click(); return; }
+  if ((e.altKey && e.key === 'ArrowUp') || e.key === 'Backspace') { e.preventDefault(); libUp(); return; }
+  if (e.key === 'Delete' && lib.picked.size && !lib.readonly) { e.preventDefault(); $('#lib-sel-del').click(); return; }
+  const rows = [...$('#lib-list').querySelectorAll('.lib-row')];
+  const cur = rows.indexOf(document.activeElement);
+  if (e.key === 'F2' && lib.picked.size === 1 && !lib.readonly) { e.preventDefault(); const f = lib.data.files.find(x => x.id === [...lib.picked][0]); if (f) libRename(f); return; }
+  if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key) && rows.length) {
+    const tiles = lib.view === 'tiles', cols = tiles ? Math.max(1, Math.round($('#lib-list').clientWidth / (rows[0].offsetWidth + 10))) : 1;
+    let n = cur < 0 ? 0 : cur;
+    if (cur >= 0) n += { ArrowDown: cols, ArrowUp: -cols, ArrowRight: tiles ? 1 : 0, ArrowLeft: tiles ? -1 : 0, Home: -n, End: rows.length }[e.key];
+    n = Math.max(0, Math.min(rows.length - 1, n));
+    e.preventDefault(); rows[n].focus();
+    if (e.shiftKey && rows[n].dataset.id) libPick(+rows[n].dataset.id, true, false);
+  }
+});
+function libSelectAll() { lib.rows.forEach(id => lib.picked.add(id)); libSelUpdate(); }
 
 /** Folders accept files dragged from the list (move) or from the computer (upload). */
 function dropTarget(el, path) {
