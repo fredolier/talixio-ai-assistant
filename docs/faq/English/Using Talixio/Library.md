@@ -11,6 +11,9 @@
   select the range, **Ctrl/Cmd-click** to add one, or on a phone tap a file's icon. The line at the top becomes the
   selection bar: **Move to…**, **Download zip**, **Delete** (asks once more). Esc or ✕ clears the selection.
   Dragging one of the selected files to a folder moves them all.
+- **View** (next to ⋮): sort, **group** (by type or by date) and **filter** by type, date or state (shared by link,
+  unreadable or being read, with a suggested place). The list follows as you click; an active filter shows as a chip on
+  the toolbar (✕ removes it), a filter belongs to the folder where you set it, and the grouping is remembered.
 - At the bottom: how many folders and files are shown and their size, and the state of the indexing.
 
 ## Adding documents

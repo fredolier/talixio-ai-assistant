@@ -19,7 +19,7 @@ user; the mockup itself is not in the repo). It ships in slices, each pushed on 
    `localStorage`, key `talixio.lib.sort`), checkboxes, Shift/Ctrl selection, selection bar replacing the
    toolbar (Move/Zip/Delete via `api/files/bulk` and `api/library/zip?ids=`), multi-file drag, status line,
    one-line toolbar.
-2. Filters (type, date, state, shared) as chips + a popover, grouping.
+2. **1.20.0 — filters and grouping** (done). One **View** panel (popover; bottom sheet on a phone) instead of separate Filters/Display buttons: sort, group (type/date), filters type/date/state; chips on the toolbar. Deviation from the mockup: one button, not two.
 3. List and Tiles views next to Details.
 4. Explorer toolbar details: tree toggle, back/up, context menu (right click), keyboard shortcuts.
 5. Preview pane.

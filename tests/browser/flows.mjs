@@ -251,6 +251,17 @@ const flows = {
     check('explorer: delete asks for a second click', await page.isVisible('.lib-confirm'));
     await page.click('.lib-confirm [data-y]'); await page.waitForTimeout(800);
     check('explorer: the selection is deleted', (await names()).length === 2);
+    await page.click('#lib-view-btn'); await page.waitForTimeout(150);
+    check('explorer: the View panel opens with sort, group and filters', await page.isVisible('.lib-pop') && (await page.textContent('.lib-pop')).includes('Text and notes'));
+    await page.click('.lib-pop [data-kind=image]'); await page.waitForTimeout(150);
+    check('explorer: a filter shows its chip, the count, and an empty message', await page.isVisible('.lib-chip') && (await page.textContent('#lib-view-n')) === '1' && (await names()).length === 0 && (await page.textContent('#lib-list')).includes('No file matches'));
+    await page.click('.lib-pop [data-kind=text]'); await page.waitForTimeout(150);
+    check('explorer: another type brings the files back', (await names()).length === 2);
+    await page.click('.lib-pop [data-group=kind]'); await page.waitForTimeout(150);
+    check('explorer: grouping by type adds a header', await page.isVisible('#lib-list .lib-group'));
+    await page.click('.lib-pop [data-clear]'); await page.click('.lib-pop [data-group=""]'); await page.waitForTimeout(150);
+    check('explorer: clearing removes the chip and the groups', !(await page.isVisible('.lib-chip')) && !(await page.isVisible('#lib-list .lib-group')));
+    await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 390, height: 780 }); await page.waitForTimeout(200);
     check('explorer mobile: no column header, list starts under 130 px', !(await page.isVisible('.lib-cols')) && (await page.evaluate(() => document.querySelector('#lib-list').getBoundingClientRect().top)) < 190);
     await page.click('#lib-list .lib-row[data-id] .ico'); await page.waitForTimeout(150);

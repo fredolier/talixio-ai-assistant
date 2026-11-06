@@ -4570,6 +4570,9 @@ const joinPath = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
 const lib = { folder: '/', tree: [], timer: null, file: null, inline: null, picked: new Set(), last: null, rows: [] };
 /** Column sort of the folder view (this browser). k: name | kind | size | changed | by; d: 1 up, -1 down. */
 lib.sort = (() => { try { const v = JSON.parse(localStorage.getItem(LSK + 'talixio.lib.sort') || ''); if (['name', 'kind', 'size', 'changed', 'by'].includes(v.k)) return { k: v.k, d: v.d === -1 ? -1 : 1 }; } catch {} return { k: 'name', d: 1 }; })();
+/** Filters on the folder's files (this visit only) and the grouping (kept on this device). */
+lib.filter = { kind: '', when: '', state: '' };
+lib.group = (() => { try { const g = localStorage.getItem(LSK + 'talixio.lib.group'); return ['kind', 'date'].includes(g) ? g : ''; } catch { return ''; } })();
 const isPhone = () => matchMedia('(max-width:760px)').matches;
 const libSearch = { ctl: null, q: '', folder: '/', results: null, phase: '' };
 
@@ -4588,6 +4591,7 @@ async function loadLibrary() {
   const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
   lib.tree = tree.tree; lib.trash = tree.stats.trash || 0; lib.shared = list.shared;
   lib.level = list.level || 'internal';
+  if (was !== lib.folder) lib.filter = { kind: '', when: '', state: '' }; // a filter belongs to the folder it was set in
   lib.folder = list.folder; lib.readonly = !!list.readonly;
   $('#lib-add').hidden = lib.readonly;
   const st = list.stats;
@@ -4693,7 +4697,7 @@ function libConfirm(anchor, message, onYes) {
 }
 function libSortBy(k, d) {
   lib.sort = { k, d }; try { localStorage.setItem(LSK + 'talixio.lib.sort', JSON.stringify(lib.sort)); } catch {}
-  if (lib.data) renderList(lib.data);
+  libViewRefresh();
 }
 
 const TRASH_SVG = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
@@ -4969,10 +4973,38 @@ function fileRow(f, sub) {
 }
 
 const SORT_COLS = [['name', 'Name'], ['kind', 'Type'], ['size', 'Size'], ['changed', 'Modified'], ['by', 'By']];
+const kindOf = f => isVideo(f) ? 'video' : f.kind || 'other';
+const LIB_KINDS = [['', 'All types'], ['pdf', 'PDF'], ['office', 'Office'], ['text', 'Text and notes'], ['image', 'Images'], ['audio', 'Audio'], ['video', 'Video'], ['other', 'Other']];
+const LIB_WHEN = [['', 'Any date'], ['1', 'Today'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['365', 'Last year']];
+const LIB_STATE = [['', 'Any state'], ['shared', 'Shared by link'], ['problem', 'Unreadable or being read'], ['suggested', 'With a suggested place']];
+const LIB_GROUP = [['', 'No grouping'], ['kind', 'By type'], ['date', 'By date']];
+const LIB_SORTS = [['name', 'Name'], ['kind', 'Type'], ['size', 'Size'], ['changed', 'Modified'], ['by', 'By']];
+const libFiltered = () => lib.filter.kind || lib.filter.when || lib.filter.state;
+function libKeep(f) {
+  const { kind, when, state } = lib.filter;
+  if (kind && kindOf(f) !== kind) return false;
+  if (when && (f.changed || f.created) < Date.now() / 1000 - (+when === 1 ? 86400 : +when * 86400)) return false;
+  if (state === 'shared' && !lib.shared?.files?.includes(f.id)) return false;
+  if (state === 'problem' && !['pending', 'processing', 'failed'].includes(f.status)) return false;
+  if (state === 'suggested' && !f.suggestion) return false;
+  return true;
+}
+/** Files cut into the groups the list shows: [[label|null, files]]. */
+function libGroups(files) {
+  if (!lib.group) return [[null, files]];
+  const now = Date.now() / 1000, buckets = new Map();
+  const labelOf = lib.group === 'kind' ? f => t(KIND_LABELS_LONG[kindOf(f)] || 'Other') : f => { const age = now - (f.changed || f.created); return age < 86400 ? t('Today') : age < 7 * 86400 ? t('This week') : age < 30 * 86400 ? t('This month') : t('Earlier'); };
+  for (const f of files) { const l = labelOf(f); if (!buckets.has(l)) buckets.set(l, []); buckets.get(l).push(f); }
+  const out = [...buckets.entries()];
+  if (lib.group === 'kind') out.sort((a, b) => a[0].localeCompare(b[0]));
+  else { const order = [t('Today'), t('This week'), t('This month'), t('Earlier')]; out.sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])); }
+  return out;
+}
+const KIND_LABELS_LONG = { pdf: 'PDF', office: 'Office', text: 'Text and notes', image: 'Images', audio: 'Audio', video: 'Video', other: 'Other' };
 function libOrdered(list) {
   const { k, d } = lib.sort, cmp = (x, y) => (typeof x === 'string' ? x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }) : x - y);
   const key = { name: f => f.name, kind: f => fileLabel(f), size: f => f.size, changed: f => f.changed || f.created, by: f => f.changed_by || '' }[k];
-  const files = [...list.files].sort((a, b) => (cmp(key(a), key(b)) || cmp(a.name, b.name)) * d);
+  const files = list.files.filter(libKeep).sort((a, b) => (cmp(key(a), key(b)) || cmp(a.name, b.name)) * d);
   const folders = [...list.folders].sort((a, b) => k === 'size' ? (a.total - b.total || cmp(a.name, b.name)) * d : cmp(a.name, b.name) * (k === 'name' ? d : 1)); // folders stay on top
   return { folders, files };
 }
@@ -4981,7 +5013,8 @@ function renderList(list) {
   lib.data = list;
   const box = $('#lib-list'); box.innerHTML = '';
   const { folders, files } = libOrdered(list);
-  lib.rows = files.map(f => f.id);
+  const groups = libGroups(files);
+  lib.rows = groups.flatMap(([, g]) => g.map(f => f.id));
   for (const id of [...lib.picked]) if (!lib.rows.includes(id)) lib.picked.delete(id); // gone, moved or deleted
   if (folders.length || files.length) {
     const head = document.createElement('div'); head.className = 'lib-cols'; head.setAttribute('role', 'row');
@@ -5009,14 +5042,62 @@ function renderList(list) {
     bar.querySelector('button').onclick = async () => { try { const r = await post('api/library/file-all'); toast(`${r.filed} documents filed`); loadLibrary(); } catch (e) { toast(e.message); } };
     box.append(bar);
   }
-  for (const f of files) box.append(fileRow(f));
-  if (!folders.length && !files.length) box.innerHTML = `<div class="placeholder">${lib.folder === '/' ? 'Your library is empty. Upload documents, or attach them in the chat: they land in Inbox.' : 'This folder is empty. Drop files here or use Upload.'}</div>`;
+  for (const [label, group] of groups) {
+    if (label) { const h = document.createElement('div'); h.className = 'lib-group'; h.innerHTML = `<b>${esc(label)}</b><span>${group.length}</span>`; box.append(h); }
+    for (const f of group) box.append(fileRow(f));
+  }
+  if (!folders.length && !files.length) box.innerHTML = list.files.length ? `<div class="placeholder">${esc(t('No file matches these filters.'))} <button class="btn small" type="button" data-clear>${esc(t('Clear the filters'))}</button></div>`
+    : `<div class="placeholder">${lib.folder === '/' ? 'Your library is empty. Upload documents, or attach them in the chat: they land in Inbox.' : 'This folder is empty. Drop files here or use Upload.'}</div>`;
+  box.querySelector('[data-clear]')?.addEventListener('click', libClearFilters);
+  libChips();
   const bytes = files.reduce((a, f) => a + f.size, 0), parts = [];
   if (folders.length) parts.push(folders.length === 1 ? t('1 folder') : t('{n} folders', { n: folders.length }));
   if (files.length) parts.push((files.length === 1 ? t('1 file') : t('{n} files', { n: files.length })) + ' · ' + fmtSize(bytes));
   $('#lib-count').textContent = parts.join(' · ');
   libSelUpdate();
 }
+
+function libClearFilters() { lib.filter = { kind: '', when: '', state: '' }; libViewRefresh(); }
+const libFilterCount = () => ['kind', 'when', 'state'].filter(k => lib.filter[k]).length;
+function libChips() {
+  const chips = [['kind', LIB_KINDS], ['when', LIB_WHEN], ['state', LIB_STATE]].filter(([k]) => lib.filter[k])
+    .map(([k, opts]) => `<span class="lib-chip">${esc(t(opts.find(o => o[0] === lib.filter[k])[1]))}<button type="button" data-chip="${k}" aria-label="${esc(t('Remove this filter'))}">✕</button></span>`);
+  $('#lib-chips').innerHTML = chips.join('');
+  $('#lib-chips').querySelectorAll('[data-chip]').forEach(b => b.onclick = () => { lib.filter[b.dataset.chip] = ''; libViewRefresh(); });
+  const n = libFilterCount(); $('#lib-view-n').hidden = !n; $('#lib-view-n').textContent = n;
+}
+/** Redraw the list and the open panel after a filter, grouping or sort change. */
+function libViewRefresh() { if (lib.data) renderList(lib.data); libPanelFill(); }
+let libPanel = null;
+function libPanelFill() {
+  if (!libPanel) return;
+  const opt = (name, list, cur) => list.map(([v, l]) => `<button type="button" class="lib-opt${cur === v ? ' on' : ''}" data-${name}="${esc(v)}" aria-pressed="${cur === v}">${esc(t(l))}</button>`).join('');
+  const shown = lib.data ? lib.data.files.filter(libKeep).length : 0;
+  libPanel.innerHTML = `<div class="lib-pop-sec"><b>${esc(t('Sort by'))}</b><div class="lib-opts">${LIB_SORTS.map(([k, l]) => `<button type="button" class="lib-opt${lib.sort.k === k ? ' on' : ''}" data-sortk="${k}" aria-pressed="${lib.sort.k === k}">${esc(t(l))}${lib.sort.k === k ? (lib.sort.d === 1 ? ' ▲' : ' ▼') : ''}</button>`).join('')}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('Group'))}</b><div class="lib-opts">${opt('group', LIB_GROUP, lib.group)}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('Type'))}</b><div class="lib-opts">${opt('kind', LIB_KINDS, lib.filter.kind)}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('Modified'))}</b><div class="lib-opts">${opt('when', LIB_WHEN, lib.filter.when)}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('State'))}</b><div class="lib-opts">${opt('state', LIB_STATE, lib.filter.state)}</div></div>`
+    + `<div class="lib-pop-foot"><button type="button" class="btn small ghost" data-clear${libFilterCount() ? '' : ' disabled'}>${esc(t('Clear the filters'))}</button><span class="spacer"></span><button type="button" class="btn small primary" data-close>${esc(shown === 1 ? t('Show 1 file') : t('Show {n} files', { n: shown }))}</button></div>`;
+  libPanel.querySelectorAll('[data-sortk]').forEach(b => b.onclick = () => libSortBy(b.dataset.sortk, lib.sort.k === b.dataset.sortk ? -lib.sort.d : 1));
+  libPanel.querySelectorAll('[data-group]').forEach(b => b.onclick = () => { lib.group = b.dataset.group; try { localStorage.setItem(LSK + 'talixio.lib.group', lib.group); } catch {} libViewRefresh(); });
+  for (const k of ['kind', 'when', 'state']) libPanel.querySelectorAll(`[data-${k}]`).forEach(b => b.onclick = () => { lib.filter[k] = b.dataset[k]; libViewRefresh(); });
+  libPanel.querySelector('[data-clear]').onclick = libClearFilters;
+  libPanel.querySelector('[data-close]').onclick = libPanelClose;
+}
+function libPanelClose() { libPanel?.remove(); libPanel = null; $('#lib-view-btn').setAttribute('aria-expanded', 'false'); }
+$('#lib-view-btn').onclick = e => {
+  e.stopPropagation();
+  if (libPanel) return libPanelClose();
+  libPanel = document.createElement('div'); libPanel.className = 'lib-pop'; libPanel.setAttribute('role', 'dialog'); libPanel.setAttribute('aria-label', t('Sort, group and filter the list'));
+  document.body.append(libPanel); libPanelFill();
+  $('#lib-view-btn').setAttribute('aria-expanded', 'true');
+  const r = e.currentTarget.getBoundingClientRect();
+  libPanel.style.top = Math.min(r.bottom + 6, innerHeight - libPanel.offsetHeight - 8) + 'px';
+  libPanel.style.left = Math.max(8, Math.min(r.right - libPanel.offsetWidth, innerWidth - libPanel.offsetWidth - 8)) + 'px';
+};
+document.addEventListener('click', e => { if (libPanel && !e.composedPath().some(x => x === libPanel || x.id === 'lib-view-btn')) libPanelClose(); }); // composedPath: the clicked button may already be redrawn
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && libPanel) { e.stopPropagation(); libPanelClose(); } }, true);
 
 /** Select or deselect a file; with Shift, the whole range from the last one touched. */
 function libPick(id, on, range) {

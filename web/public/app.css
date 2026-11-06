@@ -366,6 +366,22 @@ tr:last-child td{border-bottom:0}
 .lib-toolbar .btn.icon svg{width:18px;height:18px}
 .search-opts{display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:5;gap:14px;padding:8px 12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
 .search:focus-within .search-opts{display:flex}
+.lib-view-btn{display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:38px;flex:none}
+.lib-view-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.lib-view-btn b{min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:#fff;font-size:.72rem;display:grid;place-items:center;padding:0 5px}
+.lib-chips{display:flex;gap:6px;flex:none;max-width:40%;overflow:hidden}
+.lib-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:99px;background:var(--accent-soft);border:1px solid var(--accent);font-size:.8rem;white-space:nowrap}
+.lib-chip button{all:unset;cursor:pointer;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:.7rem;color:var(--muted)}
+.lib-chip button:hover{background:var(--surface);color:var(--ink)}
+.lib-pop{position:fixed;z-index:30;width:min(400px,calc(100vw - 16px));max-height:calc(100vh - 80px);overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.18);padding:12px 14px;display:flex;flex-direction:column;gap:12px}
+.lib-pop-sec{display:flex;flex-direction:column;gap:6px}
+.lib-pop-sec>b{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.lib-opts{display:flex;flex-wrap:wrap;gap:6px}
+.lib-opt{font:inherit;font-size:.82rem;padding:4px 11px;border-radius:99px;background:var(--sunk);border:1px solid var(--line);color:var(--ink);cursor:pointer}
+.lib-opt.on{background:var(--accent-soft);border-color:var(--accent);font-weight:600}
+.lib-pop-foot{display:flex;align-items:center;gap:8px;position:sticky;bottom:-12px;background:var(--surface);padding-top:8px;border-top:1px solid var(--line)}
+.lib-group{display:flex;align-items:baseline;gap:8px;padding:8px 14px 4px;background:var(--sunk);border-bottom:1px solid var(--line);font-size:.78rem;color:var(--muted)}
+.lib-group b{color:var(--ink);font-size:.8rem}
 .lib-selbar{background:var(--accent-soft);border-radius:var(--r);padding:0 8px}
 .lib-selbar b{font-weight:600}
 .lib-selbar .btn{flex:none}
@@ -601,7 +617,10 @@ button.mark:disabled{cursor:default}
   .lib-drop-hint{display:none}
   /* one 48px toolbar: folder, search, ⋮ and ＋ ; the details columns give way to two-line rows */
   .lib-toolbar{min-height:48px}
-  .lib-add span{display:none}
+  .lib-add span,.lib-view-btn .lbl,.lib-chips{display:none}
+  .lib-view-btn{width:38px;padding:0;justify-content:center;position:relative}
+  .lib-view-btn b{position:absolute;top:-4px;right:-4px}
+  .lib-pop{left:0!important;right:0!important;top:auto!important;bottom:0;width:auto;max-height:80vh;border-radius:16px 16px 0 0;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
   .lib-cols,.c-pick,.c-type,.c-size,.c-mod,.c-by{display:none!important}
   .lib-row,.lib-row.lib-folder{grid-template-columns:auto 1fr auto!important}
   .lib-row .name span{display:block!important}

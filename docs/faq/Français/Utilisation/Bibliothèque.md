@@ -12,6 +12,10 @@
   d'un fichier. La ligne du haut devient la barre de sélection : **Déplacer vers…**, **Télécharger le zip**,
   **Supprimer** (redemande une fois). Échap ou ✕ efface la sélection. Glisser l'un des fichiers sélectionnés vers un
   dossier les déplace tous.
+- **Affichage** (à côté de ⋮) : trier, **regrouper** (par type ou par date) et **filtrer** par type, date ou état (partagé
+  par lien, illisible ou en cours de lecture, avec un rangement suggéré). La liste suit à chaque clic ; un filtre actif
+  s'affiche en pastille sur la barre (✕ pour le retirer), un filtre appartient au dossier où on l'a posé, et le
+  regroupement est retenu.
 - En bas : le nombre de dossiers et de fichiers affichés et leur taille, et l'état de l'indexation.
 
 ## Ajouter des documents
