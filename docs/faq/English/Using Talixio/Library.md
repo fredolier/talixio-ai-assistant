@@ -11,6 +11,8 @@
   select the range, **Ctrl/Cmd-click** to add one, or on a phone tap a file's icon. The line at the top becomes the
   selection bar: **Move to…**, **Download zip**, **Delete** (asks once more). Esc or ✕ clears the selection.
   Dragging one of the selected files to a folder moves them all.
+- **Preview pane** (button next to the layout icons, computer only): a click on a file shows its thumbnail, details and
+  a text excerpt on the right instead of opening it; a double click (or Enter) opens it. Open and Download are in the pane.
 - **Navigating like an explorer**: at the left of the path, **Folder tree** shows or hides the tree (hidden by default on a
   narrow window), **Back** and **Up one folder**. **Right click** a file, a folder or the empty list for the same actions
   as ⋮. Keys: **Ctrl/Cmd+A** select all, **Delete**, **F2** rename, **arrows** move, **Enter** open, **Alt+←** back,

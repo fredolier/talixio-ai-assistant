@@ -2879,6 +2879,8 @@ window.I18N.fr = {
 "Back (Alt+←)": "Retour (Alt+←)",
 "Folder tree": "Arborescence",
 "Upload files": "Téléverser des fichiers",
+"Preview pane": "Volet d'aperçu",
+"Select a file to see it here.": "Sélectionnez un fichier pour le voir ici.",
 "Layout": "Affichage",
 "Compact list": "Liste compacte",
 "Tiles": "Tuiles",

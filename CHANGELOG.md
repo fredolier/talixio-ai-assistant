@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.23.0 (2026-11-06)
+
+- **Library: preview pane.** A **Preview pane** button (next to the layout icons, computer only) opens a column on the right: select a file with one click and it shows its thumbnail (or an audio player, or the file type), its type, size, date, who changed it and its folder, an excerpt of the text for documents and notes, and **Open** / **Download**. With the pane on, a click previews and a **double click** (or Enter) opens the full viewer; the table gives up its Type and By columns to keep the names readable, and the folder tree starts hidden on a window narrower than 1500 px (the tree button still brings it back). The choice is remembered on the device. This completes the explorer redesign. The FAQ page Library follows in both languages.
+
 ## 1.22.0 (2026-11-06)
 
 - **Library: explorer navigation — tree toggle, Back / Up, right-click menu, keyboard.** Three buttons at the left of the path: **Folder tree** (shows or hides the tree; it starts hidden on a window narrower than 1100 px and your choice is remembered), **Back** and **Up one folder**. **Right click** on a file, a folder or the empty part of the list opens the same actions as its ⋮ menu where the pointer is (a right click on a selection offers Download zip / Move / Delete for all of it; on the empty area: new file, new folder, upload, select all). Keyboard: **Ctrl/Cmd+A** selects everything, **Delete** deletes the selection (asks once more), **F2** renames the selected file, **arrow keys / Home / End** move between rows (**Shift+arrow** extends the selection), **Enter** opens, **Alt+←** goes back, **Alt+↑** or **Backspace** goes up. The FAQ page Library follows in both languages.

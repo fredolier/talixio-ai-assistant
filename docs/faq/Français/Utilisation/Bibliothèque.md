@@ -12,6 +12,9 @@
   d'un fichier. La ligne du haut devient la barre de sélection : **Déplacer vers…**, **Télécharger le zip**,
   **Supprimer** (redemande une fois). Échap ou ✕ efface la sélection. Glisser l'un des fichiers sélectionnés vers un
   dossier les déplace tous.
+- **Volet d'aperçu** (bouton à côté des icônes d'affichage, sur ordinateur) : un clic sur un fichier montre sa vignette,
+  ses détails et un extrait du texte à droite au lieu de l'ouvrir ; un double clic (ou Entrée) l'ouvre. Ouvrir et
+  Télécharger sont dans le volet.
 - **Naviguer comme dans un explorateur** : à gauche du chemin, **Arborescence** affiche ou masque l'arbre (masqué par défaut
   sur une fenêtre étroite), **Retour** et **Dossier parent**. Le **clic droit** sur un fichier, un dossier ou la zone vide
   donne les mêmes actions que ⋮. Touches : **Ctrl/Cmd+A** tout sélectionner, **Suppr**, **F2** renommer, **flèches** se

@@ -4584,10 +4584,42 @@ function libFolderFromHash() {
 /** /FAQ and below: the notes about Talixio, kept up to date by each version. */
 const isReadonly = p => p === '/FAQ' || (p || '').startsWith('/FAQ/');
 lib.depth = 0; lib.goingBack = false;
-const libTreeShown = () => { let v = null; try { v = localStorage.getItem(LSK + 'talixio.lib.tree'); } catch {} return v === null ? innerWidth >= 1100 : v === '1'; };
+const libTreeShown = () => { let v = null; try { v = localStorage.getItem(LSK + 'talixio.lib.tree'); } catch {} return v === null ? innerWidth >= (lib.preview && !isPhone() ? 1500 : 1100) : v === '1'; };
 function libTreeApply() { const on = libTreeShown() && !isPhone(); document.querySelector('#view-library .lib')?.classList.toggle('no-tree', !on); const b = $('#lib-tree-btn'); b.setAttribute('aria-pressed', on); b.classList.toggle('on', on); }
 $('#lib-tree-btn').onclick = () => { try { localStorage.setItem(LSK + 'talixio.lib.tree', libTreeShown() ? '0' : '1'); } catch {} libTreeApply(); };
 window.addEventListener('resize', () => { if (!$('#view-library').hidden) libTreeApply(); });
+lib.preview = (() => { try { return localStorage.getItem(LSK + 'talixio.lib.preview') === '1'; } catch { return false; } })();
+lib.cur = null; // the file shown in the preview pane
+const libPrevOn = () => lib.preview && !isPhone();
+function libPrevApply() {
+  const on = libPrevOn(), box = $('#view-library .lib');
+  box.classList.toggle('has-prev', on); $('#lib-prev').hidden = !on;
+  const b = $('#lib-prev-btn'); b.setAttribute('aria-pressed', on); b.classList.toggle('on', on);
+  $('#lib-list').querySelectorAll('.lib-row[data-id]').forEach(r => r.classList.toggle('cur', on && +r.dataset.id === lib.cur));
+  if (on) libPrevFill();
+}
+$('#lib-prev-btn').onclick = () => { lib.preview = !lib.preview; try { localStorage.setItem(LSK + 'talixio.lib.preview', lib.preview ? '1' : '0'); } catch {} libTreeApply(); libPrevApply(); };
+let libPrevSeq = 0;
+async function libPrevFill() {
+  const box = $('#lib-prev'), seq = ++libPrevSeq;
+  const f = lib.data?.files?.find(x => x.id === lib.cur);
+  if (!f) { box.innerHTML = `<p class="lib-prev-empty">${esc(t('Select a file to see it here.'))}</p>`; return; }
+  const shown = f.kind === 'image' || f.kind === 'pdf' || f.kind === 'office';
+  box.innerHTML = `<div class="lib-prev-top">${shown ? `<img src="api/files/${f.id}/thumb" alt="">` : f.kind === 'audio' ? `<audio controls preload="none" src="${esc(fileUrl(f))}"></audio>` : `<span class="ico big">${esc(fileLabel(f))}</span>`}</div>`
+    + `<h3 class="no-i18n">${esc(f.name)}</h3>`
+    + `<dl><dt>${esc(t('Type'))}</dt><dd>${esc(fileLabel(f))}</dd><dt>${esc(t('Size'))}</dt><dd>${esc(fmtSize(f.size))}</dd><dt>${esc(t('Modified'))}</dt><dd>${esc(fmtDayTime(f.changed || f.created))}</dd>`
+    + (f.changed_by ? `<dt>${esc(t('By'))}</dt><dd class="no-i18n">${esc(f.changed_by)}</dd>` : '') + `<dt>${esc(t('Folder'))}</dt><dd class="no-i18n">${esc(f.folder)}</dd></dl>`
+    + `<div class="lib-prev-act"><button type="button" class="btn small primary" data-open>${esc(t('Open'))}</button><a class="btn small" href="${esc(fileUrl(f))}?download=1" download="${esc(f.name)}">${esc(t('Download'))}</a></div>`
+    + (['text', 'office', 'pdf'].includes(f.kind) || f.note ? '<pre class="lib-prev-text" hidden></pre>' : '');
+  box.querySelector('[data-open]').onclick = () => openFile(f.id);
+  box.querySelector('img')?.addEventListener('error', e => e.target.replaceWith(Object.assign(document.createElement('span'), { className: 'ico big', textContent: fileLabel(f) })));
+  const pre = box.querySelector('.lib-prev-text');
+  if (pre && f.status !== 'failed') {
+    try { const d = await api(`api/files/${f.id}/text`); if (seq !== libPrevSeq || !d.text) return; pre.textContent = d.text.slice(0, 1500) + (d.text.length > 1500 ? '…' : ''); pre.hidden = false; } catch {}
+  }
+}
+function libCur(id) { lib.cur = id; libPrevApply(); }
+window.addEventListener('resize', () => { if (!$('#view-library').hidden) libPrevApply(); });
 function libUp() { if (lib.folder !== '/') libGo(lib.folder.split('/').slice(0, -1).join('/') || '/'); }
 $('#lib-up').onclick = libUp;
 $('#lib-back').onclick = () => { if (lib.depth > 0) { lib.goingBack = true; history.back(); } };
@@ -4605,6 +4637,7 @@ async function loadLibrary() {
   if (was !== lib.folder) lib.filter = { kind: '', when: '', state: '' }; // a filter belongs to the folder it was set in
   lib.folder = list.folder; lib.readonly = !!list.readonly;
   libNavUpdate();
+  if (lib.cur != null && !list.files.some(x => x.id === lib.cur)) lib.cur = null;
   $('#lib-add').hidden = lib.readonly;
   const st = list.stats;
   if (st.files) {
@@ -4975,8 +5008,10 @@ function fileRow(f, sub) {
     if (cols && e.shiftKey && lib.last != null) return libPick(f.id, true, true);
     if (cols && lib.picked.size && isPhone()) return libPick(f.id, !lib.picked.has(f.id), false); // phone: once selecting, a tap selects
     if (cols && isPhone() && lib.view !== 'tiles' && e.target.closest('.ico')) return libPick(f.id, !lib.picked.has(f.id), false); // phone: the icon selects
+    if (cols && libPrevOn() && !e.target.closest('.kebab,.pick')) { libCur(f.id); return; } // preview pane: a click shows it, a double click opens
     openFile(f.id);
   };
+  if (cols) el.ondblclick = () => { if (libPrevOn()) openFile(f.id); };
   el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (e.key === ' ' && cols) libPick(f.id, !lib.picked.has(f.id), false); else openFile(f.id); } };
   el.addEventListener('dragstart', e => {
     const ids = cols && lib.picked.has(f.id) && lib.picked.size > 1 ? [...lib.picked] : [f.id]; // drag the whole selection
@@ -5071,6 +5106,7 @@ function renderList(list) {
   if (folders.length) parts.push(folders.length === 1 ? t('1 folder') : t('{n} folders', { n: folders.length }));
   if (files.length) parts.push((files.length === 1 ? t('1 file') : t('{n} files', { n: files.length })) + ' · ' + fmtSize(bytes));
   $('#lib-count').textContent = parts.join(' · ');
+  libPrevApply();
   libSelUpdate();
 }
 
@@ -5136,6 +5172,7 @@ function libSelUpdate() {
   $('#lib-view-wrap')?.classList.toggle('selecting', !!n);
   $('#lib-list').classList.toggle('selecting', !!n);
   $('#lib-list').querySelectorAll('.lib-row[data-id]').forEach(r => { const on = lib.picked.has(+r.dataset.id); r.classList.toggle('sel', on); r.querySelector('.pick').checked = on; });
+  if (n === 1 && libPrevOn()) { lib.cur = [...lib.picked][0]; libPrevApply(); }
   const all = $('#lib-pick-all');
   if (all) { all.checked = n > 0 && n === lib.rows.length; all.indeterminate = n > 0 && n < lib.rows.length; }
   if (n) {

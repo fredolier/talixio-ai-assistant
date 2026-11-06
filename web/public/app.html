@@ -252,6 +252,7 @@
           <button type="button" data-view="list" aria-label="Compact list" title="Compact list"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h12M8 9.5h12M8 14h12M8 18.5h12M4 5h.01M4 9.5h.01M4 14h.01M4 18.5h.01"/></svg></button>
           <button type="button" data-view="tiles" aria-label="Tiles" title="Tiles"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>
         </div>
+        <button id="lib-prev-btn" class="btn ghost icon lib-prev-btn" type="button" aria-pressed="false" aria-label="Preview pane" title="Preview pane"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M14.5 4.5v15"/></svg></button>
         <span id="lib-chips" class="lib-chips"></span>
         <button id="lib-view-btn" class="btn lib-view-btn" type="button" aria-haspopup="dialog" aria-expanded="false" title="Sort, group and filter the list"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span class="lbl">View</span><b id="lib-view-n" hidden></b></button>
         <button id="lib-folder-menu" class="btn ghost icon" type="button" aria-haspopup="menu" aria-label="This folder" title="This folder"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
@@ -273,6 +274,7 @@
           <div id="lib-list" class="lib-list"></div>
           <div class="lib-status"><span id="lib-count" aria-live="polite"></span><span class="lib-drop-hint">Drop files here to add them to this folder.</span><span id="lib-stats" class="muted">Your documents, notes and recordings. Everything is searchable, by you and by the assistant.</span></div>
         </div>
+        <aside id="lib-prev" class="lib-prev" aria-label="Preview" hidden></aside>
       </div>
     </section>
 

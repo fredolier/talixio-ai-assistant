@@ -293,6 +293,19 @@ const flows = {
     await page.keyboard.press('Escape'); await page.waitForTimeout(100);
     await page.keyboard.press('ArrowDown'); await page.waitForTimeout(100);
     check('explorer: arrow keys move between rows', await page.evaluate(() => document.activeElement.classList.contains('lib-row')));
+    // slice 5: preview pane
+    check('explorer: the preview pane is off by default', !(await page.isVisible('#lib-prev')));
+    await page.click('#lib-prev-btn'); await page.waitForTimeout(150);
+    check('explorer: the preview button opens an empty pane', await page.isVisible('#lib-prev') && (await page.textContent('#lib-prev')).includes('Select a file'));
+    await page.click('#lib-list .lib-row[data-id] .name'); await page.waitForTimeout(500);
+    check('explorer: a click previews the file instead of opening it', await page.isVisible('#lib-prev h3') && !(await page.isVisible('#viewer')) && await page.isVisible('#lib-list .lib-row.cur'));
+    check('explorer: the pane shows an excerpt of a text file', await page.isVisible('#lib-prev .lib-prev-text'));
+    await page.dblclick('#lib-list .lib-row[data-id] .name'); await page.waitForTimeout(500);
+    check('explorer: a double click opens the file', await page.isVisible('#viewer'));
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+    await page.click('#lib-prev-btn'); await page.waitForTimeout(100);
+    check('explorer: the pane closes again', !(await page.isVisible('#lib-prev')));
+    await page.reload(); await page.waitForTimeout(900);
     await page.setViewportSize({ width: 390, height: 780 }); await page.waitForTimeout(200);
     check('explorer mobile: no column header, list starts under 130 px', !(await page.isVisible('.lib-cols')) && (await page.evaluate(() => document.querySelector('#lib-list').getBoundingClientRect().top)) < 190);
     await page.click('#lib-list .lib-row[data-id] .ico'); await page.waitForTimeout(150);
