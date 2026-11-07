@@ -1596,7 +1596,11 @@ check('pilot: similar past decisions come back as precedents', ($pi->precedents(
 check('pilot: answers are compared loosely', Talixio\Pilot::same('Garder A', 'garder a.') && Talixio\Pilot::same('short', 'Short title please') && !Talixio\Pilot::same('yes', 'no'));
 check('pilot: fleet_inbox lists the limits, priorities and the way to answer', str_contains($con->inboxView(), '## Your limits') && str_contains($con->inboxView(), 'Client work first') && str_contains($con->inboxView(), 'fleet_decide'));
 check('pilot: the overview suggests more room only after enough right answers', $pi->overview()['levels']['L3']['suggest'] === null && $pi->overview()['calibration']['n'] >= 2);
-$pi->setPolicy(['enabled' => false, 'autonomy' => ['L2' => 'ask'], 'priorities' => []]);
+$pi->setPolicy(['rules' => ["- Never touch billing without asking", "2) Keep answers short", ""], 'daily_cap' => 0]);
+check('pilot: standing rules are cleaned, shown to the assistant, and the cap is clamped', $pi->rules() === ['Never touch billing without asking', 'Keep answers short'] && str_contains($con->inboxView(), 'Never touch billing') && str_contains($con->inboxView(), 'daily cap: 0') && $pi->overview()['daily_cap'] === 0);
+$pi->setPolicy(['daily_cap' => 999]);
+check('pilot: the daily cap is bounded', $pi->overview()['daily_cap'] === 200);
+$pi->setPolicy(['enabled' => false, 'autonomy' => ['L2' => 'ask'], 'priorities' => [], 'rules' => [], 'daily_cap' => 20]);
 $roster([]);
 // the cockpit rebuilt for a fleet (1.18.0): replies per agent with their own unread count, a journal of fleet-wide reports and alerts, a decision journal
 $con->setNotify('inapp'); $con->markRead(); foreach (['u1', 'u2', 'sess-9'] as $xid) $con->markAgentRead($xid);

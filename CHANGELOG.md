@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.28.0 (2026-11-07)
+
+- **Standing rules and a daily cap for the autonomous pilot.** The Autonomy tab gets **Standing rules** (lasting preferences, one per line): they are listed in `fleet_inbox`, the triage prompt tells the assistant that a rule beats a guess, and `fleet_priorities` now also records rules the user states in the chat. A **daily cap** (20 by default, 0–200) is enforced in code: once the assistant has sent that many answers by itself today, further ones stay proposals.
+
 ## 1.27.0 (2026-11-07)
 
 - **The autonomous pilot: the assistant decides within your limits, and learns.** New **Autonomy** tab in Pilotage → Your autonomous pilot. (1) **It wakes by itself**: when an agent asks a question, the worker has the assistant read it (`fleet_inbox`, now with similar past decisions, your limits and your priorities) and answer with the new `fleet_decide` tool — an answer with an honest confidence; a 15-minute safety net catches questions left unattended. (2) **Your limits, enforced in code, not by the model**: per level L1–L5, *I propose, you answer* / *I answer if sure, then tell you* / *…quietly*, and a confidence threshold. L4/L5, approvals and anything about pushes, deploys, deletions, e-mails, credentials or payments are never sent by the assistant; below the threshold, its answer is shown on the question as a *Suggested answer* with a **Send this answer** button. (3) **It learns**: each answer is a prediction scored against your own answer or your **Yes / No, that was wrong** (accuracy per level, calibration of its confidence); a miss lowers the level at once, enough right answers *suggest* more room (never raised by itself), and every outcome is a Mind observation. (4) **Priorities**: an ordered list (set in the tab, or by telling the assistant — `fleet_priorities`) it arbitrates by. The FAQ page Pilotage follows in both languages.

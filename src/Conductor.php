@@ -689,6 +689,8 @@ final class Conductor
         $out[] = '## Your limits (set by the user; fleet_decide enforces them)';
         $out[] = '- autonomy: ' . implode(', ', array_map(fn($l, $m) => "$l=$m", array_keys($pol['autonomy']), $pol['autonomy'])) . '; sends only above ' . (int)round($pol['threshold'] * 100) . '% confidence.';
         $out[] = $pol['priorities'] ? "- priorities, in order:\n  " . implode("\n  ", array_map(fn($i, $x) => ($i + 1) . '. ' . $x, array_keys($pol['priorities']), $pol['priorities'])) : '- no priorities set yet: ask the user for them when agents compete for effort.';
+        $out[] = $pol['rules'] ? "- standing rules (the user's, follow them):\n  - " . implode("\n  - ", $pol['rules']) : '- no standing rules yet: when the user states a lasting preference (« never touch X », « always do Y before Z »), record it with fleet_priorities (rules).';
+        $out[] = '- daily cap: ' . (int)$pol['daily_cap'] . ' answers sent by yourself per day.';
         $dec = array_slice($b['decisions'] ?? [], -10);
         $out[] = '## Latest decisions (' . count($dec) . ' of ' . count($b['decisions'] ?? []) . ')';
         foreach (array_reverse($dec) as $d) $out[] = '- ' . date('d/m H:i', (int)$d['ts']) . " {$d['name']}" . ($d['type'] !== '' ? " [{$d['type']}]" : '') . " — Q: " . $clip((string)$d['question'], 200) . " → A ({$d['by']}): " . $clip((string)$d['answer'], 300);

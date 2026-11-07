@@ -45,7 +45,7 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
   proposition apparaît sur la question comme *Réponse suggérée*, avec un bouton **Envoyer cette réponse**. Chaque réponse est notée
   avec sa confiance puis évaluée : face à votre propre réponse, ou avec **Oui / Non, c'était faux** sur ce qu'il a envoyé.
   Une erreur ramène aussitôt le niveau en arrière ; après assez de bonnes réponses il *suggère* de lui laisser plus de place
-  (il ne relève jamais seul ses limites). Les corrections apprennent aussi au Mind comment vous décidez.
+  (il ne relève jamais seul ses limites). Les corrections apprennent aussi au Mind comment vous décidez. Plus bas, les **Règles permanentes** (une préférence durable par ligne, p. ex. *ne jamais toucher à la facturation sans me demander*) sont données à l'assistant avec chaque question ; dites-lui une règle dans le chat et il l'enregistre. Un **plafond quotidien** (20 par défaut) limite le nombre de réponses qu'il peut envoyer seul chaque jour ; au-delà, il se contente de proposer.
 - **L'assistant peut lire les questions de la flotte.** Demandez « qu'attendent les agents ? » : il liste les questions en
   attente (options, niveau, coût d'un mauvais choix), les dernières décisions et qui les a prises, les alertes récentes et la
   conversation de n'importe quel agent. Il ne fait que lire ; il ne répond (avec l'identifiant de décision) que ce que vous

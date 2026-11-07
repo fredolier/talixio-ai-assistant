@@ -33,7 +33,7 @@ final class Pilot
         $s = is_file($f = $this->file()) ? (json_decode((string)file_get_contents($f), true) ?: []) : [];
         $s['autonomy'] = array_merge(array_fill_keys(self::LEVELS, 'ask'), array_intersect_key((array)($s['autonomy'] ?? []), array_flip(self::LEVELS)));
         foreach (self::KEPT as $l) $s['autonomy'][$l] = 'ask';
-        $s += ['enabled' => false, 'threshold' => 0.75, 'priorities' => [], 'predictions' => [], 'outcomes' => [], 'pending' => 0, 'last_wake' => 0];
+        $s += ['enabled' => false, 'threshold' => 0.75, 'priorities' => [], 'rules' => [], 'daily_cap' => 20, 'predictions' => [], 'outcomes' => [], 'pending' => 0, 'last_wake' => 0];
         return $s;
     }
 
@@ -60,7 +60,7 @@ final class Pilot
                 'suggest' => $this->suggest($l, $s)];
         }
         $recent = array_slice(array_reverse(array_values($s['predictions'])), 0, 30);
-        return ['enabled' => (bool)$s['enabled'], 'threshold' => (float)$s['threshold'], 'priorities' => array_values($s['priorities']), 'levels' => $acc, 'recent' => $recent,
+        return ['enabled' => (bool)$s['enabled'], 'threshold' => (float)$s['threshold'], 'priorities' => array_values($s['priorities']), 'rules' => array_values($s['rules']), 'daily_cap' => (int)$s['daily_cap'], 'sent_today' => $this->sentToday($s), 'levels' => $acc, 'recent' => $recent,
             'calibration' => $this->calibration($s)];
     }
 
@@ -94,6 +94,8 @@ final class Pilot
                 $s['autonomy'][$l] = $m;
             }
             if (isset($in['priorities'])) $s['priorities'] = self::cleanList($in['priorities']);
+            if (isset($in['rules'])) $s['rules'] = self::cleanList($in['rules']);
+            if (isset($in['daily_cap'])) $s['daily_cap'] = max(0, min(200, (int)$in['daily_cap']));
             return [$s, null];
         });
         return $err ?? $this->overview();
@@ -107,6 +109,15 @@ final class Pilot
         foreach ($a as $x) if (is_scalar($x) && ($x = mb_substr(trim(preg_replace('/^\s*(?:\d+[.)]|[-*•])\s*/u', '', (string)$x)), 0, 200)) !== '') $out[] = $x;
         return array_slice($out, 0, 12);
     }
+
+    /** Answers the assistant sent by itself since midnight (the daily cap counts these). */
+    private function sentToday(array $s): int
+    {
+        $t0 = strtotime('today');
+        return count(array_filter($s['predictions'], fn($p) => ($p['action'] ?? '') === 'sent' && (int)($p['ts'] ?? 0) >= $t0));
+    }
+
+    public function rules(): array { return $this->state()['rules']; }
 
     public function priorities(): array { return $this->state()['priorities']; }
 
@@ -137,7 +148,7 @@ final class Pilot
     public static function triagePrompt(): string
     {
         return "[Fleet triage — agents of the fleet wait for a decision.] Call fleet_inbox. For each waiting DECISION or INSTRUCTION question (never an approval): "
-            . "weigh the similar past decisions it lists, what you know of how the user decides (your memory and Mind), and the user's priorities; then call fleet_decide with your answer, "
+            . "weigh the similar past decisions it lists, what you know of how the user decides (your memory and Mind), the user's priorities and STANDING RULES (listed by fleet_inbox; a rule that covers the question beats a guess, and a question that breaks a rule is answered « no » or left to the user); then call fleet_decide with your answer, "
             . "an HONEST confidence from 0 to 1 (0.9+ only when a clear precedent or rule covers it; below 0.5 when you are guessing) and one sentence of rationale. "
             . "The code enforces the user's limits: you may always call it, it decides whether the answer is sent or only proposed. Do not answer levels L4/L5 or anything about pushes, deploys, deletions, e-mails or credentials: call fleet_decide with confidence 0.1 so the user sees your suggestion. "
             . "If several agents compete for the same effort, say which the priorities favour. Reply TRIAGE_OK if everything was handled quietly; otherwise ONE short message for the user (what needs them, with your suggestion).";
@@ -169,7 +180,7 @@ final class Pilot
         $confidence = max(0.0, min(1.0, $confidence));
         $s = $this->state();
         $mode = $s['autonomy'][$level];
-        $sendable = $mode !== 'ask' && $confidence >= (float)$s['threshold'] && !self::sensitive($w['question'] . ' ' . $w['cost']);
+        $sendable = $mode !== 'ask' && $confidence >= (float)$s['threshold'] && !self::sensitive($w['question'] . ' ' . $w['cost']) && $this->sentToday($s) < (int)$s['daily_cap'];
         $action = $sendable ? 'sent' : 'proposed';
         $this->mutate(function (array $s) use ($id, $agent, $ag, $w, $level, $answer, $confidence, $rationale, $action) {
             $s['predictions'][$id] = ['id' => $id, 'agent' => $agent, 'name' => $ag['name'], 'level' => $level, 'question' => mb_substr($w['question'], 0, 600), 'answer' => mb_substr($answer, 0, 1000),
@@ -183,7 +194,7 @@ final class Pilot
             if ($mode === 'tell') $this->app->notifier()->notify('Fleet: I answered for you', "{$ag['name']} asked: " . mb_substr($w['question'], 0, 300) . "\nI said: " . mb_substr($answer, 0, 300) . ' (' . (int)round($confidence * 100) . "% sure). Tell me if that was wrong — I will learn from it.");
             return "sent to `$agent` ($level, $mode, " . (int)round($confidence * 100) . '%). The user will confirm or correct it; do not repeat it.';
         }
-        $why = in_array($level, self::KEPT, true) ? "$level is the user's to decide" : ($mode === 'ask' ? "autonomy at $level is « ask »" : 'confidence below the threshold ' . (int)round($s['threshold'] * 100) . '%');
+        $why = ($mode !== 'ask' && $confidence >= (float)$s['threshold'] && $this->sentToday($s) >= (int)$s['daily_cap']) ? 'the daily cap of ' . (int)$s['daily_cap'] . ' answers sent by itself is reached' : (in_array($level, self::KEPT, true) ? "$level is the user's to decide" : ($mode === 'ask' ? "autonomy at $level is « ask »" : 'confidence below the threshold ' . (int)round($s['threshold'] * 100) . '%'));
         $this->app->conductor()->suggest($agent, $id, $answer, $confidence);
         return "not sent ($why): kept as a proposal the user sees in the cockpit with your answer and confidence.";
     }

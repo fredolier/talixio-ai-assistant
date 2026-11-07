@@ -6108,6 +6108,10 @@ function plRenderAuto() {
     ${a.calibration ? `<p class="muted small no-i18n">${esc(t('Calibration'))}: ${esc(t('says'))} ${Math.round(a.calibration.confidence * 100)}% · ${esc(t('is right'))} ${Math.round(a.calibration.hit_rate * 100)}% (${a.calibration.n})</p>` : ''}
     <h5>${esc(t('Your priorities, most important first'))}</h5>
     <textarea id="pa-pr" rows="4" class="no-i18n" placeholder="${esc(t('One per line: e.g. client deliveries before internal tools'))}">${esc((a.priorities || []).join('\n'))}</textarea>
+    <h5>${esc(t('Standing rules'))}</h5>
+    <textarea id="pa-ru" rows="3" class="no-i18n" placeholder="${esc(t('One lasting preference per line: e.g. never touch billing without asking me'))}">${esc((a.rules || []).join('\n'))}</textarea>
+    <p class="muted small">${esc(t('The assistant follows these when it answers, and adds the ones you tell it in the chat.'))}</p>
+    <div class="row wrap"><label>${esc(t('At most'))} <input type="number" id="pa-cap" min="0" max="200" value="${+a.daily_cap}" class="no-i18n" style="width:4.5em"> ${esc(t('answers sent by itself per day'))}</label> <span class="muted small no-i18n">(${+a.sent_today} ${esc(t('today'))})</span></div>
     <div class="row"><button type="button" class="btn primary" data-auto-save>${esc(t('Save'))}</button></div>
     ${a.recent?.length ? `<h5>${esc(t('Its latest answers'))}</h5><div class="pl-rec">${a.recent.map(p => `<div class="pl-rw"><span class="pilot-dot pstate-${p.hit === undefined ? 'idle' : p.hit ? 'active' : 'error'}"></span>
       <div><div class="pl-n no-i18n">${esc(p.name)} · ${esc(p.level)} · ${Math.round(p.confidence * 100)}%</div><div class="pl-s no-i18n">${esc(plClip(p.answer, 70))} — <span>${esc(p.action === 'sent' ? t('sent') : t('proposed'))}${p.hit === undefined ? '' : ' · ' + esc(p.hit ? t('right') : t('wrong'))}</span></div></div>
@@ -6116,7 +6120,7 @@ function plRenderAuto() {
 }
 async function plSaveAuto() {
   const autonomy = {}; document.querySelectorAll('#pl-auto [data-auto-lv]').forEach(s => { autonomy[s.dataset.autoLv] = s.value; });
-  try { PL.auto = await post('api/pilot', { enabled: $('#pa-on').checked, threshold: Math.max(50, Math.min(99, +$('#pa-th').value || 75)) / 100, autonomy, priorities: $('#pa-pr').value }); toast(t('Saved.')); plRenderAuto(); }
+  try { PL.auto = await post('api/pilot', { enabled: $('#pa-on').checked, threshold: Math.max(50, Math.min(99, +$('#pa-th').value || 75)) / 100, autonomy, priorities: $('#pa-pr').value, rules: $('#pa-ru').value, daily_cap: +$('#pa-cap').value || 0 }); toast(t('Saved.')); plRenderAuto(); }
   catch (e) { toast(e.message); }
 }
 async function plVerdict(el) {

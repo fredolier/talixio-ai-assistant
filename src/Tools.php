@@ -619,12 +619,13 @@ final class Tools
             ['agent' => ['type' => 'string'], 'answer' => ['type' => 'string', 'description' => 'the answer, as the agent should receive it (an option verbatim when it offered options)'],
              'confidence' => ['type' => 'number', 'description' => '0 to 1'], 'rationale' => ['type' => 'string', 'description' => 'one sentence: the precedent or priority behind it']], ['agent', 'answer', 'confidence'],
             fn(array $a) => $this->sharedWrite('skills') ?? $this->app->pilot()->decide((string)$a['agent'], (string)$a['answer'], (float)$a['confidence'], (string)($a['rationale'] ?? '')));
-        $this->register('fleet_priorities', "Read, or set when the user tells you, the ordered priorities you arbitrate between the fleet's agents by (most important first). Set only what the user said; limits and autonomy are the user's to change in the cockpit.",
-            ['priorities' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'omit to read']], [],
+        $this->register('fleet_priorities', "Read, or set when the user tells you, the ordered priorities and the standing rules (lasting preferences, learned from how the user works) you arbitrate between the fleet's agents by (most important first). Set only what the user said; limits and autonomy are the user's to change in the cockpit.",
+            ['priorities' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'omit to read'], 'rules' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => "the user's standing rules for the fleet, one lasting preference each; the full list replaces the old one; omit to leave as is"]], [],
             function (array $a) {
-                if (isset($a['priorities'])) { if ($e = $this->sharedWrite('skills')) return $e; $this->app->pilot()->setPolicy(['priorities' => $a['priorities']]); }
-                $p = $this->app->pilot()->priorities();
-                return $p ? "Priorities:\n" . implode("\n", array_map(fn($i, $x) => ($i + 1) . '. ' . $x, array_keys($p), $p)) : 'No priorities set yet.';
+                if (isset($a['priorities']) || isset($a['rules'])) { if ($e = $this->sharedWrite('skills')) return $e; $this->app->pilot()->setPolicy(array_intersect_key($a, ['priorities' => 1, 'rules' => 1])); }
+                $p = $this->app->pilot()->priorities(); $r = $this->app->pilot()->rules();
+                return ($p ? "Priorities:\n" . implode("\n", array_map(fn($i, $x) => ($i + 1) . '. ' . $x, array_keys($p), $p)) : 'No priorities set yet.')
+                    . "\n" . ($r ? "Standing rules:\n- " . implode("\n- ", $r) : 'No standing rules yet.');
             });
         $this->register('fleet_status', 'Is a fleet orchestrator connected, which session, and is it still alive (when it last reported vs. when last sent to). Suggests recreating it if it has gone quiet.',
             [], [], fn() => $this->app->conductor()->fleetStatus());

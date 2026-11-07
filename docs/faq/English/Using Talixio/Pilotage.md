@@ -41,7 +41,7 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
   always yours**, whatever the setting. A proposal appears on the question as a *Suggested answer* with a **Send this
   answer** button. Every answer is written down with its confidence and scored: against your own answer when you give
   one, or with **Yes / No, that was wrong** on what it sent. A miss lowers that level back at once; after enough right
-  answers it *suggests* giving it more room (it never raises its own limits). Corrections also teach the Mind how you decide.
+  answers it *suggests* giving it more room (it never raises its own limits). Corrections also teach the Mind how you decide. Below, **Standing rules** (one lasting preference per line, e.g. *never touch billing without asking me*) are given to the assistant with every question; tell it a rule in the chat and it records it. A **daily cap** (20 by default) limits how many answers it may send by itself each day; beyond it, it only proposes.
 - **The assistant can read the fleet's questions.** Ask « what are the agents waiting for? »: it lists the waiting questions
   (options, level, cost of a wrong choice), the latest decisions and who took them, recent alerts, and any agent's
   conversation. It reads only; it answers (with the decision id) just what is yours to leave to it, never levels L4/L5,
