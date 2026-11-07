@@ -35,6 +35,10 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
   approbations et demandes de permission ne sont jamais routées : vous seul pouvez les donner. Une nouvelle question compte comme
   une nouveauté : elle apparaît dans la pastille même lors d'un point silencieux. Un pilote jumelé avant cette version a besoin
   une fois des consignes du message de jumelage : reconnectez-le, ou envoyez-lui celles-ci.
+- **L'assistant peut lire les questions de la flotte.** Demandez « qu'attendent les agents ? » : il liste les questions en
+  attente (options, niveau, coût d'un mauvais choix), les dernières décisions et qui les a prises, les alertes récentes et la
+  conversation de n'importe quel agent. Il ne fait que lire ; il ne répond (avec l'identifiant de décision) que ce que vous
+  lui laissez, jamais les niveaux L4/L5, les pushs, déploiements, suppressions, e-mails, identifiants ou approbations.
 - **Rapports de la flotte** : comment les rapports du pilote vous parviennent (voir *Canaux et notifications*) : une pastille dans
   l'app par défaut, le Journal et les conversations, et en option push + e-mail.
 

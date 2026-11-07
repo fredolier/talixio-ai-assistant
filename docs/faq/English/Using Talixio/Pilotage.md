@@ -32,6 +32,10 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
   it is; your answer goes back with a decision id, and the pilot reports the session's next step. Approvals and permission
   prompts are never routed: only you can give them. A new question counts as news: it shows in the badge even on a quiet
   check-in. A pilot paired before this needs the instructions of the pairing message once: re-pair it, or send it those.
+- **The assistant can read the fleet's questions.** Ask « what are the agents waiting for? »: it lists the waiting questions
+  (options, level, cost of a wrong choice), the latest decisions and who took them, recent alerts, and any agent's
+  conversation. It reads only; it answers (with the decision id) just what is yours to leave to it, never levels L4/L5,
+  pushes, deploys, deletions, e-mails, credentials or approvals.
 - **Fleet reports**: how the pilot's reports reach you (see *Channels and notifications*): an in-app badge by default, the
   Journal and the conversations, and optionally push + e-mail.
 

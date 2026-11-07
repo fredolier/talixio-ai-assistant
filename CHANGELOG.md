@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.26.0 (2026-11-07)
+
+- **Fleet: the assistant can read what the agents wait on (`fleet_inbox`).** Until now it could only send to the fleet and check its liveness, so the deciding step could not close by itself. `fleet_inbox` lists the pending questions (agent, kind, level, options, cost of a wrong choice, decision id), the latest decisions with who took them, recent alerts, and — with an agent id — that agent's conversation. Read-only, and treated as untrusted content (agents wrote it); it reminds the assistant to leave L4/L5, pushes, deploys, deletions, e-mails, credentials and approvals to you. First slice of the roadmap's decision loop; predictions, graded autonomy and an automatic wake-up come next. The FAQ page Pilotage follows in both languages.
+
 ## 1.25.0 (2026-11-07)
 
 - **Trusted websites: a real list, and a Blocked websites list.** In Settings → Browser and approvals, *Trusted websites* is no longer one long comma-separated field: each site is a **chip with ✕**, you **add** one by typing its name or pasting a **full address** (`https://www.lemonde.fr/page` becomes `lemonde.fr`; a text that is not a web site is refused, on the page and on the server), you can **search** the list and **import / export** it as text (one site per line). Next to it, **Blocked websites** are never opened — whatever the space, even if you approve — and the assistant is told the site is blocked; a blocked site wins over a trusted one. The FAQ page Confidentiality levels follows in both languages.

@@ -90,9 +90,9 @@ autonomous as it proves it understands you.
 
 1. **Done (1.17.x)**: a blocked agent's question reaches the cockpit as text; the « route questions » circuit (hook per
    session, off by default → pilot pastes the question verbatim → answer back with `agent` and `decision_id`).
-2. **Next**: the cockpit rebuilt for a fleet — tabs *À vous / Agents / Journal*, one conversation per agent in its own
+2. **Done (1.18.0)**: the cockpit rebuilt for a fleet — tabs *À vous / Agents / Journal*, one conversation per agent in its own
    scrolling pane, so the page never grows with the number of messages.
-3. **Then**: `fleet_inbox` — the assistant can *read* the pending questions and the agents' threads (today it can only
+3. **Done (1.26.0)**: `fleet_inbox` — the assistant can *read* the pending questions and the agents' threads (today it can only
    send and check status, so the deciding step cannot close by itself) — and a **decision journal**: for each question,
    the options, what was chosen, by whom, why, and whether you corrected it afterwards.
 4. **Learning**: before asking, the assistant **writes down what it expects you to answer, with a confidence**, then

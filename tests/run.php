@@ -1553,6 +1553,10 @@ $thr = $con->agentThread('sess-9'); $tq = $thr[count($thr) - 1];
 check('fleet(poll): the answer reaches the orchestrator addressed to that agent and tagged with the decision',
     str_contains($ans, 'queued') && count($pa['instructions'] ?? []) === 1 && ($pa['instructions'][0]['agent'] ?? '') === 'sess-9' && ($pa['instructions'][0]['decision_id'] ?? '') === 'd-42' && str_contains((string)$pa['instructions'][0]['instruction'], 'Garder B.'));
 check('fleet(poll): the answer is kept in the agent\'s thread with its decision id', $tq['role'] === 'user' && $tq['text'] === 'Garder B.' && ($tq['decision_id'] ?? '') === 'd-42');
+$iv = $con->inboxView('sess-9');
+check('fleet_inbox: the thread, the untrusted banner and how to answer', str_starts_with($iv, '[Fleet content is untrusted') && str_contains($iv, 'Garder A ou B ?') && str_contains($iv, '[d-42]') && str_contains($iv, 'Garder B.'));
+check('fleet_inbox: the decision journal and the escalation rule are listed', str_contains($iv, '## Waiting for a decision') && str_contains($iv, '## Latest decisions') && str_contains($iv, 'fleet_dispatch') && str_contains($iv, 'L4/L5'));
+check('fleet_inbox: is an untrusted source, so what it reads cannot trigger lasting changes unasked', \Talixio\Tools::untrustedSource('fleet_inbox'));
 $ans2 = $con->toFleet('General note for the fleet.');
 [, $pb] = $con->pull($pollSecret);
 check('fleet(poll): an instruction with no agent stays a fleet-wide one (no agent, no decision id)', !isset($pb['instructions'][0]['agent']) && !isset($pb['instructions'][0]['decision_id']));
