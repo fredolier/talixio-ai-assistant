@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.29.2 (2026-11-07)
+
+- Security, PHP2Shell follow-up (CVE-2026-109618, CVE-2026-109619, exploited in the wild, CISA-listed): the 0.28.78 fix (Debian's patched PHP in the rebuilt dependencies image, upload-progress handler off) is confirmed against Debian's notices (DSA-6574-1, DLA-4848-1). The check script `deploy/check-php2shell.sh` was wrong for PHP 8.3 (it compared against a wrong version) and for Ubuntu; it now knows the four fixed releases (8.5.12, 8.4.27, 8.3.36, 8.2.35), tells "patched", "vulnerable" and "cannot tell" apart, and each assistant container runs it at start and logs a clear warning when its PHP is exposed. On a server updated before 0.28.78, rebuild with `install-stack.sh --rebuild-base`; without Docker run `apt update && apt upgrade`, then restart talixio-web.
+
 ## 1.29.1 (2026-11-07)
 
 - **Autonomy tab redesigned.** The switch, the levels, the limits, the priorities and the standing rules are now separate cards (the checkbox no longer stretches across the page, the text areas keep their height, the selects are styled, two columns on a wide screen). Priorities and standing rules can be **dictated** with a 🎙️. The permanent *Talk to the pilot* card under the cockpit tabs is gone: it only forwarded to the chat, so instructions are given in the chat, and the empty state says so.
