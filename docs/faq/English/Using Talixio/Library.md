@@ -11,6 +11,11 @@
   select the range, **Ctrl/Cmd-click** to add one, or on a phone tap a file's icon. The line at the top becomes the
   selection bar: **Move to…**, **Download zip**, **Delete** (asks once more). Esc or ✕ clears the selection.
   Dragging one of the selected files to a folder moves them all.
+- **Folders in a selection**: tick a folder's box (or Ctrl/Cmd-click it): the bar offers **Download zip** and **Move to…**
+  for the folders and their content. To delete a folder, use its own ⋮ menu.
+- **Everything below** (View → Show): lists every file under the current folder in one list, with its folder under the name.
+- **Favourites**: *Pin to the tree* in a folder's ⋮ menu adds it to the top of the tree on this device; ✕ removes it.
+  A folder's **Modified** date is that of its newest file.
 - **Preview pane** (button next to the layout icons, computer only): a click on a file shows its thumbnail, details and
   a text excerpt on the right instead of opening it; a double click (or Enter) opens it. Open and Download are in the pane.
 - **Navigating like an explorer**: at the left of the path, **Folder tree** shows or hides the tree (hidden by default on a

@@ -293,6 +293,23 @@ const flows = {
     await page.keyboard.press('Escape'); await page.waitForTimeout(100);
     await page.keyboard.press('ArrowDown'); await page.waitForTimeout(100);
     check('explorer: arrow keys move between rows', await page.evaluate(() => document.activeElement.classList.contains('lib-row')));
+    // 1.24.0: folder dates, pins, everything below, folders in a selection
+    await page.evaluate(async () => { await fetch('api/library/folder', { method: 'POST', headers: { 'X-Talixio': '1', 'content-type': 'application/json' }, body: JSON.stringify({ path: '/Explorer/Sub' }) });
+      const fd = new FormData(); fd.append('file', new File(['deep'], 'deep.md')); fd.append('folder', '/Explorer/Sub'); await fetch('api/files', { method: 'POST', headers: { 'X-Talixio': '1' }, body: fd }); });
+    await page.evaluate(() => { location.hash = '#library'; }); await page.waitForTimeout(500);
+    await page.evaluate(() => { location.hash = '#library/Explorer'; }); await page.waitForTimeout(900);
+    check('explorer: a folder row shows the date of its newest file', (await page.textContent('#lib-list .lib-folder .c-mod')).trim().length > 0);
+    await page.click('#lib-view-btn'); await page.click('.lib-pop [data-flat="1"]'); await page.waitForTimeout(500);
+    check('explorer: Everything below lists the files of subfolders too, with their folder', (await names()).includes('deep.md') && !(await page.isVisible('#lib-list .lib-folder')));
+    await page.click('.lib-pop [data-flat=""]'); await page.waitForTimeout(500); await page.keyboard.press('Escape');
+    check('explorer: This folder brings the subfolders back', await page.isVisible('#lib-list .lib-folder') && !(await names()).includes('deep.md'));
+    await page.click('#lib-list .lib-folder .pick'); await page.waitForTimeout(150);
+    check('explorer: a folder can be selected; the bar offers zip and move but not delete', await page.isVisible('#lib-selbar') && !(await page.isVisible('#lib-sel-del')) && (await page.getAttribute('#lib-sel-zip', 'href')).includes('paths=%2FExplorer%2FSub'));
+    await page.click('#lib-sel-clear');
+    await page.click('#lib-list .lib-folder .kebab'); await page.click('.row-menu-item:has-text("Pin to the tree")'); await page.waitForTimeout(200);
+    check('explorer: a pinned folder appears in the tree favourites', await page.isVisible('.tree-pins a[data-path="/Explorer/Sub"]'));
+    await page.click('.tree-pins [data-unpin]'); await page.waitForTimeout(150);
+    check('explorer: and can be unpinned', !(await page.isVisible('.tree-pins')));
     // slice 5: preview pane
     check('explorer: the preview pane is off by default', !(await page.isVisible('#lib-prev')));
     await page.click('#lib-prev-btn'); await page.waitForTimeout(150);

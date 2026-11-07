@@ -24,11 +24,11 @@ user; the mockup itself is not in the repo). It ships in slices, each pushed on 
 4. **1.22.0 — explorer navigation** (done). Tree toggle (`talixio.lib.tree`, default hidden under 1100 px), Back (own depth counter over `history.back()`), Up, right-click menus reusing `libFileMenu`/`libFolderMenu` through a pointer anchor, keyboard shortcuts in one `keydown` handler that stands down when a field, dialog, menu, panel or regex search is open.
 5. **1.23.0 — preview pane** (done). Right column (`talixio.lib.preview`), desktop only; with it on a click previews and a double click opens; Type/By columns drop; tree default-hidden below 1500 px. Text excerpt comes from `api/files/<id>/text` (first 1 500 characters).
 
+6. **1.24.0 — the four open points** (done, decided 2026-11-07): folder *Modified* = newest file inside (`Library::tree()` → `changed`); `api/library?flat=1` for « everything below » (2 000 files max); pins in `localStorage` (`talixio.lib.pins`); folders selectable for Zip (`api/library/zip?paths=a|b`) and Move (one `folder/move` each), never Delete.
+
 ## Decisions and open points
 
-- Folders stay on top whatever the sort; on *Size* they sort by their file count. Their *Modified* column is
-  empty: the server does not compute a folder's date (open: compute it, or leave it).
-- Folders cannot be selected yet (bulk actions on folders need their own API semantics).
-- Open: a flat "show everything below this folder" option; pinned favourite folders in the tree.
+- Folders stay on top whatever the sort; on *Size* they sort by their file count. Their *Modified* column is the newest file inside (1.24.0).
+- Folders can be selected for Zip and Move only (1.24.0); Delete stays per folder.
 - The old regex-search results keep their own checkboxes and bulk bar (`libRegexRender`); they may merge
   into the selection bar later.

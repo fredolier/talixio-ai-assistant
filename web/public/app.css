@@ -467,6 +467,12 @@ tr:last-child td{border-bottom:0}
 .lib-tree a.active{background:var(--accent-soft);font-weight:600}
 .lib-tree a.active svg{color:var(--accent)}
 .tree-head{display:flex;align-items:center;gap:4px}
+.tree-pins{display:flex;flex-direction:column;gap:1px;padding:4px 0 6px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+.tree-pins-head{padding:2px 8px;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.tree-row.pin{display:flex;align-items:center}
+.tree-row.pin a{flex:1;min-width:0}
+.tree-row.pin .unpin{all:unset;cursor:pointer;color:var(--muted);width:22px;text-align:center;font-size:.72rem;opacity:0}
+.tree-row.pin:hover .unpin,.tree-row.pin .unpin:focus-visible{opacity:1}
 .lib-tree .tree-trash{margin-top:6px;border-top:1px solid var(--line);border-radius:0 0 8px 8px;padding-top:8px;color:var(--muted)}
 .trash-dialog{width:min(640px,calc(100vw - 32px))}
 .trash-list{display:flex;flex-direction:column;max-height:60vh;overflow-y:auto;margin:10px 0}

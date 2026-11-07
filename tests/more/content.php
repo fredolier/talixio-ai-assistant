@@ -524,6 +524,8 @@ check('files: a zip keeps the tree, renames clashing names and skips missing fil
 $emptyZip = $files->zipFolder('/Projects/Empty');
 $zr = new ZipArchive(); $zr->open($emptyZip); $en = $zr->getNameIndex(0); $zr->close(); @unlink($emptyZip);
 check('files: an empty folder downloads as an empty folder', $en === 'Empty/');
+$pz = $files->zipFolder('/', null, ['/Projects/A']); $zr = new ZipArchive(); $zr->open($pz); $pn = []; for ($i = 0; $i < $zr->numFiles; $i++) $pn[] = $zr->getNameIndex($i); $zr->close(); @unlink($pz);
+check('files: a zip of chosen folders keeps their path from the library root', count($pn) === 2 && !array_filter($pn, fn($n) => !str_starts_with($n, 'Projects/A/')), json_encode($pn));
 $fa->store->q('UPDATE files SET size = 5000000000 WHERE id = ?', [$z1]);
 check('files: a folder over 4 GB is not zipped', (function () use ($files) { try { $files->zipFolder('/Projects'); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), 'over 4 GB'); } })());
 

@@ -1863,6 +1863,9 @@ $label = $la->store->q("SELECT label FROM docs WHERE kind = 'file' AND ref = ?",
 check('library: search entries carry the folder path', $label === "/Clients/Alice/facture-alice.docx #$idDocx", (string)$label);
 $tree = array_column($lib->tree(), null, 'path');
 check('library: tree with parent folders and counts', isset($tree['/Admin'], $tree['/Admin/Logement'], $tree['/Meetings'], $tree['/Notes']) && $tree['/Admin']['total'] === 3 && $tree['/Admin']['files'] === 0 && $tree['/Admin/Logement']['depth'] === 2);
+check('library: a folder carries the date of its newest file, subfolders included', $tree['/Admin']['changed'] > 0 && $tree['/Admin']['changed'] >= $tree['/Admin/Logement']['changed']);
+$flat = $lib->list('/Admin', true);
+check('library: the flat listing has every file below and no subfolders', $flat['folders'] === [] && count($flat['files']) === 3);
 $l = $lib->list('/Admin');
 check('library: listing shows direct subfolders and files', array_column($l['folders'], 'path') === ['/Admin/Logement'] && $l['files'] === []);
 $all = array_column($lib->search('facture'), 'id');

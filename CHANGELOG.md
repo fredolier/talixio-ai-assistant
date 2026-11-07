@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.24.0 (2026-11-07)
+
+- **Library: the four open points of the explorer, settled.** (1) A **folder shows its Modified date** — the newest file inside, subfolders included — and sorts by it. (2) **View → Show → Everything below** lists every file under the current folder in one flat list (the folder is the subtitle of each row; up to 2 000 files; it resets when you change folder). (3) **Pinned folders**: *Pin to the tree* in a folder's ⋮ menu puts it in a **Favourites** block at the top of the tree (✕ to remove; kept on this device). (4) **Folders can be selected** (checkbox, Ctrl/Cmd-click): the selection bar then offers **Download zip** (the folders with all their content) and **Move to…** (each folder moves with its files); **Delete** stays on a folder's own menu, since it takes all its files with it. The FAQ page Library follows in both languages.
+
 ## 1.23.0 (2026-11-06)
 
 - **Library: preview pane.** A **Preview pane** button (next to the layout icons, computer only) opens a column on the right: select a file with one click and it shows its thumbnail (or an audio player, or the file type), its type, size, date, who changed it and its folder, an excerpt of the text for documents and notes, and **Open** / **Download**. With the pane on, a click previews and a **double click** (or Enter) opens the full viewer; the table gives up its Type and By columns to keep the names readable, and the folder tree starts hidden on a window narrower than 1500 px (the tree button still brings it back). The choice is remembered on the device. This completes the explorer redesign. The FAQ page Library follows in both languages.

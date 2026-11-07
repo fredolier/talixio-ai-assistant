@@ -12,6 +12,11 @@
   d'un fichier. La ligne du haut devient la barre de sélection : **Déplacer vers…**, **Télécharger le zip**,
   **Supprimer** (redemande une fois). Échap ou ✕ efface la sélection. Glisser l'un des fichiers sélectionnés vers un
   dossier les déplace tous.
+- **Dossiers dans une sélection** : cochez la case d'un dossier (ou Ctrl/Cmd-clic) : la barre propose **Télécharger en zip**
+  et **Déplacer vers…** pour les dossiers et leur contenu. Pour supprimer un dossier, utilisez son propre menu ⋮.
+- **Tout ce qui est dessous** (Affichage → Afficher) : liste tous les fichiers sous le dossier courant, avec leur dossier sous le nom.
+- **Favoris** : *Épingler dans l'arbre* dans le menu ⋮ d'un dossier l'ajoute en haut de l'arbre sur cet appareil ; ✕ le retire.
+  La date **Modifié** d'un dossier est celle de son fichier le plus récent.
 - **Volet d'aperçu** (bouton à côté des icônes d'affichage, sur ordinateur) : un clic sur un fichier montre sa vignette,
   ses détails et un extrait du texte à droite au lieu de l'ouvrir ; un double clic (ou Entrée) l'ouvre. Ouvrir et
   Télécharger sont dans le volet.

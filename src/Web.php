@@ -67,7 +67,7 @@ final class Web
             if (preg_match('#^/api/files/(\d+)/pdf(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveOfficePdf((int)$fm[1]); return; }
             if (preg_match('#^/api/files/(\d+)/versions/(\d+)/file$#', $path, $fm) && $method === 'GET') { $this->serveVersion((int)$fm[1], (int)$fm[2]); return; }
             if (preg_match('#^/api/files/(\d+)/(thumb|page/(\d+))$#', $path, $fm) && $method === 'GET') { $this->servePreview((int)$fm[1], (int)($fm[3] ?? 0)); return; }
-            if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/'), isset($_GET['ids']) && $_GET['ids'] !== '' ? array_map('intval', explode(',', (string)$_GET['ids'])) : null); return; }
+            if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/'), isset($_GET['ids']) && $_GET['ids'] !== '' ? array_map('intval', explode(',', (string)$_GET['ids'])) : null, isset($_GET['paths']) && $_GET['paths'] !== '' ? array_slice(explode('|', (string)$_GET['paths']), 0, 200) : null); return; }
             if ($path === '/api/privacy/journal.csv' && $method === 'GET') { $this->privacyCsv(); return; }
             if ($path === '/api/privacy/register' && $method === 'GET') {
                 header('Content-Type: text/markdown; charset=utf-8'); header('Cache-Control: no-store');
@@ -507,7 +507,7 @@ final class Web
     private function routeLibrary(string $m, string $path, array $b): array
     {
         return match (true) {
-            $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/')) + ['stats' => $this->app->library()->stats(), 'shared' => $this->app->shares()->sharedIndex(),
+            $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/'), !empty($_GET['flat'])) + ['stats' => $this->app->library()->stats(), 'shared' => $this->app->shares()->sharedIndex(),
                 'level' => $this->app->privacy()->folderLevel(Library::normalize((string)($_GET['folder'] ?? '/')))],
             $path === '/api/privacy' => $this->app->privacy()->overview() + ['journal' => $this->app->privacy()->journal()],
             $path === '/api/shares' && $m === 'GET' => ['shares' => $this->app->shares()->list((string)($_GET['scope'] ?? 'active'), isset($_GET['file']) ? (int)$_GET['file'] : null, isset($_GET['folder']) ? (string)$_GET['folder'] : null),
@@ -1385,11 +1385,11 @@ final class Web
         $this->sendPath($p, 'image/jpeg', 'inline', "default-src 'none'; sandbox");
     }
 
-    private function serveZip(string $folder, ?array $only = null): void
+    private function serveZip(string $folder, ?array $only = null, ?array $paths = null): void
     {
         set_time_limit(0);
         $folder = Library::normalize($folder);
-        try { $tmp = $this->app->files()->zipFolder($folder, $only); }
+        try { $tmp = $this->app->files()->zipFolder($folder, $only, $paths); }
         catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
         $name = ($folder === '/' ? 'Library' : basename($folder)) . '-' . date('Y-m-d') . '.zip';
         try { $this->sendPath($tmp, 'application/zip', self::disposition('attachment', $name), "default-src 'none'; sandbox", false); }

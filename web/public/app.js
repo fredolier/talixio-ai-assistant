@@ -4567,7 +4567,7 @@ const FOLDER_SVG = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8
 const fmtSize = b => b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b / 1024) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
 const fmtDate = ts => new Date(ts * 1000).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' });
 const joinPath = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
-const lib = { folder: '/', tree: [], timer: null, file: null, inline: null, picked: new Set(), last: null, rows: [] };
+const lib = { folder: '/', tree: [], timer: null, file: null, inline: null, picked: new Set(), pickedF: new Set(), flat: false, last: null, rows: [] };
 /** Column sort of the folder view (this browser). k: name | kind | size | changed | by; d: 1 up, -1 down. */
 lib.sort = (() => { try { const v = JSON.parse(localStorage.getItem(LSK + 'talixio.lib.sort') || ''); if (['name', 'kind', 'size', 'changed', 'by'].includes(v.k)) return { k: v.k, d: v.d === -1 ? -1 : 1 }; } catch {} return { k: 'name', d: 1 }; })();
 /** Filters on the folder's files (this visit only) and the grouping (kept on this device). */
@@ -4631,7 +4631,8 @@ async function loadLibrary() {
   lib.folder = libFolderFromHash() || '/';
   if (was !== undefined && was !== lib.folder) { lib.depth = Math.max(0, lib.depth + (lib.goingBack ? -1 : 1)); } lib.goingBack = false;
   if (was !== undefined && was !== lib.folder && (libSearch.phase || libRegex.on)) libSearchClose(); // another folder: its content, not old results
-  const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
+  if (was !== undefined && was !== lib.folder) lib.flat = false; // 'everything below' belongs to the folder it was asked in
+  const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder) + (lib.flat ? '&flat=1' : ''))]);
   lib.tree = tree.tree; lib.trash = tree.stats.trash || 0; lib.shared = list.shared;
   lib.level = list.level || 'internal';
   if (was !== lib.folder) lib.filter = { kind: '', when: '', state: '' }; // a filter belongs to the folder it was set in
@@ -4660,6 +4661,16 @@ async function loadLibrary() {
 /** Folders opened in the tree (this browser); the current folder's parents are always open. */
 const treeOpen = (() => { try { return new Set(JSON.parse(localStorage.getItem(LSK + 'talixio.tree.open') || '[]')); } catch { return new Set(); } })();
 const saveTreeOpen = () => { try { localStorage.setItem(LSK + 'talixio.tree.open', JSON.stringify([...treeOpen])); } catch {} };
+/** Pinned folders (this device): a short list at the top of the tree. */
+const libPins = (() => { try { const a = JSON.parse(localStorage.getItem(LSK + 'talixio.lib.pins') || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string') : []; } catch { return []; } })();
+const libPinned = p => libPins.includes(p);
+function libTogglePin(p) {
+  const i = libPins.indexOf(p); if (i >= 0) libPins.splice(i, 1); else libPins.push(p);
+  try { localStorage.setItem(LSK + 'talixio.lib.pins', JSON.stringify(libPins)); } catch {}
+  renderTree(); toast(i >= 0 ? t('Unpinned') : t('Pinned to the tree'));
+}
+const libPinItem = p => ({ label: libPinned(p) ? t('Unpin from the tree') : t('Pin to the tree'), run: () => libTogglePin(p) });
+const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M9 3h6l-1 7 3 3H7l3-3z"/></svg>';
 const CHEVRON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
 
 function renderTree() {
@@ -4672,11 +4683,14 @@ function renderTree() {
   const row = (path, name, depth, count, kids) => `<div class="tree-row${path === lib.folder ? ' active' : ''}" style="padding-left:${(depth - 1) * 14}px">`
     + (kids ? `<button class="tw${treeOpen.has(path) ? ' open' : ''}" type="button" data-toggle="${esc(path)}" aria-expanded="${treeOpen.has(path)}" aria-label="${esc(t(treeOpen.has(path) ? 'Fold {name}' : 'Unfold {name}', { name }))}">${CHEVRON_SVG}</button>` : '<span class="tw"></span>')
     + `<a href="#" data-path="${esc(path)}" class="${path === lib.folder ? 'active' : ''}">${FOLDER_SVG}<span>${esc(name)}</span>${count ? `<small>${count}</small>` : ''}</a></div>`;
+  const pins = libPins.map(p => lib.tree.find(x => x.path === p)).filter(Boolean); // a deleted folder just disappears from the list
   const anyOpen = lib.tree.some(t => treeOpen.has(t.path) && hasKids.has(t.path));
   nav.innerHTML = `<div class="tree-head"><a href="#" data-path="/" class="${lib.folder === '/' ? 'active' : ''}">${FOLDER_SVG}<span>${esc(t('All files'))}</span>${total ? `<small>${total}</small>` : ''}</a>`
     + (anyOpen ? `<button class="tw fold-all" type="button" data-fold-all title="${esc(t('Fold every folder'))}" aria-label="${esc(t('Fold every folder'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11l5-5 5 5M7 18l5-5 5 5"/></svg></button>` : '') + '</div>'
+    + (pins.length ? `<div class="tree-pins" role="group" aria-label="${esc(t('Favourites'))}"><div class="tree-pins-head">${esc(t('Favourites'))}</div>${pins.map(x => `<div class="tree-row pin"><span class="tw"></span><a href="#" data-path="${esc(x.path)}" class="${x.path === lib.folder ? 'active' : ''}" title="${esc(x.path)}">${PIN_SVG}<span class="no-i18n">${esc(x.name)}</span></a><button type="button" class="tw unpin" data-unpin="${esc(x.path)}" aria-label="${esc(t('Unpin from the tree'))}" title="${esc(t('Unpin from the tree'))}">✕</button></div>`).join('')}</div>` : '')
     + lib.tree.filter(shown).map(x => row(x.path, x.name, x.depth, x.total, hasKids.has(x.path))).join('')
     + `<a href="#" class="tree-trash" data-trash title="${esc(t('Deleted files, kept {n} days', { n: 30 }))}">${TRASH_SVG}<span>${esc(t('Trash'))}</span>${lib.trash ? `<small>${lib.trash}</small>` : ''}</a>`;
+  nav.querySelectorAll('[data-unpin]').forEach(b => b.onclick = () => libTogglePin(b.dataset.unpin));
   nav.querySelector('[data-trash]').onclick = e => { e.preventDefault(); showLibTrash(); };
   nav.querySelectorAll('a[data-path]').forEach(a => {
     a.onclick = e => { e.preventDefault(); libGo(a.dataset.path); };
@@ -4708,6 +4722,7 @@ function libFolderToolsMenu(btn) {
   const sortItem = (k, label) => ({ label: (lib.sort.k === k ? '✓ ' : '') + t(label), run: () => libSortBy(k, lib.sort.k === k ? lib.sort.d : 1) });
   const items = [
     { label: folder === '/' ? t('Ask about my library') : t('Ask about this folder'), run: ask },
+    ...(folder === '/' ? [] : [libPinItem(folder)]),
     ...(folder === '/' || lib.readonly ? [] : [owner ? { label: t('Open space'), run: () => { location.hash = '#chat/' + owner.slug; } } : { label: t('New space here'), run: () => openSpaceEditor(null, { folder, name }) }]),
     { label: t('Download zip'), href: `api/library/zip?folder=${encodeURIComponent(folder)}`, download: zipName },
     ...(folder === '/' || lib.readonly ? [] : [
@@ -4953,6 +4968,7 @@ function libFolderMenu(btn, folder, total) {
   const name = folder.split('/').pop();
   openRowMenu(btn, [
     { label: t('Open'), run: () => libGo(folder) },
+    libPinItem(folder),
     { label: t('New file here'), run: () => newNote(folder) },
     { label: t('New folder here'), run: () => libInline(folder + '/', t('New folder path'), async v => { const { folder: nf } = await post('api/library/folder', { path: v }); toast(t('Folder created')); libGo(nf); }, true) },
     { label: t('Rename or move'), run: () => libInline(folder, t('Folder path'), async v => { const { folder: nf } = await post('api/library/folder/move', { from: folder, to: v }); toast(t('Folder renamed')); libGo(nf); }, true) },
@@ -4969,9 +4985,9 @@ function fileLabel(f) {
 }
 const fmtDayTime = ts => new Date(ts * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-function fileRow(f, sub) {
+function fileRow(f, sub, keepCols = false) {
   const el = document.createElement('div'); el.className = 'lib-row'; el.draggable = true; el.tabIndex = 0; el.setAttribute('role', 'button');
-  const label = fileLabel(f), cols = !sub; // search results keep their own layout
+  const label = fileLabel(f), cols = !sub || keepCols; // search results keep their own layout; the flat listing keeps the table, with the folder as a subtitle
   if (cols) el.dataset.id = f.id;
   const ico = f.kind === 'image' || f.kind === 'pdf' ? `<img src="api/files/${f.id}/thumb" alt="" loading="lazy">` : label;
   const status = f.status === 'pending' || f.status === 'processing' ? '<span class="pill pending">reading…</span>' : f.status === 'failed' ? '<span class="pill failed">unreadable</span>' : '';
@@ -5054,7 +5070,7 @@ function libOrdered(list) {
   const { k, d } = lib.sort, cmp = (x, y) => (typeof x === 'string' ? x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }) : x - y);
   const key = { name: f => f.name, kind: f => fileLabel(f), size: f => f.size, changed: f => f.changed || f.created, by: f => f.changed_by || '' }[k];
   const files = list.files.filter(libKeep).sort((a, b) => (cmp(key(a), key(b)) || cmp(a.name, b.name)) * d);
-  const folders = [...list.folders].sort((a, b) => k === 'size' ? (a.total - b.total || cmp(a.name, b.name)) * d : cmp(a.name, b.name) * (k === 'name' ? d : 1)); // folders stay on top
+  const folders = [...list.folders].sort((a, b) => k === 'size' ? (a.total - b.total || cmp(a.name, b.name)) * d : k === 'changed' ? ((a.changed || 0) - (b.changed || 0) || cmp(a.name, b.name)) * d : cmp(a.name, b.name) * (k === 'name' ? d : 1)); // folders stay on top
   return { folders, files };
 }
 
@@ -5067,22 +5083,29 @@ function renderList(list) {
   const groups = libGroups(files);
   lib.rows = groups.flatMap(([, g]) => g.map(f => f.id));
   for (const id of [...lib.picked]) if (!lib.rows.includes(id)) lib.picked.delete(id); // gone, moved or deleted
+  for (const pth of [...lib.pickedF]) if (!folders.some(x => x.path === pth)) lib.pickedF.delete(pth);
   if ((folders.length || files.length) && lib.view === 'details') {
     const head = document.createElement('div'); head.className = 'lib-cols'; head.setAttribute('role', 'row');
     head.innerHTML = `<span class="c-pick"><input type="checkbox" id="lib-pick-all" aria-label="${esc(t('Select all'))}"></span><span></span>`
       + SORT_COLS.map(([k, label]) => `<button type="button" class="col-${k}${lib.sort.k === k ? ' on' : ''}" data-sort="${k}" aria-sort="${lib.sort.k === k ? (lib.sort.d === 1 ? 'ascending' : 'descending') : 'none'}">${esc(t(label))}<i aria-hidden="true">${lib.sort.k === k ? (lib.sort.d === 1 ? '▲' : '▼') : ''}</i></button>`).join('') + '<span></span>';
     head.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => libSortBy(b.dataset.sort, lib.sort.k === b.dataset.sort ? -lib.sort.d : 1));
-    head.querySelector('#lib-pick-all').onclick = e => { lib.picked = new Set(e.target.checked ? lib.rows : []); lib.last = null; libSelUpdate(); };
+    head.querySelector('#lib-pick-all').onclick = e => { lib.picked = new Set(e.target.checked ? lib.rows : []); lib.pickedF = new Set(e.target.checked ? folders.map(x => x.path) : []); lib.last = null; libSelUpdate(); };
     box.append(head);
   }
   for (const t of folders) {
     const el = document.createElement('a'); el.href = '#'; el.className = 'lib-row lib-folder';
-    el.innerHTML = `<span class="c-pick"></span><span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(t.name)}</b><span>${t.total} file${t.total === 1 ? '' : 's'}</span></span>`
-      + `<span class="c-type">${esc(window.t('Folder'))}</span><span class="c-size">${esc(t.total === 1 ? window.t('1 file') : window.t('{n} files', { n: t.total }))}</span><span class="c-mod"></span><span class="c-by"></span>`
+    el.innerHTML = `<span class="c-pick"><input type="checkbox" class="pick" aria-label="${esc(window.t('Select'))}"></span><span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(t.name)}</b><span>${t.total} file${t.total === 1 ? '' : 's'}</span></span>`
+      + `<span class="c-type">${esc(window.t('Folder'))}</span><span class="c-size">${esc(t.total === 1 ? window.t('1 file') : window.t('{n} files', { n: t.total }))}</span><span class="c-mod">${t.changed ? esc(fmtDate(t.changed)) : ''}</span><span class="c-by"></span>`
       + `<span class="row-end">${lib.shared?.folders?.includes(t.path) ? `<span class="shared-mark" title="${esc(window.t('Shared by link'))}">${LINK_SVG}</span>` : ''}`
       + (lib.readonly ? '' : `<button type="button" class="btn ghost icon kebab" aria-label="${esc(window.t('Actions'))}" aria-haspopup="menu" title="${esc(window.t('Actions'))}">${KEBAB_SVG}</button>`) + `</span>`;
     el.dataset.path = t.path; el.dataset.total = t.total;
-    el.onclick = e => { e.preventDefault(); libGo(t.path); };
+    const fcb = el.querySelector('.pick'); fcb.checked = lib.pickedF.has(t.path);
+    fcb.onclick = e => { e.stopPropagation(); fcb.checked ? lib.pickedF.add(t.path) : lib.pickedF.delete(t.path); libSelUpdate(); };
+    el.onclick = e => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey || ((lib.picked.size || lib.pickedF.size) && isPhone())) { lib.pickedF.has(t.path) ? lib.pickedF.delete(t.path) : lib.pickedF.add(t.path); libSelUpdate(); return; }
+      libGo(t.path);
+    };
     el.querySelector('.kebab')?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); libFolderMenu(e.currentTarget, t.path, t.total); });
     dropTarget(el, t.path);
     box.append(el);
@@ -5096,7 +5119,7 @@ function renderList(list) {
   }
   for (const [label, group] of groups) {
     if (label) { const h = document.createElement('div'); h.className = 'lib-group'; h.innerHTML = `<b>${esc(label)}</b><span>${group.length}</span>`; box.append(h); }
-    for (const f of group) box.append(fileRow(f));
+    for (const f of group) box.append(fileRow(f, lib.flat ? f.folder : undefined, true));
   }
   if (!folders.length && !files.length) box.innerHTML = list.files.length ? `<div class="placeholder">${esc(t('No file matches these filters.'))} <button class="btn small" type="button" data-clear>${esc(t('Clear the filters'))}</button></div>`
     : `<div class="placeholder">${lib.folder === '/' ? 'Your library is empty. Upload documents, or attach them in the chat: they land in Inbox.' : 'This folder is empty. Drop files here or use Upload.'}</div>`;
@@ -5107,6 +5130,7 @@ function renderList(list) {
   if (files.length) parts.push((files.length === 1 ? t('1 file') : t('{n} files', { n: files.length })) + ' · ' + fmtSize(bytes));
   $('#lib-count').textContent = parts.join(' · ');
   libPrevApply();
+  if (lib.flat) $('#lib-count').textContent += ' · ' + t('with all subfolders');
   libSelUpdate();
 }
 
@@ -5129,6 +5153,7 @@ function libPanelFill() {
   const opt = (name, list, cur) => list.map(([v, l]) => `<button type="button" class="lib-opt${cur === v ? ' on' : ''}" data-${name}="${esc(v)}" aria-pressed="${cur === v}">${esc(t(l))}</button>`).join('');
   const shown = lib.data ? lib.data.files.filter(libKeep).length : 0;
   libPanel.innerHTML = `<div class="lib-pop-sec"><b>${esc(t('Layout'))}</b><div class="lib-opts">${opt('view', LIB_VIEWS, lib.view)}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('Show'))}</b><div class="lib-opts">${opt('flat', [['', 'This folder'], ['1', 'Everything below']], lib.flat ? '1' : '')}</div></div>`
     + `<div class="lib-pop-sec"><b>${esc(t('Sort by'))}</b><div class="lib-opts">${LIB_SORTS.map(([k, l]) => `<button type="button" class="lib-opt${lib.sort.k === k ? ' on' : ''}" data-sortk="${k}" aria-pressed="${lib.sort.k === k}">${esc(t(l))}${lib.sort.k === k ? (lib.sort.d === 1 ? ' ▲' : ' ▼') : ''}</button>`).join('')}</div></div>`
     + `<div class="lib-pop-sec"><b>${esc(t('Group'))}</b><div class="lib-opts">${opt('group', LIB_GROUP, lib.group)}</div></div>`
     + `<div class="lib-pop-sec"><b>${esc(t('Type'))}</b><div class="lib-opts">${opt('kind', LIB_KINDS, lib.filter.kind)}</div></div>`
@@ -5136,6 +5161,7 @@ function libPanelFill() {
     + `<div class="lib-pop-sec"><b>${esc(t('State'))}</b><div class="lib-opts">${opt('state', LIB_STATE, lib.filter.state)}</div></div>`
     + `<div class="lib-pop-foot"><button type="button" class="btn small ghost" data-clear${libFilterCount() ? '' : ' disabled'}>${esc(t('Clear the filters'))}</button><span class="spacer"></span><button type="button" class="btn small primary" data-close>${esc(shown === 1 ? t('Show 1 file') : t('Show {n} files', { n: shown }))}</button></div>`;
   libPanel.querySelectorAll('[data-view]').forEach(b => b.onclick = () => libSetView(b.dataset.view));
+  libPanel.querySelectorAll('[data-flat]').forEach(b => b.onclick = () => { lib.flat = b.dataset.flat === '1'; loadLibrary().then(libPanelFill).catch(e => toast(e.message)); });
   libPanel.querySelectorAll('[data-sortk]').forEach(b => b.onclick = () => libSortBy(b.dataset.sortk, lib.sort.k === b.dataset.sortk ? -lib.sort.d : 1));
   libPanel.querySelectorAll('[data-group]').forEach(b => b.onclick = () => { lib.group = b.dataset.group; try { localStorage.setItem(LSK + 'talixio.lib.group', lib.group); } catch {} libViewRefresh(); });
   for (const k of ['kind', 'when', 'state']) libPanel.querySelectorAll(`[data-${k}]`).forEach(b => b.onclick = () => { lib.filter[k] = b.dataset[k]; libViewRefresh(); });
@@ -5165,34 +5191,41 @@ function libPick(id, on, range) {
   lib.last = id; libSelUpdate();
 }
 /** The selection replaces the toolbar (same height) and ticks the rows. */
+const libSelCount = () => lib.picked.size + lib.pickedF.size;
 function libSelUpdate() {
-  const n = lib.picked.size;
+  const n = libSelCount();
   $('#lib-toolbar').hidden = !!n; $('#lib-selbar').hidden = !n;
   document.querySelector('.lib-confirm')?.remove();
   $('#lib-view-wrap')?.classList.toggle('selecting', !!n);
   $('#lib-list').classList.toggle('selecting', !!n);
   $('#lib-list').querySelectorAll('.lib-row[data-id]').forEach(r => { const on = lib.picked.has(+r.dataset.id); r.classList.toggle('sel', on); r.querySelector('.pick').checked = on; });
-  if (n === 1 && libPrevOn()) { lib.cur = [...lib.picked][0]; libPrevApply(); }
+  $('#lib-list').querySelectorAll('.lib-folder').forEach(r => { const on = lib.pickedF.has(r.dataset.path); r.classList.toggle('sel', on); const cb = r.querySelector('.pick'); if (cb) cb.checked = on; });
+  if (n === 1 && lib.picked.size === 1 && libPrevOn()) { lib.cur = [...lib.picked][0]; libPrevApply(); }
   const all = $('#lib-pick-all');
-  if (all) { all.checked = n > 0 && n === lib.rows.length; all.indeterminate = n > 0 && n < lib.rows.length; }
+  const total = lib.rows.length + (lib.data?.folders?.length || 0);
+  if (all) { all.checked = n > 0 && n === total; all.indeterminate = n > 0 && n < total; }
   if (n) {
     $('#lib-sel-n').textContent = n === 1 ? t('1 selected') : t('{n} selected', { n });
-    const zip = $('#lib-sel-zip'); zip.href = `api/library/zip?folder=/&ids=${[...lib.picked].join(',')}`; zip.setAttribute('download', 'library-selection.zip');
-    $('#lib-sel-move').hidden = $('#lib-sel-del').hidden = !!lib.readonly;
+    const zip = $('#lib-sel-zip'); zip.href = `api/library/zip?folder=/&ids=${[...lib.picked].join(',')}` + (lib.pickedF.size ? `&paths=${[...lib.pickedF].map(encodeURIComponent).join('|')}` : ''); zip.setAttribute('download', 'library-selection.zip');
+    $('#lib-sel-move').hidden = !!lib.readonly; $('#lib-sel-del').hidden = !!lib.readonly || lib.pickedF.size > 0; // a folder is deleted on its own: it takes its files with it
   }
 }
-$('#lib-sel-clear').onclick = () => { lib.picked.clear(); lib.last = null; libSelUpdate(); };
-$('#lib-sel-move').onclick = () => libInline(lib.folder, t('Move {n} files to which folder?', { n: lib.picked.size }), async v => {
-  const r = await post('api/files/bulk', { ids: [...lib.picked], action: 'move', folder: v });
-  toast(t('{n} moved', { n: r.done }) + (r.failed?.length ? ' · ' + r.failed.length + ' ' + t('failed') : '')); lib.picked.clear(); loadLibrary();
+$('#lib-sel-clear').onclick = () => { lib.picked.clear(); lib.pickedF.clear(); lib.last = null; libSelUpdate(); };
+$('#lib-sel-move').onclick = () => libInline(lib.folder, t('Move {n} items to which folder?', { n: libSelCount() }), async v => {
+  let done = 0, failed = 0;
+  if (lib.picked.size) { const r = await post('api/files/bulk', { ids: [...lib.picked], action: 'move', folder: v }); done += r.done; failed += r.failed?.length || 0; }
+  for (const from of lib.pickedF) { // a folder moves with its content, under the same name
+    try { await post('api/library/folder/move', { from, to: (v === '/' ? '' : v.replace(/\/+$/, '')) + '/' + from.split('/').pop() }); done++; } catch (err) { failed++; toast(err.message); }
+  }
+  toast(t('{n} moved', { n: done }) + (failed ? ' · ' + failed + ' ' + t('failed') : '')); lib.picked.clear(); lib.pickedF.clear(); loadLibrary();
 }, true);
 $('#lib-sel-del').onclick = e => libConfirm(e.currentTarget, t('Delete {n}?', { n: lib.picked.size }), async () => {
   try { const r = await post('api/files/bulk', { ids: [...lib.picked], action: 'delete' }); toast(t('{n} moved to the trash', { n: r.done })); lib.picked.clear(); loadLibrary(); } catch (err) { toast(err.message); }
 });
 document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape' || !lib.picked.size || $('#view-library').hidden || document.querySelector('dialog[open]') || !$('#viewer').hidden || rowMenuEl) return;
+  if (e.key !== 'Escape' || !libSelCount() || $('#view-library').hidden || document.querySelector('dialog[open]') || !$('#viewer').hidden || rowMenuEl) return;
   if (document.activeElement?.closest?.('input,textarea,select')) return;
-  lib.picked.clear(); lib.last = null; libSelUpdate();
+  lib.picked.clear(); lib.pickedF.clear(); lib.last = null; libSelUpdate();
 });
 
 /** Right click: the same menus as the ⋮ of a row, opened where the pointer is. */
@@ -5206,14 +5239,15 @@ $('#lib-main').addEventListener('contextmenu', e => {
     const id = +row.dataset.id, f = lib.data?.files?.find(x => x.id === id) || lib.files?.find(x => x.id === id);
     if (!f) return;
     if (!lib.picked.has(id)) { lib.picked.clear(); libPick(id, true, false); }
-    const n = lib.picked.size;
+    const n = libSelCount();
     if (n > 1) return openMenuAt(e, [
       { label: t('{n} selected', { n }), head: true },
       { label: t('Download zip'), href: $('#lib-sel-zip').href, download: 'library-selection.zip' },
-      ...(lib.readonly ? [] : [{ label: t('Move to…'), run: () => $('#lib-sel-move').click() }, { sep: true }, { label: t('Delete'), danger: true, run: () => $('#lib-sel-del').click() }]),
+      ...(lib.readonly ? [] : [{ label: t('Move to…'), run: () => $('#lib-sel-move').click() }, ...(lib.pickedF.size ? [] : [{ sep: true }, { label: t('Delete'), danger: true, run: () => $('#lib-sel-del').click() }])]),
     ]);
     closeRowMenu(); return libFileMenu(pointAnchor(e), f);
   }
+  if (row && row.classList.contains('lib-folder') && lib.pickedF.has(row.dataset.path) && libSelCount() > 1) return openMenuAt(e, [{ label: t('{n} selected', { n: libSelCount() }), head: true }, { label: t('Download zip'), href: $('#lib-sel-zip').href, download: 'library-selection.zip' }, ...(lib.readonly ? [] : [{ label: t('Move to…'), run: () => $('#lib-sel-move').click() }])]);
   if (row && row.classList.contains('lib-folder')) { if (lib.readonly) return; closeRowMenu(); return libFolderMenu(pointAnchor(e), row.dataset.path, +row.dataset.total || 0); }
   openMenuAt(e, [
     ...(lib.readonly ? [] : [{ label: t('New file here'), run: () => newNote(lib.folder) }, { label: t('New folder'), run: () => libNewFolder() }, { label: t('Upload files'), run: () => $('#lib-upload-input').click() }]),
@@ -5229,7 +5263,7 @@ document.addEventListener('keydown', e => {
   if (mod && e.key.toLowerCase() === 'a') { e.preventDefault(); libSelectAll(); return; }
   if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); $('#lib-back').click(); return; }
   if ((e.altKey && e.key === 'ArrowUp') || e.key === 'Backspace') { e.preventDefault(); libUp(); return; }
-  if (e.key === 'Delete' && lib.picked.size && !lib.readonly) { e.preventDefault(); $('#lib-sel-del').click(); return; }
+  if (e.key === 'Delete' && lib.picked.size && !lib.pickedF.size && !lib.readonly) { e.preventDefault(); $('#lib-sel-del').click(); return; }
   const rows = [...$('#lib-list').querySelectorAll('.lib-row')];
   const cur = rows.indexOf(document.activeElement);
   if (e.key === 'F2' && lib.picked.size === 1 && !lib.readonly) { e.preventDefault(); const f = lib.data.files.find(x => x.id === [...lib.picked][0]); if (f) libRename(f); return; }
@@ -5242,7 +5276,7 @@ document.addEventListener('keydown', e => {
     if (e.shiftKey && rows[n].dataset.id) libPick(+rows[n].dataset.id, true, false);
   }
 });
-function libSelectAll() { lib.rows.forEach(id => lib.picked.add(id)); libSelUpdate(); }
+function libSelectAll() { lib.rows.forEach(id => lib.picked.add(id)); (lib.data?.folders || []).forEach(x => lib.pickedF.add(x.path)); libSelUpdate(); }
 
 /** Folders accept files dragged from the list (move) or from the computer (upload). */
 function dropTarget(el, path) {
