@@ -3178,6 +3178,7 @@ window.I18N.fr = {
   "The assistant follows these when it answers, and adds the ones you tell it in the chat.": "L’assistant les suit quand il répond, et ajoute celles que vous lui dites dans le chat.",
   "At most": "Au plus",
   "answers sent by itself per day": "réponses envoyées seul par jour",
+  "Silent for {n} min — its helper files may be lost. Re-pair it.": "Silencieux depuis {n} min — ses fichiers d’aide ont peut-être disparu. Ré-appairez-le.",
   "Suggested answer": "Réponse suggérée",
   "Send this answer": "Envoyer cette réponse",
   "Was this the right call?": "Était-ce la bonne décision ?",

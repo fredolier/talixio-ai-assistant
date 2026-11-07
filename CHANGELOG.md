@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.29.0 (2026-11-07)
+
+- **A sturdier link with the orchestrator** (from the orchestrator's own account of why it went silent: its helper scripts and secret lived in a wiped `/tmp` scratchpad). (1) The pairing prompt now tells it to keep its scripts and secret in a durable `~/.config/talixio-orchestrator/` folder (700/600), to rebuild missing helpers, to derive its own session identity from `ListAgents` instead of hard-coding it, and to print nothing on a silent tick. (2) **Receive-then-acknowledge**: `GET pull?ack=1` hands instructions out with an id and keeps them queued; the orchestrator confirms with `{"type":"ack","ids":[…]}`; an unacknowledged one comes back after 2 minutes, so a lost response (a 502, a crash) never loses work. The plain `pull` still drains as before. (3) The cockpit warns **« Silent for N min — re-pair it »** when a connected orchestrator has neither reported nor polled for 30 minutes.
+
 ## 1.28.0 (2026-11-07)
 
 - **Standing rules and a daily cap for the autonomous pilot.** The Autonomy tab gets **Standing rules** (lasting preferences, one per line): they are listed in `fleet_inbox`, the triage prompt tells the assistant that a rule beats a guess, and `fleet_priorities` now also records rules the user states in the chat. A **daily cap** (20 by default, 0–200) is enforced in code: once the assistant has sent that many answers by itself today, further ones stay proposals.

@@ -486,6 +486,7 @@ async function initOrchestratorPanel(prefix = 'sp', onRender) {
     $(`#${prefix}-orch-status`).textContent = on
       ? `Connected${info.session ? ` (session ${info.session})` : ''}. Last sent ${ago(info.lastDispatch)}; last report ${ago(info.lastReport)}. It reports back to ${info.inbox}.`
       : 'Not connected. Run a Claude Code session with Remote Control on — on your own host is fine — and connect it here to delegate code work across your machines.';
+    if (on && info.silentFor) $(`#${prefix}-orch-status`).textContent += ` ⚠ ${t('Silent for {n} min — its helper files may be lost. Re-pair it.', { n: Math.round(info.silentFor / 60) })}`;
     disc.hidden = !on;
     connect.textContent = on ? 'Re-pair…' : 'Connect…';
     onRender?.(info);

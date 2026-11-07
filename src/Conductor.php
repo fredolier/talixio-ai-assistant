@@ -197,6 +197,7 @@ final class Conductor
             'lastPoll' => (int)($b['last_poll'] ?? 0),
             'queued' => count($b['queue'] ?? []),
             'lastDispatch' => (int)($b['last_dispatch'] ?? 0),
+            'silentFor' => $this->connected() && ($h = max((int)($b['last_report'] ?? 0), (int)($b['last_poll'] ?? 0))) > 0 && time() - $h > self::SILENT ? time() - $h : 0,
             'agents' => $agents,
             'agentCount' => count($agents),
             'waiting' => count(array_filter($agents, fn($a) => !empty($a['waiting']))),
@@ -240,18 +241,23 @@ final class Conductor
             . "   {\"type\":\"pair\",\"code\":\"$code\",\"mode\":\"poll\",\n"
             . "    \"session\":\"<your session id>\",\"url\":\"<your claude.ai/code URL, if any>\"}\n\n"
             . "Keep the \"secret\" from the response; send it as `Authorization: Bearer <secret>` on everything below.\n\n"
+            . "STORAGE — keep your helper scripts and the secret in a DURABLE folder, never in /tmp or a session scratchpad (they get wiped):\n"
+            . "   ~/.config/talixio-orchestrator/ (mode 700; the `secret` file mode 600; never print it, never commit it). If a helper is\n"
+            . "   missing at a tick, rebuild it from this prompt; if only the secret is missing, tell me in chat that I must re-pair. Derive your own\n"
+            . "   session identity from ListAgents at each tick — never hard-code it.\n\n"
             . "RUNNING — keep yourself warm (~10 min: create_trigger / send_later, or a /loop). Each tick:\n"
             . " 1. Enumerate my sessions across machines and read their progress.\n"
-            . " 2. Get my pending instructions. If you paired with POLL, GET $pull\n"
-            . "    with the Bearer secret → {\"instructions\":[{\"instruction\":...,\"agent\"?:...}, ...]} (it empties the\n"
-            . "    queue, so act on every item). If you paired with PUSH, I deliver the same payloads to your webhook\n"
+            . " 2. Get my pending instructions. If you paired with POLL, GET $pull?ack=1\n"
+            . "    with the Bearer secret → {\"instructions\":[{\"iid\":...,\"instruction\":...,\"agent\"?:...}, ...]}. Items stay queued\n"
+            . "    until you acknowledge them: after handling, POST $inbox {\"type\":\"ack\",\"ids\":[<each iid>]} (an unacknowledged\n"
+            . "    item comes back after 2 min, so a lost response never loses work; handle each iid once). Act on every item. If you paired with PUSH, I deliver the same payloads to your webhook\n"
             . "    instead — act on each when it arrives.\n"
             . " 3. POST progress to $inbox as {\"type\":\"report\",\"title\":...,\"text\":...}, with a structured roster\n"
             . "    so my cockpit can list the fleet:\n"
             . "    \"agents\":[{\"id\":\"mba-m3.local\",\"name\":\"mba-m3.local\",\"task\":\"dossier conseil\",\n"
             . "    \"state\":\"active\",\"machine\":\"mba-m3.local\",\"ts\":<unix>}] (state: active|busy|waiting|idle|done|offline|error).\n"
             . "    A routine keep-warm tick with no news MUST be silent: either omit \"text\" or add \"tick\":true, so I\n"
-            . "    refresh the roster without notifying the user. Send \"text\" only when there is something to report.\n"
+            . "    refresh the roster without notifying the user. Send \"text\" only when there is something to report. A silent tick prints NOTHING in chat.\n"
             . " 3b. QUESTIONS FROM SESSIONS. A session that is blocked on a question can route it to you instead of to me\n"
             . "    (the « route questions » hook: /autopilot-on, /autopilot-off, /autopilot-status per session, OFF by default — then\n"
             . "    the question stays with me). When one reaches you, post a report with \"agent\":\"<session>\" and the question\n"
@@ -306,6 +312,15 @@ final class Conductor
         }
         if (($b['secret'] ?? '') === '' || $bearer === '' || !hash_equals((string)$b['secret'], $bearer))
             return [401, ['error' => 'unauthorized']];
+        if ((string)($msg['type'] ?? '') === 'ack') { // the orchestrator confirms the instructions it handled (pull?ack=1)
+            $ids = array_filter(array_map('strval', (array)($msg['ids'] ?? [])), fn($i) => preg_match('/^[a-f0-9]{12}$/', $i));
+            $left = $this->lockedUpdate(function (array $b) use ($ids) {
+                $b['queue'] = array_values(array_filter($b['queue'] ?? [], fn($it) => !in_array($it['iid'] ?? '', $ids, true)));
+                $b['last_report'] = time();
+                return [$b, count($b['queue'])];
+            });
+            return [200, ['ok' => true, 'queued' => $left]];
+        }
         $title = mb_substr(trim((string)($msg['title'] ?? '')) ?: 'Fleet update', 0, 120);
         $text = mb_substr(trim((string)($msg['text'] ?? '')), 0, 8000);
         // The orchestrator may carry a structured agent roster so the cockpit can list the fleet. Display data only —
@@ -451,25 +466,37 @@ final class Conductor
     }
     /** How many undelivered instructions a poll-mode orchestrator's queue holds; oldest drop past this. */
     private const QUEUE_CAP = 100;
+    /** Seconds an instruction handed out with ?ack=1 waits for its acknowledgement before it is handed out again. */
+    private const LEASE = 120;
+    /** A connected orchestrator that has neither reported nor polled for this long is « silent » in the cockpit. */
+    private const SILENT = 1800;
 
     /**
      * A poll-mode orchestrator (no webhook) pulls its pending instructions here, authenticated by the steady secret.
      * Draining is atomic, so each instruction is handed out exactly once. Returns [httpCode, responseArray].
      */
-    public function pull(string $bearer): array
+    public function pull(string $bearer, bool $ack = false): array
     {
         $b = $this->binding();
         if (($b['secret'] ?? '') === '' || $bearer === '' || !hash_equals((string)$b['secret'], $bearer))
             return [401, ['error' => 'unauthorized']];
         if ($this->mode() !== 'poll')
             return [409, ['error' => 'this orchestrator is paired for webhook push, not polling']];
-        $pending = $this->lockedUpdate(function (array $b) {
+        $pending = $this->lockedUpdate(function (array $b) use ($ack) {
             $q = array_values($b['queue'] ?? []);
-            $b['queue'] = [];
             $b['last_poll'] = time(); // polling is a liveness signal even before the first report
-            return [$b, $q];
+            if (!$ack) { $b['queue'] = []; return [$b, $q]; }
+            // receive-then-ack (1.29.0): an item stays queued until acknowledged; one handed out is leased for LEASE
+            // seconds, then handed out again — so a lost response (a 502, a crash) never loses an instruction.
+            $out = [];
+            foreach ($q as $i => $item) {
+                if (time() - (int)($item['leased'] ?? 0) < self::LEASE) continue;
+                $q[$i]['leased'] = time(); unset($item['leased']); $out[] = $item;
+            }
+            $b['queue'] = $q;
+            return [$b, $out];
         });
-        return [200, ['ok' => true, 'instructions' => $pending]];
+        return [200, ['ok' => true, 'instructions' => $pending] + ($ack ? ['ack' => 'POST ' . $this->inboxUrl() . ' {"type":"ack","ids":[<iid of each instruction handled>]}'] : [])];
     }
 
     /**
@@ -483,7 +510,7 @@ final class Conductor
         if ($mode === 'poll') {
             $this->lockedUpdate(function (array $b) use ($payload) {
                 $q = array_values($b['queue'] ?? []);
-                $q[] = $payload;
+                $q[] = $payload + ['iid' => bin2hex(random_bytes(6))];
                 if (count($q) > self::QUEUE_CAP) $q = array_slice($q, -self::QUEUE_CAP);
                 $b['queue'] = $q;
                 $b['last_dispatch'] = time();

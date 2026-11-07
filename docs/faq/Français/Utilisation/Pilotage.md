@@ -12,7 +12,7 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
 - La **carte d'état** dit s'il est connecté, quand il a fait son dernier rapport, combien d'agents il voit sur combien de machines,
   et combien attendent votre réponse. **Reconnecter…** et **Déconnecter** y sont, avec l'interrupteur **Rapports de la flotte**
   (Pastille dans l'app, Push + e-mail, Désactivée). Le jumelage se fait soit par un webhook que crée l'orchestrateur, soit, pour
-  une simple session locale, en *interrogeant* Talixio à intervalle régulier.
+  une simple session locale, en *interrogeant* Talixio à intervalle régulier. Si un orchestrateur connecté ne dit rien pendant 30 minutes, le panneau de connexion affiche **Silencieux depuis N min — ré-appairez-le** (en général ses fichiers d'aide ont disparu) : utilisez *Re-pair…*. L'invite d'appairage lui fait désormais ranger ses fichiers dans `~/.config/talixio-orchestrator/` et accuser réception de chaque instruction, pour qu'aucune ne soit perdue si une réponse échoue.
 - **Parler au pilote** (sous les onglets) lui envoie une consigne, écrite ou dictée. Elle passe les mêmes contrôles de
   confidentialité que toute autre consigne envoyée.
 - Trois onglets, chacun avec une liste à gauche et un volet à droite qui défile seul : la page ne grandit jamais avec le nombre de

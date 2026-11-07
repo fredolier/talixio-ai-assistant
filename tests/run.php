@@ -1544,6 +1544,14 @@ check('fleet(poll): the right secret pulls the grounded instruction and empties 
     $plc === 200 && count($plr['instructions'] ?? []) === 1 && str_contains((string)$plr['instructions'][0]['instruction'], 'Friday release') && $con->statusInfo()['queued'] === 0);
 [$plc2, $plr2] = $con->pull($pollSecret);
 check('fleet(poll): a second pull hands out nothing — each instruction is delivered exactly once', $plc2 === 200 && ($plr2['instructions'] ?? null) === []);
+$con->toFleet('Second job');
+[$ac1, $ar1] = $con->pull($pollSecret, true);
+$iid = $ar1['instructions'][0]['iid'] ?? '';
+check('fleet(poll): pull?ack=1 hands the instruction out with an id but keeps it queued', $ac1 === 200 && count($ar1['instructions']) === 1 && preg_match('/^[a-f0-9]{12}$/', $iid) && $con->statusInfo()['queued'] === 1 && str_contains($ar1['ack'], 'ack'));
+check('fleet(poll): a leased instruction is not handed out again at once', ($con->pull($pollSecret, true)[1]['instructions'] ?? null) === []);
+[$ackc] = $con->inbox(['type' => 'ack', 'ids' => [$iid, 'zz']], $pollSecret);
+check('fleet(poll): the acknowledgement removes it from the queue', $ackc === 200 && $con->statusInfo()['queued'] === 0 && $con->inbox(['type' => 'ack', 'ids' => [$iid]], 'wrong')[0] === 401);
+check('fleet: a recently heard orchestrator is not silent', $con->statusInfo()['silentFor'] === 0);
 // the « route questions » circuit (1.17.1): a routed question arrives tagged with its agent; the answer goes back to that agent with the decision id
 $con->inbox(['type' => 'report', 'agent' => 'sess-9', 'decision_id' => 'd-42 <b>', 'text' => 'Garder A ou B ?'], $pollSecret);
 check('fleet(poll): a routed question lands in that agent\'s thread, its decision id cleaned', ($con->agentThread('sess-9')[0]['text'] ?? '') === 'Garder A ou B ?' && ($con->agentThread('sess-9')[0]['decision_id'] ?? '') === 'd-42b');

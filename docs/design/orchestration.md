@@ -520,3 +520,7 @@ each a list and a pane that scroll on their own (so the page never grows with th
   was, the answer, and **by whom** (`user` or `assistant`). Turns sent by the assistant's tool are marked `by: assistant` in the
   thread. This is the raw material of the learning described in the roadmap (predictions compared with the user's real answers).
 - A roster entry may also carry `url` (the session's own link, http(s) only), and its `state` may be `offline`.
+
+## Orchestrator link hardening (1.29.0)
+
+Found by reading the orchestrator's own account after it went silent: its helpers and secret lived in a session scratchpad under `/tmp`, wiped on restart; its identity changed per restart and was hard-coded; `pull` drained the queue before the instruction was handled. Fixes: durable `~/.config/talixio-orchestrator/` in the pairing prompt; identity from `ListAgents`; `pull?ack=1` + `{"type":"ack"}` with a 120 s lease; cockpit « silent » warning after 30 min. Open: a single `tick` command Talixio could ship, and provisioning the secret by env var.

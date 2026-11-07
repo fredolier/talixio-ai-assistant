@@ -1726,7 +1726,7 @@ final class Web
         try {
             if ($method !== 'GET') $this->fail(405, 'GET only');
             $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
-            [$code, $resp] = $this->app->conductor()->pull($bearer);
+            [$code, $resp] = $this->app->conductor()->pull($bearer, ($_GET['ack'] ?? '') === '1');
             $this->json($resp, $code);
         } catch (\Throwable $e) {
             $this->json(['error' => self::internalError($e)], 500);
