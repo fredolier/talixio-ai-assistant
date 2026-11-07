@@ -13,8 +13,7 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
   et combien attendent votre réponse. **Reconnecter…** et **Déconnecter** y sont, avec l'interrupteur **Rapports de la flotte**
   (Pastille dans l'app, Push + e-mail, Désactivée). Le jumelage se fait soit par un webhook que crée l'orchestrateur, soit, pour
   une simple session locale, en *interrogeant* Talixio à intervalle régulier. Si un orchestrateur connecté ne dit rien pendant 30 minutes, le panneau de connexion affiche **Silencieux depuis N min — ré-appairez-le** (en général ses fichiers d'aide ont disparu) : utilisez *Re-pair…*. L'invite d'appairage lui fait désormais ranger ses fichiers dans `~/.config/talixio-orchestrator/` et accuser réception de chaque instruction, pour qu'aucune ne soit perdue si une réponse échoue.
-- **Parler au pilote** (sous les onglets) lui envoie une consigne, écrite ou dictée. Elle passe les mêmes contrôles de
-  confidentialité que toute autre consigne envoyée.
+- Pour donner une consigne au pilote, écrivez-la ou dictez-la dans le chat (mêmes contrôles de confidentialité que toute autre consigne envoyée). Dans l'onglet Autonomie, le 🎙️ de *Vos priorités* et de *Règles permanentes* permet de les dicter à voix haute.
 - Trois onglets, chacun avec une liste à gauche et un volet à droite qui défile seul : la page ne grandit jamais avec le nombre de
   messages. Sur téléphone, le volet remplace la liste, avec « ‹ Retour ». Chaque onglet porte un compteur :
   - **À vous** : les sessions qui attendent votre réponse, chacune avec la question telle qu'elle a été posée, son niveau (L1–L5),
@@ -64,6 +63,6 @@ tendance, spécialisation et actions *évaluer, publier, améliorer (A/B), archi
 
 ## Chantiers
 Les directives du directeur : chantiers ouverts, avancement et pilotage. On les lance depuis la zone de saisie de la
-conversation, avec *Parler au pilote*.
+conversation, depuis le chat.
 
 Sur téléphone, les onglets défilent horizontalement.

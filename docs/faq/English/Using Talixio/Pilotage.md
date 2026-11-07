@@ -11,8 +11,7 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
 - The **status card** says whether it is connected, when it last reported and how many agents it sees on how many machines,
   and how many wait for you. **Re-pair…** and **Disconnect** are there, with the **Fleet reports** switch (In-app badge, Push +
   e-mail, Off). Pairing works either by a webhook the orchestrator creates, or, for a plain local session, by *polling* Talixio. If a connected orchestrator says nothing for 30 minutes, the connection panel shows **Silent for N min — re-pair it** (typically its helper files were lost): use *Re-pair…*. The pairing prompt now has it keep its files in `~/.config/talixio-orchestrator/` and acknowledge each instruction, so none is lost on a failed response.
-- **Talk to the pilot** (below the tabs) sends it an instruction, typed or dictated. It passes the same privacy checks as every
-  other dispatch.
+- To give the pilot an instruction, type or dictate it in the chat (it passes the same privacy checks as every other dispatch). In the Autonomy tab, the 🎙️ on *Your priorities* and *Standing rules* lets you dictate them aloud.
 - Three tabs, each with a list on the left and a pane on the right that scrolls on its own — the page never grows with the number
   of messages. On a phone the pane replaces the list, with « ‹ Back ». Each tab carries a count:
   - **Needs you**: the sessions that wait for you, each with the question as it was asked, its level (L1–L5), the options as
@@ -59,7 +58,6 @@ specialization and the actions *evaluate, publish, improve (A/B), archive, delet
 - **Archived…** reopens archived roles. The *assessor* role is protected: it has no lifecycle actions.
 
 ## Worksites
-The director's directives: open worksites, their progress and steering. They are launched from the chat box, with
-*Talk to the pilot*.
+The director's directives: open worksites, their progress and steering. They are launched from the chat box, from the chat.
 
 On a phone, the tabs scroll sideways.

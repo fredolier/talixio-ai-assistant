@@ -1882,10 +1882,28 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .sites .site-chip button:hover { opacity: 1; }
 
 /* Pilotage → Autonomy tab */
-.pl-auto { padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 70vh; }
-.pl-switch { display: flex; gap: 8px; align-items: center; }
+.pl-auto { padding: 14px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; max-height: 70vh; max-width: 880px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.pl-auto > * { flex-shrink: 0; }
+.pl-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pl-card h5 { margin: 0; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.pl-hero { border-left: 3px solid var(--accent); }
+.pl-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 720px) { .pl-two { grid-template-columns: 1fr; } }
+.pl-auto textarea { min-height: 7.5em; resize: vertical; line-height: 1.45; }
+.pl-switch { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; font-size: inherit; color: var(--ink); }
+.pl-switch input { width: 20px; height: 20px; flex: none; margin: 2px 0 0; padding: 0; accent-color: var(--accent); }
+.pl-sw-t { display: flex; flex-direction: column; gap: 4px; }
+.pl-auto select { font: inherit; font-size: .85rem; color: var(--ink); background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; max-width: 100%; }
+.pl-kept { color: var(--muted); font-size: .85rem; }
+.pl-nums { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; }
+.pl-nums label { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--ink); }
+.pl-num { display: inline-flex; align-items: center; gap: 4px; }
+.pl-num input { width: 4.5em; padding: 6px 8px; text-align: center; }
 .pl-lv { border-collapse: collapse; width: 100%; font-size: 13px; }
 .pl-lv th, .pl-lv td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .pl-prop { border: 1px solid var(--line); border-left: 3px solid var(--accent, #2f7d6d); border-radius: 8px; padding: 8px 12px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
 .pl-verdict { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .pl-rec .pl-rw { cursor: default; }
+.pl-dict { position: relative; }
+.pl-dict textarea { padding-right: 46px; }
+.pl-dict .dictate-btn { position: absolute; top: 6px; right: 6px; width: auto; }

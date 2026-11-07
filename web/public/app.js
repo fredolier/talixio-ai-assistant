@@ -5968,15 +5968,6 @@ async function loadPilotage() {
   if (!pilotWired) {
     pilotWired = true;
     document.querySelectorAll('#view-pilotage .ptab').forEach(b => b.onclick = () => showPilotTab(b.dataset.ptab));
-    const sendPilot = () => { // route the dictated directive through the ordinary chat send(), so the director uses its own fleet tools
-      const src = $('#ptt-input'), text = src.value.trim();
-      if (!text) { src.focus(); return; }
-      $('#input').value = text; src.value = '';
-      location.hash = '#chat';
-      setTimeout(() => send(), 0);
-    };
-    $('#ptt-send').onclick = sendPilot;
-    $('#ptt-input').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendPilot(); } });
   }
   showPilotTab(pilotTab());
   pilotBadges();
@@ -6098,25 +6089,34 @@ function plRenderAuto() {
   const box = $('#pl-auto'), a = PL.auto; if (!box) return;
   if (!a) { box.innerHTML = `<div class="pl-empty">${esc(t('Not available.'))}</div>`; return; }
   const modes = [['ask', 'I propose, you answer'], ['tell', 'I answer if sure, then tell you'], ['auto', 'I answer if sure, quietly']];
-  box.innerHTML = `<label class="pl-switch"><input type="checkbox" id="pa-on" ${a.enabled ? 'checked' : ''}> <b>${esc(t('The assistant looks at the agents’ questions by itself'))}</b></label>
-    <p class="muted small">${esc(t('When an agent asks something, the assistant reads it, weighs your past decisions and priorities, then answers within the limits below — or proposes an answer and waits for you. Each of its answers is written down with a confidence and scored against yours.'))}</p>
-    <table class="pl-lv"><thead><tr><th>${esc(t('Level'))}</th><th>${esc(t('Autonomy'))}</th><th>${esc(t('Right so far'))}</th><th></th></tr></thead><tbody>${Object.entries(a.levels).map(([l, v]) => `<tr>
-      <td><b class="no-i18n">${l}</b> <span class="muted small">${esc(t(AUTO_LEVELS[l]))}</span></td>
-      <td>${v.kept ? `<span class="muted small">${esc(t('Always yours'))}</span>` : `<select data-auto-lv="${l}">${modes.map(([m, n]) => `<option value="${m}" ${v.mode === m ? 'selected' : ''}>${esc(t(n))}</option>`).join('')}</select>`}</td>
-      <td class="no-i18n">${v.n ? `${Math.round(v.rate * 100)}% <span class="muted small">(${v.n})</span>` : '—'}</td>
-      <td>${v.suggest ? `<button type="button" class="btn small" data-auto-up="${l}" data-to="${v.suggest}">${esc(t('Give it more room'))} → ${esc(t(modes.find(m => m[0] === v.suggest)[1]))}</button>` : ''}</td></tr>`).join('')}</tbody></table>
-    <div class="row wrap"><label>${esc(t('It only answers alone above'))} <input type="number" id="pa-th" min="50" max="99" step="5" value="${Math.round(a.threshold * 100)}" class="no-i18n" style="width:4.5em"> % ${esc(t('sure'))}</label></div>
-    ${a.calibration ? `<p class="muted small no-i18n">${esc(t('Calibration'))}: ${esc(t('says'))} ${Math.round(a.calibration.confidence * 100)}% · ${esc(t('is right'))} ${Math.round(a.calibration.hit_rate * 100)}% (${a.calibration.n})</p>` : ''}
-    <h5>${esc(t('Your priorities, most important first'))}</h5>
-    <textarea id="pa-pr" rows="4" class="no-i18n" placeholder="${esc(t('One per line: e.g. client deliveries before internal tools'))}">${esc((a.priorities || []).join('\n'))}</textarea>
-    <h5>${esc(t('Standing rules'))}</h5>
-    <textarea id="pa-ru" rows="3" class="no-i18n" placeholder="${esc(t('One lasting preference per line: e.g. never touch billing without asking me'))}">${esc((a.rules || []).join('\n'))}</textarea>
-    <p class="muted small">${esc(t('The assistant follows these when it answers, and adds the ones you tell it in the chat.'))}</p>
-    <div class="row wrap"><label>${esc(t('At most'))} <input type="number" id="pa-cap" min="0" max="200" value="${+a.daily_cap}" class="no-i18n" style="width:4.5em"> ${esc(t('answers sent by itself per day'))}</label> <span class="muted small no-i18n">(${+a.sent_today} ${esc(t('today'))})</span></div>
+  box.innerHTML = `<section class="pl-card pl-hero">
+      <label class="pl-switch"><input type="checkbox" id="pa-on" ${a.enabled ? 'checked' : ''}><span class="pl-sw-t"><b>${esc(t('The assistant looks at the agents’ questions by itself'))}</b>
+        <span class="muted small">${esc(t('When an agent asks something, the assistant reads it, weighs your past decisions and priorities, then answers within the limits below — or proposes an answer and waits for you. Each of its answers is written down with a confidence and scored against yours.'))}</span></span></label>
+    </section>
+    <section class="pl-card"><h5>${esc(t('Autonomy'))}</h5>
+      <table class="pl-lv"><thead><tr><th>${esc(t('Level'))}</th><th>${esc(t('Autonomy'))}</th><th>${esc(t('Right so far'))}</th></tr></thead><tbody>${Object.entries(a.levels).map(([l, v]) => `<tr>
+        <td><b class="no-i18n">${l}</b> <span class="muted small">${esc(t(AUTO_LEVELS[l]))}</span></td>
+        <td>${v.kept ? `<span class="pl-kept">🔒 ${esc(t('Always yours'))}</span>` : `<select data-auto-lv="${l}">${modes.map(([m, n]) => `<option value="${m}" ${v.mode === m ? 'selected' : ''}>${esc(t(n))}</option>`).join('')}</select>`}
+          ${v.suggest ? `<button type="button" class="btn small" data-auto-up="${l}" data-to="${v.suggest}">${esc(t('Give it more room'))} → ${esc(t(modes.find(m => m[0] === v.suggest)[1]))}</button>` : ''}</td>
+        <td class="no-i18n">${v.n ? `${Math.round(v.rate * 100)}% <span class="muted small">(${v.n})</span>` : '—'}</td></tr>`).join('')}</tbody></table>
+      <div class="pl-nums">
+        <label>${esc(t('It only answers alone above'))} <span class="pl-num"><input type="number" id="pa-th" min="50" max="99" step="5" value="${Math.round(a.threshold * 100)}" class="no-i18n"> %</span> ${esc(t('sure'))}</label>
+        <label>${esc(t('At most'))} <span class="pl-num"><input type="number" id="pa-cap" min="0" max="200" value="${+a.daily_cap}" class="no-i18n"></span> ${esc(t('answers sent by itself per day'))} <span class="muted small no-i18n">(${+a.sent_today} ${esc(t('today'))})</span></label>
+      </div>
+      ${a.calibration ? `<p class="muted small no-i18n">${esc(t('Calibration'))}: ${esc(t('says'))} ${Math.round(a.calibration.confidence * 100)}% · ${esc(t('is right'))} ${Math.round(a.calibration.hit_rate * 100)}% (${a.calibration.n})</p>` : ''}
+    </section>
+    <div class="pl-two">
+      <section class="pl-card"><h5>${esc(t('Your priorities, most important first'))}</h5>
+        <div class="pl-dict"><textarea id="pa-pr" rows="5" class="no-i18n" placeholder="${esc(t('One per line: e.g. client deliveries before internal tools'))}">${esc((a.priorities || []).join('\n'))}</textarea><button type="button" class="btn ghost icon dictate-btn" data-dictate-for="pa-pr" aria-label="${esc(t('Dictate'))}" title="${esc(t('Dictate: speak and I type it here'))}">🎙️</button></div></section>
+      <section class="pl-card"><h5>${esc(t('Standing rules'))}</h5>
+        <div class="pl-dict"><textarea id="pa-ru" rows="5" class="no-i18n" placeholder="${esc(t('One lasting preference per line: e.g. never touch billing without asking me'))}">${esc((a.rules || []).join('\n'))}</textarea><button type="button" class="btn ghost icon dictate-btn" data-dictate-for="pa-ru" aria-label="${esc(t('Dictate'))}" title="${esc(t('Dictate: speak and I type it here'))}">🎙️</button></div>
+        <p class="muted small">${esc(t('The assistant follows these when it answers, and adds the ones you tell it in the chat.'))}</p></section>
+    </div>
     <div class="row"><button type="button" class="btn primary" data-auto-save>${esc(t('Save'))}</button></div>
-    ${a.recent?.length ? `<h5>${esc(t('Its latest answers'))}</h5><div class="pl-rec">${a.recent.map(p => `<div class="pl-rw"><span class="pilot-dot pstate-${p.hit === undefined ? 'idle' : p.hit ? 'active' : 'error'}"></span>
+    ${a.recent?.length ? `<section class="pl-card"><h5>${esc(t('Its latest answers'))}</h5><div class="pl-rec">${a.recent.map(p => `<div class="pl-rw"><span class="pilot-dot pstate-${p.hit === undefined ? 'idle' : p.hit ? 'active' : 'error'}"></span>
       <div><div class="pl-n no-i18n">${esc(p.name)} · ${esc(p.level)} · ${Math.round(p.confidence * 100)}%</div><div class="pl-s no-i18n">${esc(plClip(p.answer, 70))} — <span>${esc(p.action === 'sent' ? t('sent') : t('proposed'))}${p.hit === undefined ? '' : ' · ' + esc(p.hit ? t('right') : t('wrong'))}</span></div></div>
-      <div class="pl-r">${p.action === 'sent' && p.hit === undefined ? `<button type="button" class="btn small" data-verdict="1" data-did="${esc(p.id)}">✓</button> <button type="button" class="btn small danger" data-verdict="0" data-did="${esc(p.id)}">✗</button>` : esc(pilotAgo(p.ts))}</div></div>`).join('')}</div>` : ''}`;
+      <div class="pl-r">${p.action === 'sent' && p.hit === undefined ? `<button type="button" class="btn small" data-verdict="1" data-did="${esc(p.id)}">✓</button> <button type="button" class="btn small danger" data-verdict="0" data-did="${esc(p.id)}">✗</button>` : esc(pilotAgo(p.ts))}</div></div>`).join('')}</div></section>` : ''}`;
+  box.querySelectorAll('.dictate-btn').forEach(b => b.onclick = () => toggleDictate(document.getElementById(b.dataset.dictateFor), b));
   box.querySelectorAll('[data-auto-up]').forEach(b => b.onclick = async () => { try { PL.auto = await post('api/pilot', { autonomy: { [b.dataset.autoUp]: b.dataset.to } }); toast(t('Saved.')); plRenderAuto(); } catch (e) { toast(e.message); } });
 }
 async function plSaveAuto() {
@@ -6148,7 +6148,7 @@ function plRenderAgents() {
   const row = a => `<div class="pl-rw${a.id === PL.sel ? ' sel' : ''}" data-asel="${esc(a.id)}">${plDot(a)}
       <div><div class="pl-n no-i18n">${esc(a.name)}</div><div class="pl-s no-i18n">${esc(a.task && a.task !== '—' ? a.task + ' · ' : '')}${esc(a.machine || '')}</div></div>
       <div class="pl-r">${esc(pilotAgo(a.ts))}${a.unread ? `<span class="pl-bd no-i18n">${a.unread}</span>` : ''}</div></div>`;
-  list.innerHTML = !L.length ? `<div class="pl-empty">${esc(agents.length ? t('No agent matches.') : t('No agents are running yet. Talk to the pilot below to put one to work.'))}</div>`
+  list.innerHTML = !L.length ? `<div class="pl-empty">${esc(agents.length ? t('No agent matches.') : t('No agents are running yet. Ask the assistant in the chat to put one to work.'))}</div>`
     : PL.group ? [...new Set(L.map(a => a.machine || '—'))].map(m => `<div class="pl-grp no-i18n">🖥 ${esc(m)}</div>` + L.filter(a => (a.machine || '—') === m).map(row).join('')).join('')
     : L.map(row).join('');
   const a = agents.find(x => x.id === PL.sel);

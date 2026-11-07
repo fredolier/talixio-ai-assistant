@@ -1727,7 +1727,7 @@ window.I18N.fr = {
 "Answer": "Réponse",
 "Nothing is waiting for you. Decisions will show here, with who answered what.": "Rien n'attend votre réponse. Les décisions apparaîtront ici, avec qui a répondu quoi.",
 "No agent matches.": "Aucun agent ne correspond.",
-"No agents are running yet. Talk to the pilot below to put one to work.": "Aucun agent ne tourne encore. Parlez au pilote ci-dessous pour en mettre un au travail.",
+"No agents are running yet. Ask the assistant in the chat to put one to work.": "Aucun agent ne tourne encore. Demandez à l’assistant, dans le chat, d’en mettre un au travail.",
 "Pick an agent to read its conversation.": "Choisissez un agent pour lire sa conversation.",
 "Show all": "Voir tout",
 "Show less": "Réduire",

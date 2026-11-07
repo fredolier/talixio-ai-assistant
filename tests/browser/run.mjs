@@ -19,7 +19,11 @@ const port = await new Promise(r => { const s = net.createServer().listen(0, () 
 const server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', join(root, 'web/public'), join(root, 'web/router.php')],
   { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw', TALIXIO_NOTIFY: 'none', TALIXIO_STORE: join(data, 'store') }, stdio: 'ignore' });
 const base = `http://127.0.0.1:${port}`;
-for (let i = 0; i < 50; i++) { try { await fetch(base + '/'); break; } catch { await new Promise(r => setTimeout(r, 100)); } }
+// readiness: a plain TCP connect (a fetch() here intermittently crashed Node's HTTP parser against php -S)
+for (let i = 0; i < 80; i++) {
+  if (await new Promise(r => { const c = net.connect(port, '127.0.0.1', () => { c.destroy(); r(true); }); c.on('error', () => r(false)); })) break;
+  await new Promise(r => setTimeout(r, 100));
+}
 
 let failed = 0, passed = 0;
 const errors = [];

@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.29.1 (2026-11-07)
+
+- **Autonomy tab redesigned.** The switch, the levels, the limits, the priorities and the standing rules are now separate cards (the checkbox no longer stretches across the page, the text areas keep their height, the selects are styled, two columns on a wide screen). Priorities and standing rules can be **dictated** with a 🎙️. The permanent *Talk to the pilot* card under the cockpit tabs is gone: it only forwarded to the chat, so instructions are given in the chat, and the empty state says so.
+
 ## 1.29.0 (2026-11-07)
 
 - **A sturdier link with the orchestrator** (from the orchestrator's own account of why it went silent: its helper scripts and secret lived in a wiped `/tmp` scratchpad). (1) The pairing prompt now tells it to keep its scripts and secret in a durable `~/.config/talixio-orchestrator/` folder (700/600), to rebuild missing helpers, to derive its own session identity from `ListAgents` instead of hard-coding it, and to print nothing on a silent tick. (2) **Receive-then-acknowledge**: `GET pull?ack=1` hands instructions out with an id and keeps them queued; the orchestrator confirms with `{"type":"ack","ids":[…]}`; an unacknowledged one comes back after 2 minutes, so a lost response (a 502, a crash) never loses work. The plain `pull` still drains as before. (3) The cockpit warns **« Silent for N min — re-pair it »** when a connected orchestrator has neither reported nor polled for 30 minutes.
