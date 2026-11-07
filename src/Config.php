@@ -24,8 +24,17 @@ final class Config
     public function trustedSite(string $url): bool
     {
         $h = self::siteOf($url);
-        if ($h === '') return false;
+        if ($h === '' || $this->blockedSite($url)) return false;
         foreach ($this->webTrusted as $t) if ($h === $t || str_ends_with($h, ".$t")) return true;
+        return false;
+    }
+
+    /** Whether a web address is on a blocked site (the site itself or one of its subdomains): never opened. */
+    public function blockedSite(string $url): bool
+    {
+        $h = self::siteOf($url);
+        if ($h === '') return false;
+        foreach ($this->webBlocked as $t) if ($h === $t || str_ends_with($h, ".$t")) return true;
         return false;
     }
 
@@ -159,6 +168,7 @@ final class Config
     public string $mailboxSent = 'Sent';
     /** @var string[] tools that run without asking (default: none) */ public array $autoApprove = [];
     /** @var string[] sites opened without asking (subdomains included) */ public array $webTrusted = [];
+    /** @var string[] sites never opened (subdomains included); wins over webTrusted */ public array $webBlocked = [];
     public bool $webSearchTrusted = false;
     public string $signalCli = 'signal-cli';
     public string $browser = 'auto';             // auto (on if Chromium/Chrome is installed) | off
@@ -363,6 +373,7 @@ final class Config
         $c->mailboxDrafts = $e('TALIXIO_MAILBOX_DRAFTS', 'Drafts');
         $c->mailboxSent = $e('TALIXIO_MAILBOX_SENT', 'Sent');
         $c->autoApprove = $list($e('TALIXIO_AUTO_APPROVE'));
+        $c->webBlocked = array_values(array_filter(array_map(fn($h) => self::siteOf($h), $list($e('TALIXIO_WEB_BLOCKED'))), 'strlen'));
         $c->webTrusted = array_values(array_filter(array_map(fn($h) => self::siteOf($h), $list($e('TALIXIO_WEB_TRUSTED'))), 'strlen'));
         $c->webSearchTrusted = $e('TALIXIO_WEB_SEARCH_TRUSTED', '0') === '1';
         $c->signalCli = $e('TALIXIO_SIGNAL_CLI', 'signal-cli');

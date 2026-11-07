@@ -1127,6 +1127,11 @@ final class Tools
         if ($args && !str_starts_with($name, 'browser_') && ($this->seen[$key] = ($this->seen[$key] ?? 0) + 1) > 2) { // a page or a list read again can change
             return "error: you already made this exact call twice in this answer (see the results above). Don't call it again: use what you have, or tell the user what is missing.";
         }
+        if (in_array($name, ['fetch_url', 'browser_open'], true) && $this->app->cfg->blockedSite((string)($args['url'] ?? ''))) { // the user blocked this site: no approval can open it
+            $out = 'error: this web site is blocked in the settings (Browser and approvals → Blocked websites). Do not try another way to reach it; tell the user if you needed it.';
+            $this->app->store->logTool($name, $args, $out, $this->app->jobId);
+            return $out;
+        }
         if ($this->shown !== null && isset($this->tools[$name])) $this->shown[$name] = true; // called without being sent: keep it for the next steps
         if (isset($this->tools[$name]) && ($gate = $this->app->privacy()->toolGate($name, $args)) !== null) { // confidential / secret spaces
             $this->app->store->logTool($name, $args, $gate, $this->app->jobId);

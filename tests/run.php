@@ -1748,6 +1748,16 @@ $cfg2 = \Talixio\Config::fromEnv();
 check('settings: app values override the file', $err === [] && $cfg2->name === 'Jarvis' && $cfg2->budgetDaily === 5.0 && $cfg2->notify === ['webpush', 'signal']);
 check('settings: empty secret means unchanged', $cfg2->smtpPassword === 'file-secret');
 check('settings: invalid values rejected, nothing saved', \Talixio\Settings::save($sd, ['TALIXIO_PROVIDER' => 'skynet', 'TALIXIO_NAME' => 'X']) === ['TALIXIO_PROVIDER' => 'not one of the choices'] && \Talixio\Config::fromEnv()->name === 'Jarvis');
+$e = \Talixio\Settings::save($sd, ['TALIXIO_WEB_TRUSTED' => 'https://www.LeMonde.fr/a/b, gouv.fr;lemonde.fr', 'TALIXIO_WEB_BLOCKED' => "evil.example\nhttp://track.example:8080/x"]);
+$cs = \Talixio\Config::fromEnv();
+check('sites: addresses are reduced to the site, each kept once', $e === [] && $cs->webTrusted === ['lemonde.fr', 'gouv.fr'] && $cs->webBlocked === ['evil.example', 'track.example']);
+check('sites: something that is not a site is refused and nothing is saved', isset(\Talixio\Settings::save($sd, ['TALIXIO_WEB_TRUSTED' => 'ok.example, not a site!'])['TALIXIO_WEB_TRUSTED']) && \Talixio\Config::fromEnv()->webTrusted === ['lemonde.fr', 'gouv.fr']);
+$cs->webTrusted = ['evil.example', 'lemonde.fr'];
+check('sites: a blocked site (and its subdomains) is never trusted, others unaffected', $cs->blockedSite('https://a.evil.example/x') && !$cs->trustedSite('https://a.evil.example/x') && $cs->trustedSite('https://www.lemonde.fr/') && !$cs->blockedSite('https://notevil.example'));
+$app->cfg->webBlocked = ['blocked.example'];
+check('sites: the assistant cannot fetch or open a blocked site, with no approval requested', str_contains($app->tools->run('fetch_url', ['url' => 'https://x.blocked.example/p']), 'is blocked') && str_contains($app->tools->run('browser_open', ['url' => 'https://blocked.example']), 'is blocked'));
+$app->cfg->webBlocked = [];
+\Talixio\Settings::save($sd, [], ['TALIXIO_WEB_TRUSTED', 'TALIXIO_WEB_BLOCKED']);
 check('settings: unknown keys, bad time zones and line breaks refused', isset(\Talixio\Settings::save($sd, ['PATH' => '/tmp'])['PATH']) && isset(\Talixio\Settings::save($sd, ['TALIXIO_TIMEZONE' => 'Mars/Base'])['TALIXIO_TIMEZONE'])
     && isset(\Talixio\Settings::save($sd, ['TALIXIO_NAME' => "a\nTALIXIO_X=1"])['TALIXIO_NAME']));
 $desc = \Talixio\Settings::describe($sd);

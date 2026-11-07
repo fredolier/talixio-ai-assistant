@@ -2842,8 +2842,52 @@ function fieldInput(f) {
     const on = (eff || '').split(',');
     return `<div class="checks" id="${id}">${Object.entries(f.options).map(([v, l]) => `<label><input type="checkbox" value="${esc(v)}" ${on.includes(v) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>`;
   }
+  if (f.type === 'sites') return `<div class="sites" data-for="${f.key}"><input id="${id}" type="hidden" value="${esc(siteList(f.value).join(','))}">
+    <div class="site-add"><input type="text" class="no-i18n" data-site-new autocomplete="off" placeholder="${esc(t('Add a site: lemonde.fr or a full address'))}"><button type="button" class="btn" data-site-add>${esc(t('Add'))}</button></div>
+    <p class="err" data-site-err hidden></p>
+    <div class="site-bar"><input type="search" class="no-i18n" data-site-find placeholder="${esc(t('Search the list'))}"><span class="muted small" data-site-n></span>
+      <button type="button" class="link" data-site-io>${esc(t('Import / export'))}</button></div>
+    <div class="site-io" hidden><textarea rows="5" data-site-text spellcheck="false" placeholder="${esc(t('One site per line'))}"></textarea>
+      <div class="row"><button type="button" class="btn" data-site-apply>${esc(t('Replace the list with this text'))}</button><button type="button" class="btn" data-site-merge>${esc(t('Add these to the list'))}</button></div></div>
+    <div class="site-chips"></div></div>`;
   if (f.type === 'secret') return `<input id="${id}" type="password" autocomplete="new-password" placeholder="${f.set ? 'Set (' + esc(f.hint.trim()) + '). Type to replace.' : 'Not set'}">`;
   return `<input id="${id}" type="${f.type === 'number' ? 'text' : f.type === 'url' ? 'url' : 'text'}" ${f.type === 'number' ? 'inputmode="decimal"' : ''} value="${esc(f.value)}" placeholder="${esc(f.default || '')}"${f.locked ? ' disabled' : ''}>`;
+}
+/** 'https://www.Lemonde.fr/x', 'lemonde.fr' → 'lemonde.fr' (same rule as Config::siteOf); '' when it is not a web site. */
+function siteHost(x) {
+  let h = String(x).trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/[/?#].*$/, '').replace(/^.*@/, '').replace(/:\d+$/, '').replace(/\.$/, '').replace(/^www\./, '');
+  return /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,}$/.test(h) ? h : '';
+}
+function siteList(v) { return [...new Set(String(v || '').split(/[\s,;]+/).map(siteOf).filter(Boolean))]; }
+/** The trusted / blocked sites manager: chips with ✕, add field (full addresses accepted), search, import/export as text. */
+function initSites(box) {
+  const hid = box.querySelector('input[type=hidden]'), chips = box.querySelector('.site-chips'), err = box.querySelector('[data-site-err]');
+  const nw = box.querySelector('[data-site-new]'), find = box.querySelector('[data-site-find]'), io = box.querySelector('.site-io'), txt = box.querySelector('[data-site-text]');
+  let list = hid.value ? hid.value.split(',') : [];
+  const commit = () => { hid.value = list.join(','); hid.dispatchEvent(new Event('input', { bubbles: true })); draw(); };
+  const draw = () => {
+    const q = find.value.trim().toLowerCase(), shown = list.filter(s => s.includes(q)).sort();
+    chips.innerHTML = shown.map(s => `<span class="site-chip no-i18n">${esc(s)}<button type="button" data-rm="${esc(s)}" aria-label="${esc(t('Remove'))} ${esc(s)}">✕</button></span>`).join('') || `<span class="muted small">${esc(list.length ? t('No site matches.') : t('No site yet.'))}</span>`;
+    box.querySelector('[data-site-n]').textContent = list.length ? (q ? `${shown.length} / ${list.length}` : String(list.length)) : '';
+    txt.value = [...list].sort().join('\n');
+  };
+  const add = (raw, merge = true) => {
+    const bad = [], ok = [];
+    for (const x of String(raw).split(/[\s,;]+/).filter(Boolean)) { const s = siteHost(x); (s ? ok : bad).push(s || x); }
+    err.hidden = !bad.length; err.textContent = bad.length ? t('Not a web site address: {x}', { x: bad.slice(0, 3).join(', ') }) : '';
+    if (bad.length) return false;
+    list = [...new Set([...(merge ? list : []), ...ok])]; commit(); return true;
+  };
+  box.querySelector('[data-site-add]').onclick = () => { if (add(nw.value)) nw.value = ''; nw.focus(); };
+  nw.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); box.querySelector('[data-site-add]').click(); } };
+  find.oninput = e => { e.stopPropagation(); draw(); };
+  nw.oninput = e => { e.stopPropagation(); err.hidden = true; };
+  chips.onclick = e => { const b = e.target.closest('[data-rm]'); if (b) { list = list.filter(s => s !== b.dataset.rm); commit(); } };
+  box.querySelector('[data-site-io]').onclick = () => { io.hidden = !io.hidden; if (!io.hidden) txt.focus(); };
+  box.querySelector('[data-site-apply]').onclick = () => { if (add(txt.value, false)) io.hidden = true; };
+  box.querySelector('[data-site-merge]').onclick = () => { if (add(txt.value)) io.hidden = true; };
+  txt.oninput = e => e.stopPropagation();
+  draw();
 }
 function fieldValue(f) {
   const el = document.getElementById('set-' + f.key);
@@ -2856,6 +2900,7 @@ function initialValue(f) {
   if (f.type === 'bool') return eff === '1' ? '1' : '0';
   if (f.type === 'multi') return (eff || '').split(',').filter(Boolean).join(',');
   if (f.type === 'secret') return '';
+  if (f.type === 'sites') return siteList(f.value).join(',');
   if (f.type === 'select') return eff;
   return f.value;
 }
@@ -3053,6 +3098,7 @@ function renderGroups(groups) {
       if (f) { f.after(msMailRow(gid)); f.querySelector('select')?.addEventListener('change', e => { if (e.target.value === 'microsoft') msServers(gid); showMsMail(); }); }
     }
     box.append(el);
+    el.querySelectorAll('.sites').forEach(initSites);
   }
   const page = $('#view-settings');
   page.oninput = page.onchange = e => { if (e.target.closest('.set-groups')) setDirty(); };

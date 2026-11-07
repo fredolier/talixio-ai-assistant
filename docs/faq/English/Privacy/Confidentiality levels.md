@@ -41,6 +41,11 @@ If a question asked in General reads a confidential document, the rest of the an
   "Always allow" button on an approval adds the site for you; for a web search it turns on "Web search from
   Confidential spaces without asking". Secret spaces still never reach the web. While approvals are
   waiting, you get one notice, not one email per request.
+  The list is a manager, not a long text: each site is a chip with ✕, you add one with its name or a full
+  address (`https://www.lemonde.fr/page` becomes `lemonde.fr`), search the list, and **Import / export** it
+  as text (one site per line). Something that is not a web site is refused.
+- **Blocked websites** (same page): sites that are never opened, whatever the space, even if you would approve —
+  the assistant is told the site is blocked. Subdomains included; a blocked site wins over a trusted one.
 
 ## Under each answer
 Badges show where the answer went ("Anthropic · 3 documents", "3 local", "1 blocked");

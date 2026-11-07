@@ -344,6 +344,30 @@ const flows = {
     await page.evaluate(() => { location.hash = '#settings/learning'; }); await page.waitForTimeout(700);
     check('settings: the knowledge graph is in the Learning section', await page.isVisible('#set-TALIXIO_GRAPH') || await page.isVisible('.set-sec[data-sec="learning"] [data-key="TALIXIO_GRAPH"]'));
   },
+  async sites({ page, check }) {
+    await go(page, 'settings');
+    await page.evaluate(() => { location.hash = '#settings/security'; }); await page.waitForTimeout(700);
+    const box = '.field[data-key="TALIXIO_WEB_TRUSTED"] .sites';
+    await page.click('.set-sec[data-sec="security"] .set-tabs .tab:has-text("Browser")');
+    await page.waitForSelector(box, { timeout: 10000 });
+    await page.fill(`${box} [data-site-new]`, 'https://www.LeMonde.fr/some/page');
+    await page.press(`${box} [data-site-new]`, 'Enter');
+    await page.fill(`${box} [data-site-new]`, 'gouv.fr'); await page.click(`${box} [data-site-add]`);
+    check('sites: a full address is added as the bare site, listed as chips', JSON.stringify(await page.$$eval(`${box} .site-chip`, e => e.map(x => x.firstChild.textContent.trim()).sort())) === '["gouv.fr","lemonde.fr"]');
+    check('sites: the Save bar appears', await page.isVisible('#set-save'));
+    await page.fill(`${box} [data-site-new]`, 'not a site!'); await page.click(`${box} [data-site-add]`);
+    check('sites: something that is not a site is refused with a message', await page.isVisible(`${box} [data-site-err]`) && (await page.$$(`${box} .site-chip`)).length === 2);
+    await page.fill(`${box} [data-site-find]`, 'gouv');
+    check('sites: the search filters the chips', (await page.$$(`${box} .site-chip`)).length === 1);
+    await page.fill(`${box} [data-site-find]`, '');
+    await page.click(`${box} [data-rm="gouv.fr"]`);
+    await page.click('#set-save-btn'); await page.waitForTimeout(800);
+    const val = async k => (await api(page, 'api/settings')).groups.flatMap(g => g.fields).find(f => f.key === k).value;
+    check('sites: saved on the server, normalised', await val('TALIXIO_WEB_TRUSTED') === 'lemonde.fr');
+    await page.fill('.field[data-key="TALIXIO_WEB_BLOCKED"] [data-site-new]', 'tracker.example'); await page.click('.field[data-key="TALIXIO_WEB_BLOCKED"] [data-site-add]');
+    await page.click('#set-save-btn'); await page.waitForTimeout(800);
+    check('sites: the blocked list is saved on its own', await val('TALIXIO_WEB_BLOCKED') === 'tracker.example');
+  },
   async notifications({ page, check }) {
     await go(page, 'notifications');
     for (const b of ['#notif-all-read', '#notif-clear']) if (await page.isVisible(b) && await page.isEnabled(b)) await page.click(b);

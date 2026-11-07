@@ -152,7 +152,8 @@ final class Settings
                 ['TALIXIO_BROWSER_ALLOW_PRIVATE', 'Allow local network addresses', 'bool', 'Not recommended: a web page could reach your devices.'],
                 ['TALIXIO_BROWSER_NO_SANDBOX', 'Disable Chromium\'s sandbox', 'bool', 'Only if Chromium won\'t start otherwise.'],
                 ['TALIXIO_APPROVAL_WAIT_SECONDS', 'Wait for an approval (seconds)', 'number', 'For a web form being filled in.'],
-                ['TALIXIO_WEB_TRUSTED', 'Trusted websites', 'list', 'Opened without asking, also from Confidential spaces and routines (never from Secret ones). Subdomains included, e.g. lemonde.fr, gouv.fr.'],
+                ['TALIXIO_WEB_TRUSTED', 'Trusted websites', 'sites', 'Opened without asking, also from Confidential spaces and routines (never from Secret ones). Subdomains included, e.g. lemonde.fr, gouv.fr.'],
+                ['TALIXIO_WEB_BLOCKED', 'Blocked websites', 'sites', 'Never opened, whatever the space and even if you approve: the assistant is told the site is blocked. Subdomains included. A blocked site wins over a trusted one.'],
                 ['TALIXIO_WEB_SEARCH_TRUSTED', 'Web search from Confidential spaces without asking', 'bool', 'The search words go to your search service. Never from Secret spaces.'],
                 ['TALIXIO_AUTO_APPROVE', 'Actions without approval', 'multi', 'Not recommended: you won\'t be asked for these any more.', ['calendar_add' => 'Add to calendar', 'mail_send' => 'Send email as you', 'browser_submit' => 'Submit a web form']],
             ]],
@@ -305,6 +306,16 @@ final class Settings
                 $vals = array_values(array_filter(array_map('trim', explode(',', $v)), 'strlen'));
                 if (array_diff($vals, array_keys($f['options']))) { $errors[$k] = 'not one of the choices'; continue; }
                 $v = $vals ? implode(',', $vals) : 'none';
+            }
+            if ($f['type'] === 'sites') { // web sites: 'https://www.lemonde.fr/x' or 'lemonde.fr' -> 'lemonde.fr', each once
+                $sites = []; $bad = '';
+                foreach (preg_split('/[\s,;]+/', $v, -1, PREG_SPLIT_NO_EMPTY) as $x) {
+                    $s = Config::siteOf($x);
+                    if (!preg_match('/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,}$/', $s)) { $bad = $x; break; }
+                    $sites[$s] = true;
+                }
+                if ($bad !== '') { $errors[$k] = 'not a web site address: ' . mb_substr($bad, 0, 60); continue; }
+                $v = implode(',', array_keys($sites));
             }
             if ($f['type'] === 'list') $v = implode(',', array_filter(array_map('trim', preg_split('/[,\n]+/', $v)), 'strlen'));
             if ($f['type'] === 'url' && $v !== '' && !preg_match('#^https?://#i', $v)) { $errors[$k] = 'an http(s) address is expected'; continue; }

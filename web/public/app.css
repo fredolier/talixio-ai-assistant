@@ -1867,3 +1867,16 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
   .pl-split .pl-pane{display:none}.pl-split.detail .pl-lst{display:none}.pl-split.detail .pl-pane{display:flex}
   .pl-back{display:inline-flex}.pl-b{max-width:92%}
 }
+
+/* Trusted / blocked sites manager (Settings → Browser and approvals) */
+.sites { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sites .site-add { display: flex; gap: 8px; }
+.sites .site-add input { flex: 1; min-width: 0; }
+.sites .site-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sites .site-bar input { flex: 1; min-width: 140px; max-width: 260px; }
+.sites .site-io { display: flex; flex-direction: column; gap: 6px; }
+.sites .site-io textarea { width: 100%; font-family: ui-monospace, monospace; font-size: 12px; }
+.sites .site-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 220px; overflow-y: auto; }
+.sites .site-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; background: var(--surface); }
+.sites .site-chip button { border: 0; background: none; cursor: pointer; color: inherit; opacity: .6; padding: 0 6px; font-size: 12px; border-radius: 999px; }
+.sites .site-chip button:hover { opacity: 1; }

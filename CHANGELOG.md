@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.25.0 (2026-11-07)
+
+- **Trusted websites: a real list, and a Blocked websites list.** In Settings → Browser and approvals, *Trusted websites* is no longer one long comma-separated field: each site is a **chip with ✕**, you **add** one by typing its name or pasting a **full address** (`https://www.lemonde.fr/page` becomes `lemonde.fr`; a text that is not a web site is refused, on the page and on the server), you can **search** the list and **import / export** it as text (one site per line). Next to it, **Blocked websites** are never opened — whatever the space, even if you approve — and the assistant is told the site is blocked; a blocked site wins over a trusted one. The FAQ page Confidentiality levels follows in both languages.
+
 ## 1.24.0 (2026-11-07)
 
 - **Library: the four open points of the explorer, settled.** (1) A **folder shows its Modified date** — the newest file inside, subfolders included — and sorts by it. (2) **View → Show → Everything below** lists every file under the current folder in one flat list (the folder is the subtitle of each row; up to 2 000 files; it resets when you change folder). (3) **Pinned folders**: *Pin to the tree* in a folder's ⋮ menu puts it in a **Favourites** block at the top of the tree (✕ to remove; kept on this device). (4) **Folders can be selected** (checkbox, Ctrl/Cmd-click): the selection bar then offers **Download zip** (the folders with all their content) and **Move to…** (each folder moves with its files); **Delete** stays on a folder's own menu, since it takes all its files with it. The FAQ page Library follows in both languages.

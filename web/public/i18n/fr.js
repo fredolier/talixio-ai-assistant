@@ -3161,5 +3161,16 @@ window.I18N.fr = {
   "Budget": "Budget",
   "Refresh now": "Actualiser maintenant",
   "Refreshing…": "Actualisation…",
-  "Catalogue refreshed.": "Catalogue actualisé."
+  "Catalogue refreshed.": "Catalogue actualisé.",
+  "Blocked websites": "Sites web bloqués",
+  "Never opened, whatever the space and even if you approve: the assistant is told the site is blocked. Subdomains included. A blocked site wins over a trusted one.": "Jamais ouverts, quel que soit l'espace et même si vous validez : l'assistant est prévenu que le site est bloqué. Sous-domaines inclus. Un site bloqué l'emporte sur un site de confiance.",
+  "Add a site: lemonde.fr or a full address": "Ajouter un site : lemonde.fr ou une adresse complète",
+  "Search the list": "Chercher dans la liste",
+  "Import / export": "Importer / exporter",
+  "One site per line": "Un site par ligne",
+  "Replace the list with this text": "Remplacer la liste par ce texte",
+  "Add these to the list": "Ajouter ceux-ci à la liste",
+  "No site matches.": "Aucun site ne correspond.",
+  "No site yet.": "Aucun site pour l'instant.",
+  "Not a web site address: {x}": "Ce n'est pas une adresse de site : {x}"
 };
