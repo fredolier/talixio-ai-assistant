@@ -32,6 +32,16 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
   it is; your answer goes back with a decision id, and the pilot reports the session's next step. Approvals and permission
   prompts are never routed: only you can give them. A new question counts as news: it shows in the badge even on a quiet
   check-in. A pilot paired before this needs the instructions of the pairing message once: re-pair it, or send it those.
+- **Autonomy tab: the assistant decides within your limits.** Switch on *The assistant looks at the agents' questions by
+  itself*: when an agent asks something, it reads the question, the similar decisions you took before, what it knows of
+  how you work and your **priorities** (one per line, most important first), then calls `fleet_decide` with its answer and
+  an honest confidence. For each level L1–L5 you choose: *I propose, you answer* (default), *I answer if sure, then tell
+  you*, or *I answer if sure, quietly*; it answers alone only above the confidence you set (75 % by default). **L4/L5
+  (values, business), approvals, and anything about pushes, deploys, deletions, e-mails, credentials or payments are
+  always yours**, whatever the setting. A proposal appears on the question as a *Suggested answer* with a **Send this
+  answer** button. Every answer is written down with its confidence and scored: against your own answer when you give
+  one, or with **Yes / No, that was wrong** on what it sent. A miss lowers that level back at once; after enough right
+  answers it *suggests* giving it more room (it never raises its own limits). Corrections also teach the Mind how you decide.
 - **The assistant can read the fleet's questions.** Ask « what are the agents waiting for? »: it lists the waiting questions
   (options, level, cost of a wrong choice), the latest decisions and who took them, recent alerts, and any agent's
   conversation. It reads only; it answers (with the decision id) just what is yours to leave to it, never levels L4/L5,

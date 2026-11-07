@@ -6045,6 +6045,7 @@ function plRender(info) {
   $('#pl-n-agents').textContent = agents.length || ''; $('#pl-n-journal').textContent = (info.reports || []).length || '';
   document.querySelectorAll('#pl-tabs .pl-tab').forEach(b => { b.classList.toggle('on', b.dataset.pl === PL.tab); b.setAttribute('aria-selected', String(b.dataset.pl === PL.tab)); });
   plRenderNeed(); plRenderAgents(); plRenderJournal();
+  if (PL.tab === 'autonomy') plLoadAuto();
 }
 function plShowTab(name) {
   PL.tab = name;
@@ -6079,13 +6080,52 @@ function plRenderNeed() {
     det.innerHTML = `<div class="pl-ph">${plBackBtn()}<span class="pl-t no-i18n">${esc(wa.name)}</span><span class="pl-pill">${esc(plKind(w))}</span>${w.type ? `<span class="pl-pill no-i18n">${esc(w.type)}</span>` : ''}${w.decision_id ? `<span class="pl-pill no-i18n" title="${esc(t('Decision id'))}">${esc(w.decision_id)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(wa.ts))}</span></div>
       <div class="pl-det"><div class="pl-q no-i18n">${esc(w.question)}</div>
         ${w.cost ? `<p class="muted small"><span>${esc(t('If it goes wrong:'))}</span> <span class="no-i18n">${esc(w.cost)}</span></p>` : ''}
+        ${w.proposal ? `<div class="pl-prop"><b>${esc(t('Suggested answer'))}</b> · <span class="no-i18n">${Math.round(w.proposal.confidence * 100)}%</span><div class="pl-q no-i18n">${esc(w.proposal.answer)}</div>${w.proposal.rationale ? `<p class="muted small no-i18n">${esc(w.proposal.rationale)}</p>` : ''}<button type="button" class="btn primary small no-i18n" data-answer="${esc(w.proposal.answer)}" data-agent-id="${esc(wa.id)}">${esc(t('Send this answer'))}</button></div>` : ''}
         ${w.options?.length && w.kind !== 'approval' ? `<div class="pl-opts">${w.options.map(o => `<button type="button" class="btn primary no-i18n" data-answer="${esc(o)}" data-agent-id="${esc(wa.id)}">${esc(o)}</button>`).join('')}</div>` : ''}
         ${w.kind === 'approval' ? `<p class="muted small">${esc(t('Only you can do this, in that session: open it and give the approval. Nothing can be done from here.'))}</p>${wa.url ? `<a class="btn small" href="${esc(wa.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : ''}`
           : `<p class="muted small">${esc(t('Your answer goes to the agent through the pilot, with the decision id, and is written in the journal of decisions: who answered what.'))}</p><button type="button" class="btn small" data-open-agent="${esc(wa.id)}">${esc(t('Answer another way…'))}</button>`}</div>`;
   } else if (de) {
     det.innerHTML = `<div class="pl-ph">${plBackBtn()}<span class="pl-t no-i18n">${esc(de.name || de.agent)}</span><span class="pl-pill">${esc(t('by {w}', { w: plWho(de.by) }))}</span>${de.id ? `<span class="pl-pill no-i18n">${esc(de.id)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(de.ts))}</span></div>
-      <div class="pl-det"><h5>${esc(t('Question'))}</h5><div class="pl-q no-i18n">${esc(de.question || '—')}</div><h5>${esc(t('Answer'))}</h5><div class="pl-q no-i18n">${esc(de.answer)}</div></div>`;
+      <div class="pl-det"><h5>${esc(t('Question'))}</h5><div class="pl-q no-i18n">${esc(de.question || '—')}</div><h5>${esc(t('Answer'))}</h5><div class="pl-q no-i18n">${esc(de.answer)}</div>${de.by === 'assistant' && de.id ? `<div class="pl-verdict"><span class="muted small">${esc(t('Was this the right call?'))}</span> <button type="button" class="btn small" data-verdict="1" data-did="${esc(de.id)}">${esc(t('Yes'))}</button> <button type="button" class="btn small danger" data-verdict="0" data-did="${esc(de.id)}">${esc(t('No, that was wrong'))}</button></div>` : ''}</div>`;
   } else det.innerHTML = `<div class="pl-empty pl-center">${esc(t('Nothing is waiting for you. Decisions will show here, with who answered what.'))}</div>`;
+}
+
+// -- Autonomy: what the assistant may decide alone, how right it has been, what it arbitrates by --
+async function plLoadAuto() { try { PL.auto = await api('api/pilot'); } catch (e) { PL.auto = null; } plRenderAuto(); }
+const AUTO_LEVELS = { L1: 'Routine', L2: 'Small choices', L3: 'Real choices', L4: 'Values and business', L5: 'Critical' };
+function plRenderAuto() {
+  const box = $('#pl-auto'), a = PL.auto; if (!box) return;
+  if (!a) { box.innerHTML = `<div class="pl-empty">${esc(t('Not available.'))}</div>`; return; }
+  const modes = [['ask', 'I propose, you answer'], ['tell', 'I answer if sure, then tell you'], ['auto', 'I answer if sure, quietly']];
+  box.innerHTML = `<label class="pl-switch"><input type="checkbox" id="pa-on" ${a.enabled ? 'checked' : ''}> <b>${esc(t('The assistant looks at the agents’ questions by itself'))}</b></label>
+    <p class="muted small">${esc(t('When an agent asks something, the assistant reads it, weighs your past decisions and priorities, then answers within the limits below — or proposes an answer and waits for you. Each of its answers is written down with a confidence and scored against yours.'))}</p>
+    <table class="pl-lv"><thead><tr><th>${esc(t('Level'))}</th><th>${esc(t('Autonomy'))}</th><th>${esc(t('Right so far'))}</th><th></th></tr></thead><tbody>${Object.entries(a.levels).map(([l, v]) => `<tr>
+      <td><b class="no-i18n">${l}</b> <span class="muted small">${esc(t(AUTO_LEVELS[l]))}</span></td>
+      <td>${v.kept ? `<span class="muted small">${esc(t('Always yours'))}</span>` : `<select data-auto-lv="${l}">${modes.map(([m, n]) => `<option value="${m}" ${v.mode === m ? 'selected' : ''}>${esc(t(n))}</option>`).join('')}</select>`}</td>
+      <td class="no-i18n">${v.n ? `${Math.round(v.rate * 100)}% <span class="muted small">(${v.n})</span>` : '—'}</td>
+      <td>${v.suggest ? `<button type="button" class="btn small" data-auto-up="${l}" data-to="${v.suggest}">${esc(t('Give it more room'))} → ${esc(t(modes.find(m => m[0] === v.suggest)[1]))}</button>` : ''}</td></tr>`).join('')}</tbody></table>
+    <div class="row wrap"><label>${esc(t('It only answers alone above'))} <input type="number" id="pa-th" min="50" max="99" step="5" value="${Math.round(a.threshold * 100)}" class="no-i18n" style="width:4.5em"> % ${esc(t('sure'))}</label></div>
+    ${a.calibration ? `<p class="muted small no-i18n">${esc(t('Calibration'))}: ${esc(t('says'))} ${Math.round(a.calibration.confidence * 100)}% · ${esc(t('is right'))} ${Math.round(a.calibration.hit_rate * 100)}% (${a.calibration.n})</p>` : ''}
+    <h5>${esc(t('Your priorities, most important first'))}</h5>
+    <textarea id="pa-pr" rows="4" class="no-i18n" placeholder="${esc(t('One per line: e.g. client deliveries before internal tools'))}">${esc((a.priorities || []).join('\n'))}</textarea>
+    <div class="row"><button type="button" class="btn primary" data-auto-save>${esc(t('Save'))}</button></div>
+    ${a.recent?.length ? `<h5>${esc(t('Its latest answers'))}</h5><div class="pl-rec">${a.recent.map(p => `<div class="pl-rw"><span class="pilot-dot pstate-${p.hit === undefined ? 'idle' : p.hit ? 'active' : 'error'}"></span>
+      <div><div class="pl-n no-i18n">${esc(p.name)} · ${esc(p.level)} · ${Math.round(p.confidence * 100)}%</div><div class="pl-s no-i18n">${esc(plClip(p.answer, 70))} — <span>${esc(p.action === 'sent' ? t('sent') : t('proposed'))}${p.hit === undefined ? '' : ' · ' + esc(p.hit ? t('right') : t('wrong'))}</span></div></div>
+      <div class="pl-r">${p.action === 'sent' && p.hit === undefined ? `<button type="button" class="btn small" data-verdict="1" data-did="${esc(p.id)}">✓</button> <button type="button" class="btn small danger" data-verdict="0" data-did="${esc(p.id)}">✗</button>` : esc(pilotAgo(p.ts))}</div></div>`).join('')}</div>` : ''}`;
+  box.querySelectorAll('[data-auto-up]').forEach(b => b.onclick = async () => { try { PL.auto = await post('api/pilot', { autonomy: { [b.dataset.autoUp]: b.dataset.to } }); toast(t('Saved.')); plRenderAuto(); } catch (e) { toast(e.message); } });
+}
+async function plSaveAuto() {
+  const autonomy = {}; document.querySelectorAll('#pl-auto [data-auto-lv]').forEach(s => { autonomy[s.dataset.autoLv] = s.value; });
+  try { PL.auto = await post('api/pilot', { enabled: $('#pa-on').checked, threshold: Math.max(50, Math.min(99, +$('#pa-th').value || 75)) / 100, autonomy, priorities: $('#pa-pr').value }); toast(t('Saved.')); plRenderAuto(); }
+  catch (e) { toast(e.message); }
+}
+async function plVerdict(el) {
+  el.disabled = true;
+  try {
+    const ok = el.dataset.verdict === '1';
+    PL.auto = await post('api/pilot/verdict', { decision_id: el.dataset.did, ok, note: ok ? '' : (prompt(t('What should it have answered?')) || '') });
+    toast(ok ? t('Noted, thank you.') : t('Noted: I will take that into account.')); if (PL.tab === 'autonomy') plRenderAuto();
+  } catch (e) { toast(e.message); el.disabled = false; }
 }
 
 // -- Agents: the roster, and one conversation at a time --
@@ -6197,6 +6237,8 @@ function plWire() {
     const t0 = e.target;
     let el;
     if ((el = t0.closest('[data-plback]'))) { el.closest('.pl-split').classList.remove('detail'); return; }
+    if ((el = t0.closest('[data-verdict]'))) { plVerdict(el); return; }
+    if ((el = t0.closest('[data-auto-save]'))) { plSaveAuto(); return; }
     if ((el = t0.closest('[data-answer]'))) { plSay(el.dataset.agentId, el.dataset.answer, el); return; }
     if ((el = t0.closest('[data-open-agent]'))) { PL.sel = el.dataset.openAgent; plShowTab('agents'); plOpen('#pl-split-agents'); setTimeout(() => $('#pl-ag-input')?.focus(), 250); return; }
     if ((el = t0.closest('[data-more]'))) { e.preventDefault(); const b = el.closest('.pl-b'); b.classList.toggle('open'); el.textContent = b.classList.contains('open') ? t('Show less') : t('Show all'); return; }

@@ -180,7 +180,12 @@ final class Conductor
     {
         $b = $this->binding();
         $unreadBy = $b['agent_unread'] ?? [];
-        $agents = array_map(fn($a) => $a + ['unread' => (int)($unreadBy[$a['id']] ?? 0)], array_values($b['agents'] ?? []));
+        $pilot = $this->app->pilot();
+        $agents = array_map(function ($a) use ($unreadBy, $pilot) {
+            $a += ['unread' => (int)($unreadBy[$a['id']] ?? 0)];
+            if (!empty($a['waiting'])) { $a['waiting']['decision_id'] = $this->waitingId($a); if ($p = $pilot->proposal($a['waiting']['decision_id'])) $a['waiting']['proposal'] = ['answer' => $p['answer'], 'confidence' => $p['confidence'], 'rationale' => $p['rationale'], 'level' => $p['level']]; }
+            return $a;
+        }, array_values($b['agents'] ?? []));
         $machines = count(array_unique(array_filter(array_map(fn($a) => (string)($a['machine'] ?? ''), $agents))));
         return [
             'connected' => $this->connected(),
@@ -324,9 +329,11 @@ final class Conductor
         // count on that agent; an untagged one is a fleet-wide report — a line in the journal (kind alert or summary,
         // the orchestrator may say "level":"alert"); a session that now waits for the user is an alert line of its own.
         $alert = in_array((string)($msg['level'] ?? ''), ['alert', 'error'], true);
-        $push = $this->lockedUpdate(function (array $b) use ($agents, $agent, $decision, $title, $text, $silent, $alert) { // locked: never clobber a concurrent queue drain
+        $newAsk = false;
+        $push = $this->lockedUpdate(function (array $b) use ($agents, $agent, $decision, $title, $text, $silent, $alert, &$newAsk) { // locked: never clobber a concurrent queue drain
             $b['last_report'] = time();
-            $asks = self::newQuestions($b['agents'] ?? [], $agents); // a session that now waits for the user is news, even on a keep-warm tick
+            $asks = self::newQuestions($b['agents'] ?? [], $agents); $newAsk = $asks !== '';
+            // a session that now waits for the user is news, even on a keep-warm tick
             if ($agents !== null) { $b['agents'] = $agents; $b['agents_at'] = time(); }
             if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text, $decision);
             $fresh = $text !== '' && !$silent && $text !== (string)($b['last_notified'] ?? '');
@@ -344,6 +351,7 @@ final class Conductor
             return [$b, $mode === 'push' ? $out : []];
         });
         foreach ($push as [$t, $x]) $this->app->notifier()->notify($t, $x);
+        if ($newAsk) { try { $this->app->pilot()->wake(); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); } } // a question appeared: the assistant looks at it soon
         return [200, ['ok' => true]];
     }
 
@@ -388,6 +396,27 @@ final class Conductor
         if (count($log) > self::DECISION_CAP) $log = array_slice($log, -self::DECISION_CAP);
         $b['decisions'] = array_values($log);
         return $b;
+    }
+
+    /** The agents that wait for a decision right now. */
+    public function waiting(): array { return array_values(array_filter($this->binding()['agents'] ?? [], fn($a) => !empty($a['waiting']))); }
+
+    /** The answered-questions journal (newest last). */
+    public function decisions(): array { return array_values($this->binding()['decisions'] ?? []); }
+
+    /** Stable id of a waiting question: the one the orchestrator gave, else derived from the agent and the question. */
+    public function waitingId(array $agent): string
+    {
+        return ($agent['waiting']['decision_id'] ?? '') ?: 'd-' . substr(sha1($agent['id'] . '|' . ($agent['waiting']['question'] ?? '')), 0, 8);
+    }
+
+    /** The assistant has an answer it may not send: tell the user once, in the journal (the cockpit shows the answer on the question). */
+    public function suggest(string $agent, string $id, string $answer, float $confidence): void
+    {
+        $this->lockedUpdate(function (array $b) use ($agent, $answer, $confidence) {
+            $ag = self::agentOf($b, $agent);
+            return [$this->journalAdd($b, 'alert', 'Suggested answer', ($ag['name'] ?? $agent) . ': « ' . mb_substr($answer, 0, 300) . ' » (' . (int)round($confidence * 100) . '% sure) — confirm or answer in the cockpit.'), null];
+        });
     }
 
     /** The roster entry of one agent, when the orchestrator reported it. */
@@ -560,7 +589,7 @@ final class Conductor
         // Answering a session that waits for the user settles a decision: tag it (the orchestrator echoes the id back with
         // the session's next report) and write it in the decision journal — who answered what.
         $ag = self::agentOf($this->binding(), $id);
-        $dec = !empty($ag['waiting']) ? ($ag['waiting']['decision_id'] ?? 'd-' . bin2hex(random_bytes(3))) : '';
+        $dec = !empty($ag['waiting']) ? $this->waitingId($ag) : '';
         $r = $this->deliver(['from' => 'talixio', 'ts' => time(), 'agent' => $id, 'instruction' => $this->ground($text, $space)] + ($dec !== '' ? ['decision_id' => $dec] : []));
         if (!$r['ok']) return $fail($r['error'] === 'http'
             ? "error: the orchestrator's webhook returned HTTP {$r['code']}."
@@ -570,6 +599,7 @@ final class Conductor
             if ($dec !== '' && $ag) $b = $this->decisionAdd($b, $ag, $text, 'user', $dec);
             return [$b, null];
         });
+        if ($dec !== '' && $ag) { try { $this->app->pilot()->learnAnswer($dec, $text); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); } } // score what the assistant expected
         return ['ok' => true, 'thread' => $this->agentThread($id),
             'message' => !empty($r['queued']) ? 'queued for the agent; it will pick this up on its next poll and its reply will land here.' : 'sent to the agent; its reply will land here.'];
     }
@@ -590,7 +620,7 @@ final class Conductor
         // orchestrator hands it to the session and reports the next step with the same agent and decision_id.
         $agent = mb_substr(trim($agent), 0, 80); $decision = self::decisionId($decisionId);
         $ag = $agent !== '' ? self::agentOf($this->binding(), $agent) : null;
-        if ($agent !== '' && $decision === '' && !empty($ag['waiting'])) $decision = $ag['waiting']['decision_id'] ?? 'd-' . bin2hex(random_bytes(3));
+        if ($agent !== '' && $decision === '' && !empty($ag['waiting'])) $decision = $this->waitingId($ag);
         $r = $this->deliver(['from' => 'talixio', 'ts' => time(), 'instruction' => $this->ground($instruction, $space)]
             + ($agent !== '' ? ['agent' => $agent] : []) + ($agent !== '' && $decision !== '' ? ['decision_id' => $decision] : []));
         if (!$r['ok']) return $r['error'] === 'http'
@@ -653,13 +683,19 @@ final class Conductor
                 . ($w['kind'] === 'approval' ? "\n  (an approval: only the user can give it in that session — do not answer)" : '');
         }
         if (!$wait) $out[] = '(nothing is waiting)';
+        foreach ($wait as $a) if ($a['waiting']['kind'] !== 'approval' && ($pr = $this->app->pilot()->precedents($a['waiting']['question'])))
+            { $out[] = "  similar past decisions for `{$a['id']}`:"; foreach ($pr as $p) $out[] = '  - Q: ' . $clip($p['q'], 160) . ' → A (' . $p['by'] . '): ' . $clip($p['a'], 200); }
+        $pol = $this->app->pilot()->state();
+        $out[] = '## Your limits (set by the user; fleet_decide enforces them)';
+        $out[] = '- autonomy: ' . implode(', ', array_map(fn($l, $m) => "$l=$m", array_keys($pol['autonomy']), $pol['autonomy'])) . '; sends only above ' . (int)round($pol['threshold'] * 100) . '% confidence.';
+        $out[] = $pol['priorities'] ? "- priorities, in order:\n  " . implode("\n  ", array_map(fn($i, $x) => ($i + 1) . '. ' . $x, array_keys($pol['priorities']), $pol['priorities'])) : '- no priorities set yet: ask the user for them when agents compete for effort.';
         $dec = array_slice($b['decisions'] ?? [], -10);
         $out[] = '## Latest decisions (' . count($dec) . ' of ' . count($b['decisions'] ?? []) . ')';
         foreach (array_reverse($dec) as $d) $out[] = '- ' . date('d/m H:i', (int)$d['ts']) . " {$d['name']}" . ($d['type'] !== '' ? " [{$d['type']}]" : '') . " — Q: " . $clip((string)$d['question'], 200) . " → A ({$d['by']}): " . $clip((string)$d['answer'], 300);
         if (!$dec) $out[] = '(none yet)';
         $alerts = array_slice(array_filter($b['reports'] ?? [], fn($r) => ($r['kind'] ?? '') === 'alert'), -5);
         if ($alerts) { $out[] = '## Recent alerts'; foreach ($alerts as $r) $out[] = '- ' . date('d/m H:i', (int)$r['ts']) . ' ' . $clip((string)$r['title'], 100) . ': ' . $clip((string)$r['text'], 300); }
-        $out[] = 'To answer: fleet_dispatch with agent, instruction and the decision_id. Levels L4/L5 (values, business), pushes, deploys, deletions, e-mails and credentials are the user\'s to decide: report them, do not answer.';
+        $out[] = 'To answer: fleet_decide (agent, answer, honest confidence) — the limits above decide whether it is sent; fleet_dispatch is for free instructions. Levels L4/L5 (values, business), pushes, deploys, deletions, e-mails and credentials are the user\'s to decide: report them, do not answer.';
         return implode("\n", $out);
     }
 

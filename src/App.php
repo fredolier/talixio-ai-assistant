@@ -213,6 +213,7 @@ final class App
     public function relay(): Relay { return new Relay($this); }
     public function claudeCli(): ClaudeCli { return $this->claudeCliOverride ?? new ShellClaudeCli($this->cfg->claudeBin, $this->cfg->dataDir . '/conductor/logs', $this->cfg->claudeToken); }
     public function conductor(): Conductor { return new Conductor($this, $this->claudeCli()); }
+    public function pilot(): Pilot { return new Pilot($this); }
     public function mind(): Mind { return new Mind($this); }
     public function graph(): Graph { return new Graph($this); }
     public function shares(): Shares { return new Shares($this); }

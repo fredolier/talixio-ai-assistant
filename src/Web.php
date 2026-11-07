@@ -104,7 +104,7 @@ final class Web
         $area = explode('/', $path)[2] ?? '';
         return match ($area) {
             'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'routing', 'catalogue', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
-            'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor' => $this->routeChat($m, $path, $b),
+            'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor', 'pilot' => $this->routeChat($m, $path, $b),
             'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
             'google', 'microsoft', 'spotify', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
             'memory', 'mind', 'skills', 'roles', 'scripts' => $this->routeMind($m, $path, $b),
@@ -188,6 +188,9 @@ final class Web
             $path === '/api/messages/search' => ['results' => $this->searchMessages((string)($_GET['q'] ?? ''), (int)($_GET['space'] ?? 0), ($_GET['mode'] ?? '') !== 'quick'),
                 'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
             $path === '/api/conductor' && $m === 'GET' => $this->app->conductor()->statusInfo(),
+            $path === '/api/pilot' && $m === 'GET' => $this->app->pilot()->overview(),
+            $path === '/api/pilot' && $m === 'POST' => (function () use ($b) { $r = $this->app->pilot()->setPolicy($b); if (is_string($r)) throw new \InvalidArgumentException($r); return $r; })(),
+            $path === '/api/pilot/verdict' && $m === 'POST' => (function () use ($b) { $r = $this->app->pilot()->verdict((string)($b['decision_id'] ?? ''), !empty($b['ok']), (string)($b['note'] ?? '')); if (is_string($r)) throw new \InvalidArgumentException($r); return $r; })(),
             $path === '/api/conductor/setup' && $m === 'POST' => ['instruction' => $this->app->conductor()->setup()],
             $path === '/api/conductor/disconnect' && $m === 'POST' => ['message' => $this->app->conductor()->disconnect()] + $this->app->conductor()->statusInfo(),
             $path === '/api/conductor/notify' && $m === 'POST' => $this->app->conductor()->setNotify((string)($b['mode'] ?? '')),

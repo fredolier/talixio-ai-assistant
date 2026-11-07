@@ -1563,6 +1563,41 @@ check('fleet(poll): an instruction with no agent stays a fleet-wide one (no agen
 $ans3 = $con->toFleet('No agent, so the id is dropped.', 0, '', 'd-1');
 [, $pc3] = $con->pull($pollSecret);
 check('fleet(poll): a decision id without an agent is not sent', !isset($pc3['instructions'][0]['decision_id']));
+// the autonomous pilot (1.27.0): limits only the user sets, predictions scored against real answers, a miss lowers the level
+$pi = $app->pilot();
+check('pilot: L4/L5 can never be delegated and an unknown mode is refused', is_string($pi->setPolicy(['autonomy' => ['L4' => 'auto']])) && is_string($pi->setPolicy(['autonomy' => ['L2' => 'wild']])) && $pi->state()['autonomy']['L4'] === 'ask');
+$pi->setPolicy(['enabled' => true, 'threshold' => 0.7, 'autonomy' => ['L2' => 'tell'], 'priorities' => "1. Client work first\n- the release\n"]);
+check('pilot: the policy and a clean ordered priority list are kept', $pi->state()['autonomy']['L2'] === 'tell' && $pi->priorities() === ['Client work first', 'the release']);
+check('pilot: a level is read from the question type, L4 when unclear', Talixio\Pilot::levelOf('L2') === 'L2' && Talixio\Pilot::levelOf('level 3') === 'L3' && Talixio\Pilot::levelOf('') === 'L4' && Talixio\Pilot::levelOf('business') === 'L4');
+$roster = fn(array $w) => $con->inbox(['type' => 'report', 'text' => '', 'agents' => $w], $pollSecret);
+$roster([['id' => 'p1', 'name' => 'Rédaction', 'state' => 'waiting', 'waiting' => ['kind' => 'decision', 'type' => 'L2', 'question' => 'Keep the short title or the long one for the newsletter?', 'options' => ['short', 'long']]],
+         ['id' => 'p2', 'name' => 'Site', 'state' => 'waiting', 'waiting' => ['kind' => 'decision', 'type' => 'L3', 'question' => 'Rename the section Docs to Guides on the site?', 'options' => ['yes', 'no']]],
+         ['id' => 'p3', 'name' => 'Ops', 'state' => 'waiting', 'waiting' => ['kind' => 'decision', 'type' => 'L2', 'question' => 'Deploy the new build to production now?']],
+         ['id' => 'p4', 'name' => 'Login', 'state' => 'waiting', 'waiting' => ['kind' => 'approval', 'question' => 'Token expired']],
+         ['id' => 'p5', 'name' => 'Doc', 'state' => 'waiting', 'waiting' => ['kind' => 'decision', 'type' => 'L2', 'question' => 'Which colour for the cover?']]]);
+check('pilot: a new question wakes the assistant', $pi->state()['pending'] > 0);
+$c0 = count($con->pull($pollSecret)[1]['instructions'] ?? []);
+$r1 = $pi->decide('p1', 'short', 0.9, 'same as last time');
+[, $pp] = $con->pull($pollSecret);
+check('pilot: a confident answer at a « tell » level is sent to that agent with its decision id', str_starts_with($r1, 'sent') && ($pp['instructions'][0]['agent'] ?? '') === 'p1' && ($pp['instructions'][0]['decision_id'] ?? '') !== '');
+$r2 = $pi->decide('p2', 'yes', 0.95);
+check('pilot: at an « ask » level the answer is only proposed, never sent, and the cockpit shows it', str_starts_with($r2, 'not sent') && ($con->pull($pollSecret)[1]['instructions'] ?? []) === []
+    && (function () use ($con) { foreach ($con->statusInfo()['agents'] as $a) if ($a['id'] === 'p2') return ($a['waiting']['proposal']['answer'] ?? '') === 'yes'; return false; })());
+check('pilot: something that touches a deploy is never sent, even at a delegated level', str_starts_with($pi->decide('p3', 'yes', 0.99), 'not sent') && $con->pull($pollSecret)[1]['instructions'] === []);
+check('pilot: an approval is never answered by the assistant', str_starts_with($pi->decide('p4', 'ok', 1.0), 'error'));
+check('pilot: a low confidence stays a proposal', str_starts_with($pi->decide('p5', 'blue', 0.4), 'not sent'));
+$con->agentSay('p2', 'Yes, rename it.');
+$st = $pi->state();
+check('pilot: the user\'s own answer is scored against the prediction (a hit), per level', ($st['outcomes']['L3'] ?? []) === [1]);
+$ver = $pi->verdict(array_key_first(array_filter($st['predictions'], fn($p) => $p['agent'] === 'p1')), false, 'We always keep the long one');
+$st = $pi->state();
+check('pilot: correcting something it sent lowers that level at once and counts as a miss', is_array($ver) && $st['autonomy']['L2'] === 'ask' && ($st['outcomes']['L2'] ?? []) === [0]);
+check('pilot: similar past decisions come back as precedents', ($pi->precedents('Rename the section Guides on the site again?')[0]['a'] ?? '') === 'Yes, rename it.');
+check('pilot: answers are compared loosely', Talixio\Pilot::same('Garder A', 'garder a.') && Talixio\Pilot::same('short', 'Short title please') && !Talixio\Pilot::same('yes', 'no'));
+check('pilot: fleet_inbox lists the limits, priorities and the way to answer', str_contains($con->inboxView(), '## Your limits') && str_contains($con->inboxView(), 'Client work first') && str_contains($con->inboxView(), 'fleet_decide'));
+check('pilot: the overview suggests more room only after enough right answers', $pi->overview()['levels']['L3']['suggest'] === null && $pi->overview()['calibration']['n'] >= 2);
+$pi->setPolicy(['enabled' => false, 'autonomy' => ['L2' => 'ask'], 'priorities' => []]);
+$roster([]);
 // the cockpit rebuilt for a fleet (1.18.0): replies per agent with their own unread count, a journal of fleet-wide reports and alerts, a decision journal
 $con->setNotify('inapp'); $con->markRead(); foreach (['u1', 'u2', 'sess-9'] as $xid) $con->markAgentRead($xid);
 $con->inbox(['type' => 'report', 'agent' => 'u1', 'text' => 'First reply from u1.'], $pollSecret);

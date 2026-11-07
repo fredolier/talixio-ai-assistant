@@ -95,10 +95,10 @@ autonomous as it proves it understands you.
 3. **Done (1.26.0)**: `fleet_inbox` — the assistant can *read* the pending questions and the agents' threads (today it can only
    send and check status, so the deciding step cannot close by itself) — and a **decision journal**: for each question,
    the options, what was chosen, by whom, why, and whether you corrected it afterwards.
-4. **Learning**: before asking, the assistant **writes down what it expects you to answer, with a confidence**, then
+4. **Done (1.27.0)**: **Learning**: before asking, the assistant **writes down what it expects you to answer, with a confidence**, then
    compares with your real answer. That gives an accuracy per ladder level, and similar past decisions are retrieved as
    precedents for new questions.
-5. **Graded autonomy**: per level, ask → decide and tell you afterwards once the accuracy is reliable → standing rules
+5. **Done (1.27.0, standing rules still to come)**: **Graded autonomy**: per level, ask → decide and tell you afterwards once the accuracy is reliable → standing rules
    for the orchestrator. You can take it back at any time. A rule or decision that was corrected lowers the level again.
 6. **Constraints and priorities**: « the agents may spend only X % of the quota per day », an ordered list of priorities
    the assistant consults to arbitrate between agents. This needs the orchestrator to report each agent's consumption

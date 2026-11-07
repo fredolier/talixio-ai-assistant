@@ -565,7 +565,7 @@ const flows = {
     check('pilotage: once paired, the fleet-reports toggle appears with three modes, one selected',
       (await page.$$('#pilot-notify [data-notify]')).length === 3 && (await page.$$('#pilot-notify [data-notify].on')).length === 1);
     // 1.18.0: three tabs, each a list and a pane that scrolls on its own
-    check('pilotage: once paired the pilot has three tabs — Needs you, Agents, Journal', (await page.$$('#pl-tabs .pl-tab')).length === 3 && await page.isVisible('#pl-tabs'));
+    check('pilotage: once paired the pilot has four tabs — Needs you, Agents, Journal, Autonomy', (await page.$$('#pl-tabs .pl-tab')).length === 4 && await page.isVisible('#pl-tabs'));
     check('pilotage: the Needs you tab counts the two sessions waiting', (await page.textContent('#pl-bd-need')).trim() === '2');
     check('pilotage: Needs you lists them, the decision first with its question and its options as buttons',
       (await page.$$('#pl-need-list .pl-rw[data-nsel^="w:"]')).length === 2 && /Garder le plan A ou B/.test(await page.textContent('#pl-need-detail'))
@@ -573,6 +573,12 @@ const flows = {
     await page.click('#pl-need-list .pl-rw[data-nsel="w:w2"]');
     check('pilotage: an approval offers no answer buttons, and says only the user can give it',
       (await page.$$('#pl-need-detail [data-answer]')).length === 0 && /Token revoked/.test(await page.textContent('#pl-need-detail')));
+    await page.click('#pl-tabs .pl-tab[data-pl=autonomy]'); await page.waitForSelector('#pl-auto .pl-lv', { timeout: 6000 });
+    check('pilotage: Autonomy lists the five levels, L4 and L5 are always the user\'s', (await page.$$('#pl-auto .pl-lv tbody tr')).length === 5 && (await page.$$('#pl-auto [data-auto-lv]')).length === 3);
+    await page.check('#pa-on'); await page.selectOption('#pl-auto [data-auto-lv=L2]', 'tell'); await page.fill('#pa-pr', 'Client work first\nInternal tools later');
+    await page.click('#pl-auto [data-auto-save]'); await page.waitForTimeout(700);
+    const pol = await api(page, 'api/pilot');
+    check('pilotage: the autonomy settings are saved on the server', pol.enabled === true && pol.levels.L2.mode === 'tell' && pol.levels.L4.mode === 'ask' && pol.priorities.join('|') === 'Client work first|Internal tools later');
     await page.click('#pl-tabs .pl-tab[data-pl=agents]'); await page.waitForSelector('#pl-ag-list .pl-rw', { timeout: 6000 });
     const rows = await page.$$eval('#pl-ag-list .pl-rw .pl-n', e => e.map(x => x.textContent.trim()));
     check('pilotage: Agents lists the three agents, those waiting first', rows.length === 3 && rows.slice(0, 2).sort().join() === 'deploy,dossier-conseil' && rows[2] === 'calme', rows.join('|'));

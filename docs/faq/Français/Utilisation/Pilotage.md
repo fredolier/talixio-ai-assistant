@@ -35,6 +35,17 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
   approbations et demandes de permission ne sont jamais routées : vous seul pouvez les donner. Une nouvelle question compte comme
   une nouveauté : elle apparaît dans la pastille même lors d'un point silencieux. Un pilote jumelé avant cette version a besoin
   une fois des consignes du message de jumelage : reconnectez-le, ou envoyez-lui celles-ci.
+- **Onglet Autonomie : l'assistant décide dans vos limites.** Activez *L'assistant regarde seul les questions des agents* :
+  quand un agent pose une question, il la lit avec les décisions semblables que vous avez prises, ce qu'il sait de votre façon
+  de travailler et vos **priorités** (une par ligne, la plus importante d'abord), puis appelle `fleet_decide` avec sa réponse
+  et une confiance honnête. Pour chaque niveau L1–L5 vous choisissez : *Je propose, vous répondez* (par défaut), *Je réponds si
+  je suis sûr, puis je vous préviens* ou *Je réponds si je suis sûr, sans bruit* ; il ne répond seul qu'au-dessus de la
+  confiance fixée (75 % par défaut). **Les niveaux L4/L5 (valeurs, métier), les approbations et tout ce qui touche aux pushs,
+  déploiements, suppressions, e-mails, identifiants ou paiements restent toujours à vous**, quel que soit le réglage. Une
+  proposition apparaît sur la question comme *Réponse suggérée*, avec un bouton **Envoyer cette réponse**. Chaque réponse est notée
+  avec sa confiance puis évaluée : face à votre propre réponse, ou avec **Oui / Non, c'était faux** sur ce qu'il a envoyé.
+  Une erreur ramène aussitôt le niveau en arrière ; après assez de bonnes réponses il *suggère* de lui laisser plus de place
+  (il ne relève jamais seul ses limites). Les corrections apprennent aussi au Mind comment vous décidez.
 - **L'assistant peut lire les questions de la flotte.** Demandez « qu'attendent les agents ? » : il liste les questions en
   attente (options, niveau, coût d'un mauvais choix), les dernières décisions et qui les a prises, les alertes récentes et la
   conversation de n'importe quel agent. Il ne fait que lire ; il ne répond (avec l'identifiant de décision) que ce que vous
