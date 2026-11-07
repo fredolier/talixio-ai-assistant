@@ -311,7 +311,7 @@ final class Settings
                 $sites = []; $bad = '';
                 foreach (preg_split('/[\s,;]+/', $v, -1, PREG_SPLIT_NO_EMPTY) as $x) {
                     $s = Config::siteOf($x);
-                    if (!preg_match('/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,}$/', $s)) { $bad = $x; break; }
+                    if (!preg_match('/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]+$/', $s) && $s !== 'localhost') { $bad = $x; break; }
                     $sites[$s] = true;
                 }
                 if ($bad !== '') { $errors[$k] = 'not a web site address: ' . mb_substr($bad, 0, 60); continue; }

@@ -2856,7 +2856,7 @@ function fieldInput(f) {
 /** 'https://www.Lemonde.fr/x', 'lemonde.fr' → 'lemonde.fr' (same rule as Config::siteOf); '' when it is not a web site. */
 function siteHost(x) {
   let h = String(x).trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/[/?#].*$/, '').replace(/^.*@/, '').replace(/:\d+$/, '').replace(/\.$/, '').replace(/^www\./, '');
-  return /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,}$/.test(h) ? h : '';
+  return /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]+$/.test(h) || h === 'localhost' ? h : '';
 }
 function siteList(v) { return [...new Set(String(v || '').split(/[\s,;]+/).map(siteOf).filter(Boolean))]; }
 /** The trusted / blocked sites manager: chips with ✕, add field (full addresses accepted), search, import/export as text. */
