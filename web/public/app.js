@@ -5979,6 +5979,9 @@ async function pilotBadges() {
   api('api/jobs').then(({ directives }) => setN('#pilot-tab-chantiers', (directives || []).length)).catch(() => {});
   api('api/library/kb').then(kb => { const el = $('#pilot-tab-kbsrc'), src = (kb.space || '').trim(); if (el) el.textContent = src ? ' · ' + src : ''; }).catch(() => {});
 }
+// when did the orchestrator last hear from the session itself (not when it refreshed its roster)
+function plSeen(a) { return a.seen ? pilotAgo(a.seen) : t('no news'); }
+function plStale(a) { return !a.seen || Date.now() / 1000 - a.seen > 86400; }
 function pilotAgo(ts) {
   if (!ts) return t('never');
   const d = Math.max(0, Date.now() / 1000 - ts);
@@ -6147,7 +6150,7 @@ function plRenderAgents() {
   if (!agents.some(a => a.id === PL.sel)) PL.sel = (L[0] || agents[0])?.id || null;
   const row = a => `<div class="pl-rw${a.id === PL.sel ? ' sel' : ''}" data-asel="${esc(a.id)}">${plDot(a)}
       <div><div class="pl-n no-i18n">${esc(a.name)}</div><div class="pl-s no-i18n">${esc(a.task && a.task !== '—' ? a.task + ' · ' : '')}${esc(a.machine || '')}</div></div>
-      <div class="pl-r">${esc(pilotAgo(a.ts))}${a.unread ? `<span class="pl-bd no-i18n">${a.unread}</span>` : ''}</div></div>`;
+      <div class="pl-r${plStale(a) ? ' stale' : ''}" title="${esc(t('Last news from the session itself'))}">${esc(plSeen(a))}${a.unread ? `<span class="pl-bd no-i18n">${a.unread}</span>` : ''}</div></div>`;
   list.innerHTML = !L.length ? `<div class="pl-empty">${esc(agents.length ? t('No agent matches.') : t('No agents are running yet. Ask the assistant in the chat to put one to work.'))}</div>`
     : PL.group ? [...new Set(L.map(a => a.machine || '—'))].map(m => `<div class="pl-grp no-i18n">🖥 ${esc(m)}</div>` + L.filter(a => (a.machine || '—') === m).map(row).join('')).join('')
     : L.map(row).join('');
@@ -6184,7 +6187,7 @@ function plPaintAgent(a) {
     return sep + `<div class="pl-b ${mine ? 'me' : 'them'}"><div class="pl-bt no-i18n${(x.text || '').length > 500 ? ' clamp' : ''}">${md(x.text || '')}</div>${(x.text || '').length > 500 ? `<a href="#" class="small" data-more>${esc(t('Show all'))}</a>` : ''}
       <div class="pl-bm muted"><span class="no-i18n">${esc(who)}</span> · ${esc(pilotAgo(x.ts))}${x.decision_id ? ` · <span class="no-i18n">${esc(x.decision_id)}</span>` : ''}</div></div>`;
   }).join('');
-  det.innerHTML = `<div class="pl-ph">${plBackBtn()}${plDot(a)}<span class="pl-t no-i18n">${esc(a.name)}</span><span class="pl-sp muted small no-i18n">${esc((a.task && a.task !== '—' ? a.task + ' · ' : '') + (a.machine || '') + ' · ' + pilotAgo(a.ts))}</span>${a.url ? `<a class="btn small" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : ''}</div>
+  det.innerHTML = `<div class="pl-ph">${plBackBtn()}${plDot(a)}<span class="pl-t no-i18n">${esc(a.name)}</span><span class="pl-sp muted small no-i18n">${esc((a.task && a.task !== '—' ? a.task + ' · ' : '') + (a.machine || '') + ' · ' + plSeen(a))}</span>${a.url ? `<a class="btn small" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : ''}</div>
     ${w ? `<div class="pl-pin kind-${esc(w.kind)}"><div class="small"><b>${esc(plKind(w))}${w.type ? ' · ' + esc(w.type) : ''}</b> · ${esc(t('waiting for you'))}</div><div class="pl-pq no-i18n">${esc(w.question)}</div>${w.question.length > 220 ? `<a href="#" class="small" data-more-pin>${esc(t('Show all'))}</a>` : ''}
       ${w.options?.length && w.kind !== 'approval' ? `<div class="pl-opts">${w.options.map(o => `<button type="button" class="btn small primary no-i18n" data-answer="${esc(o)}" data-agent-id="${esc(a.id)}">${esc(o)}</button>`).join('')}</div>` : ''}
       ${w.cost ? `<div class="muted small"><span>${esc(t('If it goes wrong:'))}</span> <span class="no-i18n">${esc(w.cost)}</span></div>` : ''}

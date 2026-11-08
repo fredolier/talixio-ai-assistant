@@ -268,6 +268,20 @@ final class Conductor
             . "    and report its next step with the same \"agent\" and \"decision_id\". Approvals and permission prompts (a revoked\n"
             . "    token, a click) are never routed: only I can give them in that session — report such a session as\n"
             . "    \"waiting\" with kind \"approval\" and what you know. Never tell me nothing is waiting while a session is.\n"
+            . " 3c. FRESHNESS. Each roster entry carries \"seen\":<unix> (when YOU last got evidence from that session itself: its reply to\n"
+            . "    you, or its transcript) and \"src\":\"reply|transcript|listagents|memory\". ListAgents only says idle/offline — idle can mean\n"
+            . "    paused on a quota or waiting for an approval — so it is never a status. NEVER give a session's status from your own memory\n"
+            . "    or notes as if current: ask it, or say « last known <date>, not refreshed ». Omit \"seen\" when you have no new evidence.\n"
+            . " 3d. STATUS REQUESTS (I ask for the state of the fleet or of a session, including the morning report). SendMessage every\n"
+            . "    session that is not offline: current task, state, last activity (date and time), blocker, pending L1–L5 questions, and its\n"
+            . "    /autopilot-status verbatim. Then end your turn WITHOUT reporting « no answer yet » — replies arrive as messages a few seconds\n"
+            . "    to minutes later. Report each reply as it arrives (\"agent\" set, \"seen\":now, \"src\":\"reply\"). A session still silent after\n"
+            . "    10 minutes is reported once as « no reply », with its last known date. Night mode may skip asking, but then the report must\n"
+            . "    say « not refreshed since <date> » for every session, never restate old work as the current state.\n"
+            . " 3e. A \"waiting\" entry is what I will decide from, so it must be complete: \"question\" is the session's own text of the question\n"
+            . "    (e.g. what #328 actually asks, in full), \"options\" the choices it offered, \"cost\" what a WRONG choice would cost — not what is\n"
+            . "    blocked meanwhile. If you only have a summary, ask that session for the full question first (SendMessage), and until then put\n"
+            . "    « full text not retrieved yet » in \"question\" rather than your own paraphrase. Never list several waits as one.\n"
             . " 4. When an instruction carries an \"agent\" field, route it to that one session and report its reply\n"
             . "    back with the same \"agent\" set and the reply in \"text\" — the two-voice thread the user talks to.\n```\n\n"
             . "The code is good for 30 minutes and works once. I never see or store your account token — only the "
@@ -349,7 +363,13 @@ final class Conductor
             $b['last_report'] = time();
             $asks = self::newQuestions($b['agents'] ?? [], $agents); $newAsk = $asks !== '';
             // a session that now waits for the user is news, even on a keep-warm tick
-            if ($agents !== null) { $b['agents'] = $agents; $b['agents_at'] = time(); }
+            if ($agents !== null) {
+                $old = []; foreach ($b['agents'] ?? [] as $o) $old[$o['id'] ?? ''] = $o;
+                foreach ($agents as &$na) { // a refresh without fresh evidence must not make an old status look new
+                    if (empty($na['seen']) && !empty($old[$na['id']]['seen'])) { $na['seen'] = $old[$na['id']]['seen']; if (!empty($old[$na['id']]['src'])) $na['src'] = $old[$na['id']]['src']; }
+                } unset($na);
+                $b['agents'] = $agents; $b['agents_at'] = time();
+            }
             if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text, $decision);
             $fresh = $text !== '' && !$silent && $text !== (string)($b['last_notified'] ?? '');
             if ($fresh) $b['last_notified'] = $text; // only a notified line updates the mark; silent ticks never poison it
@@ -544,7 +564,8 @@ final class Conductor
                 'state' => mb_substr(trim((string)($a['state'] ?? '')), 0, 24),
                 'machine' => mb_substr(trim((string)($a['machine'] ?? '')), 0, 80),
                 'ts' => (int)($a['ts'] ?? time()),
-            ] + (preg_match('#^https?://\S{1,200}$#', (string)($a['url'] ?? '')) ? ['url' => (string)$a['url']] : []) + (($w = self::sanitizeWaiting($a['waiting'] ?? ($a['question'] ?? null))) !== null ? ['waiting' => $w] : []);
+            ] + (($sn = (int)($a['seen'] ?? 0)) > 0 ? ['seen' => min($sn, time())] : [])
+              + (in_array($src = (string)($a['src'] ?? ''), ['reply', 'transcript', 'listagents', 'memory'], true) ? ['src' => $src] : []) + (preg_match('#^https?://\S{1,200}$#', (string)($a['url'] ?? '')) ? ['url' => (string)$a['url']] : []) + (($w = self::sanitizeWaiting($a['waiting'] ?? ($a['question'] ?? null))) !== null ? ['waiting' => $w] : []);
         }
         return $out;
     }
@@ -743,6 +764,13 @@ final class Conductor
         $lines[] = '- last sent: ' . $ago($lastDispatch ?: null) . '; last ' . ($poll ? 'poll' : 'report') . ': ' . $ago(($poll ? $heard : $lastReport) ?: null) . '.';
         if ($poll && $queued > 0) $lines[] = "- $queued instruction(s) waiting for the next poll.";
         if ($stale) $lines[] = '- ⚠️ nothing has ' . ($poll ? 'polled' : 'reported') . ' back since the last dispatch — the session may have gone to sleep. Recreate it and run fleet_setup again.';
+        // the roster, with the date of the last news FROM each session (not of the last roster refresh)
+        $ag = $b['agents'] ?? [];
+        if ($ag) {
+            $lines[] = '- agents (state as the orchestrator last reported it; "news" = when it last heard from the session itself):';
+            foreach (array_slice($ag, 0, 20) as $a) $lines[] = '  - ' . ($a['name'] ?? $a['id']) . ': ' . ($a['state'] ?? '?') . ', news ' . (!empty($a['seen']) ? $ago((int)$a['seen']) . (!empty($a['src']) ? " ({$a['src']})" : '') : 'unknown') . (!empty($a['waiting']) ? ', waiting for the user' : '');
+            $lines[] = '- An unknown or old news date is NOT proof that an agent stopped working: say the status is not refreshed and ask the orchestrator (fleet_dispatch) for a status request; never report an agent as inactive from this alone.';
+        }
         return implode("\n", $lines);
     }
 }

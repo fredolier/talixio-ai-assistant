@@ -28,7 +28,7 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
     réponses de chaque agent restent dans sa propre conversation.
   - **Journal** : seulement les rapports d'ensemble, groupés par jour, filtrés Tout / Alertes / Bilans, avec une recherche ; un
     clic ouvre le rapport en entier. Une session qui se met à attendre votre réponse ajoute une alerte.
-- Une session peut router ses questions vers le pilote avec le hook « route questions » (`/autopilot-on`, `/autopilot-off`,
+- Chaque ligne d’agent indique quand l’orchestrateur a eu des nouvelles de la session elle-même (« aucune nouvelle », en rouge après un jour ou s’il n’en a jamais eu) : l’orchestrateur doit interroger les sessions plutôt que répondre de mémoire, et attendre leurs réponses avant de dire que personne n’a répondu. Une session peut router ses questions vers le pilote avec le hook « route questions » (`/autopilot-on`, `/autopilot-off`,
   `/autopilot-status`, par session ; désactivé par défaut, et la question vous revient alors comme d'habitude). Le pilote colle la
   question telle quelle ; votre réponse repart avec un identifiant de décision, et le pilote rapporte la suite de la session. Les
   approbations et demandes de permission ne sont jamais routées : vous seul pouvez les donner. Une nouvelle question compte comme

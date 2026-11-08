@@ -1661,6 +1661,8 @@ window.I18N.fr = {
 "Push + e-mail": "Push + e-mail",
 "Recent reports": "Rapports récents",
 "Fleet update": "Mise à jour de la flotte",
+"no news": "aucune nouvelle",
+"Last news from the session itself": "Dernière nouvelle de la session elle-même",
 "A badge in Pilotage and the details here — no push": "Une pastille dans Pilotage et le détail ici — sans push",
 "A badge here, plus a push notification and e-mail": "Une pastille ici, plus une notification push et un e-mail",
 "Nothing — don’t surface fleet reports": "Rien — ne pas afficher les rapports de la flotte",

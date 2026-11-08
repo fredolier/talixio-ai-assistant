@@ -1552,6 +1552,17 @@ check('fleet(poll): a leased instruction is not handed out again at once', ($con
 [$ackc] = $con->inbox(['type' => 'ack', 'ids' => [$iid, 'zz']], $pollSecret);
 check('fleet(poll): the acknowledgement removes it from the queue', $ackc === 200 && $con->statusInfo()['queued'] === 0 && $con->inbox(['type' => 'ack', 'ids' => [$iid]], 'wrong')[0] === 401);
 check('fleet: a recently heard orchestrator is not silent', $con->statusInfo()['silentFor'] === 0);
+// freshness: a roster refresh without evidence keeps the old "seen"; fresh evidence replaces it; the future is clamped
+$con->inbox(['type' => 'report', 'tick' => true, 'agents' => [['id' => 'fr1', 'name' => 'fr1', 'state' => 'idle', 'seen' => 1700000000, 'src' => 'reply']]], $pollSecret);
+$con->inbox(['type' => 'report', 'tick' => true, 'agents' => [['id' => 'fr1', 'name' => 'fr1', 'state' => 'idle', 'src' => 'bogus']]], $pollSecret);
+$fr = array_values(array_filter($con->statusInfo()['agents'], fn($a) => $a['id'] === 'fr1'))[0] ?? [];
+check('fleet: a roster refresh without evidence keeps the old news date', ($fr['seen'] ?? 0) === 1700000000 && ($fr['src'] ?? '') === 'reply');
+$con->inbox(['type' => 'report', 'tick' => true, 'agents' => [['id' => 'fr1', 'name' => 'fr1', 'state' => 'idle', 'seen' => time() + 99999, 'src' => 'reply']]], $pollSecret);
+$fr = array_values(array_filter($con->statusInfo()['agents'], fn($a) => $a['id'] === 'fr1'))[0] ?? [];
+check('fleet: fleet_status lists the news date and warns an unknown one proves nothing', str_contains($con->fleetStatus(), 'fr1') && str_contains($con->fleetStatus(), 'NOT proof'));
+check('fleet: a news date in the future is clamped', ($fr['seen'] ?? 0) <= time());
+$pairText = $con->setup();
+check('fleet: the pairing prompt tells the orchestrator not to answer from memory', str_contains($pairText, 'FRESHNESS') && str_contains($pairText, 'STATUS REQUESTS') && str_contains($pairText, 'WRONG choice'));
 // the « route questions » circuit (1.17.1): a routed question arrives tagged with its agent; the answer goes back to that agent with the decision id
 $con->inbox(['type' => 'report', 'agent' => 'sess-9', 'decision_id' => 'd-42 <b>', 'text' => 'Garder A ou B ?'], $pollSecret);
 check('fleet(poll): a routed question lands in that agent\'s thread, its decision id cleaned', ($con->agentThread('sess-9')[0]['text'] ?? '') === 'Garder A ou B ?' && ($con->agentThread('sess-9')[0]['decision_id'] ?? '') === 'd-42b');

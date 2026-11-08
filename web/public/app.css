@@ -1834,6 +1834,7 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .pl-rw:hover{background:var(--sunk)}.pl-rw.sel{background:var(--accent-soft)}
 .pl-n{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pl-s{color:var(--muted);font-size:.74rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl-r.stale{color:var(--danger)}
 .pl-r{text-align:right;font-size:.7rem;color:var(--muted);display:flex;flex-direction:column;align-items:flex-end;gap:3px;white-space:nowrap}
 .pl-grp{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;padding:8px 12px 3px;background:var(--bg)}
 .pl-empty{padding:14px;color:var(--muted);font-size:.85rem}.pl-center{text-align:center;margin-top:30px}
