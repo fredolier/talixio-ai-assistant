@@ -35,7 +35,7 @@ Forecast::$post = function (string $url, array $payload) use (&$seen): array {
     return [200, json_encode(['model' => 'TimesFM 2.5', 'mean' => $m, 'p10' => array_fill(0, $h, 4.0), 'p90' => array_fill(0, $h, 6.0)])];
 };
 $r = Forecast::run($cfg, [1.0, 2.0, 3.0, 4.0], 3);
-check('forecast: the service is called on /forecast with series and horizon', $seen[0] === 'http://talixio-caddy:8765/forecast' && $seen[1] === ['series' => [1.0, 2.0, 3.0, 4.0], 'horizon' => 3]
+check('forecast: the service is called on /forecast with series and horizon', $seen[0] === 'http://talixio-caddy:8765/forecast' && $seen[1] === ['series' => [1.0, 2.0, 3.0, 4.0], 'horizon' => 3, 'model' => 'timesfm-2.5']
     && $r['method'] === 'TimesFM 2.5' && $r['mean'] === [5.0, 5.0, 5.0] && $r['p10'][0] === 4.0, json_encode($r));
 Forecast::$post = fn() => [500, json_encode(['error' => 'boom'])];
 $r = Forecast::run($cfg, [1, 2, 3, 4, 5, 6], 2);
@@ -99,3 +99,21 @@ $cf1 = $fl->caddyfile($fs);
 check('fleet: with --with-models Caddy exposes only /forecast and /health to the instances', Fleet::modelsOn() && str_contains($cf1, "http://:8765 {\n\t@fc path /forecast /health") && str_contains($cf1, 'reverse_proxy talixio-models:8765'));
 putenv('TALIXIO_MODELS');
 check('fleet: without it nothing is exposed', !Fleet::modelsOn() && !str_contains($cf0, '8765'));
+
+// ---- the models table (Model and budget → Models): forecast and decision models are rows, like the others
+$cat = $app->catalogue()->catalogue();
+$by = fn(string $id) => array_values(array_filter($cat['models'], fn($m) => $m['id'] === $id))[0] ?? null;
+check('catalogue: TimesFM and Chronos-2 are local forecast rows that can be chosen; TimeGPT is listed but not reachable yet',
+    ($by('timesfm-2.5')['type'] ?? '') === 'Forecast' && ($by('timesfm-2.5')['via'] ?? '') === 'local' && ($by('chronos-2')['via'] ?? '') === 'local' && ($by('timegpt-1')['via'] ?? 'x') === '');
+check('catalogue: Jev (cloud, priced), Kev and Rizzo Flow (own server) are decision rows',
+    ($by('jev-latest')['type'] ?? '') === 'Decision' && ($by('jev-latest')['prov'] ?? '') === 'typesafe' && ($by('jev-latest')['pin'] ?? 0) > 0
+    && ($by('kev-latest')['via'] ?? '') === 'local' && ($by('rizzo-flow')['type'] ?? '') === 'Decision');
+$prov = array_column($cat['providers'], null, 'id');
+check('catalogue: the TypeSafe provider counts as connected only once a decision address is set', empty($prov['typesafe']['connected']));
+putenv('TALIXIO_DECISION_URL=https://api.typesafe.ai');
+$prov = array_column(App::fromEnv()->catalogue()->catalogue()['providers'], null, 'id');
+check('catalogue: …and then it is connected', !empty($prov['typesafe']['connected']));
+putenv('TALIXIO_DECISION_URL');
+putenv('TALIXIO_FORECAST_MODEL=chronos-2'); check('config: the forecast model is chosen by TALIXIO_FORECAST_MODEL', Config::fromEnv()->forecastModel === 'chronos-2');
+putenv('TALIXIO_FORECAST_MODEL=nonsense'); check('config: an unknown forecast model falls back to TimesFM', Config::fromEnv()->forecastModel === 'timesfm-2.5');
+putenv('TALIXIO_FORECAST_MODEL');

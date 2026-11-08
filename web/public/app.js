@@ -3244,23 +3244,36 @@ const MB_USAGES = [
   { id: 'voice', label: 'Voice', hint: 'transcription of recordings and dictation' },
   { id: 'vision', label: 'Images', hint: 'reading photos and scanned PDFs' },
   { id: 'embedding', label: 'Embeddings', hint: 'search by meaning' },
+  { id: 'forecast', label: 'Forecast', hint: 'next values of a series of figures' },
+  { id: 'decision', label: 'Decisions', hint: 'choices and scores with probabilities' },
 ];
+/** Forecast and Decisions are not routed through accounts: an address (and key) in the settings, set from the strip of their card. */
+const MB_SET_USAGES = { forecast: 'TALIXIO_FORECAST_URL', decision: 'TALIXIO_DECISION_URL' };
+const MB_TIMESFM_URL = 'http://talixio-caddy:8765';
+/** The decision model a row stands for (sent as `model`; empty = the server's own default). */
+const mbDecisionModel = m => m.id === 'kev-latest' || m.id === 'jev-latest' ? m.id : '';
+const mbSetOn = u => !!mbSetVal(MB_SET_USAGES[u]);
 /** Which usages a model type can serve (image generation is in the catalogue to compare, not routed to a usage). */
-const MB_TYPE_USAGE = { LLM: ['fast', 'standard', 'deep'], Vision: ['fast', 'standard', 'deep', 'vision'], Voice: ['voice'], Image: [], Embedding: ['embedding'] };
+const MB_TYPE_USAGE = { LLM: ['fast', 'standard', 'deep'], Vision: ['fast', 'standard', 'deep', 'vision'], Voice: ['voice'], Image: [], Embedding: ['embedding'], Forecast: ['forecast'], Decision: ['decision'] };
 /** The providers whose chat models also read images, so they can serve the « Images » usage. */
 const MB_SEES = ['anthropic', 'openai', 'google'];
 /** The usages a catalogue row can be assigned to. A Voice or Embedding row the server marks unreachable (no `via`) cannot. */
 function mbUsable(m) {
-  if ((m.type === 'Voice' || m.type === 'Embedding') && !m.via) return [];
+  if (['Voice', 'Embedding', 'Forecast', 'Decision'].includes(m.type) && !m.via) return [];
   const u = [...(MB_TYPE_USAGE[m.type] || [])];
   if (m.type === 'LLM' && MB_SEES.includes(m.prov)) u.push('vision');
   return u;
 }
 /** The letter on a row's assign button: F/S/A/V in English, R/S/A/V in French; Images and Embeddings are I and E. */
-const mbLetter = u => u.id === 'vision' ? 'I' : u.id === 'embedding' ? 'E' : t(u.label)[0];
+const mbLetter = u => u.id === 'vision' ? 'I' : u.id === 'embedding' ? 'E' : u.id === 'forecast' ? 'T' : u.id === 'decision' ? 'Δ' : t(u.label)[0];
 /** Whether a row is the model a usage currently runs on (same model id on the same credentials), or — for search by
  *  meaning not yet routed — the model set in Settings. */
 function mbRowOn(u, m) {
+  if (u === 'forecast') return m.type === 'Forecast' && mbSetOn(u) && mbSetVal('TALIXIO_FORECAST_MODEL') === mbId(m);
+  if (u === 'decision') {
+    if (m.type !== 'Decision' || !mbSetOn(u)) return false;
+    return mbSetVal('TALIXIO_DECISION_MODEL') === mbDecisionModel(m);
+  }
   const e = mbEff(u);
   if (e.routed) {
     if (e.model !== mbId(m)) return false;
@@ -3386,6 +3399,10 @@ function mbRenderProviders() {
     if (p.connected) {
       const acc = mbAccountFor(p.id);
       foot = `<span class="pok">✓ ${esc(t('Connected'))}</span>` + (acc ? `<button type="button" class="btn sm ghost" data-pmanage="${esc(p.id)}">${esc(t('Manage'))}</button>` : '');
+    } else if (p.id === 'typesafe') { // reached by an address, not an account: the Decisions card holds it
+      foot = `<button type="button" class="btn sm primary" data-pdecision="1">${esc(t('Set the address'))}</button>`;
+    } else if (p.id === 'nixtla') {
+      foot = `<span class="muted small">${esc(t('Not available yet'))}</span>`;
     } else if (spec) {
       const label = p.auth === 'oauth' ? t('Sign in') : t('Connect');
       foot = `<button type="button" class="btn sm primary" data-popen="${esc(p.id)}">${esc(label)}</button>`;
@@ -3407,6 +3424,7 @@ function mbRenderProviders() {
   }).join('');
   grid.innerHTML = cards + `<div class="mb-pcard add" id="mb-pcard-add" role="button" tabindex="0"><div><div class="plus" aria-hidden="true">+</div>${esc(t('Add a custom provider'))}</div></div>`;
   grid.querySelectorAll('[data-popen]').forEach(b => b.onclick = () => mbToggleConnect(b.dataset.popen, true));
+  grid.querySelectorAll('[data-pdecision]').forEach(x => x.onclick = () => { state.mb.tab = 'models'; state.mb.sel = 'decision'; state.mb.ftype = 'Decision'; mbApplyTab(); mbRender(); });
   grid.querySelectorAll('[data-pcustom]').forEach(b => b.onclick = () => mbOpenAccountForm(b.dataset.pcustom));
   grid.querySelectorAll('[data-pmanage]').forEach(b => b.onclick = () => { const a = mbAccountFor(b.dataset.pmanage); if (a) mbOpenAccountForm(null, a); });
   grid.querySelectorAll('.pconnect').forEach(f => {
@@ -3517,6 +3535,8 @@ function mbRender() {
         <option value="Voice"${state.mb.ftype === 'Voice' ? ' selected' : ''}>${esc(t('Voice'))}</option>
         <option value="Image"${state.mb.ftype === 'Image' ? ' selected' : ''}>${esc(t('Text → image'))}</option>
         <option value="Embedding"${state.mb.ftype === 'Embedding' ? ' selected' : ''}>${esc(t('Embeddings'))}</option>
+        <option value="Forecast"${state.mb.ftype === 'Forecast' ? ' selected' : ''}>${esc(t('Forecast'))}</option>
+        <option value="Decision"${state.mb.ftype === 'Decision' ? ' selected' : ''}>${esc(t('Decisions'))}</option>
       </select>
       <select id="mb-fprov"><option value="">${esc(t('All providers'))}</option>${provOpts}</select>
       <select id="mb-ftl">
@@ -3569,14 +3589,15 @@ function mbRenderUsages() {
     const prov = e.routed ? state.mb.cat.providers.find(x => x.id === e.provider) : null;
     const flag = prov ? prov.flag : '';
     const em = state.mb.emb;
-    const name = e.routed ? (e.model || t('provider default'))
+    const name = MB_SET_USAGES[u.id] ? (mbSetOn(u.id) ? (u.id === 'forecast' ? (mbSetVal('TALIXIO_FORECAST_MODEL') === 'chronos-2' ? 'Chronos-2' : 'TimesFM') : (mbSetVal('TALIXIO_DECISION_MODEL') || t('server default'))) : (u.id === 'forecast' ? t('Built-in method') : t('Off')))
+      : e.routed ? (e.model || t('provider default'))
       : u.id === 'embedding' ? (em && em.backend !== 'off' ? em.model : t('Off')) : t('Default');
-    const tag = global ? '' : u.id === 'embedding' ? `<span class="utag inh">${esc(t('global'))}</span>` : (e.overridden ? `<span class="utag ovr">${esc(t('overridden'))}</span>` : `<span class="utag inh">${esc(t('inherited'))}</span>`);
+    const tag = global || MB_SET_USAGES[u.id] ? '' : u.id === 'embedding' ? `<span class="utag inh">${esc(t('global'))}</span>` : (e.overridden ? `<span class="utag ovr">${esc(t('overridden'))}</span>` : `<span class="utag inh">${esc(t('inherited'))}</span>`);
     const reset = ((!global && e.overridden) || (global && u.id === 'embedding' && e.routed)) ? `<button class="ureset" data-reset="${u.id}">↺ ${esc(t('back to default'))}</button>` : '';
     return `<div class="ucard${!global && !e.overridden ? ' inh' : ''}${state.mb.sel === u.id ? ' sel' : ''}" data-u="${u.id}">
       <div class="uhead"><span class="ut">${esc(t(u.label))}</span>${tag}</div>
       <div class="um"><span class="flag">${flag}</span><span class="nm no-i18n">${esc(name)}</span></div>
-      <div class="usub muted small">${prov ? `<span class="no-i18n">${esc(prov.name)}</span> · <span class="tl ${mbTlClass(prov.tl)}">${esc(mbTlText(prov.tl))}</span>` : esc(u.id === 'embedding' ? t('set in Settings → Search by meaning') : t('main settings or the space account'))}</div>
+      <div class="usub muted small">${prov ? `<span class="no-i18n">${esc(prov.name)}</span> · <span class="tl ${mbTlClass(prov.tl)}">${esc(mbTlText(prov.tl))}</span>` : esc(MB_SET_USAGES[u.id] ? t('address set below') : u.id === 'embedding' ? t('set in Settings → Search by meaning') : t('main settings or the space account'))}</div>
       ${reset}</div>`;
   }).join('');
   box.querySelectorAll('.ureset').forEach(b => b.onclick = async e => {
@@ -3587,7 +3608,7 @@ function mbRenderUsages() {
   });
   box.querySelectorAll('.ucard').forEach(c => c.onclick = () => {
     const u = c.dataset.u; state.mb.sel = state.mb.sel === u ? '' : u;
-    state.mb.ftype = state.mb.sel ? (u === 'voice' ? 'Voice' : u === 'embedding' ? 'Embedding' : u === 'vision' ? '' : 'LLM') : '';
+    state.mb.ftype = state.mb.sel ? (u === 'voice' ? 'Voice' : u === 'embedding' ? 'Embedding' : u === 'forecast' ? 'Forecast' : u === 'decision' ? 'Decision' : u === 'vision' ? '' : 'LLM') : '';
     const sel = $('#mb-ftype'); if (sel) sel.value = state.mb.ftype;
     mbRenderUsages(); mbRenderRows();
   });
@@ -3599,7 +3620,7 @@ const mbSetVal = key => { const f = mbSetField(key); return f.value !== '' ? f.v
 function mbRenderStrip() {
   const box = $('#mb-strip'); if (!box) return;
   const u = state.mb.sel, em = state.mb.emb;
-  if (!['voice', 'vision', 'embedding'].includes(u)) { box.innerHTML = ''; return; }
+  if (!['voice', 'vision', 'embedding', 'forecast', 'decision'].includes(u)) { box.innerHTML = ''; return; }
   const set = key => ` data-set="${key}"`;
   let h = '';
   if (u === 'voice') {
@@ -3610,6 +3631,23 @@ function mbRenderStrip() {
         <label>${esc(t('Longer than this (seconds) = a meeting'))}<input type="number" min="0"${set('TALIXIO_VOICE_NOTE_MAX_SECONDS')} value="${esc(mbSetVal('TALIXIO_VOICE_NOTE_MAX_SECONDS'))}"></label>
       </div>
       <p class="muted small">${esc(t('“Whisper (local)” runs whisper.cpp on this server: the audio never leaves it. With no model chosen, the assistant picks one itself: whisper.cpp if it is installed, else Gemini.'))}</p>`;
+  } else if (u === 'forecast' || u === 'decision') {
+    const sec = k => { const f = mbSetField(k); return f.set ? f.hint || '••••' : ''; };
+    h = u === 'forecast'
+      ? `<h4>${esc(t('Forecast · next values of a series of figures'))}</h4>
+      <p class="muted small">${esc(t('The assistant forecasts as soon as you give it figures. TimesFM (Google) and Chronos-2 (Amazon) are open time-series models that run on this server (install with --with-models). Until an address is set, a simple built-in method answers and says so.'))}</p>
+      <div class="mb-strip-grid">
+        <label>${esc(t('TimesFM service address'))}<input type="url"${set('TALIXIO_FORECAST_URL')} placeholder="${MB_TIMESFM_URL}" value="${esc(mbSetField('TALIXIO_FORECAST_URL').value)}"></label>
+        <div>${mbSetOn('forecast') ? `<button class="btn sm ghost" type="button" data-act="setoff" data-key="TALIXIO_FORECAST_URL">${esc(t('Use the built-in method'))}</button>` : `<button class="btn sm" type="button" data-act="seturl" data-key="TALIXIO_FORECAST_URL" data-url="${MB_TIMESFM_URL}">${esc(t('Use the TimesFM service of this stack'))}</button>`}</div>
+      </div>`
+      : `<h4>${esc(t('Decisions · choices and scores with probabilities'))}</h4>
+      <p class="muted small">${esc(t('A model that answers typed questions (choice, score, yes/no) with probabilities, through POST /v1/systemone: Jev (TypeSafe’s cloud — your text goes there), or your own Kev / Rizzo Flow server. Nothing is sent until an address is set.'))}</p>
+      <div class="mb-strip-grid">
+        <label>${esc(t('Decision model address'))}<input type="url"${set('TALIXIO_DECISION_URL')} placeholder="https://" value="${esc(mbSetField('TALIXIO_DECISION_URL').value)}"></label>
+        <label>${esc(t('Decision model key'))}<input type="password" autocomplete="off"${set('TALIXIO_DECISION_KEY')} placeholder="${esc(sec('TALIXIO_DECISION_KEY') || t('none'))}"></label>
+        <label>${esc(t('Decision model name'))}<input type="text"${set('TALIXIO_DECISION_MODEL')} placeholder="kev-latest" value="${esc(mbSetField('TALIXIO_DECISION_MODEL').value)}"></label>
+        <div>${mbSetOn('decision') ? `<button class="btn sm ghost" type="button" data-act="setoff" data-key="TALIXIO_DECISION_URL">${esc(t('Turn off decisions'))}</button>` : ''}</div>
+      </div>`;
   } else if (u === 'vision') {
     const on = mbSetVal('TALIXIO_VISION_INDEX') !== '0';
     h = `<h4>${esc(t('Images · reading photos and scanned PDFs'))}</h4>
@@ -3635,11 +3673,15 @@ function mbRenderStrip() {
     try {
       const r = await post('api/settings', { changes: { [key]: el.value } });
       for (const g of (r.groups || [])) for (const f of g.fields) state.mb.setv[f.key] = f;
+      if (MB_SET_USAGES.forecast === key || MB_SET_USAGES.decision === key || key === 'TALIXIO_DECISION_MODEL') { mbRenderUsages(); mbRenderRows(); }
       if (key === 'TALIXIO_EMBEDDINGS_DIMS') state.mb.emb = await api('api/meaning').catch(() => state.mb.emb);
       toast(t('Saved.'));
     } catch (e) { toast(e.message); }
   });
   box.querySelector('[data-goto]')?.addEventListener('click', e => { e.preventDefault(); showSection(e.currentTarget.dataset.goto); if (e.currentTarget.dataset.tab) sectionTabs(e.currentTarget.dataset.goto, e.currentTarget.dataset.tab); });
+  box.querySelectorAll('[data-act=setoff],[data-act=seturl]').forEach(b => b.onclick = async () => {
+    try { await mbSaveSetting(b.dataset.key, b.dataset.act === 'seturl' ? b.dataset.url : ''); mbRenderUsages(); mbRenderRows(); toast(t('Saved.')); } catch (e) { toast(e.message); }
+  });
   box.querySelector('[data-act=off]')?.addEventListener('click', async () => {
     try {
       await post('api/meaning/choose', { preset: 'off' });
@@ -3673,7 +3715,7 @@ function mbRenderRows() {
     const est = m.est ? '<span class="mb-est" title="' + esc(t('Estimated price')) + '">~</span>' : '';
     return `<tr class="${blocked ? 'blocked' : ''} ${conn ? '' : 'offrow'}">
       <td><div class="mname"><span class="flag">${p.flag}</span><span class="no-i18n">${esc(m.name)}${m.deprecated ? ' <span class="mb-dep" title="' + esc(t('Being retired')) + '">⚠</span>' : ''}<div class="prov muted small no-i18n">${esc(p.name)}${conn ? '' : ' · ' + t('not connected')}</div></span></div></td>
-      <td><span class="ty ${m.type.toLowerCase()}"><span class="g"></span>${esc(t(m.type === 'LLM' ? 'LLM' : m.type === 'Vision' ? 'Vision' : m.type === 'Voice' ? 'Voice' : m.type === 'Image' ? 'Image' : 'Embeddings'))}</span></td>
+      <td><span class="ty ${m.type.toLowerCase()}"><span class="g"></span>${esc(t(m.type === 'LLM' ? 'LLM' : m.type === 'Vision' ? 'Vision' : m.type === 'Voice' ? 'Voice' : m.type === 'Image' ? 'Image' : m.type === 'Forecast' ? 'Forecast' : m.type === 'Decision' ? 'Decisions' : 'Embeddings'))}</span></td>
       <td class="num"><span class="rank"><span class="rbar"><i style="width:${m.rank * 10}%"></i></span><span class="rnum no-i18n">${m.rank}</span></span></td>
       <td><span class="tl ${mbTlClass(p.tl)}" title="${esc(t(p.kind))}">${esc(mbTlText(p.tl))}</span></td>
       <td class="num no-i18n">${est}${esc(mbMoney(m.pin))}</td>
@@ -3690,7 +3732,24 @@ function mbRenderRows() {
   });
 }
 /** Assign a model to a usage: route it through the first credential source of the model's provider. */
+async function mbSaveSetting(key, value) {
+  const r = await post('api/settings', { changes: { [key]: value } });
+  for (const g of (r.groups || [])) for (const f of g.fields) state.mb.setv[f.key] = f;
+}
 async function mbAssign(usage, model, prov) {
+  if (MB_SET_USAGES[usage]) { // Forecast / Decisions: settings, not routing
+    const m = state.mb.cat.models.find(x => mbId(x) === model && x.prov === prov);
+    try {
+      if (usage === 'forecast') { await mbSaveSetting('TALIXIO_FORECAST_MODEL', mbId(m || {})); if (!mbSetOn('forecast')) await mbSaveSetting('TALIXIO_FORECAST_URL', MB_TIMESFM_URL); toast(t('Forecast → {m}. The address can be changed below.', { m: m?.name || model })); }
+      else {
+        await mbSaveSetting('TALIXIO_DECISION_MODEL', mbDecisionModel(m || {}));
+        if (m?.prov === 'typesafe' && !mbSetOn('decision')) await mbSaveSetting('TALIXIO_DECISION_URL', 'https://api.typesafe.ai');
+        toast(mbSetOn('decision') ? t('Decisions → {m}.', { m: m?.name || model }) : t('Now give the address of the decision server below.')); }
+    } catch (e) { toast(e.message); return; }
+    state.mb.sel = usage; state.mb.ftype = usage === 'forecast' ? 'Forecast' : 'Decision';
+    const sel = $('#mb-ftype'); if (sel) sel.value = state.mb.ftype;
+    mbRenderUsages(); mbRenderRows(); return;
+  }
   const p = mbProvMap()[prov], m = state.mb.cat.models.find(x => mbId(x) === model && x.prov === prov), src = mbSource(m || {}, p);
   if (!src) { toast(t('Connect this provider first.')); return; }
   const body = { usage, account: src.account, model }; if (state.mb.scope !== 'global') body.space = state.mb.scope;

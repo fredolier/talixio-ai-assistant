@@ -143,6 +143,23 @@ const flows = {
     await page.click('#set-nav a[data-sec="model"]');
     await page.waitForSelector('#mb-models .mb-table', { timeout: 10000 });
     const cat = await api(page, 'api/catalogue');
+    await page.selectOption('#mb-ftype', 'Forecast');
+    await page.waitForSelector('#mb-models .mb-table tbody tr .mname', { timeout: 10000 });
+    check('cockpit: TimesFM is a row of the table (type Forecast)', /TimesFM/.test(await page.textContent('#mb-rows')));
+    await page.selectOption('#mb-ftype', 'Decision');
+    const dec = await page.textContent('#mb-rows');
+    check('cockpit: decision models (Jev, Kev, Rizzo Flow) are rows of the table', /Jev/.test(dec) && /Kev/.test(dec) && /Rizzo/.test(dec));
+    await page.click('#mb-rows button[data-u="decision"]:not(:disabled)');
+    await page.waitForSelector('#mb-strip input[data-set="TALIXIO_DECISION_URL"]', { timeout: 5000 });
+    await page.fill('#mb-strip input[data-set="TALIXIO_DECISION_URL"]', 'https://kev.example');
+    await page.dispatchEvent('#mb-strip input[data-set="TALIXIO_DECISION_URL"]', 'change');
+    await page.waitForTimeout(600);
+    check('cockpit: the decision address is saved from the card and the Decisions card shows it is on',
+      (await api(page, 'api/settings')).groups.some(g => g.fields.some(f => f.key === 'TALIXIO_DECISION_URL' && f.value === 'https://kev.example')));
+    await page.fill('#mb-strip input[data-set="TALIXIO_DECISION_URL"]', '');
+    await page.dispatchEvent('#mb-strip input[data-set="TALIXIO_DECISION_URL"]', 'change');
+    await page.waitForTimeout(400);
+    await page.selectOption('#mb-ftype', '');
     check('cockpit: the catalogue API returns providers and models', (cat.providers?.length || 0) >= 8 && (cat.models?.length || 0) >= 20);
     // Nothing is "connected" in echo mode, so untick Available to see the whole seeded catalogue.
     await page.click('#mb-avail');
@@ -158,7 +175,7 @@ const flows = {
     check('cockpit: the provider filter narrows the table to AKI.IO sovereign models', akiRows.length > 0 && akiRows.every(t => t === '5'));
     await page.selectOption('#mb-fprov', '');
     await page.waitForTimeout(300);
-    check('cockpit: a card per usage (fast, standard, deep, voice, images, embeddings)', (await page.$$('#mb-usages .ucard')).length === 6);
+    check('cockpit: a card per usage (fast, standard, deep, voice, images, embeddings, forecast, decisions)', (await page.$$('#mb-usages .ucard')).length === 8);
     check('cockpit: the provider count badge is filled', (await page.textContent('#mb-prov-c')).trim() === String(cat.providers.length));
     // Filter the catalogue down to voice models, then clear it.
     const before = (await page.$$('#mb-models .mb-table tbody tr')).length;

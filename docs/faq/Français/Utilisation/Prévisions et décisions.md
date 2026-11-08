@@ -39,3 +39,17 @@ Dans **Réglages → Modèle et budget → Prévisions et décisions** :
 Rien n'est envoyé tant que l'adresse est vide, et la capacité *decide* n'apparaît pas. Une fois renseigné, demandez : *« Faut-il accepter
 la demande de remise de ce client ? Options : accepter, contre-proposer, refuser. »* La réponse donne la probabilité de chaque option et la
 confiance du modèle, présentées comme venant du modèle de décision, et non d'une estimation du modèle de langage.
+
+## Où les choisir : la table des modèles
+**Réglages → Modèle et budget → Modèles** les liste comme les autres modèles, avec deux cartes à côté d'*Embeddings* : **Prévision** et **Décisions**.
+Cliquez une carte pour voir ses réglages, ou appuyez sur le bouton **T** (prévision) ou **Δ** (décisions) d'une ligne pour utiliser ce modèle.
+- **Prévision, en local (votre serveur, gratuit) :** *TimesFM 2.5* (Google, Apache-2.0) et *Chronos-2* (Amazon, Apache-2.0). Les deux sont servis par le
+  service `--with-models` ; la ligne choisie règle le paramètre *Modèle de prévision*.
+- **Décisions :** *Jev* (TypeSafe AI, États-Unis, fermé, environ 0,042 $ par million de jetons en entrée au moment de la rédaction ; adresse
+  `https://api.typesafe.ai`, remplie par son bouton), *Kev* (votre serveur, Apache-2.0) et *Rizzo Flow* (votre serveur, Apache-2.0). Jev, Kev et
+  Rizzo Flow parlent tous POST `/v1/systemone`. Avec le verrou Europe, le modèle cloud est grisé ; ceux de votre serveur restent disponibles.
+- **Listés pour comparer, pas encore utilisables :** Toto (Datadog), TiRex (NX-AI, licence communautaire), Granite TTM-r2 (IBM, prévision ponctuelle
+  seulement), TimeGPT (Nixtla, API payante) et TimesFM via BigQuery. Leurs boutons sont grisés.
+
+Chronos-2 et le choix entre modèles sont nouveaux et n'ont pas été essayés avec les vrais poids dans nos tests : si une prévision revient avec une note
+disant que le service n'a pas répondu, c'est la méthode intégrée qui a répondu.

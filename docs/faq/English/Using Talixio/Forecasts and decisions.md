@@ -38,3 +38,17 @@ In **Settings → Model and budget → Forecast and decisions**:
 Nothing is sent anywhere while the address is empty, and the *decide* ability does not appear. Once set, ask: *"Should we accept this
 client's discount request? Options: accept, counter-offer, refuse."* The answer shows each option's probability and the model's
 confidence, labelled as coming from the decision model, not from the language model's guess.
+
+## Where to choose them: the models table
+**Settings → Model and budget → Models** lists them like the other models, with two cards next to *Embeddings*: **Forecast** and **Decisions**.
+Click a card to see its settings, or press the **T** (forecast) or **Δ** (decisions) button on a row to use that model.
+- **Forecast, local (your server, free):** *TimesFM 2.5* (Google, Apache-2.0) and *Chronos-2* (Amazon, Apache-2.0). Both are served by the
+  `--with-models` service; the row you press sets the *Forecast model* setting.
+- **Decisions:** *Jev* (TypeSafe AI, United States, closed, about $0.042 per million input tokens at the time of writing; address
+  `https://api.typesafe.ai`, pressing its button fills it in), *Kev* (own server, Apache-2.0) and *Rizzo Flow* (own server, Apache-2.0). Jev, Kev
+  and Rizzo Flow all speak POST `/v1/systemone`. Under the Europe lock the cloud one is greyed out; the ones on your server stay available.
+- **Listed to compare, not usable yet:** Toto (Datadog), TiRex (NX-AI, community licence), Granite TTM-r2 (IBM, point forecast only), TimeGPT
+  (Nixtla, paid API) and TimesFM through BigQuery. Their buttons are greyed out.
+
+Chronos-2 and the choice between models are new and have not been run against the real weights in our tests: if a forecast comes back
+with a note saying the service did not answer, the built-in method answered instead.

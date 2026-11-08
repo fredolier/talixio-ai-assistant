@@ -45,7 +45,7 @@ final class Forecast
 
     private static function remote(Config $cfg, array $values, int $horizon): array
     {
-        $payload = ['series' => $values, 'horizon' => $horizon];
+        $payload = ['series' => $values, 'horizon' => $horizon, 'model' => $cfg->forecastModel];
         $url = $cfg->forecastUrl . '/forecast';
         [$code, $body] = self::$post ? (self::$post)($url, $payload, []) : Privacy::as('forecast', fn() => Http::request('POST', $url, ['Content-Type: application/json'], json_encode($payload), 120));
         $d = json_decode($body, true);

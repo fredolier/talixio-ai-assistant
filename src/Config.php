@@ -115,6 +115,7 @@ final class Config
     public string $braveKey = '';
     public string $tavilyKey = '';
     public string $searxngUrl = '';
+    public string $forecastModel = 'timesfm-2.5'; // which model the service runs (timesfm-2.5, chronos-2)
     public string $forecastUrl = '';            // a TimesFM service (deploy/docker/models.Dockerfile); empty = the built-in simple method
     public string $decisionUrl = '';            // a System One decision model (Jev / Kev / Rizzo Flow…): POST /v1/systemone
     public string $decisionKey = '';
@@ -301,6 +302,7 @@ final class Config
         $c->tavilyKey = $e('TAVILY_API_KEY');
         $c->searxngUrl = rtrim($e('SEARXNG_URL'), '/');
         $c->forecastUrl = rtrim($e('TALIXIO_FORECAST_URL'), '/');
+        $c->forecastModel = in_array($e('TALIXIO_FORECAST_MODEL'), ['timesfm-2.5', 'chronos-2'], true) ? $e('TALIXIO_FORECAST_MODEL') : 'timesfm-2.5';
         $c->decisionUrl = rtrim($e('TALIXIO_DECISION_URL'), '/');
         $c->decisionKey = $e('TALIXIO_DECISION_KEY');
         $c->decisionModel = $e('TALIXIO_DECISION_MODEL');

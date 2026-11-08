@@ -129,6 +129,7 @@ final class Settings
             ]],
             'prediction' => ['Forecast and decisions', 'Two specialised models next to the language model. Forecast: time series (sales, usage, prices…) with Google TimesFM; the assistant uses it whenever you give it figures. Decisions: a model that answers choice / score / yes-no questions with real probabilities (Jev from TypeSafe, or an open one such as Kev that speaks the same protocol). Leave empty to turn off; nothing is sent anywhere until you set an address.', [
                 ['TALIXIO_FORECAST_URL', 'TimesFM service address', 'url', 'Empty = a simple built-in method. With Docker: install with --with-models, then http://talixio-caddy:8765 (see the FAQ).'],
+                ['TALIXIO_FORECAST_MODEL', 'Forecast model', 'select', 'Which model the service runs: TimesFM 2.5 (Google) or Chronos-2 (Amazon), both open and local.', ['timesfm-2.5' => 'TimesFM 2.5', 'chronos-2' => 'Chronos-2']],
                 ['TALIXIO_DECISION_URL', 'Decision model address', 'url', 'The server that answers POST /v1/systemone: TypeSafe\'s cloud (your data goes there) or your own Kev / Rizzo Flow server.'],
                 ['TALIXIO_DECISION_KEY', 'Decision model key', 'secret', 'Sent as a Bearer token. Empty if your server has none.'],
                 ['TALIXIO_DECISION_MODEL', 'Decision model name', 'text', 'e.g. kev-latest. Empty = the server\'s default.'],
@@ -222,7 +223,7 @@ final class Settings
 
     /** Defaults used by Config when nothing is set (shown in the app as placeholders). */
     public const DEFAULTS = [
-        'TALIXIO_NAME' => 'Talixio', 'TALIXIO_LANG' => 'auto', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_HISTORY_TOKENS' => '12000', 'TALIXIO_PROVIDER' => 'anthropic',
+        'TALIXIO_NAME' => 'Talixio', 'TALIXIO_FORECAST_MODEL' => 'timesfm-2.5', 'TALIXIO_LANG' => 'auto', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_HISTORY_TOKENS' => '12000', 'TALIXIO_PROVIDER' => 'anthropic',
         'TALIXIO_DEEP_THINKING_TOKENS' => '8000', 'TALIXIO_BUDGET_DAILY_USD' => '0', 'TALIXIO_BUDGET_MONTHLY_USD' => '0', 'TALIXIO_EUR_USD' => '1.10', 'TALIXIO_MAX_PARALLEL_JOBS' => '3',
         'TALIXIO_JOB_MAX_USD' => '2.00', 'TALIXIO_JOB_MAX_USD_LIMIT' => '10', 'TALIXIO_JOB_EFFORT' => 'medium', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0', 'TALIXIO_TASK_REMINDER' => '18:00', 'TALIXIO_TASKS_GOOGLE' => '1',
         'TALIXIO_SMTP_PORT' => '587', 'TALIXIO_SMTP_AUTH' => 'password', 'TALIXIO_MAILBOX_AUTH' => 'password', 'TALIXIO_SMTP_SECURITY' => 'auto', 'TALIXIO_IMAP_PORT' => '993', 'TALIXIO_EMAIL_REQUIRE_AUTH' => '1',

@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.31.0 (2026-11-08)
+
+- Forecast and decision models are now rows of the models table (Settings → Model and budget → Models), configured like the other models: new *Forecast* and *Decisions* cards (address, key and model set from the card; T and Δ buttons on the rows), type filters, and providers TypeSafe AI and Nixtla. Local forecast models (TimesFM 2.5, Chronos-2) are served by the `--with-models` service and chosen with the new *Forecast model* setting; Jev (api.typesafe.ai, with its price), Kev and Rizzo Flow are decision rows; Toto, TiRex, Granite TTM-r2, TimeGPT and BigQuery TimesFM are listed to compare but cannot be chosen yet. The inventory comes from a web search of the projects' own pages; Chronos-2 is not yet tested with the real weights.
+
 ## 1.30.1 (2026-11-08)
 
 - Pilotage: it now says plainly what to answer. A question waiting for you shows who asks, the question verbatim, one-tap options (or a free answer, dictation included), what the pilot would answer with its confidence, and what a wrong choice would cost. When the question arrived truncated, a button asks the orchestrator for the full text (no decision is logged for that message). New permanent status file `pilot-status.md` in the data folder (orchestrator liveness, one line per agent, pending questions, last decisions, priorities and rules; no secrets), rewritten after each change and available from the new *Status file* button (copy, download) or `GET /api/pilot/status.md`.

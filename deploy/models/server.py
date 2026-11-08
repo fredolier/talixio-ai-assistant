@@ -2,7 +2,7 @@
 """A small HTTP service around Google's TimesFM 2.5 (time-series forecasting), for Talixio.
 
   GET  /health    -> {"ok": true, "model": "TimesFM 2.5 (200M)", "loaded": bool}
-  POST /forecast  {"series": [numbers, oldest first], "horizon": 1..256}
+  POST /forecast  {"series": [numbers, oldest first], "horizon": 1..256, "model": "timesfm-2.5" | "chronos-2" (optional)}
                   -> {"model", "horizon", "mean": [...], "p10": [...], "p90": [...]}
 
 Listens on 0.0.0.0:8765 inside its container (reachable only on the stack's private network, and through Caddy
@@ -16,6 +16,8 @@ MAX_POINTS = int(os.environ.get("TIMESFM_MAX_CONTEXT", "1024"))   # a multiple o
 MAX_HORIZON = 256
 MAX_BODY = 2_000_000
 NAME = "TimesFM 2.5 (200M)"
+MODELS = {"timesfm-2.5": "TimesFM 2.5 (200M)", "chronos-2": "Chronos-2 (120M)"}   # id -> display name
+_chronos = None
 _lock = threading.Lock()
 _model = None
 
@@ -37,8 +39,30 @@ def load():
     return _model
 
 
-def predict(series, horizon):
+def load_chronos():
+    """Amazon Chronos-2 (Apache-2.0), loaded once on the processor. API as in the project README (Chronos2Pipeline.predict_df)."""
+    global _chronos
+    if _chronos is None:
+        from chronos import Chronos2Pipeline
+        _chronos = Chronos2Pipeline.from_pretrained("amazon/chronos-2", device_map="cpu")
+    return _chronos
+
+
+def predict_chronos(series, horizon):
+    import pandas as pd
+    pipe = load_chronos()
+    y = series[-8192:]  # Chronos-2 reads up to 8192 steps
+    df = pd.DataFrame({"id": "s", "timestamp": pd.date_range("2000-01-01", periods=len(y), freq="D"), "target": y})
+    with _lock:
+        out = pipe.predict_df(df, prediction_length=horizon, quantile_levels=[0.1, 0.5, 0.9], id_column="id", timestamp_column="timestamp", target="target")
+    mean = out["predictions"] if "predictions" in out else out["0.5"]
+    return [float(x) for x in mean][:horizon], [float(x) for x in out["0.1"]][:horizon], [float(x) for x in out["0.9"]][:horizon]
+
+
+def predict(series, horizon, model="timesfm-2.5"):
     """Returns (mean, p10, p90) as lists of floats. Replaced in tests."""
+    if model == "chronos-2":
+        return predict_chronos(series, horizon)
     import numpy as np
     m = load()
     with _lock:
@@ -60,7 +84,10 @@ def check(body):
     h = body.get("horizon", 12)
     if isinstance(h, bool) or not isinstance(h, int) or not 1 <= h <= MAX_HORIZON:
         raise ValueError("horizon: an integer from 1 to %d" % MAX_HORIZON)
-    return out, h
+    m = body.get("model", "timesfm-2.5")
+    if m not in MODELS:
+        raise ValueError("model: one of %s" % ", ".join(MODELS))
+    return out, h, m
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -92,15 +119,15 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(n))
             if not isinstance(body, dict):
                 raise ValueError("a JSON object is expected")
-            series, horizon = check(body)
+            series, horizon, model = check(body)
         except (ValueError, json.JSONDecodeError) as e:
             return self.send(422, {"error": str(e)})
         try:
-            mean, p10, p90 = predict(series, horizon)
+            mean, p10, p90 = predict(series, horizon, model)
         except Exception as e:  # model missing, out of memory…
             sys.stderr.write("forecast failed: %r\n" % (e,))
             return self.send(500, {"error": "forecast failed: %s" % type(e).__name__})
-        self.send(200, {"model": NAME, "horizon": horizon, "mean": mean, "p10": p10, "p90": p90})
+        self.send(200, {"model": MODELS[model], "horizon": horizon, "mean": mean, "p10": p10, "p90": p90})
 
 
 if __name__ == "__main__":

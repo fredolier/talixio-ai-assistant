@@ -30,6 +30,8 @@ final class ModelCatalog
         ['id' => 'elevenlabs', 'name' => 'ElevenLabs',  'country' => 'United States', 'flag' => '🇺🇸', 'tl' => 3,   'kind' => 'Business',                'bill' => 'usage'],
         ['id' => 'deepseek',   'name' => 'DeepSeek',    'country' => 'China',         'flag' => '🇨🇳', 'tl' => 1,   'kind' => 'Consumer',                'bill' => 'usage'],
         ['id' => 'huggingface','name' => 'Hugging Face','country' => 'Multiple',      'flag' => '🤗', 'tl' => 2,    'kind' => 'Free / public',           'bill' => 'free'],
+        ['id' => 'typesafe',   'name' => 'TypeSafe AI', 'country' => 'United States', 'flag' => '🇺🇸', 'tl' => 2,   'kind' => 'Not assessed',          'bill' => 'usage'],
+        ['id' => 'nixtla',     'name' => 'Nixtla',      'country' => 'Not verified',  'flag' => '☁️', 'tl' => 2,   'kind' => 'Not assessed',          'bill' => 'usage'],
         ['id' => 'local',      'name' => 'Local machine','country' => 'This computer','flag' => '🖥️', 'tl' => 'L', 'kind' => 'Local',                   'bill' => 'free'],
     ];
 
@@ -92,6 +94,20 @@ final class ModelCatalog
         ['name' => 'Llama 3.1 8B (local)', 'prov' => 'local', 'type' => 'LLM',   'rank' => 3, 'pin' => 0, 'pout' => 0],
         ['name' => 'Qwen2.5 7B (local)',   'prov' => 'local', 'type' => 'LLM',   'rank' => 4, 'pin' => 0, 'pout' => 0],
         ['name' => 'Whisper (local)',      'id' => 'whisper.cpp', 'prov' => 'local', 'type' => 'Voice', 'rank' => 3, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$'],
+        // Forecast (time series) and Decision ("System One": typed questions answered with probabilities). Not routed like
+        // the chat models: their address and key are Settings (Forecast and decisions), set from the strip of their card.
+        ['name' => 'TimesFM 2.5 (local)', 'id' => 'timesfm-2.5', 'prov' => 'local', 'type' => 'Forecast', 'rank' => 7, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$'],
+        ['name' => 'Jev', 'id' => 'jev-latest', 'prov' => 'typesafe', 'type' => 'Decision', 'rank' => 8, 'pin' => 0.042, 'pout' => 0, 'est' => true], // api.typesafe.ai, 42 $/billion input tokens, output free for now (docs.typesafe.ai)
+        ['name' => 'Kev (own server)', 'id' => 'kev-latest', 'prov' => 'local', 'type' => 'Decision', 'rank' => 6, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$'], // github.com/jaredpalmer/kev, port 8009
+        ['name' => 'Rizzo Flow (own server)', 'id' => 'rizzo-flow', 'prov' => 'local', 'type' => 'Decision', 'rank' => 5, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$'], // github.com/Rizzo-AI-Academy/rizzo-flow, port 8017
+        // Other forecasting models, listed to compare: the service of this stack runs TimesFM and Chronos-2, so the others cannot be chosen yet
+        // (no `via`). Open weights run on your own server; none has a price here. Licences/hardware: see the FAQ page.
+        ['name' => 'Chronos-2 (local)',  'id' => 'chronos-2',  'prov' => 'local', 'type' => 'Forecast', 'rank' => 7, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$'],
+        ['name' => 'Toto (own server)',       'id' => 'toto',       'prov' => 'local', 'type' => 'Forecast', 'rank' => 6, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$', 'soon' => true],
+        ['name' => 'TiRex (own server)',      'id' => 'tirex',      'prov' => 'local', 'type' => 'Forecast', 'rank' => 7, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$', 'soon' => true],
+        ['name' => 'Granite TTM-r2 (own server)', 'id' => 'granite-ttm-r2', 'prov' => 'local', 'type' => 'Forecast', 'rank' => 4, 'unit' => 0, 'unitKind' => 'min', 'cur' => '$', 'soon' => true],
+        ['name' => 'TimeGPT',                 'id' => 'timegpt-1',  'prov' => 'nixtla', 'type' => 'Forecast', 'rank' => 7, 'est' => true, 'soon' => true],
+        ['name' => 'TimesFM (BigQuery AI.FORECAST)', 'id' => 'bigquery-timesfm', 'prov' => 'google', 'type' => 'Forecast', 'rank' => 8, 'est' => true, 'soon' => true],
         // Transcription at the European providers (OpenAI-compatible audio API). No price is invented: they show « — ».
         ['name' => 'Whisper large v3', 'id' => 'whisper-large-v3', 'prov' => 'ovhcloud',   'type' => 'Voice', 'rank' => 6, 'est' => true],
         ['name' => 'Whisper large v3', 'id' => 'whisper-large-v3', 'prov' => 'scaleway',   'type' => 'Voice', 'rank' => 6, 'est' => true],
@@ -129,10 +145,17 @@ final class ModelCatalog
     {
         $sources = $this->sources();
         $live = $this->liveModels();
+        $decision = $this->app->cfg->decisionUrl !== '';
+        $sources['typesafe'] = $decision ? [['account' => '', 'name' => 'Address in the settings']] : []; // reached by its address, not an account
         $providers = array_map(fn(array $p) => $p + ['sources' => $sources[$p['id']] ?? [], 'connected' => !empty($sources[$p['id']])], self::PROVIDERS);
         $whisper = Transcriber::whisperReady();
         $models = array_map(function (array $m) use ($sources, $whisper) {
             $m += ['id' => $m['name'], 'available' => !empty($sources[$m['prov']])];
+            if (in_array($m['type'], ['Forecast', 'Decision'], true)) { // set by an address in the settings, no account
+                $m['available'] = true; $m['src'] = ['account' => '', 'name' => 'Address in the settings'];
+                $m['via'] = !empty($m['soon']) ? '' : ($m['prov'] === 'local' ? 'local' : 'cloud'); // '' = listed to compare, not yet reachable
+                return $m;
+            }
             if (in_array($m['type'], ['Voice', 'Embedding'], true)) {
                 // how a Voice (transcription) or Embedding row is reached; '' = it cannot be chosen for that job (a speech-synthesis service)
                 $m['via'] = $m['prov'] === 'local' ? 'local' : match (true) {
