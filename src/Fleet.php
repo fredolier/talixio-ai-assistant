@@ -145,6 +145,7 @@ final class Fleet
         if (!empty($i['password_hash'])) $env[] = 'TALIXIO_INIT_PASSWORD_HASH=' . $i['password_hash']; // written once into the volume, then the person's own
         if (!empty($i['reset'])) $env[] = 'TALIXIO_RESET=' . $i['reset'];                                // a new password or 2-step reset, applied once
         if ($set['ollama']) array_push($env, 'TALIXIO_EMBEDDINGS=ollama', 'TALIXIO_EMBEDDINGS_MODEL=' . $set['ollama_model'], 'TALIXIO_OLLAMA_URL=http://' . self::CADDY . ':11434');
+        if (self::modelsOn()) $env[] = 'TALIXIO_FORECAST_URL=http://' . self::CADDY . ':8765'; // the TimesFM service (install-stack.sh --with-models), through Caddy
         if ($set['google_client_id'] !== '') array_push($env, 'TALIXIO_GOOGLE_CLIENT_ID=' . $set['google_client_id'], 'TALIXIO_GOOGLE_CLIENT_SECRET=' . $set['google_client_secret']);
         $env[] = 'TALIXIO_INSTANCE_NAME=' . ($i['name'] ?? '');
         $env[] = 'TALIXIO_STORE=/store';
@@ -697,8 +698,13 @@ final class Fleet
         }
         // Ollama for the instances: embeddings only (it has no password: nothing else gets through)
         $out .= "http://:11434 {\n\t@embed path /api/embed /api/embeddings /api/tags /api/version\n\thandle @embed {\n\t\treverse_proxy talixio-ollama:11434\n\t}\n\trespond 403\n}\n";
+        if (self::modelsOn()) // the TimesFM service for the instances: forecasts only (it has no password, so nothing else gets through)
+            $out .= "http://:8765 {\n\t@fc path /forecast /health\n\thandle @fc {\n\t\treverse_proxy talixio-models:8765\n\t}\n\trespond 403\n}\n";
         return $out;
     }
+
+    /** The optional TimesFM service is part of this stack (install-stack.sh --with-models sets TALIXIO_MODELS=1). */
+    public static function modelsOn(): bool { return getenv('TALIXIO_MODELS') === '1'; }
 
     /** Another reverse proxy (on another machine) does HTTPS in front of the stack: install-stack.sh --behind-proxy. */
     public static function behindProxy(): bool { return getenv('TALIXIO_BEHIND_PROXY') === '1'; }

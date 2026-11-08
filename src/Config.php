@@ -115,6 +115,10 @@ final class Config
     public string $braveKey = '';
     public string $tavilyKey = '';
     public string $searxngUrl = '';
+    public string $forecastUrl = '';            // a TimesFM service (deploy/docker/models.Dockerfile); empty = the built-in simple method
+    public string $decisionUrl = '';            // a System One decision model (Jev / Kev / Rizzo Flow…): POST /v1/systemone
+    public string $decisionKey = '';
+    public string $decisionModel = '';
     public float $budgetDaily = 0.0;
     public float $budgetMonthly = 0.0;
     public float $eurUsd = 1.10;               // to compare bills in euros with prices in dollars
@@ -296,6 +300,10 @@ final class Config
         $c->braveKey = $e('BRAVE_API_KEY');
         $c->tavilyKey = $e('TAVILY_API_KEY');
         $c->searxngUrl = rtrim($e('SEARXNG_URL'), '/');
+        $c->forecastUrl = rtrim($e('TALIXIO_FORECAST_URL'), '/');
+        $c->decisionUrl = rtrim($e('TALIXIO_DECISION_URL'), '/');
+        $c->decisionKey = $e('TALIXIO_DECISION_KEY');
+        $c->decisionModel = $e('TALIXIO_DECISION_MODEL');
         $c->search = strtolower($e('TALIXIO_SEARCH', 'auto'));
         if ($c->search === 'auto') {
             $c->search = match (true) {

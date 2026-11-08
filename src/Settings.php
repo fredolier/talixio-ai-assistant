@@ -127,6 +127,12 @@ final class Settings
                 ['VOYAGE_API_KEY', 'Voyage key', 'secret', ''],
                 ['TALIXIO_OLLAMA_URL', 'Ollama address', 'url', ''],
             ]],
+            'prediction' => ['Forecast and decisions', 'Two specialised models next to the language model. Forecast: time series (sales, usage, prices…) with Google TimesFM; the assistant uses it whenever you give it figures. Decisions: a model that answers choice / score / yes-no questions with real probabilities (Jev from TypeSafe, or an open one such as Kev that speaks the same protocol). Leave empty to turn off; nothing is sent anywhere until you set an address.', [
+                ['TALIXIO_FORECAST_URL', 'TimesFM service address', 'url', 'Empty = a simple built-in method. With Docker: install with --with-models, then http://talixio-caddy:8765 (see the FAQ).'],
+                ['TALIXIO_DECISION_URL', 'Decision model address', 'url', 'The server that answers POST /v1/systemone: TypeSafe\'s cloud (your data goes there) or your own Kev / Rizzo Flow server.'],
+                ['TALIXIO_DECISION_KEY', 'Decision model key', 'secret', 'Sent as a Bearer token. Empty if your server has none.'],
+                ['TALIXIO_DECISION_MODEL', 'Decision model name', 'text', 'e.g. kev-latest. Empty = the server\'s default.'],
+            ]],
             'tasks' => ['Tasks', 'The tasks board of each space.', [
                 ['TALIXIO_TASK_REMINDER', 'Reminder the day before a due date', 'text', 'At this time (e.g. 18:00), a notification lists the tasks due tomorrow, per space. Empty = off.'],
                 ['TALIXIO_TASKS_GOOGLE', 'Tasks marked "show in my calendar" go to Google Calendar or Outlook', 'select', 'When Google Calendar or Outlook is connected: added as all-day events (start to due date) and kept up to date. Otherwise use the private calendar link (Tasks → Calendar).', ['1' => 'on', '0' => 'off']],
@@ -187,7 +193,7 @@ final class Settings
     /** Where each group shows on the Settings page (its sections, in order). */
     public const SECTIONS = [
         'assistant' => 'essentials', 'tasks' => 'essentials',
-        'brain' => 'model', 'budget' => 'model',
+        'brain' => 'model', 'budget' => 'model', 'prediction' => 'model',
         'notify' => 'channels', 'email' => 'channels', 'signal' => 'channels', 'telegram' => 'channels',
         'mailbox' => 'accounts', 'calendar' => 'accounts', 'spotify' => 'accounts', 'legifrance' => 'accounts',
         'search' => 'library', 'documents' => 'library', 'models' => 'model', 'learning' => 'learning',

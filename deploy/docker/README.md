@@ -73,6 +73,12 @@ or `none`). With Transcription on "auto", an assistant without a Gemini key tran
 Confidential space always does. The large model needs about 1 GB while it runs: give the person 2 GB
 (admin page → People → limits), or choose `small`. A one-hour meeting takes 30 to 60 minutes on 2 processors.
 
+### Forecasts (TimesFM)
+`install-stack.sh --with-models` builds `deploy/docker/models.Dockerfile` (Google TimesFM 2.5 on the processor, about 2 GB of memory;
+the weights download on the first forecast and stay in the volume `models`) and starts it with the profile `models`. The instances
+reach it through Caddy on `http://talixio-caddy:8765`, which lets only `/forecast` and `/health` through. Without it the `forecast`
+tool uses a built-in method. Decision models (Jev, Kev…) are not part of the stack: set their address in the settings.
+
 ### Signal
 
 signal-cli is in the image (x86_64 servers). Its registration lives in the person's volume

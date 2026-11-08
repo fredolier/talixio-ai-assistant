@@ -38,6 +38,18 @@ services:
     cpus: ${OLLAMA_CPUS:-2}   # indexing a library keeps it busy: leave processors to the assistants
     security_opt: [no-new-privileges]
 
+  models:                     # optional (install-stack.sh --with-models): TimesFM time-series forecasts; reachable only through Caddy
+    image: talixio-models:current
+    container_name: talixio-models
+    profiles: ["models"]
+    restart: unless-stopped
+    volumes: [models:/models]
+    networks: [ollama]
+    mem_limit: 2g
+    cpus: ${MODELS_CPUS:-2}
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+
   agent:                      # the only part with Docker access; a closed list of actions (src/Fleet.php)
     image: talixio:current
     container_name: talixio-agent
@@ -57,6 +69,7 @@ services:
       TALIXIO_STORE_DIR: /store            # the store's catalog, read-only in each assistant
       CADDY_CONFIG_DIR: /caddy-config
       PHP_CLI_SERVER_WORKERS: "4"
+      TALIXIO_MODELS: ${WITH_MODELS:-0}   # the TimesFM service exists: the assistants get its address, Caddy a door to it
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - agent-state:/state
@@ -99,6 +112,7 @@ volumes:
   caddy-data: { name: talixio-caddy-data }
   caddy-config: { name: talixio-caddy-config }
   ollama: { name: talixio-ollama-models }
+  models: { name: talixio-models }
   agent-state: { name: talixio-agent-state }
   admin-data: { name: talixio-admin-data }
   store: { name: talixio-store }

@@ -3213,5 +3213,15 @@ window.I18N.fr = {
   "wrong": "fausse",
   "What should it have answered?": "Qu'aurait-il dû répondre ?",
   "Noted, thank you.": "Noté, merci.",
-  "Noted: I will take that into account.": "Noté : j'en tiendrai compte."
+  "Noted: I will take that into account.": "Noté : j'en tiendrai compte.",
+  "Forecast and decisions": "Prévisions et décisions",
+  "Two specialised models next to the language model. Forecast: time series (sales, usage, prices…) with Google TimesFM; the assistant uses it whenever you give it figures. Decisions: a model that answers choice / score / yes-no questions with real probabilities (Jev from TypeSafe, or an open one such as Kev that speaks the same protocol). Leave empty to turn off; nothing is sent anywhere until you set an address.": "Deux modèles spécialisés à côté du modèle de langage. Prévisions : séries chronologiques (ventes, usage, prix…) avec Google TimesFM ; l'assistant l'utilise dès que vous lui donnez des chiffres. Décisions : un modèle qui répond à des questions de choix / note / oui-non avec de vraies probabilités (Jev de TypeSafe, ou un modèle ouvert comme Kev qui parle le même protocole). Laissez vide pour désactiver ; rien n'est envoyé tant que vous n'avez pas renseigné d'adresse.",
+  "TimesFM service address": "Adresse du service TimesFM",
+  "Empty = a simple built-in method. With Docker: install with --with-models, then http://talixio-caddy:8765 (see the FAQ).": "Vide = une méthode simple intégrée. Avec Docker : installez avec --with-models, puis http://talixio-caddy:8765 (voir la FAQ).",
+  "Decision model address": "Adresse du modèle de décision",
+  "The server that answers POST /v1/systemone: TypeSafe's cloud (your data goes there) or your own Kev / Rizzo Flow server.": "Le serveur qui répond à POST /v1/systemone : le cloud de TypeSafe (vos données y partent) ou votre propre serveur Kev / Rizzo Flow.",
+  "Decision model key": "Clé du modèle de décision",
+  "Sent as a Bearer token. Empty if your server has none.": "Envoyée comme jeton Bearer. Vide si votre serveur n'en a pas.",
+  "Decision model name": "Nom du modèle de décision",
+  "e.g. kev-latest. Empty = the server's default.": "p. ex. kev-latest. Vide = celui par défaut du serveur."
 };

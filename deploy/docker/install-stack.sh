@@ -17,11 +17,14 @@
 #   --rebuild-base
 #                 build the dependencies image again even if base.Dockerfile did not change (e.g. after a
 #                 download failed during its build, or for the latest security updates of its packages)
+#   --with-models
+#                 also build and start the forecasting service (Google TimesFM, CPU, about 2 GB of memory; the
+#                 weights download on first use). The assistant then reaches it through its own proxy.
 # Run it again to rebuild the image from this clone and restart the stack (the data stays).
 set -euo pipefail
 cd "$(dirname "$0")"
 STACK="$PWD"; REPO="$(cd ../.. && pwd)"
-DOMAIN=""; EMAIL=""; MIGRATE=""; NAME=""; PROXY=""; WMODEL="large-v3-turbo-q5_0"; REBUILD_BASE=""
+DOMAIN=""; EMAIL=""; MIGRATE=""; NAME=""; PROXY=""; WMODEL="large-v3-turbo-q5_0"; REBUILD_BASE=""; WITH_MODELS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="$2"; shift 2 ;;
@@ -31,6 +34,7 @@ while [ $# -gt 0 ]; do
     --behind-proxy) PROXY="$2"; shift 2 ;;
     --whisper-model) WMODEL="$2"; shift 2 ;;
     --rebuild-base) REBUILD_BASE=1; shift ;;
+    --with-models) WITH_MODELS=1; shift ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -82,6 +86,12 @@ BASE_TAG="talixio-base:$(sha1sum "$REPO/deploy/docker/base.Dockerfile" | cut -c1
 if [ -n "$REBUILD_BASE" ] || ! docker image inspect "$BASE_TAG" >/dev/null 2>&1; then
   say "Building the dependencies image $BASE_TAG (several minutes, only when they change)"
   docker build --pull ${REBUILD_BASE:+--no-cache} -t "$BASE_TAG" - < "$REPO/deploy/docker/base.Dockerfile"
+fi
+if [ -n "$WITH_MODELS" ] || grep -q '^WITH_MODELS=1' "$ENV" 2>/dev/null; then # TimesFM (forecasts): its own small image, kept once asked for
+  say "Building the TimesFM forecasting service (several minutes the first time; the 1 GB model downloads at its first start)"
+  docker build -t talixio-models:current -f "$REPO/deploy/docker/models.Dockerfile" "$REPO"
+  sed -i '/^WITH_MODELS=/d;/^COMPOSE_PROFILES=/d' "$ENV"; printf 'WITH_MODELS=1\nCOMPOSE_PROFILES=models\n' >> "$ENV"
+  set -a; . "$ENV"; set +a
 fi
 docker tag "$BASE_TAG" talixio-base:current
 say "Building the Talixio image"
