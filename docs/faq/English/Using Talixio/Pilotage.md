@@ -19,6 +19,11 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
     agent's conversation); an **approval** (a click only you can give, in that session, e.g. a revoked token) has no button:
     open the session; an **instruction** is for you to tell the agent what to do next. Under *Decided recently* you see **who
     answered what**: you, or the assistant on your behalf.
+    A question reads in this order: **who is asking**, **the question** word for word, **the options** as one-tap buttons (or,
+    when there are none, a box to answer in your own words — or dictate), **what the pilot would answer** with its confidence,
+    and **what a wrong choice costs**. When the orchestrator only passed on a summary, or the text says *full text not retrieved
+    yet*, a hint appears with **Ask the orchestrator for the full question**: it sends that request to the agent without
+    counting as an answer. When nothing waits, the tab says so and tells you when the orchestrator last spoke.
   - **Agents**: the roster with a search, the filters Waiting / Active / Idle / Offline, and *Group by machine*. Pick one to read
     its conversation: the question it waits on stays pinned on top, a message that is too long is cut with *Show all*, older
     messages load with « ↑ n older messages », and the box at the bottom writes to that agent (or dictate). A red number on a row
@@ -45,6 +50,12 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
   (options, level, cost of a wrong choice), the latest decisions and who took them, recent alerts, and any agent's
   conversation. It reads only; it answers (with the decision id) just what is yours to leave to it, never levels L4/L5,
   pushes, deploys, deletions, e-mails, credentials or approvals.
+- **Status file**: the **Status file** button on the status card shows, copies or downloads `pilot-status.md`, a Markdown file
+  the assistant keeps up to date at every change (a report, an answer, a decision, a setting): whether the orchestrator is
+  alive and its last news, one line per agent (state, task, date and source of its last news, waiting or not), the pending
+  questions word for word with their ids and options, the latest decisions (who answered what), and your priorities, rules,
+  daily cap and autonomy levels. The card shows where it lives (in the assistant's data folder), so you can also read it
+  from the server or sync it elsewhere. It never contains a secret or the pairing webhook.
 - **Fleet reports**: how the pilot's reports reach you (see *Channels and notifications*): an in-app badge by default, the
   Journal and the conversations, and optionally push + e-mail.
 

@@ -1908,3 +1908,14 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .pl-dict { position: relative; }
 .pl-dict textarea { padding-right: 46px; }
 .pl-dict .dictate-btn { position: absolute; top: 6px; right: 6px; width: auto; }
+
+/* "What do I answer?" card, empty state and status file (Pilotage → Your autonomous pilot) */
+.pl-who { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 1rem; }
+.pl-ask h5 { margin: 14px 0 4px; }
+.pl-hint { border: 1px solid color-mix(in srgb, #d9730d 45%, var(--line)); background: color-mix(in srgb, #d9730d 7%, var(--surface)); border-radius: 8px; padding: 8px 12px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; font-size: .85rem; }
+.pl-free { display: flex; gap: 6px; align-items: flex-end; margin: 8px 0; }
+.pl-free textarea { flex: 1; min-width: 0; font: inherit; resize: vertical; }
+.pl-zero { text-align: center; margin-top: 36px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.pl-zero b { font-size: 1.05rem; }
+.pilot-statusfile { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.pilot-statusfile pre { max-height: 22em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--sunk); border-radius: 8px; padding: 10px 12px; font-size: .78rem; margin: 0; }

@@ -74,6 +74,11 @@ final class Web
                 header('Content-Disposition: attachment; filename="record-of-processing-' . date('Y-m-d') . '.md"');
                 echo $this->app->privacy()->register(); return;
             }
+            if ($path === '/api/pilot/status.md' && $method === 'GET') { // the permanent status file, read-only (rewritten fresh on each view)
+                header('Content-Type: text/markdown; charset=utf-8'); header('Cache-Control: no-store');
+                if (!empty($_GET['download'])) header('Content-Disposition: attachment; filename="pilot-status.md"');
+                echo $this->app->conductor()->refreshStatusFile(true); return;
+            }
             if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
             $out = $this->route($method, $path, $body);
             $this->json($out, isset($out['errors']) ? 422 : 200); // values that did not validate
@@ -199,7 +204,7 @@ final class Web
             (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/read$#', $path, $mm) && $m === 'POST' => $this->app->conductor()->markAgentRead($mm[1]),
             (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/say$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
                 if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space']; // ground + guard against the dispatching space
-                return $this->app->conductor()->agentSay($mm[1], (string)($b['text'] ?? ''), (int)$this->app->space);
+                return $this->app->conductor()->agentSay($mm[1], (string)($b['text'] ?? ''), (int)$this->app->space, !empty($b['clarify']));
             })(),
             $path === '/api/spaces' && $m === 'GET' => ['spaces' => $this->app->spaces()->all(true), 'colors' => Spaces::COLORS],
             $path === '/api/spaces' && $m === 'POST' => ['space' => $this->app->spaces()->save($b)],

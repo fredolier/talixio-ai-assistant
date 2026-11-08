@@ -264,6 +264,26 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
 - This completes the six Pilotage slices; **1.0.0** is reserved for the cut on the
   user's confirmation.
 
+### Slice 7 — « what do I answer? » + the permanent status file · *Small–Medium*
+
+- **Problem.** Questions arrived but the cockpit did not say what the user was expected to do. The *Needs you* detail now
+  reads top to bottom: who asks (`.pl-who`), the question verbatim (`.pl-q`), one-tap options (`[data-answer]`) plus a
+  free-text/dictation box (`#pl-need-input`, draft kept per agent), what the pilot would answer (proposal + confidence, or a
+  plain « no proposal »), and the cost of a wrong choice (« the orchestrator did not say » when absent).
+- **Incomplete data.** `plIncomplete(w)`: « not retrieved yet »-style text, or no options and a very short question. It shows a
+  hint and **Ask the orchestrator for the full question**, which posts to the existing `/api/conductor/agents/{id}/say` with
+  `clarify:true`. `agentSay(..., clarify)` delivers the line but tags no `decision_id`, writes no decision-journal entry and
+  does not score the pilot's prediction: a request for information is not an answer.
+- **Inbox zero.** Empty list/detail say nothing waits and when the orchestrator last spoke (`lastReport`).
+- **Status file.** `Conductor::refreshStatusFile()` rewrites `<data dir>/pilot-status.md` (temp file + rename) after each
+  report, ack, answer/dispatch, pair/disconnect, notify change and pilot decision/verdict/policy change; polls refresh it at most
+  every 2 minutes. It skips the write when only the `Generated:` line would differ, and does nothing for an instance that never
+  paired. Built from `statusInfo()` (so no secret, no webhook, no transcript URL); times are absolute; agent-written text is
+  quoted. `GET /api/pilot/status.md[?download=1]` (authenticated, read-only) rebuilds and serves it; the **Status file** button
+  on the status card shows it with Copy / Download and the file's path.
+- **Not done (next slice).** Making the pilot's role clearer (what it did on its own vs. what waits), pushing the file to
+  the Library, per-question « snooze », and a one-line « next step for you » banner on the Agents tab.
+
 ## 5. Open decisions (carry from the mockup)
 
 - ~~`scope` reused vs. a new `specialization` field~~ — **settled (slice 3):**
