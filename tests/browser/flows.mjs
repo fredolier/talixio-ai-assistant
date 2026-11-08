@@ -569,6 +569,9 @@ const flows = {
     check('pilotage: Needs you lists them, the decision first with its question and its options as buttons',
       (await page.$$('#pl-need-list .pl-rw[data-nsel^="w:"]')).length === 2 && /Garder le plan A ou B/.test(await page.textContent('#pl-need-detail'))
       && (await page.$$('#pl-need-detail [data-answer]')).length === 2 && /deux jours de reprise/.test(await page.textContent('#pl-need-detail')));
+    check('pilotage: a waiting question says who asks, then the question, then the options, a free-text answer, the cost',
+      await (async () => { const h = await page.innerHTML('#pl-need-detail .pl-ask'); const at = r => h.search(r); return at(/pl-who/) >= 0 && at(/pl-who/) < at(/pl-q/) && at(/pl-q/) < at(/data-answer/) && at(/data-answer/) < at(/pl-need-input/) && at(/pl-need-input/) < at(/If it goes wrong/); })()
+      && await page.isVisible('#pl-need-input') && await page.isVisible('#pl-need-mic'));
     await page.click('#pl-need-list .pl-rw[data-nsel="w:w2"]');
     check('pilotage: an approval offers no answer buttons, and says only the user can give it',
       (await page.$$('#pl-need-detail [data-answer]')).length === 0 && /Token revoked/.test(await page.textContent('#pl-need-detail')));
@@ -608,6 +611,11 @@ const flows = {
     check('pilotage: the Alerts filter keeps only alerts', (await page.$$eval('#pl-jr-list .pl-rw .pl-pill', e => e.every(x => x.classList.contains('alert')))));
     await page.click('#pl-jr-f [data-f=all]');
     check('pilotage: the status line counts what waits for the user', /2 /.test(await page.textContent('#pilot-orch-status')) && /wait|attend/i.test(await page.textContent('#pilot-orch-status')));
+    await page.click('#pilot-status-btn'); await page.waitForFunction(() => /dossier-conseil/.test(document.querySelector('#pilot-status-text').textContent), null, { timeout: 6000 });
+    const stx = await page.textContent('#pilot-status-text');
+    check('pilotage: the Status file button shows the permanent status (agents, pending question, no secret) and where it lives',
+      /Garder le plan A ou B/.test(stx) && /WAITING FOR YOU/.test(stx) && !/orch\.example/.test(stx) && /pilot-status\.md/.test(await page.textContent('#pilot-status-path')) && /status\.md\?download=1/.test(await page.getAttribute('#pilot-status-dl', 'href')));
+    await page.click('#pilot-status-btn');
     await page.click('#pilot-notify [data-notify=off]'); await page.waitForTimeout(300);
     check('pilotage: switching fleet reports to Off is kept', (await page.$$('#pilot-notify [data-notify=off].on')).length === 1);
     await page.click('#pilot-notify [data-notify=inapp]'); await page.waitForTimeout(200);

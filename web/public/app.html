@@ -160,12 +160,19 @@
           <div class="pilot-status-head">
             <h3 class="no-i18n" id="pilot-conn-title"><span class="pilot-dot" id="pilot-conn-dot"></span></h3>
             <div class="row">
+              <button type="button" id="pilot-status-btn" class="btn ghost small" aria-expanded="false" title="A Markdown file kept up to date with the state of the fleet">Status file</button>
               <button type="button" id="pilot-orch-connect" class="btn ghost small">Connect…</button>
               <button type="button" id="pilot-orch-disconnect" class="btn ghost small danger" hidden>Disconnect</button>
             </div>
           </div>
           <div id="pilot-orch-status" class="muted small no-i18n"></div>
           <pre id="pilot-orch-steps" class="pilot-steps" hidden></pre>
+          <div id="pilot-status-file" class="pilot-statusfile" hidden>
+            <p class="muted small">The pilot keeps this file up to date, so you can read it outside Talixio. It lives here:</p>
+            <code id="pilot-status-path" class="no-i18n"></code>
+            <div class="row"><button type="button" id="pilot-status-copy" class="btn small">Copy</button> <a id="pilot-status-dl" class="btn small" href="api/pilot/status.md?download=1" download="pilot-status.md">Download</a></div>
+            <pre id="pilot-status-text" class="no-i18n"></pre>
+          </div>
           <div class="pilot-notify" id="pilot-notify-row" hidden>
             <span class="muted small">Fleet reports</span>
             <div class="seg" id="pilot-notify" role="radiogroup" aria-label="Fleet reports">

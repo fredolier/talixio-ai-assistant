@@ -21,6 +21,11 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
     ouvre la conversation de l'agent) ; une **validation** (un clic que vous seul pouvez donner, dans cette session, par exemple un
     jeton révoqué) n'a pas de bouton : ouvrez la session ; une **instruction**, c'est à vous de dire à l'agent quoi faire ensuite.
     Sous *Décidées récemment*, vous voyez **qui a répondu quoi** : vous, ou l'assistant en votre nom.
+    Une question se lit dans cet ordre : **qui demande**, **la question** mot pour mot, **les options** en boutons à un seul appui
+    (ou, s'il n'y en a pas, une zone pour répondre avec vos mots — ou à la voix), **ce que le pilote répondrait** avec sa confiance,
+    et **ce que coûte un mauvais choix**. Quand l'orchestrateur n'a transmis qu'un résumé, ou que le texte dit *full text not
+    retrieved yet*, un message apparaît avec **Demander la question complète à l'orchestrateur** : la demande part à l'agent sans
+    compter comme une réponse. Quand rien n'attend, l'onglet le dit et indique quand l'orchestrateur a parlé pour la dernière fois.
   - **Agents** : le roster avec une recherche, les filtres En attente / Actifs / Inactifs / Hors ligne, et *Grouper par machine*.
     Choisissez-en un pour lire sa conversation : la question qu'il attend reste épinglée en haut, un message trop long est coupé
     avec *Voir tout*, les anciens messages se chargent avec « ↑ n messages plus anciens », et la zone du bas écrit à cet agent (ou
@@ -49,6 +54,12 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
   attente (options, niveau, coût d'un mauvais choix), les dernières décisions et qui les a prises, les alertes récentes et la
   conversation de n'importe quel agent. Il ne fait que lire ; il ne répond (avec l'identifiant de décision) que ce que vous
   lui laissez, jamais les niveaux L4/L5, les pushs, déploiements, suppressions, e-mails, identifiants ou approbations.
+- **Fichier d'état** : le bouton **Fichier d'état** de la carte d'état affiche, copie ou télécharge `pilot-status.md`, un fichier
+  Markdown que l'assistant tient à jour à chaque changement (un rapport, une réponse, une décision, un réglage) : l'orchestrateur
+  est-il vivant et sa dernière nouvelle, une ligne par agent (état, tâche, date et source de sa dernière nouvelle, en attente ou
+  non), les questions en attente mot pour mot avec leurs identifiants et options, les dernières décisions (qui a répondu quoi),
+  et vos priorités, règles, plafond quotidien et niveaux d'autonomie. La carte indique où il se trouve (dans le dossier de données
+  de l'assistant), pour le lire aussi depuis le serveur ou le synchroniser ailleurs. Il ne contient jamais de secret ni le webhook d'appairage.
 - **Rapports de la flotte** : comment les rapports du pilote vous parviennent (voir *Canaux et notifications*) : une pastille dans
   l'app par défaut, le Journal et les conversations, et en option push + e-mail.
 

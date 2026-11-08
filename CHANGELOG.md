@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.30.1 (2026-11-08)
+
+- Pilotage: it now says plainly what to answer. A question waiting for you shows who asks, the question verbatim, one-tap options (or a free answer, dictation included), what the pilot would answer with its confidence, and what a wrong choice would cost. When the question arrived truncated, a button asks the orchestrator for the full text (no decision is logged for that message). New permanent status file `pilot-status.md` in the data folder (orchestrator liveness, one line per agent, pending questions, last decisions, priorities and rules; no secrets), rewritten after each change and available from the new *Status file* button (copy, download) or `GET /api/pilot/status.md`.
+
 ## 1.30.0 (2026-11-08)
 
 - Forecasts and decisions. New `forecast` tool: give the assistant figures (in the chat or a file) and it forecasts the next values with an 80% interval. With the optional TimesFM service (Google's time-series model, CPU, `install-stack.sh --with-models`, address in Settings → Model and budget → Forecast and decisions) the forecasts come from TimesFM; without it a simple built-in method answers and says so; if the service fails it falls back and tells why. New `decide` tool (only when an address is set): typed questions (choice, score, yes/no) answered with probabilities and a confidence by a "System One" decision model (POST `/v1/systemone`: TypeSafe's Jev, or an open one such as Kev or Rizzo Flow), sent through the privacy gate. Caddy shows the TimesFM service to the instances on `/forecast` and `/health` only. New FAQ page *Forecasts and decisions*.

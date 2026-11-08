@@ -6065,24 +6065,71 @@ function plRenderNeed() {
     + (waiting.length ? waiting.map(a => `<div class="pl-rw${PL.nsel === 'w:' + a.id ? ' sel' : ''}" data-nsel="w:${esc(a.id)}">${plDot(a)}
         <div><div class="pl-n no-i18n">${esc(a.name)}</div><div class="pl-s">${esc(plKind(a.waiting))}${a.waiting.type ? ' · ' + esc(a.waiting.type) : ''} · <span class="no-i18n">${esc(plClip(a.waiting.question, 60))}</span></div></div>
         <div class="pl-r">${esc(pilotAgo(a.ts))}</div></div>`).join('')
-      : `<div class="pl-empty">${esc(t('Nothing is waiting for you.'))}</div>`)
+      : `<div class="pl-empty">${esc(t('Nothing is waiting for you.'))}<br><span class="small">${esc(plLastSpoke(info))}</span></div>`)
     + (decided.length ? `<div class="pl-grp">${esc(t('Decided recently'))}</div>` + decided.map(d => `<div class="pl-rw${PL.nsel === dKey(d) ? ' sel' : ''}" data-nsel="${esc(dKey(d))}"><span class="pilot-dot pstate-active"></span>
         <div><div class="pl-n no-i18n">${esc(d.name || d.agent)}</div><div class="pl-s"><span>${esc(t('by {w}', { w: plWho(d.by) }))}</span> · <span class="no-i18n">${esc(plClip(d.answer, 50))}</span></div></div>
         <div class="pl-r">${esc(pilotAgo(d.ts))}</div></div>`).join('') : '');
   const wa = waiting.find(a => 'w:' + a.id === PL.nsel), de = decided.find(d => dKey(d) === PL.nsel);
   if (wa) {
-    const w = wa.waiting;
-    det.innerHTML = `<div class="pl-ph">${plBackBtn()}<span class="pl-t no-i18n">${esc(wa.name)}</span><span class="pl-pill">${esc(plKind(w))}</span>${w.type ? `<span class="pl-pill no-i18n">${esc(w.type)}</span>` : ''}${w.decision_id ? `<span class="pl-pill no-i18n" title="${esc(t('Decision id'))}">${esc(w.decision_id)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(wa.ts))}</span></div>
-      <div class="pl-det"><div class="pl-q no-i18n">${esc(w.question)}</div>
-        ${w.cost ? `<p class="muted small"><span>${esc(t('If it goes wrong:'))}</span> <span class="no-i18n">${esc(w.cost)}</span></p>` : ''}
-        ${w.proposal ? `<div class="pl-prop"><b>${esc(t('Suggested answer'))}</b> · <span class="no-i18n">${Math.round(w.proposal.confidence * 100)}%</span><div class="pl-q no-i18n">${esc(w.proposal.answer)}</div>${w.proposal.rationale ? `<p class="muted small no-i18n">${esc(w.proposal.rationale)}</p>` : ''}<button type="button" class="btn primary small no-i18n" data-answer="${esc(w.proposal.answer)}" data-agent-id="${esc(wa.id)}">${esc(t('Send this answer'))}</button></div>` : ''}
-        ${w.options?.length && w.kind !== 'approval' ? `<div class="pl-opts">${w.options.map(o => `<button type="button" class="btn primary no-i18n" data-answer="${esc(o)}" data-agent-id="${esc(wa.id)}">${esc(o)}</button>`).join('')}</div>` : ''}
-        ${w.kind === 'approval' ? `<p class="muted small">${esc(t('Only you can do this, in that session: open it and give the approval. Nothing can be done from here.'))}</p>${wa.url ? `<a class="btn small" href="${esc(wa.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : ''}`
-          : `<p class="muted small">${esc(t('Your answer goes to the agent through the pilot, with the decision id, and is written in the journal of decisions: who answered what.'))}</p><button type="button" class="btn small" data-open-agent="${esc(wa.id)}">${esc(t('Answer another way…'))}</button>`}</div>`;
+    const w = wa.waiting, draft = PL.draft['n:' + wa.id] || '', done = w.kind === 'approval';
+    const incomplete = !done && plIncomplete(w);
+    // in this order: who asks, the question itself, how to answer (one-tap options, or free words), what the pilot would say, what a wrong choice costs
+    det.innerHTML = `<div class="pl-ph">${plBackBtn()}${plDot(wa)}<span class="pl-t no-i18n">${esc(wa.name)}</span><span class="pl-pill">${esc(plKind(w))}</span>${w.type ? `<span class="pl-pill no-i18n">${esc(w.type)}</span>` : ''}${w.decision_id ? `<span class="pl-pill no-i18n" title="${esc(t('Decision id'))}">${esc(w.decision_id)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(wa.ts))}</span></div>
+      <div class="pl-det pl-ask"><div class="pl-who"><b class="no-i18n">${esc(wa.name)}</b> <span>${esc(done ? t('needs an approval from you') : t('is asking you:'))}</span></div>
+        <div class="pl-q no-i18n">${esc(w.question)}</div>
+        ${incomplete ? `<div class="pl-hint"><span>${esc(t('This may not be the full question: the orchestrator only passed on a summary or no options. Ask it for the exact text before you decide.'))}</span><button type="button" class="btn small" data-clarify="${esc(wa.id)}">${esc(t('Ask the orchestrator for the full question'))}</button></div>` : ''}
+        ${done ? `<p class="muted small">${esc(t('Only you can do this, in that session: open it and give the approval. Nothing can be done from here.'))}</p>${wa.url ? `<a class="btn small" href="${esc(wa.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : ''}`
+          : `<h5>${esc(t('Your answer'))}</h5>
+        ${w.options?.length ? `<div class="pl-opts">${w.options.map(o => `<button type="button" class="btn primary no-i18n" data-answer="${esc(o)}" data-agent-id="${esc(wa.id)}">${esc(o)}</button>`).join('')}</div><p class="muted small">${esc(t('One tap sends that answer. Or answer in your own words:'))}</p>`
+          : `<p class="muted small">${esc(t('No options were given: answer in your own words.'))}</p>`}
+        <div class="pl-free"><textarea id="pl-need-input" rows="2" data-nid="${esc(wa.id)}" placeholder="${esc(t('Your answer…'))}">${esc(draft)}</textarea>
+          <button type="button" class="btn ghost icon dictate-btn" id="pl-need-mic" aria-label="${esc(t('Dictate'))}" title="${esc(t('Dictate: speak and I type it here'))}">🎙️</button>
+          <button type="button" class="btn primary" data-need-send="${esc(wa.id)}">${esc(t('Send'))}</button></div>
+        ${w.proposal ? `<div class="pl-prop"><b>${esc(t('What the pilot would answer'))}</b> · <span class="no-i18n">${Math.round(w.proposal.confidence * 100)}%</span><div class="pl-q no-i18n">${esc(w.proposal.answer)}</div>${w.proposal.rationale ? `<p class="muted small no-i18n">${esc(w.proposal.rationale)}</p>` : ''}<button type="button" class="btn small no-i18n" data-answer="${esc(w.proposal.answer)}" data-agent-id="${esc(wa.id)}">${esc(t('Send this answer'))}</button></div>`
+          : `<p class="muted small">${esc(t('The pilot has no proposal for this one.'))}</p>`}
+        <p class="muted small"><span>${esc(t('If it goes wrong:'))}</span> <span class="no-i18n">${w.cost ? esc(w.cost) : '—'}</span>${w.cost ? '' : ` <span>${esc(t('(the orchestrator did not say)'))}</span>`}</p>
+        <p class="muted small">${esc(t('Your answer goes to the agent through the pilot, with the decision id, and is written in the journal of decisions: who answered what.'))}</p>
+        <button type="button" class="btn small" data-open-agent="${esc(wa.id)}">${esc(t('Answer another way…'))}</button>`}</div>`;
+    const inp = $('#pl-need-input');
+    if (inp) {
+      inp.addEventListener('input', () => { PL.draft['n:' + wa.id] = inp.value; });
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); det.querySelector('[data-need-send]')?.click(); } });
+      $('#pl-need-mic').onclick = e => toggleDictate(inp, e.currentTarget);
+    }
   } else if (de) {
     det.innerHTML = `<div class="pl-ph">${plBackBtn()}<span class="pl-t no-i18n">${esc(de.name || de.agent)}</span><span class="pl-pill">${esc(t('by {w}', { w: plWho(de.by) }))}</span>${de.id ? `<span class="pl-pill no-i18n">${esc(de.id)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(de.ts))}</span></div>
       <div class="pl-det"><h5>${esc(t('Question'))}</h5><div class="pl-q no-i18n">${esc(de.question || '—')}</div><h5>${esc(t('Answer'))}</h5><div class="pl-q no-i18n">${esc(de.answer)}</div>${de.by === 'assistant' && de.id ? `<div class="pl-verdict"><span class="muted small">${esc(t('Was this the right call?'))}</span> <button type="button" class="btn small" data-verdict="1" data-did="${esc(de.id)}">${esc(t('Yes'))}</button> <button type="button" class="btn small danger" data-verdict="0" data-did="${esc(de.id)}">${esc(t('No, that was wrong'))}</button></div>` : ''}</div>`;
-  } else det.innerHTML = `<div class="pl-empty pl-center">${esc(t('Nothing is waiting for you. Decisions will show here, with who answered what.'))}</div>`;
+  } else det.innerHTML = plInboxZero(info);
+}
+// the question may be incomplete: a summary only, "not retrieved yet", or a one-liner with no options to pick from
+function plIncomplete(w) {
+  const q = String(w.question || '').trim();
+  return /not retrieved|non récup|pas encore récup|summary only/i.test(q) || (!(w.options || []).length && q.length < 40);
+}
+function plLastSpoke(info) { return info.lastReport ? t('The orchestrator last spoke {a}.', { a: pilotAgo(info.lastReport) }) : t('The orchestrator has not spoken yet.'); }
+function plInboxZero(info) {
+  return `<div class="pl-zero"><b>✓ ${esc(t('Nothing is waiting for you.'))}</b><span class="muted small">${esc(plLastSpoke(info))}</span><span class="muted small">${esc(t('Questions from your agents will show here, with what to answer.'))}</span></div>`;
+}
+async function plClarify(id, btn) { // asks for the full question: a message to the agent that settles nothing
+  btn.disabled = true;
+  try {
+    const a = (PL.info.agents || []).find(x => x.id === id), w = a?.waiting;
+    const text = `Please send me, verbatim, the full pending question${w?.decision_id ? ` (decision ${w.decision_id})` : ''}: the session's own wording, ALL its options, its ladder level (L1-L5) and what a wrong choice would cost. Do not summarise; report it with this agent set and the question in "waiting".`;
+    const r = await post(`api/conductor/agents/${encodeURIComponent(id)}/say?space=${state.space}`, { text, clarify: true });
+    toast(r.ok ? t('Asked. The full question will show here when the orchestrator answers.') : (r.message || t('Could not send.')));
+  } catch (err) { toast(err.message); }
+  btn.disabled = false;
+}
+async function pilotStatusFile(open) { // the permanent status file: view, copy, download
+  const box = $('#pilot-status-file'), btn = $('#pilot-status-btn'); if (!box) return;
+  box.hidden = !open; btn.setAttribute('aria-expanded', String(!!open));
+  if (!open) return;
+  try {
+    const r = await fetch('api/pilot/status.md', { credentials: 'same-origin', headers: { 'X-Talixio': '1' } });
+    if (!r.ok) throw new Error(t('Not available.'));
+    $('#pilot-status-text').textContent = await r.text();
+    $('#pilot-status-path').textContent = PL.info?.statusFile || 'pilot-status.md';
+  } catch (e) { toast(e.message); }
 }
 
 // -- Autonomy: what the assistant may decide alone, how right it has been, what it arbitrates by --
@@ -6247,6 +6294,8 @@ function plWire() {
     if ((el = t0.closest('[data-plback]'))) { el.closest('.pl-split').classList.remove('detail'); return; }
     if ((el = t0.closest('[data-verdict]'))) { plVerdict(el); return; }
     if ((el = t0.closest('[data-auto-save]'))) { plSaveAuto(); return; }
+    if ((el = t0.closest('[data-clarify]'))) { plClarify(el.dataset.clarify, el); return; }
+    if ((el = t0.closest('[data-need-send]'))) { const inp = $('#pl-need-input'), text = inp.value.trim(); if (!text) { inp.focus(); return; } PL.draft['n:' + el.dataset.needSend] = ''; plSay(el.dataset.needSend, text, el); return; }
     if ((el = t0.closest('[data-answer]'))) { plSay(el.dataset.agentId, el.dataset.answer, el); return; }
     if ((el = t0.closest('[data-open-agent]'))) { PL.sel = el.dataset.openAgent; plShowTab('agents'); plOpen('#pl-split-agents'); setTimeout(() => $('#pl-ag-input')?.focus(), 250); return; }
     if ((el = t0.closest('[data-more]'))) { e.preventDefault(); const b = el.closest('.pl-b'); b.classList.toggle('open'); el.textContent = b.classList.contains('open') ? t('Show less') : t('Show all'); return; }
@@ -6262,6 +6311,10 @@ function plWire() {
 
 async function pilotAgents() {
   plWire();
+  if (!pilotAgents.wired) { pilotAgents.wired = true;
+    $('#pilot-status-btn').onclick = () => pilotStatusFile($('#pilot-status-file').hidden);
+    $('#pilot-status-copy').onclick = () => copyText($('#pilot-status-text').textContent);
+  }
   await initOrchestratorPanel('pilot', info => {
     const on = !!info.connected;
     // status card: dot + "Autonomous pilot — connected/disconnected", then one grounded line

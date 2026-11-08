@@ -1665,7 +1665,36 @@ check('fleet(poll): the assistant answering a waiting agent gets a generated dec
     str_starts_with((string)($pq2['instructions'][0]['decision_id'] ?? ''), 'd-') && ($dj[0]['by'] ?? '') === 'assistant' && ($dj[0]['answer'] ?? '') === 'Use the main folder.' && ($thq[count($thq) - 1]['by'] ?? '') === 'assistant');
 $con->agentSay('q3', 'Keep going.');
 check('fleet(poll): a message to an agent that is not waiting is not a decision', count($con->statusInfo()['decisions']) === count($dj));
+// the permanent status file (pilot-status.md): readable, current, and never carrying a secret
+$stf = $con->statusFile();
+$pi->setPolicy(['priorities' => ['Client work first']]);
+$con->inbox(['type' => 'report', 'title' => 'Status test', 'text' => 'Unique news line 4711.', 'agents' => [
+    ['id' => 'st1', 'name' => 'statut-agent', 'state' => 'waiting', 'task' => 'migrate the thing', 'seen' => time() - 600, 'src' => 'reply',
+     'waiting' => ['kind' => 'decision', 'type' => 'L3', 'question' => "Keep plan A or plan B?\nSecond line of the question.", 'options' => ['Plan A', 'Plan B'], 'cost' => 'two days of rework', 'decision_id' => 'dec-st1']],
+    ['id' => 'st2', 'name' => 'calm-agent', 'state' => 'active', 'task' => 'writing docs']]], $pollSecret);
+$smd = is_file($stf) ? (string)file_get_contents($stf) : '';
+check('status file: it exists in the data dir after a report, with a generated-at line', $smd !== '' && dirname($stf) === $app->cfg->dataDir && preg_match('/^Generated: \d{4}-\d\d-\d\d /m', $smd) === 1);
+check('status file: orchestrator liveness and the last news are there', str_contains($smd, 'Connected, poll mode') && str_contains($smd, 'Unique news line 4711.'));
+check('status file: one line per agent with state, task, news date and source, and who waits', str_contains($smd, '**statut-agent** — waiting — migrate the thing') && str_contains($smd, '(reply)') && str_contains($smd, '**WAITING FOR YOU**') && str_contains($smd, '**calm-agent** — active — writing docs') && str_contains($smd, 'none (not refreshed)'));
+check('status file: the pending question is verbatim with its id, options and cost', str_contains($smd, 'dec-st1') && str_contains($smd, '> Keep plan A or plan B?') && str_contains($smd, '> Second line of the question.') && str_contains($smd, '1. Plan A') && str_contains($smd, '2. Plan B') && str_contains($smd, 'two days of rework'));
+check('status file: the rules and the autonomy levels are listed', str_contains($smd, 'daily cap') && str_contains($smd, 'L4=always yours') && str_contains($smd, 'Client work first'));
+check('status file: no secret, webhook or pairing material', !str_contains($smd, $pollSecret) && !str_contains($smd, $secret) && !str_contains($smd, 'orch.example') && !str_contains($smd, 'webhook') && !str_contains($smd, $pairCode));
+$con->agentSay('st1', 'Plan B.');
+$smd2 = (string)file_get_contents($stf);
+check('status file: answering moves the question to the decisions, by you', str_contains($smd2, 'A (by you): Plan B.'));
+$pi->setPolicy(['rules' => ['Rule from status test']]);
+check('status file: a pilot setting change is written too', str_contains((string)file_get_contents($stf), 'Rule from status test'));
+$con->inbox(['type' => 'report', 'tick' => true, 'agents' => [['id' => 'st3', 'name' => 'ask-agent', 'state' => 'waiting', 'waiting' => ['kind' => 'decision', 'question' => 'full text not retrieved yet']]]], $pollSecret);
+$sayN = count($con->decisions());
+$cl = $con->agentSay('st3', 'Send me the full question.', 0, true);
+$clq = $con->pull($pollSecret)[1]['instructions'] ?? []; $cli1 = end($clq) ?: [];
+check('status file/clarify: asking for the full question is sent, is not tagged as an answer, and is not a decision',
+    $cl['ok'] === true && count($con->decisions()) === $sayN && ($cli1['agent'] ?? '') === 'st3' && !isset($cli1['decision_id']));
+check('status file: an unretrieved question is flagged in the file', str_contains((string)file_get_contents($stf), 'not retrieved yet: ask the orchestrator'));
+check('status file: it is served as text with the generated line by the same builder', str_contains($con->refreshStatusFile(true), '# Talixio — autonomous pilot status'));
 check('fleet: disconnect forgets the binding', str_contains($con->disconnect(), 'disconnected') && !$con->connected());
+check('status file: after a disconnect it says nothing is connected', str_contains((string)file_get_contents($stf), 'Not connected'));
+@unlink($stf);
 @unlink($app->cfg->dataDir . '/conductor.json');
 
 // ---- the messaging backbone (orchestration.md §3, Relay): address + durable mailbox + consent + budget envelope + loop guard ----

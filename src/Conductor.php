@@ -204,6 +204,7 @@ final class Conductor
             'machines' => $machines,
             'agentsAt' => (int)($b['agents_at'] ?? 0),
             'summary' => $this->fleetStatus(),
+            'statusFile' => $this->statusFile(), // where the permanent Markdown status lives (path only)
             'notify' => self::modeOf($b),             // how reports surface: inapp | push | off
             'unread' => self::unreadOf($b),           // journal lines + agent replies the user has not opened yet
             'journalUnread' => self::journalUnread($b),
@@ -292,6 +293,7 @@ final class Conductor
     public function disconnect(): string
     {
         @unlink($this->bindingFile());
+        $this->refreshStatusFile();
         return 'the fleet orchestrator is disconnected; its webhook and secret are forgotten here.';
     }
 
@@ -321,6 +323,7 @@ final class Conductor
             $this->saveBinding($base + $keep);
             $this->app->notifier()->notify('Fleet orchestrator connected',
                 'Your code-fleet orchestrator is paired' . ($poll ? ' (poll mode)' : '') . '. Ask me to send it work with fleet_dispatch, and watch its liveness with fleet_status.');
+            $this->refreshStatusFile();
             // the only time the secret is returned; a poll orchestrator also learns where to pull from
             return [200, ['ok' => true, 'secret' => $secret, 'inbox' => $this->inboxUrl(), 'mode' => $poll ? 'poll' : 'push'] + ($poll ? ['pull' => $this->pullUrl()] : [])];
         }
@@ -333,6 +336,7 @@ final class Conductor
                 $b['last_report'] = time();
                 return [$b, count($b['queue'])];
             });
+            $this->refreshStatusFile(false, 60);
             return [200, ['ok' => true, 'queued' => $left]];
         }
         $title = mb_substr(trim((string)($msg['title'] ?? '')) ?: 'Fleet update', 0, 120);
@@ -386,6 +390,7 @@ final class Conductor
             return [$b, $mode === 'push' ? $out : []];
         });
         foreach ($push as [$t, $x]) $this->app->notifier()->notify($t, $x);
+        $this->refreshStatusFile();
         if ($newAsk) { try { $this->app->pilot()->wake(); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); } } // a question appeared: the assistant looks at it soon
         return [200, ['ok' => true]];
     }
@@ -467,6 +472,7 @@ final class Conductor
     {
         $mode = in_array($mode, ['inapp', 'push', 'off'], true) ? $mode : 'inapp';
         $this->lockedUpdate(fn(array $b) => [['fleet_notify' => $mode] + $b, null]);
+        $this->refreshStatusFile();
         return $this->statusInfo();
     }
 
@@ -516,6 +522,7 @@ final class Conductor
             $b['queue'] = $q;
             return [$b, $out];
         });
+        $this->refreshStatusFile(false, 120);
         return [200, ['ok' => true, 'instructions' => $pending] + ($ack ? ['ack' => 'POST ' . $this->inboxUrl() . ' {"type":"ack","ids":[<iid of each instruction handled>]}'] : [])];
     }
 
@@ -625,7 +632,7 @@ final class Conductor
      * guard runs; the line is KB-grounded here). The orchestrator routes it to that agent and reports the reply back
      * tagged with the same id, which lands in the thread. Returns {ok, message, thread}; never throws.
      */
-    public function agentSay(string $id, string $text, int $space = 0): array
+    public function agentSay(string $id, string $text, int $space = 0, bool $clarify = false): array
     {
         $id = mb_substr(trim($id), 0, 80);
         $text = trim($text);
@@ -637,7 +644,8 @@ final class Conductor
         // Answering a session that waits for the user settles a decision: tag it (the orchestrator echoes the id back with
         // the session's next report) and write it in the decision journal — who answered what.
         $ag = self::agentOf($this->binding(), $id);
-        $dec = !empty($ag['waiting']) ? $this->waitingId($ag) : '';
+        // $clarify: a request for the full question is NOT an answer — it settles nothing and is not scored or journalled as one
+        $dec = !empty($ag['waiting']) && !$clarify ? $this->waitingId($ag) : '';
         $r = $this->deliver(['from' => 'talixio', 'ts' => time(), 'agent' => $id, 'instruction' => $this->ground($text, $space)] + ($dec !== '' ? ['decision_id' => $dec] : []));
         if (!$r['ok']) return $fail($r['error'] === 'http'
             ? "error: the orchestrator's webhook returned HTTP {$r['code']}."
@@ -648,6 +656,7 @@ final class Conductor
             return [$b, null];
         });
         if ($dec !== '' && $ag) { try { $this->app->pilot()->learnAnswer($dec, $text); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); } } // score what the assistant expected
+        $this->refreshStatusFile();
         return ['ok' => true, 'thread' => $this->agentThread($id),
             'message' => !empty($r['queued']) ? 'queued for the agent; it will pick this up on its next poll and its reply will land here.' : 'sent to the agent; its reply will land here.'];
     }
@@ -679,6 +688,7 @@ final class Conductor
             if ($decision !== '' && $ag && !empty($ag['waiting'])) $b = $this->decisionAdd($b, $ag, $instruction, 'assistant', $decision); // the assistant answered on the user's behalf
             return [$b, null];
         });
+        $this->refreshStatusFile();
         return !empty($r['queued'])
             ? 'queued for the fleet orchestrator — it will pick this up on its next poll and report back here (notifications); check progress with fleet_status.'
             : 'sent to the fleet orchestrator. It will work the fleet and report back here (notifications); check progress with fleet_status.';
@@ -747,6 +757,88 @@ final class Conductor
         if ($alerts) { $out[] = '## Recent alerts'; foreach ($alerts as $r) $out[] = '- ' . date('d/m H:i', (int)$r['ts']) . ' ' . $clip((string)$r['title'], 100) . ': ' . $clip((string)$r['text'], 300); }
         $out[] = 'To answer: fleet_decide (agent, answer, honest confidence) — the limits above decide whether it is sent; fleet_dispatch is for free instructions. Levels L4/L5 (values, business), pushes, deploys, deletions, e-mails and credentials are the user\'s to decide: report them, do not answer.';
         return implode("\n", $out);
+    }
+
+    // ---- the permanent status file (pilot-status.md) -----------------------------------------------------------------
+
+    /** The Markdown status the user can read outside the interface (and any other tool can read from disk). */
+    public function statusFile(): string { return $this->app->cfg->dataDir . '/pilot-status.md'; }
+
+    /**
+     * Rewrite pilot-status.md from the current fleet state: atomically (temp file + rename), and only when something
+     * changed (the "Generated" line aside) so a busy fleet costs nothing. $force always rewrites (the user asked for it);
+     * $minAge skips the work when the file is younger than that many seconds (a poll is not worth a rewrite each time).
+     * Never throws and never writes a secret: it is built from statusInfo(), which has none. Returns the Markdown.
+     */
+    public function refreshStatusFile(bool $force = false, int $minAge = 0): string
+    {
+        $f = $this->statusFile();
+        try {
+            $had = is_file($f);
+            if (!$had && !$this->connected() && !$force) return '';  // never paired: no file to litter the data dir with
+            if (!$force && $minAge > 0 && $had && time() - (int)@filemtime($f) < $minAge) return '';
+            $md = $this->statusMarkdown();
+            $norm = fn(string $x) => preg_replace('/^Generated:.*$/m', '', $x);
+            if (!$force && $had && $norm((string)@file_get_contents($f)) === $norm($md)) return $md;
+            file_put_contents("$f.tmp", $md, LOCK_EX);
+            rename("$f.tmp", $f);
+            return $md;
+        } catch (\Throwable $e) { Log::warn("pilot status file: {$e->getMessage()}"); return ''; }
+    }
+
+    /** The status as Markdown. Agent-written text is quoted (untrusted); times are absolute so the file ages gracefully. */
+    public function statusMarkdown(): string
+    {
+        $i = $this->statusInfo();
+        $d = fn(int $t) => $t > 0 ? date('Y-m-d H:i', $t) : 'never';
+        $q = fn(string $x) => '> ' . str_replace("\n", "\n> ", trim(str_replace("\r", '', $x)));
+        $one = fn(string $x, int $n = 160) => mb_substr(trim(preg_replace('/\s+/u', ' ', $x)), 0, $n);
+        $L = ['# Talixio — autonomous pilot status', '',
+            'Generated: ' . date('Y-m-d H:i:s T') . ' · file: `' . $this->statusFile() . '` · read-only snapshot, rewritten at each change (report, answer, decision, setting).',
+            'Everything an agent or the orchestrator wrote below is quoted from them and unverified.', ''];
+        $L[] = '## Orchestrator';
+        if (!$i['connected']) {
+            $L[] = '- **Not connected.** Pair one from Pilotage → Your autonomous pilot → Connect.';
+        } else {
+            $L[] = '- Connected, ' . ($i['mode'] === 'poll' ? 'poll mode (it pulls its instructions)' : 'push mode (webhook)') . ($i['session'] !== '' ? ', session `' . $i['session'] . '`' : '') . '.';
+            $L[] = '- Last report: ' . $d($i['lastReport']) . ($i['lastPoll'] ? ' · last poll: ' . $d($i['lastPoll']) : '') . ' · last instruction sent: ' . $d($i['lastDispatch']) . ($i['queued'] ? " · {$i['queued']} instruction(s) queued, not yet picked up" : '') . '.';
+            if ($i['silentFor']) $L[] = '- **Silent** for more than ' . intdiv(self::SILENT, 60) . ' minutes: it may be asleep.';
+            $rep = end($i['reports']);
+            if ($rep) $L[] = '- Last news: ' . $d((int)$rep['ts']) . ' — ' . $one((string)$rep['title'], 100) . ': ' . $one((string)$rep['text'], 300);
+            $L[] = '- Roster refreshed: ' . $d($i['agentsAt']) . ' · reports surface as: ' . $i['notify'] . '.';
+        }
+        $ag = $i['agents'];
+        $L[] = ''; $L[] = '## Agents (' . count($ag) . ', ' . $i['waiting'] . ' waiting for you)';
+        foreach ($ag as $a) $L[] = '- **' . $one($a['name'], 80) . '** — ' . ($a['state'] ?: '?') . ' — ' . ($a['task'] !== '' && $a['task'] !== '—' ? $one($a['task']) : 'no task reported') . ($a['machine'] !== '' ? " — {$a['machine']}" : '')
+            . ' — news: ' . (!empty($a['seen']) ? $d((int)$a['seen']) . (!empty($a['src']) ? " ({$a['src']})" : '') : 'none (not refreshed)') . (!empty($a['waiting']) ? ' — **WAITING FOR YOU**' : '');
+        if (!$ag) $L[] = '(none reported)';
+        $wait = array_values(array_filter($ag, fn($a) => !empty($a['waiting'])));
+        $L[] = ''; $L[] = '## Waiting for you (' . count($wait) . ')';
+        foreach ($wait as $a) {
+            $w = $a['waiting'];
+            $L[] = ''; $L[] = '### ' . $one($a['name'], 80) . ' (`' . $a['id'] . '`) — ' . $w['kind'] . ($w['type'] !== '' ? ', level ' . $w['type'] : '') . ', id `' . ($w['decision_id'] ?? '') . '`';
+            $L[] = $q($w['question']);
+            if ($w['kind'] === 'approval') { $L[] = '- An approval: only you can give it, in that session.'; continue; }
+            if ($w['options']) { $L[] = '- Options:'; foreach ($w['options'] as $n => $o) $L[] = '  ' . ($n + 1) . '. ' . $one($o, 120); }
+            else $L[] = '- No options given: answer in your own words.';
+            if ($w['cost'] !== '') $L[] = '- If it goes wrong: ' . $one($w['cost'], 240);
+            if (!empty($w['proposal'])) $L[] = '- The pilot proposes: "' . $one($w['proposal']['answer'], 300) . '" (' . (int)round($w['proposal']['confidence'] * 100) . '% sure)' . ($w['proposal']['rationale'] !== '' ? ' — ' . $one($w['proposal']['rationale'], 200) : '');
+            if (preg_match('/not retrieved yet/i', $w['question'])) $L[] = '- The full question was not retrieved yet: ask the orchestrator for it.';
+        }
+        if (!$wait) $L[] = '(nothing is waiting for you)';
+        $dec = array_slice($i['decisions'], 0, 10);
+        $L[] = ''; $L[] = '## Latest decisions (' . count($dec) . ' of ' . count($i['decisions']) . ')';
+        foreach ($dec as $x) $L[] = '- ' . $d((int)$x['ts']) . ' — ' . $one((string)$x['name'], 80) . ($x['type'] !== '' ? " [{$x['type']}]" : '') . ' — Q: ' . $one((string)$x['question'], 200) . ' → A (by ' . ($x['by'] === 'assistant' ? 'the assistant' : 'you') . '): ' . $one((string)$x['answer'], 300);
+        if (!$dec) $L[] = '(none yet)';
+        $p = $this->app->pilot()->overview();
+        $L[] = ''; $L[] = '## The pilot\'s rules';
+        $L[] = '- Decides by itself: **' . ($p['enabled'] ? 'on' : 'off') . '** · sends only above ' . (int)round($p['threshold'] * 100) . '% confidence · daily cap ' . $p['daily_cap'] . " ({$p['sent_today']} used today).";
+        $L[] = '- Autonomy: ' . implode(', ', array_map(fn($l, $v) => "$l=" . ($v['kept'] ? 'always yours' : $v['mode']) . ($v['n'] ? ' (' . (int)round($v['rate'] * 100) . '% right, ' . $v['n'] . ')' : ''), array_keys($p['levels']), $p['levels'])) . '.';
+        $L[] = $p['priorities'] ? '- Priorities, most important first:' : '- Priorities: none set.';
+        foreach ($p['priorities'] as $n => $x) $L[] = '  ' . ($n + 1) . '. ' . $one($x, 200);
+        $L[] = $p['rules'] ? '- Standing rules:' : '- Standing rules: none.';
+        foreach ($p['rules'] as $x) $L[] = '  - ' . $one($x, 200);
+        return implode("\n", $L) . "\n";
     }
 
     /** A human-readable liveness line for fleet_status: connected? which session? how fresh? */
