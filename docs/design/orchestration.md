@@ -524,3 +524,14 @@ each a list and a pane that scroll on their own (so the page never grows with th
 ## Orchestrator link hardening (1.29.0)
 
 Found by reading the orchestrator's own account after it went silent: its helpers and secret lived in a session scratchpad under `/tmp`, wiped on restart; its identity changed per restart and was hard-coded; `pull` drained the queue before the instruction was handled. Fixes: durable `~/.config/talixio-orchestrator/` in the pairing prompt; identity from `ListAgents`; `pull?ack=1` + `{"type":"ack"}` with a 120 s lease; cockpit « silent » warning after 30 min. Open: a single `tick` command Talixio could ship, and provisioning the secret by env var.
+
+## Typed pass and trace (1.35.0)
+`POST /api/conductor/tick` (Bearer secret from pairing, no new key; one call per ≥5 s) replaces report + ack + pull: it takes
+`{agents, reports[{agent, kind: question|approval|answer|status|alert, title, text, decision_id}], ack[], note}`, stores them through the
+existing `inbox()` paths (`quiet` flag so one pass is traced once), and returns `{instructions, waiting, problems, next_in}`.
+`problems` is computed by code, not by the model: a `waiting` state without a question, an incomplete question ("not retrieved", < 20
+chars), a decision without options or cost. Every pass — also keep-warm ticks and legacy `report` calls — is appended to `ticks`
+(ring of 100: ts, via, agents, waiting, reports, instructions, problems, note) and shown newest first in the pilot cockpit's **Activity**
+tab, which also flags a silence. Next slices: per-agent classification of each return (question / approval / answer / status) in the
+agent thread, the "needs you" strip with one-click answers, rules proposed from repeated answers, autopilot shadow mode, secret
+rotation/revocation with last-used date, rate limit.

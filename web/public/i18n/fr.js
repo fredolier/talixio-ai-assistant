@@ -3348,5 +3348,18 @@ window.I18N.fr = {
   "Stop following": "Ne plus suivre",
   "answer of {when}": "réponse {when}",
   "Asked {when}, waiting for the answer.": "Posée {when}, en attente de la réponse.",
-  "Press “Refresh their questions” to see what they offer you.": "Appuyez sur « Actualiser leurs questions » pour voir ce qu'ils vous proposent."
+  "Press “Refresh their questions” to see what they offer you.": "Appuyez sur « Actualiser leurs questions » pour voir ce qu'ils vous proposent.",
+  "No pass for {n} min: the orchestrator may be asleep.": "Aucun passage depuis {n} min : l'orchestrateur dort peut-être.",
+  "1 waiting": "1 en attente",
+  "{n} waiting": "{n} en attente",
+  "1 report": "1 rapport",
+  "{n} reports": "{n} rapports",
+  "1 instruction handed over": "1 instruction transmise",
+  "{n} instructions handed over": "{n} instructions transmises",
+  "1 point to fix": "1 point à corriger",
+  "{n} points to fix": "{n} points à corriger",
+  "nothing new": "rien de neuf",
+  "pass": "passage",
+  "report": "rapport",
+  "No pass recorded yet. Each time the orchestrator checks in, it shows up here.": "Aucun passage enregistré. Chaque fois que l'orchestrateur se manifeste, il apparaît ici."
 };

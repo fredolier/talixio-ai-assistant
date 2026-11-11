@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.0 (2026-11-11)
+
+- Pilotage: **Activity** tab and a single typed call for the orchestrator. Every pass of the orchestrator — also the quiet ones — is now recorded and listed (agents seen, waiting, reports and instructions exchanged, points to fix), and a silence is flagged. The orchestrator gets a new endpoint, `POST /api/conductor/tick`, that replaces report + acknowledgement + pull in one call and answers with its instructions and a list of **problems found by the code** (a waiting session without its question, a truncated question, a decision without options or cost) so it fixes them on the next pass. It uses the same secret as the pairing, no new key; the older calls still work. Re-connect the pilot to give your orchestrator the new instructions. Tested with simulated passes only, not with a real orchestrator or a real fleet.
+
 ## 1.34.0 (2026-11-11)
 
 - Other assistants: **Overview** tab. One page shows **what I offer** (each question, today's use against its limits, and which paired assistants ask it, how often and when last) and **what I follow** (for each paired assistant, the questions it offers me: give one your own name such as "Jean's status", tick *Ask every morning*, or *Ask now*; the latest answer and its age are shown). Answers now carry the question they reply to, so each followed question keeps its latest status. New tool `peer_status`: ask the assistant *"give me Jean's status"* and it reads the stored answer (with its date) and asks again in the background when it is old; the morning briefing gets a line for the followed statuses that changed (existing briefings are updated, your "Also:" text kept). Tested between two assistants in one process; not tested with a real model writing the answers.

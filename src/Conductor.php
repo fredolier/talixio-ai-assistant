@@ -208,6 +208,8 @@ final class Conductor
             'notify' => self::modeOf($b),             // how reports surface: inapp | push | off
             'unread' => self::unreadOf($b),           // journal lines + agent replies the user has not opened yet
             'journalUnread' => self::journalUnread($b),
+            'ticks' => array_reverse(array_slice($b['ticks'] ?? [], -40)), // what the orchestrator did on each pass, newest first
+            'tickUrl' => $this->tickUrl(),
             'reports' => array_values($b['reports'] ?? []), // the fleet journal (fleet-wide reports and alerts)
             'decisions' => array_reverse(array_values($b['decisions'] ?? [])), // answered questions, newest first
         ];
@@ -246,6 +248,12 @@ final class Conductor
             . "   ~/.config/talixio-orchestrator/ (mode 700; the `secret` file mode 600; never print it, never commit it). If a helper is\n"
             . "   missing at a tick, rebuild it from this prompt; if only the secret is missing, tell me in chat that I must re-pair. Derive your own\n"
             . "   session identity from ListAgents at each tick — never hard-code it.\n\n"
+            . "ONE CALL PER PASS (preferred — it replaces steps 2, 3 and the ack below): POST " . $this->tickUrl() . " with the Bearer secret:\n"
+            . "   {\"agents\":[<roster as in step 3>], \"reports\":[{\"agent\":\"<session>\",\"kind\":\"question|approval|answer|status|alert\",\"title\":...,\"text\":...,\"decision_id\":...}],\n"
+            . "    \"ack\":[<iid of each instruction handled on the previous pass>], \"note\":\"<one line: what you did this pass>\"}\n"
+            . "   → {\"instructions\":[...], \"waiting\":[...], \"problems\":[...], \"next_in\":600}. Act on every instruction, then FIX every item of \"problems\"\n"
+            . "   (usually: ask that session for the full text of its question) before the next pass. Send it every pass, even with nothing to report\n"
+            . "   (empty \"reports\"): that is how I know you are alive. One call at least 5 seconds apart. The steps below describe the content.\n\n"
             . "RUNNING — keep yourself warm (~10 min: create_trigger / send_later, or a /loop). Each tick:\n"
             . " 1. Enumerate my sessions across machines and read their progress.\n"
             . " 2. Get my pending instructions. If you paired with POLL, GET $pull?ack=1\n"
@@ -389,6 +397,8 @@ final class Conductor
             }
             return [$b, $mode === 'push' ? $out : []];
         });
+        if (!$this->quiet) $this->trace(['via' => 'report', 'agents' => count($agents ?? []), 'waiting' => count(array_filter($agents ?? [], fn($a) => !empty($a['waiting']))), 'reports' => $text !== '' && !$silent ? 1 : 0,
+            'instructions' => 0, 'problems' => 0, 'note' => $newAsk ? 'a question appeared' : '']);
         foreach ($push as [$t, $x]) $this->app->notifier()->notify($t, $x);
         $this->refreshStatusFile();
         if ($newAsk) { try { $this->app->pilot()->wake(); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); } } // a question appeared: the assistant looks at it soon
@@ -496,6 +506,69 @@ final class Conductor
     private const LEASE = 120;
     /** A connected orchestrator that has neither reported nor polled for this long is « silent » in the cockpit. */
     private const SILENT = 1800;
+
+    /** Keep the last TICK_CAP orchestrator passes (also the quiet ones), so the cockpit can show what happened and when. */
+    private const TICK_CAP = 100;
+    private bool $quiet = false;
+
+    private function trace(array $e): void
+    {
+        $this->lockedUpdate(function (array $b) use ($e) {
+            $b['ticks'][] = ['ts' => time()] + $e;
+            if (count($b['ticks']) > self::TICK_CAP) $b['ticks'] = array_slice($b['ticks'], -self::TICK_CAP);
+            return [$b, null];
+        });
+    }
+
+    public function tickUrl(): string { return preg_replace('#/inbox$#', '/tick', $this->inboxUrl()); }
+
+    /**
+     * One call per orchestrator pass (POST /api/conductor/tick), replacing the report + ack + pull dance:
+     *   {"agents":[roster], "reports":[{"agent","kind":"question|approval|answer|status|alert","title","text","decision_id"}], "ack":[iid…]}
+     * It stores the roster and the reports as before, acknowledges what was handled, and returns the instructions waiting
+     * for the orchestrator, the questions still unanswered, and `problems` — what the roster got wrong (a question without
+     * its full text, a waiting session without a question) so the orchestrator fixes it on its next pass. Returns [code, body].
+     */
+    public function tick(array $msg, string $bearer): array
+    {
+        $b = $this->binding();
+        if (($b['secret'] ?? '') === '' || $bearer === '' || !hash_equals((string)$b['secret'], $bearer)) return [401, ['error' => 'unauthorized']];
+        if (time() - (int)($b['last_tick'] ?? 0) < 5) return [429, ['error' => 'one pass at a time: wait a few seconds']];
+        $this->lockedUpdate(fn(array $b) => [['last_tick' => time()] + $b, null]);
+        $problems = [];
+        $agents = isset($msg['agents']) && is_array($msg['agents']) ? $msg['agents'] : null;
+        foreach ($agents ?? [] as $a) {
+            if (!is_array($a)) continue;
+            $n = (string)($a['name'] ?? $a['id'] ?? '?'); $w = $a['waiting'] ?? null;
+            $q = is_array($w) ? (string)($w['question'] ?? '') : (string)$w;
+            if (($a['state'] ?? '') === 'waiting' && trim($q) === '') $problems[] = "$n is waiting but has no question: ask that session what it needs, then send it in `waiting`.";
+            elseif (trim($q) !== '' && (mb_strlen(trim($q)) < 20 || stripos($q, 'not retrieved') !== false)) $problems[] = "$n: the question is incomplete ($q). Ask that session for its full text, options and cost of a wrong choice.";
+            elseif (is_array($w) && ($w['kind'] ?? 'decision') !== 'approval' && empty($w['options']) && empty($w['cost'])) $problems[] = "$n: add the options it offered and the cost of a wrong choice, so the answer can be informed.";
+        }
+        $reports = array_slice(array_values(array_filter((array)($msg['reports'] ?? []), 'is_array')), 0, 20);
+        $this->quiet = true;
+        try {
+            $first = true; $lastMsg = null;
+            foreach ($reports ?: [[]] as $r) {
+                $kind = (string)($r['kind'] ?? 'status');
+                $m = ['type' => 'report', 'title' => $r['title'] ?? '', 'text' => $r['text'] ?? '', 'agent' => $r['agent'] ?? '', 'decision_id' => $r['decision_id'] ?? '',
+                    'level' => $kind === 'alert' ? 'alert' : '', 'kind' => $kind === 'status' && ($r['text'] ?? '') === '' ? 'tick' : ''];
+                if ($first && $agents !== null) $m['agents'] = $agents;
+                if ($reports === [] ) $m['tick'] = true;
+                $this->inbox($m, $bearer); $first = false; $lastMsg = $m;
+            }
+            $ids = array_filter(array_map('strval', (array)($msg['ack'] ?? [])), fn($i) => preg_match('/^[a-f0-9]{12}$/', $i));
+            if ($ids) $this->inbox(['type' => 'ack', 'ids' => array_values($ids)], $bearer);
+        } finally { $this->quiet = false; }
+        $instructions = [];
+        if ($this->mode() === 'poll') { [, $r] = $this->pull($bearer, true); $instructions = $r['instructions'] ?? []; }
+        $b = $this->binding();
+        $waiting = array_values(array_filter($b['agents'] ?? [], fn($a) => !empty($a['waiting'])));
+        $this->trace(['via' => 'tick', 'agents' => count($b['agents'] ?? []), 'waiting' => count($waiting), 'reports' => count(array_filter($reports, fn($r) => trim((string)($r['text'] ?? '')) !== '')),
+            'instructions' => count($instructions), 'problems' => count($problems), 'note' => mb_substr(trim((string)($msg['note'] ?? '')), 0, 160)]);
+        return [200, ['ok' => true, 'instructions' => $instructions, 'waiting' => array_map(fn($a) => ['agent' => $a['id'], 'kind' => $a['waiting']['kind'], 'since' => (int)($a['ts'] ?? 0)], $waiting),
+            'problems' => $problems, 'next_in' => 600]];
+    }
 
     /**
      * A poll-mode orchestrator (no webhook) pulls its pending instructions here, authenticated by the steady secret.

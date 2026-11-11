@@ -6263,7 +6263,7 @@ function plRender(info) {
   plBadge('#pl-bd-journal', info.journalUnread || 0);
   $('#pl-n-agents').textContent = agents.length || ''; $('#pl-n-journal').textContent = (info.reports || []).length || '';
   document.querySelectorAll('#pl-tabs .pl-tab').forEach(b => { b.classList.toggle('on', b.dataset.pl === PL.tab); b.setAttribute('aria-selected', String(b.dataset.pl === PL.tab)); });
-  plRenderNeed(); plRenderAgents(); plRenderJournal();
+  plRenderNeed(); plRenderAgents(); plRenderJournal(); plRenderActivity();
   if (PL.tab === 'autonomy') plLoadAuto();
 }
 function plShowTab(name) {
@@ -6278,6 +6278,24 @@ function plShowTab(name) {
 const plOpen = id => $(id)?.classList.add('detail');
 
 // -- Needs you: what waits for the user, and what was decided (who answered what) --
+/** What the orchestrator did on each pass — also the quiet ones — so a silence is visible as a silence. */
+function plRenderActivity() {
+  const box = $('#pl-activity'); if (!box) return;
+  const info = PL.info, ticks = info.ticks || [];
+  const gap = info.silentFor ? `<p class="pl-empty">${esc(t('No pass for {n} min: the orchestrator may be asleep.', { n: Math.round(info.silentFor / 60) }))}</p>` : '';
+  const line = k => {
+    const bits = [pN('1 agent', '{n} agents', k.agents || 0)];
+    if (k.waiting) bits.push(pN('1 waiting', '{n} waiting', k.waiting));
+    if (k.reports) bits.push(pN('1 report', '{n} reports', k.reports));
+    if (k.instructions) bits.push(pN('1 instruction handed over', '{n} instructions handed over', k.instructions));
+    if (k.problems) bits.push(pN('1 point to fix', '{n} points to fix', k.problems));
+    if (!k.waiting && !k.reports && !k.instructions && !k.problems) bits.push(t('nothing new'));
+    return bits.join(' · ');
+  };
+  box.innerHTML = gap + (ticks.length ? ticks.map(k => `<div class="pl-rw"><span class="pl-pill">${esc(k.via === 'tick' ? t('pass') : t('report'))}</span>
+      <div><div class="pl-n">${esc(line(k))}</div>${k.note ? `<div class="pl-s no-i18n">${esc(k.note)}</div>` : ''}</div><div class="pl-r">${esc(pilotAgo(k.ts))}</div></div>`).join('')
+    : `<div class="pl-empty">${esc(t('No pass recorded yet. Each time the orchestrator checks in, it shows up here.'))}</div>`);
+}
 function plRenderNeed() {
   const info = PL.info, list = $('#pl-need-list'), det = $('#pl-need-detail'); if (!list) return;
   const waiting = (info.agents || []).filter(a => a.waiting).sort((a, b) => (b.ts || 0) - (a.ts || 0));

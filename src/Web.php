@@ -44,6 +44,7 @@ final class Web
         if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         if ($path === '/api/conductor/inbox') { $this->conductorInbox($method); return; } // the delegated cloud orchestrator reports in: its own secret, no session here
+        if ($path === '/api/conductor/tick') { $this->conductorTick($method); return; } // one typed call per orchestrator pass: its own secret, no session here
         if ($path === '/api/conductor/pull') { $this->conductorPull($method); return; } // a poll-mode orchestrator pulls its queued instructions: its own secret, no session here
         if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye', '/api/federation/ask', '/api/federation/queries'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
@@ -1737,6 +1738,22 @@ final class Web
             if (!is_array($msg)) $this->fail(400, 'JSON object expected');
             $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
             [$code, $resp] = $this->app->conductor()->inbox($msg, $bearer);
+            $this->json($resp, $code);
+        } catch (\Throwable $e) {
+            $this->json(['error' => self::internalError($e)], 500);
+        }
+    }
+
+    /** POST /api/conductor/tick: one call per orchestrator pass (roster + reports + acks in, instructions + problems out). Bearer secret only. */
+    private function conductorTick(string $method): void
+    {
+        ob_start();
+        try {
+            if ($method !== 'POST') $this->fail(405, 'POST only');
+            $msg = json_decode((string)file_get_contents('php://input'), true) ?: [];
+            if (!is_array($msg)) $this->fail(400, 'JSON object expected');
+            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+            [$code, $resp] = $this->app->conductor()->tick($msg, $bearer);
             $this->json($resp, $code);
         } catch (\Throwable $e) {
             $this->json(['error' => self::internalError($e)], 500);

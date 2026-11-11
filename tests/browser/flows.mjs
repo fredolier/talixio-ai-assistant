@@ -600,7 +600,7 @@ const flows = {
     check('pilotage: once paired, the fleet-reports toggle appears with three modes, one selected',
       (await page.$$('#pilot-notify [data-notify]')).length === 3 && (await page.$$('#pilot-notify [data-notify].on')).length === 1);
     // 1.18.0: three tabs, each a list and a pane that scrolls on its own
-    check('pilotage: once paired the pilot has four tabs — Needs you, Agents, Journal, Autonomy', (await page.$$('#pl-tabs .pl-tab')).length === 4 && await page.isVisible('#pl-tabs'));
+    check('pilotage: once paired the pilot has five tabs — Needs you, Agents, Journal, Activity, Autonomy', (await page.$$('#pl-tabs .pl-tab')).length === 5 && await page.isVisible('#pl-tabs'));
     check('pilotage: the Needs you tab counts the two sessions waiting', (await page.textContent('#pl-bd-need')).trim() === '2');
     check('pilotage: Needs you lists them, the decision first with its question and its options as buttons',
       (await page.$$('#pl-need-list .pl-rw[data-nsel^="w:"]')).length === 2 && /Garder le plan A ou B/.test(await page.textContent('#pl-need-detail'))
