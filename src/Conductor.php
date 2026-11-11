@@ -371,7 +371,7 @@ final class Conductor
         // the orchestrator may say "level":"alert"); a session that now waits for the user is an alert line of its own.
         $alert = in_array((string)($msg['level'] ?? ''), ['alert', 'error'], true);
         $newAsk = false;
-        $push = $this->lockedUpdate(function (array $b) use ($agents, $agent, $decision, $title, $text, $silent, $alert, &$newAsk) { // locked: never clobber a concurrent queue drain
+        $push = $this->lockedUpdate(function (array $b) use ($msg, $agents, $agent, $decision, $title, $text, $silent, $alert, &$newAsk) { // locked: never clobber a concurrent queue drain
             $b['last_report'] = time();
             $asks = self::newQuestions($b['agents'] ?? [], $agents); $newAsk = $asks !== '';
             // a session that now waits for the user is news, even on a keep-warm tick
@@ -382,7 +382,14 @@ final class Conductor
                 } unset($na);
                 $b['agents'] = $agents; $b['agents_at'] = time();
             }
-            if ($agent !== '' && $text !== '') $b = $this->appendThread($b, $agent, 'agent', $text, $decision);
+            if ($agent !== '' && $text !== '') { // what kind of return this is: a question, an approval, the answer to a decision, an alert, or a plain status
+                $kind = (string)($msg['thread_kind'] ?? '');
+                if (!in_array($kind, ['question', 'approval', 'answer', 'status', 'alert'], true)) {
+                    $mine = null; foreach ($b['agents'] ?? [] as $x) if (($x['id'] ?? '') === $agent) $mine = $x;
+                    $kind = $alert ? 'alert' : ($decision !== '' ? 'answer' : (!empty($mine['waiting']) ? (($mine['waiting']['kind'] ?? '') === 'approval' ? 'approval' : 'question') : 'status'));
+                }
+                $b = $this->appendThread($b, $agent, 'agent', $text, $decision, '', $kind);
+            }
             $fresh = $text !== '' && !$silent && $text !== (string)($b['last_notified'] ?? '');
             if ($fresh) $b['last_notified'] = $text; // only a notified line updates the mark; silent ticks never poison it
             $mode = self::modeOf($b);
@@ -552,7 +559,7 @@ final class Conductor
             foreach ($reports ?: [[]] as $r) {
                 $kind = (string)($r['kind'] ?? 'status');
                 $m = ['type' => 'report', 'title' => $r['title'] ?? '', 'text' => $r['text'] ?? '', 'agent' => $r['agent'] ?? '', 'decision_id' => $r['decision_id'] ?? '',
-                    'level' => $kind === 'alert' ? 'alert' : '', 'kind' => $kind === 'status' && ($r['text'] ?? '') === '' ? 'tick' : ''];
+                    'level' => $kind === 'alert' ? 'alert' : '', 'thread_kind' => $kind, 'kind' => $kind === 'status' && ($r['text'] ?? '') === '' ? 'tick' : ''];
                 if ($first && $agents !== null) $m['agents'] = $agents;
                 if ($reports === [] ) $m['tick'] = true;
                 $this->inbox($m, $bearer); $first = false; $lastMsg = $m;
@@ -685,10 +692,10 @@ final class Conductor
     }
 
     /** Append one turn to an agent's two-voice thread, keeping only the last THREAD_CAP turns. Returns the new binding. */
-    private function appendThread(array $b, string $id, string $role, string $text, string $decision = '', string $by = ''): array
+    private function appendThread(array $b, string $id, string $role, string $text, string $decision = '', string $by = '', string $kind = ''): array
     {
         $t = $b['threads'][$id] ?? [];
-        $t[] = ['role' => $role === 'agent' ? 'agent' : 'user', 'text' => mb_substr(trim($text), 0, 4000), 'ts' => time()] + ($decision !== '' ? ['decision_id' => $decision] : []) + ($by === 'assistant' ? ['by' => 'assistant'] : []);
+        $t[] = ['role' => $role === 'agent' ? 'agent' : 'user', 'text' => mb_substr(trim($text), 0, 4000), 'ts' => time()] + ($decision !== '' ? ['decision_id' => $decision] : []) + ($by === 'assistant' ? ['by' => 'assistant'] : []) + ($kind !== '' ? ['kind' => $kind] : []);
         if (count($t) > self::THREAD_CAP) $t = array_slice($t, -self::THREAD_CAP);
         $b['threads'][$id] = array_values($t);
         return $b;

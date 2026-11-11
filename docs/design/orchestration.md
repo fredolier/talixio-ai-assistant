@@ -531,7 +531,8 @@ Found by reading the orchestrator's own account after it went silent: its helper
 existing `inbox()` paths (`quiet` flag so one pass is traced once), and returns `{instructions, waiting, problems, next_in}`.
 `problems` is computed by code, not by the model: a `waiting` state without a question, an incomplete question ("not retrieved", < 20
 chars), a decision without options or cost. Every pass — also keep-warm ticks and legacy `report` calls — is appended to `ticks`
-(ring of 100: ts, via, agents, waiting, reports, instructions, problems, note) and shown newest first in the pilot cockpit's **Activity**
-tab, which also flags a silence. Next slices: per-agent classification of each return (question / approval / answer / status) in the
+(ring of 100: ts, via, agents, waiting, reports, instructions, problems, note) and shown newest first under the Journal's **Passes** filter
+(quiet runs folded; no extra tab); a silence is flagged on the status line. Each return in an agent's thread carries a `kind`
+(question | approval | answer | alert | status — given by the orchestrator, else inferred) and the thread tells them apart. Next slices: per-agent classification of each return (question / approval / answer / status) in the
 agent thread, the "needs you" strip with one-click answers, rules proposed from repeated answers, autopilot shadow mode, secret
 rotation/revocation with last-used date, rate limit.

@@ -59,13 +59,17 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
 - **Fleet reports**: how the pilot's reports reach you (see *Channels and notifications*): an in-app badge by default, the
   Journal and the conversations, and optionally push + e-mail.
 
-### Activity: what the orchestrator did, pass after pass
-The **Activity** tab lists every time the orchestrator checked in — also the quiet ones: how many agents it saw, how many were waiting,
-reports and instructions exchanged, and anything it must fix. If it stops checking in, the tab says so (*"No pass for 40 min"*), so a
-silence is visible. The orchestrator now makes **one call per pass** (agents, reports and acknowledgements in; instructions and points to
-fix out). Points to fix are things like a waiting session sent without its question, or a question without its full text: the
-orchestrator is asked to retrieve it from that session before the next pass. Re-connect the pilot (*Connect…*) to give your orchestrator the new
-instructions; the older way keeps working.
+### Passes: what the orchestrator did, pass after pass
+In **Journal**, the **Passes** filter lists every time the orchestrator checked in — also the quiet ones, folded into one line
+(*"12 quiet passes, nothing new"*): agents seen, how many were waiting, reports and instructions exchanged, and anything it must fix. If
+it stops checking in, the status line at the top says so (*"No pass for 40 min"*), so a silence is visible. In each agent's conversation,
+what comes back is told apart: a **Question** or an **Approval** (marked), an **Answer** to a decision, an **Alert**, or a plain
+status (smaller, quieter).
+
+The orchestrator now makes **one call per pass** (agents, reports and acknowledgements in; instructions and points to fix out). Points to
+fix are things like a waiting session sent without its question, or a question without its full text: the orchestrator is asked to
+retrieve it from that session before the next pass. Re-connect the pilot (*Connect…*) to give your orchestrator the new instructions; the
+older way keeps working.
 
 ## Roles
 The catalogue of the roles your assistant can take, grouped into one card per specialization. Each role is a node whose ring shows

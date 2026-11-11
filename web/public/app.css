@@ -1857,7 +1857,10 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .pl-older{display:block;margin:4px auto 8px}
 .pl-day{text-align:center;font-size:.68rem;color:var(--muted);font-weight:700;margin:10px 0 4px}
 .pl-b{max-width:82%;padding:7px 10px;border-radius:10px;margin:5px 0;font-size:.88rem;overflow-wrap:anywhere}
-.pl-b.them{background:var(--sunk)}.pl-b.me{background:var(--accent-soft);margin-left:auto}
+.pl-b.them{background:var(--sunk)}
+.pl-b.k-status{font-size:.8rem;opacity:.85}
+.pl-b.k-question,.pl-b.k-approval{border-left:3px solid var(--accent)}
+.pl-b .pl-pill{display:inline-block;margin-bottom:3px}.pl-b.me{background:var(--accent-soft);margin-left:auto}
 .pl-bt>*:first-child{margin-top:0}.pl-bt>*:last-child{margin-bottom:0}
 .pl-bt.clamp{max-height:9em;overflow:hidden}.pl-b.open .pl-bt.clamp{max-height:none}
 .pl-bm{font-size:.67rem;margin-top:2px}

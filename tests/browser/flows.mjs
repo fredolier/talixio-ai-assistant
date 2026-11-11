@@ -600,7 +600,7 @@ const flows = {
     check('pilotage: once paired, the fleet-reports toggle appears with three modes, one selected',
       (await page.$$('#pilot-notify [data-notify]')).length === 3 && (await page.$$('#pilot-notify [data-notify].on')).length === 1);
     // 1.18.0: three tabs, each a list and a pane that scrolls on its own
-    check('pilotage: once paired the pilot has five tabs — Needs you, Agents, Journal, Activity, Autonomy', (await page.$$('#pl-tabs .pl-tab')).length === 5 && await page.isVisible('#pl-tabs'));
+    check('pilotage: once paired the pilot has four tabs — Needs you, Agents, Journal, Autonomy', (await page.$$('#pl-tabs .pl-tab')).length === 4 && await page.isVisible('#pl-tabs'));
     check('pilotage: the Needs you tab counts the two sessions waiting', (await page.textContent('#pl-bd-need')).trim() === '2');
     check('pilotage: Needs you lists them, the decision first with its question and its options as buttons',
       (await page.$$('#pl-need-list .pl-rw[data-nsel^="w:"]')).length === 2 && /Garder le plan A ou B/.test(await page.textContent('#pl-need-detail'))
@@ -645,6 +645,8 @@ const flows = {
     check('pilotage: a journal line opens its full text in the pane', /browser fleet report/.test(await page.textContent('#pl-jr-detail')) || (await page.$$('#pl-jr-list .pl-rw')).length >= 2);
     await page.click('#pl-jr-f [data-f=alert]');
     check('pilotage: the Alerts filter keeps only alerts', (await page.$$eval('#pl-jr-list .pl-rw .pl-pill', e => e.every(x => x.classList.contains('alert')))));
+    await page.click('#pl-jr-f [data-f=pass]');
+    check('pilotage: the Journal can show the orchestrator passes instead of reports', await page.isVisible('#pl-jr-list'));
     await page.click('#pl-jr-f [data-f=all]');
     check('pilotage: the status line counts what waits for the user', /2 /.test(await page.textContent('#pilot-orch-status')) && /wait|attend/i.test(await page.textContent('#pilot-orch-status')));
     await page.click('#pilot-status-btn'); await page.waitForFunction(() => /dossier-conseil/.test(document.querySelector('#pilot-status-text').textContent), null, { timeout: 6000 });

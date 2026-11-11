@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.1 (2026-11-11)
+
+- Pilotage, autonomous pilot: **cleaner, no extra tab**. The separate *Activity* tab added in 1.35.0 is gone: the orchestrator's passes are a **Passes** filter of the Journal, with quiet passes folded into one line, and a silence is flagged on the status line at the top. In each agent's conversation, what comes back is now told apart — Question or Approval (marked), Answer to a decision, Alert, or a plain status (smaller, quieter); the orchestrator can state the kind, otherwise it is inferred. Tested with simulated passes only; not tried with a real fleet.
+
 ## 1.35.0 (2026-11-11)
 
 - Pilotage: **Activity** tab and a single typed call for the orchestrator. Every pass of the orchestrator — also the quiet ones — is now recorded and listed (agents seen, waiting, reports and instructions exchanged, points to fix), and a silence is flagged. The orchestrator gets a new endpoint, `POST /api/conductor/tick`, that replaces report + acknowledgement + pull in one call and answers with its instructions and a list of **problems found by the code** (a waiting session without its question, a truncated question, a decision without options or cost) so it fixes them on the next pass. It uses the same secret as the pairing, no new key; the older calls still work. Re-connect the pilot to give your orchestrator the new instructions. Tested with simulated passes only, not with a real orchestrator or a real fleet.

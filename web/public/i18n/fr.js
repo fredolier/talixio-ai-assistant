@@ -3361,5 +3361,8 @@ window.I18N.fr = {
   "nothing new": "rien de neuf",
   "pass": "passage",
   "report": "rapport",
-  "No pass recorded yet. Each time the orchestrator checks in, it shows up here.": "Aucun passage enregistré. Chaque fois que l'orchestrateur se manifeste, il apparaît ici."
+  "No pass recorded yet. Each time the orchestrator checks in, it shows up here.": "Aucun passage enregistré. Chaque fois que l'orchestrateur se manifeste, il apparaît ici.",
+  "Passes": "Passages",
+  "{n} quiet passes, nothing new": "{n} passages calmes, rien de neuf",
+  "Each line is one check-in of the orchestrator, even when nothing happened.": "Chaque ligne est un passage de l'orchestrateur, même quand il ne s'est rien passé."
 };

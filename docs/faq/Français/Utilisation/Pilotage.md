@@ -63,13 +63,17 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
 - **Rapports de la flotte** : comment les rapports du pilote vous parviennent (voir *Canaux et notifications*) : une pastille dans
   l'app par défaut, le Journal et les conversations, et en option push + e-mail.
 
-### Activité : ce que l'orchestrateur a fait, passage après passage
-L'onglet **Activité** liste chaque passage de l'orchestrateur — y compris les passages silencieux : combien d'agents il a vus, combien
-attendaient, les rapports et instructions échangés, et ce qu'il doit corriger. S'il ne passe plus, l'onglet le dit (*« Aucun passage depuis
-40 min »*) : un silence se voit. L'orchestrateur fait désormais **un seul appel par passage** (agents, rapports et accusés de réception en
-entrée ; instructions et points à corriger en sortie). Les points à corriger sont par exemple une session en attente envoyée sans sa
-question, ou une question sans son texte complet : l'orchestrateur doit la récupérer auprès de la session avant le passage suivant.
-Reconnectez le pilote (*Connecter…*) pour donner les nouvelles instructions à votre orchestrateur ; l'ancienne méthode continue de fonctionner.
+### Passages : ce que l'orchestrateur a fait, passage après passage
+Dans **Journal**, le filtre **Passages** liste chaque passage de l'orchestrateur — y compris les passages silencieux, repliés en une
+ligne (*« 12 passages calmes, rien de neuf »*) : agents vus, combien attendaient, rapports et instructions échangés, et ce qu'il doit
+corriger. S'il ne passe plus, la ligne d'état en haut le dit (*« Aucun passage depuis 40 min »*) : un silence se voit. Dans la
+conversation de chaque agent, ce qui revient est distingué : une **Question** ou une **Approbation** (marquées), une **Réponse** à
+une décision, une **Alerte**, ou un simple statut (plus petit, plus discret).
+
+L'orchestrateur fait désormais **un seul appel par passage** (agents, rapports et accusés de réception en entrée ; instructions et
+points à corriger en sortie). Les points à corriger sont par exemple une session en attente envoyée sans sa question, ou une question
+sans son texte complet : l'orchestrateur doit la récupérer auprès de la session avant le passage suivant. Reconnectez le pilote
+(*Connecter…*) pour donner les nouvelles instructions à votre orchestrateur ; l'ancienne méthode continue de fonctionner.
 
 ## Rôles
 Le catalogue des rôles que votre assistant peut endosser, groupés en une carte par spécialisation. Chaque rôle est un nœud dont

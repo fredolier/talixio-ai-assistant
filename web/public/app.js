@@ -6263,7 +6263,7 @@ function plRender(info) {
   plBadge('#pl-bd-journal', info.journalUnread || 0);
   $('#pl-n-agents').textContent = agents.length || ''; $('#pl-n-journal').textContent = (info.reports || []).length || '';
   document.querySelectorAll('#pl-tabs .pl-tab').forEach(b => { b.classList.toggle('on', b.dataset.pl === PL.tab); b.setAttribute('aria-selected', String(b.dataset.pl === PL.tab)); });
-  plRenderNeed(); plRenderAgents(); plRenderJournal(); plRenderActivity();
+  plRenderNeed(); plRenderAgents(); plRenderJournal();
   if (PL.tab === 'autonomy') plLoadAuto();
 }
 function plShowTab(name) {
@@ -6278,23 +6278,22 @@ function plShowTab(name) {
 const plOpen = id => $(id)?.classList.add('detail');
 
 // -- Needs you: what waits for the user, and what was decided (who answered what) --
-/** What the orchestrator did on each pass — also the quiet ones — so a silence is visible as a silence. */
-function plRenderActivity() {
-  const box = $('#pl-activity'); if (!box) return;
-  const info = PL.info, ticks = info.ticks || [];
-  const gap = info.silentFor ? `<p class="pl-empty">${esc(t('No pass for {n} min: the orchestrator may be asleep.', { n: Math.round(info.silentFor / 60) }))}</p>` : '';
+/** The orchestrator's passes for the Journal's "Passes" filter: quiet ones in a row are folded into one line. */
+function plPassRows(info) {
   const line = k => {
     const bits = [pN('1 agent', '{n} agents', k.agents || 0)];
     if (k.waiting) bits.push(pN('1 waiting', '{n} waiting', k.waiting));
     if (k.reports) bits.push(pN('1 report', '{n} reports', k.reports));
     if (k.instructions) bits.push(pN('1 instruction handed over', '{n} instructions handed over', k.instructions));
     if (k.problems) bits.push(pN('1 point to fix', '{n} points to fix', k.problems));
-    if (!k.waiting && !k.reports && !k.instructions && !k.problems) bits.push(t('nothing new'));
     return bits.join(' · ');
   };
-  box.innerHTML = gap + (ticks.length ? ticks.map(k => `<div class="pl-rw"><span class="pl-pill">${esc(k.via === 'tick' ? t('pass') : t('report'))}</span>
-      <div><div class="pl-n">${esc(line(k))}</div>${k.note ? `<div class="pl-s no-i18n">${esc(k.note)}</div>` : ''}</div><div class="pl-r">${esc(pilotAgo(k.ts))}</div></div>`).join('')
-    : `<div class="pl-empty">${esc(t('No pass recorded yet. Each time the orchestrator checks in, it shows up here.'))}</div>`);
+  const quiet = k => !k.reports && !k.instructions && !k.problems && !k.note;
+  const out = []; let run = [];
+  const flush = () => { if (!run.length) return; out.push(run.length === 1 ? { k: run[0], text: line(run[0]) + ' · ' + t('nothing new') } : { k: run[0], text: t('{n} quiet passes, nothing new', { n: run.length }) }); run = []; };
+  for (const k of info.ticks || []) { if (quiet(k)) run.push(k); else { flush(); out.push({ k, text: line(k) }); } }
+  flush();
+  return out;
 }
 function plRenderNeed() {
   const info = PL.info, list = $('#pl-need-list'), det = $('#pl-need-detail'); if (!list) return;
@@ -6473,7 +6472,8 @@ function plPaintAgent(a) {
   const bubbles = vis.map(x => {
     const day = plDay(x.ts), sep = day !== last ? `<div class="pl-day">${esc(day)}</div>` : ''; last = day;
     const mine = x.role !== 'agent', who = !mine ? a.name : x.by === 'assistant' ? t('Assistant') : t('You');
-    return sep + `<div class="pl-b ${mine ? 'me' : 'them'}"><div class="pl-bt no-i18n${(x.text || '').length > 500 ? ' clamp' : ''}">${md(x.text || '')}</div>${(x.text || '').length > 500 ? `<a href="#" class="small" data-more>${esc(t('Show all'))}</a>` : ''}
+    const kd = !mine ? (x.kind || (x.decision_id ? 'answer' : 'status')) : '', kl = { question: t('Question'), approval: t('Approval'), answer: t('Answer'), alert: t('Alert') }[kd] || '';
+    return sep + `<div class="pl-b ${mine ? 'me' : 'them'}${kd ? ' k-' + kd : ''}">${kl ? `<span class="pl-pill${kd === 'alert' ? ' alert' : ''}">${esc(kl)}</span>` : ''}<div class="pl-bt no-i18n${(x.text || '').length > 500 ? ' clamp' : ''}">${md(x.text || '')}</div>${(x.text || '').length > 500 ? `<a href="#" class="small" data-more>${esc(t('Show all'))}</a>` : ''}
       <div class="pl-bm muted"><span class="no-i18n">${esc(who)}</span> · ${esc(pilotAgo(x.ts))}${x.decision_id ? ` · <span class="no-i18n">${esc(x.decision_id)}</span>` : ''}</div></div>`;
   }).join('');
   det.innerHTML = `<div class="pl-ph">${plBackBtn()}${plDot(a)}<span class="pl-t no-i18n">${esc(a.name)}</span><span class="pl-sp muted small no-i18n">${esc((a.task && a.task !== '—' ? a.task + ' · ' : '') + (a.machine || '') + ' · ' + plSeen(a))}</span>${a.url ? `<a class="btn small" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : ''}</div>
@@ -6506,6 +6506,13 @@ function plRenderJournal() {
   const list = $('#pl-jr-list'), det = $('#pl-jr-detail'); if (!list) return;
   const q = PL.jq.trim().toLowerCase();
   document.querySelectorAll('#pl-jr-f .pl-chip').forEach(c => c.classList.toggle('on', PL.jf === c.dataset.f));
+  if (PL.jf === 'pass') { // each check-in of the orchestrator, the quiet ones folded
+    const rows = plPassRows(PL.info), gap = PL.info.silentFor ? `<div class="pl-empty">${esc(t('No pass for {n} min: the orchestrator may be asleep.', { n: Math.round(PL.info.silentFor / 60) }))}</div>` : '';
+    list.innerHTML = gap + (rows.length ? rows.map(r => `<div class="pl-rw"><span class="pl-pill">${esc(t('pass'))}</span><div><div class="pl-n">${esc(r.text)}</div>${r.k.note ? `<div class="pl-s no-i18n">${esc(r.k.note)}</div>` : ''}</div><div class="pl-r">${esc(pilotAgo(r.k.ts))}</div></div>`).join('')
+      : `<div class="pl-empty">${esc(t('No pass recorded yet. Each time the orchestrator checks in, it shows up here.'))}</div>`);
+    det.innerHTML = `<div class="pl-empty pl-center">${esc(t('Each line is one check-in of the orchestrator, even when nothing happened.'))}</div>`;
+    return;
+  }
   const all = (PL.info.reports || []).slice().reverse().filter(r => (PL.jf === 'all' || (r.kind || 'summary') === PL.jf) && (!q || `${r.title} ${r.text}`.toLowerCase().includes(q)));
   const rows = all.slice(0, PL.jmax), key = r => `${r.ts}:${r.title}`;
   if (!rows.some(r => key(r) === PL.jsel)) PL.jsel = rows[0] ? key(rows[0]) : null;
@@ -6568,6 +6575,7 @@ async function pilotAgents() {
     parts.push(t('last report {a}', { a: pilotAgo(info.lastReport) }));
     if (on) parts.push(t('sees {a} on {b}', { a: pN('1 agent', '{n} agents', info.agentCount || 0), b: pN('1 machine', '{n} machines', info.machines || 0) }));
     if (on && info.waiting) parts.push(pN('1 waiting for you', '{n} waiting for you', info.waiting));
+    if (on && info.silentFor) parts.push('⚠ ' + t('No pass for {n} min: the orchestrator may be asleep.', { n: Math.round(info.silentFor / 60) }));
     $('#pilot-orch-status').textContent = on ? parts.join(' · ')
       : t('Not paired yet. Pair your autonomous pilot to delegate work across your machines.');
     renderPilotNotify(info);
