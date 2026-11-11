@@ -1935,3 +1935,28 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .fed-msg{border-left:3px solid var(--line);padding:4px 10px}
 .fed-msg.unread{border-left-color:var(--accent)}
 .fed-body{white-space:normal;word-break:break-word}
+
+/* pilot cockpit 1.36: calm status bar, one clear thing to do per question */
+.pilot-status{padding:10px 14px}
+.pilot-status-head{flex-wrap:wrap;align-items:center;gap:4px 14px}
+.pilot-status-head h3{font-size:1rem}
+.pilot-status-head #pilot-orch-status{flex:1;min-width:0}
+.pilot-cfg{margin-top:6px}
+.pilot-cfg>summary{cursor:pointer;font-size:.78rem;color:var(--muted);list-style:none;display:inline-block}
+.pilot-cfg>summary::-webkit-details-marker{display:none}
+.pilot-cfg>summary::before{content:"⚙ "}
+.pilot-cfg[open]>summary{margin-bottom:8px}
+.pilot-cfg .pilot-notify{margin-top:10px;padding-top:10px}
+.pl-ask{display:flex;flex-direction:column;gap:14px}
+.pl-q.big{font-size:1.1rem;line-height:1.45;font-weight:500;max-height:none}
+.pl-opts.stack{flex-direction:column;align-items:stretch;margin:0}
+.pl-opts.stack .btn{text-align:left;padding:11px 14px;white-space:normal;height:auto}
+.pl-cost{font-size:.85rem;color:var(--muted);border-left:3px solid color-mix(in srgb,#d9730d 60%,var(--line));padding:2px 0 2px 10px}
+.pl-appr{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;background:var(--sunk)}
+.pl-appr ol{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:3px}
+.pl-lock{font-weight:600}
+.pl-prop-h{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:flex;gap:8px;align-items:center}
+.pl-prop{align-items:flex-start}
+.pl-free{margin:0}
+@media (max-width:640px){.pl-q.big{font-size:1.02rem}.pilot-status-head #pilot-orch-status{flex-basis:100%}}
+.pl-ask>.btn.small{align-self:flex-start}

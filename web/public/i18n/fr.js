@@ -3364,5 +3364,10 @@ window.I18N.fr = {
   "No pass recorded yet. Each time the orchestrator checks in, it shows up here.": "Aucun passage enregistré. Chaque fois que l'orchestrateur se manifeste, il apparaît ici.",
   "Passes": "Passages",
   "{n} quiet passes, nothing new": "{n} passages calmes, rien de neuf",
-  "Each line is one check-in of the orchestrator, even when nothing happened.": "Chaque ligne est un passage de l'orchestrateur, même quand il ne s'est rien passé."
+  "Each line is one check-in of the orchestrator, even when nothing happened.": "Chaque ligne est un passage de l'orchestrateur, même quand il ne s'est rien passé.",
+  "Approval: only you can give it": "Approbation : vous seul pouvez la donner",
+  "Approve the action there": "Approuvez l'action dans cette session",
+  "Nothing can be done from here.": "Rien ne peut se faire d'ici.",
+  "Or in your own words…": "Ou avec vos mots…",
+  "See the conversation": "Voir la conversation"
 };

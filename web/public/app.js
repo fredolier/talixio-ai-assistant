@@ -6314,23 +6314,24 @@ function plRenderNeed() {
   if (wa) {
     const w = wa.waiting, draft = PL.draft['n:' + wa.id] || '', done = w.kind === 'approval';
     const incomplete = !done && plIncomplete(w);
-    // in this order: who asks, the question itself, how to answer (one-tap options, or free words), what the pilot would say, what a wrong choice costs
-    det.innerHTML = `<div class="pl-ph">${plBackBtn()}${plDot(wa)}<span class="pl-t no-i18n">${esc(wa.name)}</span><span class="pl-pill">${esc(plKind(w))}</span>${w.type ? `<span class="pl-pill no-i18n">${esc(w.type)}</span>` : ''}${w.decision_id ? `<span class="pl-pill no-i18n" title="${esc(t('Decision id'))}">${esc(w.decision_id)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(wa.ts))}</span></div>
-      <div class="pl-det pl-ask"><div class="pl-who"><b class="no-i18n">${esc(wa.name)}</b> <span>${esc(done ? t('needs an approval from you') : t('is asking you:'))}</span></div>
-        <div class="pl-q no-i18n">${esc(w.question)}</div>
-        ${incomplete ? `<div class="pl-hint"><span>${esc(t('This may not be the full question: the orchestrator only passed on a summary or no options. Ask it for the exact text before you decide.'))}</span><button type="button" class="btn small" data-clarify="${esc(wa.id)}">${esc(t('Ask the orchestrator for the full question'))}</button></div>` : ''}
-        ${done ? `<p class="muted small">${esc(t('Only you can do this, in that session: open it and give the approval. Nothing can be done from here.'))}</p>${wa.url ? `<a class="btn small" href="${esc(wa.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : ''}`
-          : `<h5>${esc(t('Your answer'))}</h5>
-        ${w.options?.length ? `<div class="pl-opts">${w.options.map(o => `<button type="button" class="btn primary no-i18n" data-answer="${esc(o)}" data-agent-id="${esc(wa.id)}">${esc(o)}</button>`).join('')}</div><p class="muted small">${esc(t('One tap sends that answer. Or answer in your own words:'))}</p>`
-          : `<p class="muted small">${esc(t('No options were given: answer in your own words.'))}</p>`}
-        <div class="pl-free"><textarea id="pl-need-input" rows="2" data-nid="${esc(wa.id)}" placeholder="${esc(t('Your answer…'))}">${esc(draft)}</textarea>
+    // order: who asks → the question → what to do (approval: go to the session; decision: the pilot's suggestion, one-tap options, free words) → what a wrong choice costs
+    const prop = w.proposal, aid = esc(wa.id);
+    const opts = w.options?.length ? `<div class="pl-opts stack">${w.options.map(o => `<button type="button" class="btn ${prop ? '' : 'primary'} no-i18n" data-answer="${esc(o)}" data-agent-id="${aid}">${esc(o)}</button>`).join('')}</div>` : '';
+    const act = done
+      ? `<div class="pl-appr"><div class="pl-lock">🔒 ${esc(t('Approval: only you can give it'))}</div>
+          <ol><li>${esc(t('Open the session'))}${wa.name ? ` <b class="no-i18n">${esc(wa.name)}</b>` : ''}</li><li>${esc(t('Approve the action there'))}</li></ol>
+          ${wa.url ? `<a class="btn primary" href="${esc(wa.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : `<p class="muted small">${esc(t('Nothing can be done from here.'))}</p>`}</div>`
+      : `${prop ? `<div class="pl-prop"><div class="pl-prop-h">${esc(t('The pilot would answer'))} <span class="pl-pill no-i18n">${Math.round(prop.confidence * 100)}%</span></div><div class="pl-q no-i18n">${esc(prop.answer)}</div>${prop.rationale ? `<p class="muted small no-i18n">${esc(prop.rationale)}</p>` : ''}<button type="button" class="btn primary no-i18n" data-answer="${esc(prop.answer)}" data-agent-id="${aid}">${esc(t('Send this answer'))}</button></div>` : ''}
+        ${opts}
+        <div class="pl-free"><textarea id="pl-need-input" rows="2" data-nid="${aid}" placeholder="${esc(opts || prop ? t('Or in your own words…') : t('Your answer…'))}">${esc(draft)}</textarea>
           <button type="button" class="btn ghost icon dictate-btn" id="pl-need-mic" aria-label="${esc(t('Dictate'))}" title="${esc(t('Dictate: speak and I type it here'))}">🎙️</button>
-          <button type="button" class="btn primary" data-need-send="${esc(wa.id)}">${esc(t('Send'))}</button></div>
-        ${w.proposal ? `<div class="pl-prop"><b>${esc(t('What the pilot would answer'))}</b> · <span class="no-i18n">${Math.round(w.proposal.confidence * 100)}%</span><div class="pl-q no-i18n">${esc(w.proposal.answer)}</div>${w.proposal.rationale ? `<p class="muted small no-i18n">${esc(w.proposal.rationale)}</p>` : ''}<button type="button" class="btn small no-i18n" data-answer="${esc(w.proposal.answer)}" data-agent-id="${esc(wa.id)}">${esc(t('Send this answer'))}</button></div>`
-          : `<p class="muted small">${esc(t('The pilot has no proposal for this one.'))}</p>`}
-        <p class="muted small"><span>${esc(t('If it goes wrong:'))}</span> <span class="no-i18n">${w.cost ? esc(w.cost) : '—'}</span>${w.cost ? '' : ` <span>${esc(t('(the orchestrator did not say)'))}</span>`}</p>
-        <p class="muted small">${esc(t('Your answer goes to the agent through the pilot, with the decision id, and is written in the journal of decisions: who answered what.'))}</p>
-        <button type="button" class="btn small" data-open-agent="${esc(wa.id)}">${esc(t('Answer another way…'))}</button>`}</div>`;
+          <button type="button" class="btn primary" data-need-send="${aid}">${esc(t('Send'))}</button></div>`;
+    det.innerHTML = `<div class="pl-ph">${plBackBtn()}${plDot(wa)}<span class="pl-t no-i18n">${esc(wa.name)}</span><span class="pl-pill">${esc(plKind(w))}</span>${w.type ? `<span class="pl-pill no-i18n">${esc(w.type)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(wa.ts))}</span></div>
+      <div class="pl-det pl-ask"><div class="pl-q big no-i18n">${esc(w.question)}</div>
+        ${incomplete ? `<div class="pl-hint"><span>${esc(t('This may not be the full question: the orchestrator only passed on a summary or no options. Ask it for the exact text before you decide.'))}</span><button type="button" class="btn small" data-clarify="${esc(wa.id)}">${esc(t('Ask the orchestrator for the full question'))}</button></div>` : ''}
+        ${w.cost ? `<div class="pl-cost"><b>${esc(t('If it goes wrong:'))}</b> <span class="no-i18n">${esc(w.cost)}</span></div>` : ''}
+        ${act}
+        <button type="button" class="btn ghost small" data-open-agent="${aid}">${esc(t('See the conversation'))} →</button></div>`;
     const inp = $('#pl-need-input');
     if (inp) {
       inp.addEventListener('input', () => { PL.draft['n:' + wa.id] = inp.value; });
@@ -6467,7 +6468,9 @@ function plPaintAgent(a) {
   const det = $('#pl-ag-detail'), old = $('#pl-msgs'), oldIn = $('#pl-ag-input');
   if (oldIn && PL.loaded) PL.draft[PL.loaded] = oldIn.value;
   const atBottom = !old || PL.loaded !== a.id || old.scrollHeight - old.scrollTop - old.clientHeight < 40, keep = old?.scrollTop || 0;
-  const turns = PL.threads[a.id] || [], shown = PL.shown[a.id] || 40, vis = turns.slice(-shown), w = a.waiting;
+  let turns = PL.threads[a.id] || [];
+  if (a.waiting) { const k = turns.length - 1, z = turns[k]; if (z && z.role === 'agent' && (z.kind === 'question' || z.kind === 'approval')) turns = turns.slice(0, k); } // pinned above, not twice
+  const shown = PL.shown[a.id] || 40, vis = turns.slice(-shown), w = a.waiting;
   let last = '';
   const bubbles = vis.map(x => {
     const day = plDay(x.ts), sep = day !== last ? `<div class="pl-day">${esc(day)}</div>` : ''; last = day;
@@ -6561,6 +6564,7 @@ function plWire() {
 async function pilotAgents() {
   plWire();
   if (!pilotAgents.wired) { pilotAgents.wired = true;
+    $('#pilot-cfg').addEventListener('toggle', e => { e.currentTarget.dataset.touched = '1'; });
     $('#pilot-status-btn').onclick = () => pilotStatusFile($('#pilot-status-file').hidden);
     $('#pilot-status-copy').onclick = () => copyText($('#pilot-status-text').textContent);
   }
@@ -6578,6 +6582,7 @@ async function pilotAgents() {
     if (on && info.silentFor) parts.push('⚠ ' + t('No pass for {n} min: the orchestrator may be asleep.', { n: Math.round(info.silentFor / 60) }));
     $('#pilot-orch-status').textContent = on ? parts.join(' · ')
       : t('Not paired yet. Pair your autonomous pilot to delegate work across your machines.');
+    const cfg = $('#pilot-cfg'); if (cfg && !on && !cfg.dataset.touched) cfg.open = true;
     renderPilotNotify(info);
     plRender(info);
   });

@@ -575,6 +575,7 @@ const flows = {
     // the Agents tab leads, with the push-to-talk composer and the orchestrator panel moved here
     check('pilotage: Agents is the opening tab', await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-status'));
     check('pilotage: there is no permanent talk-to-the-pilot card any more', !(await page.$('#view-pilotage .pilot-talk')));
+    await page.evaluate(() => { document.querySelector('#pilot-cfg').open = true; });
     await page.click('#pilot-orch-connect');
     await page.waitForSelector('#pilot-orch-steps:not([hidden])', { timeout: 4000 });
     check('pilotage: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#pilot-orch-steps')));
@@ -605,8 +606,8 @@ const flows = {
     check('pilotage: Needs you lists them, the decision first with its question and its options as buttons',
       (await page.$$('#pl-need-list .pl-rw[data-nsel^="w:"]')).length === 2 && /Garder le plan A ou B/.test(await page.textContent('#pl-need-detail'))
       && (await page.$$('#pl-need-detail [data-answer]')).length === 2 && /deux jours de reprise/.test(await page.textContent('#pl-need-detail')));
-    check('pilotage: a waiting question says who asks, then the question, then the options, a free-text answer, the cost',
-      await (async () => { const h = await page.innerHTML('#pl-need-detail .pl-ask'); const at = r => h.search(r); return at(/pl-who/) >= 0 && at(/pl-who/) < at(/pl-q/) && at(/pl-q/) < at(/data-answer/) && at(/data-answer/) < at(/pl-need-input/) && at(/pl-need-input/) < at(/If it goes wrong/); })()
+    check('pilotage: a waiting question shows the question, what a wrong choice costs, then the options and a free-text answer',
+      await (async () => { const h = await page.innerHTML('#pl-need-detail .pl-ask'); const at = r => h.search(r); return at(/pl-q/) >= 0 && at(/pl-q/) < at(/If it goes wrong/) && at(/If it goes wrong/) < at(/data-answer/) && at(/data-answer/) < at(/pl-need-input/); })()
       && await page.isVisible('#pl-need-input') && await page.isVisible('#pl-need-mic'));
     await page.click('#pl-need-list .pl-rw[data-nsel="w:w2"]');
     check('pilotage: an approval offers no answer buttons, and says only the user can give it',
@@ -649,6 +650,7 @@ const flows = {
     check('pilotage: the Journal can show the orchestrator passes instead of reports', await page.isVisible('#pl-jr-list'));
     await page.click('#pl-jr-f [data-f=all]');
     check('pilotage: the status line counts what waits for the user', /2 /.test(await page.textContent('#pilot-orch-status')) && /wait|attend/i.test(await page.textContent('#pilot-orch-status')));
+    await page.evaluate(() => { document.querySelector('#pilot-cfg').open = true; });
     await page.click('#pilot-status-btn'); await page.waitForFunction(() => /dossier-conseil/.test(document.querySelector('#pilot-status-text').textContent), null, { timeout: 6000 });
     const stx = await page.textContent('#pilot-status-text');
     check('pilotage: the Status file button shows the permanent status (agents, pending question, no secret) and where it lives',

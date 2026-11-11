@@ -9,12 +9,12 @@ A glance at the library of the current space: how much it holds and how it is do
 ## Your autonomous pilot
 The pilot is an orchestrator (a Claude Code session) that supervises agents on your machines and reports to Talixio.
 - The **status card** says whether it is connected, when it last reported and how many agents it sees on how many machines,
-  and how many wait for you. **Re-pair…** and **Disconnect** are there, with the **Fleet reports** switch (In-app badge, Push +
+  and how many wait for you, on a single line. Under **⚙ Settings**: **Status file**, **Re-pair…**, **Disconnect** and the **Fleet reports** switch (In-app badge, Push +
   e-mail, Off). Pairing works either by a webhook the orchestrator creates, or, for a plain local session, by *polling* Talixio. If a connected orchestrator says nothing for 30 minutes, the connection panel shows **Silent for N min — re-pair it** (typically its helper files were lost): use *Re-pair…*. Each agent row shows when the orchestrator last heard from the session itself ("no news", in red after a day, when it has never heard): the orchestrator is told to ask the sessions for a status rather than answer from memory, and to wait for their replies before saying nobody answered. The pairing prompt now has it keep its files in `~/.config/talixio-orchestrator/` and acknowledge each instruction, so none is lost on a failed response.
 - To give the pilot an instruction, type or dictate it in the chat (it passes the same privacy checks as every other dispatch). In the Autonomy tab, the 🎙️ on *Your priorities* and *Standing rules* lets you dictate them aloud.
 - Three tabs, each with a list on the left and a pane on the right that scrolls on its own — the page never grows with the number
   of messages. On a phone the pane replaces the list, with « ‹ Back ». Each tab carries a count:
-  - **Needs you**: the sessions that wait for you, each with the question as it was asked, its level (L1–L5), the options as
+  - **Needs you** (the question first and large, then what a wrong choice costs, then one big button per option, the pilot's suggestion on top when it has one, and free words or voice below; an approval shows a lock and two steps — open the session, approve there): the sessions that wait for you, each with the question as it was asked, its level (L1–L5), the options as
     buttons and the cost of a wrong choice. A **decision** you answer with a button (or *Answer another way…*, which opens the
     agent's conversation); an **approval** (a click only you can give, in that session, e.g. a revoked token) has no button:
     open the session; an **instruction** is for you to tell the agent what to do next. Under *Decided recently* you see **who

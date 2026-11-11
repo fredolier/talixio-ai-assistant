@@ -10,13 +10,13 @@ dans *Fichiers*.
 ## Votre pilote autonome
 Le pilote est un orchestrateur (une session Claude Code) qui supervise des agents sur vos machines et fait ses rapports à Talixio.
 - La **carte d'état** dit s'il est connecté, quand il a fait son dernier rapport, combien d'agents il voit sur combien de machines,
-  et combien attendent votre réponse. **Reconnecter…** et **Déconnecter** y sont, avec l'interrupteur **Rapports de la flotte**
+  et combien attendent votre réponse, sur une seule ligne. Sous **⚙ Réglages** : **Fichier d'état**, **Reconnecter…**, **Déconnecter** et l'interrupteur **Rapports de la flotte**
   (Pastille dans l'app, Push + e-mail, Désactivée). Le jumelage se fait soit par un webhook que crée l'orchestrateur, soit, pour
   une simple session locale, en *interrogeant* Talixio à intervalle régulier. Si un orchestrateur connecté ne dit rien pendant 30 minutes, le panneau de connexion affiche **Silencieux depuis N min — ré-appairez-le** (en général ses fichiers d'aide ont disparu) : utilisez *Re-pair…*. L'invite d'appairage lui fait désormais ranger ses fichiers dans `~/.config/talixio-orchestrator/` et accuser réception de chaque instruction, pour qu'aucune ne soit perdue si une réponse échoue.
 - Pour donner une consigne au pilote, écrivez-la ou dictez-la dans le chat (mêmes contrôles de confidentialité que toute autre consigne envoyée). Dans l'onglet Autonomie, le 🎙️ de *Vos priorités* et de *Règles permanentes* permet de les dicter à voix haute.
 - Trois onglets, chacun avec une liste à gauche et un volet à droite qui défile seul : la page ne grandit jamais avec le nombre de
   messages. Sur téléphone, le volet remplace la liste, avec « ‹ Retour ». Chaque onglet porte un compteur :
-  - **À vous** : les sessions qui attendent votre réponse, chacune avec la question telle qu'elle a été posée, son niveau (L1–L5),
+  - **À vous** (la question d'abord et en grand, puis ce que coûterait un mauvais choix, puis un gros bouton par option, la suggestion du pilote en tête quand il en a une, et les mots libres ou la voix dessous ; une validation montre un cadenas et deux étapes — ouvrir la session, valider là-bas) : les sessions qui attendent votre réponse, chacune avec la question telle qu'elle a été posée, son niveau (L1–L5),
     les options en boutons et le coût d'un mauvais choix. Une **décision** se répond avec un bouton (ou *Répondre autrement…*, qui
     ouvre la conversation de l'agent) ; une **validation** (un clic que vous seul pouvez donner, dans cette session, par exemple un
     jeton révoqué) n'a pas de bouton : ouvrez la session ; une **instruction**, c'est à vous de dire à l'agent quoi faire ensuite.

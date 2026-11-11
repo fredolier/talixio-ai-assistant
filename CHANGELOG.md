@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.2 (2026-11-11)
+
+- Pilotage, autonomous pilot: **a calmer, clearer screen to answer from**. The tall status card is now one line (settings — status file, connect/disconnect, report mode — are folded under ⚙ Settings). In *Needs you*, each question shows the question first and large, then what a wrong choice costs, then what to do: one big button per option, the pilot's suggestion on top when it has one, free words or voice below; the boilerplate is gone. An **approval** is now unmistakable: a lock, two steps (open the session, approve there) and an *Open the session* button. In an agent's conversation, the waiting question is no longer shown twice. Checked with screenshots of simulated data (desktop and phone); not tried with a real fleet.
+
 ## 1.35.1 (2026-11-11)
 
 - Pilotage, autonomous pilot: **cleaner, no extra tab**. The separate *Activity* tab added in 1.35.0 is gone: the orchestrator's passes are a **Passes** filter of the Journal, with quiet passes folded into one line, and a silence is flagged on the status line at the top. In each agent's conversation, what comes back is now told apart — Question or Approval (marked), Answer to a decision, Alert, or a plain status (smaller, quieter); the orchestrator can state the kind, otherwise it is inferred. Tested with simulated passes only; not tried with a real fleet.
