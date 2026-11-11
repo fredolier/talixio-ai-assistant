@@ -36,7 +36,7 @@ final class Tools
         'jobs' => [['delegate', 'list_jobs', 'continue_job', 'cancel_job', 'archive_job', 'schedule_job'], '/job|recherch|research|cherche|enquête|compar|analys|étude|study|arrière-plan|background|rapport|report|veille|approfondi|trouve|find|liste d|list of/iu', 'background jobs: long research and reports'],
         'director' => [['direct', 'directive_', 'conductor_', 'fleet_'], '/directive|director|directeu?r|équipe|\bteam\b|en parallèle|in parallel|plusieurs (agents|rôles|workers)|several (agents|roles|workers)|worker|mission|chantier|orchestr|fan.?out|à la (fois|chaîne)|chacun|chaque (poster|contrat|concurrent|produit|item)|claude.?code|code session|session de code|agent de code|coding agent|conductor|chef d.orchestre|\bfleet\b|flotte|cloud session|session distante|remote control|priorit(y|ies|és)|\bagents?\b|pilote/iu', 'the director: run a team of worker roles toward one goal, delegate one to a Claude Code session, or drive a cloud orchestrator over the wider fleet'],
         'shell' => [['shell_', 'script_'], '/script|outil|\btools?\b|simulat|commande|command|shell|code|python|calcul|comput|csv|excel|xlsx|json|convert|graph|chart|zip|statisti/iu', 'run code in a sandbox (calculations, files, conversions)'],
-        'assistants' => [['peer_'], '/assistant de|assistants?\\b.*\\b(de|of|from)|autre assistant|other assistant|coll[eè]gue|colleague|jumel|pair(ed|ing)|digest|bilan du jour|point du jour|partag.*(avec|with)|synth[eè]se (quotidienne|du jour)|daily (summary|digest)|\\bpeers?\\b/iu', "other people's assistants: read their digests and messages, send ours"],
+        'assistants' => [['peer_'], '/assistant de|assistants?\\b.*\\b(de|of|from)|autre assistant|other assistant|coll[eè]gue|colleague|jumel|pair(ed|ing)|statut (de|du|d.|des)|status (of|from|report)|abonn[ée]|suivi de|followed (question|assistant)|digest|bilan du jour|point du jour|partag.*(avec|with)|synth[eè]se (quotidienne|du jour)|daily (summary|digest)|\\bpeers?\\b/iu', "other people's assistants: read their digests and messages, send ours"],
         'predict' => [['forecast', 'decide'], '/pr[ée]vi[sc]|forecast|projection|tendance|trend|prochains? (mois|trimestres?|semaines?|jours?|ans?)|next (months?|quarters?|weeks?|days?|years?)|série|time.?series|chiffres|figures|ventes|sales|décid|decid|trancher|choisir entre|choose between|probabilit|score|évalue|rate it/iu', 'forecast a series of figures; typed decisions with probabilities'],
         'phone' => [['phone_'], '/appel|call|sms|texto|téléphon|phone|whatsapp|signal/iu', 'calls and texts from the phone'],
         'music' => [['spotify_'], '/musique|music|joue|play|chanson|song|spotify|playlist|album|artist|volume|écoute|listen/iu', 'Spotify'],
@@ -668,6 +668,19 @@ final class Tools
                 if (!$p) return 'no paired assistant matches "' . $a['peer'] . '".';
                 $r = $f->ask((int)$p['id'], (int)$a['query'], (string)($a['value'] ?? ''));
                 return $r['cached'] ? "asked; they replied with their last answer (unchanged until " . date('H:i', $r['next']) . '): read it with peer_inbox.' : 'asked; the answer will arrive in the inbox in a few minutes (peer_inbox).';
+            });
+        $this->register('peer_status', "The latest answer of the questions the user follows on other assistants (Settings → Other assistants → Overview), e.g. 'the status of Jean's project'. Matches the user's own name for it, the question or the assistant. Without `who`, every followed one. It returns what is stored with its age and, when it is old, asks again in the background (the new answer arrives a few minutes later). Use it when the user asks for the status of someone, and in the morning briefing.",
+            ['who' => ['type' => 'string', 'description' => 'alias, question name or assistant name; empty = all followed'], 'max_age_minutes' => ['type' => 'integer', 'description' => 'ask again when the stored answer is older (default 180)']], [],
+            function (array $a) {
+                $r = $this->app->federation()->status((string)($a['who'] ?? ''), max(1, (int)($a['max_age_minutes'] ?? 180)) * 60);
+                if (!$r) return trim((string)($a['who'] ?? '')) === '' ? 'no followed question yet (Settings → Other assistants → Overview).' : 'no followed or offered question matches "' . $a['who'] . '".';
+                $o = [Federation::UNTRUSTED];
+                foreach ($r as $x) {
+                    $t = ($x['alias'] !== '' ? $x['alias'] : $x['name']) . ' — ' . $x['peerName'] . ($x['value'] !== '' ? ' [' . $x['value'] . ']' : '');
+                    $o[] = "## $t\n" . ($x['answer'] !== '' ? $x['answer'] . "\n(answer of " . date('Y-m-d H:i', $x['answerAt']) . ')' : '(no answer yet)')
+                        . ($x['asked'] ? "\n(asked again just now: a fresher answer will arrive in a few minutes)" : '') . ($x['note'] !== '' ? "\n(could not ask again: " . $x['note'] . ')' : '');
+                }
+                return implode("\n\n", $o);
             });
         $this->register('peer_publish', "Publish today's digest (titles of what was finished or moved, plus an optional one-line note from the user) to the assistants it is shared with. Only when the user asks.",
             ['note' => ['type' => 'string', 'description' => 'optional one line written by the user']], [],

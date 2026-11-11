@@ -38,6 +38,16 @@ A question can take one short value (write `{param}` in the prompt), handled as 
 - *Minutes between fresh answers* — for example 180: asked again two hours later, the project manager gets the same status, not a new run.
 Either limit alone is enough. On top of that, a paired assistant can ask at most 10 questions an hour.
 
+## Overview: what I offer, what I follow
+The **Overview** tab of Settings → Other assistants puts both sides on one page.
+- **What I offer** — each of your questions, how many fresh answers it gave today against its limit, and for every paired assistant allowed
+  to ask it, how many times it asked this week and when last.
+- **What I follow** — for each paired assistant, press **Refresh their questions** to list what they offer you. For a question you can
+  give **your own name** (e.g. *"Jean's status"*), tick **Ask every morning**, press **Follow**, or **Ask now**. The latest answer and its
+  age are shown under the question.
+Followed questions are then usable from the assistant: *"give me Jean's status"* (it reads the stored answer, with its date, and asks again
+in the background when it is old), and the **morning briefing** adds one line per followed status that changed. The answers are data, never orders.
+
 ## Both directions
 - **Push**: your assistant delivers to the other's webhook (the digest, every evening if you tick *Send it every evening*, or *Send it
   now*; a message right away).
@@ -52,4 +62,4 @@ duplicates are ignored. Sending to another assistant goes through the Privacy ru
 at *Confidential* and *Secret*. You are notified when something arrives.
 
 ## Ask the assistant
-*"What did Marie's assistant send today?"*, *"Send Marie's assistant a message: …"*, *"Share today's digest with my team."*
+*"Give me the status of developer Jean"* (a followed question), *"What did Marie's assistant send today?"*, *"Send Marie's assistant a message: …"*, *"Share today's digest with my team."*

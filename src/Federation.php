@@ -227,14 +227,14 @@ final class Federation
     }
 
     /** Put an item in the peer's outbox (so it can pull it), then try to push it. True when the push landed. */
-    private function enqueue(array $p, string $kind, string $title, string $body, bool $push = true): bool
+    private function enqueue(array $p, string $kind, string $title, string $body, bool $push = true, string $re = ''): bool
     {
         $mid = bin2hex(random_bytes(8));
-        $this->app->store->q('INSERT INTO fed_outbox(ts, peer, mid, kind, title, body, delivered) VALUES (?,?,?,?,?,?,NULL)', [time(), (int)$p['id'], $mid, $kind, $title, $body]);
+        $this->app->store->q('INSERT INTO fed_outbox(ts, peer, mid, kind, title, body, re, delivered) VALUES (?,?,?,?,?,?,?,NULL)', [time(), (int)$p['id'], $mid, $kind, $title, $body, $re]);
         $oid = (int)$this->app->store->db->lastInsertId();
         if (!$push) return false; // left in the outbox: the worker pushes it, or the peer pulls it
         try {
-            [$code] = $this->call('POST', $p['url'] . '/api/federation/push', (string)$p['out_secret'], ['mid' => $mid, 'kind' => $kind, 'title' => $title, 'body' => $body, 'from' => $this->name()], 15);
+            [$code] = $this->call('POST', $p['url'] . '/api/federation/push', (string)$p['out_secret'], ['mid' => $mid, 'kind' => $kind, 'title' => $title, 'body' => $body, 're' => $re, 'from' => $this->name()], 15);
         } catch (\Throwable $e) { Log::info("federation: push to #{$p['id']} failed: " . $e->getMessage()); return false; }
         if ($code !== 200) return false;
         $this->app->store->q('UPDATE fed_outbox SET delivered = ? WHERE id = ?', [time(), $oid]);
@@ -255,15 +255,18 @@ final class Federation
         $s = $this->app->store;
         if ($s->q('SELECT 1 FROM fed_inbox WHERE peer = ? AND mid = ?', [(int)$p['id'], $mid])->fetchColumn()) return [200, ['ok' => true, 'duplicate' => true]];
         if ((int)$s->q('SELECT COUNT(*) FROM fed_inbox WHERE peer = ? AND ts > ?', [(int)$p['id'], time() - 3600])->fetchColumn() >= self::RATE_PER_HOUR) return [429, ['error' => 'too many messages this hour']];
-        $this->store((int)$p['id'], $mid, $kind, (string)($msg['title'] ?? ''), (string)($msg['body'] ?? ''));
-        $this->app->notifier()->notify(($kind === 'digest' ? 'Digest from ' : 'Message from ') . $p['name'], mb_substr((string)($msg['body'] ?? ''), 0, 140));
+        $this->store((int)$p['id'], $mid, $kind, (string)($msg['title'] ?? ''), (string)($msg['body'] ?? ''), (string)($msg['re'] ?? ''));
+        $this->app->notifier()->notify(($kind === 'digest' ? 'Digest from ' : ($kind === 'answer' ? 'Answer from ' : 'Message from ')) . $p['name'], mb_substr((string)($msg['body'] ?? ''), 0, 140));
         return [200, ['ok' => true]];
     }
 
-    private function store(int $peer, string $mid, string $kind, string $title, string $body): void
+    private function store(int $peer, string $mid, string $kind, string $title, string $body, string $re = ''): void
     {
-        $this->app->store->q('INSERT OR IGNORE INTO fed_inbox(ts, peer, mid, kind, title, body, read) VALUES (?,?,?,?,?,?,NULL)',
-            [time(), $peer, $mid, $kind, mb_substr(trim($title), 0, 200), mb_substr(trim($body), 0, self::MAX_BODY)]);
+        $re = preg_match('/^[a-f0-9]{8,32}$/', $re) ? $re : '';
+        $body = mb_substr(trim($body), 0, self::MAX_BODY);
+        $this->app->store->q('INSERT OR IGNORE INTO fed_inbox(ts, peer, mid, kind, title, body, re, read) VALUES (?,?,?,?,?,?,?,NULL)', [time(), $peer, $mid, $kind, mb_substr(trim($title), 0, 200), $body, $re]);
+        if ($kind === 'answer' && $re !== '') // the reply to a question I asked: it becomes the question's current status
+            $this->app->store->q('UPDATE fed_subs SET last_answer = ?, last_at = ? WHERE peer = ? AND last_mid = ?', [$body, time(), $peer, $re]);
         $this->app->store->q('UPDATE fed_peers SET last_in = ? WHERE id = ?', [time(), $peer]);
     }
 
@@ -273,10 +276,10 @@ final class Federation
         $p = $this->authenticate($bearer);
         if (!$p) return [401, ['error' => 'unauthorized']];
         $s = $this->app->store;
-        $rows = $s->q('SELECT id, mid, ts, kind, title, body FROM fed_outbox WHERE peer = ? AND delivered IS NULL ORDER BY id LIMIT 50', [(int)$p['id']])->fetchAll();
+        $rows = $s->q('SELECT id, mid, ts, kind, title, body, re FROM fed_outbox WHERE peer = ? AND delivered IS NULL ORDER BY id LIMIT 50', [(int)$p['id']])->fetchAll();
         if ($ack && $rows) $s->q('UPDATE fed_outbox SET delivered = ? WHERE id IN (' . implode(',', array_map('intval', array_column($rows, 'id'))) . ')', [time()]);
         $s->q('UPDATE fed_peers SET last_out = ? WHERE id = ?', [time(), (int)$p['id']]);
-        $resp = ['ok' => true, 'from' => $this->name(), 'messages' => array_map(fn($r) => ['mid' => $r['mid'], 'ts' => (int)$r['ts'], 'kind' => $r['kind'], 'title' => $r['title'], 'body' => $r['body']], $rows)];
+        $resp = ['ok' => true, 'from' => $this->name(), 'messages' => array_map(fn($r) => ['mid' => $r['mid'], 'ts' => (int)$r['ts'], 'kind' => $r['kind'], 'title' => $r['title'], 'body' => $r['body'], 're' => $r['re']], $rows)];
         if ($view && in_array('digest', json_decode((string)$p['give'], true) ?: [], true)) $resp['digest'] = $this->digest();
         return [200, $resp];
     }
@@ -308,7 +311,7 @@ final class Federation
                 if (!is_array($m) || !self::kindOk($accept, (string)($m['kind'] ?? ''))) continue;
                 $mid = preg_match('/^[a-f0-9]{8,32}$/', (string)($m['mid'] ?? '')) ? (string)$m['mid'] : bin2hex(random_bytes(8));
                 if ($this->app->store->q('SELECT 1 FROM fed_inbox WHERE peer = ? AND mid = ?', [(int)$p['id'], $mid])->fetchColumn()) continue;
-                $this->store((int)$p['id'], $mid, (string)$m['kind'], (string)($m['title'] ?? ''), (string)($m['body'] ?? '')); $n++;
+                $this->store((int)$p['id'], $mid, (string)$m['kind'], (string)($m['title'] ?? ''), (string)($m['body'] ?? ''), (string)($m['re'] ?? '')); $n++;
             }
         }
         return $n;
@@ -375,6 +378,22 @@ final class Federation
         $this->app->store->q("UPDATE fed_asks SET status = 'failed', error = 'question removed' WHERE query = ? AND status = 'queued'", [$id]);
     }
 
+    /** What I offer: each question with who may ask it and how often they did (last 7 days / last time). */
+    public function offerOverview(): array
+    {
+        $out = [];
+        foreach ($this->queries() as $q) {
+            $who = [];
+            foreach ($q['peers'] as $pid) {
+                $p = $this->peer((int)$pid); if (!$p) continue;
+                $r = $this->app->store->q('SELECT COUNT(*) n, MAX(ts) t FROM fed_asks WHERE peer = ? AND query = ? AND ts > ?', [(int)$pid, $q['id'], time() - 7 * 86400])->fetch();
+                $who[] = ['id' => (int)$pid, 'name' => $p['name'], 'week' => (int)$r['n'], 'last' => (int)$r['t']];
+            }
+            $out[] = ['id' => $q['id'], 'name' => $q['name'], 'descr' => $q['descr'], 'space' => $q['space'], 'enabled' => $q['enabled'], 'maxDay' => $q['maxDay'], 'gapMin' => $q['gapMin'], 'today' => $q['today'], 'askedBy' => $who];
+        }
+        return $out;
+    }
+
     private function freshToday(int $qid): int
     {
         return (int)$this->app->store->q('SELECT COUNT(*) FROM fed_asks WHERE query = ? AND fresh = 1 AND done >= ?', [$qid, strtotime('today')])->fetchColumn();
@@ -407,11 +426,82 @@ final class Federation
     {
         $p = $this->peer($peer);
         if (!$p) throw new \InvalidArgumentException('unknown peer');
-        [$code, $body] = $this->call('POST', $p['url'] . '/api/federation/ask', (string)$p['out_secret'], ['query' => $query, 'param' => mb_substr($param, 0, 200), 'mid' => bin2hex(random_bytes(8))], 15);
+        [$code, $body] = $this->call('POST', $p['url'] . '/api/federation/ask', (string)$p['out_secret'], ['query' => $query, 'param' => mb_substr($param, 0, 200), 'mid' => $mid = bin2hex(random_bytes(8))], 15);
         $r = json_decode($body, true);
         if ($code >= 400 || !is_array($r)) throw new \InvalidArgumentException(is_array($r) && !empty($r['error']) ? (string)$r['error'] : "the other assistant refused the question (HTTP $code)");
         $this->app->store->q('UPDATE fed_peers SET last_out = ? WHERE id = ?', [time(), $peer]);
-        return ['ok' => true, 'cached' => !empty($r['cached']), 'next' => (int)($r['next'] ?? 0)];
+        return ['ok' => true, 'mid' => $mid, 'cached' => !empty($r['cached']), 'next' => (int)($r['next'] ?? 0)];
+    }
+
+    // ---- what I follow: the questions of paired assistants, their latest answers ---------------------------------------
+
+    /** Refresh the list of questions a paired assistant offers me (kept with my alias and my choices). */
+    public function refreshSubs(int $peer): array
+    {
+        $s = $this->app->store; $seen = [];
+        foreach ($this->queriesOf($peer) as $q) {
+            $seen[] = $q['id'];
+            $s->q('INSERT INTO fed_subs(peer, qid, name, descr, param) VALUES (?,?,?,?,?) ON CONFLICT(peer, qid) DO UPDATE SET name = excluded.name, descr = excluded.descr, param = excluded.param, gone = 0',
+                [$peer, $q['id'], $q['name'], $q['descr'], $q['param'] ? 1 : 0]);
+        }
+        foreach ($s->q('SELECT id, qid FROM fed_subs WHERE peer = ?', [$peer])->fetchAll() as $r)
+            if (!in_array((int)$r['qid'], $seen, true)) $s->q('UPDATE fed_subs SET gone = 1, daily = 0 WHERE id = ?', [(int)$r['id']]);
+        return $this->subs($peer);
+    }
+
+    /** What I follow (all paired assistants, or one). */
+    public function subs(int $peer = 0): array
+    {
+        $rows = $this->app->store->q('SELECT s.*, p.name AS peer_name FROM fed_subs s JOIN fed_peers p ON p.id = s.peer AND p.status = \'active\' ' . ($peer ? 'WHERE s.peer = ? ' : '') . 'ORDER BY p.name, s.name', $peer ? [$peer] : [])->fetchAll();
+        return array_map(fn($r) => ['id' => (int)$r['id'], 'peer' => (int)$r['peer'], 'peerName' => $r['peer_name'], 'qid' => (int)$r['qid'], 'name' => $r['name'], 'descr' => $r['descr'],
+            'param' => (bool)$r['param'], 'alias' => $r['alias'], 'daily' => (bool)$r['daily'], 'followed' => (bool)$r['followed'], 'gone' => (bool)$r['gone'],
+            'value' => $r['last_value'], 'lastAsk' => (int)$r['last_ask'], 'answer' => $r['last_answer'], 'answerAt' => (int)$r['last_at']], $rows);
+    }
+
+    /** Follow a question: give it a name of my own and choose whether it is asked every morning. */
+    public function follow(int $id, bool $daily, string $alias, string $value = ''): void
+    {
+        if (!$this->app->store->q('SELECT 1 FROM fed_subs WHERE id = ?', [$id])->fetchColumn()) throw new \InvalidArgumentException('unknown question');
+        $this->app->store->q('UPDATE fed_subs SET followed = 1, daily = ?, alias = ?, last_value = ? WHERE id = ? AND gone = 0', [$daily ? 1 : 0, mb_substr(trim($alias), 0, 60), mb_substr(trim($value), 0, 200), $id]);
+    }
+
+    public function unfollow(int $id): void
+    {
+        $this->app->store->q('UPDATE fed_subs SET followed = 0, daily = 0, alias = \'\' WHERE id = ?', [$id]);
+    }
+
+    /** Ask a followed question now; the answer will replace the stored one when it arrives. */
+    public function askSub(int $id, ?string $value = null): array
+    {
+        $r = $this->app->store->q('SELECT * FROM fed_subs WHERE id = ? AND gone = 0', [$id])->fetch();
+        if (!$r) throw new \InvalidArgumentException('unknown question');
+        $value = $value ?? (string)$r['last_value'];
+        $a = $this->ask((int)$r['peer'], (int)$r['qid'], $value);
+        $this->app->store->q('UPDATE fed_subs SET last_mid = ?, last_ask = ?, last_value = ? WHERE id = ?', [$a['mid'], time(), $r['param'] ? mb_substr($value, 0, 200) : '', $id]);
+        return $a;
+    }
+
+    /**
+     * For the chat and the briefing: the latest answer of the followed question that matches `who` (alias, question name or
+     * assistant name), and a fresh ask in the background when the stored answer is older than `maxAge` seconds.
+     */
+    public function status(string $who, int $maxAge = 3600): array
+    {
+        $who = mb_strtolower(trim($who)); $hits = [];
+        foreach ($this->subs() as $x) {
+            if ($x['gone']) continue;
+            $hay = mb_strtolower($x['alias'] . ' ' . $x['name'] . ' ' . $x['peerName']);
+            if ($who === '' ? $x['followed'] : str_contains($hay, $who)) $hits[] = $x;
+        }
+        $out = [];
+        foreach (array_slice($hits, 0, 5) as $x) {
+            $asked = false; $note = '';
+            if (time() - max($x["answerAt"], $x["lastAsk"]) >= $maxAge) {
+                try { $this->askSub($x['id']); $asked = true; } catch (\Throwable $e) { $note = $e->getMessage(); }
+            }
+            $out[] = $x + ['asked' => $asked, 'note' => $note];
+        }
+        return $out;
     }
 
     /**
@@ -437,7 +527,7 @@ final class Federation
         if (($capped || $tooSoon) && $q['last_answer'] !== '' && $param === '') { // the same answer again, said so
             $next = $capped ? strtotime('tomorrow') : $nextGap;
             $s->q("INSERT INTO fed_asks(ts, peer, query, param, mid, status, fresh, done) VALUES (?,?,?,?,?,'done',0,?)", [$now, $pid, (int)$q['id'], $param, $mid, $now]);
-            $this->enqueue($p, 'answer', 'Answer — ' . $q['name'], '(unchanged since ' . date('Y-m-d H:i', $last) . '; next update after ' . date('H:i', $next) . ")\n\n" . $q['last_answer'], false);
+            $this->enqueue($p, 'answer', 'Answer — ' . $q['name'], '(unchanged since ' . date('Y-m-d H:i', $last) . '; next update after ' . date('H:i', $next) . ")\n\n" . $q['last_answer'], false, $mid);
             return [200, ['ok' => true, 'cached' => true, 'next' => $next]];
         }
         if ($capped || $tooSoon) return [429, ['error' => 'this question was answered recently and has no stored answer for that value; try again after ' . date('H:i', $capped ? strtotime('tomorrow') : $nextGap)]];
@@ -467,12 +557,12 @@ final class Federation
             $now = time();
             if ($answer === '') {
                 $s->q("UPDATE fed_asks SET status = 'failed', error = ?, done = ? WHERE id = ?", [mb_substr($err, 0, 200), $now, (int)$a['id']]);
-                $this->enqueue($p, 'answer', 'Answer — ' . $q['name'], 'I could not answer this question right now.', false);
+                $this->enqueue($p, 'answer', 'Answer — ' . $q['name'], 'I could not answer this question right now.', false, (string)$a['mid']);
             } else {
                 $s->q("UPDATE fed_asks SET status = 'done', fresh = 1, done = ? WHERE id = ?", [$now, (int)$a['id']]);
                 if ((string)$a['param'] === '') $s->q('UPDATE fed_queries SET last_at = ?, last_answer = ? WHERE id = ?', [$now, $answer, (int)$q['id']]); // only the plain question is reused
                 else $s->q('UPDATE fed_queries SET last_at = ? WHERE id = ?', [$now, (int)$q['id']]);
-                $this->enqueue($p, 'answer', 'Answer — ' . $q['name'], $answer, false);
+                $this->enqueue($p, 'answer', 'Answer — ' . $q['name'], $answer, false, (string)$a['mid']);
             }
             $n++;
         }
@@ -486,7 +576,7 @@ final class Federation
         foreach ($this->app->store->q('SELECT * FROM fed_outbox WHERE delivered IS NULL AND ts > ? ORDER BY id LIMIT 20', [time() - 86400])->fetchAll() as $o) {
             $p = $this->peer((int)$o['peer']);
             if (!$p || isset($bad[$p['id']])) continue; // one unreachable peer must not hold up the worker
-            try { [$code] = $this->call('POST', $p['url'] . '/api/federation/push', (string)$p['out_secret'], ['mid' => $o['mid'], 'kind' => $o['kind'], 'title' => $o['title'], 'body' => $o['body'], 'from' => $this->name()], 15); }
+            try { [$code] = $this->call('POST', $p['url'] . '/api/federation/push', (string)$p['out_secret'], ['mid' => $o['mid'], 'kind' => $o['kind'], 'title' => $o['title'], 'body' => $o['body'], 're' => $o['re'], 'from' => $this->name()], 15); }
             catch (\Throwable $e) { $bad[$p['id']] = 1; continue; }
             if ($code === 200) { $this->app->store->q('UPDATE fed_outbox SET delivered = ? WHERE id = ?', [time(), (int)$o['id']]); $n++; }
         }
@@ -528,7 +618,17 @@ final class Federation
         if ($now - (int)$this->app->store->get('fed_polled', '0') >= 600) { $this->app->store->set('fed_polled', (string)$now); $this->pullFrom(); }
         $this->runAsks(1);
         $this->flush();
+        $this->askDaily($now);
         if ($this->auto() && (int)date('G', $now) >= 17 && date('Y-m-d', (int)$this->app->store->get('fed_last', '0')) !== date('Y-m-d', $now)) $this->publish();
+    }
+
+    /** Once a day from 06:00, ask the followed questions marked "every day" so the briefing finds fresh answers. */
+    private function askDaily(int $now): void
+    {
+        if ((int)date('G', $now) < 6) return;
+        foreach ($this->app->store->q('SELECT id FROM fed_subs WHERE daily = 1 AND gone = 0 AND last_ask < ?', [strtotime('today', $now)])->fetchAll() as $r) {
+            try { $this->askSub((int)$r['id']); } catch (\Throwable $e) { Log::info('federation: daily question failed: ' . $e->getMessage()); $this->app->store->q('UPDATE fed_subs SET last_ask = ? WHERE id = ?', [$now, (int)$r['id']]); }
+        }
     }
 
     // ---- transport -------------------------------------------------------------------------------------------------

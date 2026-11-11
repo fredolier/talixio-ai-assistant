@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.34.0 (2026-11-11)
+
+- Other assistants: **Overview** tab. One page shows **what I offer** (each question, today's use against its limits, and which paired assistants ask it, how often and when last) and **what I follow** (for each paired assistant, the questions it offers me: give one your own name such as "Jean's status", tick *Ask every morning*, or *Ask now*; the latest answer and its age are shown). Answers now carry the question they reply to, so each followed question keeps its latest status. New tool `peer_status`: ask the assistant *"give me Jean's status"* and it reads the stored answer (with its date) and asks again in the background when it is old; the morning briefing gets a line for the followed statuses that changed (existing briefings are updated, your "Also:" text kept). Tested between two assistants in one process; not tested with a real model writing the answers.
+
 ## 1.33.0 (2026-11-11)
 
 - Other assistants: **questions with their own prompt**. You write a question once (a name, a description, the prompt, the space it reads, who may ask) and the paired assistant can only pick it by name: a project manager's assistant can ask the PO's assistant for "the status of project Atlas" without ever sending a prompt of its own. The answer is written in the background with read-only tools (board, tasks, documents of that space; never a confidential space) and arrives in the asker's inbox. Each question has its own limits: fresh answers per day and minutes between fresh answers; beyond them the last answer is sent again, marked *unchanged since…*, at no cost. New tools `peer_queries` and `peer_ask`. The digest and the answers also leave out work done in confidential or secret spaces. Tested between two assistants in one process; the answer quality with a real model is not tested.

@@ -3075,7 +3075,49 @@ async function fedLoad(r) {
     inb.append(e);
   }
   fedQueries(f);
+  fedOverview(f, ago);
   setInfo('assistants', f.peers.length);
+}
+/** One page: what I offer (who asks what) and what I follow (their questions, my names for them, the latest answers). */
+function fedOverview(f, ago) {
+  const off = $('#fed-offer'), fol = $('#fed-follow'); if (!off || !fol) return;
+  off.innerHTML = f.offer.length ? '' : `<p class="muted small">${esc(t('No question offered yet.'))}</p>`;
+  for (const q of f.offer) {
+    const d = document.createElement('div'); d.className = 'fed-peer';
+    d.innerHTML = `<div class="fed-head"><strong class="no-i18n">${esc(q.name)}</strong> <span class="muted small">${esc(t('{n} fresh answers today', { n: q.today }))}${q.maxDay ? ' / ' + q.maxDay : ''}${q.gapMin ? ' · ' + esc(t('every {n} min at most', { n: q.gapMin })) : ''}${q.enabled ? '' : ' · ' + esc(t('off'))}</span></div>
+      ${q.askedBy.length ? q.askedBy.map(w => `<p class="small"><span class="no-i18n">${esc(w.name)}</span> <span class="muted">· ${esc(t('{n} times this week', { n: w.week }))} · ${esc(t('last asked {when}', { when: ago(w.last) }))}</span></p>`).join('') : `<p class="muted small">${esc(t('Nobody can ask it yet.'))}</p>`}`;
+    off.append(d);
+  }
+  const by = {}; for (const x of f.subs) (by[x.peer] ||= []).push(x);
+  fol.innerHTML = f.peers.length ? '' : `<p class="muted small">${esc(t('No assistant is paired yet.'))}</p>`;
+  for (const p of f.peers) {
+    const d = document.createElement('div'); d.className = 'fed-peer';
+    const list = by[p.id] || [];
+    d.innerHTML = `<div class="fed-head"><strong class="no-i18n">${esc(p.name)}</strong> <button class="btn small" data-a="refresh" type="button">${esc(t('Refresh their questions'))}</button></div>`
+      + (list.length ? list.map(x => `<div class="fed-sub" data-id="${x.id}">
+        <p><strong class="no-i18n">${esc(x.name)}</strong> <span class="muted small no-i18n">${esc(x.descr)}</span>${x.gone ? ` <span class="muted small">${esc(t('no longer offered'))}</span>` : ''}</p>
+        ${x.gone ? '' : `<div class="row wrap">
+          <input type="text" class="fed-alias" maxlength="60" value="${esc(x.alias)}" placeholder="${esc(t('My name for it (e.g. Jean’s status)'))}">
+          ${x.param ? `<input type="text" class="fed-val" maxlength="200" value="${esc(x.value)}" placeholder="${esc(t('Value'))}">` : ''}
+          <label class="check"><input type="checkbox" class="fed-daily"${x.daily ? ' checked' : ''}> <span>${esc(t('Ask every morning'))}</span></label>
+          <button class="btn small" data-a="follow" type="button">${esc(x.followed ? t('Save') : t('Follow'))}</button>
+          <button class="btn small" data-a="now" type="button">${esc(t('Ask now'))}</button>
+          ${x.followed ? `<button class="btn small" data-a="unfollow" type="button">${esc(t('Stop following'))}</button>` : ''}</div>`}
+        ${x.answer ? `<pre class="fed-preview no-i18n">${esc(x.answer)}</pre><p class="muted small">${esc(t('answer of {when}', { when: ago(x.answerAt) }))}</p>` : (x.lastAsk ? `<p class="muted small">${esc(t('Asked {when}, waiting for the answer.', { when: ago(x.lastAsk) }))}</p>` : '')}
+      </div>`).join('') : `<p class="muted small">${esc(t('Press “Refresh their questions” to see what they offer you.'))}</p>`);
+    d.onclick = async e => {
+      const b = e.target.closest('button[data-a]'); if (!b) return;
+      const row = b.closest('.fed-sub'), id = row && +row.dataset.id;
+      const body = row ? { id, alias: row.querySelector('.fed-alias')?.value || '', daily: !!row.querySelector('.fed-daily')?.checked, value: row.querySelector('.fed-val')?.value || '' } : {};
+      try {
+        if (b.dataset.a === 'refresh') { fedLoad(await post('api/federation/subs', { peer: p.id })); return; }
+        if (b.dataset.a === 'follow') { fedLoad(await post('api/federation/follow', body)); toast(t('Saved.')); return; }
+        if (b.dataset.a === 'unfollow') { fedLoad(await post('api/federation/follow', { id, on: false })); return; }
+        if (b.dataset.a === 'now') { await post('api/federation/follow', body); const a = await post('api/federation/ask-sub', { id, value: body.value }); fedLoad(a); toast(a.cached ? t('Their last answer is on its way (unchanged).') : t('Asked: the answer will arrive in “Received”.')); }
+      } catch (err) { toast(err.message); }
+    };
+    fol.append(d);
+  }
 }
 /** The questions I let paired assistants ask. */
 function fedQueries(f) {

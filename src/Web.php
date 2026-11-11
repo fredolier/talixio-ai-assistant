@@ -210,6 +210,13 @@ final class Web
             $path === '/api/federation/query/delete' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->deleteQuery((int)($b['id'] ?? 0)); return $this->federationState(); }),
             $path === '/api/federation/peer-queries' && $m === 'POST' => $this->fedDo(fn() => ['queries' => $this->app->federation()->queriesOf((int)($b['peer'] ?? 0))]),
             $path === '/api/federation/ask' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->ask((int)($b['peer'] ?? 0), (int)($b['query'] ?? 0), (string)($b['param'] ?? ''))),
+            $path === '/api/federation/subs' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->refreshSubs((int)($b['peer'] ?? 0)); return $this->federationState(); }),
+            $path === '/api/federation/follow' && $m === 'POST' => $this->fedDo(function () use ($b) {
+                $f = $this->app->federation(); $id = (int)($b['id'] ?? 0);
+                if (isset($b['on']) && !$b['on']) $f->unfollow($id); else $f->follow($id, !empty($b['daily']), (string)($b['alias'] ?? ''), (string)($b['value'] ?? ''));
+                return $this->federationState();
+            }),
+            $path === '/api/federation/ask-sub' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->askSub((int)($b['id'] ?? 0), isset($b['value']) ? (string)$b['value'] : null) + $this->federationState()),
             $path === '/api/federation/read' && $m === 'POST' => (function () use ($b) { $this->app->federation()->markRead((int)($b['peer'] ?? 0)); return $this->federationState(); })(),
             $path === '/api/federation/auto' && $m === 'POST' => (function () use ($b) { $this->app->federation()->setAuto(!empty($b['on'])); return $this->federationState(); })(),
             $path === '/api/conductor/setup' && $m === 'POST' => ['instruction' => $this->app->conductor()->setup()],
@@ -1782,7 +1789,7 @@ final class Web
     private function federationState(): array
     {
         $f = $this->app->federation();
-        return ['name' => $f->name(), 'base' => $f->base(), 'peers' => $f->peers(), 'inbox' => $f->inbox(0, false, 30), 'digest' => $f->digest(), 'auto' => $f->auto(), 'queries' => $f->queries(),
+        return ['name' => $f->name(), 'base' => $f->base(), 'peers' => $f->peers(), 'inbox' => $f->inbox(0, false, 30), 'digest' => $f->digest(), 'auto' => $f->auto(), 'queries' => $f->queries(), 'offer' => $f->offerOverview(), 'subs' => $f->subs(),
             'last' => (int)$this->app->store->get('fed_last', '0')];
     }
 

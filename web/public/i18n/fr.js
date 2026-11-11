@@ -3331,5 +3331,22 @@ window.I18N.fr = {
   "{n} fresh answers today": "{n} réponses fraîches aujourd'hui",
   "last answer {when}": "dernière réponse {when}",
   "every {n} min at most": "toutes les {n} min au plus",
-  "Delete?": "Supprimer ?"
+  "Delete?": "Supprimer ?",
+  "Overview": "Vue d'ensemble",
+  "What I offer, who uses it, and what I follow on other assistants. A followed question can be asked every morning, and you can then ask for it in the chat (“the status of Jean”) or find it in the morning briefing.": "Ce que je propose, qui s'en sert, et ce que je suis chez les autres assistants. Une question suivie peut être posée chaque matin ; vous pouvez ensuite la demander dans le chat (« le statut de Jean ») ou la retrouver dans le bilan du matin.",
+  "What I offer": "Ce que je propose",
+  "What I follow": "Ce que je suis",
+  "{n} times this week": "{n} fois cette semaine",
+  "last asked {when}": "dernière question {when}",
+  "Nobody can ask it yet.": "Personne ne peut encore la poser.",
+  "Refresh their questions": "Actualiser leurs questions",
+  "no longer offered": "n'est plus proposée",
+  "My name for it (e.g. Jean’s status)": "Mon nom pour elle (ex. statut de Jean)",
+  "Ask every morning": "Poser chaque matin",
+  "Follow": "Suivre",
+  "Ask now": "Poser maintenant",
+  "Stop following": "Ne plus suivre",
+  "answer of {when}": "réponse {when}",
+  "Asked {when}, waiting for the answer.": "Posée {when}, en attente de la réponse.",
+  "Press “Refresh their questions” to see what they offer you.": "Appuyez sur « Actualiser leurs questions » pour voir ce qu'ils vous proposent."
 };

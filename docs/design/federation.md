@@ -49,6 +49,17 @@ the asker as an `answer` item (push, else pull). Past `maxDay` or inside `gapMin
 …* (no run, no cost); a call with a `param` and no limit room is refused (429) since its answer cannot be reused. Also: 10 asks/hour/peer,
 5 waiting at once. Digest and answers never draw on non-internal spaces. `answer` is accepted wherever `message` is.
 
+## Overview and followed questions (1.34.0)
+First tab of the section: **What I offer** (`offerOverview()`: per question today's count vs limits, per allowed peer asks over 7 days
+and last ask) and **What I follow** (`fed_subs`: a local copy of each peer's question list refreshed on demand with `refreshSubs`; per
+subscription my `alias`, `daily`, `followed`, the optional value, `last_mid`/`last_ask` and the latest answer). Answers carry `re` = the
+mid of the ask (new `re` column on `fed_inbox`/`fed_outbox`, in push and pull bodies); `store()` copies an `answer` whose `re` equals a
+subscription's `last_mid` into that subscription — the stored status. `askSub` asks now; the worker tick asks `daily` ones once a day
+from 06:00 (`askDaily`). Chat/briefing: tool `peer_status(who, max_age_minutes)` matches alias / question / assistant name, returns
+the stored answer under the untrusted banner with its date, and asks again in the background when older than the limit; the morning
+briefing prompt gets a line using it (`briefing_v3` migration). The asker still never sends a prompt. Withdrawn questions are marked
+`gone` and drop out of the daily run.
+
 ## Not in this slice (deliberate)
 - Richer shares (a chosen space's board, a document). Add them as new `give` kinds, each with its own preview, never as a free-form
   "read everything".

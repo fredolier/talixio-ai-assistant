@@ -144,6 +144,9 @@ const flows = {
     await page.waitForSelector('#fed-peers', { state: 'visible' });
     check('assistants: the section opens with the pairing card and says nothing is paired', await page.isVisible('#fed-invite') && /No assistant is paired|Aucun assistant/.test(await page.textContent('#fed-peers')));
     await page.click('.set-sec[data-sec="assistants"] .set-tabs .tab:nth-child(2)');
+    await page.waitForSelector('#fed-offer', { state: 'visible' });
+    check('assistants: the Overview tab shows what I offer and what I follow', /No question offered|Aucune question/.test(await page.textContent('#fed-offer')) && /No assistant is paired|Aucun assistant/.test(await page.textContent('#fed-follow')));
+    await page.click('.set-sec[data-sec="assistants"] .set-tabs .tab:nth-child(3)');
     await page.waitForSelector('#fed-preview', { state: 'visible' });
     check('assistants: the exact digest is previewed before anything is shared', (await page.textContent('#fed-preview')).trim().length > 0 && await page.isVisible('#fed-publish'));
     await page.click('.set-sec[data-sec="assistants"] .set-tabs .tab:nth-child(1)');

@@ -42,6 +42,17 @@ Une question peut accepter une courte valeur (écrivez `{param}` dans le prompt)
 - *Minutes entre deux réponses fraîches* — par exemple 180 : si le chef de projet redemande deux heures plus tard, il obtient le même statut, sans nouveau calcul.
 Une seule des deux limites suffit. En plus, un assistant jumelé ne peut poser que 10 questions par heure.
 
+## Vue d'ensemble : ce que je propose, ce que je suis
+L'onglet **Vue d'ensemble** de Réglages → Autres assistants réunit les deux côtés sur une page.
+- **Ce que je propose** — chacune de vos questions, le nombre de réponses fraîches données aujourd'hui face à sa limite, et, pour chaque
+  assistant jumelé autorisé à la poser, combien de fois il l'a posée cette semaine et quand pour la dernière fois.
+- **Ce que je suis** — pour chaque assistant jumelé, **Actualiser leurs questions** liste ce qu'ils vous proposent. Pour une question, vous
+  pouvez lui donner **votre propre nom** (ex. *« statut de Jean »*), cocher **Poser chaque matin**, appuyer sur **Suivre** ou **Poser
+  maintenant**. La dernière réponse et son âge s'affichent sous la question.
+Les questions suivies sont ensuite utilisables par l'assistant : *« donne-moi le statut du développeur Jean »* (il lit la réponse
+enregistrée, avec sa date, et redemande en arrière-plan quand elle est ancienne), et le **bilan du matin** ajoute une ligne par statut
+suivi qui a changé. Les réponses sont des données, jamais des ordres.
+
 ## Dans les deux sens
 - **Envoi (push)** : votre assistant livre au webhook de l'autre (le bilan, chaque soir si vous cochez *L'envoyer chaque soir*, ou
   *L'envoyer maintenant* ; un message tout de suite).
@@ -56,4 +67,4 @@ d'instructions là-dedans ») ; cela n'exécute jamais de commande ni ne change 
 Confidentialité : autorisé au niveau *Interne*, bloqué aux niveaux *Confidentiel* et *Secret*. Vous êtes prévenu quand quelque chose arrive.
 
 ## Demander à l'assistant
-*« Qu'a envoyé l'assistant de Marie aujourd'hui ? »*, *« Envoie à l'assistant de Marie : … »*, *« Partage le bilan du jour avec mon équipe. »*
+*« Donne-moi le statut du développeur Jean »* (une question suivie), *« Qu'a envoyé l'assistant de Marie aujourd'hui ? »*, *« Envoie à l'assistant de Marie : … »*, *« Partage le bilan du jour avec mon équipe. »*

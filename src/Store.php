@@ -166,12 +166,26 @@ final class Store
                 max_day INTEGER NOT NULL DEFAULT 0, gap_min INTEGER NOT NULL DEFAULT 0, last_at INTEGER NOT NULL DEFAULT 0, last_answer TEXT NOT NULL DEFAULT \'\');
             CREATE TABLE IF NOT EXISTS fed_asks(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, peer INTEGER NOT NULL, query INTEGER NOT NULL, param TEXT NOT NULL DEFAULT \'\',
                 mid TEXT NOT NULL, status TEXT NOT NULL DEFAULT \'queued\', error TEXT NOT NULL DEFAULT \'\', fresh INTEGER NOT NULL DEFAULT 0, done INTEGER);');
+        $this->addColumn('fed_inbox', 're', "TEXT NOT NULL DEFAULT ''"); // the ask an answer replies to
+        $this->addColumn('fed_outbox', 're', "TEXT NOT NULL DEFAULT ''");
+        // the questions of paired assistants that I follow: cached from their list, with my alias, whether to ask every day, and the last answer
+        $this->db->exec('CREATE TABLE IF NOT EXISTS fed_subs(id INTEGER PRIMARY KEY, peer INTEGER NOT NULL, qid INTEGER NOT NULL, name TEXT NOT NULL, descr TEXT NOT NULL DEFAULT \'\',
+                param INTEGER NOT NULL DEFAULT 0, alias TEXT NOT NULL DEFAULT \'\', daily INTEGER NOT NULL DEFAULT 0, followed INTEGER NOT NULL DEFAULT 0, gone INTEGER NOT NULL DEFAULT 0,
+                last_mid TEXT NOT NULL DEFAULT \'\', last_ask INTEGER NOT NULL DEFAULT 0, last_value TEXT NOT NULL DEFAULT \'\', last_answer TEXT NOT NULL DEFAULT \'\', last_at INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(peer, qid));');
         if ($this->get('briefing_v2') === '') { // the morning briefing becomes 5 rated lines; keep what the user added ("Also: …")
             foreach ($this->q("SELECT id, prompt FROM tasks WHERE title = 'Morning briefing' AND job IS NULL")->fetchAll() as $t) {
                 $i = strpos((string)$t['prompt'], "\nAlso: ");
                 $this->q('UPDATE tasks SET prompt = ? WHERE id = ?', [Routines::briefingPrompt($i === false ? '' : trim(substr($t['prompt'], $i + 7))), $t['id']]);
             }
             $this->set('briefing_v2', '1');
+        }
+        if ($this->get('briefing_v3') === '') { // the briefing also reads the statuses of followed assistants (federation)
+            foreach ($this->q("SELECT id, prompt FROM tasks WHERE title = 'Morning briefing' AND job IS NULL")->fetchAll() as $t) {
+                $i = strpos((string)$t['prompt'], "\nAlso: ");
+                $this->q('UPDATE tasks SET prompt = ? WHERE id = ?', [Routines::briefingPrompt($i === false ? '' : trim(substr($t['prompt'], $i + 7))), $t['id']]);
+            }
+            $this->set('briefing_v3', '1');
         }
         if ($this->get('docs_backfilled') === '') { // index history written before RAG existed
             $this->db->exec("INSERT INTO docs(kind, ref, ts, label, text)

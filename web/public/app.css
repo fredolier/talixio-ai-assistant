@@ -1924,6 +1924,8 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .fed-peers,.fed-inbox{display:flex;flex-direction:column;gap:10px}
 .fed-peer{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
 .fed-head{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.fed-sub{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+.fed-alias,.fed-val{flex:1 1 160px;min-width:0}
 .fed-box{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .fed-say{flex:1 1 180px;min-width:0}
 .fed-preview{white-space:pre-wrap;word-break:break-word;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:.85rem;margin:0}

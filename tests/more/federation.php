@@ -111,6 +111,32 @@ check('fed: a confidential space cannot back a question', str_contains($err(fn()
 $alice->store->q("INSERT INTO jobs(title, instructions, tier, status, created, finished, max_cost_usd, space) VALUES ('Hidden job', 'i', 'standard', 'done', ?, ?, 1, ?)", [time() - 10, time() - 5, (int)$sp['id']]);
 check('fed: the digest leaves out work done in confidential spaces', !str_contains($alice->federation()->digest()['body'], 'Hidden job') && str_contains($alice->federation()->digest()['body'], 'Quarterly report'));
 
+// ---- the overview: what I offer, what I follow, status from the chat
+$ov = $alice->federation()->offerOverview();
+check('fed: the overview of what I offer shows who asked and how many times', count($ov) === 1 && $ov[0]['askedBy'][0]['name'] === $bob->federation()->name() && $ov[0]['askedBy'][0]['week'] >= 3);
+$subs = $bob->federation()->refreshSubs($bAlice);
+check('fed: I can list the questions a paired assistant offers me', count($subs) === 1 && $subs[0]['name'] === 'Project status' && !$subs[0]['followed']);
+$sid = $subs[0]['id'];
+$bob->federation()->follow($sid, true, 'Status of Alice');
+check('fed: following a question keeps my own name and the daily choice', $bob->federation()->subs()[0]['alias'] === 'Status of Alice' && $bob->federation()->subs()[0]['daily']);
+$alice->store->q('UPDATE fed_queries SET last_at = 0 WHERE id = ?', [$qid]); $alice->store->q('UPDATE fed_queries SET max_day = 0 WHERE id = ?', [$qid]);
+$bob->federation()->askSub($sid); $alice->federation()->runAsks(1); $alice->federation()->flush();
+$sub = $bob->federation()->subs()[0];
+check('fed: the answer to a followed question is kept as its latest status', $sub['answer'] !== '' && $sub['answerAt'] > 0 && $sub['lastAsk'] > 0);
+$st = $bob->federation()->status('alice');
+check('fed: the chat finds a followed question by my name for it', count($st) === 1 && $st[0]['alias'] === 'Status of Alice' && $st[0]['answer'] === $sub['answer'] && !$st[0]['asked']);
+$old = $bob->federation()->status('status of', 0);
+check('fed: an old status is asked again in the background', count($old) === 1 && $old[0]['asked'] === true);
+$alice->federation()->runAsks(1); $alice->federation()->flush();
+$bobTool = $bob->tools->run('peer_status', ['who' => 'Status of Alice', 'max_age_minutes' => 600]);
+check('fed: the peer_status tool returns the answer as untrusted data', str_contains((string)$bobTool, 'DATA') && str_contains((string)$bobTool, 'Status of Alice'));
+check('fed: unknown names say so', str_contains((string)$bob->tools->run('peer_status', ['who' => 'nobody-here']), 'no followed'));
+$bob->store->q('UPDATE fed_subs SET last_ask = 0 WHERE id = ?', [$sid]); $bob->federation()->tick(strtotime('today 09:00'));
+check('fed: the morning tick asks the daily questions once', (int)$bob->store->q('SELECT last_ask FROM fed_subs WHERE id = ?', [$sid])->fetchColumn() > 0);
+$alice->federation()->deleteQuery($qid); $bob->federation()->refreshSubs($bAlice);
+check('fed: a question the other side withdrew is marked gone and no longer asked daily', $bob->federation()->subs()[0]['gone'] && !$bob->federation()->subs()[0]['daily']);
+check('fed: the briefing prompt reads the followed statuses', str_contains(\Talixio\Routines::briefingPrompt(''), 'peer_status'));
+
 // ---- the live view and revocation
 $view = $bob->federation()->viewOf($bobPeerOfAlice);
 check('fed: a peer can look at the digest I give it', str_contains($view['body'], 'Quarterly report'));
