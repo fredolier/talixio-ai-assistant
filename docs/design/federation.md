@@ -40,9 +40,18 @@ A failed push leaves the item in `fed_outbox`; the peer picks it up on its next 
 Paired assistants (per-peer permissions, message, look at their digest, unpair) · What I share (exact preview, own line, "send now",
 "every evening") · Received (unread badge, mark read). Tools for the assistant: `peer_list`, `peer_inbox`, `peer_send`, `peer_publish`.
 
+## Questions (1.33.0)
+The owner defines **named questions**: prompt, the one space it reads (internal only), allowed peers, optional `{param}` (200 chars, quoted
+as data), and the cost limits `maxDay` (fresh answers per day) and `gapMin` (minutes between fresh answers). The asker never sends a
+prompt: `POST /ask {query, param, mid}`; `GET /queries` lists names and descriptions only. A fresh run is queued and done by the worker
+with the `peer` toolset (kb read, board read, tasks read; no memory/mail/web/shell/writes) and the `peer` role prompt; the answer goes to
+the asker as an `answer` item (push, else pull). Past `maxDay` or inside `gapMin`, the last stored answer is re-sent marked *unchanged since
+…* (no run, no cost); a call with a `param` and no limit room is refused (429) since its answer cannot be reused. Also: 10 asks/hour/peer,
+5 waiting at once. Digest and answers never draw on non-internal spaces. `answer` is accepted wherever `message` is.
+
 ## Not in this slice (deliberate)
-- Request/response *queries* ("ask your assistant X and wait") and richer shares (a chosen space's board, a document). Add them as new
-  `give` kinds, each with its own preview, never as a free-form "read everything".
+- Richer shares (a chosen space's board, a document). Add them as new `give` kinds, each with its own preview, never as a free-form
+  "read everything".
 - Request signing with a per-message HMAC and timestamp (today: Bearer over https + duplicate ids). Add if peers ever sit behind
   untrusted proxies.
 - Multi-hop (A→B→C) forwarding: not allowed; if added it must reuse Relay's depth/path/budget envelope.

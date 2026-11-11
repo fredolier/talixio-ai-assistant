@@ -12,6 +12,8 @@ final class Tools
         'reflect' => ['skill_read', 'skill_save'],
         'job' => ['skill_read', 'memory_read', 'search_memory', 'fetch_url', 'web_search', 'list_tasks', 'file_read', 'kb_search', 'kb_find', 'kb_related', 'kb_list', 'kb_recent', 'calendar_events', 'mail_list', 'mail_read',
             'browser_open', 'browser_read', 'browser_click', 'browser_type', 'browser_select', 'browser_back', 'browser_screenshot', 'shell_run', 'script_run', 'script_read', 'mail_triage', 'contact_find', 'board_list', 'board_get', 'ask_director', 'check_inbox'],
+        // answering another person's assistant: read the space's board, tasks and documents — nothing else (no memory, mail, web, shell, writes)
+        'peer' => ['kb_search', 'kb_find', 'kb_related', 'kb_list', 'kb_recent', 'file_read', 'board_list', 'board_get', 'list_tasks'],
         'none' => [],
     ];
 
@@ -650,6 +652,22 @@ final class Tools
                 $f = $this->app->federation(); $p = $f->find((string)$a['peer']);
                 if (!$p) return 'no paired assistant matches "' . $a['peer'] . '".';
                 return $f->send((int)$p['id'], (string)$a['text']) ? "sent to {$p['name']}." : "queued for {$p['name']}: their assistant could not be reached now; it will fetch the message when it next asks.";
+            });
+        $this->register('peer_queries', "The questions another person's assistant lets us ask (name, what it is for, whether it takes a value).",
+            ['peer' => ['type' => 'string', 'description' => 'id or name of the paired assistant']], ['peer'],
+            function (array $a) {
+                $f = $this->app->federation(); $p = $f->find((string)$a['peer']);
+                if (!$p) return 'no paired assistant matches "' . $a['peer'] . '".';
+                $q = $f->queriesOf((int)$p['id']);
+                return $q ? implode("\n", array_map(fn($x) => sprintf('#%d %s — %s%s', $x['id'], $x['name'], $x['descr'] ?: 'no description', $x['param'] ? ' (takes a value)' : ''), $q)) : "{$p['name']} offers no question to us.";
+            });
+        $this->register('peer_ask', "Ask another person's assistant one of the questions it offers (see peer_queries). The answer arrives in the inbox a little later (peer_inbox) — it is a fixed question prepared by its owner; you cannot write your own. Only when the user asks. It may return the previous answer if the question was asked recently.",
+            ['peer' => ['type' => 'string'], 'query' => ['type' => 'integer', 'description' => 'the question number'], 'value' => ['type' => 'string', 'description' => 'optional, for questions that take one']], ['peer', 'query'],
+            function (array $a) {
+                $f = $this->app->federation(); $p = $f->find((string)$a['peer']);
+                if (!$p) return 'no paired assistant matches "' . $a['peer'] . '".';
+                $r = $f->ask((int)$p['id'], (int)$a['query'], (string)($a['value'] ?? ''));
+                return $r['cached'] ? "asked; they replied with their last answer (unchanged until " . date('H:i', $r['next']) . '): read it with peer_inbox.' : 'asked; the answer will arrive in the inbox in a few minutes (peer_inbox).';
             });
         $this->register('peer_publish', "Publish today's digest (titles of what was finished or moved, plus an optional one-line note from the user) to the assistants it is shared with. Only when the user asks.",
             ['note' => ['type' => 'string', 'description' => 'optional one line written by the user']], [],

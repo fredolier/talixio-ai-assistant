@@ -45,7 +45,7 @@ final class Web
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         if ($path === '/api/conductor/inbox') { $this->conductorInbox($method); return; } // the delegated cloud orchestrator reports in: its own secret, no session here
         if ($path === '/api/conductor/pull') { $this->conductorPull($method); return; } // a poll-mode orchestrator pulls its queued instructions: its own secret, no session here
-        if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
+        if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye', '/api/federation/ask', '/api/federation/queries'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
         $this->startSession();
         try {
@@ -206,6 +206,10 @@ final class Web
             $path === '/api/federation/publish' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->publish((string)($b['note'] ?? '')) + $this->federationState()),
             $path === '/api/federation/pull-now' && $m === 'POST' => $this->fedDo(fn() => ['arrived' => $this->app->federation()->pullFrom((int)($b['peer'] ?? 0))] + $this->federationState()),
             $path === '/api/federation/view' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->viewOf((int)($b['peer'] ?? 0))),
+            $path === '/api/federation/query' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->saveQuery($b); return $this->federationState(); }),
+            $path === '/api/federation/query/delete' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->deleteQuery((int)($b['id'] ?? 0)); return $this->federationState(); }),
+            $path === '/api/federation/peer-queries' && $m === 'POST' => $this->fedDo(fn() => ['queries' => $this->app->federation()->queriesOf((int)($b['peer'] ?? 0))]),
+            $path === '/api/federation/ask' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->ask((int)($b['peer'] ?? 0), (int)($b['query'] ?? 0), (string)($b['param'] ?? ''))),
             $path === '/api/federation/read' && $m === 'POST' => (function () use ($b) { $this->app->federation()->markRead((int)($b['peer'] ?? 0)); return $this->federationState(); })(),
             $path === '/api/federation/auto' && $m === 'POST' => (function () use ($b) { $this->app->federation()->setAuto(!empty($b['on'])); return $this->federationState(); })(),
             $path === '/api/conductor/setup' && $m === 'POST' => ['instruction' => $this->app->conductor()->setup()],
@@ -1764,6 +1768,8 @@ final class Web
                 $path === '/api/federation/push' && $method === 'POST' => $fed->receive($body, $bearer),
                 $path === '/api/federation/pull' && $method === 'GET' => $fed->pullBy($bearer, ($_GET['ack'] ?? '') === '1', ($_GET['view'] ?? '') === '1'),
                 $path === '/api/federation/bye' && $method === 'POST' => $fed->bye($bearer),
+                $path === '/api/federation/ask' && $method === 'POST' => $fed->receiveAsk($body, $bearer),
+                $path === '/api/federation/queries' && $method === 'GET' => $fed->queriesFor($bearer),
                 default => [405, ['error' => 'method not allowed']],
             };
             $this->json($resp, $code);
@@ -1776,7 +1782,7 @@ final class Web
     private function federationState(): array
     {
         $f = $this->app->federation();
-        return ['name' => $f->name(), 'base' => $f->base(), 'peers' => $f->peers(), 'inbox' => $f->inbox(0, false, 30), 'digest' => $f->digest(), 'auto' => $f->auto(),
+        return ['name' => $f->name(), 'base' => $f->base(), 'peers' => $f->peers(), 'inbox' => $f->inbox(0, false, 30), 'digest' => $f->digest(), 'auto' => $f->auto(), 'queries' => $f->queries(),
             'last' => (int)$this->app->store->get('fed_last', '0')];
     }
 

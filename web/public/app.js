@@ -3032,8 +3032,8 @@ async function fedLoad(r) {
       <label class="check"><input type="checkbox" data-k="message" ${p.accept.includes('message') ? 'checked' : ''}> <span>${esc(t('I accept their messages'))}</span></label>
       <p class="muted small">${esc(p.theyGive.includes('digest') ? t('They share their daily digest with you.') : t('They do not share anything with you yet.'))}</p>
       <div class="row wrap"><input type="text" class="fed-say" maxlength="2000" placeholder="${esc(t('A short message…'))}"><button class="btn small" data-a="say" type="button">${esc(t('Send'))}</button>
-        <button class="btn small" data-a="look" type="button">${esc(t('Look at their digest'))}</button><button class="btn small" data-a="revoke" type="button">${esc(t('Unpair'))}</button></div>
-      <pre class="fed-preview no-i18n" hidden></pre>`;
+        <button class="btn small" data-a="look" type="button">${esc(t('Look at their digest'))}</button><button class="btn small" data-a="ask" type="button">${esc(t('Ask a question…'))}</button><button class="btn small" data-a="revoke" type="button">${esc(t('Unpair'))}</button></div>
+      <pre class="fed-preview no-i18n" hidden></pre><div class="fed-ask" hidden></div>`;
     const save = async () => {
       const give = [...d.querySelectorAll('[data-k=give]:checked')].map(() => 'digest'), accept = [...d.querySelectorAll('[data-k=digest]:checked,[data-k=message]:checked')].map(x => x.dataset.k);
       try { await post('api/federation/permissions', { peer: p.id, give, accept }); toast(t('Saved.')); } catch (err) { toast(err.message); }
@@ -3044,6 +3044,19 @@ async function fedLoad(r) {
       try {
         if (b.dataset.a === 'say') { const i = d.querySelector('.fed-say'); if (!i.value.trim()) return; const r = await post('api/federation/send', { peer: p.id, text: i.value }); i.value = ''; toast(r.delivered ? t('Sent.') : t('Queued: their assistant will fetch it.')); }
         if (b.dataset.a === 'look') { const r = await post('api/federation/view', { peer: p.id }); const pre = d.querySelector('.fed-preview'); pre.textContent = r.body || t('They share nothing with you right now.'); pre.hidden = false; }
+        if (b.dataset.a === 'ask') {
+          const box = d.querySelector('.fed-ask'); box.hidden = !box.hidden; if (box.hidden) return;
+          const r = await post('api/federation/peer-queries', { peer: p.id });
+          box.innerHTML = r.queries.length ? r.queries.map(q => `<div class="row wrap"><span class="no-i18n"><strong>${esc(q.name)}</strong> ${esc(q.descr)}</span>
+            ${q.param ? `<input type="text" class="fed-val" maxlength="200" placeholder="${esc(t('Value'))}">` : ''}<button class="btn small" data-q="${q.id}" type="button">${esc(t('Ask'))}</button></div>`).join('')
+            : `<p class="muted small">${esc(t('They offer no question to you yet.'))}</p>`;
+          box.onclick = async ev => {
+            const qb = ev.target.closest('button[data-q]'); if (!qb) return;
+            try { const a = await post('api/federation/ask', { peer: p.id, query: +qb.dataset.q, param: qb.parentElement.querySelector('.fed-val')?.value || '' });
+              toast(a.cached ? t('Their last answer is on its way (unchanged).') : t('Asked: the answer will arrive in “Received”.')); } catch (err) { toast(err.message); }
+          };
+          return;
+        }
         if (b.dataset.a === 'revoke') {
           if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Unpair?'); return; }
           fedLoad(await post('api/federation/revoke', { peer: p.id })); toast(t('Unpaired.'));
@@ -3061,7 +3074,36 @@ async function fedLoad(r) {
     e.innerHTML = `<div class="muted small"><strong class="no-i18n">${esc(m.from)}</strong> · ${esc(new Date(m.ts * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }))} · ${esc(m.kind === 'digest' ? t('digest') : t('message'))}</div><div class="fed-body no-i18n">${esc(m.body).replace(/\n/g, '<br>')}</div>`;
     inb.append(e);
   }
+  fedQueries(f);
   setInfo('assistants', f.peers.length);
+}
+/** The questions I let paired assistants ask. */
+function fedQueries(f) {
+  const box = $('#fed-queries'); if (!box) return;
+  box.innerHTML = f.queries.length ? '' : `<p class="muted small">${esc(t('No question offered yet.'))}</p>`;
+  const when = ts => ts ? new Date(ts * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : t('never');
+  for (const q of f.queries) {
+    const names = f.peers.filter(p => q.peers.includes(p.id)).map(p => p.name).join(', ') || t('nobody');
+    const d = document.createElement('div'); d.className = 'fed-peer';
+    d.innerHTML = `<div class="fed-head"><strong class="no-i18n">${esc(q.name)}</strong> <span class="muted small no-i18n">${esc(names)}</span></div>
+      <p class="muted small no-i18n">${esc(q.prompt)}</p>
+      <p class="muted small">${esc(t('{n} fresh answers today', { n: q.today }))}${q.maxDay ? ' / ' + q.maxDay : ''} · ${esc(t('last answer {when}', { when: when(q.lastAt) }))}${q.gapMin ? ' · ' + esc(t('every {n} min at most', { n: q.gapMin })) : ''}</p>
+      <div class="row wrap"><button class="btn small" data-a="edit" type="button">${esc(t('Edit'))}</button><button class="btn small" data-a="del" type="button">${esc(t('Delete'))}</button></div>`;
+    d.onclick = async e => {
+      const b = e.target.closest('button[data-a]'); if (!b) return;
+      if (b.dataset.a === 'edit') fedQueryForm(f, q);
+      if (b.dataset.a === 'del') { if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Delete?'); return; } try { fedLoad(await post('api/federation/query/delete', { id: q.id })); } catch (err) { toast(err.message); } }
+    };
+    box.append(d);
+  }
+}
+function fedQueryForm(f, q) {
+  q = q || { id: 0, name: '', descr: '', prompt: '', space: 0, peers: [], param: false, maxDay: 3, gapMin: 0 };
+  $('#fed-q-form').hidden = false; $('#fed-q-form').dataset.id = q.id;
+  $('#fed-q-name').value = q.name; $('#fed-q-descr').value = q.descr; $('#fed-q-prompt').value = q.prompt;
+  $('#fed-q-param').checked = q.param; $('#fed-q-max').value = q.maxDay; $('#fed-q-gap').value = q.gapMin;
+  $('#fed-q-space').innerHTML = (state.spaces || []).filter(s => !s.privacy || s.privacy === 'internal').map(s => `<option class="no-i18n" value="${s.id}"${s.id === q.space ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+  $('#fed-q-peers').innerHTML = f.peers.length ? f.peers.map(p => `<label class="check"><input type="checkbox" value="${p.id}"${q.peers.includes(p.id) ? ' checked' : ''}> <span class="no-i18n">${esc(p.name)}</span></label>`).join('') : `<p class="muted small">${esc(t('No assistant is paired yet.'))}</p>`;
 }
 (function fedWire() {
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
@@ -3081,6 +3123,15 @@ async function fedLoad(r) {
   on('fed-publish', async () => {
     try { const r = await post('api/federation/publish', { note: $('#fed-note').value }); $('#fed-publish-state').textContent = r.sent.length || r.queued.length ? t('Sent to {n}, waiting for {m}.', { n: r.sent.length, m: r.queued.length }) : t('Not shared with anyone yet: tick “They can read my daily digest” on a paired assistant.'); fedLoad(r); }
     catch (err) { toast(err.message); }
+  });
+  on('fed-q-new', () => fedQueryForm(state.fed || { peers: [], queries: [] }, null));
+  on('fed-q-save', async () => {
+    try {
+      fedLoad(await post('api/federation/query', { id: +$('#fed-q-form').dataset.id || 0, name: $('#fed-q-name').value, descr: $('#fed-q-descr').value, prompt: $('#fed-q-prompt').value,
+        space: +$('#fed-q-space').value || 0, param: $('#fed-q-param').checked, maxDay: +$('#fed-q-max').value || 0, gapMin: +$('#fed-q-gap').value || 0,
+        peers: [...document.querySelectorAll('#fed-q-peers input:checked')].map(i => +i.value) }));
+      $('#fed-q-form').hidden = true; toast(t('Saved.'));
+    } catch (err) { toast(err.message); }
   });
   on('fed-pull', async () => { try { const r = await post('api/federation/pull-now', {}); toast(t('{n} new', { n: r.arrived })); fedLoad(r); } catch (err) { toast(err.message); } });
   on('fed-read', async () => { try { fedLoad(await post('api/federation/read', {})); } catch (err) { toast(err.message); } });

@@ -622,6 +622,24 @@
               <label class="check"><input type="checkbox" id="fed-auto"> <span>Send it every evening to the assistants I share it with</span></label>
               <div class="row wrap"><button id="fed-publish" class="btn primary" type="button">Send it now</button><span id="fed-publish-state" class="muted small"></span></div>
             </div>
+            <div class="card set-card" id="fed-q-card" data-id="fed-questions">
+              <h4>Questions they can ask</h4>
+              <p class="muted small">A question is a prompt you write once: what to look at, and what to say. The other assistant only picks it by name and cannot change it. The answer is written from one space (never a confidential one) with read-only tools.</p>
+              <div id="fed-queries" class="fed-peers"></div>
+              <div class="row"><button id="fed-q-new" class="btn" type="button">New question…</button></div>
+              <div id="fed-q-form" class="fed-box" hidden>
+                <label for="fed-q-name">Name</label><input id="fed-q-name" type="text" maxlength="80" placeholder="Project status">
+                <label for="fed-q-descr">What it is for (shown to them)</label><input id="fed-q-descr" type="text" maxlength="300" placeholder="Where project Atlas stands">
+                <label for="fed-q-prompt">The prompt</label><textarea id="fed-q-prompt" class="editor" rows="4" maxlength="2000" placeholder="Write the status of project Atlas for PO Dupont: progress, blockers, next steps."></textarea>
+                <label for="fed-q-space">Space it reads</label><select id="fed-q-space"></select>
+                <label class="check"><input type="checkbox" id="fed-q-param"> <span>Let them add a short value (use {param} in the prompt)</span></label>
+                <div class="row wrap"><label for="fed-q-max">Fresh answers per day (0 = no limit)</label><input id="fed-q-max" type="number" min="0" max="1000" value="3" style="width:6em">
+                  <label for="fed-q-gap">Minutes between fresh answers (0 = none)</label><input id="fed-q-gap" type="number" min="0" max="10080" value="0" style="width:6em"></div>
+                <p class="muted small">Beyond these limits the other assistant gets your last answer again, marked as unchanged, and it costs you nothing.</p>
+                <label>Who may ask</label><div id="fed-q-peers" class="fed-peers"></div>
+                <div class="row"><button id="fed-q-save" class="btn primary" type="button">Save the question</button></div>
+              </div>
+            </div>
             <div class="card set-card" id="fed-inbox-card" data-id="fed-inbox">
               <h4>Received <span id="fed-badge" class="muted small"></span></h4>
               <p class="muted small">What other assistants sent you. It is shown as text and never acted on by itself.</p>

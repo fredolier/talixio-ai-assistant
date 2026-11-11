@@ -26,6 +26,22 @@ donne ensuite à chaque sens son propre secret ; il n'est jamais affiché, et le
 Pour chaque assistant jumelé vous choisissez : *il peut lire mon bilan quotidien*, *j'accepte son bilan*, *j'accepte ses messages*.
 Décochez et cela s'arrête aussitôt. **Dissocier** met fin au jumelage des deux côtés.
 
+## Questions qu'ils peuvent poser
+Une **question** est un prompt que vous écrivez une fois, de votre côté : *« Rédige le statut du projet Atlas pour le PO Dupont : avancement,
+blocages, prochaines étapes. »* Vous lui donnez un nom et une courte description, vous choisissez l'**espace** qu'elle lit (jamais un espace
+confidentiel ou secret) et **qui peut la poser**. L'autre assistant ne voit que le nom et la description ; il choisit la question et ne peut
+pas modifier le prompt. Votre assistant répond en arrière-plan avec des outils en lecture seule (tableau, tâches, documents de cet espace —
+ni mémoire, ni courriels, ni web, ni écriture) et envoie la réponse dans la boîte de réception de celui qui a demandé. Il utilise **Poser une
+question…** sur l'assistant jumelé, ou le demande à son assistant (*« demande à l'assistant de Marie le statut d'Atlas »*).
+
+Une question peut accepter une courte valeur (écrivez `{param}` dans le prompt), traitée comme une donnée, pas comme une instruction.
+
+**Limites que vous fixez par question**
+- *Réponses fraîches par jour* — par exemple 3. Après la troisième, celui qui redemande reçoit **la dernière réponse de nouveau, marquée
+  « inchangée depuis 14:05 »**, sans coût.
+- *Minutes entre deux réponses fraîches* — par exemple 180 : si le chef de projet redemande deux heures plus tard, il obtient le même statut, sans nouveau calcul.
+Une seule des deux limites suffit. En plus, un assistant jumelé ne peut poser que 10 questions par heure.
+
 ## Dans les deux sens
 - **Envoi (push)** : votre assistant livre au webhook de l'autre (le bilan, chaque soir si vous cochez *L'envoyer chaque soir*, ou
   *L'envoyer maintenant* ; un message tout de suite).

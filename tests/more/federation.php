@@ -18,6 +18,7 @@ Federation::$transport = function (string $method, string $url, string $bearer, 
     [$code, $resp] = match ($u['path']) {
         '/api/federation/pair' => $f->pair($body ?? []), '/api/federation/push' => $f->receive($body ?? [], $bearer),
         '/api/federation/pull' => $f->pullBy($bearer, ($q['ack'] ?? '') === '1', ($q['view'] ?? '') === '1'), '/api/federation/bye' => $f->bye($bearer),
+        '/api/federation/ask' => $f->receiveAsk($body ?? [], $bearer), '/api/federation/queries' => $f->queriesFor($bearer),
     };
     return [$code, json_encode($resp)];
 };
@@ -83,6 +84,32 @@ check('fed: oversized content is cut', $r1[0] === 200 && mb_strlen($last['body']
 check('fed: the same message id is not stored twice', $r2[0] === 200 && !empty($r2[1]['duplicate']));
 for ($i = 0; $i < 70; $i++) $rr = $bob->federation()->receive(['mid' => sprintf('%016x', 0xd000 + $i), 'kind' => 'message', 'body' => 'spam'], $sec);
 check('fed: a flood is slowed down (per peer, per hour)', $rr[0] === 429);
+
+// ---- questions with their own prompt, a daily quota and a delay
+$bob->store->q("DELETE FROM fed_inbox WHERE body = 'spam'"); // the flood above filled this hour's allowance
+$aBob = (int)$alice->federation()->peers()[0]['id']; $bAlice = (int)$bob->federation()->peers()[0]['id'];
+$qid = $alice->federation()->saveQuery(['name' => 'Project status', 'descr' => 'Where the project stands', 'prompt' => 'Write the status of project Atlas for PO Dupont.', 'peers' => [$aBob], 'maxDay' => 2, 'gapMin' => 180]);
+$offered = $bob->federation()->queriesOf($bAlice);
+check('fed: the peer sees the name and description of a question, never its prompt', count($offered) === 1 && $offered[0]['name'] === 'Project status' && !str_contains(json_encode($offered), 'Dupont'));
+check('fed: a question not offered to a peer is refused', $alice->federation()->receiveAsk(['query' => 9999], (string)$bob->store->q('SELECT out_secret FROM fed_peers')->fetch()['out_secret'])[0] === 403);
+$before = count($bob->federation()->inbox(0, false, 100));
+$r = $bob->federation()->ask($bAlice, $qid);
+check('fed: asking queues a fresh run on the other side', $r['cached'] === false);
+check('fed: the worker answers and the answer reaches the asker', $alice->federation()->runAsks(1) === 1 && $alice->federation()->flush() >= 1
+    && ($bob->federation()->inbox(0, false, 100)[0]['kind'] ?? '') === 'answer' && count($bob->federation()->inbox(0, false, 100)) === $before + 1);
+$r = $bob->federation()->ask($bAlice, $qid); $alice->federation()->flush();
+$again = $bob->federation()->inbox(0, false, 1)[0];
+check('fed: asking again within the delay returns the same answer, marked unchanged', $r['cached'] === true && str_contains($again['body'], 'unchanged since') && $alice->federation()->runAsks(5) === 0);
+$freshRuns = (int)$alice->store->q('SELECT COUNT(*) FROM fed_asks WHERE fresh = 1')->fetchColumn();
+check('fed: the repeated call did not cost a new run', $freshRuns === 1);
+$alice->federation()->saveQuery(['id' => $qid, 'name' => 'Project status', 'prompt' => 'Write the status of project Atlas.', 'peers' => [$aBob], 'maxDay' => 2, 'gapMin' => 0]);
+$bob->federation()->ask($bAlice, $qid); $alice->federation()->runAsks(1); // second fresh run today
+$r3 = $bob->federation()->ask($bAlice, $qid);
+check('fed: after the daily quota is used the last answer is returned, not a new run', $r3['cached'] === true && (int)$alice->store->q('SELECT COUNT(*) FROM fed_asks WHERE fresh = 1')->fetchColumn() === 2 && $alice->federation()->queries()[0]['today'] === 2);
+$sp = $alice->spaces()->save(['name' => 'Hidden', 'privacy' => 'confidential']);
+check('fed: a confidential space cannot back a question', str_contains($err(fn() => $alice->federation()->saveQuery(['name' => 'x', 'prompt' => 'y', 'space' => (int)$sp['id']])), 'confidential'));
+$alice->store->q("INSERT INTO jobs(title, instructions, tier, status, created, finished, max_cost_usd, space) VALUES ('Hidden job', 'i', 'standard', 'done', ?, ?, 1, ?)", [time() - 10, time() - 5, (int)$sp['id']]);
+check('fed: the digest leaves out work done in confidential spaces', !str_contains($alice->federation()->digest()['body'], 'Hidden job') && str_contains($alice->federation()->digest()['body'], 'Quarterly report'));
 
 // ---- the live view and revocation
 $view = $bob->federation()->viewOf($bobPeerOfAlice);

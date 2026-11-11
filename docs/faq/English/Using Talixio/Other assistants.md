@@ -24,6 +24,20 @@ direction its own secret; it is never shown, and the receiving side keeps only a
 For each paired assistant you choose: *they can read my daily digest*, *I accept their digest*, *I accept their messages*. Untick one
 and it stops at once. **Unpair** ends the pairing on both sides.
 
+## Questions they can ask
+A **question** is a prompt you write once, on your side: *"Write the status of project Atlas for PO Dupont: progress, blockers, next steps."*
+You give it a name and a short description, choose the **space** it reads (never a confidential or secret one) and **who may ask it**.
+The other assistant only sees the name and the description; it picks the question and cannot change the prompt. Your assistant answers
+in the background with read-only tools (board, tasks, documents of that space — no memory, mail, web or writes) and sends the answer
+to the asker's inbox. The asker uses **Ask a question…** on the paired assistant, or tells its assistant (*"ask Marie's assistant for the Atlas status"*).
+
+A question can take one short value (write `{param}` in the prompt), handled as data, not as an instruction.
+
+**Limits you set per question**
+- *Fresh answers per day* — for example 3. After the third, anyone asking again gets the **last answer again, marked "unchanged since 14:05"**, at no cost.
+- *Minutes between fresh answers* — for example 180: asked again two hours later, the project manager gets the same status, not a new run.
+Either limit alone is enough. On top of that, a paired assistant can ask at most 10 questions an hour.
+
 ## Both directions
 - **Push**: your assistant delivers to the other's webhook (the digest, every evening if you tick *Send it every evening*, or *Send it
   now*; a message right away).

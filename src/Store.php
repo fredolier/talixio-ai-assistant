@@ -159,7 +159,13 @@ final class Store
                 title TEXT NOT NULL DEFAULT \'\', body TEXT NOT NULL DEFAULT \'\', read INTEGER, UNIQUE(peer, mid));
             CREATE TABLE IF NOT EXISTS fed_outbox(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, peer INTEGER NOT NULL, mid TEXT NOT NULL, kind TEXT NOT NULL,
                 title TEXT NOT NULL DEFAULT \'\', body TEXT NOT NULL DEFAULT \'\', delivered INTEGER);
-            CREATE INDEX IF NOT EXISTS fed_outbox_peer ON fed_outbox(peer, delivered);');
+            CREATE INDEX IF NOT EXISTS fed_outbox_peer ON fed_outbox(peer, delivered);
+            -- questions I let paired assistants ask (each with its own prompt, space and allowed peers), and the asks received
+            CREATE TABLE IF NOT EXISTS fed_queries(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, name TEXT NOT NULL, descr TEXT NOT NULL DEFAULT \'\', prompt TEXT NOT NULL,
+                space INTEGER NOT NULL DEFAULT 0, peers TEXT NOT NULL DEFAULT \'[]\', param INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1,
+                max_day INTEGER NOT NULL DEFAULT 0, gap_min INTEGER NOT NULL DEFAULT 0, last_at INTEGER NOT NULL DEFAULT 0, last_answer TEXT NOT NULL DEFAULT \'\');
+            CREATE TABLE IF NOT EXISTS fed_asks(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, peer INTEGER NOT NULL, query INTEGER NOT NULL, param TEXT NOT NULL DEFAULT \'\',
+                mid TEXT NOT NULL, status TEXT NOT NULL DEFAULT \'queued\', error TEXT NOT NULL DEFAULT \'\', fresh INTEGER NOT NULL DEFAULT 0, done INTEGER);');
         if ($this->get('briefing_v2') === '') { // the morning briefing becomes 5 rated lines; keep what the user added ("Also: …")
             foreach ($this->q("SELECT id, prompt FROM tasks WHERE title = 'Morning briefing' AND job IS NULL")->fetchAll() as $t) {
                 $i = strpos((string)$t['prompt'], "\nAlso: ");
