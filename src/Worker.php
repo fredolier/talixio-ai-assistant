@@ -7,6 +7,7 @@ final class Worker
 {
     private int $lastSummary = 0;
     private int $lastBatch = 0;
+    private int $lastFed = 0;
     private int $lastEmail = 0;
     private int $lastSignal = 0;
     private int $lastMcp = 0;
@@ -77,6 +78,7 @@ final class Worker
         $this->guard('jobs', fn() => $app->jobs()->dispatch());
         $this->guard('conductor', function () use ($app) { $c = $app->conductor(); if ($c->busy()) $c->poll(); }); // advance Tier-D code sessions only when any is live
         $this->guard('pilot', fn() => $app->pilot()->tick($now)); // the assistant looks at agents' questions
+        if (!Transfer::paused($store) && $now - $this->lastFed >= 60) { $this->lastFed = $now; $this->guard('federation', fn() => $app->federation()->tick($now)); } // other people's assistants: poll, and the daily digest
         $paused = Transfer::paused($store) !== null; // only this server's housekeeping: nothing that answers, sends or acts
         foreach ($paused ? [] : $store->dueTasks($now) as $t) {
             // advance first so a crash never makes a task fire twice

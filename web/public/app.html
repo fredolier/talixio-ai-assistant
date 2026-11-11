@@ -591,6 +591,45 @@
           </div>
           </div>
 
+          <div class="set-sec" data-sec="assistants" hidden>
+            <header><h3>Other assistants</h3><p class="muted small">Pair your assistant with another person's, and decide exactly what each can see. Nothing is shared until you tick it.</p></header>
+            <div class="card set-card" id="fed-card" data-id="fed-peers">
+              <h4>Paired assistants</h4>
+              <div id="fed-peers" class="fed-peers"></div>
+              <div class="row wrap">
+                <button id="fed-invite" class="btn" type="button">Invite someone…</button>
+                <button id="fed-have" class="btn" type="button">I have an invitation…</button>
+              </div>
+              <div id="fed-invite-box" class="fed-box" hidden>
+                <label class="check"><input type="checkbox" id="fed-invite-digest" checked> <span>Let them read my daily digest</span></label>
+                <div class="row"><button id="fed-invite-make" class="btn primary" type="button">Create the invitation</button></div>
+                <textarea id="fed-invite-code" class="editor mono" rows="3" readonly hidden></textarea>
+                <p id="fed-invite-note" class="muted small" hidden>Give this code to the other person yourself (message, mail, in person). It works once and expires in 24 hours.</p>
+              </div>
+              <div id="fed-have-box" class="fed-box" hidden>
+                <label for="fed-have-code">The invitation you received</label>
+                <textarea id="fed-have-code" class="editor mono" rows="3" spellcheck="false" placeholder="tlx1.…"></textarea>
+                <label class="check"><input type="checkbox" id="fed-have-digest"> <span>Let them read my daily digest in return</span></label>
+                <div class="row"><button id="fed-have-go" class="btn primary" type="button">Pair</button></div>
+              </div>
+            </div>
+            <div class="card set-card" id="fed-share-card" data-id="fed-share">
+              <h4>What I share</h4>
+              <p class="muted small">The daily digest holds only the titles of what was finished or moved in the last 24 hours, and the line you add. Never the content of tasks, conversations, mail, files or memory. This is exactly what leaves:</p>
+              <pre id="fed-preview" class="fed-preview no-i18n"></pre>
+              <label for="fed-note">A line of your own (optional)</label>
+              <input id="fed-note" type="text" maxlength="600" placeholder="Today I focused on…">
+              <label class="check"><input type="checkbox" id="fed-auto"> <span>Send it every evening to the assistants I share it with</span></label>
+              <div class="row wrap"><button id="fed-publish" class="btn primary" type="button">Send it now</button><span id="fed-publish-state" class="muted small"></span></div>
+            </div>
+            <div class="card set-card" id="fed-inbox-card" data-id="fed-inbox">
+              <h4>Received <span id="fed-badge" class="muted small"></span></h4>
+              <p class="muted small">What other assistants sent you. It is shown as text and never acted on by itself.</p>
+              <div id="fed-inbox" class="fed-inbox"></div>
+              <div class="row wrap"><button id="fed-pull" class="btn" type="button">Check now</button><button id="fed-read" class="btn" type="button">Mark all as read</button></div>
+            </div>
+          </div>
+
           <div class="set-sec" data-sec="library" hidden>
             <header><h3>Library and memory</h3><p class="muted small">Search, documents and the network drive.</p></header>
             <div class="set-groups" data-groups="library"></div>

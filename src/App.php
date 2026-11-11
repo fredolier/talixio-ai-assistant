@@ -229,6 +229,7 @@ final class App
     public function routing(): Routing { return new Routing($this); }
     public function catalogue(): ModelCatalog { return new ModelCatalog($this); }
     public function links(): Links { return new Links($this); }
+    public function federation(): Federation { return new Federation($this); }
     public function routines(): Routines { return new Routines($this); }
     public function board(): Board { return $this->board ??= new Board($this); }
     public function google(): Google { return new Google($this); }

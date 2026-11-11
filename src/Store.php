@@ -150,6 +150,16 @@ final class Store
             CREATE INDEX IF NOT EXISTS relay_messages_box ON relay_messages(recipient, id);
             CREATE TABLE IF NOT EXISTS relay_grants(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, owner TEXT NOT NULL, peer TEXT NOT NULL,
                 scope TEXT NOT NULL, UNIQUE(owner, peer, scope));');
+        // assistant-to-assistant federation (docs/design/federation.md): paired peers (each direction has its own secret,
+        // the one that calls me is kept only as a hash), what arrived (untrusted), and what is queued for a peer to pull.
+        $this->db->exec('CREATE TABLE IF NOT EXISTS fed_peers(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL, out_secret TEXT NOT NULL DEFAULT \'\',
+                in_hash TEXT NOT NULL DEFAULT \'\', give TEXT NOT NULL DEFAULT \'[]\', they_give TEXT NOT NULL DEFAULT \'[]\', accept TEXT NOT NULL DEFAULT \'[]\',
+                status TEXT NOT NULL DEFAULT \'active\', last_in INTEGER NOT NULL DEFAULT 0, last_out INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS fed_inbox(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, peer INTEGER NOT NULL, mid TEXT NOT NULL, kind TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT \'\', body TEXT NOT NULL DEFAULT \'\', read INTEGER, UNIQUE(peer, mid));
+            CREATE TABLE IF NOT EXISTS fed_outbox(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, peer INTEGER NOT NULL, mid TEXT NOT NULL, kind TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT \'\', body TEXT NOT NULL DEFAULT \'\', delivered INTEGER);
+            CREATE INDEX IF NOT EXISTS fed_outbox_peer ON fed_outbox(peer, delivered);');
         if ($this->get('briefing_v2') === '') { // the morning briefing becomes 5 rated lines; keep what the user added ("Also: …")
             foreach ($this->q("SELECT id, prompt FROM tasks WHERE title = 'Morning briefing' AND job IS NULL")->fetchAll() as $t) {
                 $i = strpos((string)$t['prompt'], "\nAlso: ");

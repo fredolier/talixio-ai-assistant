@@ -1919,3 +1919,14 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .pl-zero b { font-size: 1.05rem; }
 .pilot-statusfile { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 .pilot-statusfile pre { max-height: 22em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--sunk); border-radius: 8px; padding: 10px 12px; font-size: .78rem; margin: 0; }
+
+/* Other assistants (federation) */
+.fed-peers,.fed-inbox{display:flex;flex-direction:column;gap:10px}
+.fed-peer{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.fed-head{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.fed-box{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.fed-say{flex:1 1 180px;min-width:0}
+.fed-preview{white-space:pre-wrap;word-break:break-word;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:.85rem;margin:0}
+.fed-msg{border-left:3px solid var(--line);padding:4px 10px}
+.fed-msg.unread{border-left-color:var(--accent)}
+.fed-body{white-space:normal;word-break:break-word}

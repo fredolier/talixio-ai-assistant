@@ -2941,6 +2941,7 @@ const SET_SECTIONS = [
   ['model', 'Model and budget', 'M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3M6 6h12v12H6zM10 10h4v4h-4z'],
   ['channels', 'Channels', 'M4 5h16v11H8l-4 4z'],
   ['accounts', 'Connected accounts', 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'],
+  ['assistants', 'Other assistants', 'M8 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 2.5-5 6-5s6 2 6 5M14 20c0-2 1.5-3.5 4-3.5s4 1.5 4 3.5'],
   ['library', 'Library and memory', 'M4 4h5v16H4zM10 4h5v16h-5zM16 5l4 1-3 14-4-1'],
   ['learning', 'Learning', 'M12 3a6 6 0 0 0-3.5 10.9V17h7v-3.1A6 6 0 0 0 12 3zM9.5 20h5M10.5 22.5h3'],
   ['security', 'Security', 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],
@@ -2971,6 +2972,7 @@ function showSection(id, scroll = true) {
   if ($('#set-search').value) { $('#set-search').value = ''; setSearch(); }
   document.querySelectorAll('#view-settings .set-sec').forEach(s => { s.hidden = s.dataset.sec !== id; });
   sectionTabs(id);
+  if (id === 'assistants') fedLoad();
   document.querySelectorAll('#set-nav a, #set-chips a').forEach(a => { a.classList.toggle('on', a.dataset.sec === id); a.setAttribute('aria-current', a.dataset.sec === id ? 'page' : 'false'); });
   $('#set-chips a.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   if (location.hash !== '#settings/' + id) history.replaceState(null, '', '#settings/' + id);
@@ -3014,6 +3016,76 @@ function setAccounts() {
   const a = state.setAcc || {}, mb = setFields().some(f => f.key === 'TALIXIO_MAILBOX_USER' && (f.value || f.set));
   setInfo('accounts', (a.google ? 1 : 0) + (a.outlook ? 1 : 0) + (a.spotify ? 1 : 0) + (a.mcp || 0) + (mb ? 1 : 0));
 }
+/** Other assistants: pairing, what each peer may read, the digest preview, and what arrived. */
+state.fed = null;
+async function fedLoad(r) {
+  try { state.fed = r || await api('api/federation'); } catch (err) { toast(err.message); return; }
+  const f = state.fed, ago = ts => { if (!ts) return t('never'); const d = Math.max(0, Date.now() / 1000 - ts); return d < 90 ? t('just now') : d < 3600 ? t('{n} min ago', { n: Math.floor(d / 60) }) : d < 86400 ? t('{n} h ago', { n: Math.floor(d / 3600) }) : t('{n} d ago', { n: Math.floor(d / 86400) }); };
+  const box = $('#fed-peers');
+  box.innerHTML = f.peers.length ? '' : `<p class="muted small">${esc(t('No assistant is paired yet.'))}</p>`;
+  for (const p of f.peers) {
+    const d = document.createElement('div'); d.className = 'fed-peer'; d.dataset.peer = p.id;
+    d.innerHTML = `<div class="fed-head"><strong class="no-i18n">${esc(p.name)}</strong> <span class="muted small no-i18n">${esc(p.url.replace(/^https?:\/\//, ''))}</span>
+      <span class="muted small">${esc(t('last received {when}', { when: ago(p.lastIn) }))} · ${esc(t('last sent {when}', { when: ago(p.lastOut) }))}</span></div>
+      <label class="check"><input type="checkbox" data-k="give" ${p.give.includes('digest') ? 'checked' : ''}> <span>${esc(t('They can read my daily digest'))}</span></label>
+      <label class="check"><input type="checkbox" data-k="digest" ${p.accept.includes('digest') ? 'checked' : ''}> <span>${esc(t('I accept their digest'))}</span></label>
+      <label class="check"><input type="checkbox" data-k="message" ${p.accept.includes('message') ? 'checked' : ''}> <span>${esc(t('I accept their messages'))}</span></label>
+      <p class="muted small">${esc(p.theyGive.includes('digest') ? t('They share their daily digest with you.') : t('They do not share anything with you yet.'))}</p>
+      <div class="row wrap"><input type="text" class="fed-say" maxlength="2000" placeholder="${esc(t('A short message…'))}"><button class="btn small" data-a="say" type="button">${esc(t('Send'))}</button>
+        <button class="btn small" data-a="look" type="button">${esc(t('Look at their digest'))}</button><button class="btn small" data-a="revoke" type="button">${esc(t('Unpair'))}</button></div>
+      <pre class="fed-preview no-i18n" hidden></pre>`;
+    const save = async () => {
+      const give = [...d.querySelectorAll('[data-k=give]:checked')].map(() => 'digest'), accept = [...d.querySelectorAll('[data-k=digest]:checked,[data-k=message]:checked')].map(x => x.dataset.k);
+      try { await post('api/federation/permissions', { peer: p.id, give, accept }); toast(t('Saved.')); } catch (err) { toast(err.message); }
+    };
+    d.querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = save);
+    d.onclick = async e => {
+      const b = e.target.closest('button[data-a]'); if (!b) return;
+      try {
+        if (b.dataset.a === 'say') { const i = d.querySelector('.fed-say'); if (!i.value.trim()) return; const r = await post('api/federation/send', { peer: p.id, text: i.value }); i.value = ''; toast(r.delivered ? t('Sent.') : t('Queued: their assistant will fetch it.')); }
+        if (b.dataset.a === 'look') { const r = await post('api/federation/view', { peer: p.id }); const pre = d.querySelector('.fed-preview'); pre.textContent = r.body || t('They share nothing with you right now.'); pre.hidden = false; }
+        if (b.dataset.a === 'revoke') {
+          if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Unpair?'); return; }
+          fedLoad(await post('api/federation/revoke', { peer: p.id })); toast(t('Unpaired.'));
+        }
+      } catch (err) { toast(err.message); }
+    };
+    box.append(d);
+  }
+  $('#fed-preview').textContent = f.digest.body;
+  $('#fed-auto').checked = !!f.auto;
+  $('#fed-badge').textContent = f.inbox.filter(m => !m.read).length ? t('{n} unread', { n: f.inbox.filter(m => !m.read).length }) : '';
+  const inb = $('#fed-inbox'); inb.innerHTML = f.inbox.length ? '' : `<p class="muted small">${esc(t('Nothing received yet.'))}</p>`;
+  for (const m of f.inbox) {
+    const e = document.createElement('div'); e.className = 'fed-msg' + (m.read ? '' : ' unread');
+    e.innerHTML = `<div class="muted small"><strong class="no-i18n">${esc(m.from)}</strong> · ${esc(new Date(m.ts * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }))} · ${esc(m.kind === 'digest' ? t('digest') : t('message'))}</div><div class="fed-body no-i18n">${esc(m.body).replace(/\n/g, '<br>')}</div>`;
+    inb.append(e);
+  }
+  setInfo('assistants', f.peers.length);
+}
+(function fedWire() {
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  on('fed-invite', () => { $('#fed-invite-box').hidden = !$('#fed-invite-box').hidden; $('#fed-have-box').hidden = true; });
+  on('fed-have', () => { $('#fed-have-box').hidden = !$('#fed-have-box').hidden; $('#fed-invite-box').hidden = true; });
+  on('fed-invite-make', async () => {
+    try {
+      const r = await post('api/federation/invite', { give: $('#fed-invite-digest').checked ? ['digest'] : [] });
+      const c = $('#fed-invite-code'); c.value = r.invite; c.hidden = false; $('#fed-invite-note').hidden = false; c.select();
+      try { await navigator.clipboard.writeText(r.invite); toast(t('Invitation copied.')); } catch {}
+    } catch (err) { toast(err.message); }
+  });
+  on('fed-have-go', async () => {
+    try { const r = await post('api/federation/accept', { invite: $('#fed-have-code').value, give: $('#fed-have-digest').checked ? ['digest'] : [] }); $('#fed-have-code').value = ''; $('#fed-have-box').hidden = true; toast(t('Paired with {name}.', { name: r.name || '' })); fedLoad(r); }
+    catch (err) { toast(err.message); }
+  });
+  on('fed-publish', async () => {
+    try { const r = await post('api/federation/publish', { note: $('#fed-note').value }); $('#fed-publish-state').textContent = r.sent.length || r.queued.length ? t('Sent to {n}, waiting for {m}.', { n: r.sent.length, m: r.queued.length }) : t('Not shared with anyone yet: tick “They can read my daily digest” on a paired assistant.'); fedLoad(r); }
+    catch (err) { toast(err.message); }
+  });
+  on('fed-pull', async () => { try { const r = await post('api/federation/pull-now', {}); toast(t('{n} new', { n: r.arrived })); fedLoad(r); } catch (err) { toast(err.message); } });
+  on('fed-read', async () => { try { fedLoad(await post('api/federation/read', {})); } catch (err) { toast(err.message); } });
+  const au = document.getElementById('fed-auto'); if (au) au.onchange = async () => { try { await post('api/federation/auto', { on: au.checked }); toast(t('Saved.')); } catch (err) { toast(err.message); } };
+})();
 function setInfo(k, v) { if (state.setInfo[k] === v) return; state.setInfo[k] = v; if (!$('#view-settings').hidden) setHealth(); }
 function applyShowIf() {
   for (const [key, [dep, vals]] of Object.entries(SHOW_IF)) {

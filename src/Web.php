@@ -45,6 +45,7 @@ final class Web
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         if ($path === '/api/conductor/inbox') { $this->conductorInbox($method); return; } // the delegated cloud orchestrator reports in: its own secret, no session here
         if ($path === '/api/conductor/pull') { $this->conductorPull($method); return; } // a poll-mode orchestrator pulls its queued instructions: its own secret, no session here
+        if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
         $this->startSession();
         try {
@@ -109,7 +110,7 @@ final class Web
         $area = explode('/', $path)[2] ?? '';
         return match ($area) {
             'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'routing', 'catalogue', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
-            'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor', 'pilot' => $this->routeChat($m, $path, $b),
+            'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor', 'pilot', 'federation' => $this->routeChat($m, $path, $b),
             'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
             'google', 'microsoft', 'spotify', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
             'memory', 'mind', 'skills', 'roles', 'scripts' => $this->routeMind($m, $path, $b),
@@ -196,6 +197,17 @@ final class Web
             $path === '/api/pilot' && $m === 'GET' => $this->app->pilot()->overview(),
             $path === '/api/pilot' && $m === 'POST' => (function () use ($b) { $r = $this->app->pilot()->setPolicy($b); if (is_string($r)) throw new \InvalidArgumentException($r); return $r; })(),
             $path === '/api/pilot/verdict' && $m === 'POST' => (function () use ($b) { $r = $this->app->pilot()->verdict((string)($b['decision_id'] ?? ''), !empty($b['ok']), (string)($b['note'] ?? '')); if (is_string($r)) throw new \InvalidArgumentException($r); return $r; })(),
+            $path === '/api/federation' && $m === 'GET' => $this->federationState(),
+            $path === '/api/federation/invite' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->invite((array)($b['give'] ?? []))),
+            $path === '/api/federation/accept' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->accept((string)($b['invite'] ?? ''), (array)($b['give'] ?? [])) + $this->federationState()),
+            $path === '/api/federation/permissions' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->setPermissions((int)($b['peer'] ?? 0), (array)($b['give'] ?? []), (array)($b['accept'] ?? [])); return $this->federationState(); }),
+            $path === '/api/federation/revoke' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->revoke((int)($b['peer'] ?? 0)); return $this->federationState(); }),
+            $path === '/api/federation/send' && $m === 'POST' => $this->fedDo(fn() => ['delivered' => $this->app->federation()->send((int)($b['peer'] ?? 0), (string)($b['text'] ?? ''))] + $this->federationState()),
+            $path === '/api/federation/publish' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->publish((string)($b['note'] ?? '')) + $this->federationState()),
+            $path === '/api/federation/pull-now' && $m === 'POST' => $this->fedDo(fn() => ['arrived' => $this->app->federation()->pullFrom((int)($b['peer'] ?? 0))] + $this->federationState()),
+            $path === '/api/federation/view' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->viewOf((int)($b['peer'] ?? 0))),
+            $path === '/api/federation/read' && $m === 'POST' => (function () use ($b) { $this->app->federation()->markRead((int)($b['peer'] ?? 0)); return $this->federationState(); })(),
+            $path === '/api/federation/auto' && $m === 'POST' => (function () use ($b) { $this->app->federation()->setAuto(!empty($b['on'])); return $this->federationState(); })(),
             $path === '/api/conductor/setup' && $m === 'POST' => ['instruction' => $this->app->conductor()->setup()],
             $path === '/api/conductor/disconnect' && $m === 'POST' => ['message' => $this->app->conductor()->disconnect()] + $this->app->conductor()->statusInfo(),
             $path === '/api/conductor/notify' && $m === 'POST' => $this->app->conductor()->setNotify((string)($b['mode'] ?? '')),
@@ -1736,6 +1748,42 @@ final class Web
         } catch (\Throwable $e) {
             $this->json(['error' => self::internalError($e)], 500);
         }
+    }
+
+    /** Federation calls from another person's assistant: authenticated by the secret issued at pairing (or the one-time code), never by the web session. */
+    private function federationPublic(string $path, string $method): void
+    {
+        ob_start();
+        try {
+            $fed = $this->app->federation();
+            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+            $body = $method === 'POST' ? (json_decode((string)file_get_contents('php://input'), true) ?: []) : [];
+            if (!is_array($body)) $this->fail(400, 'JSON object expected');
+            [$code, $resp] = match (true) {
+                $path === '/api/federation/pair' && $method === 'POST' => $fed->pair($body),
+                $path === '/api/federation/push' && $method === 'POST' => $fed->receive($body, $bearer),
+                $path === '/api/federation/pull' && $method === 'GET' => $fed->pullBy($bearer, ($_GET['ack'] ?? '') === '1', ($_GET['view'] ?? '') === '1'),
+                $path === '/api/federation/bye' && $method === 'POST' => $fed->bye($bearer),
+                default => [405, ['error' => 'method not allowed']],
+            };
+            $this->json($resp, $code);
+        } catch (\Throwable $e) {
+            $this->json(['error' => self::internalError($e)], 500);
+        }
+    }
+
+    /** What the Other assistants screen shows: my address, peers, what arrived, the digest as it would leave. */
+    private function federationState(): array
+    {
+        $f = $this->app->federation();
+        return ['name' => $f->name(), 'base' => $f->base(), 'peers' => $f->peers(), 'inbox' => $f->inbox(0, false, 30), 'digest' => $f->digest(), 'auto' => $f->auto(),
+            'last' => (int)$this->app->store->get('fed_last', '0')];
+    }
+
+    /** Run a federation action; network failures reach the person as a plain message, not a 500. */
+    private function fedDo(callable $fn): array
+    {
+        try { return $fn(); } catch (\RuntimeException $e) { throw new \InvalidArgumentException($e->getMessage()); }
     }
 
     /** POST /api/apps/receive?t=: the browser hands over an app (its package, as JSON) from a linked assistant. */

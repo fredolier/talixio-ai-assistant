@@ -348,7 +348,7 @@ final class Privacy
     private static function label(array $svc, string $purpose): string
     {
         return ['search' => 'Web search', 'web' => 'Reading a web page', 'transcription' => 'Transcription', 'embeddings' => 'Search by meaning',
-            'connector' => 'Connector', 'calendar' => 'Calendar', 'music' => 'Music', 'chat' => 'Chat app', 'model' => 'Model', 'vision' => 'Reading images', 'billing' => 'Reading costs'][$purpose] ?? ucfirst($purpose);
+            'connector' => 'Connector', 'calendar' => 'Calendar', 'music' => 'Music', 'chat' => 'Chat app', 'model' => 'Model', 'vision' => 'Reading images', 'billing' => 'Reading costs', 'assistants' => 'Other assistants'][$purpose] ?? ucfirst($purpose);
     }
 
     private function log(string $service, string $purpose, int $bytes, string $level, bool $blocked): void

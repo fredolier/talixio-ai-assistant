@@ -138,6 +138,22 @@ const flows = {
     await page.selectOption('#theme-mode', '');
     if (await page.isVisible('#doctor-run')) { await page.click('#doctor-run'); await page.waitForTimeout(1500); }
   },
+  async otherAssistants({ page, check }) {
+    await go(page, 'settings');
+    await page.evaluate(() => { location.hash = '#settings/assistants'; });
+    await page.waitForSelector('#fed-peers', { state: 'visible' });
+    check('assistants: the section opens with the pairing card and says nothing is paired', await page.isVisible('#fed-invite') && /No assistant is paired|Aucun assistant/.test(await page.textContent('#fed-peers')));
+    await page.click('.set-sec[data-sec="assistants"] .set-tabs .tab:nth-child(2)');
+    await page.waitForSelector('#fed-preview', { state: 'visible' });
+    check('assistants: the exact digest is previewed before anything is shared', (await page.textContent('#fed-preview')).trim().length > 0 && await page.isVisible('#fed-publish'));
+    await page.click('.set-sec[data-sec="assistants"] .set-tabs .tab:nth-child(1)');
+    await page.click('#fed-have');
+    check('assistants: "I have an invitation" opens the form, sharing in return is off by default', await page.isVisible('#fed-have-code') && !(await page.isChecked('#fed-have-digest')));
+    await page.fill('#fed-have-code', 'tlx1.not-a-real-invitation');
+    await page.click('#fed-have-go');
+    await page.waitForFunction(() => /not valid|invalide/i.test(document.querySelector('#toast').textContent));
+    check('assistants: an invalid invitation is refused with a plain message', true);
+  },
   async modelCockpit({ page, check }) {
     await go(page, 'settings');
     await page.click('#set-nav a[data-sec="model"]');
