@@ -14,8 +14,8 @@ Depuis la 0.16, les chemins des fichiers sont remis à jour automatiquement au d
 de données a changé (installation simple → Docker, transfert). Si un document reste introuvable, vérifiez
 qu'il est bien dans le volume (`docker exec talixio-<vous> ls /data/files`).
 
-## « Worker hors ligne »
-Les routines, Telegram et les tâches de fond sont arrêtés. Installation simple :
+## « Processus d'arrière-plan arrêté »
+Les routines, Telegram et les missions sont arrêtés. Installation simple :
 `systemctl status talixio-worker` et `journalctl -u talixio-worker -n 50`. Docker : `docker logs talixio-<vous>`.
 
 ## L'app ne répond plus ou reste sur une ancienne version
@@ -27,7 +27,7 @@ Rechargez, ou fermez et rouvrez l'app. Si rien n'y fait : dans le navigateur, pa
 - Après 5 erreurs en 15 minutes, l'adresse est bloquée un moment.
 
 ## Les documents restent « en lecture… »
-La lecture se fait en arrière-plan par le worker : vérifiez qu'il tourne. Un fichier « illisible » :
+La lecture se fait en arrière-plan par le processus d'arrière-plan : vérifiez qu'il tourne. Un fichier « illisible » :
 ouvrez-le et choisissez *Relire*.
 
 ## La transcription locale échoue

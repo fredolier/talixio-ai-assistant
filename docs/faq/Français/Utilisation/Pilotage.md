@@ -84,8 +84,8 @@ tendance, spécialisation et actions *évaluer, publier, améliorer (A/B), archi
 - On peut aussi créer un rôle en le demandant à l'assistant, ou en installer un depuis le catalogue.
 - **Archivés…** rouvre les rôles archivés. Le rôle *évaluateur* est protégé : il n'a aucune action de cycle de vie.
 
-## Chantiers
-Les directives du directeur : chantiers ouverts, avancement et pilotage. On les lance depuis la zone de saisie de la
+## Missions
+Les missions du directeur, menées par plusieurs agents : missions ouvertes, avancement et pilotage. On les lance depuis la zone de saisie de la
 conversation, depuis le chat.
 
 Sur téléphone, les onglets défilent horizontalement.

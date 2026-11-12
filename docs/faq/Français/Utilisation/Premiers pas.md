@@ -24,7 +24,7 @@
 ## Le menu
 Le menu à gauche (la barre du bas sur téléphone) a huit entrées : **Chat**, **Tâches**, **Fichiers** (la bibliothèque),
 **Apps**, **Notifications**, **Mail**, **Personnes** et, en dernier, **Pilotage** (voir *Pilotage*).
-- **⋯ Plus** contient les **Automatisations** (tâches planifiées et travaux de fond) et **Activité et coûts**.
+- **⋯ Plus** contient les **Automatisations** (onglets **Routines** et **Missions**) et **Activité et coûts**.
 - Votre nom en bas ouvre le **menu du compte** : Réglages, Utilisation (Activité et coûts), Confidentialité, Mémoire, Langue,
   Thème, *Installer l'application* si votre navigateur le propose, *Obtenir de l'aide* (cette FAQ) et Se déconnecter. Sur
   téléphone, ces entrées sont dans *Plus*.

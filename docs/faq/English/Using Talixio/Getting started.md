@@ -24,7 +24,7 @@
 ## The menu
 The menu on the left (the bottom bar on a phone) has eight entries: **Chat**, **Tasks**, **Files** (the library), **Apps**,
 **Notifications**, **Mail**, **People** and, last, **Pilotage** (see *Pilotage*).
-- **⋯ More** holds **Automations** (scheduled tasks and background work) and **Activity and costs**.
+- **⋯ More** holds **Automations** (its **Routines** and **Missions** tabs: scheduled tasks and background work) and **Activity and costs**.
 - Your name at the bottom opens the **account menu**: Settings, Usage (Activity and costs), Privacy, Memory, Language,
   Theme, *Install the app* when your browser offers it, *Get help* (this FAQ) and Sign out. On a phone, these are in *More*.
 
