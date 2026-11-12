@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.7 (2026-11-12)
+
+- Fix (audit Q1): **monthly watches ran far too often, and may have cost you**. A "watch and draft" set to *monthly* ("the first Tuesday") was saved as the cron `M H 1-7 * 2`, which cron reads as *days 1 to 7, or any Tuesday*: about 11 runs a month instead of one, each starting a background research job billed to your model account. It is now saved as `M H * * 2#1` (a new, explicit form: the first Tuesday of the month), and the monthly watches already set up are migrated when the app starts, with their next run recomputed. Check your model costs of the past months if you had one. Tested on the schedule computation and the migration; the cost of past runs cannot be undone.
+
 ## 1.35.6 (2026-11-12)
 
 - Security (audit S3): **a background job's report no longer launders what the job read**. A job reads web pages, emails, connectors' results or Confidential files, then its report is posted in the main conversation, where every answer used to start clean: an instruction surviving in the report could save to memory, schedule a routine or fetch an unknown address without approval, and the Confidential level of what the job read was lost. Each job now records, when it ends, whether it read content written by others, the addresses found in it and the strictest level it read (`jobs.trust`); the turn that relays its report starts from that state, and keeps it while the report is in the recent conversation. The same holds for a directive's combined result (the strictest of its workers) and for a job carried on with *Continue* (it starts from the earlier run's state). A meeting summary counts as content written by others (what people said is not an instruction). Tested with a simulated model: a job reading an imported file, then trying `memory_append` and `fetch_url` in its report turn, gets two approval requests; a job reading a Confidential file reports without web search and is refused shared memory. FAQ *Confidentiality levels* updated.

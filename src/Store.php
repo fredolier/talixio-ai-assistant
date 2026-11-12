@@ -98,6 +98,11 @@ final class Store
         $this->addColumn('jobs', 'session', "TEXT NOT NULL DEFAULT ''"); // a Tier-D delegated code session's handle (kind='conductor', Conductor)
         $this->addColumn('jobs', 'trust', "TEXT NOT NULL DEFAULT ''"); // what the job read (Privacy::snapshot as JSON): carried into the work that follows it
         $this->addColumn('tasks', 'job', 'INTEGER'); // a routine that runs this job again, instead of a prompt
+        // monthly watches were written "M H 1-7 * D" until 1.35.7, which cron reads as "days 1-7 OR every D": the first D of the month
+        foreach ($this->db->query("SELECT id, cron FROM tasks WHERE cron GLOB '[0-9]* [0-9]* 1-7 [*] [0-7]'")->fetchAll() as $t) {
+            $cron = preg_replace('/^(\d+ \d+) 1-7 \* ([0-7])$/', '$1 * * $2#1', (string)$t['cron']);
+            $this->db->prepare('UPDATE tasks SET cron = ?, next_run = ? WHERE id = ?')->execute([$cron, Cron::next($cron, time()), $t['id']]);
+        }
         // the assistant's mind (Mind): observations from the history, beliefs built from them, a journal of how it changes
         $this->db->exec("CREATE TABLE IF NOT EXISTS mind_obs(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, strength INTEGER NOT NULL DEFAULT 1,
                 space INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'chat', messages TEXT NOT NULL DEFAULT '[]', processed INTEGER NOT NULL DEFAULT 0);

@@ -172,7 +172,7 @@ final class Routines
         $w['folder'] = Library::normalize($w['folder'] !== '' ? $w['folder'] : '/Drafts/' . $w['name']);
         Library::guard($w['folder']);
         [$h, $m] = self::time($w['time']);
-        $cron = match ($w['every']) { 'daily' => "$m $h * * *", 'monthly' => "$m $h 1-7 * {$w['day']}", default => "$m $h * * {$w['day']}" };
+        $cron = match ($w['every']) { 'daily' => "$m $h * * *", 'monthly' => "$m $h * * {$w['day']}#1", default => "$m $h * * {$w['day']}" };
         if ($id !== null && !$this->app->store->get(self::WATCH_PREFIX . $id)) throw new \InvalidArgumentException('no such watch');
         $t = $this->upsert($id ?? $this->find($w['name']), $w['name'], self::watchPrompt($w), $cron, 'standard');
         $this->app->store->set(self::WATCH_PREFIX . $t['id'], json_encode($w, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));

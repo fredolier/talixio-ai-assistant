@@ -16,6 +16,13 @@ check('cron sunday as 7', $fmt(Cron::next('0 20 * * 7', $t)) === 'Sun 2026-10-11
 check('cron hour roll-over', $fmt(Cron::next('5 23 * * *', strtotime('2026-10-08 23:30'))) === 'Fri 2026-10-09 23:05');
 check('cron list + range', $fmt(Cron::next('0 9,18 * * 6', $t)) === 'Sat 2026-10-10 09:00');
 try { Cron::next('61 * * * *', $t); check('cron rejects bad value', false); } catch (\InvalidArgumentException) { check('cron rejects bad value', true); }
+// audit Q1: "first Monday" — once a month, not days 1-7 plus every Monday
+$runs = []; for ($x = strtotime('2026-11-01 00:00'); ($x = Cron::next('0 8 * * 1#1', $x)) < strtotime('2027-01-01');) $runs[] = date('Y-m-d', $x);
+check('cron: the first Monday of the month runs once a month', $runs === ['2026-11-02', '2026-12-07'], json_encode($runs));
+$runs = []; for ($x = strtotime('2026-11-01 00:00'); ($x = Cron::next('0 8 1-7 * 1', $x)) < strtotime('2026-12-01');) $runs[] = $x;
+check('cron: "1-7 * 1" keeps the standard meaning (days 1-7 or Mondays)', count($runs) === 11, (string)count($runs));
+check('cron: the third Friday', $fmt(Cron::next('0 9 * * 5#3', $t)) === 'Fri 2026-10-16 09:00');
+try { Cron::next('0 9 * * 1#6', $t); check('cron rejects a 6th weekday', false); } catch (\InvalidArgumentException) { check('cron rejects a 6th weekday', true); }
 
 // isolated app in a temp dir
 $dir = sys_get_temp_dir() . '/talixio-test-' . getmypid();
@@ -3924,8 +3931,12 @@ check('feedback: clicking again removes the vote', count($rt->feedback($wk['id']
 try { $rt->setupWatch(['name' => 'Fil IA', 'topics' => '']); $err = ''; } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
 $wa = $rt->setupWatch(['name' => 'Fil IA', 'topics' => 'AI for small businesses', 'every' => 'monthly', 'day' => 2, 'time' => '08:15']);
 $ws = $rt->watches();
-check('watch and draft: needs topics; monthly on the first Tuesday; drafts in /Drafts/Fil IA by a background job', $err === 'Say what to watch.' && $wa['cron'] === '15 8 1-7 * 2'
+check('watch and draft: needs topics; monthly on the first Tuesday; drafts in /Drafts/Fil IA by a background job', $err === 'Say what to watch.' && $wa['cron'] === '15 8 * * 2#1'
     && str_contains($wa['prompt'], 'delegate') && str_contains($wa['prompt'], '/Drafts/Fil IA') && count($ws) === 1 && $ws[0]['id'] === $wa['id'] && $ws[0]['topics'] === 'AI for small businesses');
+$app->store->q("UPDATE tasks SET cron = '15 8 1-7 * 2', next_run = ? WHERE id = ?", [strtotime('tomorrow 08:15'), $wa['id']]); // as written before 1.35.7
+new \Talixio\Store($app->store->path); // opening the store migrates it
+$mt = $app->store->task((int)$wa['id']);
+check('watch and draft: a monthly watch written the old way is migrated to the first Tuesday', $mt['cron'] === '15 8 * * 2#1' && date('N', (int)$mt['next_run']) === '2' && (int)date('j', (int)$mt['next_run']) <= 7, json_encode($mt));
 $rt->setupWatch(['name' => 'Fil IA', 'topics' => 'AI', 'every' => 'weekly', 'day' => 1, 'time' => '08:00'], $wa['id']);
 $app->store->q('DELETE FROM tasks WHERE id = ?', [$wk['id']]);
 check('watch and draft: updated in place; a deleted routine leaves no settings behind', $app->store->task($wa['id'])['cron'] === '0 8 * * 1' && count($rt->watches()) === 1);
