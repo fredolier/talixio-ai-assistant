@@ -530,8 +530,15 @@ const flows = {
   },
   async settingsSave({ page, check }) {
     await go(page, 'settings');
+    // nothing touched: no "unsaved change" (it used to show one for a server value the list does not offer: audit U12)
+    check('settings: opening them shows no unsaved change', await page.isHidden('#set-save'));
+    await page.fill('#set-search', 'heartbeat'); await page.waitForTimeout(400);
+    const f = page.locator('#set-TALIXIO_HEARTBEAT_MINUTES');
+    await f.fill(String((+(await f.inputValue()) || 0) + 30)); await f.dispatchEvent('input'); await page.waitForTimeout(200);
+    check('settings: a change shows the save bar', await page.isVisible('#set-save'));
     await page.click('#set-save-btn'); await page.waitForTimeout(800);
-    check('settings: saving works', true);
+    check('settings: saving works', await page.isHidden('#set-save'));
+    await page.fill('#set-search', ''); await page.waitForTimeout(200);
   },
   async markdown({ page, check }) {
     await go(page, 'chat');

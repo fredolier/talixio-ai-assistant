@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.30 (2026-11-12)
+
+- French interface (audit 5.4, U15, U16, U18–U21): the last English bits are translated (the searches of Pilotage, the Jobs bar's tooltip that read "Ouvrir the Activity view", the app examples, the model tier chips such as "deep", "General" sent by the server, the notification when the fleet orchestrator connects, the default folder of the weekly review); words with "(s)" now agree with their number ("1 nouvelle réponse", "3 nouvelles réponses"), in the page and in what the server writes; money is written one way, the French way in French ("2,00 $", not "$2.00" next to "2,00 $"), as are thousands ("1,0 k") and sizes ("60 o", "1,2 Mo"); the searches of the Library, Settings and Memory and the Library's title no longer get cut on a phone; the one-line previews of Pilotage's journal no longer show Markdown marks; a few Autonomy labels are clearer ("Taux de réussite"). Names that differ from page to page (U17) wait for the owner's choice of names. Also (audit U12, end): Settings no longer shows an unsaved change for a channel list set to "none" on the server; the browser test of saving settings relied on that false change and now changes a real value.
+
 ## 1.35.29 (2026-11-12)
 
 - Interface, dark theme and contrast (audit 5.3, U22, U23, U29): the red counters (menu, tabs, Pilotage) had white text on the dark theme's light red (2.3:1): they now use a dark ink there. The orange *Alert* pill, the P2 priority, the blue "info" labels, the outgoing-data pill, the *Delete* item of row menus and the library's view counter had colours written in the styles with no dark-theme value; they now have one. In the light theme, Pilotage's tab counters and the director's link no longer fade the text with transparency (3.0 and 3.1:1). Every one of these measured at 4.5:1 or more, in both themes, with a contrast script in the browser.

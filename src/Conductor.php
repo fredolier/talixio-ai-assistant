@@ -320,8 +320,8 @@ final class Conductor
             });
             if ($res[0] !== 200) return $res;
             $poll = $res[1]['poll'];
-            $this->app->notifier()->notify('Fleet orchestrator connected',
-                'Your code-fleet orchestrator is paired' . ($poll ? ' (poll mode)' : '') . '. Ask me to send it work with fleet_dispatch, and watch its liveness with fleet_status.');
+            $this->app->notifier()->notify(I18n::t($this->app, 'Fleet orchestrator connected'), // shown to the person, in their language (audit U15)
+                I18n::t($this->app, $poll ? 'Your code-fleet orchestrator is paired (poll mode). Ask me to send it work, and watch it in Pilotage.' : 'Your code-fleet orchestrator is paired. Ask me to send it work, and watch it in Pilotage.'));
             $this->refreshStatusFile();
             // the only time the secret is returned; a poll orchestrator also learns where to pull from
             return [200, ['ok' => true, 'secret' => $res[1]['secret'], 'inbox' => $this->inboxUrl(), 'mode' => $poll ? 'poll' : 'push'] + ($poll ? ['pull' => $this->pullUrl()] : [])];

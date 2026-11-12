@@ -141,7 +141,7 @@ final class Routines
     public function setupWeekly(string $time, int $day = 0, string $folder = ''): array
     {
         [$h, $m] = self::time($time);
-        $folder = Library::normalize($folder !== '' ? $folder : Library::NOTES . '/Weekly reviews');
+        $folder = Library::normalize($folder !== '' ? $folder : Library::NOTES . '/' . I18n::t($this->app, 'Weekly reviews'));
         Library::guard($folder);
         return $this->upsert($this->find(self::WEEKLY), self::WEEKLY, self::weeklyPrompt($folder), "$m $h * * " . max(0, min(6, $day)), 'standard');
     }

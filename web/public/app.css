@@ -2006,3 +2006,7 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
   .act{min-width:40px}
   .pl-chip{display:inline-flex;align-items:center}
 }
+@media (max-width:560px){
+  /* U19 the library's title is not cut ("Bibliothèqu"): Back and Up give their room when there is nowhere to go */
+  #lib-back:disabled,#lib-up:disabled{display:none}
+}

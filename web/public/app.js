@@ -128,8 +128,10 @@ function md(src) {
 }
 
 const CHANNEL = { web: null, approval: 'Approval', learn: 'Learning', cli: 'Terminal', telegram: 'Telegram', email: 'Email', signal: 'Signal', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
-const money = v => v == null ? '' : v === 0 ? '$0' : v < 0.01 ? '<$0.01' : '$' + v.toFixed(v < 1 ? 3 : 2);
-const ktok = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
+/** Dollars as the interface language writes them ("$2.00", "2,00 $"): one format everywhere (audit U18) */
+const usdf = (v, d = 2) => new Intl.NumberFormat(LOCALE.length ? LOCALE : 'en-US', { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: d, maximumFractionDigits: d }).format(+v || 0);
+const money = v => v == null ? '' : v === 0 ? usdf(0, 0) : v < 0.01 ? '< ' + usdf(0.01) : usdf(v, v < 1 ? 3 : 2);
+const ktok = n => n >= 1000 ? new Intl.NumberFormat(LOCALE.length ? LOCALE : 'en-US', { maximumFractionDigits: n >= 10000 ? 0 : 1, minimumFractionDigits: n >= 10000 ? 0 : 1 }).format(n / 1000) + (LANG === 'en' ? 'k' : ' k') : String(n);
 const fmtTime = ts => new Date(ts * 1000).toLocaleString(LOCALE, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
 function renderMessage(m) {
@@ -1244,7 +1246,7 @@ function renderDirectives(list, box = $('#directives'), refresh = loadJobs) {
     const pct = Math.min(100, Math.round(b.today / b.daily_limit * 100));
     const lvl = b.state === 'blocked' || pct >= 100 ? 'bad' : b.state === 'low' || pct >= 70 ? 'warn' : 'ok';
     const m = document.createElement('div'); m.className = 'dir-budget ' + lvl;
-    m.innerHTML = `<div class="dir-budget-row"><b>${esc(t('Today’s budget'))}</b><span class="spacer"></span><span>$${b.today.toFixed(2)} ${esc(t('of'))} $${(+b.daily_limit).toFixed(2)}${lvl !== 'ok' ? ' · ' + esc(t(lvl === 'bad' ? 'budget reached' : 'budget low')) : ''}</span></div><div class="dir-budget-bar"><i style="width:${pct}%"></i></div>`;
+    m.innerHTML = `<div class="dir-budget-row"><b>${esc(t('Today’s budget'))}</b><span class="spacer"></span><span>${esc(usdf(b.today))} ${esc(t('of'))} ${esc(usdf(b.daily_limit))}${lvl !== 'ok' ? ' · ' + esc(t(lvl === 'bad' ? 'budget reached' : 'budget low')) : ''}</span></div><div class="dir-budget-bar"><i style="width:${pct}%"></i></div>`;
     box.appendChild(m);
   }
   for (const d of list) box.appendChild(dirRow(d, refresh));
@@ -1266,7 +1268,7 @@ function dirRow(d, refresh = loadJobs) {
       <span class="dir-prog" title="${done}/${total}"><i style="width:${pct}%"></i></span>
       <span class="muted small dir-cost">${money(+d.cost) || '$0'}</span>
       <span class="dir-actions"></span></div>
-    <div class="dir-workers"${open ? '' : ' hidden'}>${d.workers.map(w => `<div class="dir-w"><b>${esc(w.role)}</b><span class="chip">${esc(w.tier)}</span><span class="pill ${w.status}">${w.status === 'running' ? '<span class="dot"></span>' : ''}${esc(w.status)}</span><span class="muted small">${money(+w.cost) || '$0'}</span>${w.note ? `<span class="muted small dir-w-note">${esc(w.note)}</span>` : ''}</div>`).join('') || `<div class="muted small">${esc(t('no workers yet'))}</div>`}</div>`;
+    <div class="dir-workers"${open ? '' : ' hidden'}>${d.workers.map(w => `<div class="dir-w"><b>${esc(w.role)}</b><span class="chip no-i18n">${esc(tierLabel(w.tier))}</span><span class="pill ${w.status}">${w.status === 'running' ? '<span class="dot"></span>' : ''}${esc(w.status)}</span><span class="muted small">${money(+w.cost) || '$0'}</span>${w.note ? `<span class="muted small dir-w-note">${esc(w.note)}</span>` : ''}</div>`).join('') || `<div class="muted small">${esc(t('no workers yet'))}</div>`}</div>`;
   const wb = el.querySelector('.dir-workers'), exp = el.querySelector('.dir-exp');
   exp.onclick = () => { const o = wb.hidden; wb.hidden = !o; exp.textContent = o ? '▾' : '▸'; if (o) { dirOpen.add(d.id); dirOpen.delete('-' + d.id); } else { dirOpen.delete(d.id); dirOpen.add('-' + d.id); } };
   const act = el.querySelector('.dir-actions');
@@ -1349,7 +1351,7 @@ async function loadJobs() {
     const durText = dur == null ? 'waiting' : dur < 90 ? dur + ' s' : Math.round(dur / 60) + ' min';
     const tagHtml = () => tagsOf(j).map(t => `<span class="tag small" data-tag="${esc(t)}">#${esc(t)}</span>`).join('') + '<button type="button" class="tag small add" data-a="tags" title="Edit the tags">＋ tag</button>';
     el.innerHTML = `<div><h3>${esc(j.title)}</h3><div class="when"><span class="pill ${j.status}">${j.status === 'running' ? '<span class="dot"></span>' : ''}${j.status}</span>
-        ${spaceChip(j.space)}<span class="chip">${esc(j.tier)}</span>${j.kind === 'agent' ? `<span class="chip" title="Effort">${esc(EFFORTS[j.effort || state.status?.job_effort] || j.effort || '')}</span>` : ''}<span>${money(+j.cost_usd) || '$0'} of ${+j.max_cost_usd > 0 ? '$' + (+j.max_cost_usd).toFixed(2) : 'no cap'}</span><span>${durText}</span><span>${fmtTime(j.created)}</span>${j.parent ? `<span class="chip" title="Carries on from job #${j.parent}">continues #${j.parent}</span>` : ''}</div>
+        ${spaceChip(j.space)}<span class="chip no-i18n">${esc(tierLabel(j.tier))}</span>${j.kind === 'agent' ? `<span class="chip" title="Effort">${esc(EFFORTS[j.effort || state.status?.job_effort] || j.effort || '')}</span>` : ''}<span>${money(+j.cost_usd) || '$0'} of ${+j.max_cost_usd > 0 ? '$' + (+j.max_cost_usd).toFixed(2) : 'no cap'}</span><span>${durText}</span><span>${fmtTime(j.created)}</span>${j.parent ? `<span class="chip" title="Carries on from job #${j.parent}">continues #${j.parent}</span>` : ''}</div>
         <div class="jtags">${tagHtml()}</div>${reportHtml || routineHtml ? `<div class="jreport">${reportHtml ? '📄 ' + reportHtml : ''}${routineHtml}</div>` : ''}</div>
       <div class="actions">${['queued', 'running'].includes(j.status) ? '<button class="btn small" data-a="cancel">Cancel</button>'
         : j.kind !== 'reflect' ? `${tierSelect(j.tier, 'Model for running it again')}${j.kind === 'agent' ? effortSelect(j.effort || state.status?.job_effort || 'medium') : ''}<label class="cap" title="Cost cap for running it again (up to $${(+(state.status?.job_max_usd_limit ?? 10)).toFixed(2)})">$<input type="number" min="0.05" step="0.5" value="${(+j.max_cost_usd > 0 ? (j.status === 'failed' && /cost cap/.test(j.result || '') ? Math.min(+j.max_cost_usd * 2, +(state.status?.job_max_usd_limit ?? 10) || +j.max_cost_usd * 2) : +j.max_cost_usd) : (+(state.status?.job_max_usd) || 2)).toFixed(2)}" aria-label="Cost cap ($)"></label>${j.kind === 'agent' ? `<button class="btn small${j.status === 'failed' && /cost cap/.test(j.result || '') ? ' primary' : ''}" data-a="continue" title="Carry on from where it stopped, with the cap and effort chosen here">Continue</button>` : ''}<button class="btn small" data-a="rerun" title="Start over with the same instructions">Run again</button>` : ''}${moreHtml}</div>
@@ -2911,7 +2913,7 @@ function fieldValue(f) {
 function initialValue(f) {
   const eff = f.value !== '' ? f.value : f.default;
   if (f.type === 'bool') return eff === '1' ? '1' : '0';
-  if (f.type === 'multi') return (eff || '').split(',').filter(Boolean).join(',');
+  if (f.type === 'multi') return (eff || '').split(',').filter(v => v && (!f.options || Object.prototype.hasOwnProperty.call(f.options, v))).join(','); // 'none' or a value not offered: not a change (audit U12)
   if (f.type === 'secret') return '';
   if (f.type === 'sites') return siteList(f.value).join(',');
   if (f.type === 'select') { // a value the list does not offer (set in the server's environment) shows as the list's choice: not an unsaved change (audit U12)
@@ -3417,6 +3419,8 @@ async function loadSettings() {
   if (!state.setGroups || $('#set-save').hidden) renderGroups((await api('api/settings')).groups);
 }
 // ---- Model & budget cockpit: the Models/Providers/Budget tabs, the catalogue table and per-usage routing ----
+/** A model tier as the person reads it ("deep" → "Approfondi"): audit U15 */
+const tierLabel = x => t({ fast: 'Fast', standard: 'Standard', deep: 'Deep' }[x] || x || '');
 const MB_USAGES = [
   { id: 'fast', label: 'Fast', hint: 'short replies, sorting, routine' },
   { id: 'standard', label: 'Standard', hint: 'conversation, everyday tasks' },
@@ -3475,7 +3479,7 @@ const mbTlRank = tl => tl === 'L' ? 6 : +tl;                       // local coun
 const mbTlClass = tl => tl === 'L' ? 'tlL' : 'tl' + tl;
 const mbTlText = tl => tl === 'L' ? t('loc') : String(tl);
 const mbCompliant = p => mbTlRank(p.tl) >= 5;                      // sovereign (GDPR) or local
-const mbMoney = v => v == null ? '—' : v === 0 ? t('free') : '$' + (+v).toFixed(2);
+const mbMoney = v => v == null ? '—' : v === 0 ? t('free') : usdf(v);
 const mbId = m => m.id || m.name;
 function mbUnit(m) {
   if (m.unit == null) return null;
@@ -3538,9 +3542,9 @@ function mbBudgetSnapshot() {
   const pct = b.monthly ? Math.min(100, Math.round(100 * (b.month || 0) / b.monthly)) : 0;
   snap.innerHTML = `<div class="bbar"><i style="width:${pct}%"></i></div>
     <div class="krow">
-      <span class="k">${esc(t('Spent this month'))}<b class="no-i18n">$${(b.month || 0).toFixed(2)}</b></span>
-      ${b.monthly ? `<span class="k">${esc(t('Cap'))}<b class="no-i18n">$${(+b.monthly).toFixed(2)}</b></span>` : ''}
-      ${b.day != null ? `<span class="k">${esc(t('Today'))}<b class="no-i18n">$${(+b.day).toFixed(2)}</b></span>` : ''}
+      <span class="k">${esc(t('Spent this month'))}<b class="no-i18n">${esc(usdf(b.month || 0))}</b></span>
+      ${b.monthly ? `<span class="k">${esc(t('Cap'))}<b class="no-i18n">${esc(usdf(b.monthly))}</b></span>` : ''}
+      ${b.day != null ? `<span class="k">${esc(t('Today'))}<b class="no-i18n">${esc(usdf(b.day))}</b></span>` : ''}
     </div>`;
 }
 // How a catalogue provider maps to an AI-account: the account kind that reaches it, and where to get a key.
@@ -4542,7 +4546,7 @@ function euTiers() {
   const tested = state.euTest?.service === id ? state.euTest : null;
   const tiers = tested?.tiers || (d.active && id === d.service && Object.keys(d.tiers).length ? d.tiers : s.fallback || {});
   const prices = { ...(d.prices || {}), ...(tested?.prices || {}) };
-  const usd = v => v == null ? '?' : '$' + (v < 0.01 ? v.toFixed(4) : v < 1 ? v.toFixed(3) : v.toFixed(2));
+  const usd = v => v == null ? '?' : usdf(v, v < 0.01 ? 4 : v < 1 ? 3 : 2);
   const rows = ['fast', 'standard', 'deep'].filter(k => tiers[k]).map(k => {
     const p = prices[tiers[k]], msg = p ? (EU_MSG.in * p[0] + EU_MSG.out * p[1]) / 1e6 : null;
     return `<tr><td>${esc(window.t(k))}</td><td><code>${esc(tiers[k])}</code></td><td>${p ? usd(p[0]) : '?'}</td><td>${p ? usd(p[1]) : '?'}</td><td>${usd(msg)}</td><td>${msg == null ? '?' : usd(msg * EU_MSG.perMonth)}</td></tr>`;
@@ -4850,7 +4854,8 @@ function loadMemoryTab() {
 // ---- library ----
 const KIND_LABEL = { pdf: 'PDF', office: 'DOC', text: 'TXT', audio: 'AUD', image: 'IMG', other: 'FILE' };
 const FOLDER_SVG = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
-const fmtSize = b => b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b / 1024) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
+const fmtSize = b => { const nf1 = new Intl.NumberFormat(LOCALE.length ? LOCALE : 'en-US', { maximumFractionDigits: 1, minimumFractionDigits: 1 }), fr = LANG === 'fr'; // "60 o", "1,2 Mo" in French (audit U18)
+  return b < 1024 ? b + (fr ? ' o' : ' B') : b < 1048576 ? Math.round(b / 1024) + (fr ? ' ko' : ' KB') : nf1.format(b / 1048576) + (fr ? ' Mo' : ' MB'); };
 const fmtDate = ts => new Date(ts * 1000).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' });
 const joinPath = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
 const lib = { folder: '/', tree: [], timer: null, file: null, inline: null, picked: new Set(), pickedF: new Set(), flat: false, last: null, rows: [] };
@@ -5950,8 +5955,8 @@ async function loadActivity() {
   const meter = (label, spent, limit) => {
     const pct = limit > 0 ? Math.min(100, spent / limit * 100) : 0;
     const cls = !limit ? '' : pct >= 100 ? 'blocked' : pct >= 80 ? 'low' : '';
-    return `<div class="meter"><div class="row"><span class="muted small">${label}</span><span class="muted small">${limit > 0 ? 'limit $' + limit.toFixed(2) : 'no limit set'}</span></div>
-      <b>$${spent.toFixed(2)}</b><div class="track ${cls}"><i style="width:${pct.toFixed(1)}%"></i></div></div>`;
+    return `<div class="meter"><div class="row"><span class="muted small">${label}</span><span class="muted small">${limit > 0 ? esc(t('limit {a}', { a: usdf(limit) })) : 'no limit set'}</span></div>
+      <b class="no-i18n">${esc(usdf(spent))}</b><div class="track ${cls}"><i style="width:${pct.toFixed(1)}%"></i></div></div>`;
   };
   $('#budget').innerHTML = meter('Spent today', budget.today, budget.daily_limit) + meter('Spent this month', budget.month, budget.monthly_limit);
   $('#calib-text').textContent = calibration.text;
@@ -5975,7 +5980,7 @@ async function loadActivity() {
     <div class="stat"><b>${nf.format(sum('calls'))}</b><span>model calls</span></div>
     <div class="stat"><b>${nf.format(sum('input'))}</b><span>input tokens</span></div>
     <div class="stat"><b>${nf.format(sum('output'))}</b><span>output tokens</span></div>
-    <div class="stat"><b>${cost ? '$' + cost.toFixed(2) : '–'}</b><span>${state.status?.provider === 'claude-code' ? 'API-equivalent cost (covered by your plan)' : 'reported cost'}</span></div>
+    <div class="stat"><b class="no-i18n">${cost ? esc(usdf(cost)) : '–'}</b><span>${state.status?.provider === 'claude-code' ? 'API-equivalent cost (covered by your plan)' : 'reported cost'}</span></div>
     <div class="bars"><div class="bars-title">Tokens per day <span class="muted small">· last 30 days</span></div>${tokenChart(days, byDay, costDay)}</div>`;
   chartHover($('#usage .chart'));
   $('#tools tbody').innerHTML = tools.length ? tools.map(t => `<tr><td>${fmtTime(t.ts)}</td><td>${esc(t.tool)}</td><td><code>${esc(t.args.slice(0, 200))}</code></td><td>${esc(t.result.slice(0, 220))}</td></tr>`).join('')
@@ -6002,7 +6007,7 @@ async function loadApps() {
       <span class="muted small">${esc(a.description || '')}</span>
       <span class="small muted no-i18n">${esc(spaceOf(a.space))}${a.status === 'pending' ? ` · <span class="app-pending">${esc(t('Waiting for approval'))}</span>` : ''}</span></a>`).join('')}</div>`
     : `<div class="empty"><p>No apps yet. Ask the assistant: “With what you know about me, could you suggest several apps you could build and add to the Apps menu?”</p></div>`)
-    + (ex.length ? `<h3 class="apps-ex-title">Examples</h3><div class="row wrap">${ex.map(e => `<button type="button" class="btn ghost" data-ex="${esc(e.key)}" title="${esc(e.description)}">${esc(e.icon)} ${esc(e.name)}</button>`).join('')}</div>` : '')
+    + (ex.length ? `<h3 class="apps-ex-title">Examples</h3><div class="row wrap">${ex.map(e => `<button type="button" class="btn ghost" data-ex="${esc(e.key)}" title="${esc(e.description)}"><span aria-hidden="true">${esc(e.icon)}</span> <span>${esc(e.name)}</span></button>`).join('')}</div>` : '')
     + `<p class="row wrap"><button type="button" class="btn small" id="apps-ask">Ask the assistant for app ideas</button>
       <label class="btn small ghost">Add an app from a file<input type="file" id="apps-import" accept=".json,application/json" hidden></label></p>`;
   storeApps(box, sp);
@@ -6258,7 +6263,10 @@ const plGroupOf = a => a.waiting ? 'waiting' : ['active', 'busy'].includes(a.sta
 const plDot = a => `<span class="pilot-dot pstate-${a.waiting ? 'waiting' : (PSTATE[a.state] || 'idle')}"></span>`;
 const plKind = w => ({ decision: t('Decision needed'), approval: t('Approval needed'), instruction: t('Instruction needed') }[w.kind] || t('Decision needed'));
 const plWho = by => by === 'assistant' ? t('the assistant') : t('you');
-const plClip = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+/** A one-line preview: the Markdown marks go ("**Dev A**", "[link](…)", "# title"), the text stays (audit U20) */
+const plainLine = s => String(s || '').replace(/```[\s\S]*?```/g, ' ').replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '')
+  .replace(/(\*\*|__|~~|`)/g, '').replace(/(^|\W)[*_]([^*_\n]+)[*_](?=\W|$)/g, '$1$2');
+const plClip = (s, n) => { s = plainLine(s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 function plDay(ts) {
   const d = new Date(ts * 1000), n = new Date(), y = new Date(Date.now() - 86400000), same = (a, b) => a.toDateString() === b.toDateString();
   return same(d, n) ? t('Today') : same(d, y) ? t('Yesterday') : d.toLocaleDateString(window.LOCALE, { day: 'numeric', month: 'long' });
@@ -6646,7 +6654,7 @@ function roleDetail(r) {
   const chips = [];
   if (r.protected) chips.push(`<span class="chip proto">${esc(t('Protected'))}</span>`);
   if (r.published) chips.push(`<span class="chip schedule">${esc(t('Published'))}</span>`);
-  chips.push(`<span class="chip tier no-i18n">${esc(r.tier)}</span>`);
+  chips.push(`<span class="chip tier no-i18n">${esc(tierLabel(r.tier))}</span>`);
   const trendTitle = { up: 'rising', down: 'falling', flat: 'steady', new: 'too new to tell' }[r.trend] || '';
   const trend = PILOT_TREND[r.trend] ? `<span class="ptrend t-${esc(r.trend)}" title="${esc(t(trendTitle))}">${PILOT_TREND[r.trend]}</span>` : '';
   const bits = [
@@ -7037,7 +7045,7 @@ async function refreshStatus() {
     renderAssistants(s.assistants, s.assistant);
     renderAccount();
     const ch = Object.entries(s.channels).filter(([, on]) => on).map(([k]) => k[0].toUpperCase() + k.slice(1)).join(', ');
-    const b = s.budget, lim = b.daily_limit > 0 ? ` · $${b.today.toFixed(2)} of $${b.daily_limit.toFixed(2)} today` : '';
+    const b = s.budget, lim = b.daily_limit > 0 ? ' · ' + t('{a} of {b} today', { a: usdf(b.today), b: usdf(b.daily_limit) }) : '';
     $('#chat-sub').textContent = `${shortModel(s.model)} · ${ch}${lim}${b.state === 'low' ? ' · budget low' : b.state === 'blocked' ? ' · budget reached' : ''}`;
     const st = $('#status'); st.className = 'status ' + (s.worker_online ? 'on' : 'off');
     st.querySelector('span').textContent = s.worker_online ? 'Running' : 'Worker offline';
@@ -7146,7 +7154,7 @@ function renderBilling(b) {
   const list = b?.sources || [];
   $('#billing').hidden = !list.length;
   $('#billing-list').innerHTML = list.map(s => `<li><b class="no-i18n">${esc(s.name)}</b>${s.scope ? ` <span class="muted no-i18n">(${esc(s.scope)})</span>` : ''}: `
-    + (s.synced ? `$${s.month.toFixed(2)} ${esc(t('billed this month'))} · ${esc(t('read'))} ${fmtTime(s.synced)}` : esc(t('not read yet')))
+    + (s.synced ? `${esc(usdf(s.month))} ${esc(t('billed this month'))} · ${esc(t('read'))} ${fmtTime(s.synced)}` : esc(t('not read yet')))
     + (s.error ? ` · <span class="err">${esc(t('last try failed:'))} <span class="no-i18n">${esc(s.error)}</span></span>` : '') + '</li>').join('');
 }
 $('#billing-sync').onclick = async e => {

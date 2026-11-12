@@ -414,8 +414,9 @@ final class Mind
     /** The observations behind a belief, newest first. */
     public function evidence(int $belief): array
     {
-        $names = array_column($this->app->spaces()->all(), 'name', 'id') + [0 => 'General'];
-        return array_map(fn($o) => $o + ['space_name' => $names[$o['space']] ?? 'General'],
+        $general = I18n::t($this->app, 'General'); // shown on the Memory page (audit U15)
+        $names = array_column($this->app->spaces()->all(), 'name', 'id') + [0 => $general];
+        return array_map(fn($o) => $o + ['space_name' => $names[$o['space']] ?? $general],
             $this->app->store->q('SELECT o.id, o.ts, o.kind, o.text, o.strength, o.space, o.source, l.polarity FROM mind_links l JOIN mind_obs o ON o.id = l.obs WHERE l.belief = ? ORDER BY o.ts DESC LIMIT 50', [$belief])->fetchAll());
     }
 
