@@ -14,4 +14,12 @@ $e = $web('/api/contacts/' . (int)($c['contact']['id'] ?? 0), ['notes' => 'met a
 check('freshbase: a contact is updated', $e['_code'] === 200 && ($e['contact']['notes'] ?? '') === 'met at the conference', $e['_raw']);
 $l = $web('/api/legifrance');
 check('freshbase: the French law card answers', $l['_code'] === 200 && ($l['configured'] ?? null) === false, $l['_raw']);
+// audit Q4: the Privacy page's overview raised a PHP warning on every load
+putenv("TALIXIO_DATA_DIR=$d/inproc"); putenv('TALIXIO_PROVIDER=echo'); putenv('TALIXIO_NOTIFY=none'); putenv('TALIXIO_EMBEDDINGS=off');
+$warnings = [];
+set_error_handler(function (int $no, string $msg, string $file, int $line) use (&$warnings) { if (error_reporting() & $no) $warnings[] = "$msg ($file:$line)"; return true; }); // @-silenced reads of absent files are on purpose
+$ov = \Talixio\App::fromEnv()->privacy()->overview();
+restore_error_handler();
+putenv('TALIXIO_DATA_DIR');
+check('freshbase: the Privacy overview loads without a PHP warning', $warnings === [] && isset($ov['level']), implode(' | ', $warnings));
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

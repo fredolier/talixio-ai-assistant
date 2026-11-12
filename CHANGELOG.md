@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.10 (2026-11-12)
+
+- Fix (audit Q4): the Privacy page raised two PHP warnings on every load (an unused field read from an undefined variable). The field is removed; nothing on the page changes. A test now checks the page's data loads without a warning.
+
 ## 1.35.9 (2026-11-12)
 
 - Fix (audit Q8, Q9): **a contact's page and the French law card failed on a new installation**. Opening a person in *People* gave a server error until the mailbox had been sorted once (the sorted-mail table was only created by the sorting); it is now part of the database from the start. *Settings → French law (Légifrance)* answered "not found" because its address was missing from the router. Tested on a fresh installation through the web API.

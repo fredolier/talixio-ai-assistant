@@ -555,7 +555,7 @@ final class Privacy
             ['label' => 'Nightly backups', 'ok' => $this->app->cfg->backupKeep > 0],
         ];
         $spaces = array_map(fn($s) => ['id' => (int)$s['id'], 'name' => $s['id'] ? $s['name'] : 'General', 'level' => $s['privacy'] ?? 'internal', 'color' => $s['color']], $this->app->spaces()->all());
-        return ['level' => $level, 'european' => $european, 'sovereign_only' => $c->sovereignOnly, 'model_grade' => $this->modelGrade(), 'flows' => $flows, 'issues' => count($issues), 'security' => $security, 'spaces' => $spaces];
+        return ['level' => $level, 'european' => $european, 'model_grade' => $this->modelGrade(), 'flows' => $flows, 'issues' => count($issues), 'security' => $security, 'spaces' => $spaces];
     }
 
     /** The journal: requests per service, today and over $days days, and per space. */
