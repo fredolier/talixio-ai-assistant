@@ -24,6 +24,12 @@ check('cron: "1-7 * 1" keeps the standard meaning (days 1-7 or Mondays)', count(
 check('cron: the third Friday', $fmt(Cron::next('0 9 * * 5#3', $t)) === 'Fri 2026-10-16 09:00');
 try { Cron::next('0 9 * * 1#6', $t); check('cron rejects a 6th weekday', false); } catch (\InvalidArgumentException) { check('cron rejects a 6th weekday', true); }
 
+// audit Q26: a PHP warning fails the run (tests/helpers.php); an @-silenced one does not
+exec(escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg('require ' . var_export(__DIR__ . '/helpers.php', true) . '; $a = []; echo $a["nope"]; tests_done();') . ' 2>&1', $wout, $wcode);
+exec(escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg('require ' . var_export(__DIR__ . '/helpers.php', true) . '; @file_get_contents("/nonexistent/x"); tests_done();') . ' 2>&1', $sout, $scode);
+check('tests: a PHP warning makes the run fail', $wcode === 1 && str_contains(implode("\n", $wout), 'FAIL php warning: Undefined array key "nope"'), implode(' | ', $wout));
+check('tests: an @-silenced warning does not', $scode === 0, implode(' | ', $sout));
+
 // isolated app in a temp dir
 $dir = sys_get_temp_dir() . '/talixio-test-' . getmypid();
 putenv("TALIXIO_DATA_DIR=$dir"); putenv('TALIXIO_PROVIDER=echo'); putenv('TALIXIO_NOTIFY=none'); putenv('TALIXIO_TIMEZONE=Europe/Paris');

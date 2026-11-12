@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.12 (2026-11-12)
+
+- Tests (audit Q26): **a PHP warning or notice now fails the test run** (`tests/helpers.php`, also when a file of `tests/more/` runs alone); warnings silenced on purpose with `@` do not. The two it found were a missing program started by a connector or by Signal, already reported to the user by a clear error, now without the extra warning in the log. Found on the way: when `php tests/run.php` writes straight to a file, its first lines are overwritten by a child process (the count and exit code stay right); pipe it instead (`| cat > log`), noted in `CLAUDE.md`. Its cause is not found yet.
+
 ## 1.35.11 (2026-11-12)
 
 - Fix (audit Q5): **a tool called with a missing or malformed argument answered with a server error and file paths**. The model got PHP's message (with the path of the code on the server) and warnings went to the log. Each call is now checked against the tool's own description first: *missing argument: name*, or *invalid argument: text (expected a text, not a list)*; an error that still slips through names the argument only. Tools that accept "3" for a number or a single word for a list keep doing so.

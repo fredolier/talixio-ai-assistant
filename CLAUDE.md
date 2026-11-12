@@ -22,7 +22,9 @@ step for the frontend — the files are served as-is. UI language is **French**
 ## Running tests (always before you push)
 
 - **PHP suite:** `php tests/run.php` — prints `all passed`. **Slow (minutes)**;
-  run it in the background and wait. Covers routes, version/changelog
+  run it in the background and wait. Pipe its output (`php tests/run.php 2>&1 | cat > log`): redirected
+  straight to a file, the first ~400 lines get overwritten by a child process (cause not found yet); the
+  final count and exit code are right either way. Covers routes, version/changelog
   consistency (`run.php` ~L397/400), and i18n dictionary validity (~L413).
 - **Browser suite:** `node tests/browser/run.mjs` — prints `all passed (N)`.
   Flows live in `tests/browser/flows.mjs`. Harness boots `php -S` with

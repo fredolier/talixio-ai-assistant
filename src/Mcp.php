@@ -285,7 +285,7 @@ final class Mcp
         $cwd = $cwd === '' ? ($sandbox ? $home : $this->app->cfg->dataDir) : ($cwd[0] === '/' ? $cwd : $this->app->cfg->dataDir . '/' . $cwd);
         if (isset($s['source']['library_file']) && $method === 'tools/call') $this->browserFor($cwd);
         if ($sandbox) $cmd = $this->sandboxArgv($cmd, $cwd, $home, $env, isset($s['source']['library_file']));
-        $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $err, 'w']], $pipes, $cwd, $env);
+        $proc = @proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $err, 'w']], $pipes, $cwd, $env); // a missing command: said by the exception below, not as a PHP warning too
         if (!is_resource($proc)) throw new \RuntimeException("could not start {$s['command']}");
         try {
             $send = fn(array $m) => fwrite($pipes[0], json_encode(['jsonrpc' => '2.0'] + $m, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
