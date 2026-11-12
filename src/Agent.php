@@ -363,12 +363,19 @@ final class Agent
             $ref = $files ? $this->app->files()->reference($files) : '';
             $store->addMessage('user', $channel, trim($text . ($ref !== '' ? "\n$ref" : '')), null, $files, $space);
             $history = $store->history($this->app->cfg->historyMessages, $oldest, $this->app->cfg->historyTokens * 4, $space);
+            foreach ($store->trustFrom($oldest, $space) as $t) Privacy::adopt($t); // an approved tool's result or a job report read by others stays untrusted while in the history
             if ($history) {
                 $content = $prompt;
                 if ($files) {
                     if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Reading the attachments…']);
                     $content = $this->app->files()->parts($prompt, $files);
                     foreach ($files as $fid) if ($f = $this->app->files()->get((int)$fid)) Privacy::doc($f['name'], (int)mb_strlen((string)$f['text']), $privacy->folderLevel($f['folder']));
+                    // an attachment is as often written by someone else (a forwarded PDF, a screenshot): what it says must not act on its own
+                    Privacy::$untrusted = true; Privacy::$privateRead = true;
+                    foreach ($files as $fid) {
+                        preg_match_all('#https?://[^\s<>"\'`)\]]+#i', (string)($this->app->files()->get((int)$fid)['text'] ?? ''), $um);
+                        foreach ($um[0] as $u) Privacy::$links[rtrim($u, '.,;:!?')] = true;
+                    }
                 }
                 $history[count($history) - 1]['content'] = $content; // the new message, with attachments
             }
@@ -475,7 +482,11 @@ final class Agent
         $trace = implode("\n", array_map(fn($s) => "- {$s['tool']} " . mb_substr($s['args'], 0, 200), $steps));
         $task = "## The user asked\n" . mb_substr($request, 0, 3000) . "\n\n## Steps taken\n$trace\n\n## Final answer\n" . mb_substr($reply, 0, 3000)
             . ($used ? "\n\n(An existing skill was used: update it if the steps above improved on it.)" : '');
-        try { $this->app->store->addJob('Learning from: ' . mb_substr(preg_replace('/\s+/', ' ', $request), 0, 60), $task, 'fast', 0.05, 'reflect', null, $this->app->space, ['learning']); }
+        try {
+            $id = $this->app->store->addJob('Learning from: ' . mb_substr(preg_replace('/\s+/', ' ', $request), 0, 60), $task, 'fast', 0.05, 'reflect', null, $this->app->space, ['learning']);
+            // the steps read content written by others: a skill learned from them is saved only once the user approves it (Jobs::reflect)
+            if (Privacy::$untrusted || array_filter($steps, fn($st) => Tools::untrustedSource((string)$st['tool']))) $this->app->store->updateJob($id, ['trust' => json_encode(['untrusted' => true] + Privacy::snapshot())]);
+        }
         catch (\Throwable $e) { Log::warn("learn: {$e->getMessage()}"); }
     }
 
@@ -505,7 +516,7 @@ final class Agent
     public function heartbeat(): ?string
     {
         $store = $this->app->store;
-        $history = $store->history(10);
+        $history = $store->history(10, $oldest);
         $check = "[Heartbeat check, not from the user] Read your HEARTBEAT.md checklist below and decide if anything needs the user's attention right now. "
             . "If nothing does, reply HEARTBEAT_OK followed by one short line saying what you checked and why nothing needs attention "
             . "(e.g. \"HEARTBEAT_OK: calendar clear until 15:00, no urgent email\"). Otherwise write the message to send.\n\n"
@@ -515,6 +526,7 @@ final class Agent
         $before = (int)$store->q('SELECT COALESCE(MAX(id),0) FROM tool_log')->fetchColumn();
         $tools = fn() => array_column($store->q('SELECT tool FROM tool_log WHERE id > ? ORDER BY id', [$before])->fetchAll(), 'tool');
         Privacy::$taint = 0; Privacy::trustAgain(); // a fresh check: what an earlier piece of work read does not carry over
+        foreach ($store->trustFrom($oldest, 0) as $t) Privacy::adopt($t); // ...except what its history still holds
         try {
             [$reply, $meta] = $this->run('heartbeat', 'fast', 'heartbeat', $history);
         } catch (Abort $e) {

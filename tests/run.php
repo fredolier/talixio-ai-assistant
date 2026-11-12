@@ -1980,6 +1980,9 @@ $fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return
 check('library: kb_search tool cites paths and file ids', str_contains($out, "/Admin/Logement/devis.eml (file #$idEml") && str_contains($out, "(/files/$idEml)"), $out);
 check('library: the assistant is told about the library', str_contains($fake->calls[0]['system'], 'kb_search') && in_array('kb_save_note', $fake->calls[0]['tools']));
 check('library: kb_list shows the tree and a folder', str_contains($la->tools->run('kb_list', []), '/Admin/Logement (3 files)') && str_contains($la->tools->run('kb_list', ['folder' => '/Clients/Bob']), "#$idXlsx ventes.xlsx (office"));
+// the search above read an email (devis.eml): since the audit (S4), filing right after it asks first
+check('library: kb_move right after reading an email asks first', str_contains($la->tools->run('kb_move', ['id' => $idCsv, 'folder' => '/Admin/Budget', 'name' => 'depenses-octobre.csv']), "Waiting for the user's approval"));
+\Talixio\Privacy::trustAgain(); // a new answer
 $r = $la->tools->run('kb_move', ['id' => $idCsv, 'folder' => '/Admin/Budget', 'name' => 'depenses-octobre.csv']);
 check('library: kb_move files an attachment', $r === "moved to /Admin/Budget/depenses-octobre.csv (file #$idCsv)", $r);
 $lib->moveFolder('/Admin', '/Perso/Admin');

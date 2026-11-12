@@ -96,6 +96,7 @@ final class Store
         $this->addColumn('jobs', 'directive', 'INTEGER'); // the agent-factory directive this worker job belongs to
         $this->addColumn('jobs', 'role', "TEXT NOT NULL DEFAULT ''"); // the worker role this job runs (kind='worker')
         $this->addColumn('jobs', 'session', "TEXT NOT NULL DEFAULT ''"); // a Tier-D delegated code session's handle (kind='conductor', Conductor)
+        $this->addColumn('jobs', 'trust', "TEXT NOT NULL DEFAULT ''"); // what the job read (Privacy::snapshot as JSON): carried into the work that follows it
         $this->addColumn('tasks', 'job', 'INTEGER'); // a routine that runs this job again, instead of a prompt
         // the assistant's mind (Mind): observations from the history, beliefs built from them, a journal of how it changes
         $this->db->exec("CREATE TABLE IF NOT EXISTS mind_obs(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, strength INTEGER NOT NULL DEFAULT 1,
@@ -262,6 +263,21 @@ final class Store
         }
         return array_map(fn($r) => ['meta' => $r['meta'] ? json_decode($r['meta'], true) : null,
             'files' => array_values(array_filter(array_map(fn($i) => $info[$i] ?? null, json_decode((string)$r['files'], true) ?: [])))] + $r, $rows);
+    }
+
+    /**
+     * The guard carried by messages of a space from $oldestId on (Privacy::snapshot shapes): a tool result the user
+     * approved, or a job report, that came from content written by others. They count as long as they are in the history.
+     * @return list<array>
+     */
+    public function trustFrom(int $oldestId, int $space = 0): array
+    {
+        $out = [];
+        foreach ($this->q("SELECT meta FROM messages WHERE space = ? AND id >= ? AND meta LIKE '%\"trust\"%'", [$space, $oldestId]) as $r) {
+            $t = json_decode((string)$r['meta'], true)['trust'] ?? null;
+            if (is_array($t)) $out[] = $t;
+        }
+        return $out;
     }
 
     /**

@@ -38,6 +38,13 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
   en dehors de lui.
 - **Recherche web** : la recherche web propre au fournisseur est coupée dès que le travail dépasse
   Interne ; celle de Talixio demande votre validation (Confidentiel) ou est refusée (Secret).
+- **Contenu écrit par d'autres** : dès qu'une réponse a lu un e-mail, une page web (y compris la recherche web
+  propre au modèle), un document que vous avez importé ou joint, votre agenda, le résultat d'un connecteur ou un
+  message d'un autre assistant ou d'un agent, un texte glissé dedans ne peut pas agir seul : les changements durables
+  (mémoire, compétences, routines, rangement d'un fichier) et l'ouverture d'une adresse web absente de ce contenu
+  attendent votre validation. Vos propres notes, écrites et modifiées en dernier par vous dans l'app, ne comptent pas.
+  Un résultat validé qui venait d'un tel contenu garde la règle tant qu'il est dans la conversation récente, et une
+  compétence apprise d'un tel travail attend elle aussi votre validation.
 - **Sites web de confiance** : les sites listés dans Réglages → Navigateur et validations → Sites web de
   confiance (sous-domaines inclus) s'ouvrent sans demander, y compris depuis un espace Confidentiel, une
   routine ou après la lecture d'un e-mail. Le bouton « Toujours autoriser » d'une validation ajoute le site

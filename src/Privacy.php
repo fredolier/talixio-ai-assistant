@@ -195,6 +195,39 @@ final class Privacy
     /** A new piece of work: nothing untrusted read yet. */
     public static function trustAgain(): void { self::$untrusted = false; self::$privateRead = false; self::$links = []; }
 
+    /** What the current work has read, to be carried on by another piece of work (a job's report, a tool process). */
+    public static function snapshot(): array
+    {
+        return ['untrusted' => self::$untrusted, 'private' => self::$privateRead, 'taint' => self::$taint, 'links' => array_slice(array_keys(self::$links), 0, 500)];
+    }
+
+    /** Carry on from a snapshot: it only ever raises the guard (untrusted, private, taint), never lowers it. */
+    public static function adopt(?array $s): void
+    {
+        if (!$s) return;
+        if (!empty($s['untrusted'])) self::$untrusted = true;
+        if (!empty($s['private'])) self::$privateRead = true;
+        self::$taint = max(self::$taint, min(count(self::LEVELS) - 1, (int)($s['taint'] ?? 0)));
+        foreach ((array)($s['links'] ?? []) as $u) if (is_string($u) && count(self::$links) < 2000) self::$links[$u] = true;
+    }
+
+    /** Set in the tool process Claude Code starts: the file it shares this state through with the answer that started it. */
+    public static string $shareFile = '';
+
+    /** Merge this process's state with the shared file and write the result back (both sides call it; under a lock). */
+    public static function sync(string $file = ''): void
+    {
+        $file = $file !== '' ? $file : self::$shareFile;
+        if ($file === '' || !($h = @fopen($file, 'c+'))) return;
+        try {
+            flock($h, LOCK_EX);
+            self::adopt(json_decode((string)stream_get_contents($h), true) ?: null);
+            ftruncate($h, 0); rewind($h);
+            fwrite($h, (string)json_encode(self::snapshot(), JSON_UNESCAPED_SLASHES));
+            fflush($h);
+        } finally { flock($h, LOCK_UN); fclose($h); }
+    }
+
     // ---- the trace of one answer ----
 
     public static function begin(): void { self::$taint = 0; self::trustAgain(); self::$trace = ['out' => [], 'local' => [], 'docs' => [], 'blocked' => []]; }

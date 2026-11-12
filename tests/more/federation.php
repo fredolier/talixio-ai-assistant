@@ -10,6 +10,7 @@ $mk = function (string $name, string $url): App {
     return App::fromEnv();
 };
 $alice = $mk('Alice', 'https://alice.test'); $bob = $mk('Bob', 'https://bob.test');
+putenv('TALIXIO_INSTANCE_NAME'); putenv('TALIXIO_PUBLIC_URL'); // inside run.php the next files must not inherit Bob's address
 $apps = ['alice.test' => $alice, 'bob.test' => $bob]; $down = []; $log = [];
 Federation::$transport = function (string $method, string $url, string $bearer, ?array $body) use ($apps, &$down, &$log): array {
     $u = parse_url($url); $host = $u['host']; $log[] = "$method {$u['path']}";
@@ -147,4 +148,4 @@ check('fed: unpairing ends it on both sides', $alice->federation()->revoke($alic
 check('fed: after unpairing nothing can be sent', str_contains($err(fn() => $bob->federation()->send($bobPeerOfAlice, 'still there?')), 'unknown peer')
     && $alice->federation()->receive(['kind' => 'message', 'body' => 'x'], $sec)[0] === 401);
 Federation::$transport = null;
-tests_done();
+if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done(); // run alone; inside run.php the other files must still run

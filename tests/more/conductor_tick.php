@@ -37,4 +37,4 @@ $ticks = $con->statusInfo()['ticks'];
 check('tick: every pass is traced, the quiet ones too, newest first', count($ticks) >= 4 && $ticks[0]['via'] === 'tick' && $ticks[0]['reports'] === 0 && $ticks[0]['waiting'] === 1 && end($ticks)['note'] === 'first pass');
 [$c] = $con->inbox(['type' => 'report', 'text' => 'old style', 'title' => 'x'], $sec);
 check('tick: the older report call still works and is traced as a report', $c === 200 && $con->statusInfo()['ticks'][0]['via'] === 'report');
-tests_done();
+if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done(); // run alone; inside run.php the other files must still run

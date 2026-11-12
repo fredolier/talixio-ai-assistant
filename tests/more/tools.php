@@ -258,7 +258,7 @@ check('tools: when reads plain words', Tools::when(['when' => 'every monday at 8
 check('tools: when falls back to cron', Tools::when(['cron' => '0 8 * * 1'], $t0)['cron'] === '0 8 * * 1');
 check('tools: when falls back to at', Tools::when(['at' => '2026-10-20T10:00'], $t0) === ['cron' => null, 'next' => strtotime('2026-10-20 10:00')]);
 check('tools: when without a schedule is an error', str_starts_with($caught(fn() => Tools::when([], $t0)), 'say when'));
-check('tools: outside content sources are untrusted', Tools::untrustedSource('mcp_x_y') && Tools::untrustedSource('browser_open') && Tools::untrustedSource('mail_read') && !Tools::untrustedSource('kb_search'));
+check('tools: outside content sources are untrusted', Tools::untrustedSource('mcp_x_y') && Tools::untrustedSource('browser_open') && Tools::untrustedSource('mail_read') && Tools::untrustedSource('kb_search') && !Tools::untrustedSource('kb_list')); // kb_search too since the audit (S4): documents are often written by others
 
 // ---------- Tools: library, memory, shares, jobs ----------
 $app = $mkApp('tl');

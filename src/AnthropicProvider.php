@@ -44,6 +44,7 @@ final class AnthropicProvider implements Provider
                 if (in_array($b['type'] ?? '', ['tool_use', 'server_tool_use'], true) && ($b['input'] ?? []) === []) $b['input'] = new \stdClass();
                 return $b;
             }, $r['content'] ?? []);
+            self::markWebSearch($blocks);
             $stop = $r['stop_reason'] ?? '';
             if ($stop === 'pause_turn') { // long server-side tool run: continue the same turn
                 $messages[] = ['role' => 'assistant', 'content' => $blocks];
@@ -75,6 +76,21 @@ final class AnthropicProvider implements Provider
         $onUsage(['model' => $this->tier->model, 'in' => (int)($u['input_tokens'] ?? 0), 'out' => (int)($u['output_tokens'] ?? 0),
             'cache_read' => (int)($u['cache_read_input_tokens'] ?? 0), 'cache_write' => (int)($u['cache_creation_input_tokens'] ?? 0), 'cost' => null]);
         return implode('', array_map(fn($b) => ($b['type'] ?? '') === 'text' ? $b['text'] : '', $r['content'] ?? [])) ?: '(stopped after too many tool steps)';
+    }
+
+    /**
+     * The provider's own web search runs at Anthropic, outside Tools::run: its results are web pages all the same,
+     * so the work becomes untrusted, and the addresses found may be opened without asking (as after web_search).
+     */
+    public static function markWebSearch(array $blocks): void
+    {
+        foreach ($blocks as $b) {
+            $type = (string)($b['type'] ?? '');
+            if ($type !== 'server_tool_use' && !str_ends_with($type, '_tool_result')) continue; // server tools only: ours come back as tool_result in our own message
+            Privacy::$untrusted = true;
+            preg_match_all('#https?://[^\s<>"\'`)\]\\\\]+#i', (string)json_encode($b['content'] ?? [], JSON_UNESCAPED_SLASHES), $m);
+            foreach ($m[0] as $u) Privacy::$links[rtrim($u, '.,;:!?')] = true;
+        }
     }
 
     /**

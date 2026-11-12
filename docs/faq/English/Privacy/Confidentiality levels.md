@@ -36,6 +36,12 @@ If a question asked in General reads a confidential document, the rest of the an
   cannot be changed from elsewhere; a Secret space's folder is not shown outside it.
 - **Web search**: the provider's own web search is turned off as soon as the work is above
   Internal; Talixio's web search asks for your approval (Confidential) or is refused (Secret).
+- **Content written by others**: once an answer has read an email, a web page (the model's own web search
+  included), a document you imported or attached, your calendar, a connector's result or a message from another
+  assistant or a worker, text planted in it cannot act on its own: lasting changes (memory, skills, routines,
+  filing a file) and opening a web address that was not in that content wait for your approval. Your own notes,
+  written and last changed by you in the app, do not count. A result you approved that came from such content keeps
+  the rule while it is in the recent conversation, and a skill learned from such work waits for your approval too.
 - **Trusted websites**: sites listed in Settings → Browser and approvals → Trusted websites (subdomains
   included) open without asking, also from Confidential spaces, routines and after reading an email. The
   "Always allow" button on an approval adds the site for you; for a web search it turns on "Web search from

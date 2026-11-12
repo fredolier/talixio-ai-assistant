@@ -42,6 +42,7 @@ final class Cli
                     $app->setSpace(max(0, (int)getenv('TALIXIO_SPACE')));
                     App::$inWorker = getenv('TALIXIO_IN_WORKER') === '1';
                     $app->jobId = (int)getenv('TALIXIO_JOB') ?: null;
+                    Privacy::$shareFile = (string)getenv('TALIXIO_TRUST_FILE'); // what the answer has read so far, both ways
                     (new McpServer($app->tools))->serve();
                     return 0;
                 case 'chat':

@@ -1239,7 +1239,14 @@ final class Tools
     /** Tools whose results are written by others: emails, web pages, search results, connectors. */
     public static function untrustedSource(string $name): bool
     {
-        return str_starts_with($name, 'mcp_') || str_starts_with($name, 'browser_') || in_array($name, ['mail_list', 'mail_read', 'mail_triage', 'fetch_url', 'web_search', 'fleet_inbox'], true);
+        return str_starts_with($name, 'mcp_') || str_starts_with($name, 'browser_') || in_array($name, ['mail_list', 'mail_read', 'mail_triage', 'fetch_url', 'web_search', 'fleet_inbox',
+            'file_read', 'kb_search', 'calendar_events', 'peer_inbox', 'peer_status', 'directive_inbox', 'check_inbox'], true);
+    }
+
+    /** Untrusted sources that hold the user's own data (not only the public web): a GET form must not carry it out. */
+    private static function privateSource(string $name): bool
+    {
+        return str_starts_with($name, 'mcp_') || str_starts_with($name, 'mail_') || in_array($name, ['file_read', 'kb_search', 'calendar_events'], true);
     }
 
     /**
@@ -1250,12 +1257,14 @@ final class Tools
     private function afterUntrusted(string $name, array $args): ?string
     {
         if (!Privacy::$untrusted) return null;
-        $why = "\n\n(Asked after reading content written by others: an email, a web page or a connector's result.)";
+        $why = "\n\n(Asked after reading content written by others: an email, a web page, a document, an attachment or a connector's result.)";
         $show = fn(array $a) => mb_substr(json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), 0, 3000);
         if (in_array($name, ['fetch_url', 'browser_open'], true)) {
             $url = trim((string)($args['url'] ?? ''));
             return isset(Privacy::$links[$url]) || isset(Privacy::$links[rtrim($url, '/')]) || $this->app->cfg->trustedSite($url) ? null : ($name === 'fetch_url' ? 'Fetch' : 'Open') . " the web address $url$why";
         }
+        // shared memory and skills refuse Confidential work themselves (sharedWrite): an approval must not get round that
+        if (in_array($name, ['memory_append', 'memory_replace', 'skill_save'], true) && $this->app->privacy()->effective() !== 'internal') return null;
         $lasting = ['memory_append', 'memory_replace', 'skill_save', 'skill_delete', 'schedule_task', 'kb_move'];
         if (in_array($name, $lasting, true) || ($name === 'space_notes' && ($args['action'] ?? 'read') !== 'read')) return "Run $name: " . $show($args) . $why;
         return null;
@@ -1275,14 +1284,29 @@ final class Tools
             catch (\Throwable $e) { $out = 'error: ' . $e->getMessage(); } // errors go back to the model
         }
         $this->app->store->logTool($name, $args, $out, $this->app->jobId);
-        if (self::untrustedSource($name) && !str_starts_with($out, 'error:')) { // a refused or failed call read nothing
+        if (self::untrustedSource($name) && !str_starts_with($out, 'error:') && !$this->ownWriting($name, $args, $out)) { // a refused or failed call read nothing
             Privacy::$untrusted = true;
-            if (str_starts_with($name, 'mcp_') || str_starts_with($name, 'mail_')) Privacy::$privateRead = true;
+            if (self::privateSource($name)) Privacy::$privateRead = true;
             preg_match_all('#https?://[^\s<>"\'`)\]]+#i', $out, $m);
             foreach ($m[0] as $u) Privacy::$links[rtrim($u, '.,;:!?')] = true;
         }
         if ($this->app->notice !== '') { $out .= "\n\n" . $this->app->notice; $this->app->notice = ''; }
         return $out;
+    }
+
+    /**
+     * Library reads that only reached the user's own writing: notes made in the app and last changed by the person
+     * (not imported files, emails, or notes the assistant or a routine wrote). Those do not make the work untrusted.
+     */
+    private function ownWriting(string $name, array $args, string $out): bool
+    {
+        if ($name === 'file_read') $ids = [(int)($args['id'] ?? 0)];
+        elseif ($name === 'kb_search') { preg_match_all('/\(file #(\d+)/', $out, $m); $ids = array_map('intval', $m[1]); }
+        else return false;
+        if (!$ids) return true; // nothing found: nothing read
+        $ids = array_values(array_unique($ids));
+        $own = $this->app->store->q('SELECT COUNT(*) FROM files WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ") AND note = 1 AND changed_by = 'you'", $ids)->fetchColumn();
+        return (int)$own === count($ids);
     }
 
     /** Run a browser action; if it submits a form that sends data, ask the user first and wait for the answer. */
