@@ -41,30 +41,20 @@ check('web1: the API needs a session', $web('/api/status')['_code'] === 401);
 $nh = $raw('/api/status', 'POST', '{}');
 check('web1: a POST without the app header is refused', $nh['code'] === 403 && str_contains($nh['body'], 'missing request header'), $nh['body']);
 
-// sign-in callbacks carry no session: their answer goes back to Settings
-$g = $raw('/api/google/callback?error=access_denied');
-check('web1: Google refusal lands in Settings', $g['code'] === 303 && str_contains($g['h']['location'] ?? '', '?google=Google%3A%20access_denied#settings'), json_encode($g['h']));
-$g = $raw('/api/google/callback?code=x&state=forged');
-check('web1: Google callback with a forged state does not connect', $g['code'] === 303 && !str_contains($g['h']['location'] ?? '', 'google=connected'), json_encode($g['h']));
-$m = $raw('/api/microsoft/callback?error=x&error_description=' . rawurlencode("User cancelled\r\nTrace: 123"));
-check('web1: Microsoft refusal keeps only the first line', str_contains($m['h']['location'] ?? '', 'microsoft=Microsoft%3A%20User%20cancelled#settings'), json_encode($m['h']));
-$m = $raw('/api/microsoft/callback?error=invalid_request&error_description=' . rawurlencode("AADSTS50194: Application 'x' is not configured as a multi-tenant application."));
-check('web1: a single-organisation Microsoft app is pointed to the directory setting', str_contains(rawurldecode($m['h']['location'] ?? ''), 'Microsoft directory'), json_encode($m['h']));
-$m = $raw('/api/microsoft/callback?code=x&state=forged');
-check('web1: Microsoft callback with a forged state does not connect', $m['code'] === 303 && !str_contains($m['h']['location'] ?? '', 'microsoft=connected'));
-$s = $raw('/api/spotify/callback?error=denied');
-check('web1: Spotify refusal lands in Settings', str_contains($s['h']['location'] ?? '', 'spotify=Spotify%3A%20denied#settings'), json_encode($s['h']));
-$s = $raw('/api/spotify/callback?code=x&state=forged');
-check('web1: Spotify callback with a forged state does not connect', $s['code'] === 303 && !str_contains($s['h']['location'] ?? '', 'spotify=connected'));
-$mo = $raw('/api/mcp/oauth/callback?error=access_denied&error_description=nope');
-check('web1: connector sign-in cancelled', str_contains(rawurldecode($mo['h']['location'] ?? ''), 'mcp=sign-in cancelled: access_denied (nope)'), json_encode($mo['h']));
-$mo = $raw('/api/mcp/oauth/callback?error=access_denied');
-check('web1: connector sign-in cancelled without a description', str_contains(rawurldecode($mo['h']['location'] ?? ''), 'cancelled: access_denied#'), json_encode($mo['h']));
-$mo = $raw('/api/mcp/oauth/callback?code=x&state=forged');
-check('web1: connector callback with an unknown state does not connect', $mo['code'] === 303 && !str_contains($mo['h']['location'] ?? '', 'connected:'));
+// sign-in callbacks carry no session: they go back to Settings, and the address they land on carries no words of its own;
+// a refusal or a state that no sign-in started here is told as an expired link (audit, lot 6). The refusal's own message,
+// for a sign-in started here, is tested in run.php (Google, Outlook, Spotify, a connector).
+foreach (['google' => '/api/google/callback', 'microsoft' => '/api/microsoft/callback', 'spotify' => '/api/spotify/callback', 'mcp' => '/api/mcp/oauth/callback'] as $k => $cb) {
+    $r = $raw("$cb?error=access_denied&error_description=" . rawurlencode('Call 555-0100 now'));
+    check("web1: $k refusal lands in Settings, without the words of the address", $r['code'] === 303 && ($r['h']['location'] ?? '') === "/?$k=back#settings", json_encode($r['h']));
+    $r = $raw("$cb?code=x&state=forged");
+    check("web1: $k callback with a forged state does not connect", $r['code'] === 303 && ($r['h']['location'] ?? '') === "/?$k=back#settings", json_encode($r['h']));
+}
 
 // ---- signed in ----
 check('web1: sign in', $web('/api/login', ['password' => 'correct horse battery'])['_code'] === 200);
+$bk = $web('/api/oauth/back', []);
+check('web1: the app reads the last sign-in message from the server, without the words of the address', ($bk['for'] ?? '') === 'mcp' && !str_contains(json_encode($bk), '555'), json_encode($bk));
 
 $reg = $raw('/api/privacy/register');
 check('web1: the record of processing downloads as Markdown', $reg['code'] === 200 && str_contains($reg['h']['content-type'] ?? '', 'text/markdown')

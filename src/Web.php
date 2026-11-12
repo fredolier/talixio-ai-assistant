@@ -120,7 +120,7 @@ final class Web
             'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'routing', 'catalogue', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
             'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor', 'pilot', 'federation' => $this->routeChat($m, $path, $b),
             'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
-            'google', 'microsoft', 'spotify', 'legifrance', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
+            'google', 'microsoft', 'spotify', 'oauth', 'legifrance', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
             'memory', 'mind', 'skills', 'roles', 'scripts' => $this->routeMind($m, $path, $b),
             'library', 'files', 'shares', 'privacy' => $this->routeLibrary($m, $path, $b),
             'board' => $this->board($m, $path, $b),
@@ -382,6 +382,7 @@ final class Web
                 $cfg = $this->app->mcp()->servers()[$name] ?? $this->fail(404, 'no such connector');
                 return ['url' => $this->app->mcpOAuth()->start($name, $cfg, $this->app->mcp()->cache()[$name]['auth_meta'] ?? null)];
             })(),
+            $path === '/api/oauth/back' && $m === 'POST' => $this->oauthBackRead(),
             $path === '/api/mcp/oauth/forget' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcpOAuth()->forget((string)($b['server'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/mcp/refresh' && $m === 'POST' => (function () { set_time_limit(0); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/shell/check' && $m === 'POST' => (function () { try { return ['ok' => true, 'text' => $this->app->shell()->check()]; } catch (\Throwable $e) { return ['ok' => false, 'text' => $e->getMessage()]; } })(),
@@ -625,13 +626,27 @@ final class Web
     {
         $msg = 'connected';
         try {
-            if (isset($_GET['error'])) throw new \RuntimeException('Google: ' . $_GET['error']);
-            $this->app->google()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+            $this->app->google()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''), (string)($_GET['error'] ?? ''));
         } catch (\Throwable $e) {
             Log::warn("google: {$e->getMessage()}");
             $msg = $e->getMessage();
         }
-        header('Location: ' . Config::basePath() . '/?google=' . rawurlencode($msg) . '#settings', true, 303);
+        $this->oauthBack('google', $msg);
+    }
+
+    /** The way back from a sign-in page. Its message stays here, read once by the app (POST /api/oauth/back): the address the
+     *  browser lands on carries none, so a link made elsewhere cannot show its own words in the app (audit, lot 6). */
+    private function oauthBack(string $for, string $msg, string $purpose = ''): void
+    {
+        $this->app->store->set('oauth_back', json_encode(['for' => $for, 'msg' => $msg, 'purpose' => $purpose, 'ts' => time()]));
+        header('Location: ' . Config::basePath() . '/?' . $for . '=back#settings', true, 303);
+    }
+
+    private function oauthBackRead(): array
+    {
+        $b = json_decode((string)$this->app->store->get('oauth_back'), true);
+        $this->app->store->set('oauth_back', '');
+        return is_array($b) && ($b['ts'] ?? 0) > time() - 600 ? ['for' => (string)$b['for'], 'msg' => (string)$b['msg'], 'purpose' => (string)$b['purpose']] : ['for' => null];
     }
 
     private function microsoftState(): array
@@ -653,7 +668,7 @@ final class Web
             $msg = $e->getMessage();
             $this->app->microsoft($ms->finished)->failed($msg); // kept under the button: the message after the redirect is easy to miss
         }
-        header('Location: ' . Config::basePath() . '/?microsoft=' . rawurlencode($msg) . ($ms->finished !== '' ? '&for=' . $ms->finished : '') . '#settings', true, 303);
+        $this->oauthBack('microsoft', $msg, $ms->finished);
     }
 
     /** Tasks board. The app acts as "you" and may change any space's cards. */
@@ -786,8 +801,8 @@ final class Web
     {
         $msg = '';
         try {
-            if (isset($_GET['error'])) throw new \RuntimeException('sign-in cancelled: ' . $_GET['error'] . (isset($_GET['error_description']) ? ' (' . $_GET['error_description'] . ')' : ''));
-            $name = $this->app->mcpOAuth()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+            $error = isset($_GET['error']) ? $_GET['error'] . (isset($_GET['error_description']) ? ' (' . $_GET['error_description'] . ')' : '') : '';
+            $name = $this->app->mcpOAuth()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''), (string)$error);
             set_time_limit(0);
             $cache = $this->app->mcp()->refresh();
             $msg = !empty($cache[$name]['error']) ? "$name: signed in, but " . $cache[$name]['error'] : "connected:$name";
@@ -795,7 +810,7 @@ final class Web
             Log::warn("mcp oauth: {$e->getMessage()}");
             $msg = $e->getMessage();
         }
-        header('Location: ' . Config::basePath() . '/?mcp=' . rawurlencode($msg) . '#settings', true, 303);
+        $this->oauthBack('mcp', $msg);
     }
 
     private function spotifyState(): array
@@ -811,13 +826,12 @@ final class Web
     {
         $msg = 'connected';
         try {
-            if (isset($_GET['error'])) throw new \RuntimeException('Spotify: ' . $_GET['error']);
-            $this->app->spotify()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+            $this->app->spotify()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''), (string)($_GET['error'] ?? ''));
         } catch (\Throwable $e) {
             Log::warn("spotify: {$e->getMessage()}");
             $msg = $e->getMessage();
         }
-        header('Location: ' . Config::basePath() . '/?spotify=' . rawurlencode($msg) . '#settings', true, 303);
+        $this->oauthBack('spotify', $msg);
     }
 
     private function heartbeats(): array

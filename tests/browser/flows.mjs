@@ -485,6 +485,14 @@ const flows = {
       /Bibliothèque|Corbeille|Nouveau/.test(await p2.textContent('body')));
     await ctx2.close();
   },
+  async oauthLink({ page, base, check }) {
+    // audit, lot 6: a link made elsewhere, as if back from a sign-in page, cannot show its own words in the app
+    await page.goto(base + '/?google=' + encodeURIComponent('Your account is locked: call 555-0100') + '#chat');
+    await page.waitForSelector('#shell:not([hidden])'); await page.waitForTimeout(1200);
+    const shown = await page.evaluate(() => document.querySelector('#toast')?.textContent || '');
+    check('oauth: the words of a forged sign-in link are not shown', !shown.includes('555'), shown);
+    check('oauth: the address is cleaned', !(await page.evaluate(() => location.search)).includes('google'));
+  },
   async firstLook({ browser, base, check }) {
     // audit 5.1: what a French user sees first, the language pinned as the account menu does
     const ctx = await browser.newContext({ locale: 'fr-FR' }), p = await ctx.newPage();

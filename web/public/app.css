@@ -552,7 +552,6 @@ tr:last-child td{border-bottom:0}
 .viewer-body .viewer-edit{flex:1;min-height:0}
 .viewer-body .viewer-edit .editor{flex:1;min-height:200px}
 .viewer-body pre.extracted[data-pane]{flex:1;overflow:auto;margin:0}
-.viewer-md{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--bg);max-width:none}
 .viewer-edit{display:flex;flex-direction:column;gap:8px}
 .viewer-edit .rte{flex:1;min-height:0;display:flex;flex-direction:column}
 .viewer-edit .rte-bar{flex:none;position:sticky;top:0}
@@ -1605,23 +1604,14 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .ptab:hover{border-color:var(--accent)}
 .ptab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
 .pilot-panel{display:flex;flex-direction:column;gap:14px}
-.pilot-talk{border:1px solid var(--accent);background:var(--accent-soft)}
-.pilot-talk h3{color:var(--ink)}
-.ptt{display:flex;align-items:center;gap:14px}
-.ptt .micbig{width:66px;height:66px;border-radius:50%;flex:none;display:grid;place-items:center;padding:0}
-.ptt .micbig svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.ptt p{margin:0}
-.pilot-composer{border-top:0;padding:0;background:transparent;flex-direction:row;align-items:flex-end;gap:8px}
-.pilot-composer textarea{resize:none;max-height:160px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface);flex:1;min-width:0;font:inherit;color:var(--ink)}
 .pilot-steps{max-height:320px;overflow:auto;background:var(--sunk);padding:10px 12px;border-radius:var(--r);font-size:.78rem;line-height:1.45;white-space:pre-wrap;word-break:break-word;margin:4px 0 0}
-.pilot-orch .row,.pilot-talk .row{display:flex;gap:8px;flex-wrap:wrap}
+.pilot-orch .row{display:flex;gap:8px;flex-wrap:wrap}
 /* tab count/source badges */
 .ptab-n,.ptab-src{color:var(--muted);font-variant-numeric:tabular-nums} /* not an opacity: 3.0:1 (audit U29) */
 .ptab[aria-selected="true"] .ptab-n,.ptab[aria-selected="true"] .ptab-src{color:inherit}
 .ptab{display:inline-flex;align-items:center;gap:6px}
 .ptab-badge{min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:var(--danger);color:var(--danger-ink);font-size:.66rem;font-weight:700;display:inline-grid;place-items:center;line-height:1}
 .ptab[aria-selected="true"] .ptab-badge{background:var(--accent-ink);color:var(--accent)}
-.pilot-scale{font-weight:400;font-size:.85rem}
 /* pilot status card */
 .pilot-status-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .pilot-status-head h3{margin:0;display:flex;align-items:center;gap:8px}
@@ -1711,8 +1701,7 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .parch-row:last-child{border-bottom:0}
 .parch-id p{margin:2px 0 0}
 .parch-actions{display:flex;gap:6px;flex-wrap:wrap;flex:none}
-.micbig.rec{color:var(--danger);animation:blink 1.2s infinite}
-@media (max-width:560px){.pilot-tabs{flex:none;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}.pilot-tabs::-webkit-scrollbar{display:none}.ptab{flex:none}.ptt{flex-direction:column;align-items:stretch;text-align:center}.ptt .micbig{align-self:center}}
+@media (max-width:560px){.pilot-tabs{flex:none;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}.pilot-tabs::-webkit-scrollbar{display:none}.ptab{flex:none}}
 
 /* ===== Model & budget cockpit (Models / Providers / Budget) ===== */
 .mb-tabs{display:flex;gap:5px;flex-wrap:wrap;margin:2px 0 14px;border-bottom:1px solid var(--line)}
@@ -1801,7 +1790,6 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 
 /* ---- Providers tab: the provider-card grid ---- */
 .mb-phelp{margin:2px 0 12px}
-.mb-dh{margin:20px 0 8px;font-size:1rem}
 .mb-pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:6px}
 .mb-pcard{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:7px;min-width:0}
 .mb-pcard .ptop{display:flex;align-items:center;gap:8px;min-width:0}

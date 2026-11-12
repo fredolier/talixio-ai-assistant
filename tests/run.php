@@ -3199,6 +3199,7 @@ parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
 check('google: consent link asks for offline calendar access', str_contains($q['scope'], 'calendar.events') && $q['access_type'] === 'offline' && strlen($q['state']) === 32);
 try { $ga->google()->finish('good-code', 'forged'); check('google: forged state refused', false); } catch (\InvalidArgumentException) { check('google: forged state refused', true); }
 $url = $ga->google()->authUrl('https://assistant.example/api/google/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+try { $ga->google()->finish('good-code', 'forged'); } catch (\InvalidArgumentException) {} // anyone can call the way back: a wrong state must not cancel this sign-in (audit, lot 6)
 check('google: connected, account read from the id token', $ga->google()->finish('good-code', $q['state']) === 'fred@gmail.com' && $ga->google()->connected()
     && (fileperms("$ad/google.json") & 0777) === 0600);
 $ga = App::fromEnv();
@@ -3222,7 +3223,12 @@ check('google: access token refreshed when expired', str_contains($ga->tools->ru
 $state = $aj('/api/google', null, 'd');
 check('google: status for the app (account, calendars, redirect address)', $state['connected'] && $state['email'] === 'fred@gmail.com' && in_array('Family', $state['calendars'], true) && str_ends_with($state['redirect'], '/api/google/callback'), json_encode($state));
 $ch = curl_init("http://127.0.0.1:$webPort/api/google/callback?code=x&state=bad"); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]); $h = (string)curl_exec($ch); curl_close($ch);
-check('google: callback works without a session and reports errors back in the app', str_contains($h, '303') && str_contains($h, 'Location: /?google=') && str_contains($h, '#settings'));
+check('google: callback works without a session and reports errors back in the app', str_contains($h, '303') && str_contains($h, 'Location: /?google=back#settings'));
+$bk = $aj('/api/oauth/back', [], 'd');
+check('google: the app reads the message once, from the server', ($bk['for'] ?? '') === 'google' && str_contains($bk['msg'], 'expired') && $aj('/api/oauth/back', [], 'd')['for'] === null, json_encode($bk));
+$url = $ga->google()->authUrl('https://assistant.example/api/google/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+$ch = curl_init("http://127.0.0.1:$webPort/api/google/callback?state={$q['state']}&error=access_denied"); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]); curl_exec($ch); curl_close($ch);
+check('google: a refusal on the way back from a sign-in started here is told', ($aj('/api/oauth/back', [], 'd')['msg'] ?? '') === 'Google: access_denied' && $ga->google()->connected());
 check('google: our own task events are not read back as appointments', !str_contains($ga->tools->run('calendar_events', []), 'a task'));
 $gb = $ga->board();
 $gc = $gb->create(['title' => 'Déclarer les impôts', 'due_date' => '2026-11-20', 'start_date' => '2026-11-18', 'in_calendar' => true], 0);
@@ -3310,7 +3316,9 @@ check('outlook mail: status for the app per mailbox, no tokens', $state['mail'][
 $url = $ga->microsoft('email')->authUrl('https://assistant.example/api/microsoft/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
 $ch = curl_init("http://127.0.0.1:$webPort/api/microsoft/callback?state={$q['state']}&error=invalid_client&error_description=" . rawurlencode("AADSTS7000215: Invalid client secret.\r\nTrace: 1")); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]); $h = (string)curl_exec($ch); curl_close($ch);
 $state = $aj('/api/microsoft', null, 'd');
-check('outlook mail: a failed sign-in is kept under its button, not only in a passing message', str_contains($h, '&for=email#settings')
+$bk = $aj('/api/oauth/back', [], 'd');
+check('outlook mail: a failed sign-in is kept under its button, not only in a passing message', str_contains($h, 'Location: /?microsoft=back#settings') && ($bk['purpose'] ?? '') === 'email'
+    && ($bk['msg'] ?? '') === 'Microsoft: AADSTS7000215: Invalid client secret.'
     && preg_match('/^\d{4}-\d\d-\d\d \d\d:\d\d Microsoft: AADSTS7000215: Invalid client secret\.$/', $state['mail']['email']['error']) && $state['mail']['mailbox']['error'] === '' && str_contains($state['error'], 'expired'), $h . json_encode($state));
 $url = $ga->microsoft('email')->authUrl('https://assistant.example/api/microsoft/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
 $ga->microsoft()->finish('good-code', $q['state']);
@@ -3389,7 +3397,11 @@ check('spotify: token refreshed, new refresh token kept', $tok['access_token'] =
 $state = $aj('/api/spotify', null, 'd');
 check('spotify: status for the app', $state['connected'] && $state['name'] === 'Fred' && str_ends_with($state['redirect'], '/api/spotify/callback'), json_encode($state));
 $ch = curl_init("http://127.0.0.1:$webPort/api/spotify/callback?code=x&state=bad"); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]); $h = (string)curl_exec($ch); curl_close($ch);
-check('spotify: callback works without a session and reports back in the app', str_contains($h, '303') && str_contains($h, 'Location: /?spotify='));
+check('spotify: callback works without a session and reports back in the app', str_contains($h, '303') && str_contains($h, 'Location: /?spotify=back#settings'));
+$url = $sa->spotify()->authUrl('https://assistant.example/api/spotify/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+try { $sa->spotify()->finish('', 'forged', 'denied'); $sp1 = 'no error'; } catch (\Throwable $e) { $sp1 = $e->getMessage(); }
+try { $sa->spotify()->finish('', $q['state'], "denied\r\nmore"); $sp2 = 'no error'; } catch (\Throwable $e) { $sp2 = $e->getMessage(); }
+check('spotify: a refusal is told only for a sign-in started here, and a wrong state cancels nothing (audit, lot 6)', str_contains($sp1, 'expired') && $sp2 === 'Spotify: denied', "$sp1 | $sp2");
 $sa->spotify()->disconnect();
 check('spotify: disconnect forgets the tokens', !$sa->spotify()->connected() && !is_file("$ad/spotify.json"));
 foreach (['AUTH_URL', 'TOKEN_URL', 'API_BASE'] as $k) putenv("TALIXIO_SPOTIFY_$k");
@@ -3571,7 +3583,7 @@ check('mcp oauth: registered, sign-in page with PKCE, the resource and the scope
 $hop = function (string $url): array { $ch = curl_init($url); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]); $r = (string)curl_exec($ch); curl_close($ch); preg_match('/^Location: (.+)$/mi', $r, $m); return [$r, trim($m[1] ?? '')]; };
 [, $back] = $hop($st0['url']);                       // the person approves on the service's page
 [$r2, $land] = $hop($back);                           // back in Talixio, without a session cookie
-check('mcp oauth: back from the sign-in page, connected', str_contains($land, '?mcp=connected%3Anotes') && str_contains($land, '#settings'), $land . ' ' . substr($r2, 0, 200));
+check('mcp oauth: back from the sign-in page, connected', str_ends_with($land, '?mcp=back#settings') && ($aj('/api/oauth/back', [], 'd')['msg'] ?? '') === 'connected:notes', $land . ' ' . substr($r2, 0, 200));
 $mc = $aj('/api/mcp', null, 'd');
 $notes = array_values(array_filter($mc['servers'], fn($x) => $x['name'] === 'notes'))[0];
 check('mcp oauth: signed in, tools listed', $notes['auth'] === 'signed_in' && count($notes['tools']) === 1 && !$notes['error'], json_encode($notes));
@@ -3593,7 +3605,10 @@ $hop("http://127.0.0.1:$oport/revoke-all");
 check('mcp oauth: a refused token is renewed once, then the call goes through', str_contains($oa->tools->run('mcp_notes_search_notes', ['q' => 'x']), '(token at-2)')
     && in_array('refreshed', json_decode((string)file_get_contents(sys_get_temp_dir() . "/fake-mcp-oauth-$oport.json"), true)['log'], true));
 [, $land] = $hop($back);
-check('mcp oauth: a sign-in answer is used once', !str_contains($land, 'connected'), $land);
+check('mcp oauth: a sign-in answer is used once', !str_contains($aj('/api/oauth/back', [], 'd')['msg'] ?? '', 'connected'), $land);
+$st1 = $aj('/api/mcp/oauth/start', ['server' => 'notes'], 'd'); parse_str((string)parse_url((string)($st1['url'] ?? ''), PHP_URL_QUERY), $oq);
+$hop("http://127.0.0.1:$webPort/api/mcp/oauth/callback?state={$oq['state']}&error=access_denied&error_description=nope");
+check('mcp oauth: a refusal on the way back from a sign-in started here is told', ($aj('/api/oauth/back', [], 'd')['msg'] ?? '') === 'sign-in cancelled: access_denied (nope)');
 $mc = $aj('/api/mcp/oauth/forget', ['server' => 'notes'], 'd');
 check('mcp oauth: sign out', (array_values(array_filter($mc['servers'], fn($x) => $x['name'] === 'notes'))[0]['auth'] ?? '') === 'needed' && !str_contains((string)@file_get_contents("$ad/mcp-oauth.json"), 'at-2'));
 $aj('/api/mcp', ['raw' => json_encode(['mcpServers' => new stdClass()])], 'd');

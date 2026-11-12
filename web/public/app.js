@@ -2006,6 +2006,26 @@ async function renderOverall(d) {
 }
 
 // ---- today, quick add, move sheet ----
+/** What a finished sign-in says, from POST api/oauth/back (see the boot code). */
+function oauthBack(k, g, forMail) {
+  if (k === 'google') {
+    toast(g === 'connected' ? 'Google Calendar connected.' : g);
+    if (g === 'connected') setTimeout(() => { showSection('accounts'); $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
+  } else if (k === 'microsoft') {
+    toast(g !== 'connected' ? g : forMail ? 'Microsoft account connected for mail.' : 'Outlook connected.');
+    if (g === 'connected') setTimeout(() => {
+      const group = state.setGroups?.find(x => x.id === forMail);
+      showSection(group ? group.section : 'accounts');
+      (document.querySelector(`.ms-mail[data-purpose="${CSS.escape(forMail)}"]`) || $('#microsoft-card')).scrollIntoView({ block: 'center' });
+    }, 600);
+  } else if (k === 'mcp') {
+    toast(g.startsWith('connected:') ? `Connected to ${g.slice(10)}: its tools are available from the next message.` : g);
+    setTimeout(() => { showSection('accounts'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600);
+  } else {
+    toast(g === 'connected' ? 'Spotify connected.' : g);
+    setTimeout(() => { showSection('accounts'); $('#spotify-card').scrollIntoView({ block: 'center' }); }, 600);
+  }
+}
 function toastAction(text, label, fn) {
   toast(text); const t = $('#toast'), b = document.createElement('button');
   b.type = 'button'; b.className = 'toast-act'; b.textContent = label; b.onclick = () => { t.hidden = true; fn(); };
@@ -5355,7 +5375,6 @@ const LIB_STATE = [['', 'Any state'], ['shared', 'Shared by link'], ['problem', 
 const LIB_VIEWS = [['details', 'Details'], ['list', 'Compact list'], ['tiles', 'Tiles']];
 const LIB_GROUP = [['', 'No grouping'], ['kind', 'By type'], ['date', 'By date']];
 const LIB_SORTS = [['name', 'Name'], ['kind', 'Type'], ['size', 'Size'], ['changed', 'Modified'], ['by', 'By']];
-const libFiltered = () => lib.filter.kind || lib.filter.when || lib.filter.state;
 function libKeep(f) {
   const { kind, when, state } = lib.filter;
   if (kind && kindOf(f) !== kind) return false;
@@ -6254,7 +6273,6 @@ function pilotAgo(ts) {
     : d < 86400 ? t('{n} h ago', { n: Math.floor(d / 3600) }) : t('{n} d ago', { n: Math.floor(d / 86400) });
 }
 const PSTATE = { active: 'active', busy: 'busy', waiting: 'waiting', idle: 'idle', done: 'done', error: 'error', offline: 'offline' };
-const pStateLabel = s => ({ active: t('active'), busy: t('busy'), waiting: t('waiting for you'), idle: t('idle'), done: t('done'), error: t('error'), offline: t('offline') }[s] || t('idle'));
 // one plural helper for the pilot roster strings
 const pN = (one, many, v) => t(v === 1 ? one : many, { n: v });
 // the fleet-reports toggle: badge-only (default), push+e-mail, or off — lives in Votre pilote autonome
@@ -7597,34 +7615,12 @@ $('#notif-clear').onclick = async () => {
 async function handleLaunch() {
   const params = new URLSearchParams(location.search);
   const token = params.get('share');
-  if (params.has('google')) {
-    const g = params.get('google');
+  // back from a sign-in page: the address says only which one; its message is read once from the server, so a link made
+  // elsewhere (?google=any words) cannot show its own text in the app (audit, lot 6)
+  const back = ['google', 'microsoft', 'mcp', 'spotify'].find(k => params.has(k));
+  if (back) {
     history.replaceState(null, '', './#settings');
-    toast(g === 'connected' ? 'Google Calendar connected.' : g);
-    if (g === 'connected') setTimeout(() => { showSection('accounts'); $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
-  }
-  if (params.has('microsoft')) {
-    const g = params.get('microsoft');
-    history.replaceState(null, '', './#settings');
-    const forMail = params.get('for');
-    toast(g !== 'connected' ? g : forMail ? 'Microsoft account connected for mail.' : 'Outlook connected.');
-    if (g === 'connected') setTimeout(() => {
-      const group = state.setGroups?.find(x => x.id === forMail);
-      showSection(group ? group.section : 'accounts');
-      (document.querySelector(`.ms-mail[data-purpose="${forMail}"]`) || $('#microsoft-card')).scrollIntoView({ block: 'center' });
-    }, 600);
-  }
-  if (params.has('mcp')) {
-    const g = params.get('mcp');
-    history.replaceState(null, '', './#settings');
-    toast(g.startsWith('connected:') ? `Connected to ${g.slice(10)}: its tools are available from the next message.` : g);
-    setTimeout(() => { showSection('accounts'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600);
-  }
-  if (params.has('spotify')) {
-    const g = params.get('spotify');
-    history.replaceState(null, '', './#settings');
-    toast(g === 'connected' ? 'Spotify connected.' : g);
-    setTimeout(() => { showSection('accounts'); $('#spotify-card').scrollIntoView({ block: 'center' }); }, 600);
+    post('api/oauth/back', {}).then(r => { if (r?.for === back) oauthBack(back, String(r.msg || ''), r.purpose || ''); }).catch(() => {});
   }
   if (params.has('connector')) { // "▶ Install" in the FAQ connector list (opens here in a new tab)
     history.replaceState(null, '', location.pathname + location.hash);

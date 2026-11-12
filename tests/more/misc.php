@@ -8,6 +8,11 @@ use Talixio\{App, Board, Config, ConnectorPackage, Doctor, Sovereign, SpotifyErr
 $d = test_dir('misc');
 $root = dirname(__DIR__, 2);
 
+// audit Q24: the code nothing used is gone, and stays gone (classes built from data, such as t-flat or ty llm, are in use)
+$dead = array_filter(['libFiltered', 'pStateLabel', '.pilot-talk', '.ptt', '.micbig', '.pilot-composer', '.pilot-scale', '.viewer-md', '.mb-dh'],
+    fn($w) => str_contains((string)file_get_contents("$root/web/public/" . ($w[0] === '.' ? 'app.css' : 'app.js')), $w));
+check('hygiene: the unused functions and styles the audit listed are removed', !$dead, implode(' ', $dead));
+
 // ---- the environment, changed per section and put back after
 $envKeys = [];
 $setEnv = function (array $vars) use (&$envKeys) {
