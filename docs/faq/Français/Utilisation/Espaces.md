@@ -39,7 +39,8 @@ espace peut passer de l'un à l'autre avec tout ce qui lui appartient.
   couleur et le niveau de confidentialité, les tâches (avec leurs dépendances, leur historique et le
   temps passé), les routines et les travaux, ce que l'assistant a appris à son sujet, et son
   **dossier de la bibliothèque**. Les documents d'ailleurs dans la bibliothèque vers lesquels pointent la
-  conversation ou les tâches sont copiés aussi.
+  conversation ou les tâches sont copiés aussi. Les routines arrivent en pause : activez dans Routines celles
+  qui doivent tourner ici.
 - Ce qui reste : le compte IA de l'espace (les clés ne voyagent jamais ; l'autre assistant utilise ses
   propres réglages, à changer là-bas si besoin), les liens de partage, les notifications.
 - Si l'autre assistant a déjà un espace du même nom, du même code de tâches ou du même dossier,

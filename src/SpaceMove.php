@@ -210,6 +210,7 @@ final class SpaceMove
                 $old = (int)$t['id'];
                 unset($t['id']);
                 $t['space'] = $space;
+                $t['enabled'] = 0; // a routine that arrives runs only once the person turns it on (audit S15)
                 $t['job'] = isset($jobs[(int)$t['job']]) ? $jobs[(int)$t['job']] : null;
                 if ($t['job'] === null && trim((string)$t['prompt']) === '') continue; // its job did not come along
                 $tasks[$old] = $this->insert('tasks', $t);

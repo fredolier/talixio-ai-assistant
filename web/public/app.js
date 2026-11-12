@@ -4280,7 +4280,9 @@ async function installFromLink(src, name, headers) {
   if (!/^https:\/\/[^\s/]+\.[^\s/]+/i.test(src || '')) { toast(t('Not a connector address: {src}', { src: src || '' })); return; }
   if (/^https:\/\/(www\.)?github\.com\//i.test(src)) {
     await connectorDialog();
-    $('#conn-gh').value = src; $('#conn-gh-go').click();
+    // filled in, not fetched: the person presses the button after reading the address (audit S14)
+    $('#conn-gh').value = src; $('#conn-gh-go').focus();
+    toast(t('Check the address, then press the button to download it.'));
     return;
   }
   name = (name || new URL(src).hostname.replace(/^(www|mcp|api)\./, '').split('.')[0]).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'connector';
@@ -6098,8 +6100,9 @@ async function openApp(id) {
       <ul>${(app.sources || []).map(s => `<li class="no-i18n"><code>${esc(s.name)}</code> — ${esc(src(s))}</li>`).join('') || `<li>${esc(t('no data source'))}</li>`}</ul>
       <details><summary>Show the code</summary><pre class="no-i18n">${esc(app.html)}</pre><pre class="no-i18n">${esc(app.script)}</pre></details>
       <p><button type="button" class="btn" id="app-approve">Approve</button></p></div>` : ''}
-    <iframe class="app-frame" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer" title="${esc(app.name)}" src="api/apps/${id}/frame?space=${sp}"></iframe>`;
-  appFrame = { id, el: box.querySelector('iframe') };
+    ${pending ? '' : `<iframe class="app-frame" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer" title="${esc(app.name)}" src="api/apps/${id}/frame?space=${sp}"></iframe>`}`;
+  // an app waiting for approval does not run at all: its code is shown above, not executed (audit S17)
+  appFrame = pending ? null : { id, el: box.querySelector('iframe') };
   appFrame.el.onload = () => appFrame?.el.contentWindow?.postMessage({ talixio: 1, theme: document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light' }, '*');
   $('#app-edit').onclick = () => { location.hash = '#chat'; $('#input').value = t('Change the app “{a}” (#{b}): ', { a: app.name, b: id }); $('#input').focus(); };
   $('#app-del').onclick = async () => {

@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.34 (2026-11-12)
+
+- Security (audit S14, S15, S17): **an install link no longer downloads by itself**: a "▶ Install" link for a GitHub connector opened the window and fetched the repository at once; it now fills in the address and waits for you to press the button. **A space moved in from another assistant brings its routines paused**: they could start running (and spending) here before you had looked at them; turn on those you want in Routines. **An app waiting for your approval does not run**: its code ran in its frame before approval and could offer a file to download; now it is only shown (its sources and code) until you approve it, also when its page is opened directly. FAQ *Apps*, *Spaces* and *Connector list* updated.
+
 ## 1.35.33 (2026-11-12)
 
 - Security (audit S12, S13): **another person's assistant and the orchestrator's webhook can only be reached at a public address**. The address a paired assistant or an orchestrator gives was called as given, so a valid pairing could make the server send requests to machines of its own network (the admin agent on the same host, a router, the cloud's metadata address). These calls now go only to a public address, pinned when it is checked, as the assistant's own web reading already did; `TALIXIO_ALLOW_PRIVATE_PEERS=1` allows two assistants on one network on purpose. **The sign-in pause no longer locks you out**: after 60 failed attempts in an hour from many addresses, sign-in was paused for everyone, the owner included; now, during that pause, the person still gets in from an address they signed in from in the last 30 days, or with the right password and the right two-step code; anyone else gets the same "too many attempts" answer, right password or not, so the pause reveals nothing. Each address's own limits (5 in 15 minutes, 20 a day) are unchanged. Tested with simulated sign-ins from many addresses and the refused address kinds. FAQ *Other assistants* updated.

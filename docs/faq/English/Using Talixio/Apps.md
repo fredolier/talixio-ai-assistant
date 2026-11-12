@@ -42,7 +42,7 @@ An app is not free code. The assistant writes it with a small kit (charts, table
   search, the tasks of its space, your calendar, your contacts, one of your saved scripts, or a connector tool you
   marked *only reading*. Nothing else;
 - **every app the assistant makes or changes waits for your approval.** Open it: you see the sources it reads (and
-  the code if you like), then *Approve*. Until then it gets no data;
+  the code if you like), then *Approve*. Until then it does not run at all and gets no data;
 - an app belongs to a space and follows its privacy level: apps of a Secret space are not shown elsewhere and never
   read the web. An app of a Confidential space, or one that reads a Confidential file or folder, never reaches the
   web or a connector either: what it reads stays in the app. Script arguments may not start with `-`.

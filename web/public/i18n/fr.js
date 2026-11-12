@@ -1,6 +1,7 @@
 window.I18N = window.I18N || {};
 /* French interface: English text (as it appears on screen) → French. {placeholders} match any value. See i18n.js. */
 window.I18N.fr = {
+"Check the address, then press the button to download it.": "Vérifiez l'adresse, puis appuyez sur le bouton pour le télécharger.",
 "Repeat": "Répétition",
 "Date": "Date",
 "Send to": "Envoyer à",

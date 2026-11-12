@@ -691,6 +691,13 @@ final class Web
     {
         if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space'];
         $a = $this->app->apps()->get($id) ?? $this->fail(404, 'not found');
+        if (($a['status'] ?? '') === 'pending') { // not approved yet: its code does not run, even opened directly (audit S17)
+            while (ob_get_level() > 0) ob_end_clean();
+            http_response_code(403);
+            header('Content-Type: text/plain; charset=utf-8'); header("Content-Security-Policy: default-src 'none'; sandbox");
+            echo 'This app waits for your approval: it does not run before.';
+            return;
+        }
         $nonce = base64_encode(random_bytes(16));
         while (ob_get_level() > 0) ob_end_clean();
         header('Content-Type: text/html; charset=utf-8');

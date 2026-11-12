@@ -82,6 +82,8 @@ check('move: its settings came along, not the account', $got['instructions'] ===
 check('move: the history says it moved', ($bb->spaces()->history($nid)[0]['what'] ?? '') === 'moved' && ($bb->spaces()->history($nid)[0]['detail'] ?? '') === 'Work'
     && count($bb->spaces()->history($nid)) >= 2, json_encode($bb->spaces()->history($nid)));
 $bs = $bb->store;
+$rt = $bs->q('SELECT title, enabled FROM tasks WHERE space = ?', [$nid])->fetchAll();
+check('move: an imported routine arrives paused, to be turned on by the person (audit S15)', count($rt) === 1 && (int)$rt[0]['enabled'] === 0, json_encode($rt));
 $msgs = $bs->q('SELECT * FROM messages WHERE space = ? ORDER BY id', [$nid])->fetchAll();
 $q = (int)$bs->q("SELECT id FROM files WHERE name = 'quote.txt'")->fetchColumn();
 $p = (int)$bs->q("SELECT id FROM files WHERE name = 'prices.txt'")->fetchColumn();

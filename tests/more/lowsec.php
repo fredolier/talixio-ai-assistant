@@ -43,4 +43,13 @@ $r = $web('/api/login', ['password' => 'correct horse battery'], 'home', '', $fr
 check('lowsec: ... but the person, from an address they signed in from, gets in', $r['_code'] === 200, json_encode($r));
 $r = $web('/api/login', ['password' => 'wrong'], 'home2', '', $from('203.0.113.50'));
 check('lowsec: ... and only with the right password', $r['_code'] === 401 || $r['_code'] === 429, (string)$r['_code']);
+// ---- S17: an app waiting for approval does not run, even opened directly
+putenv("TALIXIO_DATA_DIR=$dw"); putenv('TALIXIO_WEB_PASSWORD=correct horse battery');
+$wa = App::fromEnv();
+$pa = $wa->apps()->save(['name' => 'Waiting app', 'html' => '<p>hi</p>', 'script' => "talixio.download('x.txt', 'boo');"], 'assistant');
+putenv('TALIXIO_DATA_DIR'); putenv('TALIXIO_WEB_PASSWORD');
+check('lowsec: an app made by the assistant waits for approval', $pa['status'] === 'pending');
+$ch = curl_init("http://127.0.0.1:$port/api/apps/{$pa['id']}/frame"); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIEFILE => "$dw/ck-home", CURLOPT_HTTPHEADER => ['X-Forwarded-For: 203.0.113.50']]);
+$body = (string)curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+check('lowsec: its frame is not served before approval, so its code never runs', $code === 403 && !str_contains($body, 'talixio.download'), "$code $body");
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

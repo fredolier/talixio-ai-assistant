@@ -45,7 +45,7 @@ stockage à elle), et :
   bibliothèque, une recherche dans la bibliothèque, les tâches de son espace, votre agenda, vos contacts, un de vos
   scripts enregistrés, ou un outil de connecteur que vous avez marqué *lecture seule*. Rien d'autre ;
 - **toute app créée ou modifiée par l'assistant attend votre validation.** Ouvrez-la : vous voyez les sources qu'elle
-  lit (et le code si vous voulez), puis *Approuver*. D'ici là, elle ne reçoit aucune donnée ;
+  lit (et le code si vous voulez), puis *Approuver*. D'ici là, elle ne s'exécute pas du tout et ne reçoit aucune donnée ;
 - une app appartient à un espace et suit son niveau de confidentialité : les apps d'un espace Secret ne sont pas
   montrées ailleurs et ne lisent jamais le web. Une app d'un espace Confidentiel, ou qui lit un fichier ou un
   dossier Confidentiel, n'atteint pas non plus le web ni un connecteur : ce qu'elle lit reste dans l'app. Les
