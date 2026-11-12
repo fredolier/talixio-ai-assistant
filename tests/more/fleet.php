@@ -112,6 +112,20 @@ check('fleet: one mail server name for every assistant, from the admin page (1.3
 $f->setSettings(['email_authserv' => '']);
 $f->setSettings(['domain' => 'localhost', 'mode' => 'path', 'memory_mb' => 512, 'cpus' => 1, 'ollama' => true, 'eu_provider' => '', 'google_client_id' => '', 'apparmor_unconfined' => true]);
 check('fleet: path addresses', $f->url('alice') === 'https://localhost/alice/');
+// fleet.json changed by several processes at the same instant (the admin page, the agent, an update): no change is lost (audit 4.2)
+$fields = [['memory_mb', 2048], ['ollama_model', 'race-model:1'], ['google_client_id', 'gid-race'], ['eu_only', true]];
+$lost = 0;
+for ($round = 0; $round < 6; $round++) {
+    $rd = "$d/race-$round"; $at = microtime(true) + 0.4; $ps = [];
+    foreach ($fields as [$k, $v]) {
+        $code = 'require ' . var_export("$root/src/autoload.php", true) . '; while (microtime(true) < ' . $at . ') usleep(200); (new Talixio\Fleet(' . var_export($rd, true) . ', ' . var_export($sock, true) . '))->setSettings([' . var_export($k, true) . ' => ' . var_export($v, true) . ']);';
+        $ps[] = proc_open([PHP_BINARY, '-r', $code], [], $pp);
+    }
+    foreach ($ps as $p) proc_close($p);
+    $got = (new Fleet($rd, $sock))->state()['settings'];
+    foreach ($fields as [$k, $v]) if ($got[$k] !== $v) $lost++;
+}
+check('fleet: settings changed by several processes at the same instant are all kept', $lost === 0, "$lost lost");
 
 // create
 $rules([['GET', '#^/networks/talixio-i-alice#', 404, ['message' => 'no such network'], 'once' => 'n1'], ['GET', '#^/volumes/talixio-alice#', 404, [], 'once' => 'v1'],
