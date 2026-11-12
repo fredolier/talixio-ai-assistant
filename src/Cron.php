@@ -55,7 +55,14 @@ final class Cron
             // cron rule: if both day fields are restricted, either may match
             $dayOk = $domAny && $dowAny ? true : ($domAny ? $w : ($dowAny ? $d : ($d || $w)));
             if (!$dayOk) { $t = $t->modify('+1 day')->setTime(0, 0); continue; }
-            if (!isset($hour[(int)$t->format('G')])) { $t = $t->setTime((int)$t->format('G'), 0)->modify('+1 hour'); continue; }
+            if (!isset($hour[$g = (int)$t->format('G')])) {
+                $n = $t->setTime($g, 0)->modify('+1 hour'); $ng = (int)$n->format('G');
+                // the clock jumps forward (summer time): a run planned in the skipped hour happens right after it, not a day later (audit Q16)
+                if ($ng > $g + 1 && $n->format('Ymd') === $t->format('Ymd')) for ($h = $g + 1; $h < $ng; $h++) {
+                    if (isset($hour[$h])) { $c = $n->setTime($ng, (int)min(array_keys($min))); if ($c->getTimestamp() > $after) return $c->getTimestamp(); }
+                }
+                $t = $n; continue;
+            }
             if (!isset($min[(int)$t->format('i')])) { $t = $t->modify('+1 minute'); continue; }
             return $t->getTimestamp();
         }

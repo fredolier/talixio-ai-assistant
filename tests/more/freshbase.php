@@ -22,4 +22,7 @@ $ov = \Talixio\App::fromEnv()->privacy()->overview();
 restore_error_handler();
 putenv('TALIXIO_DATA_DIR');
 check('freshbase: the Privacy overview loads without a PHP warning', $warnings === [] && isset($ov['level']), implode(' | ', $warnings));
+// audit Q25: an app error keeps its message for the browser, without the server's file paths
+check('freshbase: an error message loses the server paths, not the web addresses', \Talixio\Web::internalError(new RuntimeException('the backup folder /var/lib/talixio/backups cannot be created (see https://example.org/help/backups)'))
+    === 'the backup folder …/backups cannot be created (see https://example.org/help/backups)');
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

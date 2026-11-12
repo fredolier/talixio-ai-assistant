@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.25 (2026-11-12)
+
+- Fix (audit Q16, Q17, Q25): three small ones. **Summer time**: a routine set in the hour the clock skips (02:30 on the last Sunday of March in Europe) was put off by a whole day; it now runs right after the jump (03:30), and the night the clock goes back it still runs once. **Cancelling a job as it finishes**: the cancel and the end of the job could overwrite each other (a cancelled job shown as done, or reporting anyway); now whichever comes first wins, and a cancelled job sends no report. **Error messages**: the app's own errors still say what went wrong, but without the server's file paths (`/var/lib/talixio/backups` becomes `…/backups`; web addresses are kept).
+
 ## 1.35.24 (2026-11-12)
 
 - Fix (audit Q18): **the database no longer only grows**. Each day, the worker now removes the main conversation's log of the assistant's actions after 90 days (new setting *Keep the log of the assistant's actions*, Settings → Budget; 0 = keep everything; background jobs keep theirs), messages between agents and to other assistants a month after they were delivered, finished questions from other assistants after 90 days, received ones after 180 days, and the assistant's processed observations, its journal and role runs after a year. Costs are not lost: usage older than 90 days is summed into one line per day, model and kind, with the same totals. The costs of the day and month (read at every status refresh), the job queue, a directive's workers and the routines due are now indexed, and putting old jobs away is one query instead of loading every job twice an hour. The fallback of meaning search still looks at the 20,000 most recent vectors only (unchanged). FAQ *Where my data goes* updated.

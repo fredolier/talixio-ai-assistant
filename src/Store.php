@@ -479,6 +479,13 @@ final class Store
     public function jobsWithStatus(string $status): array { return $this->q('SELECT * FROM jobs WHERE status=? ORDER BY id', [$status])->fetchAll(); }
     public function updateJob(int $id, array $fields): void { $this->update('jobs', $id, $fields); }
 
+    /** A run's outcome, written only if the job is still running: a cancel that came first stays (audit Q17). */
+    public function finishJob(int $id, array $fields): bool
+    {
+        $set = implode(', ', array_map(fn($k) => "$k = ?", array_keys($fields)));
+        return $this->q("UPDATE jobs SET $set WHERE id = ? AND status = 'running'", [...array_values($fields), $id])->rowCount() === 1;
+    }
+
     /** Atomically move a queued job to running. */
     public function claimJob(int $id): bool
     {

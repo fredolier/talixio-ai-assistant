@@ -107,6 +107,14 @@ $app->jobs()->runJob($w2);
 $app->jobs()->runJob($w1);
 check('jobtrust: the directive\'s combined result keeps what a worker read', str_contains($seen['memory'] ?? '', "Waiting for the user's approval"), json_encode($seen));
 
+// audit Q17: a job cancelled while it finishes stays cancelled, with no report
+$app->store->q('DELETE FROM messages');
+$jc = $app->store->addJob('Racing', 'NOTHING', 'standard', 1.0);
+$fake->script = function ($last, $tools, $on) use ($usage, $app, $jc) { $usage($on); if (str_starts_with($last, 'NOTHING')) { $app->jobs()->cancel($jc); return 'Report: done anyway.'; } return 'Relayed.'; };
+$app->jobs()->runJob($jc);
+check('jobtrust: a job cancelled while it finishes stays cancelled, and reports nothing', $app->store->job($jc)['status'] === 'cancelled'
+    && !$app->store->q("SELECT 1 FROM messages WHERE content LIKE '%Racing%'")->fetchColumn());
+check('jobtrust: cancelling a finished job does nothing', $app->jobs()->cancel($jc) === false);
 $app->providerOverride = null;
 Privacy::trustAgain(); Privacy::$taint = 0;
 foreach ($envSaved as $k => $v) $v === false ? putenv($k) : putenv("$k=$v");

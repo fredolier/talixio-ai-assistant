@@ -23,6 +23,10 @@ $runs = []; for ($x = strtotime('2026-11-01 00:00'); ($x = Cron::next('0 8 1-7 *
 check('cron: "1-7 * 1" keeps the standard meaning (days 1-7 or Mondays)', count($runs) === 11, (string)count($runs));
 check('cron: the third Friday', $fmt(Cron::next('0 9 * * 5#3', $t)) === 'Fri 2026-10-16 09:00');
 try { Cron::next('0 9 * * 1#6', $t); check('cron rejects a 6th weekday', false); } catch (\InvalidArgumentException) { check('cron rejects a 6th weekday', true); }
+// audit Q16: the night the clock goes forward (Europe/Paris, 29 March 2026, 02:00 → 03:00) a 02:30 run happens at 03:30, once
+check('cron: a run in the hour skipped by summer time happens right after the jump', $fmt(Cron::next('30 2 * * *', strtotime('2026-03-28 12:00'))) === 'Sun 2026-03-29 03:30');
+check('cron: ... and the next one is the next night as usual', $fmt(Cron::next('30 2 * * *', strtotime('2026-03-29 03:30:05'))) === 'Mon 2026-03-30 02:30');
+check('cron: the night the clock goes back, 02:30 runs once', date('Y-m-d H:i', Cron::next('30 2 * * *', strtotime('2026-10-25 02:30:10 CEST'))) === '2026-10-26 02:30');
 
 // audit Q26: a PHP warning fails the run (tests/helpers.php); an @-silenced one does not
 exec(escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg('require ' . var_export(__DIR__ . '/helpers.php', true) . '; $a = []; echo $a["nope"]; tests_done();') . ' 2>&1', $wout, $wcode);

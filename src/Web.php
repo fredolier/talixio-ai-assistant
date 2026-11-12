@@ -102,7 +102,13 @@ final class Web
         $ref = bin2hex(random_bytes(4));
         Log::error("$where [$ref]: " . get_class($e) . ": {$e->getMessage()} at " . basename($e->getFile()) . ':' . $e->getLine());
         return $e instanceof \Error || $e instanceof \PDOException || $e instanceof \JsonException
-            ? "Something went wrong on the server (reference $ref, in the log)." : $e->getMessage();
+            ? "Something went wrong on the server (reference $ref, in the log)." : self::withoutPaths($e->getMessage());
+    }
+
+    /** A message for the browser without the server's file paths (audit Q25): "/var/lib/talixio/backups" says "…/backups"; web addresses stay. */
+    public static function withoutPaths(string $msg): string
+    {
+        return (string)preg_replace_callback('#(?<![\w:/.~-])/(?:[\w.@%+~-]+/)+([\w.@%+~-]*)#u', fn($m) => '…/' . $m[1], $msg);
     }
 
     /** Sends each /api/<area>/... request to the handler of its area. */

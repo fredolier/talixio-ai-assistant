@@ -111,10 +111,8 @@ final class Jobs
 
     public function cancel(int $id): bool
     {
-        $j = $this->app->store->job($id);
-        if (!$j || !in_array($j['status'], ['queued', 'running'], true)) return false;
-        $this->app->store->updateJob($id, ['status' => 'cancelled', 'finished' => time()]);
-        return true;
+        // in one statement: a job that finishes at the same moment is either cancelled or done, never both (audit Q17)
+        return $this->app->store->q("UPDATE jobs SET status = 'cancelled', finished = ? WHERE id = ? AND status IN ('queued', 'running')", [time(), $id])->rowCount() === 1;
     }
 
     /** Finished jobs are put away on their own after this many days (still searchable under Archived). */
@@ -321,15 +319,16 @@ final class Jobs
             }
             [$text, $meta] = $this->app->agent()->run('job', $j['tier'], 'job', [['role' => 'user', 'content' => $task]], $brief, 'job', $id, $guard);
             if ($j['kind'] === 'meeting') $store->addDoc('summary', $id, 'meeting summary: ' . $j['title'], $text, null, (int)($j['space'] ?? 0)); // its space's level applies
-            $store->updateJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);
+            $store->finishJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);
             if (trim((string)$text) !== '') $this->saveReport($store->job($id), $text);
         } catch (Abort $e) {
             if ($e->getMessage() === 'cancelled') { $store->updateJob($id, ['trust' => json_encode(Privacy::snapshot())]); if ($j['kind'] === 'worker') $this->app->director()->onWorkerDone($id); return; } // cancelled: no chat report, but the directive may now be done
-            $store->updateJob($id, ['status' => 'failed', 'result' => 'Stopped: ' . $e->getMessage(), 'finished' => time()]);
+            $store->finishJob($id, ['status' => 'failed', 'result' => 'Stopped: ' . $e->getMessage(), 'finished' => time()]);
         } catch (\Throwable $e) {
-            $store->updateJob($id, ['status' => 'failed', 'result' => 'Error: ' . $e->getMessage(), 'finished' => time()]);
+            $store->finishJob($id, ['status' => 'failed', 'result' => 'Error: ' . $e->getMessage(), 'finished' => time()]);
         }
         $store->updateJob($id, ['trust' => json_encode(Privacy::snapshot())]); // what it read: its report turn, a directive and continue_job carry it on
+        if (($store->job($id)['status'] ?? '') === 'cancelled' && $j['kind'] !== 'worker') return; // cancelled while it finished: no report
         if ($j['kind'] === 'worker') $this->app->director()->onWorkerDone($id); // the directive reports once, not each worker
         elseif ($j['kind'] !== 'reflect') $this->report($id); // learning is quiet unless it learned something
     }
