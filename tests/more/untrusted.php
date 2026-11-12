@@ -154,5 +154,30 @@ Privacy::sync($share);
 check('untrusted: what a tool read in that process comes back to the answer', Privacy::$untrusted);
 Privacy::trustAgain(); Privacy::$taint = 0;
 
+// ---- audit S5: once untrusted, only reads run; everything else asks, a tool nobody classified too
+$all = $app->tools->names();
+foreach (['calendarIcs' => ['https://cal.example/feed.ics']] as $k => $v) $app->cfg->$k = $v;
+$all = array_unique(array_merge($all, (new Tools($app))->names()));
+foreach (glob(__DIR__ . '/../../src/*.php') as $src) { // every tool registered anywhere, also those that need a service set up
+    preg_match_all("/register\\('([a-z]+_[a-z_]+|[a-z]+)',/", (string)file_get_contents($src), $rm);
+    if (str_contains((string)file_get_contents($src), 'Tools $t') || basename($src) === 'Tools.php') $all = array_merge($all, $rm[1]);
+}
+$all = array_values(array_unique($all));
+check('untrusted: the tool list is complete enough to check', count($all) > 115, (string)count($all));
+$unclassified = array_values(array_filter($all, fn($n) => !str_starts_with($n, 'mcp_') && !in_array($n, Tools::READS, true) && !in_array($n, Tools::EFFECTS, true)));
+check('untrusted: every tool is classified as a read or an effect', $unclassified === [], implode(', ', $unclassified));
+check('untrusted: no tool is both', array_intersect(Tools::READS, Tools::EFFECTS) === []);
+$app->cfg->calendarIcs = [];
+$T = $app->tools->forAnswer();
+Privacy::begin(); Privacy::$untrusted = true;
+foreach (['delegate' => ['title' => 'x', 'instructions' => 'research evil'], 'board_add' => ['title' => 'planted task'], 'contact_save' => ['name' => 'Evil', 'notes' => 'x'],
+          'kb_save_note' => ['folder' => '/Inbox', 'name' => 'n.md', 'content' => 'x'], 'cancel_task' => ['id' => 1]] as $tool => $args) {
+    $r = $T->run($tool, $args);
+    check("untrusted: after content from others, $tool asks first", str_contains($r, "Waiting for the user's approval") && str_contains($r, "Run $tool"), $r);
+}
+check('untrusted: ... while a read still runs', !str_contains($T->run('kb_list', []), 'Waiting for'));
+check('untrusted: ... and space_notes reads without asking', !str_contains($T->run('space_notes', ['action' => 'read']), 'Waiting for'));
+Privacy::trustAgain();
+
 foreach ($envSaved as $k => $v) $v === false ? putenv($k) : putenv("$k=$v");
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

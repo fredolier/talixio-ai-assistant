@@ -38,8 +38,12 @@ If a question asked in General reads a confidential document, the rest of the an
   Internal; Talixio's web search asks for your approval (Confidential) or is refused (Secret).
 - **Content written by others**: once an answer has read an email, a web page (the model's own web search
   included), a document you imported or attached, your calendar, a connector's result or a message from another
-  assistant or a worker, text planted in it cannot act on its own: lasting changes (memory, skills, routines,
-  filing a file) and opening a web address that was not in that content wait for your approval. Your own notes,
+  assistant or a worker, text planted in it cannot act on its own: from then on only reading runs freely (searching,
+  reading files, mail, the calendar, the board; preparing a mail draft), and everything that changes or sends something
+  (memory, skills, routines, tasks, contacts, notes, jobs, the code fleet, messages to other assistants, shell commands,
+  opening a web address that was not in that content) waits for your approval. In the browser, typing, clicking and
+  choosing go ahead on a site you named in your request or trust, unless the answer has read your own data (it could be
+  typed into the page); otherwise you approve that one action at once. Your own notes,
   written and last changed by you in the app, do not count. A result you approved that came from such content keeps
   the rule while it is in the recent conversation, and a skill learned from such work waits for your approval too.
   A background job, a directive or a continued job carries what it read into its report: the turn that relays it

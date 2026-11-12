@@ -765,12 +765,14 @@ final class Tools
                 ['url' => ['type' => 'string']], ['url'], fn(array $a) => $b()->open($a['url']));
             $this->register('browser_read', 'Read the current browser page again (text and numbered elements).', [], [], fn() => $b()->snapshot());
             $this->register('browser_click', 'Click an element of the current page by its number. Clicking a button that submits a form sending data (login, order, contact...) pauses for the user\'s approval.',
-                ['ref' => $ref], ['ref'], fn(array $a) => $this->browserAct((int)$a['ref'], fn() => $b()->click((int)$a['ref']), false));
+                ['ref' => $ref], ['ref'], fn(array $a) => $this->browserAct((int)$a['ref'], fn() => $b()->click((int)$a['ref']), false, 'Click'));
             $this->register('browser_type', 'Type text into a field of the current page by its number; enter=true presses Enter afterwards (which may submit the form: then it pauses for approval).',
                 ['ref' => $ref, 'text' => ['type' => 'string'], 'enter' => ['type' => 'boolean']], ['ref', 'text'],
-                fn(array $a) => !empty($a['enter']) ? $this->browserAct((int)$a['ref'], fn() => $b()->type((int)$a['ref'], $a['text'], true), true) : $b()->type((int)$a['ref'], $a['text'], false));
+                fn(array $a) => $this->browserAct((int)$a['ref'], fn() => $b()->type((int)$a['ref'], $a['text'], !empty($a['enter'])), !empty($a['enter']),
+                    'Type "' . mb_substr((string)$a['text'], 0, 300) . '"' . (!empty($a['enter']) ? ' and press Enter' : ''), empty($a['enter'])));
             $this->register('browser_select', 'Choose an option in a select (drop-down) by its number and the option text or value.',
-                ['ref' => $ref, 'value' => ['type' => 'string']], ['ref', 'value'], fn(array $a) => $b()->select((int)$a['ref'], $a['value']));
+                ['ref' => $ref, 'value' => ['type' => 'string']], ['ref', 'value'], fn(array $a) => $this->browserAct((int)$a['ref'], fn() => $b()->select((int)$a['ref'], $a['value']), false,
+                    'Choose "' . mb_substr((string)$a['value'], 0, 120) . '"', true));
             $this->register('browser_back', 'Go back to the previous page.', [], [], fn() => $b()->back());
             $this->register('browser_save_login', 'After the user logged in to a site in this browser, save that login (its cookies) to the file a connector reads, '
                 . 'so the connector works without its own login (e.g. the cookiesPath an Uber Eats connector reports). Asks the user to approve first.',
@@ -1236,6 +1238,29 @@ final class Tools
         return $this->execute($name, $args);
     }
 
+    /**
+     * Once the work has read content written by others (audit S5), only these run without asking: they read, they only
+     * speak to the user or to one of its own workers (directive_tell: the worker reads it as data), or they only
+     * prepare something the user acts on (a mail draft is not sent: mail_send asks). Every other tool waits for approval — a new tool too, until it is listed here or in EFFECTS
+     * (a test checks each tool is in one of the two). fetch_url and browser_open have their own rule (addresses in that
+     * content). space_notes and spaces read with their read actions only; connectors' tools that change something already ask.
+     */
+    public const READS = ['app_get', 'app_list', 'ask_director', 'board_changes', 'board_get', 'board_list', 'browser_back', 'browser_open', 'browser_read',
+        'browser_screenshot', 'calendar_events', 'check_inbox', 'contact_find', 'decide', 'directive_inbox', 'directive_status', 'directive_tell', 'eurlex_get', 'eurlex_search',
+        'fetch_url', 'file_read', 'fleet_inbox', 'fleet_status', 'forecast', 'judilibre_get', 'judilibre_search', 'kb_find', 'kb_inbox', 'kb_list', 'kb_recent',
+        'kb_related', 'kb_search', 'kb_versions', 'legifrance_get', 'legifrance_search', 'list_jobs', 'list_tasks', 'mail_draft', 'mail_list', 'mail_read', 'mail_triage',
+        'memory_read', 'peer_inbox', 'peer_list', 'peer_queries', 'peer_status', 'phone_action', 'role_find', 'script_read', 'search_memory', 'share_list',
+        'skill_read', 'space_notes', 'spaces', 'spotify_now', 'tools_more', 'usage_report', 'web_search'];
+    /** Tools that change something or send something out: after content written by others, they ask first. */
+    public const EFFECTS = ['app_save', 'archive_job', 'asset_install', 'asset_publish', 'asset_publish_file', 'board_add', 'board_delete', 'board_invite',
+        'board_log_time', 'board_prioritize', 'board_update', 'browser_click', 'browser_save_login', 'browser_select', 'browser_type', 'calendar_add',
+        'cancel_job', 'cancel_task', 'conductor_dispatch', 'connector_install_github', 'contact_save', 'continue_job', 'delegate', 'direct', 'directive_rate',
+        'directive_steer', 'fleet_decide', 'fleet_disconnect', 'fleet_dispatch', 'fleet_priorities', 'fleet_setup', 'kb_make_document',
+        'kb_move', 'kb_save_note', 'kb_trash', 'mail_send', 'memory_append', 'memory_replace', 'mind_observe', 'peer_ask', 'peer_publish',
+        'peer_send', 'role_case_add', 'role_evaluate', 'role_improve', 'role_install', 'role_publish', 'role_record', 'role_save', 'routine_feedback',
+        'schedule_job', 'schedule_task', 'script_delete', 'script_run', 'script_save', 'share_create', 'share_revoke', 'shell_run', 'shell_save',
+        'skill_delete', 'skill_save', 'spotify_control', 'spotify_play', 'spotify_save', 'usage_bill'];
+
     /** Tools whose results are written by others: emails, web pages, search results, connectors. */
     public static function untrustedSource(string $name): bool
     {
@@ -1265,9 +1290,11 @@ final class Tools
         }
         // shared memory and skills refuse Confidential work themselves (sharedWrite): an approval must not get round that
         if (in_array($name, ['memory_append', 'memory_replace', 'skill_save'], true) && $this->app->privacy()->effective() !== 'internal') return null;
-        $lasting = ['memory_append', 'memory_replace', 'skill_save', 'skill_delete', 'schedule_task', 'kb_move'];
-        if (in_array($name, $lasting, true) || ($name === 'space_notes' && ($args['action'] ?? 'read') !== 'read')) return "Run $name: " . $show($args) . $why;
-        return null;
+        if ($name === 'space_notes' && ($args['action'] ?? 'read') !== 'read') return "Run $name: " . $show($args) . $why;
+        if ($name === 'spaces' && ($args['action'] ?? 'list') === 'restore') return "Run $name: " . $show($args) . $why;
+        if (in_array($name, self::READS, true) || str_starts_with($name, 'mcp_')) return null; // reads; a connector's changes already ask
+        if (in_array($name, ['browser_click', 'browser_type', 'browser_select'], true)) return null; // asked now, on the live page, by browserGuard
+        return "Run $name: " . $show($args) . $why; // anything else, also a tool not classified yet
     }
 
     /**
@@ -1327,10 +1354,13 @@ final class Tools
     }
 
     /** Run a browser action; if it submits a form that sends data, ask the user first and wait for the answer. */
-    private function browserAct(int $ref, callable $act, bool $enter): string
+    private function browserAct(int $ref, callable $act, bool $enter, string $what = 'Click', bool $noSubmit = false): string
     {
         $i = Browser::get($this->app)->inspect($ref);
-        $submits = $enter ? $i['inForm'] : $i['submits'];
+        $g = $this->browserGuard($i, $what);
+        if ($g === true) return $act(); // the user just approved this very action
+        if (is_string($g)) return $g;
+        $submits = !$noSubmit && ($enter ? $i['inForm'] : $i['submits']);
         if (!$submits || ($i['method'] !== 'post' && !$i['password'] && !Privacy::$privateRead)) return $act(); // a GET form can carry emails or connector data out too
         $summary = "Submit a form on the web: \"{$i['label']}\"" . ($i['action'] ? " → {$i['action']}" : '') . ($i['fields'] ? "\nFields: " . implode(', ', array_slice($i['fields'], 0, 12)) : '');
         if (in_array('browser_submit', $this->app->cfg->autoApprove, true)) return $act();
@@ -1340,6 +1370,24 @@ final class Tools
         return $this->app->approvals()->ask('browser_submit', ['ref' => $ref], $summary)
             ? $act()
             : 'error: the user did not approve submitting this form (rejected or no answer in time). Nothing was submitted.';
+    }
+
+    /**
+     * Typing, clicking or choosing on a page once the work has read content written by others (audit S9): fine on a site
+     * the user named in this request, or trusts, as long as nothing private was read (it could be typed into the page).
+     * Elsewhere the user approves this one action, now. Returns null (go on, other checks apply), true (approved) or an error.
+     */
+    private function browserGuard(array $i, string $what): bool|string|null
+    {
+        if (!Privacy::$untrusted || in_array('browser_submit', $this->app->cfg->autoApprove, true)) return null;
+        $page = (string)($i['page'] ?? ''); $site = Config::siteOf($page);
+        $named = $site !== '' && ($this->app->cfg->trustedSite($page) || array_filter(array_keys(Privacy::$userSites), fn($u) => $site === $u || str_ends_with($site, ".$u")));
+        if ($named && !Privacy::$privateRead) return null;
+        if (App::$inWorker) return "error: acting on this page needs the user's approval, which can't be awaited here. Use delegate to hand the whole web task to a background job (it will ask the user and wait).";
+        $summary = "$what on " . ($site ?: 'a web page') . ": \"{$i['label']}\"\n(" . (Privacy::$privateRead ? 'This answer has read your own data (emails, documents or a connector): it could be typed into the page.'
+            : 'You did not name this site, and the answer has read content written by others.') . ')';
+        return $this->app->approvals()->ask('browser_act', ['label' => $i['label'], 'page' => $page], $summary)
+            ? true : 'error: the user did not approve this action on the page (rejected or no answer in time). Nothing was done.';
     }
 
     /** Write the browser's cookies for some domains to a connector's cookie file (Playwright format). */

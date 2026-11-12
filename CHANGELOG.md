@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.13 (2026-11-12)
+
+- Security (audits S5 and S9): **after reading content written by others, only reading runs freely**. Until now the guard held back a short list of lasting changes (memory, skills, routines, filing); everything else — starting background jobs or directives, dispatching to the code fleet, messaging other assistants, publishing roles, saving notes, contacts or tasks, shell commands, cancelling routines, revoking shares — ran without asking. The list is now the other way round: a named list of tools that only read (or only speak to you, or prepare a mail draft that is not sent) runs freely, and every other tool asks first, a new one too until it is classified (a test fails if a tool is in neither list). **In the browser**, opening a page made every later click count as "after untrusted content", so typing went unchecked unless a form was posted: now typing, clicking and choosing go ahead on a site you named in your request or trust, unless the answer has read your own data (then it could be typed into the page); anywhere else you approve that one action at once, with the text to be typed shown. Expect more approval requests after reading the web or your mail. Tested with simulated models and a real headless Chromium on a local test site; not tried on real sites. FAQ *Confidentiality levels* updated.
+- Tests: several sections of `tests/run.php` and `isolation.php` called tools one after the other with what earlier sections had read still marked; they now start a new answer, as the app does.
+
 ## 1.35.12 (2026-11-12)
 
 - Tests (audit Q26): **a PHP warning or notice now fails the test run** (`tests/helpers.php`, also when a file of `tests/more/` runs alone); warnings silenced on purpose with `@` do not. The two it found were a missing program started by a connector or by Signal, already reported to the user by a clear error, now without the extra warning in the log. Found on the way: when `php tests/run.php` writes straight to a file, its first lines are overwritten by a child process (the count and exit code stay right); pipe it instead (`| cat > log`), noted in `CLAUDE.md`. Its cause is not found yet.

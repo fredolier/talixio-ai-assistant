@@ -1229,6 +1229,7 @@ $app->triage()->relabel(1, 'reply');
 check('triage: the user relabels', $app->triage()->get(1)['label'] === 'reply' && $app->triage()->get(1)['by'] === 'you');
 $alice = $app->contacts()->search('alice')[0] ?? null;
 check('contacts: senders become contacts (not newsletters or no-reply)', $alice && $alice['email'] === 'alice@example.com' && $alice['name'] === 'Alice' && !$app->contacts()->search('journal.fr'));
+\Talixio\Privacy::trustAgain(); // a new answer: what an earlier section read does not carry over (the untrusted guard, audit S5)
 $app->tools->run('contact_save', ['name' => 'Alice', 'email' => 'alice@example.com', 'org' => 'Dupont SA', 'note' => 'prefers calls in the morning']);
 $found = $app->tools->run('contact_find', ['query' => 'Dupont']);
 check('contacts: the assistant keeps facts about people', str_contains($found, 'Alice <alice@example.com>') && str_contains($found, 'prefers calls in the morning') && str_contains($found, date('Y-m-d')), $found);
@@ -1255,6 +1256,8 @@ if (\Talixio\Browser::findBinary('') !== null) {
     check('browser: local addresses refused by default', str_starts_with($app->tools->run('browser_open', ['url' => "http://127.0.0.1:$wport/"]), 'error: that address is not allowed'));
     \Talixio\Browser::shutdown();
     $c->browserAllowPrivate = true; // the test site is local
+    // a new answer, in which the user named the site (since the audit, S9: elsewhere, typing and clicking after a page was read ask first)
+    \Talixio\Privacy::begin(); \Talixio\Privacy::$userSites = ['127.0.0.1' => true];
     $page = $app->tools->run('browser_open', ['url' => "http://127.0.0.1:$wport/"]);
     check('browser: page text after JavaScript, numbered elements', str_contains($page, 'Rendered by JavaScript: 3 products') && preg_match('/\[1\] link "See products"/', $page) === 1 && str_contains($page, 'password field'), $page);
     preg_match('/\[(\d+)\] text field "Search"/', $page, $m1); preg_match('/\[(\d+)\] text field "Email"/', $page, $m2); preg_match('/\[(\d+)\] button "Sign in"/', $page, $m3); preg_match('/\[(\d+)\] select/', $page, $m4);
@@ -1281,6 +1284,19 @@ if (\Talixio\Browser::findBinary('') !== null) {
     App::$inWorker = true;
     check('browser: inside the worker it asks to delegate instead of blocking', str_contains($app->tools->run('browser_click', ['ref' => (int)$m3[1]]), 'Use delegate'));
     App::$inWorker = false;
+    // audit S9: once a page was read, typing on a site the user did not name, or after reading private data, asks first
+    $page = $app->tools->run('browser_read', []); preg_match('/\[(\d+)\] text field "Search"/', $page, $m1);
+    $c->approvalWaitSeconds = 1;
+    \Talixio\Privacy::$userSites = []; \Talixio\Privacy::$untrusted = true; // a page found by the model itself
+    $r = $app->tools->run('browser_type', ['ref' => (int)$m1[1], 'text' => 'my address: 1 rue X']);
+    $ask = $app->store->q("SELECT summary FROM approvals WHERE tool='browser_act' ORDER BY id DESC LIMIT 1")->fetchColumn();
+    check('browser: typing on a site the user did not name asks first, showing the text', str_contains($r, 'did not approve') && str_contains((string)$ask, 'Type "my address: 1 rue X"') && str_contains((string)$ask, 'You did not name this site'), $r . ' / ' . $ask);
+    \Talixio\Privacy::$userSites = ['127.0.0.1' => true]; \Talixio\Privacy::$privateRead = true; // named, but the answer read the user's documents
+    $r = $app->tools->run('browser_type', ['ref' => (int)$m1[1], 'text' => 'from my files']);
+    check('browser: after reading private data, typing asks first even on a named site', str_contains($r, 'did not approve') && str_contains((string)$app->store->q("SELECT summary FROM approvals WHERE tool='browser_act' ORDER BY id DESC LIMIT 1")->fetchColumn(), 'read your own data'), $r);
+    \Talixio\Privacy::$privateRead = false;
+    check('browser: on a named site, without private data, typing goes ahead', !str_contains($app->tools->run('browser_type', ['ref' => (int)$m1[1], 'text' => 'desk lamp']), 'approve'));
+    \Talixio\Privacy::trustAgain(); $c->approvalWaitSeconds = 6;
     \Talixio\Content::$imageLoader = fn(int $id) => $app->files()->imagePart($id); // other App instances were created above
     $shot = $app->tools->run('browser_screenshot', []);
     [$txt, $imgs] = \Talixio\Content::toolImages($shot);
@@ -1748,6 +1764,7 @@ $mdid = (int)$s->q('SELECT MAX(id) FROM directives')->fetchColumn();
 $mw = $s->directiveWorkers($mdid)[0]; $mwjid = (int)$mw['id'];
 $wAddr = Talixio\Relay::addr('worker', $mwjid); $dAddr = Talixio\Relay::addr('director', $mdid);
 check('proof: opening a directive grants the worker↔director team mailbox', $relay->allowed($wAddr, $dAddr, 'tell') && $relay->allowed($dAddr, $wAddr, 'ask'));
+\Talixio\Privacy::trustAgain(); // a new answer: what an earlier section read does not carry over (the untrusted guard, audit S5)
 // the worker asks the director a question (runs inside the worker job context)
 $beforeN = (int)$s->q("SELECT COUNT(*) FROM notifications")->fetchColumn();
 $app->jobId = $mwjid;
@@ -3334,6 +3351,7 @@ try { $sa->spotify()->finish('good-code', 'forged'); check('spotify: forged stat
 $url = $sa->spotify()->authUrl('https://assistant.example/api/spotify/callback'); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
 check('spotify: connected, account name kept, tokens private', $sa->spotify()->finish('good-code', $q['state']) === 'Fred' && $sa->spotify()->connected() && (fileperms("$ad/spotify.json") & 0777) === 0600);
 $sa = App::fromEnv();
+\Talixio\Privacy::trustAgain(); // a new answer: what an earlier section read does not carry over (the untrusted guard, audit S5)
 $r = $sa->tools->run('spotify_play', ['query' => 'get lucky']);
 $play = array_values(array_filter($scalls(), fn($c) => $c[1] === '/v1/me/player/play'));
 check('spotify: plays the song found, on the phone when nothing is playing', str_contains($r, 'Get Lucky') && str_contains($r, 'Galaxy S25 Ultra') && ($play[0][2]['device_id'] ?? '') === 'D2' && ($play[0][3]['uris'][0] ?? '') === 'spotify:track:T1', $r);
@@ -3435,6 +3453,7 @@ $moved = $bd->move($c2['id'], 'doing');
 check('board: moved to another column', $moved['status'] === 'doing');
 $bd->addTime($c1['id'], '1h30', '2026-10-09', 'ponçage');
 check('board: time spent recorded', $bd->get($c1['id'])['spent_hours'] === 1.5);
+\Talixio\Privacy::trustAgain(); // a new answer: what an earlier section read does not carry over (the untrusted guard, audit S5)
 // assistant tools: isolation between spaces
 $ba->space = (int)$bsp['id'];
 $r = $ba->tools->run('board_update', ['code' => 'ACM-1', 'priority' => 1]);

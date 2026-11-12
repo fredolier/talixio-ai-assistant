@@ -359,6 +359,7 @@ final class Agent
         [$previousSpace, $previousChannel] = [$this->app->space, $this->app->channel];
         $this->app->setSpace($space); $this->app->channel = $channel; // tools (library search, schedules, notes...) work within this space
         Privacy::begin(); // what this answer sends out, shown under it
+        if ($channel !== 'job') Privacy::$userSites = Privacy::sitesIn($prompt); // the sites the user named: the browser may act there (a job report is not the user's words)
         if ($onEvent) Privacy::$onEvent = $onEvent;
         try {
             $ref = $files ? $this->app->files()->reference($files) : '';

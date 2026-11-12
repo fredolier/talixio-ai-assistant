@@ -50,6 +50,7 @@ check('isolation: the provider\'s web search is back for Internal work', $app->t
 $app->cfg->provider = 'claude-code';
 
 // ---- acting on other spaces: jobs and routines of a space the model may not read are not seen
+Privacy::trustAgain(); // a new answer: what an earlier section read does not carry over (the untrusted guard, audit S5)
 $app->store->addTask('Iso weekly', 'check Iso', '0 8 * * 1', time() + 3600, 'standard', $cid);
 $tid = (int)$app->store->db->lastInsertId();
 $app->store->addTask('General daily', 'hello', '0 8 * * *', time() + 3600);

@@ -40,9 +40,13 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
   Interne ; celle de Talixio demande votre validation (Confidentiel) ou est refusée (Secret).
 - **Contenu écrit par d'autres** : dès qu'une réponse a lu un e-mail, une page web (y compris la recherche web
   propre au modèle), un document que vous avez importé ou joint, votre agenda, le résultat d'un connecteur ou un
-  message d'un autre assistant ou d'un agent, un texte glissé dedans ne peut pas agir seul : les changements durables
-  (mémoire, compétences, routines, rangement d'un fichier) et l'ouverture d'une adresse web absente de ce contenu
-  attendent votre validation. Vos propres notes, écrites et modifiées en dernier par vous dans l'app, ne comptent pas.
+  message d'un autre assistant ou d'un agent, un texte glissé dedans ne peut pas agir seul : dès lors, seule la lecture
+  se fait librement (recherche, lecture de fichiers, du mail, de l'agenda, du tableau ; préparation d'un brouillon de
+  mail), et tout ce qui modifie ou envoie quelque chose (mémoire, compétences, routines, tâches, contacts, notes, jobs,
+  flotte de code, messages à d'autres assistants, commandes shell, ouverture d'une adresse web absente de ce contenu)
+  attend votre validation. Dans le navigateur, saisir, cliquer et choisir se font sans demander sur un site que vous
+  avez nommé dans votre demande ou mis en confiance, sauf si la réponse a lu vos propres données (elles pourraient être
+  saisies dans la page) ; sinon vous validez cette action sur le moment. Vos propres notes, écrites et modifiées en dernier par vous dans l'app, ne comptent pas.
   Un résultat validé qui venait d'un tel contenu garde la règle tant qu'il est dans la conversation récente, et une
   compétence apprise d'un tel travail attend elle aussi votre validation.
   Un job en arrière-plan, une directive ou un job repris transmet ce qu'il a lu à son rapport : le tour qui le

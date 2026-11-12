@@ -37,6 +37,17 @@ final class Privacy
     public static bool $privateRead = false;
     /** @var array<string,true> the web addresses found in that content: opening one of them leaks nothing new */
     public static array $links = [];
+    /** @var array<string,true> the sites the user named in this request ("book on sncf-connect.com"): the browser may act there (Tools::browserGuard) */
+    public static array $userSites = [];
+
+    /** The sites a text names, as full addresses or bare domains ("lemonde.fr"). */
+    public static function sitesIn(string $text): array
+    {
+        preg_match_all('#(?:https?://)?((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24})(?=[/:\s,;!?)"\'»]|\.(?:\s|$)|$)#iu', $text, $m);
+        $out = [];
+        foreach ($m[1] as $h) if (($site = Config::siteOf($h)) !== '' && !preg_match('/\.(?:md|pdf|txt|docx?|xlsx?|csv|png|jpe?g)$/i', $site)) $out[$site] = true;
+        return $out;
+    }
     /** The current answer's trace: what went out, what stayed here, which documents, what was blocked. */
     public static ?array $trace = null;
     /** Told about each request as it leaves (live pills in the app). */
@@ -193,12 +204,13 @@ final class Privacy
     }
 
     /** A new piece of work: nothing untrusted read yet. */
-    public static function trustAgain(): void { self::$untrusted = false; self::$privateRead = false; self::$links = []; }
+    public static function trustAgain(): void { self::$untrusted = false; self::$privateRead = false; self::$links = []; self::$userSites = []; }
 
     /** What the current work has read, to be carried on by another piece of work (a job's report, a tool process). */
     public static function snapshot(): array
     {
-        return ['untrusted' => self::$untrusted, 'private' => self::$privateRead, 'taint' => self::$taint, 'links' => array_slice(array_keys(self::$links), 0, 500)];
+        return ['untrusted' => self::$untrusted, 'private' => self::$privateRead, 'taint' => self::$taint, 'links' => array_slice(array_keys(self::$links), 0, 500),
+            'sites' => array_slice(array_keys(self::$userSites), 0, 50)];
     }
 
     /** Carry on from a snapshot: it only ever raises the guard (untrusted, private, taint), never lowers it. */
@@ -209,6 +221,7 @@ final class Privacy
         if (!empty($s['private'])) self::$privateRead = true;
         self::$taint = max(self::$taint, min(count(self::LEVELS) - 1, (int)($s['taint'] ?? 0)));
         foreach ((array)($s['links'] ?? []) as $u) if (is_string($u) && count(self::$links) < 2000) self::$links[$u] = true;
+        foreach ((array)($s['sites'] ?? []) as $u) if (is_string($u) && count(self::$userSites) < 50) self::$userSites[$u] = true;
     }
 
     /** Several snapshots as one (a directive's workers): the strictest of each. Null when none read anything of note. */
