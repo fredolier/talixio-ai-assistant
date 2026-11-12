@@ -97,6 +97,11 @@ final class Store
         $this->addColumn('jobs', 'role', "TEXT NOT NULL DEFAULT ''"); // the worker role this job runs (kind='worker')
         $this->addColumn('jobs', 'session', "TEXT NOT NULL DEFAULT ''"); // a Tier-D delegated code session's handle (kind='conductor', Conductor)
         $this->addColumn('jobs', 'trust', "TEXT NOT NULL DEFAULT ''"); // what the job read (Privacy::snapshot as JSON): carried into the work that follows it
+        // the sorted inbox (Triage); also read by a contact's page, so it exists from the start
+        $this->db->exec("CREATE TABLE IF NOT EXISTS mail_triage(uid INTEGER PRIMARY KEY, message_id TEXT NOT NULL DEFAULT '', ts INTEGER NOT NULL,
+            sender TEXT NOT NULL, email TEXT NOT NULL, subject TEXT NOT NULL, snippet TEXT NOT NULL, label TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '',
+            due TEXT NOT NULL DEFAULT '', by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', seen INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS mail_triage_status ON mail_triage(status, label);");
         $this->addColumn('tasks', 'job', 'INTEGER'); // a routine that runs this job again, instead of a prompt
         // monthly watches were written "M H 1-7 * D" until 1.35.7, which cron reads as "days 1-7 OR every D": the first D of the month
         foreach ($this->db->query("SELECT id, cron FROM tasks WHERE cron GLOB '[0-9]* [0-9]* 1-7 [*] [0-7]'")->fetchAll() as $t) {

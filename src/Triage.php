@@ -15,13 +15,8 @@ final class Triage
 {
     public const LABELS = ['reply' => 'To answer', 'action' => 'To do', 'fyi' => 'To read', 'low' => 'Low priority'];
 
-    public function __construct(private App $app)
-    {
-        $app->store->db->exec("CREATE TABLE IF NOT EXISTS mail_triage(uid INTEGER PRIMARY KEY, message_id TEXT NOT NULL DEFAULT '', ts INTEGER NOT NULL,
-            sender TEXT NOT NULL, email TEXT NOT NULL, subject TEXT NOT NULL, snippet TEXT NOT NULL, label TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '',
-            due TEXT NOT NULL DEFAULT '', by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', seen INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL);
-            CREATE INDEX IF NOT EXISTS mail_triage_status ON mail_triage(status, label);");
-    }
+    /** Its table, mail_triage, is in the common schema (Store::migrate): a contact's page reads it before any mail is sorted. */
+    public function __construct(private App $app) {}
 
     public function enabled(): bool { return $this->app->mailbox()->enabled() && $this->app->cfg->mailTriage; }
 

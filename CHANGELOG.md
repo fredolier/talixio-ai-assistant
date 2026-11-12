@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.9 (2026-11-12)
+
+- Fix (audit Q8, Q9): **a contact's page and the French law card failed on a new installation**. Opening a person in *People* gave a server error until the mailbox had been sorted once (the sorted-mail table was only created by the sorting); it is now part of the database from the start. *Settings → French law (Légifrance)* answered "not found" because its address was missing from the router. Tested on a fresh installation through the web API.
+
 ## 1.35.8 (2026-11-12)
 
 - Fix (audit Q3, Q6, Q7): **re-pairing the autonomous pilot lost your settings and its journal**. *Re-pair…* kept only the agent list and threads: the Fleet reports setting (push, off) went back to the in-app badge, and the Journal (reports, decisions, passes) and unread counts were emptied. They are kept now; only the secret and the webhook change. Opening Pilotage before any pairing no longer creates a pairing file. A title, text or note sent by the orchestrator as a list (or other structure) is kept as readable text instead of showing "Array". Tested with simulated orchestrator calls. FAQ *Pilotage* updated.
