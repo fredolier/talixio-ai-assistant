@@ -470,7 +470,8 @@ $fc->provider = 'anthropic'; $fc->visionIndex = true;
 $fake->script = fn() => 'A receipt from Acme.';
 $imgRead = $files->save(tap_tmp($png), 'receipt.png', 'image/png', '/Inbox');
 check('files: images are described by the model', $files->text($imgRead) === "Image description:\nA receipt from Acme." && $files->imagePart($imgRead)['mime'] === 'image/png');
-$gif = $files->save(tap_tmp($png), 'odd.bmp', 'image/bmp', '/Inbox');
+$bmp = (function () { $im = imagecreatetruecolor(4, 4); ob_start(); imagebmp($im); return (string)ob_get_clean(); })(); // a real BMP: since 1.35.14 the type is read from the content
+$gif = $files->save(tap_tmp($bmp), 'odd.bmp', 'image/bmp', '/Inbox');
 check('files: images in other formats are sent as JPEG', $files->imagePart($gif)['mime'] === 'image/jpeg');
 $fc->provider = 'echo';
 check('files: no description without a model', $files->text($files->save(tap_tmp($png), 'b.png', 'image/png', '/Inbox')) === '');

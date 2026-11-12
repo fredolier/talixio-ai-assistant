@@ -25,6 +25,20 @@ final class Files
         };
     }
 
+    /**
+     * The type kept for a new file (audit S8): what its content is. The sender's type is kept only where the content says
+     * little (plain text, a zip that is an Office file, unknown bytes), and never when it claims a page, a script or an SVG
+     * the content is not.
+     */
+    public static function storedType(string $declared, string $real): string
+    {
+        $declared = strtolower(trim(preg_replace('/;.*/', '', $declared))); $real = strtolower($real);
+        $generic = in_array($real, ['application/octet-stream', 'text/plain', 'application/zip', 'inode/x-empty', 'application/x-empty', 'application/x-ole-storage', 'application/cdfv2'], true);
+        if ($declared === '' || !$generic) return $real ?: ($declared ?: 'application/octet-stream');
+        if (preg_match('/html|svg|xml|javascript|ecmascript/', $declared)) return $real;
+        return $declared;
+    }
+
     public const VERSIONS_MAX = 20; // earlier contents kept per file (and each for Library::TRASH_DAYS days)
 
     /**
@@ -44,9 +58,7 @@ final class Files
             if ($replace) { $this->replace($same, $tmp, $mime); return $same; }
             $name = $lib->freeName($folder, $name);
         }
-        if ($mime === '' || $mime === 'application/octet-stream') {
-            $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($tmp) ?: 'application/octet-stream';
-        }
+        $mime = self::storedType($mime, (string)((new \finfo(FILEINFO_MIME_TYPE))->file($tmp) ?: 'application/octet-stream'));
         $dir = $c->filesDir() . '/' . date('Y/m');
         if (!is_dir($dir)) mkdir($dir, 0750, true);
         $kind = self::kind($mime, $name);

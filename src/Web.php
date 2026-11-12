@@ -1360,9 +1360,15 @@ final class Web
     {
         $f = $this->app->files()->get($id);
         if (!$f || !is_file($f['path'])) $this->fail(404, 'not found');
-        $mime = $f['mime'];
-        $inline = !$download && self::showsInline($f['kind'], $mime, (string)(new \finfo(FILEINFO_MIME_TYPE))->file($f['path']));
-        $type = $inline ? ($f['kind'] === 'text' ? preg_replace('/;.*/', '', $mime) . '; charset=utf-8' : $mime) : 'application/octet-stream';
+        $mime = strtolower((string)$f['mime']); $real = strtolower((string)(new \finfo(FILEINFO_MIME_TYPE))->file($f['path']));
+        $inline = !$download && self::showsInline($f['kind'], $mime, $real);
+        // the type sent is the one the content was checked to be, never the sender's word alone (audit S8)
+        $type = !$inline ? 'application/octet-stream' : match ($f['kind']) {
+            'pdf' => 'application/pdf',
+            'image' => $real,
+            'text' => preg_replace('/;.*/', '', $mime) . '; charset=utf-8',
+            default => $mime,
+        };
         // PDFs need the browser's own viewer, which a sandboxed response blocks; they still get no scripts or network access
         $this->sendPath($f['path'], $type, self::disposition($inline ? 'inline' : 'attachment', $f['name']),
             $f['kind'] === 'pdf' && $inline ? "default-src 'none'; object-src 'self'" : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox");
@@ -1384,7 +1390,8 @@ final class Web
      */
     public static function showsInline(string $kind, string $mime, string $real): bool
     {
-        if (preg_match('/svg|html|xml/', $mime . ' ' . $real)) return false;
+        $mime = strtolower($mime); $real = strtolower($real);
+        if (preg_match('/svg|html|xml|javascript|ecmascript/', $mime . ' ' . $real)) return false;
         return match ($kind) {
             'image' => str_starts_with($mime, 'image/') && str_starts_with($real, 'image/'),
             'pdf' => $real === 'application/pdf',
