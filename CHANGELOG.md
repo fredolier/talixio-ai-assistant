@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.8 (2026-11-12)
+
+- Fix (audit Q3, Q6, Q7): **re-pairing the autonomous pilot lost your settings and its journal**. *Re-pair…* kept only the agent list and threads: the Fleet reports setting (push, off) went back to the in-app badge, and the Journal (reports, decisions, passes) and unread counts were emptied. They are kept now; only the secret and the webhook change. Opening Pilotage before any pairing no longer creates a pairing file. A title, text or note sent by the orchestrator as a list (or other structure) is kept as readable text instead of showing "Array". Tested with simulated orchestrator calls. FAQ *Pilotage* updated.
+
 ## 1.35.7 (2026-11-12)
 
 - Fix (audit Q1): **monthly watches ran far too often, and may have cost you**. A "watch and draft" set to *monthly* ("the first Tuesday") was saved as the cron `M H 1-7 * 2`, which cron reads as *days 1 to 7, or any Tuesday*: about 11 runs a month instead of one, each starting a background research job billed to your model account. It is now saved as `M H * * 2#1` (a new, explicit form: the first Tuesday of the month), and the monthly watches already set up are migrated when the app starts, with their next run recomputed. Check your model costs of the past months if you had one. Tested on the schedule computation and the migration; the cost of past runs cannot be undone.

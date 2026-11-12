@@ -116,6 +116,15 @@ final class Conductor
     private function bindingFile(): string { return $this->app->cfg->dataDir . '/conductor.json'; }
 
     /** The private binding (webhook URL, inbox secret, liveness timestamps). Secrets never leave this file. */
+    /** A field the orchestrator sent as text: a list of lines is joined, anything else structured is shown as JSON (never "Array"). */
+    private static function text(mixed $v): string
+    {
+        if ($v === null) return '';
+        if (is_scalar($v)) return (string)$v;
+        if (is_array($v) && array_is_list($v) && array_filter($v, fn($x) => !is_scalar($x)) === []) return implode("\n", array_map('strval', $v));
+        return (string)json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
     private function binding(): array
     {
         $f = $this->bindingFile();
@@ -313,20 +322,21 @@ final class Conductor
     public function inbox(array $msg, string $bearer): array
     {
         $b = $this->binding();
-        if ((string)($msg['type'] ?? 'report') === 'pair') {
+        if (self::text($msg['type'] ?? 'report') === 'pair') {
             $p = $b['pair'] ?? null;
-            if (!is_array($p) || time() > (int)($p['expires'] ?? 0) || !hash_equals((string)($p['hash'] ?? ''), hash('sha256', (string)($msg['code'] ?? ''))))
+            if (!is_array($p) || time() > (int)($p['expires'] ?? 0) || !hash_equals((string)($p['hash'] ?? ''), hash('sha256', self::text($msg['code'] ?? ''))))
                 return [403, ['error' => 'pairing code invalid or expired — run fleet_setup again']];
-            $webhook = (string)($msg['webhook'] ?? '');
-            $poll = (string)($msg['mode'] ?? '') === 'poll' || !empty($msg['poll']);
+            $webhook = self::text($msg['webhook'] ?? '');
+            $poll = self::text($msg['mode'] ?? '') === 'poll' || !empty($msg['poll']);
             if (!$poll && !preg_match('#^https://[^\s]+$#', $webhook))
                 return [400, ['error' => 'a https webhook URL is required, or set "mode":"poll" to pull instructions instead']];
             $secret = bin2hex(random_bytes(32));
-            // A fresh binding for this pairing; keep only the display-only roster/threads from any prior one, and make
-            // sure a mode switch (push→poll or back) never leaves a stale webhook or queue behind.
-            $keep = array_intersect_key($b, array_flip(['agents', 'agents_at', 'threads']));
-            $base = ['secret' => $secret, 'session' => mb_substr((string)($msg['session'] ?? ''), 0, 200),
-                'url' => mb_substr((string)($msg['url'] ?? ''), 0, 500), 'created' => time(), 'last_report' => time()];
+            // A fresh binding for this pairing; keep what the user sees and chose (roster, threads, journal, notification
+            // mode, unread counts) from any prior one, and make sure a mode switch (push→poll or back) never leaves a stale
+            // webhook or queue behind.
+            $keep = array_intersect_key($b, array_flip(['agents', 'agents_at', 'threads', 'fleet_notify', 'reports', 'decisions', 'ticks', 'journal_unread', 'agent_unread', 'unread']));
+            $base = ['secret' => $secret, 'session' => mb_substr(self::text($msg['session'] ?? ''), 0, 200),
+                'url' => mb_substr(self::text($msg['url'] ?? ''), 0, 500), 'created' => time(), 'last_report' => time()];
             $base += $poll ? ['mode' => 'poll', 'queue' => []] : ['webhook' => $webhook];
             $this->saveBinding($base + $keep);
             $this->app->notifier()->notify('Fleet orchestrator connected',
@@ -337,7 +347,7 @@ final class Conductor
         }
         if (($b['secret'] ?? '') === '' || $bearer === '' || !hash_equals((string)$b['secret'], $bearer))
             return [401, ['error' => 'unauthorized']];
-        if ((string)($msg['type'] ?? '') === 'ack') { // the orchestrator confirms the instructions it handled (pull?ack=1)
+        if (self::text($msg['type'] ?? '') === 'ack') { // the orchestrator confirms the instructions it handled (pull?ack=1)
             $ids = array_filter(array_map('strval', (array)($msg['ids'] ?? [])), fn($i) => preg_match('/^[a-f0-9]{12}$/', $i));
             $left = $this->lockedUpdate(function (array $b) use ($ids) {
                 $b['queue'] = array_values(array_filter($b['queue'] ?? [], fn($it) => !in_array($it['iid'] ?? '', $ids, true)));
@@ -347,13 +357,13 @@ final class Conductor
             $this->refreshStatusFile(false, 60);
             return [200, ['ok' => true, 'queued' => $left]];
         }
-        $title = mb_substr(trim((string)($msg['title'] ?? '')) ?: 'Fleet update', 0, 120);
-        $text = mb_substr(trim((string)($msg['text'] ?? '')), 0, 8000);
+        $title = mb_substr(trim(self::text($msg['title'] ?? '')) ?: 'Fleet update', 0, 120);
+        $text = mb_substr(trim(self::text($msg['text'] ?? '')), 0, 8000);
         // The orchestrator may carry a structured agent roster so the cockpit can list the fleet. Display data only —
         // bounded and surfaced, never executed here (orchestration.md §5.3).
         $agents = isset($msg['agents']) && is_array($msg['agents']) ? $this->sanitizeAgents($msg['agents']) : null;
         // A report tagged with an `agent` is that one agent's reply in its two-voice thread (the "Discuter" drawer).
-        $agent = mb_substr(trim((string)($msg['agent'] ?? '')), 0, 80);
+        $agent = mb_substr(trim(self::text($msg['agent'] ?? '')), 0, 80);
         $decision = self::decisionId($msg['decision_id'] ?? '');
         // A keep-warm tick (a roster/liveness refresh, with no news) must NOT raise a notification — the orchestrator
         // pings roughly every ~10 min to stay warm, and notifying each time spams the user. We notify only on a report
@@ -361,7 +371,7 @@ final class Conductor
         // line we notified. The flag is a courtesy the orchestrator may forget; the repeat-check is the backstop, so a
         // chatty orchestrator re-sending the same status every tick goes quiet after the first and only genuinely new
         // text breaks through. The check-and-mark lives inside the lock so two concurrent reports can't both notify.
-        $silent = !empty($msg['tick']) || !empty($msg['silent']) || in_array((string)($msg['kind'] ?? ''), ['tick', 'liveness', 'heartbeat', 'keepalive'], true);
+        $silent = !empty($msg['tick']) || !empty($msg['silent']) || in_array(self::text($msg['kind'] ?? ''), ['tick', 'liveness', 'heartbeat', 'keepalive'], true);
         // How a fresh report surfaces is the user's choice (fleet_notify, default 'inapp' — see orchestration.md §5.4):
         //   off   — surfaced nowhere: no journal line, no badge, no push.
         //   inapp — a badge and the cockpit; no push/e-mail.
@@ -369,7 +379,7 @@ final class Conductor
         // Where a report lands (1.18.0): one tagged with an `agent` is that agent's reply — in its thread, with an unread
         // count on that agent; an untagged one is a fleet-wide report — a line in the journal (kind alert or summary,
         // the orchestrator may say "level":"alert"); a session that now waits for the user is an alert line of its own.
-        $alert = in_array((string)($msg['level'] ?? ''), ['alert', 'error'], true);
+        $alert = in_array(self::text($msg['level'] ?? ''), ['alert', 'error'], true);
         $newAsk = false;
         $push = $this->lockedUpdate(function (array $b) use ($msg, $agents, $agent, $decision, $title, $text, $silent, $alert, &$newAsk) { // locked: never clobber a concurrent queue drain
             $b['last_report'] = time();
@@ -383,7 +393,7 @@ final class Conductor
                 $b['agents'] = $agents; $b['agents_at'] = time();
             }
             if ($agent !== '' && $text !== '') { // what kind of return this is: a question, an approval, the answer to a decision, an alert, or a plain status
-                $kind = (string)($msg['thread_kind'] ?? '');
+                $kind = self::text($msg['thread_kind'] ?? '');
                 if (!in_array($kind, ['question', 'approval', 'answer', 'status', 'alert'], true)) {
                     $mine = null; foreach ($b['agents'] ?? [] as $x) if (($x['id'] ?? '') === $agent) $mine = $x;
                     $kind = $alert ? 'alert' : ($decision !== '' ? 'answer' : (!empty($mine['waiting']) ? (($mine['waiting']['kind'] ?? '') === 'approval' ? 'approval' : 'question') : 'status'));
@@ -493,9 +503,10 @@ final class Conductor
         return $this->statusInfo();
     }
 
-    /** Clear the unread badge (called when the user opens Votre pilote autonome). */
+    /** Clear the unread badge (called when the user opens Votre pilote autonome). Nothing to clear, no file, before a pairing. */
     public function markRead(): array
     {
+        if (!is_file($this->bindingFile())) return ['unread' => $this->unread()];
         $this->lockedUpdate(function (array $b) { $b['journal_unread'] = 0; unset($b['unread']); return [$b, null]; });
         return ['unread' => $this->unread()];
     }
@@ -504,6 +515,7 @@ final class Conductor
     public function markAgentRead(string $id): array
     {
         $id = mb_substr(trim($id), 0, 80);
+        if (!is_file($this->bindingFile())) return ['unread' => $this->unread()];
         $this->lockedUpdate(function (array $b) use ($id) { unset($b['agent_unread'][$id]); return [$b, null]; });
         return ['unread' => $this->unread()];
     }
@@ -546,8 +558,8 @@ final class Conductor
         $agents = isset($msg['agents']) && is_array($msg['agents']) ? $msg['agents'] : null;
         foreach ($agents ?? [] as $a) {
             if (!is_array($a)) continue;
-            $n = (string)($a['name'] ?? $a['id'] ?? '?'); $w = $a['waiting'] ?? null;
-            $q = is_array($w) ? (string)($w['question'] ?? '') : (string)$w;
+            $n = self::text($a['name'] ?? $a['id'] ?? '?'); $w = $a['waiting'] ?? null;
+            $q = self::text(is_array($w) ? ($w['question'] ?? '') : $w);
             if (($a['state'] ?? '') === 'waiting' && trim($q) === '') $problems[] = "$n is waiting but has no question: ask that session what it needs, then send it in `waiting`.";
             elseif (trim($q) !== '' && (mb_strlen(trim($q)) < 20 || stripos($q, 'not retrieved') !== false)) $problems[] = "$n: the question is incomplete ($q). Ask that session for its full text, options and cost of a wrong choice.";
             elseif (is_array($w) && ($w['kind'] ?? 'decision') !== 'approval' && empty($w['options']) && empty($w['cost'])) $problems[] = "$n: add the options it offered and the cost of a wrong choice, so the answer can be informed.";
@@ -557,7 +569,7 @@ final class Conductor
         try {
             $first = true; $lastMsg = null;
             foreach ($reports ?: [[]] as $r) {
-                $kind = (string)($r['kind'] ?? 'status');
+                $kind = self::text($r['kind'] ?? 'status');
                 $m = ['type' => 'report', 'title' => $r['title'] ?? '', 'text' => $r['text'] ?? '', 'agent' => $r['agent'] ?? '', 'decision_id' => $r['decision_id'] ?? '',
                     'level' => $kind === 'alert' ? 'alert' : '', 'thread_kind' => $kind, 'kind' => $kind === 'status' && ($r['text'] ?? '') === '' ? 'tick' : ''];
                 if ($first && $agents !== null) $m['agents'] = $agents;
@@ -571,8 +583,8 @@ final class Conductor
         if ($this->mode() === 'poll') { [, $r] = $this->pull($bearer, true); $instructions = $r['instructions'] ?? []; }
         $b = $this->binding();
         $waiting = array_values(array_filter($b['agents'] ?? [], fn($a) => !empty($a['waiting'])));
-        $this->trace(['via' => 'tick', 'agents' => count($b['agents'] ?? []), 'waiting' => count($waiting), 'reports' => count(array_filter($reports, fn($r) => trim((string)($r['text'] ?? '')) !== '')),
-            'instructions' => count($instructions), 'problems' => count($problems), 'note' => mb_substr(trim((string)($msg['note'] ?? '')), 0, 160)]);
+        $this->trace(['via' => 'tick', 'agents' => count($b['agents'] ?? []), 'waiting' => count($waiting), 'reports' => count(array_filter($reports, fn($r) => trim(self::text($r['text'] ?? '')) !== '')),
+            'instructions' => count($instructions), 'problems' => count($problems), 'note' => mb_substr(trim(self::text($msg['note'] ?? '')), 0, 160)]);
         return [200, ['ok' => true, 'instructions' => $instructions, 'waiting' => array_map(fn($a) => ['agent' => $a['id'], 'kind' => $a['waiting']['kind'], 'since' => (int)($a['ts'] ?? 0)], $waiting),
             'problems' => $problems, 'next_in' => 600]];
     }

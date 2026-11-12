@@ -37,4 +37,19 @@ $ticks = $con->statusInfo()['ticks'];
 check('tick: every pass is traced, the quiet ones too, newest first', count($ticks) >= 4 && $ticks[0]['via'] === 'tick' && $ticks[0]['reports'] === 0 && $ticks[0]['waiting'] === 1 && end($ticks)['note'] === 'first pass');
 [$c] = $con->inbox(['type' => 'report', 'text' => 'old style', 'title' => 'x'], $sec);
 check('tick: the older report call still works and is traced as a report', $c === 200 && $con->statusInfo()['ticks'][0]['via'] === 'report');
+// audit Q3, Q6, Q7: pairing again keeps what the user chose and saw; reading before pairing writes nothing; fields of any shape
+$con->setNotify('push');
+$free();
+[$c] = $con->inbox(['type' => 'report', 'title' => ['Build', 'nightly'], 'text' => ['line one', 'line two']], $sec);
+$reportsBefore = count($con->reports()); $ticksBefore = count($con->statusInfo()['ticks'] ?? []);
+check('tick: a title and a text sent as lists are kept as text, not "Array"', $c === 200 && str_contains(json_encode($con->reports()), 'line one\nline two') && !str_contains(json_encode($con->reports()), 'Array'), json_encode($con->reports()));
+$setup2 = $con->setup(); $code2 = preg_match('/"code":"([a-f0-9]{32})"/', $setup2, $m2) ? $m2[1] : '';
+[$c2, $r2] = $con->inbox(['type' => 'pair', 'code' => $code2, 'mode' => 'poll', 'session' => 's2'], '');
+check('tick: pairing again keeps the notification mode, the journal and the passes', $c2 === 200 && $con->notifyMode() === 'push'
+    && count($con->reports()) === $reportsBefore && $reportsBefore > 0 && count($con->statusInfo()['ticks'] ?? []) === $ticksBefore, json_encode([$c2, $con->notifyMode(), count($con->reports()), $reportsBefore]));
+[$c3] = $con->inbox(['type' => 'report', 'text' => 'old secret'], $sec);
+check('tick: ... with a new secret', $c3 === 401 && $con->inbox(['type' => 'report', 'text' => 'new secret'], (string)$r2['secret'])[0] === 200);
+$ed = test_dir('tick-empty'); putenv("TALIXIO_DATA_DIR=$ed"); $empty = App::fromEnv()->conductor();
+$empty->markRead(); $empty->markAgentRead('dev-a');
+check('tick: marking read before any pairing creates no binding', !$empty->connected() && glob("$ed/conductor*") === [], json_encode(glob("$ed/*")));
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done(); // run alone; inside run.php the other files must still run
