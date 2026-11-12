@@ -17,7 +17,7 @@ final class Signal
     {
         $c = $this->app->cfg;
         $cmd = array_merge([$c->signalCli, '--config', $c->dataDir . '/signal', '-a', $c->signalNumber], $args);
-        $p = proc_open($cmd, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        $p = @proc_open($cmd, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes); // a missing signal-cli: said by the exception below
         if (!is_resource($p)) throw new \RuntimeException("cannot run {$c->signalCli}");
         stream_set_blocking($pipes[1], false); stream_set_blocking($pipes[2], false);
         $out = $err = ''; $deadline = microtime(true) + $timeout;

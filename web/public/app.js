@@ -39,25 +39,26 @@ const CITE_SVG = '<svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="
 function md(src) {
   const blocks = [];
   const keep = html => { blocks.push(html); return `\u0000${blocks.length - 1}\u0000`; };
-  let s = esc(String(src).replace(/\r\n?/g, '\n').replace(/\t/g, '    '))
+  // \u0000 marks a kept-aside piece (keep): never taken from the text, so no address can carry one into an attribute
+  let s = esc(String(src).replace(/\u0000/g, '').replace(/\r\n?/g, '\n').replace(/\t/g, '    '))
     .replace(/^ {0,3}```[\w+-]*\n([\s\S]*?)\n? {0,3}```[ ]*$/gm, (_, code) => '\n' + keep(`<pre><code>${code}</code></pre>`) + '\n');
   // links are made first and kept aside: the formatting after them never reaches inside an address or a tag
   const fmt = t => t
     .replace(/\*\*([^*\n]+?)\*\*|__([^_\n]+?)__/g, (_, a, b) => `<strong>${a ?? b}</strong>`)
     .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>')
     .replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
-  const link = (href, cls, t, blank) => keep(`<a href="${href}"${cls ? ` class="${cls}"` : ''}${blank ? ' target="_blank" rel="noopener"' : ''}>${fmt(t)}</a>`);
+  const link = (href, cls, t, blank) => /[\s"'<>\u0000]/.test(href) ? fmt(t) : keep(`<a href="${href}"${cls ? ` class="${cls}"` : ''}${blank ? ' target="_blank" rel="noopener"' : ''}>${fmt(t)}</a>`);
   const inline = t => fmt(t
     .replace(/`([^`\n]+)`/g, (_, c) => keep(`<code>${c}</code>`))
     .replace(/\\(&gt;|&amp;|[\\`*_\[\]()#+\-.!|~])/g, (_, c) => keep(c)) // \* is a plain star
     .replace(/\[([^\]]+)\]\(\/files\/(\d+)(?:#p(\d+))?\)/g, (_, t, id, pg) => keep(`<a href="#" class="cite" data-file="${id}"${pg ? ` data-page="${pg}"` : ''} title="Open the document${pg ? ' at page ' + pg : ''}">${CITE_SVG}${fmt(t)}</a>`))
-    .replace(/\[([^\]]+)\]\((#library(?:\/[^\s)"]*)?)\)/g, (_, t, h) => keep(`<a href="${h}" class="cite folder">${FOLDER_SVG}${fmt(t)}</a>`)) // a library folder ("where is…?")
+    .replace(/\[([^\]]+)\]\((#library(?:\/[^\s)"\u0000]*)?)\)/g, (_, t, h) => keep(`<a href="${h}" class="cite folder">${FOLDER_SVG}${fmt(t)}</a>`)) // a library folder ("where is…?")
     // buttons that open an app on the phone (phone_action, Spotify): custom schemes only from this list
-    .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|deezer|tg|sgnl|uber|homeassistant):[^\s)"]+)\)/g, (_, t, h) => link(h, 'action', t.replace(/^▶\s*/, '')))
+    .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|deezer|tg|sgnl|uber|homeassistant):[^\s)"\u0000]+)\)/g, (_, t, h) => link(h, 'action', t.replace(/^▶\s*/, '')))
     .replace(INTENT_MD, (_, t, h) => link(h, 'action', t.replace(/^▶\s*/, ''))) // Android intents: only "open this app, or its Play Store page"
-    .replace(/\[([^\]]+)\]\((\?connector=[^\s)"]+)\)/g, (_, t, h) => link(h, 'action connector', t.replace(/^▶\s*/, ''))) // "▶ Install" from the connector list
-    .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, (_, t, h) => link(h, 'action', t, true))
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, (_, t, h) => link(h, '', t, true))
+    .replace(/\[([^\]]+)\]\((\?connector=[^\s)"\u0000]+)\)/g, (_, t, h) => link(h, 'action connector', t.replace(/^▶\s*/, ''))) // "▶ Install" from the connector list
+    .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)"\u0000]+)\)/g, (_, t, h) => link(h, 'action', t, true))
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)"\u0000]+)\)/g, (_, t, h) => link(h, '', t, true))
     .replace(/(^|[\s(])(https?:\/\/[^\s<)"\u0000]+)/g, (_, pre, h) => pre + link(h, '', h, true)));
   const lines = s.split('\n'), n = lines.length, out = [];
   const LIST = /^( *)([-*+•]|\d{1,3}[.)])\s+(.*)$/, HR = /^ {0,3}([-*_])( *\1){2,} *$/, HEAD = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
@@ -127,8 +128,10 @@ function md(src) {
 }
 
 const CHANNEL = { web: null, approval: 'Approval', learn: 'Learning', cli: 'Terminal', telegram: 'Telegram', email: 'Email', signal: 'Signal', schedule: 'Scheduled', heartbeat: 'Heartbeat', job: 'Job result' };
-const money = v => v == null ? '' : v === 0 ? '$0' : v < 0.01 ? '<$0.01' : '$' + v.toFixed(v < 1 ? 3 : 2);
-const ktok = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
+/** Dollars as the interface language writes them ("$2.00", "2,00 $"): one format everywhere (audit U18) */
+const usdf = (v, d = 2) => new Intl.NumberFormat(LOCALE.length ? LOCALE : 'en-US', { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: d, maximumFractionDigits: d }).format(+v || 0);
+const money = v => v == null ? '' : v === 0 ? usdf(0, 0) : v < 0.01 ? '< ' + usdf(0.01) : usdf(v, v < 1 ? 3 : 2);
+const ktok = n => n >= 1000 ? new Intl.NumberFormat(LOCALE.length ? LOCALE : 'en-US', { maximumFractionDigits: n >= 10000 ? 0 : 1, minimumFractionDigits: n >= 10000 ? 0 : 1 }).format(n / 1000) + (LANG === 'en' ? 'k' : ' k') : String(n);
 const fmtTime = ts => new Date(ts * 1000).toLocaleString(LOCALE, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
 function renderMessage(m) {
@@ -143,7 +146,7 @@ function renderMessage(m) {
     const [, num, title, status] = m.content.match(/^\[Background job #(\d+) "(.*?)" (\w+)/) || [];
     const report = m.content.replace(/^\[[^\]]*\]\s*/, '');
     el.className = 'jobcard';
-    el.innerHTML = `<details><summary><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Job ${status || 'finished'}: <b>${esc(title || 'background job')}</b> · ${fmtTime(m.ts)} · show the full report</span></summary><div class="report doc">${md(report)}</div></details>`;
+    el.innerHTML = `<details><summary><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>${esc(t('Job {a}:', { a: t(status || 'finished') }))} <b>${esc(title || 'background job')}</b> · ${fmtTime(m.ts)} · show the full report</span></summary><div class="report doc">${md(report)}</div></details>`;
     return el;
   }
   if (m.role === 'assistant' && m.channel === 'approval' && m.content.includes('\n\n')) { // a tool's raw result: folded, the chat stays for the conversation
@@ -486,6 +489,7 @@ async function initOrchestratorPanel(prefix = 'sp', onRender) {
     $(`#${prefix}-orch-status`).textContent = on
       ? `Connected${info.session ? ` (session ${info.session})` : ''}. Last sent ${ago(info.lastDispatch)}; last report ${ago(info.lastReport)}. It reports back to ${info.inbox}.`
       : 'Not connected. Run a Claude Code session with Remote Control on — on your own host is fine — and connect it here to delegate code work across your machines.';
+    if (on && info.silentFor) $(`#${prefix}-orch-status`).textContent += ` ⚠ ${t('Silent for {n} min — its helper files may be lost. Re-pair it.', { n: Math.round(info.silentFor / 60) })}`;
     disc.hidden = !on;
     connect.textContent = on ? 'Re-pair…' : 'Connect…';
     onRender?.(info);
@@ -725,7 +729,10 @@ async function loadPrivacy() {
     if (x.href) { location.hash = x.href.split('/')[0]; return; }
     try { await post('api/settings', { changes: x.set }); toast('Saved.'); loadPrivacy(); } catch (e) { toast(e.message); }
   });
-  $('#pv-security').innerHTML = d.security.map(s => `<div class="pv-sec ${s.ok ? 'ok' : 'warn'}"><i class="dot"></i><span>${esc(s.label)}</span><span class="muted small">${s.ok ? 'Active' : 'Not set up'}</span></div>`).join('');
+  // the backup says its real state: failed (with why), late, not run yet (audit Q15)
+  const secState = s => s.state === 'failed' ? t('Last backup failed: {e}', { e: s.error || '' }) : s.state === 'late' ? t('No backup for more than two days')
+    : s.state === 'never' ? t('Not run yet') : s.ok ? t('Active') : t('Not set up');
+  $('#pv-security').innerHTML = d.security.map(s => `<div class="pv-sec ${s.ok ? 'ok' : 'warn'}"><i class="dot"></i><span>${esc(s.label)}</span><span class="muted small${s.state === 'failed' ? ' no-i18n' : ''}">${esc(secState(s))}</span></div>`).join('');
   const j = d.journal, max = Math.max(1, ...j.today.map(r => +r.calls));
   const names = Object.fromEntries(d.spaces.map(s => [s.id, s.id ? s.name : t('General')]));
   const req = v => esc(t(+v === 1 ? '1 request' : '{n} requests', { n: v })), blk = v => esc(t(+v === 1 ? '1 blocked' : '{n} blocked', { n: v }));
@@ -749,20 +756,24 @@ function folderPicker(input, on = true) {
     const choose = path => { input.value = path; box.hidden = true; input.focus(); input.dispatchEvent(new Event('change')); };
     fp.render = () => {
       if (!fp.on) { box.hidden = true; return; }
+      const tree = fp.tree || []; // not read yet: "Loading folders…"
       const v = input.value.trim(), lv = v.toLowerCase();
-      const list = !v || v === fp.start ? fp.tree : fp.tree.filter(f => f.path.toLowerCase().includes(lv.replace(/\/+$/, '')));
-      const fresh = v.startsWith('/') && v !== '/' && !fp.tree.some(f => f.path.toLowerCase() === lv.replace(/\/+$/, ''));
-      box.innerHTML = (fp.tree.length ? '' : `<div class="muted small fp-note">${esc(t('Loading folders…'))}</div>`)
+      const list = !v || v === fp.start ? tree : tree.filter(f => f.path.toLowerCase().includes(lv.replace(/\/+$/, '')));
+      const fresh = v.startsWith('/') && v !== '/' && !tree.some(f => f.path.toLowerCase() === lv.replace(/\/+$/, ''));
+      box.innerHTML = (tree.length ? '' : `<div class="muted small fp-note">${esc(t('Loading folders…'))}</div>`)
         + list.map(f => `<button type="button" role="option" data-p="${esc(f.path)}" class="${f.path === fp.start ? 'cur' : ''}" style="padding-left:${10 + 14 * (f.depth - 1)}px"${f.readonly ? ' disabled' : ''}>`
           + `<span class="no-i18n">📁 ${esc(f.name)}</span>${f.total ? `<span class="muted small">${f.total}</span>` : ''}</button>`).join('')
         + (fresh ? `<div class="muted small fp-note">${esc(t('New folder, created on save: {path}', { path: v }))}</div>` : '')
-        + (fp.tree.length && !list.length && !fresh ? `<div class="muted small fp-note">${esc(t('No folder matches'))}</div>` : '');
+        + (tree.length && !list.length && !fresh ? `<div class="muted small fp-note">${esc(t('No folder matches'))}</div>` : '');
       fp.active = -1; box.hidden = false;
       box.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
     };
     box.addEventListener('mousedown', e => e.preventDefault()); // keep the focus in the input
     box.addEventListener('click', e => { const b = e.target.closest('button[data-p]'); if (b) choose(b.dataset.p); });
-    input.addEventListener('focus', () => fp.render());
+    input.addEventListener('focus', () => { // the folders are read when the field is used, not when the page loads (before sign-in: audit U14)
+      if (!fp.tree) api('api/library/tree').then(({ tree }) => { fp.tree = tree; if (document.activeElement === input) fp.render(); }).catch(() => {});
+      fp.render();
+    });
     input.addEventListener('input', () => fp.render());
     input.addEventListener('blur', () => setTimeout(() => { box.hidden = true; }, 150));
     input.addEventListener('keydown', e => {
@@ -779,7 +790,7 @@ function folderPicker(input, on = true) {
   const fp = input._fp;
   fp.on = on; fp.start = input.value.trim();
   if (!on) { fp.box.hidden = true; return; }
-  api('api/library/tree').then(({ tree }) => { fp.tree = tree; if (document.activeElement === input) fp.render(); }).catch(() => {});
+  fp.tree = null; // read again at the next focus
 }
 
 async function loadFolderList() {
@@ -1126,6 +1137,26 @@ $('#weekly-save').onclick = async () => {
   catch (e) { toast(e.message); }
 };
 folderPicker($('#weekly-folder')); folderPicker($('#watch-folder'));
+// menus (assistant, spaces, More, account): the keyboard goes in when one opens, the arrows move, items say they are (audit U25)
+const menuItems = m => [...m.querySelectorAll('button, a[href], input')].filter(e => !e.disabled && e.offsetParent !== null);
+new MutationObserver(recs => {
+  for (const r of recs) {
+    const m = r.target;
+    if (!(m instanceof HTMLElement) || !m.classList.contains('space-menu') || m.hidden) continue;
+    menuItems(m).forEach(i => { if (i.tagName !== 'INPUT' && !i.getAttribute('role')) i.setAttribute('role', 'menuitem'); });
+    if (!m.contains(document.activeElement)) requestAnimationFrame(() => menuItems(m)[0]?.focus({ preventScroll: true }));
+  }
+}).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
+document.addEventListener('keydown', e => {
+  const m = document.activeElement?.closest?.('.space-menu');
+  if (!m || m.hidden || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) || document.activeElement.tagName === 'INPUT' && (e.key === 'Home' || e.key === 'End')) return;
+  const items = menuItems(m); if (!items.length) return;
+  e.preventDefault();
+  const i = items.indexOf(document.activeElement);
+  items[e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+});
+// on a phone the board's filters are folded behind a button (audit U9); one that is in use keeps them open
+$('#board-filter-btn').onclick = () => { const f = $('#board-filters'), open = !f.classList.contains('open'); f.classList.toggle('open', open); $('#board-filter-btn').setAttribute('aria-expanded', String(open)); };
 $('#watch-every').onchange = () => { $('#watch-day').hidden = $('#watch-every').value === 'daily'; };
 $('#watch-name').oninput = () => { $('#watch-folder').placeholder = '/Drafts/' + ($('#watch-name').value.trim() || '…'); };
 function fillWatch(w) {
@@ -1233,7 +1264,7 @@ function renderDirectives(list, box = $('#directives'), refresh = loadJobs) {
     const pct = Math.min(100, Math.round(b.today / b.daily_limit * 100));
     const lvl = b.state === 'blocked' || pct >= 100 ? 'bad' : b.state === 'low' || pct >= 70 ? 'warn' : 'ok';
     const m = document.createElement('div'); m.className = 'dir-budget ' + lvl;
-    m.innerHTML = `<div class="dir-budget-row"><b>${esc(t('Today’s budget'))}</b><span class="spacer"></span><span>$${b.today.toFixed(2)} ${esc(t('of'))} $${(+b.daily_limit).toFixed(2)}${lvl !== 'ok' ? ' · ' + esc(t(lvl === 'bad' ? 'budget reached' : 'budget low')) : ''}</span></div><div class="dir-budget-bar"><i style="width:${pct}%"></i></div>`;
+    m.innerHTML = `<div class="dir-budget-row"><b>${esc(t('Today’s budget'))}</b><span class="spacer"></span><span>${esc(usdf(b.today))} ${esc(t('of'))} ${esc(usdf(b.daily_limit))}${lvl !== 'ok' ? ' · ' + esc(t(lvl === 'bad' ? 'budget reached' : 'budget low')) : ''}</span></div><div class="dir-budget-bar"><i style="width:${pct}%"></i></div>`;
     box.appendChild(m);
   }
   for (const d of list) box.appendChild(dirRow(d, refresh));
@@ -1255,7 +1286,7 @@ function dirRow(d, refresh = loadJobs) {
       <span class="dir-prog" title="${done}/${total}"><i style="width:${pct}%"></i></span>
       <span class="muted small dir-cost">${money(+d.cost) || '$0'}</span>
       <span class="dir-actions"></span></div>
-    <div class="dir-workers"${open ? '' : ' hidden'}>${d.workers.map(w => `<div class="dir-w"><b>${esc(w.role)}</b><span class="chip">${esc(w.tier)}</span><span class="pill ${w.status}">${w.status === 'running' ? '<span class="dot"></span>' : ''}${esc(w.status)}</span><span class="muted small">${money(+w.cost) || '$0'}</span>${w.note ? `<span class="muted small dir-w-note">${esc(w.note)}</span>` : ''}</div>`).join('') || `<div class="muted small">${esc(t('no workers yet'))}</div>`}</div>`;
+    <div class="dir-workers"${open ? '' : ' hidden'}>${d.workers.map(w => `<div class="dir-w"><b>${esc(w.role)}</b><span class="chip no-i18n">${esc(tierLabel(w.tier))}</span><span class="pill ${w.status}">${w.status === 'running' ? '<span class="dot"></span>' : ''}${esc(w.status)}</span><span class="muted small">${money(+w.cost) || '$0'}</span>${w.note ? `<span class="muted small dir-w-note">${esc(w.note)}</span>` : ''}</div>`).join('') || `<div class="muted small">${esc(t('no workers yet'))}</div>`}</div>`;
   const wb = el.querySelector('.dir-workers'), exp = el.querySelector('.dir-exp');
   exp.onclick = () => { const o = wb.hidden; wb.hidden = !o; exp.textContent = o ? '▾' : '▸'; if (o) { dirOpen.add(d.id); dirOpen.delete('-' + d.id); } else { dirOpen.delete(d.id); dirOpen.add('-' + d.id); } };
   const act = el.querySelector('.dir-actions');
@@ -1319,6 +1350,7 @@ async function loadJobs() {
   const box = $('#jobs'); box.innerHTML = '';
   const filtered = (jobsFilter.space ?? '') !== '' || jobsFilter.tag || jobsFilter.q || jobsFilter.archived;
   if (!jobs.length) {
+    if (!filtered && (directives || []).length) return; // a directive is running: its card is the content, not "no jobs yet" (audit U11)
     box.innerHTML = filtered ? '<div class="placeholder">No job matches these filters. <a href="#jobs" data-a="clear">Show them all</a></div>'
       : '<div class="placeholder">No jobs yet. Ask for research, e.g. <q>compare the three best e-bikes under €2000</q>.</div>';
     box.querySelector('[data-a=clear]')?.addEventListener('click', e => { e.preventDefault(); jobsFilter.space = ''; jobsFilter.tag = ''; jobsFilter.q = ''; jobsFilter.archived = false; saveJobsFilter(); loadJobs(); });
@@ -1337,7 +1369,7 @@ async function loadJobs() {
     const durText = dur == null ? 'waiting' : dur < 90 ? dur + ' s' : Math.round(dur / 60) + ' min';
     const tagHtml = () => tagsOf(j).map(t => `<span class="tag small" data-tag="${esc(t)}">#${esc(t)}</span>`).join('') + '<button type="button" class="tag small add" data-a="tags" title="Edit the tags">＋ tag</button>';
     el.innerHTML = `<div><h3>${esc(j.title)}</h3><div class="when"><span class="pill ${j.status}">${j.status === 'running' ? '<span class="dot"></span>' : ''}${j.status}</span>
-        ${spaceChip(j.space)}<span class="chip">${esc(j.tier)}</span>${j.kind === 'agent' ? `<span class="chip" title="Effort">${esc(EFFORTS[j.effort || state.status?.job_effort] || j.effort || '')}</span>` : ''}<span>${money(+j.cost_usd) || '$0'} of ${+j.max_cost_usd > 0 ? '$' + (+j.max_cost_usd).toFixed(2) : 'no cap'}</span><span>${durText}</span><span>${fmtTime(j.created)}</span>${j.parent ? `<span class="chip" title="Carries on from job #${j.parent}">continues #${j.parent}</span>` : ''}</div>
+        ${spaceChip(j.space)}<span class="chip no-i18n">${esc(tierLabel(j.tier))}</span>${j.kind === 'agent' ? `<span class="chip" title="Effort">${esc(EFFORTS[j.effort || state.status?.job_effort] || j.effort || '')}</span>` : ''}<span>${money(+j.cost_usd) || '$0'} of ${+j.max_cost_usd > 0 ? '$' + (+j.max_cost_usd).toFixed(2) : 'no cap'}</span><span>${durText}</span><span>${fmtTime(j.created)}</span>${j.parent ? `<span class="chip" title="Carries on from job #${j.parent}">continues #${j.parent}</span>` : ''}</div>
         <div class="jtags">${tagHtml()}</div>${reportHtml || routineHtml ? `<div class="jreport">${reportHtml ? '📄 ' + reportHtml : ''}${routineHtml}</div>` : ''}</div>
       <div class="actions">${['queued', 'running'].includes(j.status) ? '<button class="btn small" data-a="cancel">Cancel</button>'
         : j.kind !== 'reflect' ? `${tierSelect(j.tier, 'Model for running it again')}${j.kind === 'agent' ? effortSelect(j.effort || state.status?.job_effort || 'medium') : ''}<label class="cap" title="Cost cap for running it again (up to $${(+(state.status?.job_max_usd_limit ?? 10)).toFixed(2)})">$<input type="number" min="0.05" step="0.5" value="${(+j.max_cost_usd > 0 ? (j.status === 'failed' && /cost cap/.test(j.result || '') ? Math.min(+j.max_cost_usd * 2, +(state.status?.job_max_usd_limit ?? 10) || +j.max_cost_usd * 2) : +j.max_cost_usd) : (+(state.status?.job_max_usd) || 2)).toFixed(2)}" aria-label="Cost cap ($)"></label>${j.kind === 'agent' ? `<button class="btn small${j.status === 'failed' && /cost cap/.test(j.result || '') ? ' primary' : ''}" data-a="continue" title="Carry on from where it stopped, with the cap and effort chosen here">Continue</button>` : ''}<button class="btn small" data-a="rerun" title="Start over with the same instructions">Run again</button>` : ''}${moreHtml}</div>
@@ -1377,8 +1409,8 @@ async function loadJobs() {
       if (el.querySelector('.jsched')) return el.querySelector('.jsched').remove();
       const p = document.createElement('div'); p.className = 'jsched';
       const days = [1, 2, 3, 4, 5, 6, 0].map(d => `<option value="${d}">${esc(new Date(2024, 0, 7 + d).toLocaleDateString(undefined, { weekday: 'long' }))}</option>`).join('');
-      p.innerHTML = `<select data-f="rep"><option value="week">${esc(t('Every week'))}</option><option value="day">${esc(t('Every day'))}</option><option value="weekdays">${esc(t('Every weekday'))}</option><option value="month">${esc(t('Every month, on the 1st'))}</option><option value="once">${esc(t('Once'))}</option></select>`
-        + `<select data-f="dow">${days}</select><input data-f="date" type="date" hidden><input data-f="time" type="time" value="08:00">`
+      p.innerHTML = `<select data-f="rep" aria-label="${esc(t('Repeat'))}"><option value="week">${esc(t('Every week'))}</option><option value="day">${esc(t('Every day'))}</option><option value="weekdays">${esc(t('Every weekday'))}</option><option value="month">${esc(t('Every month, on the 1st'))}</option><option value="once">${esc(t('Once'))}</option></select>`
+        + `<select data-f="dow" aria-label="${esc(t('Day'))}">${days}</select><input data-f="date" type="date" aria-label="${esc(t('Date'))}" hidden><input data-f="time" type="time" aria-label="${esc(t('Time'))}" value="08:00">`
         + `<button class="btn small primary" data-f="ok">${esc(t('Schedule'))}</button><span class="muted">${esc(t('Same instructions, model, effort and cap; the report comes in the chat and in the library.'))}</span>`;
       const f = n => p.querySelector(`[data-f=${n}]`);
       const sync = () => { f('dow').hidden = f('rep').value !== 'week'; f('date').hidden = f('rep').value !== 'once'; };
@@ -1598,6 +1630,7 @@ const dueClass = c => { if (!c.due_date || c.status === 'done') return ''; const
 const board = { cards: [], refs: {}, statuses: {} };
 
 async function loadBoard() {
+  if ([...document.querySelectorAll('#board-filters input, #board-filters select')].some(e => e.value && e.selectedIndex !== 0)) $('#board-filters').classList.add('open'); // a filter in use stays in sight on a phone
   if (!state.spaces.length) await loadSpaces();
   if (boardPrefs.space === undefined) boardPrefs.space = String(state.space);
   const sel = $('#board-space');
@@ -1694,7 +1727,7 @@ function cardHtml(c, opts = {}) {
   const warn = c.warnings.filter(w => w.kind !== 'waiting' && w.kind !== 'overdue');
   const bits = [];
   if (c.start_time) bits.push(`<span class="kb ${dueClass(c)}" title="${esc(c.start_time)}${c.end_time ? '–' + esc(c.end_time) : ''}">${BICON.due}${fmtDay(c.start_date || c.due_date)} ${esc(c.start_time)}</span>`);
-  else if (c.due_date) bits.push(`<span class="kb ${dueClass(c)}" title="Due ${esc(c.due_date)}${c.start_date ? ', starts ' + esc(c.start_date) : ''}">${BICON.due}${fmtDay(c.due_date)}</span>`);
+  else if (c.due_date) bits.push(`<span class="kb ${dueClass(c)}" title="${esc(t('Due {b}{c}', { b: c.due_date, c: c.start_date ? t(', starts') + ' ' + c.start_date : '' }))}">${BICON.due}${fmtDay(c.due_date)}</span>`);
   if (c.estimate_hours != null || c.spent_hours) bits.push(`<span class="kb${c.estimate_hours && c.spent_hours > c.estimate_hours ? ' late' : ''}" title="Workload${c.spent_hours ? ': ' + fmtH(c.spent_hours) + ' spent' : ''}${c.estimate_hours != null ? ' of ' + fmtH(c.estimate_hours) + ' planned' : ''}">${BICON.load}${c.spent_hours ? fmtH(c.spent_hours) + '/' : ''}${fmtH(c.estimate_hours) || '?'}</span>`);
   if (c.checklist.total) bits.push(`<span class="kb${c.checklist.done === c.checklist.total ? ' ok' : ''}" title="Checklist">${BICON.check}${c.checklist.done}/${c.checklist.total}</span>`);
   if (waits.length) bits.push(`<span class="kb wait" title="Waits for ${esc(waits.map(d => board.refs[d].code + ' ' + board.refs[d].title).join(', '))}">${BICON.lock}${esc(waits.map(d => board.refs[d].code).join(', '))}</span>`);
@@ -1973,6 +2006,26 @@ async function renderOverall(d) {
 }
 
 // ---- today, quick add, move sheet ----
+/** What a finished sign-in says, from POST api/oauth/back (see the boot code). */
+function oauthBack(k, g, forMail) {
+  if (k === 'google') {
+    toast(g === 'connected' ? 'Google Calendar connected.' : g);
+    if (g === 'connected') setTimeout(() => { showSection('accounts'); $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
+  } else if (k === 'microsoft') {
+    toast(g !== 'connected' ? g : forMail ? 'Microsoft account connected for mail.' : 'Outlook connected.');
+    if (g === 'connected') setTimeout(() => {
+      const group = state.setGroups?.find(x => x.id === forMail);
+      showSection(group ? group.section : 'accounts');
+      (document.querySelector(`.ms-mail[data-purpose="${CSS.escape(forMail)}"]`) || $('#microsoft-card')).scrollIntoView({ block: 'center' });
+    }, 600);
+  } else if (k === 'mcp') {
+    toast(g.startsWith('connected:') ? `Connected to ${g.slice(10)}: its tools are available from the next message.` : g);
+    setTimeout(() => { showSection('accounts'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600);
+  } else {
+    toast(g === 'connected' ? 'Spotify connected.' : g);
+    setTimeout(() => { showSection('accounts'); $('#spotify-card').scrollIntoView({ block: 'center' }); }, 600);
+  }
+}
 function toastAction(text, label, fn) {
   toast(text); const t = $('#toast'), b = document.createElement('button');
   b.type = 'button'; b.className = 'toast-act'; b.textContent = label; b.onclick = () => { t.hidden = true; fn(); };
@@ -2143,7 +2196,7 @@ async function renderToday() {
     const s = spaceOf(c.space), bits = [`<span class="code">${esc(c.code)}</span>`];
     if (all) bits.push(`<span class="kc-space"><i style="background:${esc(s.color || 'var(--muted)')}"></i>${esc(s.name)}</span>`);
     if (c.start_time && (c.start_date || c.due_date) === t0) bits.push(`<span>${esc(c.start_time)}${c.end_time ? '–' + esc(c.end_time) : ''}</span>`);
-    else if (c.due_date && c.due_date !== t0) bits.push(`<span class="${dueClass(c)}">${c.due_date < t0 ? `due ${esc(fmtDay(c.due_date))}` : esc(fmtDay(c.due_date))}</span>`);
+    else if (c.due_date && c.due_date !== t0) bits.push(`<span class="${dueClass(c)}">${c.due_date < t0 ? esc(t('due {a}', { a: fmtDay(c.due_date) })) : esc(fmtDay(c.due_date))}</span>`);
     if (c.estimate_hours) bits.push(`<span>${fmtH(c.estimate_hours)}</span>`);
     if (c.checklist?.total) bits.push(`<span>☑ ${c.checklist.done}/${c.checklist.total}</span>`);
     if (c.status === 'doing') bits.push(`<span class="td-doing">In progress</span>`);
@@ -2842,8 +2895,52 @@ function fieldInput(f) {
     const on = (eff || '').split(',');
     return `<div class="checks" id="${id}">${Object.entries(f.options).map(([v, l]) => `<label><input type="checkbox" value="${esc(v)}" ${on.includes(v) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>`;
   }
+  if (f.type === 'sites') return `<div class="sites" data-for="${f.key}"><input id="${id}" type="hidden" value="${esc(siteList(f.value).join(','))}">
+    <div class="site-add"><input type="text" class="no-i18n" data-site-new autocomplete="off" placeholder="${esc(t('Add a site: lemonde.fr or a full address'))}"><button type="button" class="btn" data-site-add>${esc(t('Add'))}</button></div>
+    <p class="err" data-site-err hidden></p>
+    <div class="site-bar"><input type="search" class="no-i18n" data-site-find placeholder="${esc(t('Search the list'))}"><span class="muted small" data-site-n></span>
+      <button type="button" class="link" data-site-io>${esc(t('Import / export'))}</button></div>
+    <div class="site-io" hidden><textarea rows="5" data-site-text spellcheck="false" placeholder="${esc(t('One site per line'))}"></textarea>
+      <div class="row"><button type="button" class="btn" data-site-apply>${esc(t('Replace the list with this text'))}</button><button type="button" class="btn" data-site-merge>${esc(t('Add these to the list'))}</button></div></div>
+    <div class="site-chips"></div></div>`;
   if (f.type === 'secret') return `<input id="${id}" type="password" autocomplete="new-password" placeholder="${f.set ? 'Set (' + esc(f.hint.trim()) + '). Type to replace.' : 'Not set'}">`;
   return `<input id="${id}" type="${f.type === 'number' ? 'text' : f.type === 'url' ? 'url' : 'text'}" ${f.type === 'number' ? 'inputmode="decimal"' : ''} value="${esc(f.value)}" placeholder="${esc(f.default || '')}"${f.locked ? ' disabled' : ''}>`;
+}
+/** 'https://www.Lemonde.fr/x', 'lemonde.fr' → 'lemonde.fr' (same rule as Config::siteOf); '' when it is not a web site. */
+function siteHost(x) {
+  let h = String(x).trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/[/?#].*$/, '').replace(/^.*@/, '').replace(/:\d+$/, '').replace(/\.$/, '').replace(/^www\./, '');
+  return /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]+$/.test(h) || h === 'localhost' ? h : '';
+}
+function siteList(v) { return [...new Set(String(v || '').split(/[\s,;]+/).map(siteOf).filter(Boolean))]; }
+/** The trusted / blocked sites manager: chips with ✕, add field (full addresses accepted), search, import/export as text. */
+function initSites(box) {
+  const hid = box.querySelector('input[type=hidden]'), chips = box.querySelector('.site-chips'), err = box.querySelector('[data-site-err]');
+  const nw = box.querySelector('[data-site-new]'), find = box.querySelector('[data-site-find]'), io = box.querySelector('.site-io'), txt = box.querySelector('[data-site-text]');
+  let list = hid.value ? hid.value.split(',') : [];
+  const commit = () => { hid.value = list.join(','); hid.dispatchEvent(new Event('input', { bubbles: true })); draw(); };
+  const draw = () => {
+    const q = find.value.trim().toLowerCase(), shown = list.filter(s => s.includes(q)).sort();
+    chips.innerHTML = shown.map(s => `<span class="site-chip no-i18n">${esc(s)}<button type="button" data-rm="${esc(s)}" aria-label="${esc(t('Remove'))} ${esc(s)}">✕</button></span>`).join('') || `<span class="muted small">${esc(list.length ? t('No site matches.') : t('No site yet.'))}</span>`;
+    box.querySelector('[data-site-n]').textContent = list.length ? (q ? `${shown.length} / ${list.length}` : String(list.length)) : '';
+    txt.value = [...list].sort().join('\n');
+  };
+  const add = (raw, merge = true) => {
+    const bad = [], ok = [];
+    for (const x of String(raw).split(/[\s,;]+/).filter(Boolean)) { const s = siteHost(x); (s ? ok : bad).push(s || x); }
+    err.hidden = !bad.length; err.textContent = bad.length ? t('Not a web site address: {x}', { x: bad.slice(0, 3).join(', ') }) : '';
+    if (bad.length) return false;
+    list = [...new Set([...(merge ? list : []), ...ok])]; commit(); return true;
+  };
+  box.querySelector('[data-site-add]').onclick = () => { if (add(nw.value)) nw.value = ''; nw.focus(); };
+  nw.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); box.querySelector('[data-site-add]').click(); } };
+  find.oninput = e => { e.stopPropagation(); draw(); };
+  nw.oninput = e => { e.stopPropagation(); err.hidden = true; };
+  chips.onclick = e => { const b = e.target.closest('[data-rm]'); if (b) { list = list.filter(s => s !== b.dataset.rm); commit(); } };
+  box.querySelector('[data-site-io]').onclick = () => { io.hidden = !io.hidden; if (!io.hidden) txt.focus(); };
+  box.querySelector('[data-site-apply]').onclick = () => { if (add(txt.value, false)) io.hidden = true; };
+  box.querySelector('[data-site-merge]').onclick = () => { if (add(txt.value)) io.hidden = true; };
+  txt.oninput = e => e.stopPropagation();
+  draw();
 }
 function fieldValue(f) {
   const el = document.getElementById('set-' + f.key);
@@ -2854,40 +2951,38 @@ function fieldValue(f) {
 function initialValue(f) {
   const eff = f.value !== '' ? f.value : f.default;
   if (f.type === 'bool') return eff === '1' ? '1' : '0';
-  if (f.type === 'multi') return (eff || '').split(',').filter(Boolean).join(',');
+  if (f.type === 'multi') return (eff || '').split(',').filter(v => v && (!f.options || Object.prototype.hasOwnProperty.call(f.options, v))).join(','); // 'none' or a value not offered: not a change (audit U12)
   if (f.type === 'secret') return '';
-  if (f.type === 'select') return eff;
+  if (f.type === 'sites') return siteList(f.value).join(',');
+  if (f.type === 'select') { // a value the list does not offer (set in the server's environment) shows as the list's choice: not an unsaved change (audit U12)
+    const el = document.getElementById('set-' + f.key);
+    return el && ![...el.options].some(o => o.value === eff) ? el.value : eff;
+  }
   return f.value;
 }
-/** Settings → Search by meaning: pick who computes the vectors, see the index and what it costs here. */
+/** Settings → Library → Search: which model is in use for search by meaning, the index, and what it costs here.
+ *  The model itself is chosen in Model and budget → Models (Embeddings). */
 async function loadMeaning(box = $('#meaning')) {
   if (!box) return;
   const m = await api('api/meaning');
-  const problem = p => ({ 'no-key': t('needs its key'), 'no-ollama': m.shared ? t('the server\'s Ollama is off: ask the administrator') : t('Ollama is not installed (sudo ./install.sh --with-ollama)'),
-    'not-downloaded': m.shared ? t('not downloaded on the server: ask the administrator') : t('downloaded when chosen') }[p] || '');
-  const mem = p => p.local ? t('≈ {gb} GB while it computes', { gb: new Intl.NumberFormat(document.documentElement.lang || undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(p.memory_mb / 1024) }) : '';
   const idx = m.backend !== 'off' && m.index.total ? Math.round(100 * m.index.done / m.index.total) : 100;
   const pull = m.pull && m.pull.state === 'running' ? t('Downloading {model}…', { model: m.pull.model }) : m.pull?.state === 'failed' ? t('Download of {model} failed: {error}', { model: m.pull.model, error: m.pull.error || '' }) : '';
   const ms = m.measure;
+  const where = m.backend === 'off' ? '' : m.backend === 'ollama' ? t('on this server') : t('online');
   box.innerHTML = `<b>${esc(t('Search by meaning'))}</b>
-    <p class="muted small">${esc(t('Finds documents and past conversations by what they mean, not only their words. Who turns texts into vectors:'))}</p>
-    <div class="meaning-list" role="radiogroup">${m.presets.map(p => `<button type="button" class="meaning-opt${p.id === m.current ? ' on' : ''}" role="radio" aria-checked="${p.id === m.current}" data-p="${p.id}" ${p.problem && (p.problem !== 'not-downloaded' || m.shared) && p.id !== m.current ? 'aria-disabled="true"' : ''}>
-        <span class="mo-head"><b>${esc(t(p.label))}</b>${p.local ? `<span class="pill">${esc(t('private'))}</span>` : p.backend !== 'off' ? `<span class="pill out">${esc(t('online'))}</span>` : ''}</span>
-        <small>${esc(t(p.about))}</small>
-        <small class="muted">${esc([mem(p), p.problem ? problem(p.problem) : ''].filter(Boolean).join(' · '))}</small></button>`).join('')}</div>
-    ${m.current === 'custom' ? `<p class="small">${esc(t('Now: {backend} {model} (set below).', { backend: m.backend, model: m.model }))}</p>` : ''}
+    <p class="muted small">${esc(t('Finds documents and past conversations by what they mean, not only their words.'))}</p>
+    <p class="small">${m.backend === 'off' ? esc(t('Off: search by words only. Nothing is computed or sent.'))
+      : `${esc(t('Model in use:'))} <b class="no-i18n">${esc(m.model)}</b> <span class="pill${m.backend === 'ollama' ? '' : ' out'}">${esc(where)}</span>`}
+      <button type="button" class="btn sm" data-a="choose">${esc(t('Choose the model…'))}</button></p>
     ${m.backend !== 'off' ? `<p class="small">${esc(idx < 100 ? t('Index: {done} of {total} passages ready ({pct} %); the rest is done in the background.', { done: nf.format(m.index.done), total: nf.format(m.index.total), pct: idx }) : t('Index: everything is ready ({total} passages).', { total: nf.format(m.index.total) }))}</p>` : ''}
     ${pull ? `<p class="small">${esc(pull)}</p>` : ''}
     <div class="row wrap"><button class="btn small" type="button" data-a="measure" ${m.backend === 'off' ? 'disabled' : ''}>${esc(t('Measure on this server'))}</button>
       <span class="muted small" data-a="out">${ms ? esc(t('A search: {s} ms (question {q} ms + comparing {n} vectors {c} ms, {engine}). Indexing: {p} ms per passage. First call after a pause: {f} ms.', { s: nf.format(ms.search_ms), q: nf.format(ms.query_ms), n: nf.format(ms.vectors), c: nf.format(ms.scan_ms), engine: ms.engine, p: nf.format(ms.passage_ms), f: nf.format(ms.first_ms) })) : ''}</span></div>
     <p class="muted small">${esc(t('Confidential and Secret spaces are only indexed by a model on this server; with an online service they are searched by words.'))} ${esc(t('Comparison engine: {engine}.', { engine: m.engine === 'php' ? t('PHP (slower; sqlite-vec is in the Docker image)') : m.engine }))}</p>`;
-  box.querySelectorAll('[data-p]').forEach(b => b.onclick = async () => {
-    if (b.dataset.p === m.current) return;
-    if (b.getAttribute('aria-disabled') === 'true') { toast(problem(m.presets.find(p => p.id === b.dataset.p).problem)); return; }
-    if (b.dataset.confirm !== '1') { box.querySelectorAll('[data-confirm]').forEach(x => { delete x.dataset.confirm; x.classList.remove('ask'); }); b.dataset.confirm = '1'; b.classList.add('ask'); toast(t('Click again to switch: everything is indexed again in the background.')); return; }
-    try { const r = await post('api/meaning/choose', { preset: b.dataset.p }); toast(r.pulling ? t('Chosen. The model is downloading; indexing starts after.') : t('Chosen. Indexing again in the background.')); loadMeaning(box); refreshStatus(); }
-    catch (e) { toast(e.message); }
-  });
+  box.querySelector('[data-a=choose]').onclick = () => { // the Embeddings card of the table
+    showSection('model');
+    setTimeout(() => { if (state.mb.sel !== 'embedding') $('#mb-usages .ucard[data-u="embedding"]')?.click(); }, 250);
+  };
   box.querySelector('[data-a=measure]').onclick = async e => {
     const b = e.currentTarget; b.disabled = true; box.querySelector('[data-a=out]').textContent = t('Measuring… (up to a minute if the model has to load)');
     try { await post('api/meaning/measure'); await loadMeaning(box); } catch (err) { box.querySelector('[data-a=out]').textContent = err.message; b.disabled = false; }
@@ -2901,12 +2996,14 @@ const SET_SECTIONS = [
   ['model', 'Model and budget', 'M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3M6 6h12v12H6zM10 10h4v4h-4z'],
   ['channels', 'Channels', 'M4 5h16v11H8l-4 4z'],
   ['accounts', 'Connected accounts', 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'],
+  ['assistants', 'Other assistants', 'M8 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 2.5-5 6-5s6 2 6 5M14 20c0-2 1.5-3.5 4-3.5s4 1.5 4 3.5'],
   ['library', 'Library and memory', 'M4 4h5v16H4zM10 4h5v16h-5zM16 5l4 1-3 14-4-1'],
+  ['learning', 'Learning', 'M12 3a6 6 0 0 0-3.5 10.9V17h7v-3.1A6 6 0 0 0 12 3zM9.5 20h5M10.5 22.5h3'],
   ['security', 'Security', 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'],
   ['system', 'System', 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2'],
 ];
 /** Old links (#settings/brain, #settings/memory…) and names used in messages: which section they mean. */
-const SET_ALIAS = { brain: 'model', budget: 'model', memory: 'library', search: 'library', connectors: 'accounts', google: 'accounts', calendar: 'accounts',
+const SET_ALIAS = { brain: 'model', budget: 'model', memory: 'library', search: 'library', mind: 'learning', learn: 'learning', skills: 'learning', graph: 'learning', connectors: 'accounts', google: 'accounts', calendar: 'accounts',
   spotify: 'accounts', legifrance: 'accounts', mcp: 'accounts', mailbox: 'accounts', notify: 'channels', update: 'system', backups: 'system', totp: 'security' };
 /** Fields only useful with a given choice; shown anyway once they hold a value. */
 const SHOW_IF = {
@@ -2930,6 +3027,7 @@ function showSection(id, scroll = true) {
   if ($('#set-search').value) { $('#set-search').value = ''; setSearch(); }
   document.querySelectorAll('#view-settings .set-sec').forEach(s => { s.hidden = s.dataset.sec !== id; });
   sectionTabs(id);
+  if (id === 'assistants') fedLoad();
   document.querySelectorAll('#set-nav a, #set-chips a').forEach(a => { a.classList.toggle('on', a.dataset.sec === id); a.setAttribute('aria-current', a.dataset.sec === id ? 'page' : 'false'); });
   $('#set-chips a.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   if (location.hash !== '#settings/' + id) history.replaceState(null, '', '#settings/' + id);
@@ -2973,6 +3071,169 @@ function setAccounts() {
   const a = state.setAcc || {}, mb = setFields().some(f => f.key === 'TALIXIO_MAILBOX_USER' && (f.value || f.set));
   setInfo('accounts', (a.google ? 1 : 0) + (a.outlook ? 1 : 0) + (a.spotify ? 1 : 0) + (a.mcp || 0) + (mb ? 1 : 0));
 }
+/** Other assistants: pairing, what each peer may read, the digest preview, and what arrived. */
+state.fed = null;
+async function fedLoad(r) {
+  try { state.fed = r || await api('api/federation'); } catch (err) { toast(err.message); return; }
+  const f = state.fed, ago = ts => { if (!ts) return t('never'); const d = Math.max(0, Date.now() / 1000 - ts); return d < 90 ? t('just now') : d < 3600 ? t('{n} min ago', { n: Math.floor(d / 60) }) : d < 86400 ? t('{n} h ago', { n: Math.floor(d / 3600) }) : t('{n} d ago', { n: Math.floor(d / 86400) }); };
+  const box = $('#fed-peers');
+  box.innerHTML = f.peers.length ? '' : `<p class="muted small">${esc(t('No assistant is paired yet.'))}</p>`;
+  for (const p of f.peers) {
+    const d = document.createElement('div'); d.className = 'fed-peer'; d.dataset.peer = p.id;
+    d.innerHTML = `<div class="fed-head"><strong class="no-i18n">${esc(p.name)}</strong> <span class="muted small no-i18n">${esc(p.url.replace(/^https?:\/\//, ''))}</span>
+      <span class="muted small">${esc(t('last received {when}', { when: ago(p.lastIn) }))} · ${esc(t('last sent {when}', { when: ago(p.lastOut) }))}</span></div>
+      <label class="check"><input type="checkbox" data-k="give" ${p.give.includes('digest') ? 'checked' : ''}> <span>${esc(t('They can read my daily digest'))}</span></label>
+      <label class="check"><input type="checkbox" data-k="digest" ${p.accept.includes('digest') ? 'checked' : ''}> <span>${esc(t('I accept their digest'))}</span></label>
+      <label class="check"><input type="checkbox" data-k="message" ${p.accept.includes('message') ? 'checked' : ''}> <span>${esc(t('I accept their messages'))}</span></label>
+      <p class="muted small">${esc(p.theyGive.includes('digest') ? t('They share their daily digest with you.') : t('They do not share anything with you yet.'))}</p>
+      <div class="row wrap"><input type="text" class="fed-say" maxlength="2000" placeholder="${esc(t('A short message…'))}"><button class="btn small" data-a="say" type="button">${esc(t('Send'))}</button>
+        <button class="btn small" data-a="look" type="button">${esc(t('Look at their digest'))}</button><button class="btn small" data-a="ask" type="button">${esc(t('Ask a question…'))}</button><button class="btn small" data-a="revoke" type="button">${esc(t('Unpair'))}</button></div>
+      <pre class="fed-preview no-i18n" hidden></pre><div class="fed-ask" hidden></div>`;
+    const save = async () => {
+      const give = [...d.querySelectorAll('[data-k=give]:checked')].map(() => 'digest'), accept = [...d.querySelectorAll('[data-k=digest]:checked,[data-k=message]:checked')].map(x => x.dataset.k);
+      try { await post('api/federation/permissions', { peer: p.id, give, accept }); toast(t('Saved.')); } catch (err) { toast(err.message); }
+    };
+    d.querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = save);
+    d.onclick = async e => {
+      const b = e.target.closest('button[data-a]'); if (!b) return;
+      try {
+        if (b.dataset.a === 'say') { const i = d.querySelector('.fed-say'); if (!i.value.trim()) return; const r = await post('api/federation/send', { peer: p.id, text: i.value }); i.value = ''; toast(r.delivered ? t('Sent.') : t('Queued: their assistant will fetch it.')); }
+        if (b.dataset.a === 'look') { const r = await post('api/federation/view', { peer: p.id }); const pre = d.querySelector('.fed-preview'); pre.textContent = r.body || t('They share nothing with you right now.'); pre.hidden = false; }
+        if (b.dataset.a === 'ask') {
+          const box = d.querySelector('.fed-ask'); box.hidden = !box.hidden; if (box.hidden) return;
+          const r = await post('api/federation/peer-queries', { peer: p.id });
+          box.innerHTML = r.queries.length ? r.queries.map(q => `<div class="row wrap"><span class="no-i18n"><strong>${esc(q.name)}</strong> ${esc(q.descr)}</span>
+            ${q.param ? `<input type="text" class="fed-val" maxlength="200" placeholder="${esc(t('Value'))}">` : ''}<button class="btn small" data-q="${q.id}" type="button">${esc(t('Ask'))}</button></div>`).join('')
+            : `<p class="muted small">${esc(t('They offer no question to you yet.'))}</p>`;
+          box.onclick = async ev => {
+            const qb = ev.target.closest('button[data-q]'); if (!qb) return;
+            try { const a = await post('api/federation/ask', { peer: p.id, query: +qb.dataset.q, param: qb.parentElement.querySelector('.fed-val')?.value || '' });
+              toast(a.cached ? t('Their last answer is on its way (unchanged).') : t('Asked: the answer will arrive in “Received”.')); } catch (err) { toast(err.message); }
+          };
+          return;
+        }
+        if (b.dataset.a === 'revoke') {
+          if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Unpair?'); return; }
+          fedLoad(await post('api/federation/revoke', { peer: p.id })); toast(t('Unpaired.'));
+        }
+      } catch (err) { toast(err.message); }
+    };
+    box.append(d);
+  }
+  $('#fed-preview').textContent = f.digest.body;
+  $('#fed-auto').checked = !!f.auto;
+  $('#fed-badge').textContent = f.inbox.filter(m => !m.read).length ? t('{n} unread', { n: f.inbox.filter(m => !m.read).length }) : '';
+  const inb = $('#fed-inbox'); inb.innerHTML = f.inbox.length ? '' : `<p class="muted small">${esc(t('Nothing received yet.'))}</p>`;
+  for (const m of f.inbox) {
+    const e = document.createElement('div'); e.className = 'fed-msg' + (m.read ? '' : ' unread');
+    e.innerHTML = `<div class="muted small"><strong class="no-i18n">${esc(m.from)}</strong> · ${esc(new Date(m.ts * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }))} · ${esc(m.kind === 'digest' ? t('digest') : t('message'))}</div><div class="fed-body no-i18n">${esc(m.body).replace(/\n/g, '<br>')}</div>`;
+    inb.append(e);
+  }
+  fedQueries(f);
+  fedOverview(f, ago);
+  setInfo('assistants', f.peers.length);
+}
+/** One page: what I offer (who asks what) and what I follow (their questions, my names for them, the latest answers). */
+function fedOverview(f, ago) {
+  const off = $('#fed-offer'), fol = $('#fed-follow'); if (!off || !fol) return;
+  off.innerHTML = f.offer.length ? '' : `<p class="muted small">${esc(t('No question offered yet.'))}</p>`;
+  for (const q of f.offer) {
+    const d = document.createElement('div'); d.className = 'fed-peer';
+    d.innerHTML = `<div class="fed-head"><strong class="no-i18n">${esc(q.name)}</strong> <span class="muted small">${esc(t('{n} fresh answers today', { n: q.today }))}${q.maxDay ? ' / ' + q.maxDay : ''}${q.gapMin ? ' · ' + esc(t('every {n} min at most', { n: q.gapMin })) : ''}${q.enabled ? '' : ' · ' + esc(t('off'))}</span></div>
+      ${q.askedBy.length ? q.askedBy.map(w => `<p class="small"><span class="no-i18n">${esc(w.name)}</span> <span class="muted">· ${esc(t('{n} times this week', { n: w.week }))} · ${esc(t('last asked {when}', { when: ago(w.last) }))}</span></p>`).join('') : `<p class="muted small">${esc(t('Nobody can ask it yet.'))}</p>`}`;
+    off.append(d);
+  }
+  const by = {}; for (const x of f.subs) (by[x.peer] ||= []).push(x);
+  fol.innerHTML = f.peers.length ? '' : `<p class="muted small">${esc(t('No assistant is paired yet.'))}</p>`;
+  for (const p of f.peers) {
+    const d = document.createElement('div'); d.className = 'fed-peer';
+    const list = by[p.id] || [];
+    d.innerHTML = `<div class="fed-head"><strong class="no-i18n">${esc(p.name)}</strong> <button class="btn small" data-a="refresh" type="button">${esc(t('Refresh their questions'))}</button></div>`
+      + (list.length ? list.map(x => `<div class="fed-sub" data-id="${x.id}">
+        <p><strong class="no-i18n">${esc(x.name)}</strong> <span class="muted small no-i18n">${esc(x.descr)}</span>${x.gone ? ` <span class="muted small">${esc(t('no longer offered'))}</span>` : ''}</p>
+        ${x.gone ? '' : `<div class="row wrap">
+          <input type="text" class="fed-alias" maxlength="60" value="${esc(x.alias)}" placeholder="${esc(t('My name for it (e.g. Jean’s status)'))}">
+          ${x.param ? `<input type="text" class="fed-val" maxlength="200" value="${esc(x.value)}" placeholder="${esc(t('Value'))}">` : ''}
+          <label class="check"><input type="checkbox" class="fed-daily"${x.daily ? ' checked' : ''}> <span>${esc(t('Ask every morning'))}</span></label>
+          <button class="btn small" data-a="follow" type="button">${esc(x.followed ? t('Save') : t('Follow'))}</button>
+          <button class="btn small" data-a="now" type="button">${esc(t('Ask now'))}</button>
+          ${x.followed ? `<button class="btn small" data-a="unfollow" type="button">${esc(t('Stop following'))}</button>` : ''}</div>`}
+        ${x.answer ? `<pre class="fed-preview no-i18n">${esc(x.answer)}</pre><p class="muted small">${esc(t('answer of {when}', { when: ago(x.answerAt) }))}</p>` : (x.lastAsk ? `<p class="muted small">${esc(t('Asked {when}, waiting for the answer.', { when: ago(x.lastAsk) }))}</p>` : '')}
+      </div>`).join('') : `<p class="muted small">${esc(t('Press “Refresh their questions” to see what they offer you.'))}</p>`);
+    d.onclick = async e => {
+      const b = e.target.closest('button[data-a]'); if (!b) return;
+      const row = b.closest('.fed-sub'), id = row && +row.dataset.id;
+      const body = row ? { id, alias: row.querySelector('.fed-alias')?.value || '', daily: !!row.querySelector('.fed-daily')?.checked, value: row.querySelector('.fed-val')?.value || '' } : {};
+      try {
+        if (b.dataset.a === 'refresh') { fedLoad(await post('api/federation/subs', { peer: p.id })); return; }
+        if (b.dataset.a === 'follow') { fedLoad(await post('api/federation/follow', body)); toast(t('Saved.')); return; }
+        if (b.dataset.a === 'unfollow') { fedLoad(await post('api/federation/follow', { id, on: false })); return; }
+        if (b.dataset.a === 'now') { await post('api/federation/follow', body); const a = await post('api/federation/ask-sub', { id, value: body.value }); fedLoad(a); toast(a.cached ? t('Their last answer is on its way (unchanged).') : t('Asked: the answer will arrive in “Received”.')); }
+      } catch (err) { toast(err.message); }
+    };
+    fol.append(d);
+  }
+}
+/** The questions I let paired assistants ask. */
+function fedQueries(f) {
+  const box = $('#fed-queries'); if (!box) return;
+  box.innerHTML = f.queries.length ? '' : `<p class="muted small">${esc(t('No question offered yet.'))}</p>`;
+  const when = ts => ts ? new Date(ts * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : t('never');
+  for (const q of f.queries) {
+    const names = f.peers.filter(p => q.peers.includes(p.id)).map(p => p.name).join(', ') || t('nobody');
+    const d = document.createElement('div'); d.className = 'fed-peer';
+    d.innerHTML = `<div class="fed-head"><strong class="no-i18n">${esc(q.name)}</strong> <span class="muted small no-i18n">${esc(names)}</span></div>
+      <p class="muted small no-i18n">${esc(q.prompt)}</p>
+      <p class="muted small">${esc(t('{n} fresh answers today', { n: q.today }))}${q.maxDay ? ' / ' + q.maxDay : ''} · ${esc(t('last answer {when}', { when: when(q.lastAt) }))}${q.gapMin ? ' · ' + esc(t('every {n} min at most', { n: q.gapMin })) : ''}</p>
+      <div class="row wrap"><button class="btn small" data-a="edit" type="button">${esc(t('Edit'))}</button><button class="btn small" data-a="del" type="button">${esc(t('Delete'))}</button></div>`;
+    d.onclick = async e => {
+      const b = e.target.closest('button[data-a]'); if (!b) return;
+      if (b.dataset.a === 'edit') fedQueryForm(f, q);
+      if (b.dataset.a === 'del') { if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Delete?'); return; } try { fedLoad(await post('api/federation/query/delete', { id: q.id })); } catch (err) { toast(err.message); } }
+    };
+    box.append(d);
+  }
+}
+function fedQueryForm(f, q) {
+  q = q || { id: 0, name: '', descr: '', prompt: '', space: 0, peers: [], param: false, maxDay: 3, gapMin: 0 };
+  $('#fed-q-form').hidden = false; $('#fed-q-form').dataset.id = q.id;
+  $('#fed-q-name').value = q.name; $('#fed-q-descr').value = q.descr; $('#fed-q-prompt').value = q.prompt;
+  $('#fed-q-param').checked = q.param; $('#fed-q-max').value = q.maxDay; $('#fed-q-gap').value = q.gapMin;
+  $('#fed-q-space').innerHTML = (state.spaces || []).filter(s => !s.privacy || s.privacy === 'internal').map(s => `<option class="no-i18n" value="${s.id}"${s.id === q.space ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+  $('#fed-q-peers').innerHTML = f.peers.length ? f.peers.map(p => `<label class="check"><input type="checkbox" value="${p.id}"${q.peers.includes(p.id) ? ' checked' : ''}> <span class="no-i18n">${esc(p.name)}</span></label>`).join('') : `<p class="muted small">${esc(t('No assistant is paired yet.'))}</p>`;
+}
+(function fedWire() {
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  on('fed-invite', () => { $('#fed-invite-box').hidden = !$('#fed-invite-box').hidden; $('#fed-have-box').hidden = true; });
+  on('fed-have', () => { $('#fed-have-box').hidden = !$('#fed-have-box').hidden; $('#fed-invite-box').hidden = true; });
+  on('fed-invite-make', async () => {
+    try {
+      const r = await post('api/federation/invite', { give: $('#fed-invite-digest').checked ? ['digest'] : [] });
+      const c = $('#fed-invite-code'); c.value = r.invite; c.hidden = false; $('#fed-invite-note').hidden = false; c.select();
+      try { await navigator.clipboard.writeText(r.invite); toast(t('Invitation copied.')); } catch {}
+    } catch (err) { toast(err.message); }
+  });
+  on('fed-have-go', async () => {
+    try { const r = await post('api/federation/accept', { invite: $('#fed-have-code').value, give: $('#fed-have-digest').checked ? ['digest'] : [] }); $('#fed-have-code').value = ''; $('#fed-have-box').hidden = true; toast(t('Paired with {name}.', { name: r.name || '' })); fedLoad(r); }
+    catch (err) { toast(err.message); }
+  });
+  on('fed-publish', async () => {
+    try { const r = await post('api/federation/publish', { note: $('#fed-note').value }); $('#fed-publish-state').textContent = r.sent.length || r.queued.length ? t('Sent to {n}, waiting for {m}.', { n: r.sent.length, m: r.queued.length }) : t('Not shared with anyone yet: tick “They can read my daily digest” on a paired assistant.'); fedLoad(r); }
+    catch (err) { toast(err.message); }
+  });
+  on('fed-q-new', () => fedQueryForm(state.fed || { peers: [], queries: [] }, null));
+  on('fed-q-save', async () => {
+    try {
+      fedLoad(await post('api/federation/query', { id: +$('#fed-q-form').dataset.id || 0, name: $('#fed-q-name').value, descr: $('#fed-q-descr').value, prompt: $('#fed-q-prompt').value,
+        space: +$('#fed-q-space').value || 0, param: $('#fed-q-param').checked, maxDay: +$('#fed-q-max').value || 0, gapMin: +$('#fed-q-gap').value || 0,
+        peers: [...document.querySelectorAll('#fed-q-peers input:checked')].map(i => +i.value) }));
+      $('#fed-q-form').hidden = true; toast(t('Saved.'));
+    } catch (err) { toast(err.message); }
+  });
+  on('fed-pull', async () => { try { const r = await post('api/federation/pull-now', {}); toast(t('{n} new', { n: r.arrived })); fedLoad(r); } catch (err) { toast(err.message); } });
+  on('fed-read', async () => { try { fedLoad(await post('api/federation/read', {})); } catch (err) { toast(err.message); } });
+  const au = document.getElementById('fed-auto'); if (au) au.onchange = async () => { try { await post('api/federation/auto', { on: au.checked }); toast(t('Saved.')); } catch (err) { toast(err.message); } };
+})();
 function setInfo(k, v) { if (state.setInfo[k] === v) return; state.setInfo[k] = v; if (!$('#view-settings').hidden) setHealth(); }
 function applyShowIf() {
   for (const [key, [dep, vals]] of Object.entries(SHOW_IF)) {
@@ -3058,14 +3319,17 @@ function renderGroups(groups) {
       if (f) { f.after(msMailRow(gid)); f.querySelector('select')?.addEventListener('change', e => { if (e.target.value === 'microsoft') msServers(gid); showMsMail(); }); }
     }
     box.append(el);
+    el.querySelectorAll('.sites').forEach(initSites);
   }
   const page = $('#view-settings');
   page.oninput = page.onchange = e => { if (e.target.closest('.set-groups')) setDirty(); };
   setDirty(); setAccounts(); showMsMail(); sectionTabs(state.setSection);
   if ($('#set-search').value) setSearch();
+  if (state.mb?.cat) mbApplyTab(); // keep the Models/Providers/Budget tabs showing the right cards after a re-render
 }
 /** Each settings section: one tab per card, one card at a time (all of them while searching). */
 function sectionTabs(id, pick) {
+  if (id === 'model') return; // the model section has its own Models/Providers/Budget tabs (mb-tabs)
   const sec = $(`#view-settings .set-sec[data-sec="${id}"]`); if (!sec) return;
   const cards = [...sec.querySelectorAll(':scope > .set-card, .set-groups > .set-card')];
   const key = (c, i) => c.dataset.id || c.id || 'card' + i;
@@ -3183,6 +3447,7 @@ async function loadSettings() {
   loadSecurity();
   loadDav();
   loadEu(); loadAccCard();
+  loadModelCockpit().catch(e => { const b = $('#mb-models'); if (b) b.innerHTML = `<p class="bad small">${esc(e.message)}</p>`; });
   renderAppearance();
   loadConnectors();
   loadGoogle(); loadMicrosoft();
@@ -3191,6 +3456,559 @@ async function loadSettings() {
   refreshStatus().then(setHealth);
   if (!state.setGroups || $('#set-save').hidden) renderGroups((await api('api/settings')).groups);
 }
+// ---- Model & budget cockpit: the Models/Providers/Budget tabs, the catalogue table and per-usage routing ----
+/** A model tier as the person reads it ("deep" → "Approfondi"): audit U15 */
+const tierLabel = x => t({ fast: 'Fast', standard: 'Standard', deep: 'Deep' }[x] || x || '');
+const MB_USAGES = [
+  { id: 'fast', label: 'Fast', hint: 'short replies, sorting, routine' },
+  { id: 'standard', label: 'Standard', hint: 'conversation, everyday tasks' },
+  { id: 'deep', label: 'Deep', hint: 'analysis, long writing' },
+  { id: 'voice', label: 'Voice', hint: 'transcription of recordings and dictation' },
+  { id: 'vision', label: 'Images', hint: 'reading photos and scanned PDFs' },
+  { id: 'embedding', label: 'Embeddings', hint: 'search by meaning' },
+  { id: 'forecast', label: 'Forecast', hint: 'next values of a series of figures' },
+  { id: 'decision', label: 'Decisions', hint: 'choices and scores with probabilities' },
+];
+/** Forecast and Decisions are not routed through accounts: an address (and key) in the settings, set from the strip of their card. */
+const MB_SET_USAGES = { forecast: 'TALIXIO_FORECAST_URL', decision: 'TALIXIO_DECISION_URL' };
+const MB_TIMESFM_URL = 'http://talixio-caddy:8765';
+/** The decision model a row stands for (sent as `model`; empty = the server's own default). */
+const mbDecisionModel = m => m.id === 'kev-latest' || m.id === 'jev-latest' ? m.id : '';
+const mbSetOn = u => !!mbSetVal(MB_SET_USAGES[u]);
+/** Which usages a model type can serve (image generation is in the catalogue to compare, not routed to a usage). */
+const MB_TYPE_USAGE = { LLM: ['fast', 'standard', 'deep'], Vision: ['fast', 'standard', 'deep', 'vision'], Voice: ['voice'], Image: [], Embedding: ['embedding'], Forecast: ['forecast'], Decision: ['decision'] };
+/** The providers whose chat models also read images, so they can serve the « Images » usage. */
+const MB_SEES = ['anthropic', 'openai', 'google'];
+/** The usages a catalogue row can be assigned to. A Voice or Embedding row the server marks unreachable (no `via`) cannot. */
+function mbUsable(m) {
+  if (['Voice', 'Embedding', 'Forecast', 'Decision'].includes(m.type) && !m.via) return [];
+  const u = [...(MB_TYPE_USAGE[m.type] || [])];
+  if (m.type === 'LLM' && MB_SEES.includes(m.prov)) u.push('vision');
+  return u;
+}
+/** The letter on a row's assign button: F/S/A/V in English, R/S/A/V in French; Images and Embeddings are I and E. */
+const mbLetter = u => u.id === 'vision' ? 'I' : u.id === 'embedding' ? 'E' : u.id === 'forecast' ? 'T' : u.id === 'decision' ? 'Δ' : t(u.label)[0];
+/** Whether a row is the model a usage currently runs on (same model id on the same credentials), or — for search by
+ *  meaning not yet routed — the model set in Settings. */
+function mbRowOn(u, m) {
+  if (u === 'forecast') return m.type === 'Forecast' && mbSetOn(u) && mbSetVal('TALIXIO_FORECAST_MODEL') === mbId(m);
+  if (u === 'decision') {
+    if (m.type !== 'Decision' || !mbSetOn(u)) return false;
+    return mbSetVal('TALIXIO_DECISION_MODEL') === mbDecisionModel(m);
+  }
+  const e = mbEff(u);
+  if (e.routed) {
+    if (e.model !== mbId(m)) return false;
+    const srcs = m.src ? [m.src] : (mbProvMap()[m.prov]?.sources || []);
+    return srcs.some(x => x.account === e.account);
+  }
+  const em = state.mb.emb;
+  if (u === 'embedding' && em && em.backend !== 'off' && (em.model || '').toLowerCase() === mbId(m).toLowerCase()) {
+    const via = em.backend === 'ollama' ? 'local' : em.backend;
+    return m.via === via && (via !== 'sovereign' || m.prov === em.service);
+  }
+  return false;
+}
+const mbConnected = (m, p) => !!(p.connected || m.src);
+/** A row's credential source: the built-in one for whisper.cpp / Ollama on this server, else the provider's first. */
+const mbSource = (m, p) => m.src || p?.sources?.[0];
+state.mb = { tab: 'models', scope: 'global', cat: null, routing: null, emb: null, setv: {}, lock: false, avail: true, sort: { key: 'rank', dir: -1 }, q: '', ftype: '', fprov: '', ftl: 0, sel: '' };
+const mbTlRank = tl => tl === 'L' ? 6 : +tl;                       // local counts as top trust for the Europe floor
+const mbTlClass = tl => tl === 'L' ? 'tlL' : 'tl' + tl;
+const mbTlText = tl => tl === 'L' ? t('loc') : String(tl);
+const mbCompliant = p => mbTlRank(p.tl) >= 5;                      // sovereign (GDPR) or local
+const mbMoney = v => v == null ? '—' : v === 0 ? t('free') : usdf(v);
+const mbId = m => m.id || m.name;
+function mbUnit(m) {
+  if (m.unit == null) return null;
+  if (m.unit === 0) return t('free');
+  return (m.cur || '$') + (+m.unit).toFixed(m.unit < 0.1 ? 3 : 2) + '/' + (m.unitKind === 'img' ? t('img') : m.unitKind === 'Mtok' ? 'Mtok' : t('min'));
+}
+/** A rough "per message" cost (≈20k tokens in + 1k out), the same yardstick the budget uses. */
+function mbMsg(m) {
+  const u = mbUnit(m); if (u !== null) return u;
+  if (m.pin == null) return '—';
+  if (m.pin === 0) return t('free');
+  return '$' + (m.pin * 0.020 + m.pout * 0.001).toFixed(4);
+}
+
+async function loadModelCockpit() {
+  const [cat, routing, emb, sets] = await Promise.all([api('api/catalogue'), mbFetchRouting(), api('api/meaning').catch(() => null), api('api/settings').catch(() => null)]);
+  state.mb.cat = cat; state.mb.routing = routing; state.mb.emb = emb;
+  state.mb.setv = {}; for (const g of (sets?.groups || [])) for (const f of g.fields) state.mb.setv[f.key] = f;
+  $('#mb-prov-c').textContent = cat.providers.length;
+  wireMbTabs();
+  mbApplyTab();
+  mbRender();
+}
+function mbFetchRouting() {
+  const s = state.mb.scope;
+  return api('api/routing' + (s !== 'global' ? '?space=' + encodeURIComponent(s) : ''));
+}
+function wireMbTabs() {
+  if (wireMbTabs.done) return; wireMbTabs.done = true;
+  $('#mb-tabs').querySelectorAll('.mb-tab').forEach(b => b.onclick = () => { state.mb.tab = b.dataset.mtab; mbApplyTab(); });
+}
+/** The tabs show one face of the page: the catalogue, the provider cards, or the budget settings. */
+function mbApplyTab() {
+  const tab = state.mb.tab;
+  $('#mb-tabs')?.querySelectorAll('.mb-tab').forEach(b => { b.classList.toggle('on', b.dataset.mtab === tab); b.setAttribute('aria-selected', String(b.dataset.mtab === tab)); });
+  const show = (sel, on) => document.querySelectorAll(sel).forEach(e => { e.hidden = !on; });
+  show('#mb-models', tab === 'models');
+  show('#mb-phelp', tab === 'providers');
+  show('#mb-pgrid', tab === 'providers');
+  // The Europe form, the AI-accounts list and the brain card no longer live on this tab: each provider connects
+  // on its own card now. The account form stays, revealed only as the advanced editor for a custom provider.
+  show('#eu-card', false);
+  show('#acc-manage', false);
+  if (tab !== 'providers') accClose();
+  show('#acc-card', tab === 'providers' && !$('#acc-form').hidden);
+  document.querySelectorAll('#view-settings .set-groups[data-groups="model"] .group-card').forEach(c => {
+    c.hidden = !(tab === 'budget' && c.dataset.id === 'budget');
+  });
+  if (tab === 'providers') mbRenderProviders();
+  if (tab === 'budget') mbBudgetSnapshot();
+}
+/** A short budget glance above the budget fields, from the live status. */
+function mbBudgetSnapshot() {
+  const card = document.querySelector('#view-settings .set-groups[data-groups="model"] .group-card[data-id="budget"]');
+  if (!card) return;
+  const b = state.status?.budget;
+  let snap = card.querySelector('.mb-bsnap');
+  if (!b) { snap?.remove(); return; }
+  if (!snap) { snap = document.createElement('div'); snap.className = 'mb-bsnap'; card.querySelector('h4')?.after(snap); }
+  const pct = b.monthly ? Math.min(100, Math.round(100 * (b.month || 0) / b.monthly)) : 0;
+  snap.innerHTML = `<div class="bbar"><i style="width:${pct}%"></i></div>
+    <div class="krow">
+      <span class="k">${esc(t('Spent this month'))}<b class="no-i18n">${esc(usdf(b.month || 0))}</b></span>
+      ${b.monthly ? `<span class="k">${esc(t('Cap'))}<b class="no-i18n">${esc(usdf(b.monthly))}</b></span>` : ''}
+      ${b.day != null ? `<span class="k">${esc(t('Today'))}<b class="no-i18n">${esc(usdf(b.day))}</b></span>` : ''}
+    </div>`;
+}
+// How a catalogue provider maps to an AI-account: the account kind that reaches it, and where to get a key.
+// Sovereign providers (kind `sovereign`, their own service id) get their key page from the Europe catalogue.
+const MB_KEYS = { anthropic: 'https://console.anthropic.com/settings/keys', openai: 'https://platform.openai.com/api-keys', google: 'https://aistudio.google.com/apikey' };
+const MB_KIND = { anthropic: 'anthropic', openai: 'openai', google: 'gemini' };
+/** The connect recipe for a provider card, or null when it has no one-key path (local, or an exotic provider
+ *  that routes through the generic « custom provider » form). */
+function mbConnectSpec(p) {
+  const euIds = new Set((state.eu?.services || []).map(s => s.id));
+  if (euIds.has(p.id)) { const s = (state.eu?.services || []).find(x => x.id === p.id); return { kind: 'sovereign', service: p.id, keys: s?.keys || '' }; }
+  if (MB_KIND[p.id]) return { kind: MB_KIND[p.id], service: '', keys: MB_KEYS[p.id] || '' };
+  return null; // local / deepseek / huggingface / elevenlabs → the advanced custom form
+}
+/** The existing AI account that already reaches this provider, if any (so Connect becomes Manage). */
+function mbAccountFor(id) {
+  return (state.aiAccounts || []).find(a => mbAccProv(a) === id) || null;
+}
+/** The catalogue provider an AI account reaches. */
+function mbAccProv(a) {
+  if (a.kind === 'sovereign') return a.service;
+  if (a.kind === 'anthropic' || a.kind === 'claude-code') return 'anthropic';
+  if (a.kind === 'openai') return 'openai';
+  if (a.kind === 'gemini') return 'google';
+  return '';
+}
+/** The Fournisseurs tab's provider-card grid (the mockup's centrepiece): one card per catalogue provider —
+ *  flag, status light, trust/kind/model-count chips — and connect right here with just the key. */
+function mbRenderProviders() {
+  const grid = $('#mb-pgrid'); if (!grid || !state.mb?.cat) return;
+  const models = state.mb.cat.models;
+  const cards = state.mb.cat.providers.map(p => {
+    const n = models.filter(m => m.prov === p.id).length;
+    const spec = mbConnectSpec(p);
+    let foot;
+    if (p.connected) {
+      const acc = mbAccountFor(p.id);
+      foot = `<span class="pok">✓ ${esc(t('Connected'))}</span>` + (acc ? `<button type="button" class="btn sm ghost" data-pmanage="${esc(p.id)}">${esc(t('Manage'))}</button>` : '');
+    } else if (p.id === 'typesafe') { // reached by an address, not an account: the Decisions card holds it
+      foot = `<button type="button" class="btn sm primary" data-pdecision="1">${esc(t('Set the address'))}</button>`;
+    } else if (p.id === 'nixtla') {
+      foot = `<span class="muted small">${esc(t('Not available yet'))}</span>`;
+    } else if (spec) {
+      const label = p.auth === 'oauth' ? t('Sign in') : t('Connect');
+      foot = `<button type="button" class="btn sm primary" data-popen="${esc(p.id)}">${esc(label)}</button>`;
+    } else {
+      foot = `<button type="button" class="btn sm" data-pcustom="${esc(p.id)}">${esc(t('Connect'))}</button>`;
+    }
+    const form = spec ? `<form class="pconnect" data-pform="${esc(p.id)}" hidden>
+        <input type="password" class="pkey" autocomplete="off" spellcheck="false" placeholder="${esc(t('API key'))}">
+        <div class="row wrap"><button type="submit" class="btn sm primary">${esc(t('Connect'))}</button>${spec.keys ? `<a class="btn sm ghost" target="_blank" rel="noopener" href="${esc(spec.keys)}">${esc(t('Sign up'))}</a>` : ''}<span class="spacer"></span><button type="button" class="btn sm ghost pcancel">${esc(t('Cancel'))}</button></div>
+        <p class="pcstate muted small"></p>
+      </form>` : '';
+    return `<div class="mb-pcard${p.connected ? ' on' : ''}" data-pid="${esc(p.id)}">
+      <div class="ptop"><span class="flag no-i18n">${esc(p.flag || '')}</span><span class="pn no-i18n">${esc(p.name)}</span><span class="led${p.connected ? '' : ' off'}" title="${esc(p.connected ? t('connected') : t('not connected'))}"></span></div>
+      <div class="pc"><span class="no-i18n">${esc(t(p.country))}</span> · ${esc(t(p.bill === 'usage' ? 'pay as you go' : p.bill))}</div>
+      <div class="pmeta"><span class="tl ${mbTlClass(p.tl)}">${esc(mbTlText(p.tl))}</span><span class="pchip">${esc(t(p.kind))}</span><span class="pchip no-i18n">${n} ${esc(n > 1 ? t('models') : t('model'))}</span></div>
+      <div class="pfoot">${foot}</div>
+      ${form}
+    </div>`;
+  }).join('');
+  grid.innerHTML = cards + `<div class="mb-pcard add" id="mb-pcard-add" role="button" tabindex="0"><div><div class="plus" aria-hidden="true">+</div>${esc(t('Add a custom provider'))}</div></div>`;
+  grid.querySelectorAll('[data-popen]').forEach(b => b.onclick = () => mbToggleConnect(b.dataset.popen, true));
+  grid.querySelectorAll('[data-pdecision]').forEach(x => x.onclick = () => { state.mb.tab = 'models'; state.mb.sel = 'decision'; state.mb.ftype = 'Decision'; mbApplyTab(); mbRender(); });
+  grid.querySelectorAll('[data-pcustom]').forEach(b => b.onclick = () => mbOpenAccountForm(b.dataset.pcustom));
+  grid.querySelectorAll('[data-pmanage]').forEach(b => b.onclick = () => { const a = mbAccountFor(b.dataset.pmanage); if (a) mbOpenAccountForm(null, a); });
+  grid.querySelectorAll('.pconnect').forEach(f => {
+    f.querySelector('.pcancel').onclick = () => mbToggleConnect(f.dataset.pform, false);
+    f.onsubmit = e => { e.preventDefault(); mbProviderConnect(f.dataset.pform, f); };
+  });
+  const add = $('#mb-pcard-add');
+  add.onclick = () => mbOpenAccountForm();
+  add.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); mbOpenAccountForm(); } };
+}
+/** Re-read the catalogue after a connection changed, and repaint the grid + table (no-op before the cockpit loads). */
+async function mbRefreshProviders() {
+  if (!state.mb?.cat) return;
+  try { state.mb.cat = await api('api/catalogue'); $('#mb-prov-c').textContent = state.mb.cat.providers.length; mbRenderProviders(); mbRenderRows(); } catch { /* stale view is fine */ }
+}
+/** Reveal (or hide) a card's inline key field. */
+function mbToggleConnect(id, open) {
+  const f = $(`.pconnect[data-pform="${CSS.escape(id)}"]`); if (!f) return;
+  f.hidden = !open;
+  if (open) f.querySelector('.pkey')?.focus();
+}
+/** Connect a provider straight from its card: save an AI account of the mapped kind with just this key. */
+async function mbProviderConnect(id, form) {
+  const p = state.mb.cat.providers.find(x => x.id === id), spec = mbConnectSpec(p); if (!spec) return;
+  const key = form.querySelector('.pkey').value.trim();
+  const st = form.querySelector('.pcstate');
+  if (!key) { st.className = 'pcstate bad small'; st.textContent = t('Enter the key first.'); return; }
+  st.className = 'pcstate muted small'; st.textContent = t('Connecting…');
+  const existing = mbAccountFor(id);
+  const body = { name: existing?.name || p.name, kind: spec.kind, service: spec.service, url: existing?.url || '', key,
+    token: '', paid: !!existing?.paid, admin_key: '', admin_clear: false, billing_scope: existing?.billing_scope || '', models: { fast: '', standard: '', deep: '' } };
+  try {
+    await post(existing ? `api/accounts/${encodeURIComponent(existing.id)}` : 'api/accounts', body);
+    toast(t('{p} connected.', { p: p.name }));
+    await Promise.all([loadAccCard(), loadSpaces()]);
+    await mbRefreshProviders();
+  } catch (e) { st.className = 'pcstate bad small'; st.textContent = e.message; }
+}
+/** Open the AI-account form as the advanced editor: a brand-new custom provider, or an existing account to manage. */
+function mbOpenAccountForm(providerId, account) {
+  const kindFor = { anthropic: 'anthropic', claude: 'anthropic', openai: 'openai', google: 'gemini', gemini: 'gemini', deepseek: 'openai', huggingface: 'openai' };
+  $('#acc-card').hidden = false;
+  accEdit(account || null);
+  if (!account) {
+    const kind = kindFor[providerId], ksel = $('#acc-kind');
+    if (kind && ksel && [...ksel.options].some(o => o.value === kind)) { ksel.value = kind; ksel.dispatchEvent(new Event('change')); }
+  }
+  $('#acc-form-h').hidden = false;
+  $('#acc-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('#acc-name')?.focus();
+}
+
+function mbProvMap() { const m = {}; for (const p of state.mb.cat.providers) m[p.id] = p; return m; }
+/** The models that pass the current filters, sorted. */
+function mbVisible() {
+  const st = state.mb, P = mbProvMap();
+  const q = st.q.trim().toLowerCase();
+  let rows = st.cat.models.filter(m => {
+    const p = P[m.prov]; if (!p) return false;
+    if (st.avail && !m.available) return false;
+    if (q && !(mbId(m).toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))) return false;
+    if (st.ftype && m.type !== st.ftype) return false;
+    if (st.fprov && m.prov !== st.fprov) return false;
+    if (st.ftl && mbTlRank(p.tl) < st.ftl) return false;
+    if (st.sel === 'vision' && !mbUsable(m).includes('vision')) return false; // « Images » : only the models that can read an image
+    return true;
+  });
+  const key = st.sort.key, dir = st.sort.dir;
+  const val = m => key === 'name' ? (m.name.toLowerCase())
+    : key === 'type' ? m.type : key === 'rank' ? m.rank
+    : key === 'tl' ? mbTlRank(P[m.prov].tl)
+    : key === 'pin' ? (m.pin ?? 1e9) : key === 'pout' ? (m.pout ?? 1e9)
+    : key === 'pmsg' ? (m.pin != null ? m.pin * 0.02 + m.pout * 0.001 : 1e9) : m.name;
+  rows.sort((a, b) => { const x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+  return rows;
+}
+/** What each usage resolves to in the current scope, from the server's routing view. */
+function mbEff(u) { return state.mb.routing?.effective?.[u] || { routed: false }; }
+/** The best (highest-rank) compliant + available model that can serve a usage — for the Europe lock's force-swap. */
+function mbBestCompliant(usageId) {
+  const P = mbProvMap();
+  return state.mb.cat.models.filter(m => m.available && mbCompliant(P[m.prov]) && mbUsable(m).includes(usageId))
+    .sort((a, b) => b.rank - a.rank)[0] || null;
+}
+
+function mbRender() {
+  const box = $('#mb-models'); if (!box || !state.mb.cat) return;
+  const P = mbProvMap();
+  const spaceOpts = state.spaces.filter(s => !s.archived).map(s => `<option class="no-i18n" value="${s.id}"${String(state.mb.scope) === String(s.id) ? ' selected' : ''}>${esc(s.id ? s.name : t('General'))}</option>`).join('');
+  const provOpts = state.mb.cat.providers.map(p => `<option class="no-i18n" value="${esc(p.id)}"${state.mb.fprov === p.id ? ' selected' : ''}>${esc(p.name)}${p.connected ? '' : ' (' + t('not connected') + ')'}</option>`).join('');
+  const upd = state.mb.cat.updated ? new Date(state.mb.cat.updated * 1000).toLocaleDateString(window.LOCALE) : '';
+  box.innerHTML = `
+    <div class="scopebar">
+      <span class="muted small">${esc(t('Routing'))}</span>
+      <select id="mb-scope" aria-label="${esc(t('Settings for'))}"><option value="global"${state.mb.scope === 'global' ? ' selected' : ''}>${esc(t('Global default (all spaces)'))}</option>
+        <optgroup label="${esc(t('Override for a space'))}">${spaceOpts}</optgroup></select>
+      <span class="muted small">${esc(state.mb.scope === 'global' ? t('Applied everywhere, unless a space overrides it.') : t('Inherited usages follow the global default; overridden ones are specific to this space.'))}</span>
+      <button class="btn sm" id="mb-refresh" style="margin-left:auto">↻ ${esc(t('Refresh now'))}</button>
+    </div>
+    <div class="usages" id="mb-usages"></div>
+    <div id="mb-strip"></div>
+    <div class="filters">
+      <input type="search" id="mb-q" aria-label="${esc(t('Search a model…'))}" placeholder="${esc(t('Search a model…'))}" value="${esc(state.mb.q)}">
+      <select id="mb-ftype" aria-label="${esc(t('Kind of model'))}">
+        <option value="">${esc(t('All types'))}</option>
+        <option value="LLM"${state.mb.ftype === 'LLM' ? ' selected' : ''}>${esc(t('LLM (text)'))}</option>
+        <option value="Vision"${state.mb.ftype === 'Vision' ? ' selected' : ''}>${esc(t('LLM vision'))}</option>
+        <option value="Voice"${state.mb.ftype === 'Voice' ? ' selected' : ''}>${esc(t('Voice'))}</option>
+        <option value="Image"${state.mb.ftype === 'Image' ? ' selected' : ''}>${esc(t('Text → image'))}</option>
+        <option value="Embedding"${state.mb.ftype === 'Embedding' ? ' selected' : ''}>${esc(t('Embeddings'))}</option>
+        <option value="Forecast"${state.mb.ftype === 'Forecast' ? ' selected' : ''}>${esc(t('Forecast'))}</option>
+        <option value="Decision"${state.mb.ftype === 'Decision' ? ' selected' : ''}>${esc(t('Decisions'))}</option>
+      </select>
+      <select id="mb-fprov" aria-label="${esc(t('Provider'))}"><option value="">${esc(t('All providers'))}</option>${provOpts}</select>
+      <select id="mb-ftl" aria-label="${esc(t('Tier'))}">
+        <option value="0">${esc(t('All trust levels'))}</option>
+        <option value="3"${state.mb.ftl === 3 ? ' selected' : ''}>${esc(t('Level ≥ 3 (pro)'))}</option>
+        <option value="4"${state.mb.ftl === 4 ? ' selected' : ''}>${esc(t('Level ≥ 4 (no retention)'))}</option>
+        <option value="5"${state.mb.ftl === 5 ? ' selected' : ''}>${esc(t('Level ≥ 5 (sovereign / local)'))}</option>
+      </select>
+      <label class="mb-lock ${state.mb.avail ? 'on' : 'off'}" id="mb-avail"><input type="checkbox" id="mb-avail-cb"${state.mb.avail ? ' checked' : ''}> ${esc(t('Available'))}</label>
+      <label class="mb-lock ${state.mb.lock ? 'on' : 'off'}" id="mb-lock"><input type="checkbox" id="mb-lock-cb"${state.mb.lock ? ' checked' : ''}> 🔒 ${esc(t('Europe lock (GDPR)'))}</label>
+    </div>
+    <p class="note small muted">${esc(state.mb.cat.source === 'live' && upd
+      ? t('Catalogue updated {d} — from connected providers + a seed.', { d: upd })
+      : t('Base catalogue — connect a provider and click “Refresh now” to fold in its full model list.'))}</p>
+    <div class="tscroll"><table class="mb-table"><thead><tr>
+      <th data-sort="name">${esc(t('Model'))}</th><th data-sort="type">${esc(t('Type'))}</th>
+      <th data-sort="rank" class="num">${esc(t('Rank'))}</th><th data-sort="tl">${esc(t('Trust'))}</th>
+      <th data-sort="pin" class="num">${esc(t('Input'))}</th><th data-sort="pout" class="num">${esc(t('Output'))}</th>
+      <th data-sort="pmsg" class="num">${esc(t('≈ / message'))}</th><th>${esc(t('Assign to…'))}</th>
+    </tr></thead><tbody id="mb-rows"></tbody></table></div>
+    <div class="legend small muted">
+      <span><b>${esc(t('Rank'))}</b> ${esc(t('1 (basic) → 10 (flagship)'))}</span>
+      <span><b>${esc(t('Trust'))}</b> <span class="tl tl1">1</span> ${esc(t('consumer (China)'))} · <span class="tl tl2">2</span> ${esc(t('free/public'))} · <span class="tl tl3">3</span> ${esc(t('pro'))} · <span class="tl tl4">4</span> ${esc(t('no retention'))} · <span class="tl tl5">5</span> ${esc(t('sovereign (GDPR)'))} · <span class="tl tlL">${esc(t('loc'))}</span> ${esc(t('local'))}</span>
+    </div>
+    <p class="note small muted">${esc(t('Prices in $ per million tokens (voice: $/min, image: $/image, embeddings: $/Mtok). Indicative — check with the provider. “≈ / message”: ~20,000 tokens read + 1,000 written. “~” marks an estimated price.'))}</p>`;
+  mbRenderUsages(); mbRenderRows();
+  $('#mb-scope').onchange = async e => { state.mb.scope = e.target.value === 'global' ? 'global' : +e.target.value; state.mb.routing = await mbFetchRouting(); mbRender(); };
+  $('#mb-q').oninput = e => { state.mb.q = e.target.value; mbRenderRows(); };
+  $('#mb-ftype').onchange = e => { state.mb.ftype = e.target.value; mbRenderRows(); };
+  $('#mb-fprov').onchange = e => { state.mb.fprov = e.target.value; mbRenderRows(); };
+  $('#mb-ftl').onchange = e => { state.mb.ftl = +e.target.value; mbRenderRows(); };
+  $('#mb-avail-cb').onchange = e => { state.mb.avail = e.target.checked; $('#mb-avail').classList.toggle('on', state.mb.avail); $('#mb-avail').classList.toggle('off', !state.mb.avail); mbRenderRows(); };
+  $('#mb-lock-cb').onchange = mbToggleLock;
+  box.querySelectorAll('thead th[data-sort]').forEach(th => th.onclick = () => {
+    const k = th.dataset.sort; state.mb.sort.dir = state.mb.sort.key === k ? -state.mb.sort.dir : (k === 'name' || k === 'type' ? 1 : -1); state.mb.sort.key = k; mbRenderRows();
+  });
+  $('#mb-refresh').onclick = async e => {
+    const btn = e.currentTarget, old = btn.textContent; btn.disabled = true; btn.textContent = t('Refreshing…');
+    try {
+      state.mb.cat = await post('api/catalogue/refresh', {});
+      $('#mb-prov-c').textContent = state.mb.cat.providers.length;
+      mbRender(); toast(t('Catalogue refreshed.'));
+    } catch (err) { toast(err.message); btn.disabled = false; btn.textContent = old; }
+  };
+}
+function mbRenderUsages() {
+  const box = $('#mb-usages'); if (!box) return; const P = mbProvMap(), global = state.mb.scope === 'global';
+  box.innerHTML = MB_USAGES.map(u => {
+    const e = mbEff(u.id);
+    const prov = e.routed ? state.mb.cat.providers.find(x => x.id === e.provider) : null;
+    const flag = prov ? prov.flag : '';
+    const em = state.mb.emb;
+    const name = MB_SET_USAGES[u.id] ? (mbSetOn(u.id) ? (u.id === 'forecast' ? (mbSetVal('TALIXIO_FORECAST_MODEL') === 'chronos-2' ? 'Chronos-2' : 'TimesFM') : (mbSetVal('TALIXIO_DECISION_MODEL') || t('server default'))) : (u.id === 'forecast' ? t('Built-in method') : t('Off')))
+      : e.routed ? (e.model || t('provider default'))
+      : u.id === 'embedding' ? (em && em.backend !== 'off' ? em.model : t('Off')) : t('Default');
+    const tag = global || MB_SET_USAGES[u.id] ? '' : u.id === 'embedding' ? `<span class="utag inh">${esc(t('global'))}</span>` : (e.overridden ? `<span class="utag ovr">${esc(t('overridden'))}</span>` : `<span class="utag inh">${esc(t('inherited'))}</span>`);
+    const reset = ((!global && e.overridden) || (global && u.id === 'embedding' && e.routed)) ? `<button class="ureset" data-reset="${u.id}">↺ ${esc(t('back to default'))}</button>` : '';
+    return `<div class="ucard${!global && !e.overridden ? ' inh' : ''}${state.mb.sel === u.id ? ' sel' : ''}" data-u="${u.id}">
+      <div class="uhead"><span class="ut">${esc(t(u.label))}</span>${tag}</div>
+      <div class="um"><span class="flag">${flag}</span><span class="nm no-i18n">${esc(name)}</span></div>
+      <div class="usub muted small">${prov ? `<span class="no-i18n">${esc(prov.name)}</span> · <span class="tl ${mbTlClass(prov.tl)}">${esc(mbTlText(prov.tl))}</span>` : esc(MB_SET_USAGES[u.id] ? t('address set below') : u.id === 'embedding' ? t('set in Settings → Search by meaning') : t('main settings or the space account'))}</div>
+      ${reset}</div>`;
+  }).join('');
+  box.querySelectorAll('.ureset').forEach(b => b.onclick = async e => {
+    e.stopPropagation(); const u = b.dataset.reset;
+    const body = { usage: u, clear: true }; if (state.mb.scope !== 'global') body.space = state.mb.scope;
+    state.mb.routing = await post('api/routing', body); mbRenderUsages(); mbRenderRows();
+    toast(t('“{u}”: back to the global default', { u: t(MB_USAGES.find(x => x.id === u).label) }));
+  });
+  box.querySelectorAll('.ucard').forEach(c => c.onclick = () => {
+    const u = c.dataset.u; state.mb.sel = state.mb.sel === u ? '' : u;
+    state.mb.ftype = state.mb.sel ? (u === 'voice' ? 'Voice' : u === 'embedding' ? 'Embedding' : u === 'forecast' ? 'Forecast' : u === 'decision' ? 'Decision' : u === 'vision' ? '' : 'LLM') : '';
+    const sel = $('#mb-ftype'); if (sel) sel.value = state.mb.ftype;
+    mbRenderUsages(); mbRenderRows();
+  });
+  mbRenderStrip();
+}
+/** What a selected Voice / Images / Embeddings card still needs hand-set: the settings that are not a model. */
+const mbSetField = key => state.mb.setv[key] || { key, value: '', default: '' };
+const mbSetVal = key => { const f = mbSetField(key); return f.value !== '' ? f.value : (f.default ?? ''); };
+function mbRenderStrip() {
+  const box = $('#mb-strip'); if (!box) return;
+  const u = state.mb.sel, em = state.mb.emb;
+  if (!['voice', 'vision', 'embedding', 'forecast', 'decision'].includes(u)) { box.innerHTML = ''; return; }
+  const set = key => ` data-set="${key}"`;
+  let h = '';
+  if (u === 'voice') {
+    h = `<h4>${esc(t('Voice · transcription and meetings'))}</h4>
+      <p class="muted small">${esc(t('The model is chosen in the table below (the V button). What remains here are settings that are not a model:'))}</p>
+      <div class="mb-strip-grid">
+        <label>${esc(t('Tier for meeting summaries'))}<select${set('TALIXIO_MEETING_TIER')}>${['standard', 'deep', 'fast'].map(o => `<option value="${o}"${mbSetVal('TALIXIO_MEETING_TIER') === o ? ' selected' : ''}>${esc(t(o))}</option>`).join('')}</select></label>
+        <label>${esc(t('Longer than this (seconds) = a meeting'))}<input type="number" min="0"${set('TALIXIO_VOICE_NOTE_MAX_SECONDS')} value="${esc(mbSetVal('TALIXIO_VOICE_NOTE_MAX_SECONDS'))}"></label>
+      </div>
+      <p class="muted small">${esc(t('“Whisper (local)” runs whisper.cpp on this server: the audio never leaves it. With no model chosen, the assistant picks one itself: whisper.cpp if it is installed, else Gemini.'))}</p>`;
+  } else if (u === 'forecast' || u === 'decision') {
+    const sec = k => { const f = mbSetField(k); return f.set ? f.hint || '••••' : ''; };
+    h = u === 'forecast'
+      ? `<h4>${esc(t('Forecast · next values of a series of figures'))}</h4>
+      <p class="muted small">${esc(t('The assistant forecasts as soon as you give it figures. TimesFM (Google) and Chronos-2 (Amazon) are open time-series models that run on this server (install with --with-models). Until an address is set, a simple built-in method answers and says so.'))}</p>
+      <div class="mb-strip-grid">
+        <label>${esc(t('TimesFM service address'))}<input type="url"${set('TALIXIO_FORECAST_URL')} placeholder="${MB_TIMESFM_URL}" value="${esc(mbSetField('TALIXIO_FORECAST_URL').value)}"></label>
+        <div>${mbSetOn('forecast') ? `<button class="btn sm ghost" type="button" data-act="setoff" data-key="TALIXIO_FORECAST_URL">${esc(t('Use the built-in method'))}</button>` : `<button class="btn sm" type="button" data-act="seturl" data-key="TALIXIO_FORECAST_URL" data-url="${MB_TIMESFM_URL}">${esc(t('Use the TimesFM service of this stack'))}</button>`}</div>
+      </div>`
+      : `<h4>${esc(t('Decisions · choices and scores with probabilities'))}</h4>
+      <p class="muted small">${esc(t('A model that answers typed questions (choice, score, yes/no) with probabilities, through POST /v1/systemone: Jev (TypeSafe’s cloud — your text goes there), or your own Kev / Rizzo Flow server. Nothing is sent until an address is set.'))}</p>
+      <div class="mb-strip-grid">
+        <label>${esc(t('Decision model address'))}<input type="url"${set('TALIXIO_DECISION_URL')} placeholder="https://" value="${esc(mbSetField('TALIXIO_DECISION_URL').value)}"></label>
+        <label>${esc(t('Decision model key'))}<input type="password" autocomplete="off"${set('TALIXIO_DECISION_KEY')} placeholder="${esc(sec('TALIXIO_DECISION_KEY') || t('none'))}"></label>
+        <label>${esc(t('Decision model name'))}<input type="text"${set('TALIXIO_DECISION_MODEL')} placeholder="kev-latest" value="${esc(mbSetField('TALIXIO_DECISION_MODEL').value)}"></label>
+        <div>${mbSetOn('decision') ? `<button class="btn sm ghost" type="button" data-act="setoff" data-key="TALIXIO_DECISION_URL">${esc(t('Turn off decisions'))}</button>` : ''}</div>
+      </div>`;
+  } else if (u === 'vision') {
+    const on = mbSetVal('TALIXIO_VISION_INDEX') !== '0';
+    h = `<h4>${esc(t('Images · reading photos and scanned PDFs'))}</h4>
+      <p class="muted small">${esc(t('The model is chosen in the table below (the I button, for models that can read an image). Until you choose one, the fast model does it.'))}</p>
+      <p class="small">${esc(on ? t('Reading images and scanned PDFs is on.') : t('Reading images and scanned PDFs is off.'))} <a href="#" data-goto="library" data-tab="documents">${esc(t('Change it in Settings → Library → Documents'))}</a></p>`;
+  } else {
+    const ix = em?.index;
+    h = `<h4>${esc(t('Embeddings · search by meaning'))}</h4>
+      <p class="muted small">${esc(t('The model is chosen in the table below (the E button); changing it re-indexes the memory in the background. What remains here:'))}</p>
+      <div class="mb-strip-grid">
+        <label>${esc(t('Vector size'))}<input type="number" min="0"${set('TALIXIO_EMBEDDINGS_DIMS')} placeholder="${esc(t('automatic'))}" value="${esc(mbSetField('TALIXIO_EMBEDDINGS_DIMS').value)}"></label>
+        <div class="mb-strip-idx"><span class="small">${esc(ix ? t('Index: {done} of {total} passages', { done: ix.done, total: ix.total }) : '')}</span>
+          <button class="btn sm" type="button" data-act="measure"${em && em.backend === 'off' ? ' disabled' : ''}>${esc(t('Measure on this server'))}</button> <span class="muted small" data-out></span></div>
+        ${em && em.backend !== 'off' ? `<button class="btn sm ghost" type="button" data-act="off">${esc(t('Turn off search by meaning'))}</button>` : `<span class="muted small">${esc(t('Search by meaning is off: search by words only. Choose a model in the table to turn it on.'))}</span>`}
+      </div>
+      <p class="muted small">${esc(t('Empty = automatic (512 for models built for it: faster search, nearly the same quality). 0 = full size.'))}</p>
+      ${em && !em.routed ? `<p class="muted small">${esc(t('Search by meaning is currently set in Settings; choosing a model in the table replaces that choice.'))}</p>` : ''}
+      ${em && em.ollama && !em.ollama.up ? `<p class="muted small">${esc(t('Ollama is not running on this server: the local models are unavailable.'))}</p>` : ''}`;
+  }
+  box.innerHTML = `<div class="mb-strip">${h}</div>`;
+  box.querySelectorAll('[data-set]').forEach(el => el.onchange = async () => {
+    const key = el.dataset.set;
+    try {
+      const r = await post('api/settings', { changes: { [key]: el.value } });
+      for (const g of (r.groups || [])) for (const f of g.fields) state.mb.setv[f.key] = f;
+      if (MB_SET_USAGES.forecast === key || MB_SET_USAGES.decision === key || key === 'TALIXIO_DECISION_MODEL') { mbRenderUsages(); mbRenderRows(); }
+      if (key === 'TALIXIO_EMBEDDINGS_DIMS') state.mb.emb = await api('api/meaning').catch(() => state.mb.emb);
+      toast(t('Saved.'));
+    } catch (e) { toast(e.message); }
+  });
+  box.querySelector('[data-goto]')?.addEventListener('click', e => { e.preventDefault(); showSection(e.currentTarget.dataset.goto); if (e.currentTarget.dataset.tab) sectionTabs(e.currentTarget.dataset.goto, e.currentTarget.dataset.tab); });
+  box.querySelectorAll('[data-act=setoff],[data-act=seturl]').forEach(b => b.onclick = async () => {
+    try { await mbSaveSetting(b.dataset.key, b.dataset.act === 'seturl' ? b.dataset.url : ''); mbRenderUsages(); mbRenderRows(); toast(t('Saved.')); } catch (e) { toast(e.message); }
+  });
+  box.querySelector('[data-act=off]')?.addEventListener('click', async () => {
+    try {
+      await post('api/meaning/choose', { preset: 'off' });
+      state.mb.routing = await mbFetchRouting(); state.mb.emb = await api('api/meaning').catch(() => state.mb.emb);
+      mbRenderUsages(); mbRenderRows(); toast(t('Search by meaning is off.'));
+    } catch (e) { toast(e.message); }
+  });
+  box.querySelector('[data-act=measure]')?.addEventListener('click', async e => {
+    const b = e.currentTarget, out = box.querySelector('[data-out]'); b.disabled = true; out.textContent = t('Measuring…');
+    try { const r = await post('api/meaning/measure'); out.textContent = t('A search takes about {ms} ms ({n} vectors, {e}).', { ms: r.search_ms, n: r.vectors, e: r.engine }); }
+    catch (err) { out.textContent = err.message; }
+    b.disabled = false;
+  });
+}
+function mbRenderRows() {
+  const tb = $('#mb-rows'); if (!tb) return; const P = mbProvMap();
+  const rows = mbVisible();
+  tb.innerHTML = rows.map(m => {
+    const p = P[m.prov], conn = mbConnected(m, p), blocked = state.mb.lock && !mbCompliant(p);
+    const usable = mbUsable(m);
+    const btns = MB_USAGES.map(u => {
+      let why = '';
+      if (u.id === 'embedding' && state.mb.scope !== 'global') why = t('Embeddings are shared by every space: set them in the global default');
+      else if (u.id === 'embedding' && m.via === 'local' && state.mb.emb && !state.mb.emb.ollama?.up) why = t('Ollama is not running on this server');
+      const ok = usable.includes(u.id) && !blocked && conn && !why;
+      const on = mbRowOn(u.id, m);
+      return `<button data-m="${esc(mbId(m))}" data-prov="${esc(m.prov)}" data-u="${u.id}" class="${on ? 'on' : ''}"${ok ? '' : ' disabled'} title="${esc(why || t(u.label))}">${esc(mbLetter(u))}</button>`;
+    }).join('');
+    const cell = conn ? `<div class="assign">${btns}</div>`
+      : `<button class="btn sm primary" data-connect="${esc(m.prov)}">${esc(t('Connect'))}</button>`;
+    const est = m.est ? '<span class="mb-est" title="' + esc(t('Estimated price')) + '">~</span>' : '';
+    return `<tr class="${blocked ? 'blocked' : ''} ${conn ? '' : 'offrow'}">
+      <td><div class="mname"><span class="flag">${p.flag}</span><span class="no-i18n">${esc(m.name)}${m.deprecated ? ' <span class="mb-dep" title="' + esc(t('Being retired')) + '">⚠</span>' : ''}<div class="prov muted small no-i18n">${esc(p.name)}${conn ? '' : ' · ' + t('not connected')}</div></span></div></td>
+      <td><span class="ty ${m.type.toLowerCase()}"><span class="g"></span>${esc(t(m.type === 'LLM' ? 'LLM' : m.type === 'Vision' ? 'Vision' : m.type === 'Voice' ? 'Voice' : m.type === 'Image' ? 'Image' : m.type === 'Forecast' ? 'Forecast' : m.type === 'Decision' ? 'Decisions' : 'Embeddings'))}</span></td>
+      <td class="num"><span class="rank"><span class="rbar"><i style="width:${m.rank * 10}%"></i></span><span class="rnum no-i18n">${m.rank}</span></span></td>
+      <td><span class="tl ${mbTlClass(p.tl)}" title="${esc(t(p.kind))}">${esc(mbTlText(p.tl))}</span></td>
+      <td class="num no-i18n">${est}${esc(mbMoney(m.pin))}</td>
+      <td class="num no-i18n">${esc(mbMoney(m.pout))}</td>
+      <td class="num no-i18n">${est}${esc(mbMsg(m))}</td>
+      <td>${cell}</td></tr>`;
+  }).join('') || `<tr><td colspan="8" class="muted" style="padding:16px">${esc(t('No model matches. Widen the filters, or untick “Available” to see the whole catalogue.'))}</td></tr>`;
+  tb.querySelectorAll('.assign button:not(:disabled)').forEach(b => b.onclick = () => mbAssign(b.dataset.u, b.dataset.m, b.dataset.prov));
+  tb.querySelectorAll('[data-connect]').forEach(b => b.onclick = () => {
+    state.mb.tab = 'providers'; mbApplyTab();
+    const card = $(`.mb-pcard[data-pid="${CSS.escape(b.dataset.connect)}"]`) || $('#mb-pgrid');
+    card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card?.querySelector('[data-popen]')?.click();
+  });
+}
+/** Assign a model to a usage: route it through the first credential source of the model's provider. */
+async function mbSaveSetting(key, value) {
+  const r = await post('api/settings', { changes: { [key]: value } });
+  for (const g of (r.groups || [])) for (const f of g.fields) state.mb.setv[f.key] = f;
+}
+async function mbAssign(usage, model, prov) {
+  if (MB_SET_USAGES[usage]) { // Forecast / Decisions: settings, not routing
+    const m = state.mb.cat.models.find(x => mbId(x) === model && x.prov === prov);
+    try {
+      if (usage === 'forecast') { await mbSaveSetting('TALIXIO_FORECAST_MODEL', mbId(m || {})); if (!mbSetOn('forecast')) await mbSaveSetting('TALIXIO_FORECAST_URL', MB_TIMESFM_URL); toast(t('Forecast → {m}. The address can be changed below.', { m: m?.name || model })); }
+      else {
+        await mbSaveSetting('TALIXIO_DECISION_MODEL', mbDecisionModel(m || {}));
+        if (m?.prov === 'typesafe' && !mbSetOn('decision')) await mbSaveSetting('TALIXIO_DECISION_URL', 'https://api.typesafe.ai');
+        toast(mbSetOn('decision') ? t('Decisions → {m}.', { m: m?.name || model }) : t('Now give the address of the decision server below.')); }
+    } catch (e) { toast(e.message); return; }
+    state.mb.sel = usage; state.mb.ftype = usage === 'forecast' ? 'Forecast' : 'Decision';
+    const sel = $('#mb-ftype'); if (sel) sel.value = state.mb.ftype;
+    mbRenderUsages(); mbRenderRows(); return;
+  }
+  const p = mbProvMap()[prov], m = state.mb.cat.models.find(x => mbId(x) === model && x.prov === prov), src = mbSource(m || {}, p);
+  if (!src) { toast(t('Connect this provider first.')); return; }
+  const body = { usage, account: src.account, model }; if (state.mb.scope !== 'global') body.space = state.mb.scope;
+  if ((usage === 'voice' || usage === 'embedding') && m?.via) body.via = m.via; // how a transcription or embedding model is reached
+  try {
+    state.mb.routing = await post('api/routing', body);
+    if (usage === 'embedding') state.mb.emb = await api('api/meaning').catch(() => state.mb.emb);
+    mbRenderUsages(); mbRenderRows();
+    if (usage === 'embedding') { toast(t('Search by meaning → {m}. The memory is re-indexed in the background.', { m: model })); return; }
+    const where = state.mb.scope === 'global' ? t('global default') : t('space {n}', { n: (state.spaces.find(s => s.id === +state.mb.scope)?.name || state.mb.scope) });
+    toast(t('“{u}” → {m} · {w}', { u: t(MB_USAGES.find(u => u.id === usage).label), m: model, w: where }));
+  } catch (e) { toast(e.message); }
+}
+/** The Europe (GDPR) lock: the real server-side lock (nothing leaves Europe, enforced at runtime) *and* a trust
+ *  floor of 5 that filters out non-compliant models and force-swaps any non-compliant current selection. */
+async function mbToggleLock(e) {
+  state.mb.lock = e.target.checked;
+  $('#mb-lock').classList.toggle('on', state.mb.lock); $('#mb-lock').classList.toggle('off', !state.mb.lock);
+  try { showEu(await post('api/sovereign/lock', { only: state.mb.lock })); } catch (err) { toast(err.message); }
+  if (!state.mb.lock) { state.mb.ftl = 0; $('#mb-ftl').value = '0'; mbRenderRows(); return; }
+  state.mb.ftl = 5; $('#mb-ftl').value = '5';
+  const P = mbProvMap(), swaps = [];
+  for (const u of MB_USAGES) {
+    const eff = mbEff(u.id); if (!eff.routed || !eff.model) continue;
+    const cur = state.mb.cat.models.find(m => mbId(m) === eff.model); if (!cur) continue;
+    if (mbCompliant(P[cur.prov])) continue;
+    const repl = mbBestCompliant(u.id); if (!repl) continue;
+    if (u.id === 'embedding' && state.mb.scope !== 'global') continue; // shared by every space: swapped from the global default
+    const src = mbSource(repl, P[repl.prov]); const body = { usage: u.id, account: src.account, model: mbId(repl) };
+    if ((u.id === 'voice' || u.id === 'embedding') && repl.via) body.via = repl.via;
+    if (state.mb.scope !== 'global') body.space = state.mb.scope;
+    try { state.mb.routing = await post('api/routing', body); swaps.push(`${t(u.label)} → ${repl.name}`); } catch {}
+  }
+  mbRenderUsages(); mbRenderRows();
+  toast(swaps.length ? t('Europe lock · swapped: {s}', { s: swaps.join(' · ') }) : t('Europe lock on — selections already compliant'));
+}
+
 $('#doctor-run').onclick = async () => {
   const b = $('#doctor-run'); b.disabled = true; b.textContent = 'Checking…';
   const ul = $('#doctor'); ul.hidden = false; ul.innerHTML = '<li class="info">Running checks (this can take a few seconds)…</li>';
@@ -3482,7 +4300,9 @@ async function installFromLink(src, name, headers) {
   if (!/^https:\/\/[^\s/]+\.[^\s/]+/i.test(src || '')) { toast(t('Not a connector address: {src}', { src: src || '' })); return; }
   if (/^https:\/\/(www\.)?github\.com\//i.test(src)) {
     await connectorDialog();
-    $('#conn-gh').value = src; $('#conn-gh-go').click();
+    // filled in, not fetched: the person presses the button after reading the address (audit S14)
+    $('#conn-gh').value = src; $('#conn-gh-go').focus();
+    toast(t('Check the address, then press the button to download it.'));
     return;
   }
   name = (name || new URL(src).hostname.replace(/^(www|mcp|api)\./, '').split('.')[0]).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'connector';
@@ -3538,7 +4358,7 @@ function renderStore(box, st) {
     + `<div id="store-conn-list">` + (st.connectors.length ? st.connectors.map(connItem).join('')
       : `<p class="muted small">${esc(t('The store has no connector yet. The connectors listed in the FAQ arrive once the server is updated.'))}</p>`) + '</div>'
     + (hasApps ? `<div id="store-apps-list" hidden>${st.apps.map(appItem).join('')}</div>` : '')
-    + (mine.length ? `<p class="muted small">${esc(t('Share one of your connectors with everyone on this server (the admin reviews it first):'))}</p><form class="row wrap" id="store-conn-send"><select id="store-conn-pick">${mine.map(n => `<option class="no-i18n">${esc(n)}</option>`).join('')}</select>
+    + (mine.length ? `<p class="muted small">${esc(t('Share one of your connectors with everyone on this server (the admin reviews it first):'))}</p><form class="row wrap" id="store-conn-send"><select id="store-conn-pick" aria-label="${esc(t('Connector'))}">${mine.map(n => `<option class="no-i18n">${esc(n)}</option>`).join('')}</select>
         <input id="store-conn-note" placeholder="${esc(t('A word for the admin (optional)'))}" maxlength="500"><button class="btn small">${esc(t('Send for review'))}</button></form>
         <p class="muted small">${esc(t('Shares how to install it (its GitHub repository or address), never your keys or header values.'))}</p>` : '')
     + sent.map(x => `<p class="small muted"><span class="no-i18n">${esc(x.name)}</span>: ${esc(storeStatus(x))}</p>`).join('');
@@ -3738,6 +4558,17 @@ function showEu(d) {
   st.title = d.outside.length ? d.outside.map(o => o.name).join(', ')
     : t('Everything stays in Europe: {provider}, under the GDPR.', { provider: svc ? `${window.t(svc.name)} (${window.t(svc.country)})` : '' }) + (d.only ? ' ' + t('Locked: nothing can be sent outside Europe.') : '');
   euService(); euFields();
+  mbSyncLock(); // the model table's Europe lock mirrors this real server lock
+}
+/** Reflect the server-side Europe lock (state.eu.only) in the Models tab's lock toggle. */
+function mbSyncLock() {
+  if (!state.mb) return;
+  const only = !!state.eu?.only; state.mb.lock = only;
+  const cb = $('#mb-lock-cb'); if (!cb) return;
+  cb.checked = only;
+  $('#mb-lock')?.classList.toggle('on', only); $('#mb-lock')?.classList.toggle('off', !only);
+  if (only && state.mb.ftl < 5) { state.mb.ftl = 5; const f = $('#mb-ftl'); if (f) f.value = '5'; }
+  if (state.mb.cat) mbRenderRows();
 }
 function euService() {
   const s = (state.eu?.services || []).find(x => x.id === $('#eu-service').value); if (!s) return;
@@ -3755,7 +4586,7 @@ function euTiers() {
   const tested = state.euTest?.service === id ? state.euTest : null;
   const tiers = tested?.tiers || (d.active && id === d.service && Object.keys(d.tiers).length ? d.tiers : s.fallback || {});
   const prices = { ...(d.prices || {}), ...(tested?.prices || {}) };
-  const usd = v => v == null ? '?' : '$' + (v < 0.01 ? v.toFixed(4) : v < 1 ? v.toFixed(3) : v.toFixed(2));
+  const usd = v => v == null ? '?' : usdf(v, v < 0.01 ? 4 : v < 1 ? 3 : 2);
   const rows = ['fast', 'standard', 'deep'].filter(k => tiers[k]).map(k => {
     const p = prices[tiers[k]], msg = p ? (EU_MSG.in * p[0] + EU_MSG.out * p[1]) / 1e6 : null;
     return `<tr><td>${esc(window.t(k))}</td><td><code>${esc(tiers[k])}</code></td><td>${p ? usd(p[0]) : '?'}</td><td>${p ? usd(p[1]) : '?'}</td><td>${usd(msg)}</td><td>${msg == null ? '?' : usd(msg * EU_MSG.perMonth)}</td></tr>`;
@@ -3839,7 +4670,11 @@ const accBody = () => ({ name: $('#acc-name').value.trim(), kind: $('#acc-kind')
   key: $('#acc-key').value.trim(), token: $('#acc-token').value.trim(), paid: $('#acc-paid').checked,
   admin_key: $('#acc-admin').value.trim(), admin_clear: $('#acc-admin-clear').checked, billing_scope: $('#acc-scope').value.trim(),
   models: { fast: $('#acc-m-fast').value.trim(), standard: $('#acc-m-standard').value.trim(), deep: $('#acc-m-deep').value.trim() } });
-const accClose = () => { $('#acc-form').hidden = true; $('#acc-add').hidden = false; state.accEditing = null; $('#acc-key').value = $('#acc-token').value = $('#acc-admin').value = ''; };
+const accClose = () => {
+  $('#acc-form').hidden = true; $('#acc-add').hidden = false; $('#acc-form-h').hidden = true; state.accEditing = null;
+  $('#acc-key').value = $('#acc-token').value = $('#acc-admin').value = '';
+  if (state.mb?.tab === 'providers') $('#acc-card').hidden = true; // on the Providers tab the form is the only part shown
+};
 $('#acc-add').onclick = () => accEdit(null);
 $('#acc-cancel').onclick = accClose;
 $('#acc-kind').onchange = $('#acc-service').onchange = accKind;
@@ -3857,13 +4692,14 @@ $('#acc-form').onsubmit = async e => {
   try {
     await post(id ? `api/accounts/${encodeURIComponent(id)}` : 'api/accounts', accBody());
     accClose(); toast(t('Account saved. Choose it in a space\'s settings.')); await loadAccCard();
+    await mbRefreshProviders();
   } catch (err) { st.className = 'bad small'; st.textContent = err.message; }
   finally { b.disabled = false; }
 };
 $('#acc-delete').onclick = async e => {
   const b = e.currentTarget, a = state.accEditing; if (!a) return;
   if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = t('Delete it? Its spaces go back to the main settings'); return; }
-  try { await post(`api/accounts/${encodeURIComponent(a.id)}/delete`); accClose(); toast(t('Account deleted.')); await Promise.all([loadAccCard(), loadSpaces()]); }
+  try { await post(`api/accounts/${encodeURIComponent(a.id)}/delete`); accClose(); toast(t('Account deleted.')); await Promise.all([loadAccCard(), loadSpaces()]); await mbRefreshProviders(); }
   catch (err) { $('#acc-state').className = 'bad small'; $('#acc-state').textContent = err.message; }
 };
 
@@ -3875,7 +4711,7 @@ const MEM_HELP = {
   'HEARTBEAT.md': 'Checklist for periodic checks (needs TALIXIO_HEARTBEAT_MINUTES). It only messages you when something needs attention.',
 };
 async function loadSkills() {
-  const { skills } = await api('api/skills');
+  const skills = (await api('api/skills')).skills.filter(k => k.kind !== 'role'); // roles are managed in Pilotage → Roles (and the assessor cannot be deleted): audit U13
   state.memInfo.skills = skills.length; renderMemNav();
   const box = $('#skills'); box.innerHTML = '';
   if (!skills.length) { box.innerHTML = '<div class="placeholder">No skills yet. After multi-step tasks it writes down how it did them, so next time is faster and closer to what you want.</div>'; return; }
@@ -4058,10 +4894,18 @@ function loadMemoryTab() {
 // ---- library ----
 const KIND_LABEL = { pdf: 'PDF', office: 'DOC', text: 'TXT', audio: 'AUD', image: 'IMG', other: 'FILE' };
 const FOLDER_SVG = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
-const fmtSize = b => b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b / 1024) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
+const fmtSize = b => { const nf1 = new Intl.NumberFormat(LOCALE.length ? LOCALE : 'en-US', { maximumFractionDigits: 1, minimumFractionDigits: 1 }), fr = LANG === 'fr'; // "60 o", "1,2 Mo" in French (audit U18)
+  return b < 1024 ? b + (fr ? ' o' : ' B') : b < 1048576 ? Math.round(b / 1024) + (fr ? ' ko' : ' KB') : nf1.format(b / 1048576) + (fr ? ' Mo' : ' MB'); };
 const fmtDate = ts => new Date(ts * 1000).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' });
 const joinPath = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
-const lib = { folder: '/', tree: [], timer: null, file: null, inline: null };
+const lib = { folder: '/', tree: [], timer: null, file: null, inline: null, picked: new Set(), pickedF: new Set(), flat: false, last: null, rows: [] };
+/** Column sort of the folder view (this browser). k: name | kind | size | changed | by; d: 1 up, -1 down. */
+lib.sort = (() => { try { const v = JSON.parse(localStorage.getItem(LSK + 'talixio.lib.sort') || ''); if (['name', 'kind', 'size', 'changed', 'by'].includes(v.k)) return { k: v.k, d: v.d === -1 ? -1 : 1 }; } catch {} return { k: 'name', d: 1 }; })();
+/** Filters on the folder's files (this visit only) and the grouping (kept on this device). */
+lib.filter = { kind: '', when: '', state: '' };
+lib.group = (() => { try { const g = localStorage.getItem(LSK + 'talixio.lib.group'); return ['kind', 'date'].includes(g) ? g : ''; } catch { return ''; } })();
+lib.view = (() => { try { const v = localStorage.getItem(LSK + 'talixio.lib.view'); return ['list', 'tiles'].includes(v) ? v : 'details'; } catch { return 'details'; } })();
+const isPhone = () => matchMedia('(max-width:760px)').matches;
 const libSearch = { ctl: null, q: '', folder: '/', results: null, phase: '' };
 
 function libFolderFromHash() {
@@ -4070,17 +4914,63 @@ function libFolderFromHash() {
 }
 /** /FAQ and below: the notes about Talixio, kept up to date by each version. */
 const isReadonly = p => p === '/FAQ' || (p || '').startsWith('/FAQ/');
+lib.depth = 0; lib.goingBack = false;
+const libTreeShown = () => { let v = null; try { v = localStorage.getItem(LSK + 'talixio.lib.tree'); } catch {} return v === null ? innerWidth >= (lib.preview && !isPhone() ? 1500 : 1100) : v === '1'; };
+function libTreeApply() { const on = libTreeShown() && !isPhone(); document.querySelector('#view-library .lib')?.classList.toggle('no-tree', !on); const b = $('#lib-tree-btn'); b.setAttribute('aria-pressed', on); b.classList.toggle('on', on); }
+$('#lib-tree-btn').onclick = () => { try { localStorage.setItem(LSK + 'talixio.lib.tree', libTreeShown() ? '0' : '1'); } catch {} libTreeApply(); };
+window.addEventListener('resize', () => { if (!$('#view-library').hidden) libTreeApply(); });
+lib.preview = (() => { try { return localStorage.getItem(LSK + 'talixio.lib.preview') === '1'; } catch { return false; } })();
+lib.cur = null; // the file shown in the preview pane
+const libPrevOn = () => lib.preview && !isPhone();
+function libPrevApply() {
+  const on = libPrevOn(), box = $('#view-library .lib');
+  box.classList.toggle('has-prev', on); $('#lib-prev').hidden = !on;
+  const b = $('#lib-prev-btn'); b.setAttribute('aria-pressed', on); b.classList.toggle('on', on);
+  $('#lib-list').querySelectorAll('.lib-row[data-id]').forEach(r => r.classList.toggle('cur', on && +r.dataset.id === lib.cur));
+  if (on) libPrevFill();
+}
+$('#lib-prev-btn').onclick = () => { lib.preview = !lib.preview; try { localStorage.setItem(LSK + 'talixio.lib.preview', lib.preview ? '1' : '0'); } catch {} libTreeApply(); libPrevApply(); };
+let libPrevSeq = 0;
+async function libPrevFill() {
+  const box = $('#lib-prev'), seq = ++libPrevSeq;
+  const f = lib.data?.files?.find(x => x.id === lib.cur);
+  if (!f) { box.innerHTML = `<p class="lib-prev-empty">${esc(t('Select a file to see it here.'))}</p>`; return; }
+  const shown = f.kind === 'image' || f.kind === 'pdf' || f.kind === 'office';
+  box.innerHTML = `<div class="lib-prev-top">${shown ? `<img src="api/files/${f.id}/thumb" alt="">` : f.kind === 'audio' ? `<audio controls preload="none" src="${esc(fileUrl(f))}"></audio>` : `<span class="ico big">${esc(fileLabel(f))}</span>`}</div>`
+    + `<h3 class="no-i18n">${esc(f.name)}</h3>`
+    + `<dl><dt>${esc(t('Type'))}</dt><dd>${esc(fileLabel(f))}</dd><dt>${esc(t('Size'))}</dt><dd>${esc(fmtSize(f.size))}</dd><dt>${esc(t('Modified'))}</dt><dd>${esc(fmtDayTime(f.changed || f.created))}</dd>`
+    + (f.changed_by ? `<dt>${esc(t('By'))}</dt><dd class="no-i18n">${esc(f.changed_by)}</dd>` : '') + `<dt>${esc(t('Folder'))}</dt><dd class="no-i18n">${esc(f.folder)}</dd></dl>`
+    + `<div class="lib-prev-act"><button type="button" class="btn small primary" data-open>${esc(t('Open'))}</button><a class="btn small" href="${esc(fileUrl(f))}?download=1" download="${esc(f.name)}">${esc(t('Download'))}</a></div>`
+    + (['text', 'office', 'pdf'].includes(f.kind) || f.note ? '<pre class="lib-prev-text" hidden></pre>' : '');
+  box.querySelector('[data-open]').onclick = () => openFile(f.id);
+  box.querySelector('img')?.addEventListener('error', e => e.target.replaceWith(Object.assign(document.createElement('span'), { className: 'ico big', textContent: fileLabel(f) })));
+  const pre = box.querySelector('.lib-prev-text');
+  if (pre && f.status !== 'failed') {
+    try { const d = await api(`api/files/${f.id}/text`); if (seq !== libPrevSeq || !d.text) return; pre.textContent = d.text.slice(0, 1500) + (d.text.length > 1500 ? '…' : ''); pre.hidden = false; } catch {}
+  }
+}
+function libCur(id) { lib.cur = id; libPrevApply(); }
+window.addEventListener('resize', () => { if (!$('#view-library').hidden) libPrevApply(); });
+function libUp() { if (lib.folder !== '/') libGo(lib.folder.split('/').slice(0, -1).join('/') || '/'); }
+$('#lib-up').onclick = libUp;
+$('#lib-back').onclick = () => { if (lib.depth > 0) { lib.goingBack = true; history.back(); } };
+function libNavUpdate() { $('#lib-up').disabled = lib.folder === '/'; $('#lib-back').disabled = lib.depth <= 0; libTreeApply(); }
 function libGo(folder) { location.hash = '#library' + (folder === '/' ? '' : folder.split('/').map(encodeURIComponent).join('/')); }
 
 async function loadLibrary() {
   const was = lib.folder;
   lib.folder = libFolderFromHash() || '/';
+  if (was !== undefined && was !== lib.folder) { lib.depth = Math.max(0, lib.depth + (lib.goingBack ? -1 : 1)); } lib.goingBack = false;
   if (was !== undefined && was !== lib.folder && (libSearch.phase || libRegex.on)) libSearchClose(); // another folder: its content, not old results
-  const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder))]);
+  if (was !== undefined && was !== lib.folder) lib.flat = false; // 'everything below' belongs to the folder it was asked in
+  const [tree, list] = await Promise.all([api('api/library/tree'), api('api/library?folder=' + encodeURIComponent(lib.folder) + (lib.flat ? '&flat=1' : ''))]);
   lib.tree = tree.tree; lib.trash = tree.stats.trash || 0; lib.shared = list.shared;
-  $('#lib-trash').textContent = lib.trash ? `${t('Trash')} (${lib.trash})` : t('Trash'); lib.level = list.level || 'internal';
+  lib.level = list.level || 'internal';
+  if (was !== lib.folder) lib.filter = { kind: '', when: '', state: '' }; // a filter belongs to the folder it was set in
   lib.folder = list.folder; lib.readonly = !!list.readonly;
-  for (const b of ['#lib-upload', '#lib-newnote', '#lib-newfolder']) $(b).hidden = lib.readonly;
+  libNavUpdate();
+  if (lib.cur != null && !list.files.some(x => x.id === lib.cur)) lib.cur = null;
+  $('#lib-add').hidden = lib.readonly;
   const st = list.stats;
   if (st.files) {
     const full = `${nf.format(st.files)} files · ${fmtSize(st.bytes)}${st.failed ? ' ' + t('· {a} unreadable', { a: st.failed }) : ''}. ${st.pending ? t('Reading {a} new file{b} to index…', { a: st.pending, b: st.pending > 1 ? 's' : '' }) : t('Everything is searchable, by you and by the assistant.')}`;
@@ -4089,7 +4979,7 @@ async function loadLibrary() {
     $('#lib-stats').setAttribute('aria-label', full);
   } else { $('#lib-stats').textContent = t('Your documents, notes and recordings. Everything is searchable, by you and by the assistant.'); $('#lib-stats').removeAttribute('aria-label'); }
   $('#folder-list').innerHTML = lib.tree.map(t => `<option value="${esc(t.path)}">`).join('');
-  renderTree(); renderCrumbs(); renderList(list);
+  renderTree(); renderCrumbs(); renderList(list); libSelUpdate();
   if (!libSearch.phase && !libRegex.on) { $('#lib-results').hidden = true; $('#lib-list').hidden = false; } // no search: show the folder
   // the Library tab reopens the last folder; the breadcrumb's "Library" goes to the top
   document.querySelectorAll('a[data-view=library]').forEach(a => { a.href = '#library' + (lib.folder === '/' ? '' : lib.folder.split('/').map(encodeURIComponent).join('/')); });
@@ -4102,6 +4992,16 @@ async function loadLibrary() {
 /** Folders opened in the tree (this browser); the current folder's parents are always open. */
 const treeOpen = (() => { try { return new Set(JSON.parse(localStorage.getItem(LSK + 'talixio.tree.open') || '[]')); } catch { return new Set(); } })();
 const saveTreeOpen = () => { try { localStorage.setItem(LSK + 'talixio.tree.open', JSON.stringify([...treeOpen])); } catch {} };
+/** Pinned folders (this device): a short list at the top of the tree. */
+const libPins = (() => { try { const a = JSON.parse(localStorage.getItem(LSK + 'talixio.lib.pins') || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string') : []; } catch { return []; } })();
+const libPinned = p => libPins.includes(p);
+function libTogglePin(p) {
+  const i = libPins.indexOf(p); if (i >= 0) libPins.splice(i, 1); else libPins.push(p);
+  try { localStorage.setItem(LSK + 'talixio.lib.pins', JSON.stringify(libPins)); } catch {}
+  renderTree(); toast(i >= 0 ? t('Unpinned') : t('Pinned to the tree'));
+}
+const libPinItem = p => ({ label: libPinned(p) ? t('Unpin from the tree') : t('Pin to the tree'), run: () => libTogglePin(p) });
+const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M9 3h6l-1 7 3 3H7l3-3z"/></svg>';
 const CHEVRON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
 
 function renderTree() {
@@ -4114,11 +5014,14 @@ function renderTree() {
   const row = (path, name, depth, count, kids) => `<div class="tree-row${path === lib.folder ? ' active' : ''}" style="padding-left:${(depth - 1) * 14}px">`
     + (kids ? `<button class="tw${treeOpen.has(path) ? ' open' : ''}" type="button" data-toggle="${esc(path)}" aria-expanded="${treeOpen.has(path)}" aria-label="${esc(t(treeOpen.has(path) ? 'Fold {name}' : 'Unfold {name}', { name }))}">${CHEVRON_SVG}</button>` : '<span class="tw"></span>')
     + `<a href="#" data-path="${esc(path)}" class="${path === lib.folder ? 'active' : ''}">${FOLDER_SVG}<span>${esc(name)}</span>${count ? `<small>${count}</small>` : ''}</a></div>`;
+  const pins = libPins.map(p => lib.tree.find(x => x.path === p)).filter(Boolean); // a deleted folder just disappears from the list
   const anyOpen = lib.tree.some(t => treeOpen.has(t.path) && hasKids.has(t.path));
   nav.innerHTML = `<div class="tree-head"><a href="#" data-path="/" class="${lib.folder === '/' ? 'active' : ''}">${FOLDER_SVG}<span>${esc(t('All files'))}</span>${total ? `<small>${total}</small>` : ''}</a>`
     + (anyOpen ? `<button class="tw fold-all" type="button" data-fold-all title="${esc(t('Fold every folder'))}" aria-label="${esc(t('Fold every folder'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11l5-5 5 5M7 18l5-5 5 5"/></svg></button>` : '') + '</div>'
+    + (pins.length ? `<div class="tree-pins" role="group" aria-label="${esc(t('Favourites'))}"><div class="tree-pins-head">${esc(t('Favourites'))}</div>${pins.map(x => `<div class="tree-row pin"><span class="tw"></span><a href="#" data-path="${esc(x.path)}" class="${x.path === lib.folder ? 'active' : ''}" title="${esc(x.path)}">${PIN_SVG}<span class="no-i18n">${esc(x.name)}</span></a><button type="button" class="tw unpin" data-unpin="${esc(x.path)}" aria-label="${esc(t('Unpin from the tree'))}" title="${esc(t('Unpin from the tree'))}">✕</button></div>`).join('')}</div>` : '')
     + lib.tree.filter(shown).map(x => row(x.path, x.name, x.depth, x.total, hasKids.has(x.path))).join('')
     + `<a href="#" class="tree-trash" data-trash title="${esc(t('Deleted files, kept {n} days', { n: 30 }))}">${TRASH_SVG}<span>${esc(t('Trash'))}</span>${lib.trash ? `<small>${lib.trash}</small>` : ''}</a>`;
+  nav.querySelectorAll('[data-unpin]').forEach(b => b.onclick = () => libTogglePin(b.dataset.unpin));
   nav.querySelector('[data-trash]').onclick = e => { e.preventDefault(); showLibTrash(); };
   nav.querySelectorAll('a[data-path]').forEach(a => {
     a.onclick = e => { e.preventDefault(); libGo(a.dataset.path); };
@@ -4139,31 +5042,53 @@ function renderCrumbs() {
   $('#lib-crumbs').innerHTML = items.map(([path, name]) => `<li><a href="#" data-path="${esc(path)}">${esc(name)}</a></li>`).join('');
   $('#lib-crumbs').querySelectorAll('a').forEach(a => { a.onclick = e => { e.preventDefault(); libGo(a.dataset.path); }; dropTarget(a, a.dataset.path); });
   if (lib.level && lib.level !== 'internal') $('#lib-crumbs').insertAdjacentHTML('beforeend', `<li class="lvl-crumb"><span class="privacy-badge ${lib.level}">${SHIELD_SVG}<span>${LEVELS[lib.level].label}</span></span></li>`);
-  const fa = $('#lib-folder-actions');
-  const zipName = (lib.folder === '/' ? 'Library' : lib.folder.split('/').pop()) + '-' + new Date().toLocaleDateString('sv-SE') + '.zip';
-  const zip = `<a class="btn small" href="api/library/zip?folder=${encodeURIComponent(lib.folder)}" download="${esc(zipName)}" title="Download this folder and its subfolders as a ZIP">Download zip</a>`;
-  const ask = `<button class="btn small primary" data-a="ask" type="button" title="Ask the assistant about the documents in this folder">Ask about ${lib.folder === '/' ? 'my library' : 'this folder'}</button>`;
-  const owner = lib.folder !== '/' && state.spaces.find(x => x.id && x.folder === lib.folder);
-  const spaceBtn = lib.folder === '/' ? '' : owner ? `<a class="btn small" href="#chat/${esc(owner.slug)}" title="Open the conversation of this folder's space"><i class="space-dot" style="background:${esc(owner.color)};width:9px;height:9px;display:inline-block;margin-right:6px"></i>Open space</a>`
-    : '<button class="btn small" data-a="space" type="button" title="A separate conversation about this folder">New space here</button>';
-  if (lib.readonly) { // read-only: ask and download, nothing that changes it
-    fa.innerHTML = `<span class="pill" title="${esc(t('Kept up to date with each version of Talixio.'))}">${esc(t('Read-only'))}</span>` + ask + zip;
-    fa.querySelector('[data-a=ask]').addEventListener('click', () => { location.hash = '#chat'; const i = $('#input'); i.value = `From my documents in ${lib.folder}: `; autosize(); i.focus(); saveDraft(); });
-    return;
-  }
-  fa.innerHTML = ask + spaceBtn + zip + (lib.folder === '/' ? '' : '<button class="btn small" data-a="share" type="button" title="A link to this folder for people outside">Share</button><button class="btn small" data-a="rename" type="button" title="Rename or move this folder">Rename</button><button class="btn small ghost danger" data-a="delete" type="button" title="Delete this folder">Delete</button>');
-  fa.querySelector('[data-a=share]')?.addEventListener('click', () => openShare({ folder: lib.folder }, lib.folder.split('/').pop()));
-  fa.querySelector('[data-a=space]')?.addEventListener('click', () => openSpaceEditor(null, { folder: lib.folder, name: lib.folder.split('/').pop() }));
-  fa.querySelector('[data-a=ask]').addEventListener('click', () => {
-    location.hash = '#chat';
-    const i = $('#input'); i.value = lib.folder === '/' ? 'From my library: ' : `From my documents in ${lib.folder}: `; autosize(); i.focus(); saveDraft();
-  });
-  fa.querySelector('[data-a=rename]')?.addEventListener('click', () => libInline(lib.folder, 'Folder path', async v => { const { folder } = await post('api/library/folder/move', { from: lib.folder, to: v }); toast('Folder renamed'); libGo(folder); }));
-  fa.querySelector('[data-a=delete]')?.addEventListener('click', async e => {
-    const b = e.currentTarget, node = lib.tree.find(t => t.path === lib.folder), n = node ? node.total : 0;
-    if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = n ? `Delete with its ${n} file${n > 1 ? 's' : ''}?` : 'Confirm delete'; return; }
-    try { const r = await post('api/library/folder/delete', { path: lib.folder, recursive: true }); toast(r.deleted_files ? t('Folder moved to the trash: restorable for {n} days', { n: 30 }) : 'Folder deleted'); libGo(lib.folder.split('/').slice(0, -1).join('/') || '/'); } catch (err) { toast(err.message); }
-  });
+}
+
+/** The ⋮ of the toolbar: what you can do with the folder you are in, and how its list is ordered. */
+function libFolderToolsMenu(btn) {
+  const folder = lib.folder, name = folder === '/' ? 'Library' : folder.split('/').pop();
+  const zipName = name + '-' + new Date().toLocaleDateString('sv-SE') + '.zip';
+  const owner = folder !== '/' && state.spaces.find(x => x.id && x.folder === folder);
+  const ask = () => { location.hash = '#chat'; const i = $('#input'); i.value = folder === '/' ? 'From my library: ' : `From my documents in ${folder}: `; autosize(); i.focus(); saveDraft(); };
+  const sortItem = (k, label) => ({ label: (lib.sort.k === k ? '✓ ' : '') + t(label), run: () => libSortBy(k, lib.sort.k === k ? lib.sort.d : 1) });
+  const items = [
+    { label: folder === '/' ? t('Ask about my library') : t('Ask about this folder'), run: ask },
+    ...(folder === '/' ? [] : [libPinItem(folder)]),
+    ...(folder === '/' || lib.readonly ? [] : [owner ? { label: t('Open space'), run: () => { location.hash = '#chat/' + owner.slug; } } : { label: t('New space here'), run: () => openSpaceEditor(null, { folder, name }) }]),
+    { label: t('Download zip'), href: `api/library/zip?folder=${encodeURIComponent(folder)}`, download: zipName },
+    ...(folder === '/' || lib.readonly ? [] : [
+      { label: t('Share…'), run: () => openShare({ folder }, name) },
+      { label: t('Rename or move'), run: () => libInline(folder, t('Folder path'), async v => { const { folder: nf } = await post('api/library/folder/move', { from: folder, to: v }); toast(t('Folder renamed')); libGo(nf); }) },
+    ]),
+    { sep: true },
+    { label: t('Sort by'), head: true },
+    sortItem('name', 'Name'), sortItem('kind', 'Type'), sortItem('size', 'Size'), sortItem('changed', 'Modified'),
+    { sep: true },
+    { label: t('Shares'), run: () => openSharesManager() },
+    { label: t('Recent changes'), run: () => showLibRecent() },
+    { label: lib.trash ? t('Trash ({n})', { n: lib.trash }) : t('Trash'), run: () => showLibTrash() },
+    ...(folder === '/' || lib.readonly ? [] : [{ sep: true }, { label: t('Delete this folder'), danger: true, run: () => {
+      const node = lib.tree.find(x => x.path === folder), n = node ? node.total : 0;
+      libConfirm(btn, n ? t('Delete {name} with its {n} files?', { name, n }) : t('Delete {name}?', { name }), async () => {
+        try { const r = await post('api/library/folder/delete', { path: folder, recursive: true }); toast(r.deleted_files ? t('Folder moved to the trash: restorable for {n} days', { n: 30 }) : t('Folder deleted')); libGo(folder.split('/').slice(0, -1).join('/') || '/'); } catch (err) { toast(err.message); }
+      });
+    } }]),
+  ];
+  openRowMenu(btn, items);
+}
+/** A destructive action needs a second, explicit click: a small bar under the toolbar. */
+function libConfirm(anchor, message, onYes) {
+  document.querySelector('.lib-confirm')?.remove();
+  const bar = document.createElement('div'); bar.className = 'lib-confirm'; bar.setAttribute('role', 'alertdialog');
+  bar.innerHTML = `<span></span><span class="spacer"></span><button class="btn small danger" type="button" data-y>${esc(t('Delete'))}</button><button class="btn small" type="button" data-n>${esc(t('Cancel'))}</button>`;
+  bar.firstElementChild.textContent = message;
+  bar.querySelector('[data-n]').onclick = () => bar.remove();
+  bar.querySelector('[data-y]').onclick = () => { bar.remove(); onYes(); };
+  $('#lib-toolbar').after(bar); bar.querySelector('[data-n]').focus();
+}
+function libSortBy(k, d) {
+  lib.sort = { k, d }; try { localStorage.setItem(LSK + 'talixio.lib.sort', JSON.stringify(lib.sort)); } catch {}
+  libViewRefresh();
 }
 
 const TRASH_SVG = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
@@ -4326,9 +5251,6 @@ async function openSharesManager() {
   await refresh().catch(e => toast(e.message));
   dlg.showModal();
 }
-$('#lib-shares').onclick = () => openSharesManager();
-$('#lib-trash').onclick = () => showLibTrash();
-$('#lib-recent').onclick = () => showLibRecent();
 $('#viewer-share').onclick = () => lib.file && openShare({ file: lib.file.id }, lib.file.name);
 const isVideo = f => (f.mime || '').startsWith('video/');
 const Library_join = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
@@ -4342,6 +5264,7 @@ function openRowMenu(btn, items) {
   const m = document.createElement('div'); m.className = 'row-menu'; m.setAttribute('role', 'menu'); m._btn = btn;
   for (const it of items) {
     if (it.sep) { const s = document.createElement('div'); s.className = 'row-menu-sep'; m.append(s); continue; }
+    if (it.head) { const h = document.createElement('div'); h.className = 'row-menu-head'; h.textContent = it.label; m.append(h); continue; }
     const a = document.createElement(it.href ? 'a' : 'button');
     if (it.href) { a.href = it.href; if (it.download) a.setAttribute('download', it.download); } else a.type = 'button';
     a.className = 'row-menu-item' + (it.danger ? ' danger' : ''); a.setAttribute('role', 'menuitem'); a.textContent = it.label;
@@ -4361,9 +5284,10 @@ window.addEventListener('scroll', closeRowMenu, true);
 
 // Redraw whatever the library is showing: the regex results when a name search is open, else the folder.
 function libRefresh() { if (libRegex.on) { libRegexSearch(libRegex.q, libRegex.folder); loadLibrary().catch(() => {}); } else loadLibrary(); }
+const libRename = f => libInline(f.name, t('New name'), async v => { if (await withReplace(r => post(`api/files/${f.id}/rename`, { name: v, ...r }))) { toast(t('Renamed')); libRefresh(); } }, false);
 function libFileMenu(btn, f) {
   openRowMenu(btn, [
-    { label: t('Rename'), run: () => libInline(f.name, t('New name'), async v => { if (await withReplace(r => post(`api/files/${f.id}/rename`, { name: v, ...r }))) { toast(t('Renamed')); libRefresh(); } }, false) },
+    { label: t('Rename'), run: () => libRename(f) },
     { label: t('Move to…'), run: () => libInline(f.folder, t('Folder'), async v => { if (await withReplace(r => post(`api/files/${f.id}/move`, { folder: v, ...r }))) { toast(t('Moved to {folder}', { folder: v })); libRefresh(); } }, true) },
     { label: t('Download'), href: `api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1`, download: f.name },
     { label: t('Share…'), run: () => openShare({ file: f.id }, f.name) },
@@ -4375,6 +5299,7 @@ function libFolderMenu(btn, folder, total) {
   const name = folder.split('/').pop();
   openRowMenu(btn, [
     { label: t('Open'), run: () => libGo(folder) },
+    libPinItem(folder),
     { label: t('New file here'), run: () => newNote(folder) },
     { label: t('New folder here'), run: () => libInline(folder + '/', t('New folder path'), async v => { const { folder: nf } = await post('api/library/folder', { path: v }); toast(t('Folder created')); libGo(nf); }, true) },
     { label: t('Rename or move'), run: () => libInline(folder, t('Folder path'), async v => { const { folder: nf } = await post('api/library/folder/move', { from: folder, to: v }); toast(t('Folder renamed')); libGo(nf); }, true) },
@@ -4385,13 +5310,22 @@ function libFolderMenu(btn, folder, total) {
 }
 const KEBAB_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
 
-function fileRow(f, sub) {
-  const el = document.createElement('div'); el.className = 'lib-row'; el.draggable = true; el.tabIndex = 0; el.setAttribute('role', 'button');
+function fileLabel(f) {
   const ext = (f.name.match(/\.([a-z0-9]{1,4})$/i) || [])[1];
-  const label = f.note ? 'NOTE' : isVideo(f) ? 'VID' : ['text', 'office'].includes(f.kind) && ext ? ext.toUpperCase() : KIND_LABEL[f.kind] || 'FILE';
+  return f.note ? 'NOTE' : isVideo(f) ? 'VID' : ['text', 'office'].includes(f.kind) && ext ? ext.toUpperCase() : KIND_LABEL[f.kind] || 'FILE';
+}
+const fmtDayTime = ts => new Date(ts * 1000).toLocaleString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+function fileRow(f, sub, keepCols = false) {
+  const el = document.createElement('div'); el.className = 'lib-row'; el.draggable = true; el.tabIndex = 0; el.setAttribute('role', 'button');
+  const label = fileLabel(f), cols = !sub || keepCols; // search results keep their own layout; the flat listing keeps the table, with the folder as a subtitle
+  if (cols) el.dataset.id = f.id;
   const ico = f.kind === 'image' || f.kind === 'pdf' ? `<img src="api/files/${f.id}/thumb" alt="" loading="lazy">` : label;
   const status = f.status === 'pending' || f.status === 'processing' ? '<span class="pill pending">reading…</span>' : f.status === 'failed' ? '<span class="pill failed">unreadable</span>' : '';
-  el.innerHTML = `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>`
+  const who = f.changed_by ? t(RECENT_BY[f.changed_by] || f.changed_by) : '';
+  el.innerHTML = (cols ? `<span class="c-pick"><input type="checkbox" class="pick" aria-label="${esc(t('Select {name}', { name: f.name }))}"></span>` : '')
+    + `<span class="ico">${ico}</span><span class="name"><b>${esc(f.name)}</b><span class="${sub ? 'snippet' : ''}">${sub ? esc(sub) : `${fmtSize(f.size)} · ${fmtDate(f.changed || f.created)}${f.duration ? ' · ' + Math.round(f.duration / 60) + ' min' : ''}`}</span></span>`
+    + (cols ? `<span class="c-type">${esc(label)}</span><span class="c-size">${esc(fmtSize(f.size))}</span><span class="c-mod" title="${esc(fmtDayTime(f.changed || f.created))}">${esc(fmtDate(f.changed || f.created))}</span><span class="c-by no-i18n">${esc(who)}</span>` : '')
     + `<span class="row-end">${status}${lib.shared?.files?.includes(f.id) ? `<span class="shared-mark" title="${esc(t('Shared by link'))}">${LINK_SVG}</span>` : ''}<a class="btn ghost icon dl" href="api/files/${f.id}/file/${encodeURIComponent(f.name)}?download=1" download="${esc(f.name)}" aria-label="Download ${esc(f.name)}" title="Download">${DL_SVG}</a>`
     + (lib.readonly ? '' : `<button type="button" class="btn ghost icon kebab" aria-label="${esc(t('Actions'))}" aria-haspopup="menu" title="${esc(t('Actions'))}">${KEBAB_SVG}</button>`) + `</span>`;
   el.querySelector('.dl').onclick = e => e.stopPropagation();
@@ -4412,33 +5346,267 @@ function fileRow(f, sub) {
     el.classList.add('has-suggestion'); el.append(box);
   }
   const th = el.querySelector('.ico img'); if (th) th.onerror = () => th.replaceWith(label);
-  el.onclick = () => openFile(f.id);
-  el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFile(f.id); } };
-  el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/x-talixio-file', String(f.id)); e.dataTransfer.effectAllowed = 'move'; });
+  if (cols) {
+    const cb = el.querySelector('.pick'); cb.checked = lib.picked.has(f.id);
+    cb.onclick = e => { e.stopPropagation(); libPick(f.id, cb.checked, e.shiftKey); };
+  }
+  el.onclick = e => {
+    if (cols && (e.ctrlKey || e.metaKey)) return libPick(f.id, !lib.picked.has(f.id), false); // explorer: Ctrl/Cmd-click selects
+    if (cols && e.shiftKey && lib.last != null) return libPick(f.id, true, true);
+    if (cols && lib.picked.size && isPhone()) return libPick(f.id, !lib.picked.has(f.id), false); // phone: once selecting, a tap selects
+    if (cols && isPhone() && lib.view !== 'tiles' && e.target.closest('.ico')) return libPick(f.id, !lib.picked.has(f.id), false); // phone: the icon selects
+    if (cols && libPrevOn() && !e.target.closest('.kebab,.pick')) { libCur(f.id); return; } // preview pane: a click shows it, a double click opens
+    openFile(f.id);
+  };
+  if (cols) el.ondblclick = () => { if (libPrevOn()) openFile(f.id); };
+  el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (e.key === ' ' && cols) libPick(f.id, !lib.picked.has(f.id), false); else openFile(f.id); } };
+  el.addEventListener('dragstart', e => {
+    const ids = cols && lib.picked.has(f.id) && lib.picked.size > 1 ? [...lib.picked] : [f.id]; // drag the whole selection
+    e.dataTransfer.setData('text/x-talixio-file', String(f.id)); e.dataTransfer.setData('text/x-talixio-files', ids.join(',')); e.dataTransfer.effectAllowed = 'move';
+  });
   return el;
 }
 
+const SORT_COLS = [['name', 'Name'], ['kind', 'Type'], ['size', 'Size'], ['changed', 'Modified'], ['by', 'By']];
+const kindOf = f => isVideo(f) ? 'video' : f.kind || 'other';
+const LIB_KINDS = [['', 'All types'], ['pdf', 'PDF'], ['office', 'Office'], ['text', 'Text and notes'], ['image', 'Images'], ['audio', 'Audio'], ['video', 'Video'], ['other', 'Other']];
+const LIB_WHEN = [['', 'Any date'], ['1', 'Today'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['365', 'Last year']];
+const LIB_STATE = [['', 'Any state'], ['shared', 'Shared by link'], ['problem', 'Unreadable or being read'], ['suggested', 'With a suggested place']];
+const LIB_VIEWS = [['details', 'Details'], ['list', 'Compact list'], ['tiles', 'Tiles']];
+const LIB_GROUP = [['', 'No grouping'], ['kind', 'By type'], ['date', 'By date']];
+const LIB_SORTS = [['name', 'Name'], ['kind', 'Type'], ['size', 'Size'], ['changed', 'Modified'], ['by', 'By']];
+function libKeep(f) {
+  const { kind, when, state } = lib.filter;
+  if (kind && kindOf(f) !== kind) return false;
+  if (when && (f.changed || f.created) < Date.now() / 1000 - (+when === 1 ? 86400 : +when * 86400)) return false;
+  if (state === 'shared' && !lib.shared?.files?.includes(f.id)) return false;
+  if (state === 'problem' && !['pending', 'processing', 'failed'].includes(f.status)) return false;
+  if (state === 'suggested' && !f.suggestion) return false;
+  return true;
+}
+/** Files cut into the groups the list shows: [[label|null, files]]. */
+function libGroups(files) {
+  if (!lib.group) return [[null, files]];
+  const now = Date.now() / 1000, buckets = new Map();
+  const labelOf = lib.group === 'kind' ? f => t(KIND_LABELS_LONG[kindOf(f)] || 'Other') : f => { const age = now - (f.changed || f.created); return age < 86400 ? t('Today') : age < 7 * 86400 ? t('This week') : age < 30 * 86400 ? t('This month') : t('Earlier'); };
+  for (const f of files) { const l = labelOf(f); if (!buckets.has(l)) buckets.set(l, []); buckets.get(l).push(f); }
+  const out = [...buckets.entries()];
+  if (lib.group === 'kind') out.sort((a, b) => a[0].localeCompare(b[0]));
+  else { const order = [t('Today'), t('This week'), t('This month'), t('Earlier')]; out.sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])); }
+  return out;
+}
+const KIND_LABELS_LONG = { pdf: 'PDF', office: 'Office', text: 'Text and notes', image: 'Images', audio: 'Audio', video: 'Video', other: 'Other' };
+function libOrdered(list) {
+  const { k, d } = lib.sort, cmp = (x, y) => (typeof x === 'string' ? x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }) : x - y);
+  const key = { name: f => f.name, kind: f => fileLabel(f), size: f => f.size, changed: f => f.changed || f.created, by: f => f.changed_by || '' }[k];
+  const files = list.files.filter(libKeep).sort((a, b) => (cmp(key(a), key(b)) || cmp(a.name, b.name)) * d);
+  const folders = [...list.folders].sort((a, b) => k === 'size' ? (a.total - b.total || cmp(a.name, b.name)) * d : k === 'changed' ? ((a.changed || 0) - (b.changed || 0) || cmp(a.name, b.name)) * d : cmp(a.name, b.name) * (k === 'name' ? d : 1)); // folders stay on top
+  return { folders, files };
+}
+
 function renderList(list) {
+  lib.data = list;
   const box = $('#lib-list'); box.innerHTML = '';
-  for (const t of list.folders) {
-    const el = document.createElement('a'); el.href = '#'; el.className = 'lib-row';
-    el.innerHTML = `<span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(t.name)}</b><span>${t.total} file${t.total === 1 ? '' : 's'}</span></span><span class="row-end">${lib.shared?.folders?.includes(t.path) ? `<span class="shared-mark" title="${esc(window.t('Shared by link'))}">${LINK_SVG}</span>` : ''}`
+  box.classList.remove('v-details', 'v-list', 'v-tiles'); box.classList.add('v-' + lib.view);
+  document.querySelectorAll('.lib-views [data-view]').forEach(b => { b.classList.toggle('on', b.dataset.view === lib.view); b.setAttribute('aria-pressed', b.dataset.view === lib.view); });
+  const { folders, files } = libOrdered(list);
+  const groups = libGroups(files);
+  lib.rows = groups.flatMap(([, g]) => g.map(f => f.id));
+  for (const id of [...lib.picked]) if (!lib.rows.includes(id)) lib.picked.delete(id); // gone, moved or deleted
+  for (const pth of [...lib.pickedF]) if (!folders.some(x => x.path === pth)) lib.pickedF.delete(pth);
+  if ((folders.length || files.length) && lib.view === 'details') {
+    const head = document.createElement('div'); head.className = 'lib-cols'; head.setAttribute('role', 'row');
+    head.innerHTML = `<span class="c-pick"><input type="checkbox" id="lib-pick-all" aria-label="${esc(t('Select all'))}"></span><span></span>`
+      + SORT_COLS.map(([k, label]) => `<button type="button" class="col-${k}${lib.sort.k === k ? ' on' : ''}" data-sort="${k}" aria-sort="${lib.sort.k === k ? (lib.sort.d === 1 ? 'ascending' : 'descending') : 'none'}">${esc(t(label))}<i aria-hidden="true">${lib.sort.k === k ? (lib.sort.d === 1 ? '▲' : '▼') : ''}</i></button>`).join('') + '<span></span>';
+    head.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => libSortBy(b.dataset.sort, lib.sort.k === b.dataset.sort ? -lib.sort.d : 1));
+    head.querySelector('#lib-pick-all').onclick = e => { lib.picked = new Set(e.target.checked ? lib.rows : []); lib.pickedF = new Set(e.target.checked ? folders.map(x => x.path) : []); lib.last = null; libSelUpdate(); };
+    box.append(head);
+  }
+  for (const t of folders) {
+    const el = document.createElement('a'); el.href = '#'; el.className = 'lib-row lib-folder';
+    el.innerHTML = `<span class="c-pick"><input type="checkbox" class="pick" aria-label="${esc(window.t('Select'))}"></span><span class="ico folder">${FOLDER_SVG}</span><span class="name"><b>${esc(t.name)}</b><span>${t.total} file${t.total === 1 ? '' : 's'}</span></span>`
+      + `<span class="c-type">${esc(window.t('Folder'))}</span><span class="c-size">${esc(t.total === 1 ? window.t('1 file') : window.t('{n} files', { n: t.total }))}</span><span class="c-mod">${t.changed ? esc(fmtDate(t.changed)) : ''}</span><span class="c-by"></span>`
+      + `<span class="row-end">${lib.shared?.folders?.includes(t.path) ? `<span class="shared-mark" title="${esc(window.t('Shared by link'))}">${LINK_SVG}</span>` : ''}`
       + (lib.readonly ? '' : `<button type="button" class="btn ghost icon kebab" aria-label="${esc(window.t('Actions'))}" aria-haspopup="menu" title="${esc(window.t('Actions'))}">${KEBAB_SVG}</button>`) + `</span>`;
-    el.onclick = e => { e.preventDefault(); libGo(t.path); };
+    el.dataset.path = t.path; el.dataset.total = t.total;
+    const fcb = el.querySelector('.pick'); fcb.checked = lib.pickedF.has(t.path);
+    fcb.onclick = e => { e.stopPropagation(); fcb.checked ? lib.pickedF.add(t.path) : lib.pickedF.delete(t.path); libSelUpdate(); };
+    el.onclick = e => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey || ((lib.picked.size || lib.pickedF.size) && isPhone())) { lib.pickedF.has(t.path) ? lib.pickedF.delete(t.path) : lib.pickedF.add(t.path); libSelUpdate(); return; }
+      libGo(t.path);
+    };
     el.querySelector('.kebab')?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); libFolderMenu(e.currentTarget, t.path, t.total); });
     dropTarget(el, t.path);
     box.append(el);
   }
-  const ready = list.files.filter(f => f.suggestion);
+  const ready = files.filter(f => f.suggestion);
   if (lib.folder === '/Inbox' && ready.length > 1) {
     const bar = document.createElement('div'); bar.className = 'suggest-bar';
     bar.innerHTML = `<span>${ready.length} documents have a suggested place.</span><button class="btn small primary" type="button">File them all</button>`;
     bar.querySelector('button').onclick = async () => { try { const r = await post('api/library/file-all'); toast(`${r.filed} documents filed`); loadLibrary(); } catch (e) { toast(e.message); } };
     box.append(bar);
   }
-  for (const f of list.files) box.append(fileRow(f));
-  if (!list.folders.length && !list.files.length) box.innerHTML = `<div class="placeholder">${lib.folder === '/' ? 'Your library is empty. Upload documents, or attach them in the chat: they land in Inbox.' : 'This folder is empty. Drop files here or use Upload.'}</div>`;
+  for (const [label, group] of groups) {
+    if (label) { const h = document.createElement('div'); h.className = 'lib-group'; h.innerHTML = `<b>${esc(label)}</b><span>${group.length}</span>`; box.append(h); }
+    for (const f of group) box.append(fileRow(f, lib.flat ? f.folder : undefined, true));
+  }
+  if (!folders.length && !files.length) box.innerHTML = list.files.length ? `<div class="placeholder">${esc(t('No file matches these filters.'))} <button class="btn small" type="button" data-clear>${esc(t('Clear the filters'))}</button></div>`
+    : `<div class="placeholder">${lib.folder === '/' ? 'Your library is empty. Upload documents, or attach them in the chat: they land in Inbox.' : 'This folder is empty. Drop files here or use Upload.'}</div>`;
+  box.querySelector('[data-clear]')?.addEventListener('click', libClearFilters);
+  libChips();
+  const bytes = files.reduce((a, f) => a + f.size, 0), parts = [];
+  if (folders.length) parts.push(folders.length === 1 ? t('1 folder') : t('{n} folders', { n: folders.length }));
+  if (files.length) parts.push((files.length === 1 ? t('1 file') : t('{n} files', { n: files.length })) + ' · ' + fmtSize(bytes));
+  $('#lib-count').textContent = parts.join(' · ');
+  libPrevApply();
+  if (lib.flat) $('#lib-count').textContent += ' · ' + t('with all subfolders');
+  libSelUpdate();
 }
+
+function libSetView(v) { lib.view = v; try { localStorage.setItem(LSK + 'talixio.lib.view', v); } catch {} libViewRefresh(); }
+document.querySelectorAll('.lib-views [data-view]').forEach(b => b.onclick = () => libSetView(b.dataset.view));
+function libClearFilters() { lib.filter = { kind: '', when: '', state: '' }; libViewRefresh(); }
+const libFilterCount = () => ['kind', 'when', 'state'].filter(k => lib.filter[k]).length;
+function libChips() {
+  const chips = [['kind', LIB_KINDS], ['when', LIB_WHEN], ['state', LIB_STATE]].filter(([k]) => lib.filter[k])
+    .map(([k, opts]) => `<span class="lib-chip">${esc(t(opts.find(o => o[0] === lib.filter[k])[1]))}<button type="button" data-chip="${k}" aria-label="${esc(t('Remove this filter'))}">✕</button></span>`);
+  $('#lib-chips').innerHTML = chips.join('');
+  $('#lib-chips').querySelectorAll('[data-chip]').forEach(b => b.onclick = () => { lib.filter[b.dataset.chip] = ''; libViewRefresh(); });
+  const n = libFilterCount(); $('#lib-view-n').hidden = !n; $('#lib-view-n').textContent = n;
+}
+/** Redraw the list and the open panel after a filter, grouping or sort change. */
+function libViewRefresh() { if (lib.data) renderList(lib.data); libPanelFill(); }
+let libPanel = null;
+function libPanelFill() {
+  if (!libPanel) return;
+  const opt = (name, list, cur) => list.map(([v, l]) => `<button type="button" class="lib-opt${cur === v ? ' on' : ''}" data-${name}="${esc(v)}" aria-pressed="${cur === v}">${esc(t(l))}</button>`).join('');
+  const shown = lib.data ? lib.data.files.filter(libKeep).length : 0;
+  libPanel.innerHTML = `<div class="lib-pop-sec"><b>${esc(t('Layout'))}</b><div class="lib-opts">${opt('view', LIB_VIEWS, lib.view)}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('Show'))}</b><div class="lib-opts">${opt('flat', [['', 'This folder'], ['1', 'Everything below']], lib.flat ? '1' : '')}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('Sort by'))}</b><div class="lib-opts">${LIB_SORTS.map(([k, l]) => `<button type="button" class="lib-opt${lib.sort.k === k ? ' on' : ''}" data-sortk="${k}" aria-pressed="${lib.sort.k === k}">${esc(t(l))}${lib.sort.k === k ? (lib.sort.d === 1 ? ' ▲' : ' ▼') : ''}</button>`).join('')}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('Group'))}</b><div class="lib-opts">${opt('group', LIB_GROUP, lib.group)}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('Type'))}</b><div class="lib-opts">${opt('kind', LIB_KINDS, lib.filter.kind)}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('Modified'))}</b><div class="lib-opts">${opt('when', LIB_WHEN, lib.filter.when)}</div></div>`
+    + `<div class="lib-pop-sec"><b>${esc(t('State'))}</b><div class="lib-opts">${opt('state', LIB_STATE, lib.filter.state)}</div></div>`
+    + `<div class="lib-pop-foot"><button type="button" class="btn small ghost" data-clear${libFilterCount() ? '' : ' disabled'}>${esc(t('Clear the filters'))}</button><span class="spacer"></span><button type="button" class="btn small primary" data-close>${esc(shown === 1 ? t('Show 1 file') : t('Show {n} files', { n: shown }))}</button></div>`;
+  libPanel.querySelectorAll('[data-view]').forEach(b => b.onclick = () => libSetView(b.dataset.view));
+  libPanel.querySelectorAll('[data-flat]').forEach(b => b.onclick = () => { lib.flat = b.dataset.flat === '1'; loadLibrary().then(libPanelFill).catch(e => toast(e.message)); });
+  libPanel.querySelectorAll('[data-sortk]').forEach(b => b.onclick = () => libSortBy(b.dataset.sortk, lib.sort.k === b.dataset.sortk ? -lib.sort.d : 1));
+  libPanel.querySelectorAll('[data-group]').forEach(b => b.onclick = () => { lib.group = b.dataset.group; try { localStorage.setItem(LSK + 'talixio.lib.group', lib.group); } catch {} libViewRefresh(); });
+  for (const k of ['kind', 'when', 'state']) libPanel.querySelectorAll(`[data-${k}]`).forEach(b => b.onclick = () => { lib.filter[k] = b.dataset[k]; libViewRefresh(); });
+  libPanel.querySelector('[data-clear]').onclick = libClearFilters;
+  libPanel.querySelector('[data-close]').onclick = libPanelClose;
+}
+function libPanelClose() { libPanel?.remove(); libPanel = null; $('#lib-view-btn').setAttribute('aria-expanded', 'false'); }
+$('#lib-view-btn').onclick = e => {
+  e.stopPropagation();
+  if (libPanel) return libPanelClose();
+  libPanel = document.createElement('div'); libPanel.className = 'lib-pop'; libPanel.setAttribute('role', 'dialog'); libPanel.setAttribute('aria-label', t('Sort, group and filter the list'));
+  document.body.append(libPanel); libPanelFill();
+  $('#lib-view-btn').setAttribute('aria-expanded', 'true');
+  const r = e.currentTarget.getBoundingClientRect();
+  libPanel.style.top = Math.min(r.bottom + 6, innerHeight - libPanel.offsetHeight - 8) + 'px';
+  libPanel.style.left = Math.max(8, Math.min(r.right - libPanel.offsetWidth, innerWidth - libPanel.offsetWidth - 8)) + 'px';
+};
+document.addEventListener('click', e => { if (libPanel && !e.composedPath().some(x => x === libPanel || x.id === 'lib-view-btn')) libPanelClose(); }); // composedPath: the clicked button may already be redrawn
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && libPanel) { e.stopPropagation(); libPanelClose(); } }, true);
+
+/** Select or deselect a file; with Shift, the whole range from the last one touched. */
+function libPick(id, on, range) {
+  if (range && lib.last != null && lib.rows.includes(lib.last)) {
+    const a = lib.rows.indexOf(lib.last), b = lib.rows.indexOf(id);
+    for (const x of lib.rows.slice(Math.min(a, b), Math.max(a, b) + 1)) on ? lib.picked.add(x) : lib.picked.delete(x);
+  } else on ? lib.picked.add(id) : lib.picked.delete(id);
+  lib.last = id; libSelUpdate();
+}
+/** The selection replaces the toolbar (same height) and ticks the rows. */
+const libSelCount = () => lib.picked.size + lib.pickedF.size;
+function libSelUpdate() {
+  const n = libSelCount();
+  $('#lib-toolbar').hidden = !!n; $('#lib-selbar').hidden = !n;
+  document.querySelector('.lib-confirm')?.remove();
+  $('#lib-view-wrap')?.classList.toggle('selecting', !!n);
+  $('#lib-list').classList.toggle('selecting', !!n);
+  $('#lib-list').querySelectorAll('.lib-row[data-id]').forEach(r => { const on = lib.picked.has(+r.dataset.id); r.classList.toggle('sel', on); r.querySelector('.pick').checked = on; });
+  $('#lib-list').querySelectorAll('.lib-folder').forEach(r => { const on = lib.pickedF.has(r.dataset.path); r.classList.toggle('sel', on); const cb = r.querySelector('.pick'); if (cb) cb.checked = on; });
+  if (n === 1 && lib.picked.size === 1 && libPrevOn()) { lib.cur = [...lib.picked][0]; libPrevApply(); }
+  const all = $('#lib-pick-all');
+  const total = lib.rows.length + (lib.data?.folders?.length || 0);
+  if (all) { all.checked = n > 0 && n === total; all.indeterminate = n > 0 && n < total; }
+  if (n) {
+    $('#lib-sel-n').textContent = n === 1 ? t('1 selected') : t('{n} selected', { n });
+    const zip = $('#lib-sel-zip'); zip.href = `api/library/zip?folder=/&ids=${[...lib.picked].join(',')}` + (lib.pickedF.size ? `&paths=${[...lib.pickedF].map(encodeURIComponent).join('|')}` : ''); zip.setAttribute('download', 'library-selection.zip');
+    $('#lib-sel-move').hidden = !!lib.readonly; $('#lib-sel-del').hidden = !!lib.readonly || lib.pickedF.size > 0; // a folder is deleted on its own: it takes its files with it
+  }
+}
+$('#lib-sel-clear').onclick = () => { lib.picked.clear(); lib.pickedF.clear(); lib.last = null; libSelUpdate(); };
+$('#lib-sel-move').onclick = () => libInline(lib.folder, t('Move {n} items to which folder?', { n: libSelCount() }), async v => {
+  let done = 0, failed = 0;
+  if (lib.picked.size) { const r = await post('api/files/bulk', { ids: [...lib.picked], action: 'move', folder: v }); done += r.done; failed += r.failed?.length || 0; }
+  for (const from of lib.pickedF) { // a folder moves with its content, under the same name
+    try { await post('api/library/folder/move', { from, to: (v === '/' ? '' : v.replace(/\/+$/, '')) + '/' + from.split('/').pop() }); done++; } catch (err) { failed++; toast(err.message); }
+  }
+  toast(t('{n} moved', { n: done }) + (failed ? ' · ' + failed + ' ' + t('failed') : '')); lib.picked.clear(); lib.pickedF.clear(); loadLibrary();
+}, true);
+$('#lib-sel-del').onclick = e => libConfirm(e.currentTarget, t('Delete {n}?', { n: lib.picked.size }), async () => {
+  try { const r = await post('api/files/bulk', { ids: [...lib.picked], action: 'delete' }); toast(t('{n} moved to the trash', { n: r.done })); lib.picked.clear(); loadLibrary(); } catch (err) { toast(err.message); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !libSelCount() || $('#view-library').hidden || document.querySelector('dialog[open]') || !$('#viewer').hidden || rowMenuEl) return;
+  if (document.activeElement?.closest?.('input,textarea,select')) return;
+  lib.picked.clear(); lib.pickedF.clear(); lib.last = null; libSelUpdate();
+});
+
+/** Right click: the same menus as the ⋮ of a row, opened where the pointer is. */
+const pointAnchor = e => ({ getBoundingClientRect: () => ({ top: e.clientY, bottom: e.clientY - 4, left: e.clientX, right: e.clientX, width: 0, height: 0 }) });
+function openMenuAt(e, items) { closeRowMenu(); openRowMenu(pointAnchor(e), items); }
+$('#lib-main').addEventListener('contextmenu', e => {
+  if (e.target.closest('input,textarea,#lib-inline,#lib-results')) return;
+  const row = e.target.closest('#lib-list .lib-row');
+  e.preventDefault();
+  if (row && row.dataset.id) {
+    const id = +row.dataset.id, f = lib.data?.files?.find(x => x.id === id) || lib.files?.find(x => x.id === id);
+    if (!f) return;
+    if (!lib.picked.has(id)) { lib.picked.clear(); libPick(id, true, false); }
+    const n = libSelCount();
+    if (n > 1) return openMenuAt(e, [
+      { label: t('{n} selected', { n }), head: true },
+      { label: t('Download zip'), href: $('#lib-sel-zip').href, download: 'library-selection.zip' },
+      ...(lib.readonly ? [] : [{ label: t('Move to…'), run: () => $('#lib-sel-move').click() }, ...(lib.pickedF.size ? [] : [{ sep: true }, { label: t('Delete'), danger: true, run: () => $('#lib-sel-del').click() }])]),
+    ]);
+    closeRowMenu(); return libFileMenu(pointAnchor(e), f);
+  }
+  if (row && row.classList.contains('lib-folder') && lib.pickedF.has(row.dataset.path) && libSelCount() > 1) return openMenuAt(e, [{ label: t('{n} selected', { n: libSelCount() }), head: true }, { label: t('Download zip'), href: $('#lib-sel-zip').href, download: 'library-selection.zip' }, ...(lib.readonly ? [] : [{ label: t('Move to…'), run: () => $('#lib-sel-move').click() }])]);
+  if (row && row.classList.contains('lib-folder')) { if (lib.readonly) return; closeRowMenu(); return libFolderMenu(pointAnchor(e), row.dataset.path, +row.dataset.total || 0); }
+  openMenuAt(e, [
+    ...(lib.readonly ? [] : [{ label: t('New file here'), run: () => newNote(lib.folder) }, { label: t('New folder'), run: () => libNewFolder() }, { label: t('Upload files'), run: () => $('#lib-upload-input').click() }]),
+    ...(lib.folder !== '/' ? [{ label: t('Up one folder'), run: libUp }] : []),
+    { label: t('Select all'), run: () => libSelectAll() },
+  ]);
+});
+/** Keyboard in the explorer: Ctrl/Cmd+A, Delete, F2, arrows, Enter, Alt+←/↑, Backspace. */
+document.addEventListener('keydown', e => {
+  if ($('#view-library').hidden || document.querySelector('dialog[open]') || !$('#viewer').hidden || rowMenuEl || libPanel || libRegex.on) return;
+  if (e.target.closest?.('input,textarea,select,[contenteditable]')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'a') { e.preventDefault(); libSelectAll(); return; }
+  if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); $('#lib-back').click(); return; }
+  if ((e.altKey && e.key === 'ArrowUp') || e.key === 'Backspace') { e.preventDefault(); libUp(); return; }
+  if (e.key === 'Delete' && lib.picked.size && !lib.pickedF.size && !lib.readonly) { e.preventDefault(); $('#lib-sel-del').click(); return; }
+  const rows = [...$('#lib-list').querySelectorAll('.lib-row')];
+  const cur = rows.indexOf(document.activeElement);
+  if (e.key === 'F2' && lib.picked.size === 1 && !lib.readonly) { e.preventDefault(); const f = lib.data.files.find(x => x.id === [...lib.picked][0]); if (f) libRename(f); return; }
+  if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key) && rows.length) {
+    const tiles = lib.view === 'tiles', cols = tiles ? Math.max(1, Math.round($('#lib-list').clientWidth / (rows[0].offsetWidth + 10))) : 1;
+    let n = cur < 0 ? 0 : cur;
+    if (cur >= 0) n += { ArrowDown: cols, ArrowUp: -cols, ArrowRight: tiles ? 1 : 0, ArrowLeft: tiles ? -1 : 0, Home: -n, End: rows.length }[e.key];
+    n = Math.max(0, Math.min(rows.length - 1, n));
+    e.preventDefault(); rows[n].focus();
+    if (e.shiftKey && rows[n].dataset.id) libPick(+rows[n].dataset.id, true, false);
+  }
+});
+function libSelectAll() { lib.rows.forEach(id => lib.picked.add(id)); (lib.data?.folders || []).forEach(x => lib.pickedF.add(x.path)); libSelUpdate(); }
 
 /** Folders accept files dragged from the list (move) or from the computer (upload). */
 function dropTarget(el, path) {
@@ -4446,6 +5614,8 @@ function dropTarget(el, path) {
   el.addEventListener('dragleave', () => el.classList.remove('drop'));
   el.addEventListener('drop', async e => {
     e.preventDefault(); e.stopPropagation(); el.classList.remove('drop'); $('#lib-main').classList.remove('drag');
+    const ids = (e.dataTransfer.getData('text/x-talixio-files') || '').split(',').filter(Boolean);
+    if (ids.length > 1) { try { const r = await post('api/files/bulk', { ids: ids.map(Number), action: 'move', folder: path }); toast(t('{n} moved', { n: r.done }) + (r.failed?.length ? ' · ' + r.failed.length + ' ' + t('failed') : '')); lib.picked.clear(); loadLibrary(); } catch (err) { toast(err.message); } return; }
     const id = e.dataTransfer.getData('text/x-talixio-file');
     if (id) { try { if (await withReplace(r => post(`api/files/${id}/move`, { folder: path, ...r }))) { toast('Moved to ' + path); loadLibrary(); } } catch (err) { toast(err.message); } return; }
     libUpload([...(e.dataTransfer.files || [])], path);
@@ -4824,8 +5994,8 @@ async function loadActivity() {
   const meter = (label, spent, limit) => {
     const pct = limit > 0 ? Math.min(100, spent / limit * 100) : 0;
     const cls = !limit ? '' : pct >= 100 ? 'blocked' : pct >= 80 ? 'low' : '';
-    return `<div class="meter"><div class="row"><span class="muted small">${label}</span><span class="muted small">${limit > 0 ? 'limit $' + limit.toFixed(2) : 'no limit set'}</span></div>
-      <b>$${spent.toFixed(2)}</b><div class="track ${cls}"><i style="width:${pct.toFixed(1)}%"></i></div></div>`;
+    return `<div class="meter"><div class="row"><span class="muted small">${label}</span><span class="muted small">${limit > 0 ? esc(t('limit {a}', { a: usdf(limit) })) : 'no limit set'}</span></div>
+      <b class="no-i18n">${esc(usdf(spent))}</b><div class="track ${cls}"><i style="width:${pct.toFixed(1)}%"></i></div></div>`;
   };
   $('#budget').innerHTML = meter('Spent today', budget.today, budget.daily_limit) + meter('Spent this month', budget.month, budget.monthly_limit);
   $('#calib-text').textContent = calibration.text;
@@ -4849,7 +6019,7 @@ async function loadActivity() {
     <div class="stat"><b>${nf.format(sum('calls'))}</b><span>model calls</span></div>
     <div class="stat"><b>${nf.format(sum('input'))}</b><span>input tokens</span></div>
     <div class="stat"><b>${nf.format(sum('output'))}</b><span>output tokens</span></div>
-    <div class="stat"><b>${cost ? '$' + cost.toFixed(2) : '–'}</b><span>${state.status?.provider === 'claude-code' ? 'API-equivalent cost (covered by your plan)' : 'reported cost'}</span></div>
+    <div class="stat"><b class="no-i18n">${cost ? esc(usdf(cost)) : '–'}</b><span>${state.status?.provider === 'claude-code' ? 'API-equivalent cost (covered by your plan)' : 'reported cost'}</span></div>
     <div class="bars"><div class="bars-title">Tokens per day <span class="muted small">· last 30 days</span></div>${tokenChart(days, byDay, costDay)}</div>`;
   chartHover($('#usage .chart'));
   $('#tools tbody').innerHTML = tools.length ? tools.map(t => `<tr><td>${fmtTime(t.ts)}</td><td>${esc(t.tool)}</td><td><code>${esc(t.args.slice(0, 200))}</code></td><td>${esc(t.result.slice(0, 220))}</td></tr>`).join('')
@@ -4876,7 +6046,7 @@ async function loadApps() {
       <span class="muted small">${esc(a.description || '')}</span>
       <span class="small muted no-i18n">${esc(spaceOf(a.space))}${a.status === 'pending' ? ` · <span class="app-pending">${esc(t('Waiting for approval'))}</span>` : ''}</span></a>`).join('')}</div>`
     : `<div class="empty"><p>No apps yet. Ask the assistant: “With what you know about me, could you suggest several apps you could build and add to the Apps menu?”</p></div>`)
-    + (ex.length ? `<h3 class="apps-ex-title">Examples</h3><div class="row wrap">${ex.map(e => `<button type="button" class="btn ghost" data-ex="${esc(e.key)}" title="${esc(e.description)}">${esc(e.icon)} ${esc(e.name)}</button>`).join('')}</div>` : '')
+    + (ex.length ? `<h3 class="apps-ex-title">Examples</h3><div class="row wrap">${ex.map(e => `<button type="button" class="btn ghost" data-ex="${esc(e.key)}" title="${esc(e.description)}"><span aria-hidden="true">${esc(e.icon)}</span> <span>${esc(e.name)}</span></button>`).join('')}</div>` : '')
     + `<p class="row wrap"><button type="button" class="btn small" id="apps-ask">Ask the assistant for app ideas</button>
       <label class="btn small ghost">Add an app from a file<input type="file" id="apps-import" accept=".json,application/json" hidden></label></p>`;
   storeApps(box, sp);
@@ -4949,8 +6119,9 @@ async function openApp(id) {
       <ul>${(app.sources || []).map(s => `<li class="no-i18n"><code>${esc(s.name)}</code> — ${esc(src(s))}</li>`).join('') || `<li>${esc(t('no data source'))}</li>`}</ul>
       <details><summary>Show the code</summary><pre class="no-i18n">${esc(app.html)}</pre><pre class="no-i18n">${esc(app.script)}</pre></details>
       <p><button type="button" class="btn" id="app-approve">Approve</button></p></div>` : ''}
-    <iframe class="app-frame" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer" title="${esc(app.name)}" src="api/apps/${id}/frame?space=${sp}"></iframe>`;
-  appFrame = { id, el: box.querySelector('iframe') };
+    ${pending ? '' : `<iframe class="app-frame" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer" title="${esc(app.name)}" src="api/apps/${id}/frame?space=${sp}"></iframe>`}`;
+  // an app waiting for approval does not run at all: its code is shown above, not executed (audit S17)
+  appFrame = pending ? null : { id, el: box.querySelector('iframe') };
   appFrame.el.onload = () => appFrame?.el.contentWindow?.postMessage({ talixio: 1, theme: document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light' }, '*');
   $('#app-edit').onclick = () => { location.hash = '#chat'; $('#input').value = t('Change the app “{a}” (#{b}): ', { a: app.name, b: id }); $('#input').focus(); };
   $('#app-del').onclick = async () => {
@@ -4997,7 +6168,7 @@ function appShare(app, el, storeOnly = false) {
   const list = state.assistants || [], sp = state.space ?? '';
   const file = pkg => ({ blob: new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' }), name: (app.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app') + '.talixio-app.json' });
   el.innerHTML = storeOnly ? `<div id="app-store-send"></div><p class="small" id="app-share-say" role="status"></p>` : `<p class="small">${esc(t('Shares the app’s code and what it reads, never its data, its saved state or a key. The other side approves it before it gets any data, and installs the connectors it uses with its own account.'))}</p>
-    ${list.length ? `<form class="row wrap" id="app-send"><select id="app-send-to">${list.map(a => `<option value="${esc(a.id)}" class="no-i18n">${esc(a.name)}</option>`).join('')}</select>
+    ${list.length ? `<form class="row wrap" id="app-send"><select id="app-send-to" aria-label="${esc(t('Send to'))}">${list.map(a => `<option value="${esc(a.id)}" class="no-i18n">${esc(a.name)}</option>`).join('')}</select>
       <button class="btn small">Copy to this assistant</button></form>` : ''}
     <p class="row wrap"><button type="button" class="btn small ghost" id="app-dl">Download it as a file</button>
       <span class="muted small">${esc(t('To give it to anyone: they add it with “Add an app from a file” in their Apps.'))}</span></p>
@@ -5067,7 +6238,7 @@ window.addEventListener('message', async e => {
 });
 
 // ---- Pilotage: the director's cockpit (agents · worksites · roles · knowledge) ----
-const PILOT_TABS = ['agents', 'chantiers', 'roles', 'kb'];
+const PILOT_TABS = ['kb', 'agents', 'roles', 'chantiers'];
 function pilotTab() { try { const v = localStorage.getItem('pilotTab'); return PILOT_TABS.includes(v) ? v : 'agents'; } catch { return 'agents'; } }
 function showPilotTab(tab) {
   if (!PILOT_TABS.includes(tab)) tab = 'agents';
@@ -5081,25 +6252,409 @@ async function loadPilotage() {
   if (!pilotWired) {
     pilotWired = true;
     document.querySelectorAll('#view-pilotage .ptab').forEach(b => b.onclick = () => showPilotTab(b.dataset.ptab));
-    const sendPilot = () => { // route the dictated directive through the ordinary chat send(), so the director uses its own fleet tools
-      const src = $('#ptt-input'), text = src.value.trim();
-      if (!text) { src.focus(); return; }
-      $('#input').value = text; src.value = '';
-      location.hash = '#chat';
-      setTimeout(() => send(), 0);
-    };
-    $('#ptt-send').onclick = sendPilot;
-    $('#ptt-input').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendPilot(); } });
   }
   showPilotTab(pilotTab());
+  pilotBadges();
 }
-async function pilotAgents() {
-  const box = $('#pilot-agents');
-  await initOrchestratorPanel('pilot', info => {
-    const sum = (info.summary || '').trim();
-    box.innerHTML = sum ? `<div class="doc">${md(sum)}</div>`
-      : `<div class="placeholder">${esc(t('No fleet orchestrator is connected yet. Connect one above to run agents across your machines.'))}</div>`;
+// counts and the knowledge-base source shown on the Pilotage tabs themselves
+async function pilotBadges() {
+  const setN = (sel, v) => { const el = $(sel); if (el) el.textContent = v > 0 ? ' ' + v : ''; };
+  api('api/roles').then(({ roles }) => setN('#pilot-tab-roles', (roles || []).length)).catch(() => {});
+  api('api/jobs').then(({ directives }) => setN('#pilot-tab-chantiers', (directives || []).length)).catch(() => {});
+  api('api/library/kb').then(kb => { const el = $('#pilot-tab-kbsrc'), src = (kb.space || '').trim(); if (el) el.textContent = src ? ' · ' + src : ''; }).catch(() => {});
+}
+// when did the orchestrator last hear from the session itself (not when it refreshed its roster)
+function plSeen(a) { return a.seen ? pilotAgo(a.seen) : t('no news'); }
+function plStale(a) { return !a.seen || Date.now() / 1000 - a.seen > 86400; }
+function pilotAgo(ts) {
+  if (!ts) return t('never');
+  const d = Math.max(0, Date.now() / 1000 - ts);
+  return d < 90 ? t('just now') : d < 3600 ? t('{n} min ago', { n: Math.floor(d / 60) })
+    : d < 86400 ? t('{n} h ago', { n: Math.floor(d / 3600) }) : t('{n} d ago', { n: Math.floor(d / 86400) });
+}
+const PSTATE = { active: 'active', busy: 'busy', waiting: 'waiting', idle: 'idle', done: 'done', error: 'error', offline: 'offline' };
+// one plural helper for the pilot roster strings
+const pN = (one, many, v) => t(v === 1 ? one : many, { n: v });
+// the fleet-reports toggle: badge-only (default), push+e-mail, or off — lives in Votre pilote autonome
+let pilotNotifyWired = false;
+function renderPilotNotify(info) {
+  const row = $('#pilot-notify-row'); if (!row) return;
+  row.hidden = !info.connected;
+  if (!info.connected) return;
+  const mode = info.notify || 'inapp';
+  row.querySelectorAll('[data-notify]').forEach(b => b.classList.toggle('on', b.dataset.notify === mode));
+  if (!pilotNotifyWired) {
+    pilotNotifyWired = true;
+    row.querySelectorAll('[data-notify]').forEach(b => b.onclick = async () => {
+      if (b.classList.contains('on')) return;
+      try {
+        const r = await post('api/conductor/notify', { mode: b.dataset.notify });
+        renderPilotNotify(r); plRender(r); // reflect the new mode
+        toast(t('Fleet reports: {m}', { m: t({ inapp: 'In-app badge', push: 'Push + e-mail', off: 'Off' }[b.dataset.notify]) }));
+      } catch (e) { toast(e.message); }
+    });
+  }
+}
+// ---- Votre pilote autonome (1.18.0): three tabs — Needs you / Agents / Journal. Each is a list and a pane that scrolls
+// on its own, so the page never grows with the number of messages (docs/design/pilotage.md). ----
+const PL = { tab: 'need', f: 'all', q: '', group: false, sel: null, nsel: null, jf: 'all', jq: '', jsel: null, jmax: 50, info: null, threads: {}, shown: {}, draft: {}, loaded: null, wired: false };
+const plGroupOf = a => a.waiting ? 'waiting' : ['active', 'busy'].includes(a.state) ? 'active' : ['offline', 'error'].includes(a.state) ? 'offline' : 'idle';
+const plDot = a => `<span class="pilot-dot pstate-${a.waiting ? 'waiting' : (PSTATE[a.state] || 'idle')}"></span>`;
+const plKind = w => ({ decision: t('Decision needed'), approval: t('Approval needed'), instruction: t('Instruction needed') }[w.kind] || t('Decision needed'));
+const plWho = by => by === 'assistant' ? t('the assistant') : t('you');
+/** A one-line preview: the Markdown marks go ("**Dev A**", "[link](…)", "# title"), the text stays (audit U20) */
+const plainLine = s => String(s || '').replace(/```[\s\S]*?```/g, ' ').replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '')
+  .replace(/(\*\*|__|~~|`)/g, '').replace(/(^|\W)[*_]([^*_\n]+)[*_](?=\W|$)/g, '$1$2');
+const plClip = (s, n) => { s = plainLine(s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+function plDay(ts) {
+  const d = new Date(ts * 1000), n = new Date(), y = new Date(Date.now() - 86400000), same = (a, b) => a.toDateString() === b.toDateString();
+  return same(d, n) ? t('Today') : same(d, y) ? t('Yesterday') : d.toLocaleDateString(window.LOCALE, { day: 'numeric', month: 'long' });
+}
+const plBadge = (sel, n) => { const el = $(sel); if (el) { el.hidden = !n; el.textContent = n ? (n > 99 ? '99+' : String(n)) : ''; } };
+const plBack = `<button type="button" class="btn small pl-back" data-plback>‹ ${'__BACK__'}</button>`;
+const plBackBtn = () => plBack.replace('__BACK__', esc(t('Back')));
+
+function plRender(info) {
+  PL.info = info;
+  const on = !!info.connected, agents = info.agents || [];
+  $('#pl-tabs').hidden = !on;
+  document.querySelectorAll('.pl-panel').forEach(p => { p.hidden = !on || p.dataset.plp !== PL.tab; });
+  if (!on) return;
+  plBadge('#pl-bd-need', info.waiting || 0);
+  plBadge('#pl-bd-agents', agents.reduce((n, a) => n + (a.unread || 0), 0));
+  plBadge('#pl-bd-journal', info.journalUnread || 0);
+  $('#pl-n-agents').textContent = agents.length || ''; $('#pl-n-journal').textContent = (info.reports || []).length || '';
+  document.querySelectorAll('#pl-tabs .pl-tab').forEach(b => { b.classList.toggle('on', b.dataset.pl === PL.tab); b.setAttribute('aria-selected', String(b.dataset.pl === PL.tab)); });
+  plRenderNeed(); plRenderAgents(); plRenderJournal();
+  if (PL.tab === 'autonomy') plLoadAuto();
+}
+function plShowTab(name) {
+  PL.tab = name;
+  if (name === 'journal' && PL.info?.journalUnread) { // opening the journal reads it
+    PL.info.journalUnread = 0; plBadge('#pl-bd-journal', 0);
+    post('api/conductor/read', {}).then(() => refreshStatus()).catch(() => {});
+  }
+  plRender(PL.info || { connected: false });
+}
+// a detail pane in a narrow window replaces its list; « Back » returns
+const plOpen = id => $(id)?.classList.add('detail');
+
+// -- Needs you: what waits for the user, and what was decided (who answered what) --
+/** The orchestrator's passes for the Journal's "Passes" filter: quiet ones in a row are folded into one line. */
+function plPassRows(info) {
+  const line = k => {
+    const bits = [pN('1 agent', '{n} agents', k.agents || 0)];
+    if (k.waiting) bits.push(pN('1 waiting', '{n} waiting', k.waiting));
+    if (k.reports) bits.push(pN('1 report', '{n} reports', k.reports));
+    if (k.instructions) bits.push(pN('1 instruction handed over', '{n} instructions handed over', k.instructions));
+    if (k.problems) bits.push(pN('1 point to fix', '{n} points to fix', k.problems));
+    return bits.join(' · ');
+  };
+  const quiet = k => !k.reports && !k.instructions && !k.problems && !k.note;
+  const out = []; let run = [];
+  const flush = () => { if (!run.length) return; out.push(run.length === 1 ? { k: run[0], text: line(run[0]) + ' · ' + t('nothing new') } : { k: run[0], text: t('{n} quiet passes, nothing new', { n: run.length }) }); run = []; };
+  for (const k of info.ticks || []) { if (quiet(k)) run.push(k); else { flush(); out.push({ k, text: line(k) }); } }
+  flush();
+  return out;
+}
+function plRenderNeed() {
+  const info = PL.info, list = $('#pl-need-list'), det = $('#pl-need-detail'); if (!list) return;
+  const waiting = (info.agents || []).filter(a => a.waiting).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const decided = info.decisions || [];
+  const dKey = d => `d:${d.ts}:${d.agent}`;
+  const keys = [...waiting.map(a => 'w:' + a.id), ...decided.map(dKey)];
+  if (!keys.includes(PL.nsel)) PL.nsel = keys[0] || null;
+  list.innerHTML = `<div class="pl-grp">${esc(t('Waiting for you'))} · <span class="no-i18n">${waiting.length}</span></div>`
+    + (waiting.length ? waiting.map(a => `<div class="pl-rw${PL.nsel === 'w:' + a.id ? ' sel' : ''}" data-nsel="w:${esc(a.id)}">${plDot(a)}
+        <div><div class="pl-n no-i18n">${esc(a.name)}</div><div class="pl-s">${esc(plKind(a.waiting))}${a.waiting.type ? ' · ' + esc(a.waiting.type) : ''} · <span class="no-i18n">${esc(plClip(a.waiting.question, 60))}</span></div></div>
+        <div class="pl-r">${esc(pilotAgo(a.ts))}</div></div>`).join('')
+      : `<div class="pl-empty">${esc(t('Nothing is waiting for you.'))}<br><span class="small">${esc(plLastSpoke(info))}</span></div>`)
+    + (decided.length ? `<div class="pl-grp">${esc(t('Decided recently'))}</div>` + decided.map(d => `<div class="pl-rw${PL.nsel === dKey(d) ? ' sel' : ''}" data-nsel="${esc(dKey(d))}"><span class="pilot-dot pstate-active"></span>
+        <div><div class="pl-n no-i18n">${esc(d.name || d.agent)}</div><div class="pl-s"><span>${esc(t('by {w}', { w: plWho(d.by) }))}</span> · <span class="no-i18n">${esc(plClip(d.answer, 50))}</span></div></div>
+        <div class="pl-r">${esc(pilotAgo(d.ts))}</div></div>`).join('') : '');
+  const wa = waiting.find(a => 'w:' + a.id === PL.nsel), de = decided.find(d => dKey(d) === PL.nsel);
+  if (wa) {
+    const w = wa.waiting, draft = PL.draft['n:' + wa.id] || '', done = w.kind === 'approval';
+    const incomplete = !done && plIncomplete(w);
+    // order: who asks → the question → what to do (approval: go to the session; decision: the pilot's suggestion, one-tap options, free words) → what a wrong choice costs
+    const prop = w.proposal, aid = esc(wa.id);
+    const opts = w.options?.length ? `<div class="pl-opts stack">${w.options.map(o => `<button type="button" class="btn ${prop ? '' : 'primary'} no-i18n" data-answer="${esc(o)}" data-agent-id="${aid}">${esc(o)}</button>`).join('')}</div>` : '';
+    const act = done
+      ? `<div class="pl-appr"><div class="pl-lock">🔒 ${esc(t('Approval: only you can give it'))}</div>
+          <ol><li>${esc(t('Open the session'))}${wa.name ? ` <b class="no-i18n">${esc(wa.name)}</b>` : ''}</li><li>${esc(t('Approve the action there'))}</li></ol>
+          ${wa.url ? `<a class="btn primary" href="${esc(wa.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : `<p class="muted small">${esc(t('Nothing can be done from here.'))}</p>`}</div>`
+      : `${prop ? `<div class="pl-prop"><div class="pl-prop-h">${esc(t('The pilot would answer'))} <span class="pl-pill no-i18n">${Math.round(prop.confidence * 100)}%</span></div><div class="pl-q no-i18n">${esc(prop.answer)}</div>${prop.rationale ? `<p class="muted small no-i18n">${esc(prop.rationale)}</p>` : ''}<button type="button" class="btn primary no-i18n" data-answer="${esc(prop.answer)}" data-agent-id="${aid}">${esc(t('Send this answer'))}</button></div>` : ''}
+        ${opts}
+        <div class="pl-free"><textarea id="pl-need-input" rows="2" data-nid="${aid}" aria-label="${esc(t('Your answer…'))}" placeholder="${esc(opts || prop ? t('Or in your own words…') : t('Your answer…'))}">${esc(draft)}</textarea>
+          <button type="button" class="btn ghost icon dictate-btn" id="pl-need-mic" aria-label="${esc(t('Dictate'))}" title="${esc(t('Dictate: speak and I type it here'))}">🎙️</button>
+          <button type="button" class="btn primary" data-need-send="${aid}">${esc(t('Send'))}</button></div>`;
+    det.innerHTML = `<div class="pl-ph">${plBackBtn()}${plDot(wa)}<span class="pl-t no-i18n">${esc(wa.name)}</span><span class="pl-pill">${esc(plKind(w))}</span>${w.type ? `<span class="pl-pill no-i18n">${esc(w.type)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(wa.ts))}</span></div>
+      <div class="pl-det pl-ask"><div class="pl-q big no-i18n">${esc(w.question)}</div>
+        ${incomplete ? `<div class="pl-hint"><span>${esc(t('This may not be the full question: the orchestrator only passed on a summary or no options. Ask it for the exact text before you decide.'))}</span><button type="button" class="btn small" data-clarify="${esc(wa.id)}">${esc(t('Ask the orchestrator for the full question'))}</button></div>` : ''}
+        ${w.cost ? `<div class="pl-cost"><b>${esc(t('If it goes wrong:'))}</b> <span class="no-i18n">${esc(w.cost)}</span></div>` : ''}
+        ${act}
+        <button type="button" class="btn ghost small" data-open-agent="${aid}">${esc(t('See the conversation'))} →</button></div>`;
+    const inp = $('#pl-need-input');
+    if (inp) {
+      inp.addEventListener('input', () => { PL.draft['n:' + wa.id] = inp.value; });
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); det.querySelector('[data-need-send]')?.click(); } });
+      $('#pl-need-mic').onclick = e => toggleDictate(inp, e.currentTarget);
+    }
+  } else if (de) {
+    det.innerHTML = `<div class="pl-ph">${plBackBtn()}<span class="pl-t no-i18n">${esc(de.name || de.agent)}</span><span class="pl-pill">${esc(t('by {w}', { w: plWho(de.by) }))}</span>${de.id ? `<span class="pl-pill no-i18n">${esc(de.id)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(de.ts))}</span></div>
+      <div class="pl-det"><h5>${esc(t('Question'))}</h5><div class="pl-q no-i18n">${esc(de.question || '—')}</div><h5>${esc(t('Answer'))}</h5><div class="pl-q no-i18n">${esc(de.answer)}</div>${de.by === 'assistant' && de.id ? `<div class="pl-verdict"><span class="muted small">${esc(t('Was this the right call?'))}</span> <button type="button" class="btn small" data-verdict="1" data-did="${esc(de.id)}">${esc(t('Yes'))}</button> <button type="button" class="btn small danger" data-verdict="0" data-did="${esc(de.id)}">${esc(t('No, that was wrong'))}</button></div>` : ''}</div>`;
+  } else det.innerHTML = plInboxZero(info);
+}
+// the question may be incomplete: a summary only, "not retrieved yet", or a one-liner with no options to pick from
+function plIncomplete(w) {
+  const q = String(w.question || '').trim();
+  return /not retrieved|non récup|pas encore récup|summary only/i.test(q) || (!(w.options || []).length && q.length < 40);
+}
+function plLastSpoke(info) { return info.lastReport ? t('The orchestrator last spoke {a}.', { a: pilotAgo(info.lastReport) }) : t('The orchestrator has not spoken yet.'); }
+function plInboxZero(info) {
+  return `<div class="pl-zero"><b>✓ ${esc(t('Nothing is waiting for you.'))}</b><span class="muted small">${esc(plLastSpoke(info))}</span><span class="muted small">${esc(t('Questions from your agents will show here, with what to answer.'))}</span></div>`;
+}
+async function plClarify(id, btn) { // asks for the full question: a message to the agent that settles nothing
+  btn.disabled = true;
+  try {
+    const a = (PL.info.agents || []).find(x => x.id === id), w = a?.waiting;
+    const text = `Please send me, verbatim, the full pending question${w?.decision_id ? ` (decision ${w.decision_id})` : ''}: the session's own wording, ALL its options, its ladder level (L1-L5) and what a wrong choice would cost. Do not summarise; report it with this agent set and the question in "waiting".`;
+    const r = await post(`api/conductor/agents/${encodeURIComponent(id)}/say?space=${state.space}`, { text, clarify: true });
+    toast(r.ok ? t('Asked. The full question will show here when the orchestrator answers.') : (r.message || t('Could not send.')));
+  } catch (err) { toast(err.message); }
+  btn.disabled = false;
+}
+async function pilotStatusFile(open) { // the permanent status file: view, copy, download
+  const box = $('#pilot-status-file'), btn = $('#pilot-status-btn'); if (!box) return;
+  box.hidden = !open; btn.setAttribute('aria-expanded', String(!!open));
+  if (!open) return;
+  try {
+    const r = await fetch('api/pilot/status.md', { credentials: 'same-origin', headers: { 'X-Talixio': '1' } });
+    if (!r.ok) throw new Error(t('Not available.'));
+    $('#pilot-status-text').textContent = await r.text();
+    $('#pilot-status-path').textContent = PL.info?.statusFile || 'pilot-status.md';
+  } catch (e) { toast(e.message); }
+}
+
+// -- Autonomy: what the assistant may decide alone, how right it has been, what it arbitrates by --
+async function plLoadAuto() { try { PL.auto = await api('api/pilot'); } catch (e) { PL.auto = null; } plRenderAuto(); }
+const AUTO_LEVELS = { L1: 'Routine', L2: 'Small choices', L3: 'Real choices', L4: 'Values and business', L5: 'Critical' };
+function plRenderAuto() {
+  const box = $('#pl-auto'), a = PL.auto; if (!box) return;
+  if (!a) { box.innerHTML = `<div class="pl-empty">${esc(t('Not available.'))}</div>`; return; }
+  const modes = [['ask', 'I propose, you answer'], ['tell', 'I answer if sure, then tell you'], ['auto', 'I answer if sure, quietly']];
+  box.innerHTML = `<section class="pl-card pl-hero">
+      <label class="pl-switch"><input type="checkbox" id="pa-on" ${a.enabled ? 'checked' : ''}><span class="pl-sw-t"><b>${esc(t('The assistant looks at the agents’ questions by itself'))}</b>
+        <span class="muted small">${esc(t('When an agent asks something, the assistant reads it, weighs your past decisions and priorities, then answers within the limits below — or proposes an answer and waits for you. Each of its answers is written down with a confidence and scored against yours.'))}</span></span></label>
+    </section>
+    <section class="pl-card"><h5>${esc(t('Autonomy'))}</h5>
+      <table class="pl-lv"><thead><tr><th>${esc(t('Level'))}</th><th>${esc(t('Autonomy'))}</th><th>${esc(t('Right so far'))}</th></tr></thead><tbody>${Object.entries(a.levels).map(([l, v]) => `<tr>
+        <td><b class="no-i18n">${l}</b> <span class="muted small">${esc(t(AUTO_LEVELS[l]))}</span></td>
+        <td>${v.kept ? `<span class="pl-kept">🔒 ${esc(t('Always yours'))}</span>` : `<select data-auto-lv="${l}" aria-label="${esc(t('Autonomy') + ' · ' + l)}">${modes.map(([m, n]) => `<option value="${m}" ${v.mode === m ? 'selected' : ''}>${esc(t(n))}</option>`).join('')}</select>`}
+          ${v.suggest ? `<button type="button" class="btn small" data-auto-up="${l}" data-to="${v.suggest}">${esc(t('Give it more room'))} → ${esc(t(modes.find(m => m[0] === v.suggest)[1]))}</button>` : ''}</td>
+        <td class="no-i18n">${v.n ? `${Math.round(v.rate * 100)}% <span class="muted small">(${v.n})</span>` : '—'}</td></tr>`).join('')}</tbody></table>
+      <div class="pl-nums">
+        <label>${esc(t('It only answers alone above'))} <span class="pl-num"><input type="number" id="pa-th" min="50" max="99" step="5" value="${Math.round(a.threshold * 100)}" class="no-i18n"> %</span> ${esc(t('sure'))}</label>
+        <label>${esc(t('At most'))} <span class="pl-num"><input type="number" id="pa-cap" min="0" max="200" value="${+a.daily_cap}" class="no-i18n"></span> ${esc(t('answers sent by itself per day'))} <span class="muted small no-i18n">(${+a.sent_today} ${esc(t('today'))})</span></label>
+      </div>
+      ${a.calibration ? `<p class="muted small no-i18n">${esc(t('Calibration'))}: ${esc(t('says'))} ${Math.round(a.calibration.confidence * 100)}% · ${esc(t('is right'))} ${Math.round(a.calibration.hit_rate * 100)}% (${a.calibration.n})</p>` : ''}
+    </section>
+    <div class="pl-two">
+      <section class="pl-card"><h5>${esc(t('Your priorities, most important first'))}</h5>
+        <div class="pl-dict"><textarea id="pa-pr" rows="5" class="no-i18n" placeholder="${esc(t('One per line: e.g. client deliveries before internal tools'))}">${esc((a.priorities || []).join('\n'))}</textarea><button type="button" class="btn ghost icon dictate-btn" data-dictate-for="pa-pr" aria-label="${esc(t('Dictate'))}" title="${esc(t('Dictate: speak and I type it here'))}">🎙️</button></div></section>
+      <section class="pl-card"><h5>${esc(t('Standing rules'))}</h5>
+        <div class="pl-dict"><textarea id="pa-ru" rows="5" class="no-i18n" placeholder="${esc(t('One lasting preference per line: e.g. never touch billing without asking me'))}">${esc((a.rules || []).join('\n'))}</textarea><button type="button" class="btn ghost icon dictate-btn" data-dictate-for="pa-ru" aria-label="${esc(t('Dictate'))}" title="${esc(t('Dictate: speak and I type it here'))}">🎙️</button></div>
+        <p class="muted small">${esc(t('The assistant follows these when it answers, and adds the ones you tell it in the chat.'))}</p></section>
+    </div>
+    <div class="row"><button type="button" class="btn primary" data-auto-save>${esc(t('Save'))}</button></div>
+    ${a.recent?.length ? `<section class="pl-card"><h5>${esc(t('Its latest answers'))}</h5><div class="pl-rec">${a.recent.map(p => `<div class="pl-rw"><span class="pilot-dot pstate-${p.hit === undefined ? 'idle' : p.hit ? 'active' : 'error'}"></span>
+      <div><div class="pl-n no-i18n">${esc(p.name)} · ${esc(p.level)} · ${Math.round(p.confidence * 100)}%</div><div class="pl-s no-i18n">${esc(plClip(p.answer, 70))} — <span>${esc(p.action === 'sent' ? t('sent') : t('proposed'))}${p.hit === undefined ? '' : ' · ' + esc(p.hit ? t('right') : t('wrong'))}</span></div></div>
+      <div class="pl-r">${p.action === 'sent' && p.hit === undefined ? `<button type="button" class="btn small" data-verdict="1" data-did="${esc(p.id)}">✓</button> <button type="button" class="btn small danger" data-verdict="0" data-did="${esc(p.id)}">✗</button>` : esc(pilotAgo(p.ts))}</div></div>`).join('')}</div></section>` : ''}`;
+  box.querySelectorAll('.dictate-btn').forEach(b => b.onclick = () => toggleDictate(document.getElementById(b.dataset.dictateFor), b));
+  box.querySelectorAll('[data-auto-up]').forEach(b => b.onclick = async () => { try { PL.auto = await post('api/pilot', { autonomy: { [b.dataset.autoUp]: b.dataset.to } }); toast(t('Saved.')); plRenderAuto(); } catch (e) { toast(e.message); } });
+}
+async function plSaveAuto() {
+  const autonomy = {}; document.querySelectorAll('#pl-auto [data-auto-lv]').forEach(s => { autonomy[s.dataset.autoLv] = s.value; });
+  try { PL.auto = await post('api/pilot', { enabled: $('#pa-on').checked, threshold: Math.max(50, Math.min(99, +$('#pa-th').value || 75)) / 100, autonomy, priorities: $('#pa-pr').value, rules: $('#pa-ru').value, daily_cap: +$('#pa-cap').value || 0 }); toast(t('Saved.')); plRenderAuto(); }
+  catch (e) { toast(e.message); }
+}
+async function plVerdict(el) {
+  el.disabled = true;
+  try {
+    const ok = el.dataset.verdict === '1';
+    PL.auto = await post('api/pilot/verdict', { decision_id: el.dataset.did, ok, note: ok ? '' : (prompt(t('What should it have answered?')) || '') });
+    toast(ok ? t('Noted, thank you.') : t('Noted: I will take that into account.')); if (PL.tab === 'autonomy') plRenderAuto();
+  } catch (e) { toast(e.message); el.disabled = false; }
+}
+
+// -- Agents: the roster, and one conversation at a time --
+function plRenderAgents() {
+  const info = PL.info, list = $('#pl-ag-list'), det = $('#pl-ag-detail'); if (!list) return;
+  const agents = info.agents || [], q = PL.q.trim().toLowerCase();
+  document.querySelectorAll('#pl-ag-f .pl-chip').forEach(c => {
+    const f = c.dataset.f, n = f === 'all' ? agents.length : agents.filter(a => plGroupOf(a) === f).length;
+    c.classList.toggle('on', PL.f === f); let s = c.querySelector('.pl-cn'); if (!s) { s = document.createElement('span'); s.className = 'pl-cn no-i18n'; c.append(s); } s.textContent = ' · ' + n;
   });
+  $('#pl-ag-group')?.classList.toggle('on', PL.group);
+  const L = agents.filter(a => (PL.f === 'all' || plGroupOf(a) === PL.f) && (!q || `${a.name} ${a.task || ''} ${a.machine || ''}`.toLowerCase().includes(q)))
+    .sort((a, b) => (!!b.waiting - !!a.waiting) || ((b.unread || 0) - (a.unread || 0)) || ((b.ts || 0) - (a.ts || 0)));
+  if (!agents.some(a => a.id === PL.sel)) PL.sel = (L[0] || agents[0])?.id || null;
+  const row = a => `<div class="pl-rw${a.id === PL.sel ? ' sel' : ''}" data-asel="${esc(a.id)}">${plDot(a)}
+      <div><div class="pl-n no-i18n">${esc(a.name)}</div><div class="pl-s no-i18n">${esc(a.task && a.task !== '—' ? a.task + ' · ' : '')}${esc(a.machine || '')}</div></div>
+      <div class="pl-r${plStale(a) ? ' stale' : ''}" title="${esc(t('Last news from the session itself'))}">${esc(plSeen(a))}${a.unread ? `<span class="pl-bd no-i18n">${a.unread}</span>` : ''}</div></div>`;
+  list.innerHTML = !L.length ? `<div class="pl-empty">${esc(agents.length ? t('No agent matches.') : t('No agents are running yet. Ask the assistant in the chat to put one to work.'))}</div>`
+    : PL.group ? [...new Set(L.map(a => a.machine || '—'))].map(m => `<div class="pl-grp no-i18n">🖥 ${esc(m)}</div>` + L.filter(a => (a.machine || '—') === m).map(row).join('')).join('')
+    : L.map(row).join('');
+  const a = agents.find(x => x.id === PL.sel);
+  if (!a) { det.innerHTML = `<div class="pl-empty pl-center">${esc(t('Pick an agent to read its conversation.'))}</div>`; return; }
+  if (PL.tab === 'agents') plLoadThread(a);
+  else if (PL.threads[a.id]) plPaintAgent(a);
+}
+async function plLoadThread(a) {
+  try {
+    const r = await api(`api/conductor/agents/${encodeURIComponent(a.id)}/thread`);
+    PL.threads[a.id] = r.thread || [];
+  } catch (err) { PL.threads[a.id] = PL.threads[a.id] || []; }
+  if (PL.sel !== a.id) return;
+  plPaintAgent(a);
+  if (a.unread && PL.tab === 'agents') { // reading a conversation clears its unread count
+    a.unread = 0; plBadge('#pl-bd-agents', (PL.info.agents || []).reduce((n, x) => n + (x.unread || 0), 0));
+    post(`api/conductor/agents/${encodeURIComponent(a.id)}/read`, {}).then(() => refreshStatus()).catch(() => {});
+    plRenderAgentsList();
+  }
+}
+function plRenderAgentsList() { // only the list, after a read (the open conversation stays as it is)
+  const sel = PL.sel; document.querySelectorAll('#pl-ag-list .pl-rw').forEach(r => { if (r.dataset.asel === sel) r.querySelector('.pl-bd')?.remove(); });
+}
+function plPaintAgent(a) {
+  const det = $('#pl-ag-detail'), old = $('#pl-msgs'), oldIn = $('#pl-ag-input');
+  if (oldIn && PL.loaded) PL.draft[PL.loaded] = oldIn.value;
+  const atBottom = !old || PL.loaded !== a.id || old.scrollHeight - old.scrollTop - old.clientHeight < 40, keep = old?.scrollTop || 0;
+  let turns = PL.threads[a.id] || [];
+  if (a.waiting) { const k = turns.length - 1, z = turns[k]; if (z && z.role === 'agent' && (z.kind === 'question' || z.kind === 'approval')) turns = turns.slice(0, k); } // pinned above, not twice
+  const shown = PL.shown[a.id] || 40, vis = turns.slice(-shown), w = a.waiting;
+  let last = '';
+  const bubbles = vis.map(x => {
+    const day = plDay(x.ts), sep = day !== last ? `<div class="pl-day">${esc(day)}</div>` : ''; last = day;
+    const mine = x.role !== 'agent', who = !mine ? a.name : x.by === 'assistant' ? t('Assistant') : t('You');
+    const kd = !mine ? (x.kind || (x.decision_id ? 'answer' : 'status')) : '', kl = { question: t('Question'), approval: t('Approval'), answer: t('Answer'), alert: t('Alert') }[kd] || '';
+    return sep + `<div class="pl-b ${mine ? 'me' : 'them'}${kd ? ' k-' + kd : ''}">${kl ? `<span class="pl-pill${kd === 'alert' ? ' alert' : ''}">${esc(kl)}</span>` : ''}<div class="pl-bt no-i18n${(x.text || '').length > 500 ? ' clamp' : ''}">${md(x.text || '')}</div>${(x.text || '').length > 500 ? `<a href="#" class="small" data-more>${esc(t('Show all'))}</a>` : ''}
+      <div class="pl-bm muted"><span class="no-i18n">${esc(who)}</span> · ${esc(pilotAgo(x.ts))}${x.decision_id ? ` · <span class="no-i18n">${esc(x.decision_id)}</span>` : ''}</div></div>`;
+  }).join('');
+  det.innerHTML = `<div class="pl-ph">${plBackBtn()}${plDot(a)}<span class="pl-t no-i18n">${esc(a.name)}</span><span class="pl-sp muted small no-i18n">${esc((a.task && a.task !== '—' ? a.task + ' · ' : '') + (a.machine || '') + ' · ' + plSeen(a))}</span>${a.url ? `<a class="btn small" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : ''}</div>
+    ${w ? `<div class="pl-pin kind-${esc(w.kind)}"><div class="small"><b>${esc(plKind(w))}${w.type ? ' · ' + esc(w.type) : ''}</b> · ${esc(t('waiting for you'))}</div><div class="pl-pq no-i18n">${esc(w.question)}</div>${w.question.length > 220 ? `<a href="#" class="small" data-more-pin>${esc(t('Show all'))}</a>` : ''}
+      ${w.options?.length && w.kind !== 'approval' ? `<div class="pl-opts">${w.options.map(o => `<button type="button" class="btn small primary no-i18n" data-answer="${esc(o)}" data-agent-id="${esc(a.id)}">${esc(o)}</button>`).join('')}</div>` : ''}
+      ${w.cost ? `<div class="muted small"><span>${esc(t('If it goes wrong:'))}</span> <span class="no-i18n">${esc(w.cost)}</span></div>` : ''}
+      ${w.kind === 'approval' ? `<div class="muted small">${esc(t('Only you can do this, in that session: open it and give the approval. Nothing can be done from here.'))}</div>` : ''}</div>` : ''}
+    <div class="pl-msgs" id="pl-msgs">${turns.length > shown ? `<button type="button" class="btn small pl-older" data-older="${esc(a.id)}">↑ ${esc(t('{n} older messages', { n: turns.length - shown }))}</button>` : ''}${bubbles || `<div class="pl-empty pl-center">${esc(t('No messages yet. Send the first one below.'))}</div>`}</div>
+    <div class="pl-comp"><textarea id="pl-ag-input" rows="2" placeholder="${esc(t('Message this agent…'))}"></textarea>
+      <button type="button" class="btn ghost icon dictate-btn" id="pl-ag-mic" aria-label="${esc(t('Dictate'))}" title="${esc(t('Dictate: speak and I type it here'))}">🎙️</button>
+      <button type="button" class="btn primary" id="pl-ag-send" data-agent-id="${esc(a.id)}">${esc(t('Send'))}</button></div>`;
+  const inp = $('#pl-ag-input'), box = $('#pl-msgs');
+  inp.value = PL.draft[a.id] || ''; PL.loaded = a.id;
+  $('#pl-ag-mic').onclick = e => toggleDictate(inp, e.currentTarget);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $('#pl-ag-send').click(); } });
+  box.scrollTop = atBottom ? box.scrollHeight : keep;
+}
+async function plSay(id, text, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await post(`api/conductor/agents/${encodeURIComponent(id)}/say?space=${state.space}`, { text });
+    toast(r.ok ? t('Sent to {a}.', { a: (PL.info.agents || []).find(x => x.id === id)?.name || id }) : (r.message || t('Could not send.')));
+    if (r.ok) { PL.draft[id] = ''; PL.threads[id] = r.thread || PL.threads[id]; plRender(await api('api/conductor')); }
+  } catch (err) { toast(err.message); }
+  if (btn) btn.disabled = false;
+}
+
+// -- Journal: the fleet-wide reports and alerts (an agent's own replies are in its conversation) --
+function plRenderJournal() {
+  const list = $('#pl-jr-list'), det = $('#pl-jr-detail'); if (!list) return;
+  const q = PL.jq.trim().toLowerCase();
+  document.querySelectorAll('#pl-jr-f .pl-chip').forEach(c => c.classList.toggle('on', PL.jf === c.dataset.f));
+  if (PL.jf === 'pass') { // each check-in of the orchestrator, the quiet ones folded
+    const rows = plPassRows(PL.info), gap = PL.info.silentFor ? `<div class="pl-empty">${esc(t('No pass for {n} min: the orchestrator may be asleep.', { n: Math.round(PL.info.silentFor / 60) }))}</div>` : '';
+    list.innerHTML = gap + (rows.length ? rows.map(r => `<div class="pl-rw"><span class="pl-pill">${esc(t('pass'))}</span><div><div class="pl-n">${esc(r.text)}</div>${r.k.note ? `<div class="pl-s no-i18n">${esc(r.k.note)}</div>` : ''}</div><div class="pl-r">${esc(pilotAgo(r.k.ts))}</div></div>`).join('')
+      : `<div class="pl-empty">${esc(t('No pass recorded yet. Each time the orchestrator checks in, it shows up here.'))}</div>`);
+    det.innerHTML = `<div class="pl-empty pl-center">${esc(t('Each line is one check-in of the orchestrator, even when nothing happened.'))}</div>`;
+    return;
+  }
+  const all = (PL.info.reports || []).slice().reverse().filter(r => (PL.jf === 'all' || (r.kind || 'summary') === PL.jf) && (!q || `${r.title} ${r.text}`.toLowerCase().includes(q)));
+  const rows = all.slice(0, PL.jmax), key = r => `${r.ts}:${r.title}`;
+  if (!rows.some(r => key(r) === PL.jsel)) PL.jsel = rows[0] ? key(rows[0]) : null;
+  let last = '';
+  list.innerHTML = rows.map(r => {
+    const day = plDay(r.ts), sep = day !== last ? `<div class="pl-grp">${esc(day)}</div>` : ''; last = day;
+    const alert = (r.kind || 'summary') === 'alert';
+    return sep + `<div class="pl-rw pl-jr${key(r) === PL.jsel ? ' sel' : ''}" data-jsel="${esc(key(r))}"><span class="pl-pill${alert ? ' alert' : ''}">${esc(alert ? t('Alert') : t('Summary'))}</span>
+      <div><div class="pl-n no-i18n">${esc(r.title || t('Fleet update'))}</div><div class="pl-s no-i18n">${esc(plClip(r.text, 70))}</div></div><div class="pl-r">${esc(pilotAgo(r.ts))}</div></div>`;
+  }).join('') + (all.length > rows.length ? `<div class="pl-more"><button type="button" class="btn small" data-jmore>${esc(t('Show more ({n} older)', { n: all.length - rows.length }))}</button></div>` : '')
+    || `<div class="pl-empty">${esc(t('No reports yet. When your pilot reports progress, it shows up here.'))}</div>`;
+  const r = rows.find(x => key(x) === PL.jsel);
+  det.innerHTML = r ? `<div class="pl-ph">${plBackBtn()}<span class="pl-t no-i18n">${esc(r.title || t('Fleet update'))}</span><span class="pl-pill${(r.kind || 'summary') === 'alert' ? ' alert' : ''}">${esc((r.kind || 'summary') === 'alert' ? t('Alert') : t('Summary'))}</span><span class="pl-sp muted small">${esc(pilotAgo(r.ts))}</span></div><div class="pl-det no-i18n">${md(r.text || '')}</div>`
+    : `<div class="pl-empty pl-center">${esc(t('Pick a report to read it.'))}</div>`;
+}
+
+function plWire() {
+  if (PL.wired) return; PL.wired = true;
+  $('#pl-tabs').addEventListener('click', e => { const b = e.target.closest('.pl-tab'); if (b) plShowTab(b.dataset.pl); });
+  $('#pl-ag-f').addEventListener('click', e => { const c = e.target.closest('.pl-chip'); if (c) { PL.f = c.dataset.f; plRenderAgents(); } });
+  $('#pl-ag-group').onclick = () => { PL.group = !PL.group; plRenderAgents(); };
+  $('#pl-ag-q').oninput = e => { PL.q = e.target.value; plRenderAgents(); };
+  $('#pl-jr-f').addEventListener('click', e => { const c = e.target.closest('.pl-chip'); if (c) { PL.jf = c.dataset.f; plRenderJournal(); } });
+  $('#pl-jr-q').oninput = e => { PL.jq = e.target.value; plRenderJournal(); };
+  $('.pilot-panel[data-ppanel=agents]').addEventListener('click', e => {
+    const t0 = e.target;
+    let el;
+    if ((el = t0.closest('[data-plback]'))) { el.closest('.pl-split').classList.remove('detail'); return; }
+    if ((el = t0.closest('[data-verdict]'))) { plVerdict(el); return; }
+    if ((el = t0.closest('[data-auto-save]'))) { plSaveAuto(); return; }
+    if ((el = t0.closest('[data-clarify]'))) { plClarify(el.dataset.clarify, el); return; }
+    if ((el = t0.closest('[data-need-send]'))) { const inp = $('#pl-need-input'), text = inp.value.trim(); if (!text) { inp.focus(); return; } PL.draft['n:' + el.dataset.needSend] = ''; plSay(el.dataset.needSend, text, el); return; }
+    if ((el = t0.closest('[data-answer]'))) { plSay(el.dataset.agentId, el.dataset.answer, el); return; }
+    if ((el = t0.closest('[data-open-agent]'))) { PL.sel = el.dataset.openAgent; plShowTab('agents'); plOpen('#pl-split-agents'); setTimeout(() => $('#pl-ag-input')?.focus(), 250); return; }
+    if ((el = t0.closest('[data-more]'))) { e.preventDefault(); const b = el.closest('.pl-b'); b.classList.toggle('open'); el.textContent = b.classList.contains('open') ? t('Show less') : t('Show all'); return; }
+    if ((el = t0.closest('[data-more-pin]'))) { e.preventDefault(); const p = el.closest('.pl-pin'); p.classList.toggle('open'); el.textContent = p.classList.contains('open') ? t('Show less') : t('Show all'); return; }
+    if ((el = t0.closest('[data-older]'))) { const box = $('#pl-msgs'), h = box.scrollHeight; PL.shown[el.dataset.older] = (PL.shown[el.dataset.older] || 40) + 40; plPaintAgent((PL.info.agents || []).find(x => x.id === el.dataset.older)); const nb = $('#pl-msgs'); nb.scrollTop = nb.scrollHeight - h; return; }
+    if ((el = t0.closest('[data-jmore]'))) { PL.jmax += 50; plRenderJournal(); return; }
+    if ((el = t0.closest('#pl-ag-send'))) { const inp = $('#pl-ag-input'), text = inp.value.trim(); if (!text) { inp.focus(); return; } plSay(el.dataset.agentId, text, el); return; }
+    if ((el = t0.closest('[data-nsel]'))) { PL.nsel = el.dataset.nsel; plOpen('#pl-split-need'); plRenderNeed(); return; }
+    if ((el = t0.closest('[data-asel]'))) { PL.sel = el.dataset.asel; plOpen('#pl-split-agents'); plRenderAgents(); return; }
+    if ((el = t0.closest('[data-jsel]'))) { PL.jsel = el.dataset.jsel; plOpen('#pl-split-journal'); plRenderJournal(); return; }
+  });
+}
+
+async function pilotAgents() {
+  plWire();
+  if (!pilotAgents.wired) { pilotAgents.wired = true;
+    $('#pilot-cfg').addEventListener('toggle', e => { e.currentTarget.dataset.touched = '1'; });
+    $('#pilot-status-btn').onclick = () => pilotStatusFile($('#pilot-status-file').hidden);
+    $('#pilot-status-copy').onclick = () => copyText($('#pilot-status-text').textContent);
+  }
+  await initOrchestratorPanel('pilot', info => {
+    const on = !!info.connected;
+    // status card: dot + "Autonomous pilot — connected/disconnected", then one grounded line
+    const title = $('#pilot-conn-title');
+    if (title) title.innerHTML = `<span class="pilot-dot${on ? ' on' : ''}" id="pilot-conn-dot"></span>`
+      + esc(`${t('Autonomous pilot')} — ${on ? t('connected') : t('disconnected')}`);
+    const parts = [];
+    if (info.session) parts.push(t('session {s}', { s: info.session }));
+    parts.push(t('last report {a}', { a: pilotAgo(info.lastReport) }));
+    if (on) parts.push(t('sees {a} on {b}', { a: pN('1 agent', '{n} agents', info.agentCount || 0), b: pN('1 machine', '{n} machines', info.machines || 0) }));
+    if (on && info.waiting) parts.push(pN('1 waiting for you', '{n} waiting for you', info.waiting));
+    if (on && info.silentFor) parts.push('⚠ ' + t('No pass for {n} min: the orchestrator may be asleep.', { n: Math.round(info.silentFor / 60) }));
+    $('#pilot-orch-status').textContent = on ? parts.join(' · ')
+      : t('Not paired yet. Pair your autonomous pilot to delegate work across your machines.');
+    const cfg = $('#pilot-cfg'); if (cfg && !on && !cfg.dataset.touched) cfg.open = true;
+    renderPilotNotify(info);
+    plRender(info);
+  });
+}
+// the Pilotage menu badge + the Agents-subtab badge, both counting unread fleet reports
+function setFleetBadge() {
+  const n = state.fleetUnread || 0, txt = n > 99 ? '99+' : String(n);
+  for (const sel of ['#pilot-rail-badge', '#pilot-tab-agents']) {
+    const el = $(sel); if (!el) continue; el.hidden = !n; el.textContent = n ? txt : '';
+  }
 }
 async function pilotChantiers() {
   const box = $('#pilot-chantiers');
@@ -5123,12 +6678,22 @@ function pSpark(series) { // recent accepted (1) / rejected (0) runs, oldest→n
   const width = pts.length * (w + g) - g;
   return `<svg class="pspark" viewBox="0 0 ${width} ${h}" width="${width}" height="${h}" aria-hidden="true">${bars}</svg>`;
 }
-function proleCard(r) {
+// A role in the specialization map: a compact, clickable node (ring sized by run volume) that opens the detail card below.
+function roleNode(r, scale) {
+  const meta = r.runs ? t('{n} runs', { n: r.runs }) : t('no runs yet');
+  const proto = r.protected ? ` <span class="chip proto">${esc(t('Protected'))}</span>` : '';
+  return `<button type="button" class="pnode" data-role-select="${esc(r.name)}" aria-pressed="false">
+    <span class="pnode-ring" style="--s:${scale.toFixed(2)}">${pRing(r.acceptance)}</span>
+    <span class="pnode-id"><b class="no-i18n">${esc(r.name)}</b><span class="muted small no-i18n">${esc(meta)}${proto}</span></span>
+  </button>`;
+}
+// The detail card shown at the bottom for the selected role: ring, metrics, sparkline, specialization editor, lifecycle actions.
+function roleDetail(r) {
   const acc = r.acceptance == null ? t('no rated runs yet') : `${Math.round(r.acceptance * 100)}% ${t('accepted')}`;
   const chips = [];
   if (r.protected) chips.push(`<span class="chip proto">${esc(t('Protected'))}</span>`);
   if (r.published) chips.push(`<span class="chip schedule">${esc(t('Published'))}</span>`);
-  chips.push(`<span class="chip tier no-i18n">${esc(r.tier)}</span>`);
+  chips.push(`<span class="chip tier no-i18n">${esc(tierLabel(r.tier))}</span>`);
   const trendTitle = { up: 'rising', down: 'falling', flat: 'steady', new: 'too new to tell' }[r.trend] || '';
   const trend = PILOT_TREND[r.trend] ? `<span class="ptrend t-${esc(r.trend)}" title="${esc(t(trendTitle))}">${PILOT_TREND[r.trend]}</span>` : '';
   const bits = [
@@ -5143,12 +6708,12 @@ function proleCard(r) {
   const lifecycle = r.protected ? '' :
     `<button class="btn ghost small" data-role-improve="${esc(r.name)}">${esc(t('Improve'))}</button>`
     + `<button class="btn ghost small" data-role-archive="${esc(r.name)}">${esc(t('Archive'))}</button>`;
-  return `<div class="prole-card">
+  return `<div class="prole-detail-card">
     <div class="prole-head">${pRing(r.acceptance)}<div class="prole-id"><b class="no-i18n">${esc(r.name)}</b> <span class="muted small no-i18n">v${r.version}</span><div class="prole-chips">${chips.join('')}</div></div></div>
     <p class="muted small prole-desc">${esc(r.description || '')}</p>
     <div class="prole-metrics small"><span>${esc(acc)}</span>${trend}<span class="muted">${esc(bits)}</span>${pSpark(r.series)}</div>
     ${overlap}
-    <form class="prole-spec" data-role-spec="${esc(r.name)}"><label class="muted small">${esc(t('Specialization'))}</label><input class="prole-spec-in no-i18n" value="${esc(r.specialization || '')}" placeholder="${esc(t('none'))}"><button type="submit" class="btn ghost small">${esc(t('Set'))}</button></form>
+    <form class="prole-spec" data-role-spec="${esc(r.name)}"><label class="muted small">${esc(t('Specialization'))}</label><input class="prole-spec-in no-i18n" aria-label="${esc(t('Specialization'))}" value="${esc(r.specialization || '')}" placeholder="${esc(t('none'))}"><button type="submit" class="btn ghost small">${esc(t('Set'))}</button></form>
     <div class="prole-actions">
       <button class="btn ghost small" data-role-eval="${esc(r.name)}">${esc(t('Evaluate'))}</button>
       ${publish}
@@ -5207,45 +6772,125 @@ async function roleImprove(name) {
     };
   } catch (e) { panel.innerHTML = `<div class="placeholder">${esc(e.message)}</div>`; }
 }
+async function roleNew() {
+  const panel = $('#prole-new');
+  panel.hidden = false;
+  panel.scrollIntoView({ block: 'nearest' });
+  // offer the specializations already in use, so a new role joins an existing cluster rather than spawning a near-duplicate one
+  let specs = [];
+  try { const r = await api('api/roles'); specs = [...new Set((r.roles || []).map(x => (x.specialization || '').trim()).filter(Boolean))].sort(); } catch {}
+  const opts = specs.map(s => `<option value="${esc(s)}"></option>`).join('');
+  panel.innerHTML = `<div class="prole-merge-head"><b>${esc(t('New role'))}</b><button class="btn icon" data-new-close aria-label="${esc(t('Close'))}">✕</button></div>`
+    + `<label class="muted small">${esc(t('Name'))}</label><input class="prole-new-name no-i18n" placeholder="${esc(t('e.g. meeting-notes'))}">`
+    + `<label class="muted small">${esc(t('Purpose (one line)'))}</label><input class="prole-new-purpose" placeholder="${esc(t('what this role is for, in one line'))}">`
+    + `<label class="muted small">${esc(t('Specialization'))}</label><input class="prole-new-spec no-i18n" list="prole-new-specs" placeholder="${esc(t('optional'))}"><datalist id="prole-new-specs">${opts}</datalist>`
+    + `<label class="muted small">${esc(t('Brief'))}</label><textarea class="prole-new-brief no-i18n" rows="8" placeholder="${esc(t('Describe the role: what it does, its standards, its guardrails…'))}"></textarea>`
+    + `<p class="muted small">${esc(t('On creation the pilot checks for duplicates and warns if a close role already exists.'))}</p>`
+    + `<button class="btn primary small" data-new-save>${esc(t('Create the role'))}</button>`;
+  panel.querySelector('[data-new-close]').onclick = () => { panel.hidden = true; panel.innerHTML = ''; };
+  panel.querySelector('[data-new-save]').onclick = async e => {
+    const btn = e.currentTarget;
+    const name = panel.querySelector('.prole-new-name').value.trim();
+    const purpose = panel.querySelector('.prole-new-purpose').value.trim();
+    const content = panel.querySelector('.prole-new-brief').value.trim();
+    const specialization = panel.querySelector('.prole-new-spec').value.trim();
+    if (!name || !purpose || !content) { toast(t('A role needs a name, a one-line purpose and a brief.')); return; }
+    btn.disabled = true;
+    try {
+      const r = await post('api/roles', { name, purpose, content, specialization });
+      toast(r.message || t('Role created'));
+      panel.hidden = true; panel.innerHTML = '';
+      pilotRoles().catch(() => {}); pilotBadges().catch(() => {});
+    } catch (err) { toast(err.message); btn.disabled = false; }
+  };
+}
 async function pilotRoles() {
   const box = $('#pilot-roles');
   const { roles, overlaps, archived } = await api('api/roles');
-  if (!roles || !roles.length) { box.innerHTML = `<div class="placeholder">${esc(t('No roles yet. The director and the fleet seed roles as they work; they will appear here as a managed catalogue.'))}</div>`; return; }
+  const archBtn = archived && archived.length
+    ? `<button class="btn ghost small" id="prole-arch-btn">${esc(t('Archived'))} (${archived.length})</button>` : '';
+  const header = `<div class="prole-toolbar">
+      <div class="prole-toolbar-txt">
+        <h3>${esc(t('Roles by specialization'))}</h3>
+        <p class="muted small">${esc(t('A specialization groups roles on a close topic — not necessarily duplicates. The ring shows each role’s accept rate, its size how much it runs. Click a role to see its detail.'))}</p>
+      </div>
+      <div class="prole-toolbar-btns"><button class="btn primary small" id="prole-new-btn">+ ${esc(t('New role'))}</button>${archBtn}</div>
+    </div>
+    <div id="prole-new" hidden></div>`;
+  const wireNew = () => { const b = $('#prole-new-btn'); if (b) b.onclick = () => roleNew(); };
+  if (!roles || !roles.length) {
+    box.innerHTML = header + `<div class="placeholder">${esc(t('No roles yet. The director and the fleet seed roles as they work; they will appear here as a managed catalogue.'))}</div>`;
+    wireNew(); return;
+  }
   const banner = overlaps && overlaps.length
     ? `<div class="poverlap-banner"><b>${esc(t('Overlap detected'))}</b><ul>` + overlaps.map(o =>
         `<li><span class="no-i18n">${esc(o.a)} ≈ ${esc(o.b)}</span> <span class="muted small">${esc(t('{p}% close', { p: Math.round(o.score * 100) }))}</span> <button class="btn ghost small" data-merge-a="${esc(o.a)}" data-merge-b="${esc(o.b)}">${esc(t('Compare'))}</button></li>`
       ).join('') + `</ul></div>` : '';
-  // group by specialization; roles with none fall into a trailing "Unspecialized" group
+  // group by specialization; roles with none fall into a trailing "Unspecialized" group. Ring size scales with run volume.
   const groups = new Map();
   for (const r of roles) { const k = r.specialization || ''; (groups.get(k) || groups.set(k, []).get(k)).push(r); }
   const keys = [...groups.keys()].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b));
-  const sections = keys.map(k =>
-    `<div class="pspec${k ? '' : ' none'} no-i18n">${esc(k || t('Unspecialized'))}</div>`
-    + `<div class="prole-grid">${groups.get(k).map(proleCard).join('')}</div>`).join('');
+  const maxRuns = Math.max(1, ...roles.map(r => r.runs || 0));
+  const scaleOf = n => 0.82 + 0.5 * Math.sqrt((n || 0) / maxRuns);
+  const sections = keys.map(k => {
+    const list = groups.get(k);
+    const count = t(list.length === 1 ? '{n} role' : '{n} roles', { n: list.length });
+    return `<div class="pspec-card${k ? '' : ' none'}">
+      <div class="pspec-head"><span class="pspec-name no-i18n">${esc(k || t('Unspecialized'))}</span><span class="pspec-count muted small">· ${esc(count)}</span></div>
+      <div class="pnode-row">${list.map(r => roleNode(r, scaleOf(r.runs))).join('')}</div>
+    </div>`;
+  }).join('');
   // archived roles keep their file and all their Assessor history; they are just out of the map and the director's search
   const archivedBlock = archived && archived.length
-    ? `<details class="parchived"><summary>${esc(t('Archived'))} (${archived.length})</summary>`
+    ? `<div id="prole-arch" class="parchived" hidden><div class="pspec-name muted small">${esc(t('Archived'))}</div>`
       + archived.map(a => `<div class="parch-row"><div class="parch-id"><b class="no-i18n">${esc(a.name)}</b> <span class="muted small">${esc(a.runs ? t('{n} runs', { n: a.runs }) : t('no runs yet'))}</span><p class="muted small no-i18n">${esc(a.description || '')}</p></div>`
         + `<div class="parch-actions"><button class="btn ghost small" data-role-reactivate="${esc(a.name)}">${esc(t('Reactivate'))}</button>`
         + (a.runs
           ? `<button class="btn ghost small" disabled title="${esc(t('This role has history; archive keeps it. Delete is only for a role that never ran.'))}">${esc(t('Delete'))}</button>`
           : `<button class="btn ghost small danger" data-role-delete="${esc(a.name)}">${esc(t('Delete'))}</button>`)
         + `</div></div>`).join('')
-      + `</details>` : '';
-  box.innerHTML = `<p class="muted small">${esc(t('The roles your assistant runs — the same registry the director and the fleet use, drawing the Assessor’s own numbers, so improving one improves everywhere.'))}</p>`
-    + banner + `<div id="prole-merge" hidden></div><div id="prole-improve" hidden></div>` + sections + archivedBlock;
-  box.querySelectorAll('[data-role-eval]').forEach(b => b.onclick = () => roleAction(b, `api/roles/${encodeURIComponent(b.dataset.roleEval)}/evaluate`));
-  box.querySelectorAll('[data-role-pub]').forEach(b => b.onclick = () => {
-    if (!confirm(t('Send this role to the store for review, so other assistants can install it?'))) return;
-    roleAction(b, `api/roles/${encodeURIComponent(b.dataset.rolePub)}/publish`);
-  });
-  box.querySelectorAll('[data-role-improve]').forEach(b => b.onclick = () => roleImprove(b.dataset.roleImprove));
-  box.querySelectorAll('[data-role-archive]').forEach(b => b.onclick = async () => {
-    if (!confirm(t('Archive this role? It leaves the catalogue and the director’s search, but its file and all its history are kept — you can reactivate it any time.'))) return;
-    b.disabled = true;
-    try { await post(`api/roles/${encodeURIComponent(b.dataset.roleArchive)}/archive`, { on: true }); toast(t('Archived.')); pilotRoles().catch(() => {}); }
-    catch (err) { toast(err.message); b.disabled = false; }
-  });
+      + `</div>` : '';
+  box.innerHTML = header + banner
+    + `<div id="prole-merge" hidden></div><div id="prole-improve" hidden></div>`
+    + `<div class="pspec-grid">${sections}</div>`
+    + `<div id="prole-detail" class="prole-detail"></div>`
+    + archivedBlock;
+  wireNew();
+  const ab = $('#prole-arch-btn');
+  if (ab) ab.onclick = () => { const p = $('#prole-arch'); if (p) { p.hidden = !p.hidden; if (!p.hidden) p.scrollIntoView({ block: 'nearest' }); } };
+  // wire the lifecycle controls that live inside the currently-rendered detail card (scoped so a re-render re-wires cleanly)
+  function wireDetail(scope) {
+    scope.querySelectorAll('[data-role-eval]').forEach(b => b.onclick = () => roleAction(b, `api/roles/${encodeURIComponent(b.dataset.roleEval)}/evaluate`));
+    scope.querySelectorAll('[data-role-pub]').forEach(b => b.onclick = () => {
+      if (!confirm(t('Send this role to the store for review, so other assistants can install it?'))) return;
+      roleAction(b, `api/roles/${encodeURIComponent(b.dataset.rolePub)}/publish`);
+    });
+    scope.querySelectorAll('[data-role-improve]').forEach(b => b.onclick = () => roleImprove(b.dataset.roleImprove));
+    scope.querySelectorAll('[data-role-archive]').forEach(b => b.onclick = async () => {
+      if (!confirm(t('Archive this role? It leaves the catalogue and the director’s search, but its file and all its history are kept — you can reactivate it any time.'))) return;
+      b.disabled = true;
+      try { await post(`api/roles/${encodeURIComponent(b.dataset.roleArchive)}/archive`, { on: true }); toast(t('Archived.')); pilotRoles().catch(() => {}); }
+      catch (err) { toast(err.message); b.disabled = false; }
+    });
+    scope.querySelectorAll('form[data-role-spec]').forEach(f => f.onsubmit = async e => {
+      e.preventDefault();
+      const name = f.dataset.roleSpec, val = f.querySelector('.prole-spec-in').value.trim();
+      try { await post(`api/roles/${encodeURIComponent(name)}/specialization`, { specialization: val }); toast(t('Specialization saved')); pilotRoles().catch(() => {}); }
+      catch (err) { toast(err.message); }
+    });
+  }
+  // master → detail: clicking a node renders its card below and marks it selected; the choice survives a refresh
+  const byName = new Map(roles.map(r => [r.name, r]));
+  const detail = $('#prole-detail');
+  const showDetail = name => {
+    const r = byName.get(name); if (!r) return;
+    pilotRoles._sel = name;
+    box.querySelectorAll('.pnode').forEach(n => { const on = n.dataset.roleSelect === name; n.classList.toggle('sel', on); n.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    detail.innerHTML = roleDetail(r);
+    wireDetail(detail);
+  };
+  box.querySelectorAll('[data-role-select]').forEach(b => b.onclick = () => { showDetail(b.dataset.roleSelect); detail.scrollIntoView({ block: 'nearest' }); });
+  // the archived controls and the overlap "Compare" buttons live outside the detail card
   box.querySelectorAll('[data-role-reactivate]').forEach(b => b.onclick = async () => {
     b.disabled = true;
     try { await post(`api/roles/${encodeURIComponent(b.dataset.roleReactivate)}/archive`, { on: false }); toast(t('Reactivated.')); pilotRoles().catch(() => {}); }
@@ -5258,12 +6903,8 @@ async function pilotRoles() {
     catch (err) { toast(err.message); b.disabled = false; }
   });
   box.querySelectorAll('[data-merge-a]').forEach(b => b.onclick = () => roleCompare(b.dataset.mergeA, b.dataset.mergeB));
-  box.querySelectorAll('form[data-role-spec]').forEach(f => f.onsubmit = async e => {
-    e.preventDefault();
-    const name = f.dataset.roleSpec, val = f.querySelector('.prole-spec-in').value.trim();
-    try { await post(`api/roles/${encodeURIComponent(name)}/specialization`, { specialization: val }); toast(t('Specialization saved')); pilotRoles().catch(() => {}); }
-    catch (err) { toast(err.message); }
-  });
+  // open the previously-selected role if it still exists, else the first one, so the detail card is never empty
+  showDetail(byName.has(pilotRoles._sel) ? pilotRoles._sel : roles[0].name);
 }
 async function pilotKb() {
   const box = $('#pilot-kb');
@@ -5303,8 +6944,8 @@ function route() {
   document.querySelectorAll('.subtabs a').forEach(a => {
     const on = a.dataset.view === v; a.classList.toggle('active', on); a.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  $('#more-btn').classList.toggle('active', ['notifications', 'jobs', 'apps', 'activity', 'settings', 'mail', 'people', 'tasks', 'privacy'].includes(v));
-  $('#more-sheet').hidden = true;
+  $('#more-btn').classList.toggle('active', ['tasks', 'jobs', 'activity'].includes(v));
+  closeMore();
   if (v !== 'library') closeViewer();
   if (v !== 'board') { clearTimeout(loadBoard.t); }
   VIEWS[v]?.().catch(e => toast(e.message));
@@ -5355,20 +6996,102 @@ $('#assistant-btn').onclick = $('#brand-mark').onclick = e => {
 };
 document.addEventListener('click', e => { if (!e.target.closest('.brand')) { $('#assistant-menu').hidden = true; $('#assistant-btn').setAttribute('aria-expanded', 'false'); } });
 
+// ---- the account menu, bottom-left of the rail: who you are, plus the settings that belong to you, not to a space ----
+function langPref() { try { return localStorage.getItem(LSK + 'talixio.lang') || ''; } catch { return ''; } }
+function setLang(v) { try { if (v) localStorage.setItem(LSK + 'talixio.lang', v); else localStorage.removeItem(LSK + 'talixio.lang'); } catch {} location.reload(); }
+const THEME_LABEL = { '': 'System', light: 'Light', dark: 'Dark' };
+const LANG_LABEL = { '': 'Automatic', fr: 'Français', en: 'English' };
+/** The chip: the assistant you are signed in as. The brand at the top switches assistants; this is the same identity, down where an account lives. */
+function renderAccount() {
+  const me = state.status?.assistant || {}, name = me.name || state.status?.name || 'Talixio';
+  const a = avatarOf(me.id || name);
+  const av = $('#account-av'); if (av) { av.textContent = a.letters; av.style.setProperty('--h', a.hue); }
+  const nm = $('#account-name'); if (nm) nm.textContent = name;
+  const btn = $('#account-btn'); if (btn) btn.title = t('Account and settings');
+}
+const accountIcon = {
+  settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8M4.6 9a1.7 1.7 0 0 0-.3-1.8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
+  usage: '<svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>',
+  privacy: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></svg>',
+  memory: '<svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg>',
+  lang: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>',
+  theme: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>',
+  install: '<svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4M5 21h14"/></svg>',
+  help: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01"/></svg>',
+  logout: '<svg viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></svg>',
+  back: '<svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>',
+};
+function accountRow(icon, label, { hint = '', value = '', cls = '', attrs = '' } = {}) {
+  return `<button class="space-item${cls ? ' ' + cls : ''}" role="menuitem" type="button"${attrs}>`
+    + `<span class="ai-ic" aria-hidden="true">${accountIcon[icon] || ''}</span>`
+    + `<span class="ai-label">${esc(t(label))}</span>`
+    + (value ? `<span class="ai-value no-i18n">${esc(value)}</span>` : '')
+    + (hint ? `<span class="ai-hint no-i18n">${esc(hint)}</span>` : '')
+    + '</button>';
+}
+function closeAccountMenu() { const m = $('#account-menu'); if (m) m.hidden = true; $('#account-btn')?.setAttribute('aria-expanded', 'false'); }
+function openAccountMenu() {
+  const menu = $('#account-menu');
+  const installable = !$('#install-btn').hidden;
+  menu.innerHTML =
+    accountRow('settings', 'Settings', { attrs: ' data-go="settings"' })
+    + accountRow('usage', 'Usage', { attrs: ' data-go="activity"' })
+    + accountRow('privacy', 'Privacy', { attrs: ' data-go="privacy"' })
+    + accountRow('memory', 'Memory', { attrs: ' data-go="memory"' })
+    + '<hr>'
+    + accountRow('lang', 'Language', { value: t(LANG_LABEL[langPref()]), attrs: ' data-sub="lang"' })
+    + accountRow('theme', 'Theme', { value: t(THEME_LABEL[themePref().mode || '']), attrs: ' data-act="theme"' })
+    + (installable ? '<hr>' + accountRow('install', 'Install app', { attrs: ' data-act="install"' }) : '')
+    + '<hr>'
+    + accountRow('help', 'Get help', { attrs: ' data-go="library"' })
+    + accountRow('logout', 'Sign out', { cls: 'danger', attrs: ' data-act="logout"' });
+  menu.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { closeAccountMenu(); location.hash = '#' + b.dataset.go; });
+  menu.querySelector('[data-act=install]')?.addEventListener('click', () => { closeAccountMenu(); $('#install-btn').click(); });
+  menu.querySelector('[data-act=logout]')?.addEventListener('click', () => { closeAccountMenu(); $('#logout').click(); });
+  menu.querySelector('[data-act=theme]')?.addEventListener('click', e => {
+    e.stopPropagation();
+    const order = ['', 'light', 'dark'], next = order[(order.indexOf(themePref().mode || '') + 1) % order.length];
+    saveTheme({ ...themePref(), mode: next });
+    openAccountMenu(); // keep the menu open so you see the theme change under the pointer
+  });
+  menu.querySelector('[data-sub=lang]')?.addEventListener('click', e => { e.stopPropagation(); openLangMenu(); });
+  menu.hidden = false; $('#account-btn').setAttribute('aria-expanded', 'true');
+}
+function openLangMenu() {
+  const menu = $('#account-menu'), cur = langPref();
+  const opt = (v, label) => `<button class="space-item" role="menuitemradio" type="button" aria-checked="${cur === v}" data-lang="${v}">`
+    + `<span class="ai-ic" aria-hidden="true">${cur === v ? accountIcon.check : ''}</span>`
+    + `<span class="ai-label no-i18n">${esc(t(label))}</span></button>`;
+  menu.innerHTML = accountRow('back', 'Language', { cls: 'ai-head', attrs: ' data-back="1"' })
+    + '<hr>' + opt('', LANG_LABEL['']) + opt('fr', LANG_LABEL.fr) + opt('en', LANG_LABEL.en);
+  menu.querySelector('[data-back]')?.addEventListener('click', e => { e.stopPropagation(); openAccountMenu(); });
+  menu.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { if (b.dataset.lang === cur) { closeAccountMenu(); return; } setLang(b.dataset.lang); });
+}
+$('#account-btn').onclick = e => {
+  e.stopPropagation();
+  if (!$('#account-menu').hidden) { closeAccountMenu(); return; }
+  openAccountMenu();
+};
+document.addEventListener('click', e => { if (!e.target.closest('.account')) closeAccountMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#account-menu').hidden) { closeAccountMenu(); $('#account-btn').focus(); } });
+
 async function refreshStatus() {
   try {
     state.statusAt = Date.now();
     const s = state.status = await api('api/status');
     const bn = $('#brand-name'); bn.textContent = bn.title = s.name; bn.classList.toggle('long', s.name.length > 14); document.title = s.name;
     renderAssistants(s.assistants, s.assistant);
+    renderAccount();
     const ch = Object.entries(s.channels).filter(([, on]) => on).map(([k]) => k[0].toUpperCase() + k.slice(1)).join(', ');
-    const b = s.budget, lim = b.daily_limit > 0 ? ` · $${b.today.toFixed(2)} of $${b.daily_limit.toFixed(2)} today` : '';
+    const b = s.budget, lim = b.daily_limit > 0 ? ' · ' + t('{a} of {b} today', { a: usdf(b.today), b: usdf(b.daily_limit) }) : '';
     $('#chat-sub').textContent = `${shortModel(s.model)} · ${ch}${lim}${b.state === 'low' ? ' · budget low' : b.state === 'blocked' ? ' · budget reached' : ''}`;
     const st = $('#status'); st.className = 'status ' + (s.worker_online ? 'on' : 'off');
     st.querySelector('span').textContent = s.worker_online ? 'Running' : 'Worker offline';
     st.title = s.worker_online ? 'Background worker is running: schedules and chat apps work.' : 'Background worker is not running: schedules and Telegram are paused. Check: systemctl status talixio-worker';
     for (const el of [$('#app-version'), $('#more-version')]) { el.textContent = 'Talixio ' + s.version; el.title = s.version_label; }
     if (s.notifications_unread !== state.notifUnread) { state.notifUnread = s.notifications_unread; setBadge(); if (!$('#view-notifications').hidden) loadNotifications(); }
+    if (s.fleet_unread !== state.fleetUnread) { const open = !$('#view-pilotage').hidden && $('.ptab[data-ptab="agents"]')?.getAttribute('aria-selected') === 'true'; state.fleetUnread = s.fleet_unread; if (open) pilotAgents().catch(() => {}); else setFleetBadge(); }
     $('#setup-model').hidden = !s.model_problem;
     $('#setup-claude').hidden = !s.claude_code;
     if (JSON.stringify(s.paused || null) !== $('#paused').dataset.p) { $('#paused').dataset.p = JSON.stringify(s.paused || null); renderPaused(s.paused); }
@@ -5470,7 +7193,7 @@ function renderBilling(b) {
   const list = b?.sources || [];
   $('#billing').hidden = !list.length;
   $('#billing-list').innerHTML = list.map(s => `<li><b class="no-i18n">${esc(s.name)}</b>${s.scope ? ` <span class="muted no-i18n">(${esc(s.scope)})</span>` : ''}: `
-    + (s.synced ? `$${s.month.toFixed(2)} ${esc(t('billed this month'))} · ${esc(t('read'))} ${fmtTime(s.synced)}` : esc(t('not read yet')))
+    + (s.synced ? `${esc(usdf(s.month))} ${esc(t('billed this month'))} · ${esc(t('read'))} ${fmtTime(s.synced)}` : esc(t('not read yet')))
     + (s.error ? ` · <span class="err">${esc(t('last try failed:'))} <span class="no-i18n">${esc(s.error)}</span></span>` : '') + '</li>').join('');
 }
 $('#billing-sync').onclick = async e => {
@@ -5527,26 +7250,24 @@ $('#mem-save').onclick = async () => {
 document.querySelectorAll('.rail a[data-view=library]').forEach(a => a.addEventListener('click', e => {
   if (!$('#view-library').hidden) { e.preventDefault(); libGo('/'); }
 }));
-$('#lib-upload').onclick = () => $('#lib-upload-input').click();
 $('#lib-upload-input').onchange = e => { libUpload([...e.target.files]); e.target.value = ''; };
-$('#lib-newnote').onclick = newNote;
-// mobile: one "+" opens every library action, so the toolbar is a single row
+// one "＋ New" menu: everything that adds something to the folder
+const libNewFolder = () => libInline(lib.folder === '/' ? '/' : lib.folder + '/', 'New folder path, e.g. /Clients/Alice', async v => {
+  const { folder } = await post('api/library/folder', { path: v }); toast('Folder created'); libGo(folder);
+});
 $('#lib-add').onclick = e => {
   e.stopPropagation();
   if (lib.readonly) return;
   openRowMenu(e.currentTarget, [
     { label: t('Upload'), run: () => $('#lib-upload-input').click() },
     { label: t('New note'), run: () => newNote() },
-    { label: t('New folder'), run: () => $('#lib-newfolder').click() },
-    { sep: true },
-    { label: t('Shares'), run: () => openSharesManager() },
-    { label: t('Recent changes'), run: () => showLibRecent() },
-    { label: lib.trash ? t('Trash ({n})', { n: lib.trash }) : t('Trash'), run: () => showLibTrash() },
+    { label: t('New folder'), run: libNewFolder },
   ]);
 };
-$('#lib-newfolder').onclick = () => libInline(lib.folder === '/' ? '/' : lib.folder + '/', 'New folder path, e.g. /Clients/Alice', async v => {
-  const { folder } = await post('api/library/folder', { path: v }); toast('Folder created'); libGo(folder);
-});
+$('#lib-folder-menu').onclick = e => { e.stopPropagation(); libFolderToolsMenu(e.currentTarget); };
+// the search field: a magnifier on a phone that opens over the toolbar; on a computer always there, its options shown while it is used
+$('#lib-search-toggle').onclick = () => { $('#lib-search').classList.add('open'); $('#lib-q').focus(); };
+$('#lib-q').addEventListener('blur', () => setTimeout(() => { const f = $('#lib-search'); if (!f.contains(document.activeElement) && !$('#lib-q').value) f.classList.remove('open'); }, 150));
 $('#lib-inline-cancel').onclick = () => { $('#lib-inline').hidden = true; };
 ['dragover', 'dragenter'].forEach(t => $('#lib-main').addEventListener(t, e => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); $('#lib-main').classList.add('drag'); } }));
 $('#lib-main').addEventListener('dragleave', e => { if (!$('#lib-main').contains(e.relatedTarget)) $('#lib-main').classList.remove('drag'); });
@@ -5778,10 +7499,18 @@ $('#viewer-ask').onclick = () => {
   closeViewer(); location.hash = '#chat';
   setTimeout(() => { autosize(); $('#input').focus(); }, 50); // the document is attached: the question is enough
 };
-$('#more-btn').onclick = () => { $('#more-sheet').hidden = false; $('#more-install').hidden = $('#install-btn').hidden; };
-$('#more-sheet').onclick = e => { if (e.target === $('#more-sheet') || e.target.closest('a')) $('#more-sheet').hidden = true; };
-$('#more-logout').onclick = () => $('#logout').click();
-$('#more-install').onclick = () => { $('#more-sheet').hidden = true; $('#install-btn').click(); };
+function closeMore() { $('#more-sheet').hidden = true; $('#more-btn').setAttribute('aria-expanded', 'false'); }
+$('#more-btn').onclick = e => {
+  e.stopPropagation();
+  if (!$('#more-sheet').hidden) { closeMore(); return; }
+  $('#more-install').hidden = $('#install-btn').hidden;
+  $('#more-sheet').hidden = false; $('#more-btn').setAttribute('aria-expanded', 'true');
+};
+$('#more-sheet').addEventListener('click', e => { if (e.target.closest('a')) closeMore(); });
+$('#more-logout').onclick = () => { closeMore(); $('#logout').click(); };
+$('#more-install').onclick = () => { closeMore(); $('#install-btn').click(); };
+document.addEventListener('click', e => { if (!e.target.closest('.more-wrap')) closeMore(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#more-sheet').hidden) { closeMore(); $('#more-btn').focus(); } });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 window.addEventListener('hashchange', route);
 
@@ -5853,7 +7582,7 @@ if (!navigator.onLine) onlineState();
 /** Badges: unread notifications in the menu; on the app icon, those plus the approvals waiting. */
 function setBadge() {
   const u = state.notifUnread || 0, n = u + (state.pendingApprovals || 0);
-  for (const id of ['#notif-count', '#more-count', '#more-notif-count']) { const b = $(id); b.textContent = u > 99 ? '99+' : u; b.hidden = !u; }
+  { const b = $('#notif-count'); b.textContent = u > 99 ? '99+' : u; b.hidden = !u; }
   if (!('setAppBadge' in navigator)) return;
   (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
 }
@@ -5886,34 +7615,12 @@ $('#notif-clear').onclick = async () => {
 async function handleLaunch() {
   const params = new URLSearchParams(location.search);
   const token = params.get('share');
-  if (params.has('google')) {
-    const g = params.get('google');
+  // back from a sign-in page: the address says only which one; its message is read once from the server, so a link made
+  // elsewhere (?google=any words) cannot show its own text in the app (audit, lot 6)
+  const back = ['google', 'microsoft', 'mcp', 'spotify'].find(k => params.has(k));
+  if (back) {
     history.replaceState(null, '', './#settings');
-    toast(g === 'connected' ? 'Google Calendar connected.' : g);
-    if (g === 'connected') setTimeout(() => { showSection('accounts'); $('#google-card').scrollIntoView({ block: 'center' }); }, 600);
-  }
-  if (params.has('microsoft')) {
-    const g = params.get('microsoft');
-    history.replaceState(null, '', './#settings');
-    const forMail = params.get('for');
-    toast(g !== 'connected' ? g : forMail ? 'Microsoft account connected for mail.' : 'Outlook connected.');
-    if (g === 'connected') setTimeout(() => {
-      const group = state.setGroups?.find(x => x.id === forMail);
-      showSection(group ? group.section : 'accounts');
-      (document.querySelector(`.ms-mail[data-purpose="${forMail}"]`) || $('#microsoft-card')).scrollIntoView({ block: 'center' });
-    }, 600);
-  }
-  if (params.has('mcp')) {
-    const g = params.get('mcp');
-    history.replaceState(null, '', './#settings');
-    toast(g.startsWith('connected:') ? `Connected to ${g.slice(10)}: its tools are available from the next message.` : g);
-    setTimeout(() => { showSection('accounts'); $('#mcp-card').scrollIntoView({ block: 'center' }); }, 600);
-  }
-  if (params.has('spotify')) {
-    const g = params.get('spotify');
-    history.replaceState(null, '', './#settings');
-    toast(g === 'connected' ? 'Spotify connected.' : g);
-    setTimeout(() => { showSection('accounts'); $('#spotify-card').scrollIntoView({ block: 'center' }); }, 600);
+    post('api/oauth/back', {}).then(r => { if (r?.for === back) oauthBack(back, String(r.msg || ''), r.purpose || ''); }).catch(() => {});
   }
   if (params.has('connector')) { // "▶ Install" in the FAQ connector list (opens here in a new tab)
     history.replaceState(null, '', location.pathname + location.hash);
@@ -5921,14 +7628,24 @@ async function handleLaunch() {
   }
   if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', '/' + location.hash);
   if (token) {
+    // a share is only looked at first: nothing is stored nor written in the message box before the user says yes
+    // (a link to /?share=… can come from somewhere else than this browser's share sheet)
     try {
-      const d = await post('api/share/claim', { token });
-      if (d.text) { $('#input').value = d.text; autosize(); }
-      for (const f of d.files) { state.pending.push({ id: f.id, info: f }); }
-      renderPending();
+      const p = await post('api/share/claim', { token, peek: true });
+      const names = p.files.map(f => f.name);
+      const what = names.length ? t(names.length === 1 ? '1 shared file: add it?' : '{n} shared files: add them?', { n: names.length }) : t('Shared text: add it to your message?');
       location.hash = '#chat';
-      toast(d.skipped ? `${d.skipped} file(s) were too large to share this way (max ${d.max_mb} MB): attach them with the paperclip.` : 'Shared content ready: add a message if you like, then send.');
-      $('#input').focus();
+      banner(`${what}${names.length ? ' ' + names.join(', ') : p.text ? ' ' + Array.from(p.text).slice(0, 80).join('') : ''}`, t('Add'), async () => {
+        banner('');
+        try {
+          const d = await post('api/share/claim', { token });
+          if (d.text) { $('#input').value = d.text; autosize(); }
+          for (const f of d.files) { state.pending.push({ id: f.id, info: f }); }
+          renderPending();
+          toast(d.skipped ? `${d.skipped} file(s) were too large to share this way (max ${d.max_mb} MB): attach them with the paperclip.` : 'Shared content ready: add a message if you like, then send.');
+          $('#input').focus();
+        } catch (e) { toast(e.message); }
+      });
     } catch (e) { toast(e.message); }
   }
   if (params.get('action') === 'capture') { location.hash = '#chat'; openCapture(); }
@@ -5991,4 +7708,6 @@ async function startPreview() {
 if (previewId) start = startPreview; // after sign-in, come back to the document
 
 registerServiceWorker();
-api('api/status').then(async () => { await start(); if (!previewId) handleLaunch(); }).catch(() => showLogin());
+// no session cookie at all (said by the server in the page): the sign-in at once, without a refused request (audit U14)
+if (document.documentElement.dataset.session === '0' && navigator.onLine) showLogin();
+else api('api/status').then(async () => { await start(); if (!previewId) handleLaunch(); }).catch(() => showLogin());

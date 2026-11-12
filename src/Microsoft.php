@@ -47,10 +47,7 @@ final class Microsoft
 
     private function saveTokens(array $t): void
     {
-        $tmp = $this->file() . '.tmp';
-        file_put_contents($tmp, json_encode($t, JSON_UNESCAPED_SLASHES));
-        chmod($tmp, 0600);
-        rename($tmp, $this->file());
+        JsonFile::write($this->file(), $t, 0600); // whole or not at all: a half-written token file would sign you out (audit Q12)
     }
 
     /** Where Microsoft sends the user back; must be listed in the app registration exactly like this. */
@@ -80,13 +77,14 @@ final class Microsoft
     public function finish(string $code, string $state, string $error = ''): string
     {
         $saved = json_decode($this->app->store->get('microsoft_state'), true);
+        // a wrong state changes nothing: anyone can call this address, and must not cancel a sign-in in progress (audit, lot 6)
+        if (!is_array($saved) || !hash_equals((string)$saved['state'], $state) || $saved['ts'] < time() - 900) throw new \InvalidArgumentException('This sign-in link expired. Press "Connect" again.');
         $this->app->store->set('microsoft_state', '');
-        $for = is_array($saved) && in_array($saved['purpose'] ?? '', self::PURPOSES, true) ? (string)$saved['purpose'] : '';
+        $for = in_array($saved['purpose'] ?? '', self::PURPOSES, true) ? (string)$saved['purpose'] : '';
         $this->finished = $for; // the failure is shown with that connection too
         if ($error !== '') throw new \RuntimeException(str_contains($error, 'AADSTS50194') // an app for one organisation only
             ? 'Your Microsoft app accepts only your organisation: put its Directory (tenant) ID in Settings → Calendar → Microsoft directory, save, then connect again.'
             : 'Microsoft: ' . strtok($error, "\r\n"));
-        if (!is_array($saved) || !hash_equals((string)$saved['state'], $state) || $saved['ts'] < time() - 900) throw new \InvalidArgumentException('This sign-in link expired. Press "Connect" again.');
         return ($for === $this->purpose ? $this : new self($this->app, $for))->finishWith($code, $saved['redirect']);
     }
 

@@ -53,10 +53,7 @@ final class Mcp
             if (!is_array($s) || (!isset($s['command']) && !isset($s['url']))) throw new \InvalidArgumentException("server \"$n\": give a command (local) or a url (remote)");
             if (isset($s['url']) && !preg_match('#^https?://#i', (string)$s['url'])) throw new \InvalidArgumentException("server \"$n\": the url must start with http(s)://");
         }
-        $tmp = $this->file() . '.tmp';
-        file_put_contents($tmp, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
-        chmod($tmp, 0600);
-        rename($tmp, $this->file());
+        JsonFile::write($this->file(), $d, 0600, JSON_PRETTY_PRINT); // whole or not at all (audit Q12)
     }
 
     public function cache(): array { return json_decode((string)@file_get_contents($this->cacheFile()), true) ?: []; }
@@ -83,7 +80,7 @@ final class Mcp
                 Log::warn("mcp $name: {$e->getMessage()}");
             }
         }
-        file_put_contents($this->cacheFile(), json_encode($cache, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        JsonFile::write($this->cacheFile(), $cache, 0600);
         return $cache;
     }
 
@@ -228,15 +225,31 @@ final class Mcp
         if (is_file($failed) && filemtime($failed) > time() - 3600) throw new \RuntimeException('The web browser this connector drives could not be downloaded: ' . file_get_contents($failed));
         Log::info("connector in $cwd: downloading the web browser it drives");
         foreach ($cmds as $c) {
-            $out = [];
-            exec('cd ' . escapeshellarg($cwd) . " && $c 2>&1", $out, $code);
+            [$code, $out] = $this->runInSandbox($c, $cwd, basename($cwd), [ConnectorPackage::browsers($this->app->cfg->dataDir)]);
             if ($code !== 0) {
-                $why = mb_substr(trim(implode("\n", array_slice($out, -6))), -600);
+                $why = mb_substr(trim($out), -600);
                 @mkdir(dirname($failed), 0700, true); file_put_contents($failed, $why);
                 throw new \RuntimeException("The web browser this connector drives could not be downloaded (tried again in an hour): $why");
             }
         }
         @unlink($failed);
+    }
+
+    /**
+     * A shell command of a connector's installation (npm, its build, the browser download), in the same sandbox as the
+     * connector runs in when bubblewrap is there: its folder, its home and $writable can be written, nothing else of the
+     * data folder is seen. Returns [exit code, last lines of output].
+     */
+    public function runInSandbox(string $cmd, string $cwd, string $name, array $writable = []): array
+    {
+        $home = $this->homeOf(['_name' => $name]);
+        $env = ['PATH' => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin', 'HOME' => $home, 'LANG' => 'C.UTF-8', 'PLAYWRIGHT_BROWSERS_PATH' => ConnectorPackage::browsers($this->app->cfg->dataDir)];
+        foreach ($writable as $w) if (!is_dir($w)) @mkdir($w, 0700, true);
+        $argv = Shell::binary() !== null ? $this->sandboxArgv(['/bin/sh', '-c', $cmd], $cwd, $home, $env, false, $writable) : null;
+        $line = $argv ? implode(' ', array_map('escapeshellarg', $argv)) : 'cd ' . escapeshellarg($cwd) . " && $cmd";
+        $out = [];
+        exec("$line 2>&1", $out, $code);
+        return [$code, implode("\n", array_slice($out, -12))];
     }
 
     /** A local server's own home folder (its caches, its settings), the only place it keeps things besides its own folder. */
@@ -252,7 +265,7 @@ final class Mcp
      * services), its folder and home writable, the files named on its command line read-only; the rest of the
      * data folder (keys, mail, documents) out of sight.
      */
-    public function sandboxArgv(array $cmd, string $cwd, string $home, array $env, bool $browsers = false): array
+    public function sandboxArgv(array $cmd, string $cwd, string $home, array $env, bool $browsers = false, array $writable = []): array
     {
         $a = [Shell::binary(), '--die-with-parent', '--new-session', '--unshare-all', '--share-net',
             '--ro-bind', '/usr', '/usr', '--ro-bind-try', '/opt', '/opt', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/dev/shm', '--tmpfs', '/tmp'];
@@ -260,7 +273,7 @@ final class Mcp
         foreach (['/etc/alternatives', '/etc/ssl', '/etc/ca-certificates', '/etc/fonts', '/etc/localtime', '/etc/mime.types', '/etc/passwd', '/etc/group',
                   '/etc/resolv.conf', '/etc/hosts', '/etc/nsswitch.conf', '/etc/gai.conf', '/etc/php', '/etc/python3'] as $e) array_push($a, '--ro-bind-try', $e, $e);
         $data = rtrim($this->app->cfg->dataDir, '/') . '/';
-        $writable = array_unique([$home, $cwd]);
+        $writable = array_unique(array_merge([$home, $cwd], $writable));
         foreach ($writable as $d) if (!str_starts_with($data, rtrim($d, '/') . '/')) array_push($a, '--bind', $d, $d); // never a folder holding the data folder
         if ($browsers) array_push($a, '--ro-bind-try', ConnectorPackage::browsers($this->app->cfg->dataDir), ConnectorPackage::browsers($this->app->cfg->dataDir));
         foreach ($cmd as $part) { // a script given by its path (node /opt/x/server.js): visible, read-only; never something of the data folder
@@ -285,7 +298,7 @@ final class Mcp
         $cwd = $cwd === '' ? ($sandbox ? $home : $this->app->cfg->dataDir) : ($cwd[0] === '/' ? $cwd : $this->app->cfg->dataDir . '/' . $cwd);
         if (isset($s['source']['library_file']) && $method === 'tools/call') $this->browserFor($cwd);
         if ($sandbox) $cmd = $this->sandboxArgv($cmd, $cwd, $home, $env, isset($s['source']['library_file']));
-        $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $err, 'w']], $pipes, $cwd, $env);
+        $proc = @proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $err, 'w']], $pipes, $cwd, $env); // a missing command: said by the exception below, not as a PHP warning too
         if (!is_resource($proc)) throw new \RuntimeException("could not start {$s['command']}");
         try {
             $send = fn(array $m) => fwrite($pipes[0], json_encode(['jsonrpc' => '2.0'] + $m, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");

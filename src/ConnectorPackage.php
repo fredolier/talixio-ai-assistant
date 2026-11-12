@@ -39,12 +39,34 @@ final class ConnectorPackage
         return ['owner' => $m[1], 'repo' => $m[2], 'ref' => rawurldecode($m[3] ?? '') ?: 'HEAD', 'dir' => $dir];
     }
 
-    /** Fetches a public GitHub repository into /Connecteurs as a .zip (only the sub-folder asked for). @return array what inspect() says, with the file id */
-    public function fromGithub(string $url): array
+    /**
+     * The commit a GitHub address points to now (its branch, tag or HEAD): what gets fetched is pinned to it, so the code
+     * the user approved is the code installed, even if the repository changes in between (audit S6).
+     */
+    public static function commitOf(string $url): string
+    {
+        $g = self::parseGithub($url);
+        if (preg_match('/^[0-9a-f]{40}$/', $g['ref'])) return $g['ref'];
+        $api = "https://api.github.com/repos/{$g['owner']}/{$g['repo']}/commits/" . rawurlencode($g['ref']);
+        if (self::$fetch) $body = (string)(self::$fetch)($api);
+        else {
+            [$code, $body] = Http::safeGet($api, 2_000_000, 30);
+            if ($code === 404 || $code === 422) throw new \InvalidArgumentException("GitHub has no public repository {$g['owner']}/{$g['repo']}" . ($g['ref'] !== 'HEAD' ? " with the branch {$g['ref']}" : '') . ' (a private one cannot be fetched: download it as a .zip and put it in the library).');
+            if ($code !== 200) throw new \RuntimeException("GitHub answered $code for $api.");
+        }
+        $sha = (string)(json_decode($body, true)['sha'] ?? trim($body));
+        if (!preg_match('/^[0-9a-f]{40}$/', $sha)) throw new \RuntimeException('GitHub did not say which commit this is.');
+        return $sha;
+    }
+
+    /** Fetches a public GitHub repository into /Connecteurs as a .zip (only the sub-folder asked for), at $commit (else the one it points to now). @return array what inspect() says, with the file id and the commit */
+    public function fromGithub(string $url, string $commit = ''): array
     {
         $g = self::parseGithub($url);
         if (!class_exists(\ZipArchive::class)) throw new \RuntimeException('php-zip is missing (sudo ./install.sh again).');
-        $archive = "https://github.com/{$g['owner']}/{$g['repo']}/archive/" . rawurlencode($g['ref']) . '.zip';
+        if ($commit !== '' && !preg_match('/^[0-9a-f]{40}$/', $commit)) throw new \InvalidArgumentException('not a commit id');
+        $commit = $commit !== '' ? $commit : self::commitOf($url);
+        $archive = "https://github.com/{$g['owner']}/{$g['repo']}/archive/$commit.zip";
         if (self::$fetch) $body = (string)(self::$fetch)($archive);
         else {
             [$code, $body] = Http::safeGet($archive, self::MAX_DOWNLOAD, 120);
@@ -72,7 +94,7 @@ final class ConnectorPackage
         $src[$id] = "https://github.com/{$g['owner']}/{$g['repo']}" . ($g['ref'] !== 'HEAD' || $g['dir'] !== '' ? "/tree/{$g['ref']}" . ($g['dir'] !== '' ? "/{$g['dir']}" : '') : '');
         $this->app->store->set('connector_sources', json_encode(array_slice($src, -50, null, true), JSON_UNESCAPED_SLASHES));
         Log::info("connector: fetched {$src[$id]} into the library (file #$id)");
-        return $this->inspect($id) + ['github' => $src[$id]];
+        return $this->inspect($id) + ['github' => $src[$id], 'commit' => $commit];
     }
 
     /** Rewrites the archive with only one of its folders (GitHub puts everything under repo-branch/). */
@@ -198,6 +220,7 @@ final class ConnectorPackage
         try {
             foreach ($files as $i => $rel) {
                 if ($rel === '' || str_starts_with($rel, '/') || preg_match('#(^|/)\.\.(/|$)#', $rel)) continue; // nothing outside its folder
+                if (preg_match('#(^|/)node_modules/#', $rel)) continue; // dependencies come from npm, never from the .zip (whose cli.js would then be run)
                 $st = $z->statIndex($i);
                 if (++$count > self::MAX_FILES || ($bytes += (int)$st['size']) > self::MAX_BYTES) throw new \InvalidArgumentException('This .zip is too big for a connector (80 MB, 20 000 files).');
                 $attr = 0; $z->getExternalAttributesIndex($i, $opsys, $attr);
@@ -259,13 +282,15 @@ final class ConnectorPackage
         $s = json_decode($this->app->store->get('connector_install', ''), true) ?: [];
         if (($s['state'] ?? '') !== 'running') return;
         $base = $this->dir(); $tmp = "$base/" . $s['tmp']; $name = $s['name']; $final = "$base/$name";
-        $run = function (string $cmd, string $step) use (&$s, $tmp): void {
+        $run = function (string $cmd, string $step) use (&$s, $tmp, $name): void {
             $s['step'] = $step; $this->setState($s);
-            exec('cd ' . escapeshellarg($tmp) . " && $cmd 2>&1", $out, $code);
-            if ($code !== 0) throw new \RuntimeException("$step: " . mb_substr(trim(implode("\n", array_slice($out, -12))), -1200));
+            // the repository's code (its build, the browser download) runs in the connectors' sandbox when there is one (audit S6)
+            [$code, $out] = $this->app->mcp()->runInSandbox($cmd, $tmp, $name, [self::browsers($this->app->cfg->dataDir)]);
+            if ($code !== 0) throw new \RuntimeException("$step: " . mb_substr(trim($out), -1200)
+                . ($step === 'installing dependencies' || $step === 'building' ? "\n(For safety, the install scripts of its dependencies are not run: a connector whose dependencies need them cannot be installed this way.)" : ''));
         };
         try {
-            $npm = 'npm --no-audit --no-fund --loglevel=error';
+            $npm = 'npm --no-audit --no-fund --loglevel=error --ignore-scripts';
             if ($s['build']) { $run("$npm install", 'installing dependencies'); $run('npm run build', 'building'); }
             elseif ($s['deps']) $run("$npm install --omit=dev", 'installing dependencies');
             foreach (self::browserInstalls($tmp, $this->app->cfg->dataDir) as $cmd) $run($cmd, 'installing the browser');

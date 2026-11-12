@@ -173,9 +173,10 @@ final class Library
     {
         $st = $this->app->store;
         $paths = array_column($st->q('SELECT path FROM folders')->fetchAll(), 'path');
-        $direct = [];
-        foreach ($st->q('SELECT folder, COUNT(*) n FROM files WHERE deleted_at IS NULL GROUP BY folder')->fetchAll() as $r) {
+        $direct = []; $latest = [];
+        foreach ($st->q('SELECT folder, COUNT(*) n, MAX(COALESCE(changed, created)) m FROM files WHERE deleted_at IS NULL GROUP BY folder')->fetchAll() as $r) {
             $direct[$r['folder']] = (int)$r['n'];
+            $latest[$r['folder']] = (int)$r['m'];
             $paths[] = $r['folder'];
         }
         foreach ([self::INBOX, self::MEETINGS, self::NOTES] as $d) $paths[] = $d;
@@ -183,20 +184,21 @@ final class Library
         foreach ($paths as $p) for ($p = self::normalize($p); $p !== '/'; $p = self::parent($p)) $all[$p] = true;
         $all = array_keys($all);
         sort($all, SORT_NATURAL | SORT_FLAG_CASE);
-        return array_map(function (string $p) use ($direct) {
-            $total = 0;
-            foreach ($direct as $f => $n) if ($f === $p || str_starts_with($f, "$p/")) $total += $n;
-            return ['path' => $p, 'name' => basename($p), 'depth' => substr_count($p, '/'), 'files' => $direct[$p] ?? 0, 'total' => $total, 'readonly' => self::readonly($p)];
+        return array_map(function (string $p) use ($direct, $latest) {
+            $total = 0; $changed = 0; // changed: the newest file inside, subfolders included (0 for an empty folder)
+            foreach ($direct as $f => $n) if ($f === $p || str_starts_with($f, "$p/")) { $total += $n; $changed = max($changed, $latest[$f]); }
+            return ['path' => $p, 'name' => basename($p), 'depth' => substr_count($p, '/'), 'files' => $direct[$p] ?? 0, 'total' => $total, 'changed' => $changed, 'readonly' => self::readonly($p)];
         }, $all);
     }
 
     /** Direct subfolders and files of a folder. */
-    public function list(string $folder): array
+    public function list(string $folder, bool $flat = false): array
     {
         $folder = self::normalize($folder);
         $subs = [];
-        foreach ($this->tree() as $t) if ($t['path'] !== '/' && self::parent($t['path']) === $folder) $subs[] = $t;
-        $files = $this->app->store->q('SELECT id, name, mime, kind, size, duration, created, changed, changed_by, folder, status, note, suggestion, LENGTH(text) chars FROM files WHERE folder = ? AND deleted_at IS NULL ORDER BY name COLLATE NOCASE', [$folder])->fetchAll();
+        if (!$flat) foreach ($this->tree() as $t) if ($t['path'] !== '/' && self::parent($t['path']) === $folder) $subs[] = $t;
+        [$w, $a] = $flat ? self::within($folder) : ['folder = ?', [$folder]]; // flat: every file below, no subfolders
+        $files = $this->app->store->q("SELECT id, name, mime, kind, size, duration, created, changed, changed_by, folder, status, note, suggestion, LENGTH(text) chars FROM files WHERE $w AND deleted_at IS NULL ORDER BY name COLLATE NOCASE" . ($flat ? ' LIMIT 2000' : ''), $a)->fetchAll();
         $sugg = fn(?string $j) => ($d = json_decode((string)$j, true)) && !empty($d['folder']) ? $d : null; // only real suggestions, not done/dismissed
         return ['folder' => $folder, 'readonly' => self::readonly($folder), 'folders' => $subs, 'files' => array_map(fn($f) => ['id' => (int)$f['id'], 'size' => (int)$f['size'], 'note' => (bool)$f['note'], 'chars' => (int)$f['chars'],
             'created' => (int)$f['created'], 'changed' => (int)($f['changed'] ?? $f['created']), 'suggestion' => $sugg($f['suggestion'])] + $f, $files)];

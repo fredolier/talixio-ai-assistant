@@ -229,7 +229,7 @@ final class Browser
             const fields = form ? [...form.elements].filter(f => f.name && f.type !== 'hidden').map(f => f.name + '=' + (f.type === 'password' ? '••••' : String(f.value).slice(0, 60))) : [];
             return { label: (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || tag).trim().slice(0, 80),
               submits, inForm: !!form, method: form ? (form.getAttribute('method') || 'get').toLowerCase() : '', action: form ? form.action : '',
-              password: !!form && !!form.querySelector('input[type=password]'), fields }; })()");
+              password: !!form && !!form.querySelector('input[type=password]'), fields, page: location.href }; })()");
         if (!is_array($info)) throw new \RuntimeException("no element [$ref] on the page: call browser_read to refresh the numbers");
         return $info;
     }

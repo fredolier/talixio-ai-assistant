@@ -38,20 +38,14 @@ final class Fleet
     {
         $s = json_decode((string)@file_get_contents($this->stateFile), true) ?: [];
         $s['settings'] = ($s['settings'] ?? []) + ['domain' => getenv('TALIXIO_DOMAIN') ?: 'localhost', 'mode' => 'path', 'memory_mb' => 1024, 'cpus' => 1.5,
-            'ollama' => true, 'ollama_model' => 'qwen3-embedding:0.6b', 'google_client_id' => '', 'google_client_secret' => '', 'apparmor_unconfined' => true,
+            'ollama' => true, 'ollama_model' => 'qwen3-embedding:0.6b', 'google_client_id' => '', 'google_client_secret' => '', 'email_authserv' => '', 'apparmor_unconfined' => true,
             'eu_provider' => '', 'eu_key' => '', 'eu_url' => '', 'eu_only' => false];
         $s['instances'] = $s['instances'] ?? [];
         $s['image'] = $s['image'] ?? ['current' => self::IMAGE . ':current', 'previous' => null];
         return $s;
     }
 
-    private function save(array $s): void
-    {
-        $tmp = $this->stateFile . '.tmp';
-        file_put_contents($tmp, json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        chmod($tmp, 0600);
-        rename($tmp, $this->stateFile);
-    }
+    private function save(array $s): void { JsonFile::write($this->stateFile, $s, 0600, JSON_PRETTY_PRINT); } // whole or not at all (audit Q12)
 
     /**
      * The long action the admin page follows (job.json). One whose process is gone (the agent was restarted or
@@ -99,6 +93,7 @@ final class Fleet
         if (isset($d['ollama'])) $set['ollama'] = (bool)$d['ollama'];
         if (isset($d['ollama_model'])) { $m = trim((string)$d['ollama_model']); if (!preg_match('/^[a-z0-9][a-z0-9._:\/-]{0,80}$/i', $m)) throw new \InvalidArgumentException('Unexpected model name.'); $set['ollama_model'] = $m; }
         foreach (['google_client_id', 'google_client_secret'] as $k) if (isset($d[$k])) $set[$k] = mb_substr(trim((string)$d[$k]), 0, 300);
+        if (isset($d['email_authserv'])) { $a = strtolower(trim((string)$d['email_authserv'])); if ($a !== '' && !preg_match('/^[a-z0-9][a-z0-9.-]{0,200}$/', $a)) throw new \InvalidArgumentException('The mail server\'s name looks like mx.example.com.'); $set['email_authserv'] = $a; }
         if (isset($d['apparmor_unconfined'])) $set['apparmor_unconfined'] = (bool)$d['apparmor_unconfined'];
         if (isset($d['eu_provider'])) { if ($d['eu_provider'] !== '' && !isset(Sovereign::SERVICES[$d['eu_provider']])) throw new \InvalidArgumentException('Unknown European provider.'); $set['eu_provider'] = (string)$d['eu_provider']; }
         if (isset($d['eu_key'])) $set['eu_key'] = mb_substr(trim((string)$d['eu_key']), 0, 300);
@@ -145,6 +140,8 @@ final class Fleet
         if (!empty($i['password_hash'])) $env[] = 'TALIXIO_INIT_PASSWORD_HASH=' . $i['password_hash']; // written once into the volume, then the person's own
         if (!empty($i['reset'])) $env[] = 'TALIXIO_RESET=' . $i['reset'];                                // a new password or 2-step reset, applied once
         if ($set['ollama']) array_push($env, 'TALIXIO_EMBEDDINGS=ollama', 'TALIXIO_EMBEDDINGS_MODEL=' . $set['ollama_model'], 'TALIXIO_OLLAMA_URL=http://' . self::CADDY . ':11434');
+        if (self::modelsOn()) $env[] = 'TALIXIO_FORECAST_URL=http://' . self::CADDY . ':8765'; // the TimesFM service (install-stack.sh --with-models), through Caddy
+        if (($set['email_authserv'] ?? '') !== '') $env[] = 'TALIXIO_EMAIL_AUTHSERV_ID=' . $set['email_authserv']; // everyone's, unless a person sets their own in Settings
         if ($set['google_client_id'] !== '') array_push($env, 'TALIXIO_GOOGLE_CLIENT_ID=' . $set['google_client_id'], 'TALIXIO_GOOGLE_CLIENT_SECRET=' . $set['google_client_secret']);
         $env[] = 'TALIXIO_INSTANCE_NAME=' . ($i['name'] ?? '');
         $env[] = 'TALIXIO_STORE=/store';
@@ -697,8 +694,13 @@ final class Fleet
         }
         // Ollama for the instances: embeddings only (it has no password: nothing else gets through)
         $out .= "http://:11434 {\n\t@embed path /api/embed /api/embeddings /api/tags /api/version\n\thandle @embed {\n\t\treverse_proxy talixio-ollama:11434\n\t}\n\trespond 403\n}\n";
+        if (self::modelsOn()) // the TimesFM service for the instances: forecasts only (it has no password, so nothing else gets through)
+            $out .= "http://:8765 {\n\t@fc path /forecast /health\n\thandle @fc {\n\t\treverse_proxy talixio-models:8765\n\t}\n\trespond 403\n}\n";
         return $out;
     }
+
+    /** The optional TimesFM service is part of this stack (install-stack.sh --with-models sets TALIXIO_MODELS=1). */
+    public static function modelsOn(): bool { return getenv('TALIXIO_MODELS') === '1'; }
 
     /** Another reverse proxy (on another machine) does HTTPS in front of the stack: install-stack.sh --behind-proxy. */
     public static function behindProxy(): bool { return getenv('TALIXIO_BEHIND_PROXY') === '1'; }

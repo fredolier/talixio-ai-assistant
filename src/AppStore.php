@@ -209,9 +209,7 @@ final class AppStore
     private function saveAssetState(array $s): void
     {
         $f = $this->app->cfg->dataDir . '/store-assets.json';
-        file_put_contents("$f.tmp", json_encode($s, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        @chmod("$f.tmp", 0600);
-        rename("$f.tmp", $f);
+        JsonFile::write($f, $s, 0600); // whole or not at all (audit Q12)
     }
 
     public const ASSET_FOLDER = '/Company KB';

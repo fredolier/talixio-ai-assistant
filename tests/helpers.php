@@ -4,6 +4,16 @@ declare(strict_types=1);
 require_once __DIR__ . '/../src/autoload.php';
 
 $GLOBALS['fails'] ??= 0;
+// a PHP warning or notice in the code under test is a failure, not noise in the output (audit Q26); @-silenced ones are on purpose
+if (empty($GLOBALS['strictWarnings'])) {
+    $GLOBALS['strictWarnings'] = true;
+    set_error_handler(function (int $no, string $msg, string $file, int $line): bool {
+        if (!(error_reporting() & $no)) return false;
+        echo "FAIL php warning: $msg  -> $file:$line\n";
+        $GLOBALS['fails']++;
+        return true;
+    });
+}
 function tap_tmp(string $content): string { $t = tempnam(sys_get_temp_dir(), 'tt'); file_put_contents($t, $content); return $t; }
 function check(string $name, bool $ok, string $detail = ''): void {
     echo ($ok ? "ok   " : "FAIL ") . $name . ($ok || $detail === '' ? '' : "  -> $detail") . "\n";

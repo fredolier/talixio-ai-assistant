@@ -9,7 +9,7 @@
 ## Ce qu'il sait faire
 - Répondre en direct, chercher sur le web, lire des pages.
 - Se souvenir de vous (mémoire modifiable dans la page Mémoire) et retrouver ce qui a été dit.
-- Ranger et retrouver vos documents (Bibliothèque), en citant la page.
+- Ranger et retrouver vos documents (Fichiers), en citant la page.
 - Gérer vos tâches, rappels et routines (briefing du matin…).
 - Transcrire et résumer vos réunions et notes vocales.
 - Lire votre messagerie et votre agenda, préparer des réponses ; tout ce qui agit à l'extérieur
@@ -21,9 +21,14 @@
 - **Arrêter** une réponse en cours : le bouton d'envoi devient *Stop*.
 - **Modifier** votre dernier message ou demander une **autre réponse**.
 
-## Les pages
-Conversation, Tâches, Bibliothèque, Routines, Jobs (travaux de fond), Mail, Personnes, Mémoire,
-Activité (dépenses et journal), Confidentialité, Réglages.
+## Le menu
+Le menu à gauche (la barre du bas sur téléphone) a huit entrées : **Chat**, **Tâches**, **Fichiers** (la bibliothèque),
+**Apps**, **Notifications**, **Mail**, **Personnes** et, en dernier, **Pilotage** (voir *Pilotage*).
+- **⋯ Plus** contient les **Automatisations** (tâches planifiées et travaux de fond) et **Activité et coûts**.
+- Votre nom en bas ouvre le **menu du compte** : Réglages, Utilisation (Activité et coûts), Confidentialité, Mémoire, Langue,
+  Thème, *Installer l'application* si votre navigateur le propose, *Obtenir de l'aide* (cette FAQ) et Se déconnecter. Sur
+  téléphone, ces entrées sont dans *Plus*.
 
 ## L'interface est en anglais ?
-Réglages → Assistant → *Langue de l'interface*. L'assistant, lui, répond dans la langue où vous lui écrivez.
+Menu du compte → **Langue** (Automatique / Français / English) : le choix est mémorisé dans ce navigateur.
+L'assistant, lui, répond dans la langue où vous lui écrivez. L'entrée **Thème** fait défiler Système → Clair → Sombre.

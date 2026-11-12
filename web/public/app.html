@@ -50,24 +50,42 @@
       <div id="rail-space-menu" class="space-menu" role="menu" hidden></div>
     </div>
     <a href="#chat" data-view="chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></svg><span>Chat</span></a>
-    <a href="#pilotage" data-view="pilotage"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 12l5-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg><span>Pilotage</span></a>
     <a href="#board" data-view="board"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/><path d="M5.5 8h1.5M11 8h2M17 8h1.5M11 12h2"/></svg><span>Tasks</span></a>
-    <a href="#library" data-view="library"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Library</span></a>
+    <a href="#library" data-view="library"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Files</span></a>
     <a href="#apps" data-view="apps" class="secondary"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><path d="M16.75 13.5v6.5M13.5 16.75H20"/></svg><span>Apps</span></a>
-    <a href="#notifications" data-view="notifications" class="secondary"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Notifications</span><b id="notif-count" class="rail-badge" hidden></b></a>
-    <a href="#tasks" data-view="tasks" class="secondary"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span>Automations</span></a>
+    <a href="#notifications" data-view="notifications"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Notifications</span><b id="notif-count" class="rail-badge" hidden></b></a>
     <a href="#mail" data-view="mail" class="secondary"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>Mail</span></a>
     <a href="#people" data-view="people" class="secondary"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg><span>People</span></a>
-    <a href="#memory" data-view="memory"><svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg><span>Memory</span></a>
-    <a href="#settings" data-view="settings" class="secondary"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
-    <a href="#privacy" data-view="privacy" class="secondary"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/></svg><span>Privacy</span></a>
-    <a href="#activity" data-view="activity" class="secondary"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span>Activity</span></a>
-    <button id="more-btn" class="more" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>More</span><b id="more-count" class="rail-badge" hidden></b></button>
+    <a href="#pilotage" data-view="pilotage"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 12l5-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg><span>Pilotage</span><span class="badge rail-badge" id="pilot-rail-badge" hidden></span></a>
+    <div class="more-wrap">
+      <button id="more-btn" class="more" type="button" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>More</span></button>
+      <div id="more-sheet" class="space-menu more-menu" role="menu" aria-label="More" hidden>
+        <div id="more-assistants" class="more-assistants only-mobile" hidden></div>
+        <a href="#tasks" data-view="tasks">Automations</a>
+        <a href="#activity" data-view="activity">Activity and costs</a>
+        <a href="#apps" data-view="apps" class="only-mobile">Apps</a>
+        <a href="#mail" data-view="mail" class="only-mobile">Mail to handle</a>
+        <a href="#people" data-view="people" class="only-mobile">People</a>
+        <a href="#memory" data-view="memory" class="only-mobile">Memory</a>
+        <a href="#privacy" data-view="privacy" class="only-mobile">Privacy</a>
+        <a href="#settings" data-view="settings" class="only-mobile">Settings</a>
+        <button id="more-install" class="btn primary only-mobile" type="button" hidden>Install app</button>
+        <button id="more-logout" class="btn only-mobile" type="button">Sign out</button>
+        <p id="more-version" class="app-version only-mobile"></p>
+      </div>
+    </div>
     <div class="rail-foot">
       <button id="install-btn" class="btn small primary" type="button" hidden>Install app</button>
       <div id="status" class="status" title="Background worker"><i></i><span>…</span></div>
-      <div id="app-version" class="app-version"></div>
-      <button id="logout" class="link" type="button"><svg viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></svg><span>Sign out</span></button>
+      <div class="account">
+        <button id="account-btn" class="account-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Account and settings" title="Account and settings">
+          <span class="account-av avatar no-i18n" id="account-av" aria-hidden="true">?</span>
+          <span class="account-who"><span class="account-name no-i18n" id="account-name">Talixio</span><span class="account-sub" id="app-version"></span></span>
+          <svg class="chev" viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></svg>
+        </button>
+        <div id="account-menu" class="space-menu account-menu" role="menu" hidden></div>
+      </div>
+      <button id="logout" class="link" type="button" hidden><svg viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></svg><span>Sign out</span></button>
     </div>
   </nav>
 
@@ -119,7 +137,7 @@
           <button id="attach" class="btn ghost icon" type="button" aria-label="Attach a file" title="Attach photos, PDFs, audio"><svg viewBox="0 0 24 24"><path d="M21 12l-8.5 8.5a5 5 0 0 1-7-7L14 5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 8"/></svg></button>
           <button id="mic" class="btn ghost icon" type="button" aria-label="Record a voice note or a meeting" title="Record a voice note or a meeting"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
           <button class="btn ghost icon dictate-btn" type="button" data-dictate-for="input" aria-label="Dictate" title="Dictate: speak and I type it here">🎙️</button>
-          <textarea id="input" rows="1" placeholder="Message Talixio…" aria-label="Message"></textarea>
+          <textarea id="input" class="no-i18n" rows="1" placeholder="Message Talixio…" aria-label="Message"></textarea>
           <button id="send" class="btn primary icon" type="submit" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2-6z"/></svg></button>
         </div>
       </form>
@@ -131,83 +149,132 @@
         <p class="muted small">Steer your assistant’s own work — its agents, roles and worksites — in one place. Speak to it; it’s more natural.</p>
       </header>
       <nav class="pilot-tabs" role="tablist" aria-label="Pilotage">
-        <button type="button" class="ptab" data-ptab="agents" role="tab">Agents</button>
-        <button type="button" class="ptab" data-ptab="chantiers" role="tab">Worksites</button>
-        <button type="button" class="ptab" data-ptab="roles" role="tab">Roles</button>
-        <button type="button" class="ptab" data-ptab="kb" role="tab">Knowledge</button>
+        <button type="button" class="ptab" data-ptab="kb" role="tab" id="ptab-kb" aria-controls="ppanel-kb"><span>Knowledge base</span><span class="ptab-src no-i18n" id="pilot-tab-kbsrc"></span></button>
+        <button type="button" class="ptab" data-ptab="agents" role="tab" id="ptab-agents" aria-controls="ppanel-agents"><span>Your autonomous pilot</span><span class="ptab-badge no-i18n" id="pilot-tab-agents" hidden></span></button>
+        <button type="button" class="ptab" data-ptab="roles" role="tab" id="ptab-roles" aria-controls="ppanel-roles"><span>Roles</span><span class="ptab-n no-i18n" id="pilot-tab-roles"></span></button>
+        <button type="button" class="ptab" data-ptab="chantiers" role="tab" id="ptab-chantiers" aria-controls="ppanel-chantiers"><span>Worksites</span><span class="ptab-n no-i18n" id="pilot-tab-chantiers"></span></button>
       </nav>
 
-      <div class="pilot-panel" data-ppanel="agents" hidden>
-        <div class="card pilot-talk">
-          <h3>Talk to the pilot</h3>
-          <div class="ptt">
-            <button type="button" class="btn primary micbig dictate-btn" data-dictate-for="ptt-input" aria-label="Speak to the pilot" title="Speak to the pilot"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
-            <p class="muted small">Speak it — dictate a directive to the pilot. It’s transcribed, you read it back, then send.</p>
+      <div class="pilot-panel" data-ppanel="agents" id="ppanel-agents" role="tabpanel" aria-labelledby="ptab-agents" hidden>
+        <div class="card pilot-orch pilot-status">
+          <div class="pilot-status-head">
+            <h3 class="no-i18n" id="pilot-conn-title"><span class="pilot-dot" id="pilot-conn-dot"></span></h3>
+            <div id="pilot-orch-status" class="muted small no-i18n"></div>
           </div>
-          <div class="composer pilot-composer">
-            <textarea id="ptt-input" rows="2" placeholder="Tell the pilot what to do…"></textarea>
-            <button type="button" class="btn ghost icon dictate-btn" data-dictate-for="ptt-input" aria-label="Dictate" title="Dictate: speak and I type it here">🎙️</button>
-            <button type="button" id="ptt-send" class="btn primary">Send</button>
-          </div>
-        </div>
-        <div class="card pilot-orch">
-          <h3>Fleet orchestrator</h3>
-          <div id="pilot-orch-status" class="muted small"></div>
           <pre id="pilot-orch-steps" class="pilot-steps" hidden></pre>
-          <div class="row">
-            <button type="button" id="pilot-orch-connect" class="btn">Connect…</button>
-            <button type="button" id="pilot-orch-disconnect" class="btn ghost danger" hidden>Disconnect</button>
-          </div>
+          <details class="pilot-cfg" id="pilot-cfg">
+            <summary>Settings</summary>
+            <div class="row">
+              <button type="button" id="pilot-status-btn" class="btn ghost small" aria-expanded="false" title="A Markdown file kept up to date with the state of the fleet">Status file</button>
+              <button type="button" id="pilot-orch-connect" class="btn ghost small">Connect…</button>
+              <button type="button" id="pilot-orch-disconnect" class="btn ghost small danger" hidden>Disconnect</button>
+            </div>
+            <div id="pilot-status-file" class="pilot-statusfile" hidden>
+              <p class="muted small">The pilot keeps this file up to date, so you can read it outside Talixio. It lives here:</p>
+              <code id="pilot-status-path" class="no-i18n"></code>
+              <div class="row"><button type="button" id="pilot-status-copy" class="btn small">Copy</button> <a id="pilot-status-dl" class="btn small" href="api/pilot/status.md?download=1" download="pilot-status.md">Download</a></div>
+              <pre id="pilot-status-text" class="no-i18n"></pre>
+            </div>
+            <div class="pilot-notify" id="pilot-notify-row" hidden>
+              <span class="muted small">Fleet reports</span>
+              <div class="seg" id="pilot-notify" role="radiogroup" aria-label="Fleet reports">
+                <button type="button" data-notify="inapp" role="radio" title="A badge in Pilotage and the details here — no push">In-app badge</button>
+                <button type="button" data-notify="push" role="radio" title="A badge here, plus a push notification and e-mail">Push + e-mail</button>
+                <button type="button" data-notify="off" role="radio" title="Nothing — don’t surface fleet reports">Off</button>
+              </div>
+            </div>
+          </details>
         </div>
-        <div class="card">
-          <h3>Agents across your machines</h3>
-          <div id="pilot-agents" class="muted small"></div>
+        <div class="pl-tabs" id="pl-tabs" role="tablist" aria-label="Your autonomous pilot">
+          <button type="button" class="pl-tab on" role="tab" data-pl="need">Needs you<span class="pl-bd no-i18n" id="pl-bd-need" hidden></span></button>
+          <button type="button" class="pl-tab" role="tab" data-pl="agents">Agents<span class="pl-pill no-i18n" id="pl-n-agents"></span><span class="pl-bd no-i18n" id="pl-bd-agents" hidden></span></button>
+          <button type="button" class="pl-tab" role="tab" data-pl="journal">Journal<span class="pl-pill no-i18n" id="pl-n-journal"></span><span class="pl-bd no-i18n" id="pl-bd-journal" hidden></span></button>
+          <button type="button" class="pl-tab" role="tab" data-pl="autonomy">Autonomy</button>
         </div>
+        <div class="pl-panel on" data-plp="need"><div class="pl-split" id="pl-split-need">
+          <div class="pl-lst"><div class="pl-rows" id="pl-need-list"></div></div>
+          <div class="pl-pane" id="pl-need-detail"></div></div></div>
+        <div class="pl-panel" data-plp="agents" hidden><div class="pl-split" id="pl-split-agents">
+          <div class="pl-lst"><div class="pl-top">
+            <input type="search" id="pl-ag-q" placeholder="Search an agent…" aria-label="Search an agent">
+            <div class="pl-chips" id="pl-ag-f" role="group" aria-label="Filter agents">
+              <button type="button" class="pl-chip on" data-f="all">All</button><button type="button" class="pl-chip" data-f="waiting">Waiting</button><button type="button" class="pl-chip" data-f="active">Active</button><button type="button" class="pl-chip" data-f="idle">Idle</button><button type="button" class="pl-chip" data-f="offline">Offline</button>
+            </div>
+            <div class="pl-chips"><button type="button" class="pl-chip" id="pl-ag-group">Group by machine</button></div></div>
+            <div class="pl-rows" id="pl-ag-list"></div></div>
+          <div class="pl-pane" id="pl-ag-detail"></div></div></div>
+        <div class="pl-panel" data-plp="journal" hidden><div class="pl-split" id="pl-split-journal">
+          <div class="pl-lst"><div class="pl-top">
+            <input type="search" id="pl-jr-q" placeholder="Search the journal…" aria-label="Search the journal">
+            <div class="pl-chips" id="pl-jr-f" role="group" aria-label="Filter the journal">
+              <button type="button" class="pl-chip on" data-f="all">All</button><button type="button" class="pl-chip" data-f="alert">Alerts</button><button type="button" class="pl-chip" data-f="summary">Summaries</button><button type="button" class="pl-chip" data-f="pass">Passes</button>
+            </div></div>
+            <div class="pl-rows" id="pl-jr-list"></div></div>
+          <div class="pl-pane" id="pl-jr-detail"></div></div></div>
+        <div class="pl-panel" data-plp="autonomy" hidden><div class="pl-auto" id="pl-auto"></div></div>
       </div>
 
-      <div class="pilot-panel" data-ppanel="chantiers" hidden>
+      <div class="pilot-panel" data-ppanel="chantiers" id="ppanel-chantiers" role="tabpanel" aria-labelledby="ptab-chantiers" hidden>
         <div id="pilot-chantiers" class="list dir-list"></div>
         <p class="muted small pilot-xlink"><a href="#activity">See full activity and costs</a> ▸ <span>every agent and tool, not only the director’s.</span></p>
       </div>
 
-      <div class="pilot-panel" data-ppanel="roles" hidden>
+      <div class="pilot-panel" data-ppanel="roles" id="ppanel-roles" role="tabpanel" aria-labelledby="ptab-roles" hidden>
         <div id="pilot-roles"></div>
       </div>
 
-      <div class="pilot-panel" data-ppanel="kb" hidden>
+      <div class="pilot-panel" data-ppanel="kb" id="ppanel-kb" role="tabpanel" aria-labelledby="ptab-kb" hidden>
         <div id="pilot-kb"></div>
       </div>
     </section>
 
     <section id="view-library" class="view page wide" hidden>
-      <header class="page-head lib-head">
-        <div><h2>Library</h2><p class="muted" id="lib-stats">Your documents, notes and recordings. Everything is searchable, by you and by the assistant.</p></div>
-        <div class="lib-actions">
-          <input id="lib-upload-input" type="file" multiple hidden>
-          <button id="lib-add" class="btn primary lib-add" type="button" aria-haspopup="menu" aria-label="Add">＋ Add</button>
-          <button id="lib-upload" class="btn primary lib-sec" type="button">Upload</button>
-          <button id="lib-newnote" class="btn lib-sec" type="button">New note</button>
-          <button id="lib-newfolder" class="btn lib-sec" type="button">New folder</button>
-          <button id="lib-shares" class="btn lib-sec" type="button" title="Links to your documents for people outside">Shares</button>
-          <button id="lib-recent" class="btn lib-sec" type="button" title="Files created or changed lately, and by whom">Recent changes</button>
-          <button id="lib-trash" class="btn lib-trash-btn lib-sec" type="button" title="Deleted files, restorable for 30 days">Trash</button>
+      <h2 class="sr-only">Library</h2>
+      <input id="lib-upload-input" type="file" multiple hidden>
+      <div class="lib-toolbar" id="lib-toolbar">
+        <div class="lib-navbtns">
+          <button id="lib-tree-btn" class="btn ghost icon" type="button" aria-pressed="true" aria-label="Folder tree" title="Folder tree"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15"/></svg></button>
+          <button id="lib-back" class="btn ghost icon" type="button" aria-label="Back" title="Back (Alt+←)" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <button id="lib-up" class="btn ghost icon" type="button" aria-label="Up one folder" title="Up one folder (Alt+↑)" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg></button>
         </div>
-      </header>
-      <form id="lib-search" class="search" role="search">
-        <input id="lib-q" type="search" placeholder="Search your library…" aria-label="Search the library">
-        <label class="scope"><input id="lib-scope" type="checkbox"> <span id="lib-scope-label">this folder only</span></label>
-        <label class="scope" title="Match file and folder names with a regular expression"><input id="lib-regex" type="checkbox"> <span>Regex</span></label>
-        <button class="btn" type="submit">Search</button>
-      </form>
+        <ol id="lib-crumbs" class="crumbs" aria-label="Current folder"></ol>
+        <form id="lib-search" class="search" role="search">
+          <button id="lib-search-toggle" class="btn ghost icon lib-search-toggle" type="button" aria-label="Search" title="Search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg></button>
+          <input id="lib-q" type="search" placeholder="Search your library…" aria-label="Search the library">
+          <button class="btn icon lib-search-go" type="submit" aria-label="Search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg></button>
+          <div class="search-opts">
+            <label class="scope"><input id="lib-scope" type="checkbox"> <span id="lib-scope-label">this folder only</span></label>
+            <label class="scope" title="Match file and folder names with a regular expression"><input id="lib-regex" type="checkbox"> <span>Regex</span></label>
+          </div>
+        </form>
+        <div class="lib-views" role="group" aria-label="Layout">
+          <button type="button" data-view="details" aria-label="Details" title="Details"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+          <button type="button" data-view="list" aria-label="Compact list" title="Compact list"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h12M8 9.5h12M8 14h12M8 18.5h12M4 5h.01M4 9.5h.01M4 14h.01M4 18.5h.01"/></svg></button>
+          <button type="button" data-view="tiles" aria-label="Tiles" title="Tiles"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>
+        </div>
+        <button id="lib-prev-btn" class="btn ghost icon lib-prev-btn" type="button" aria-pressed="false" aria-label="Preview pane" title="Preview pane"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M14.5 4.5v15"/></svg></button>
+        <span id="lib-chips" class="lib-chips"></span>
+        <button id="lib-view-btn" class="btn lib-view-btn" type="button" aria-haspopup="dialog" aria-expanded="false" title="Sort, group and filter the list"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span class="lbl">View</span><b id="lib-view-n" hidden></b></button>
+        <button id="lib-folder-menu" class="btn ghost icon" type="button" aria-haspopup="menu" aria-label="This folder" title="This folder"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
+        <button id="lib-add" class="btn primary lib-add" type="button" aria-haspopup="menu" aria-label="Add">＋ <span>New</span></button>
+      </div>
+      <div class="lib-toolbar lib-selbar" id="lib-selbar" hidden>
+        <button id="lib-sel-clear" class="btn ghost icon" type="button" aria-label="Clear the selection" title="Clear the selection">✕</button>
+        <b id="lib-sel-n"></b>
+        <span class="spacer"></span>
+        <button id="lib-sel-move" class="btn small" type="button">Move to…</button>
+        <a id="lib-sel-zip" class="btn small">Download zip</a>
+        <button id="lib-sel-del" class="btn small ghost danger" type="button">Delete</button>
+      </div>
       <div class="lib">
         <nav id="lib-tree" class="lib-tree" aria-label="Folders"></nav>
         <div id="lib-main" class="lib-main">
-          <div class="lib-bar"><ol id="lib-crumbs" class="crumbs" aria-label="Current folder"></ol><div id="lib-folder-actions" class="row"></div></div>
           <form id="lib-inline" class="lib-inline" hidden><input id="lib-inline-input" required><button class="btn primary small" type="submit">OK</button><button id="lib-inline-cancel" class="btn small" type="button">Cancel</button></form>
           <div id="lib-results" class="results" hidden></div>
           <div id="lib-list" class="lib-list"></div>
-          <p class="muted small lib-drop-hint">Drop files here to add them to this folder.</p>
+          <div class="lib-status"><span id="lib-count" aria-live="polite"></span><span class="lib-drop-hint">Drop files here to add them to this folder.</span><span id="lib-stats" class="muted">Your documents, notes and recordings. Everything is searchable, by you and by the assistant.</span></div>
         </div>
+        <aside id="lib-prev" class="lib-prev" aria-label="Preview" hidden></aside>
       </div>
     </section>
 
@@ -221,6 +288,7 @@
           <button id="board-new" class="btn primary small" type="button">+ New task</button>
           <button id="board-changes" class="btn small ghost" type="button" title="What changed recently, and who did it">Changes</button>
           <button id="board-trash" class="btn small ghost" type="button">Trash</button>
+          <button id="board-filter-btn" class="btn small ghost" type="button" aria-expanded="false" aria-controls="board-filters">Filters</button>
         </div>
         <div id="board-filters" class="bfilters" role="search">
           <input id="board-q" type="search" placeholder="Search tasks" aria-label="Search tasks">
@@ -286,7 +354,7 @@
     <section id="view-mail" class="view page" hidden>
       <header class="page-head"><h2>Mail to handle</h2>
         <p class="muted" id="mail-help">Your new emails, sorted: to answer, to do, to read. Move one to another group and it learns.</p></header>
-      <div class="row wrap"><button id="mail-run" class="btn small" type="button">Check now</button><label class="small muted"><input id="mail-all" type="checkbox"> show handled</label><span id="mail-state" class="muted small"></span></div>
+      <div class="row wrap"><button id="mail-run" class="btn small" type="button">Check now</button><label id="mail-all-label" class="small muted"><input id="mail-all" type="checkbox"> show handled</label><span id="mail-state" class="muted small"></span></div>
       <div id="mail-list"></div>
     </section>
 
@@ -428,6 +496,14 @@
 
           <div class="set-sec" data-sec="model" hidden>
             <header><h3>Model and budget</h3><p class="muted small">The assistant's brain, and how much it may spend.</p></header>
+            <div class="mb-tabs" id="mb-tabs" role="tablist">
+              <button type="button" class="mb-tab on" data-mtab="models" role="tab" aria-selected="true">Models</button>
+              <button type="button" class="mb-tab" data-mtab="providers" role="tab" aria-selected="false">Providers <span class="mb-c" id="mb-prov-c"></span></button>
+              <button type="button" class="mb-tab" data-mtab="budget" role="tab" aria-selected="false">Budget</button>
+            </div>
+            <div class="card set-card mb-models" id="mb-models"></div>
+            <p class="muted small mb-phelp" id="mb-phelp" hidden>All your access to AI services: paid, free, sovereign, or a model running on your own machine. Connect a provider with its key right on its card; its models then appear in the Models tab, where you choose which one answers. The Europe lock lives there too.</p>
+            <div class="mb-pgrid" id="mb-pgrid" hidden></div>
             <div class="card set-card" id="eu-card">
               <h4>Europe only <span id="eu-badge" class="muted small"></span></h4>
               <p class="muted small">Your messages, documents and recordings go to an AI provider hosted in Europe, under the GDPR, and nothing goes to the big American platforms. Paid by use, nothing to host.</p>
@@ -447,10 +523,13 @@
               </form>
             </div>
             <div class="card set-card" id="acc-card">
+              <div id="acc-manage">
               <h4>AI accounts <span id="acc-badge" class="muted small"></span></h4>
               <p class="muted small">Other providers or subscriptions a space can use instead of the main settings: a client's space on a European provider, another on a second Claude subscription. Each account has its own limits. Choose the account in the space's settings (General: in the space menu).</p>
               <div id="acc-list"></div>
               <div class="row"><button id="acc-add" class="btn" type="button">+ Add an account</button></div>
+              </div>
+              <h4 id="acc-form-h" hidden>Connection details</h4>
               <form id="acc-form" class="fields" hidden>
                 <label for="acc-name">Name</label><input id="acc-name" maxlength="60" placeholder="Claude Pro, Mistral for clients…">
                 <label for="acc-kind">Kind</label>
@@ -516,8 +595,73 @@
           </div>
           </div>
 
+          <div class="set-sec" data-sec="assistants" hidden>
+            <header><h3>Other assistants</h3><p class="muted small">Pair your assistant with another person's, and decide exactly what each can see. Nothing is shared until you tick it.</p></header>
+            <div class="card set-card" id="fed-card" data-id="fed-peers">
+              <h4>Paired assistants</h4>
+              <div id="fed-peers" class="fed-peers"></div>
+              <div class="row wrap">
+                <button id="fed-invite" class="btn" type="button">Invite someone…</button>
+                <button id="fed-have" class="btn" type="button">I have an invitation…</button>
+              </div>
+              <div id="fed-invite-box" class="fed-box" hidden>
+                <label class="check"><input type="checkbox" id="fed-invite-digest" checked> <span>Let them read my daily digest</span></label>
+                <div class="row"><button id="fed-invite-make" class="btn primary" type="button">Create the invitation</button></div>
+                <textarea id="fed-invite-code" class="editor mono" rows="3" readonly hidden></textarea>
+                <p id="fed-invite-note" class="muted small" hidden>Give this code to the other person yourself (message, mail, in person). It works once and expires in 24 hours.</p>
+              </div>
+              <div id="fed-have-box" class="fed-box" hidden>
+                <label for="fed-have-code">The invitation you received</label>
+                <textarea id="fed-have-code" class="editor mono" rows="3" spellcheck="false" placeholder="tlx1.…"></textarea>
+                <label class="check"><input type="checkbox" id="fed-have-digest"> <span>Let them read my daily digest in return</span></label>
+                <div class="row"><button id="fed-have-go" class="btn primary" type="button">Pair</button></div>
+              </div>
+            </div>
+            <div class="card set-card" id="fed-overview-card" data-id="fed-overview">
+              <h4>Overview</h4>
+              <p class="muted small">What I offer, who uses it, and what I follow on other assistants. A followed question can be asked every morning, and you can then ask for it in the chat (“the status of Jean”) or find it in the morning briefing.</p>
+              <h5>What I offer</h5>
+              <div id="fed-offer" class="fed-peers"></div>
+              <h5>What I follow</h5>
+              <div id="fed-follow" class="fed-peers"></div>
+            </div>
+            <div class="card set-card" id="fed-share-card" data-id="fed-share">
+              <h4>What I share</h4>
+              <p class="muted small">The daily digest holds only the titles of what was finished or moved in the last 24 hours, and the line you add. Never the content of tasks, conversations, mail, files or memory. This is exactly what leaves:</p>
+              <pre id="fed-preview" class="fed-preview no-i18n"></pre>
+              <label for="fed-note">A line of your own (optional)</label>
+              <input id="fed-note" type="text" maxlength="600" placeholder="Today I focused on…">
+              <label class="check"><input type="checkbox" id="fed-auto"> <span>Send it every evening to the assistants I share it with</span></label>
+              <div class="row wrap"><button id="fed-publish" class="btn primary" type="button">Send it now</button><span id="fed-publish-state" class="muted small"></span></div>
+            </div>
+            <div class="card set-card" id="fed-q-card" data-id="fed-questions">
+              <h4>Questions they can ask</h4>
+              <p class="muted small">A question is a prompt you write once: what to look at, and what to say. The other assistant only picks it by name and cannot change it. The answer is written from one space (never a confidential one) with read-only tools.</p>
+              <div id="fed-queries" class="fed-peers"></div>
+              <div class="row"><button id="fed-q-new" class="btn" type="button">New question…</button></div>
+              <div id="fed-q-form" class="fed-box" hidden>
+                <label for="fed-q-name">Name</label><input id="fed-q-name" type="text" maxlength="80" placeholder="Project status">
+                <label for="fed-q-descr">What it is for (shown to them)</label><input id="fed-q-descr" type="text" maxlength="300" placeholder="Where project Atlas stands">
+                <label for="fed-q-prompt">The prompt</label><textarea id="fed-q-prompt" class="editor" rows="4" maxlength="2000" placeholder="Write the status of project Atlas for PO Dupont: progress, blockers, next steps."></textarea>
+                <label for="fed-q-space">Space it reads</label><select id="fed-q-space"></select>
+                <label class="check"><input type="checkbox" id="fed-q-param"> <span>Let them add a short value (use {param} in the prompt)</span></label>
+                <div class="row wrap"><label for="fed-q-max">Fresh answers per day (0 = no limit)</label><input id="fed-q-max" type="number" min="0" max="1000" value="3" style="width:6em">
+                  <label for="fed-q-gap">Minutes between fresh answers (0 = none)</label><input id="fed-q-gap" type="number" min="0" max="10080" value="0" style="width:6em"></div>
+                <p class="muted small">Beyond these limits the other assistant gets your last answer again, marked as unchanged, and it costs you nothing.</p>
+                <label>Who may ask</label><div id="fed-q-peers" class="fed-peers"></div>
+                <div class="row"><button id="fed-q-save" class="btn primary" type="button">Save the question</button></div>
+              </div>
+            </div>
+            <div class="card set-card" id="fed-inbox-card" data-id="fed-inbox">
+              <h4>Received <span id="fed-badge" class="muted small"></span></h4>
+              <p class="muted small">What other assistants sent you. It is shown as text and never acted on by itself.</p>
+              <div id="fed-inbox" class="fed-inbox"></div>
+              <div class="row wrap"><button id="fed-pull" class="btn" type="button">Check now</button><button id="fed-read" class="btn" type="button">Mark all as read</button></div>
+            </div>
+          </div>
+
           <div class="set-sec" data-sec="library" hidden>
-            <header><h3>Library and memory</h3><p class="muted small">Search, documents, recordings, and what the assistant learns.</p></header>
+            <header><h3>Library and memory</h3><p class="muted small">Search, documents and the network drive.</p></header>
             <div class="set-groups" data-groups="library"></div>
             <div class="card set-card" id="dav-card">
             <h4>Network drive (WebDAV) <span id="dav-badge" class="muted small"></span></h4>
@@ -542,6 +686,11 @@
               </details>
             </div>
           </div>
+          </div>
+
+          <div class="set-sec" data-sec="learning" hidden>
+            <header><h3>Learning</h3><p class="muted small">What the assistant learns by itself, from your history, your tasks and your documents.</p></header>
+            <div class="set-groups" data-groups="learning"></div>
           </div>
 
           <div class="set-sec" data-sec="security" hidden>
@@ -690,8 +839,8 @@
         <div id="billing" class="billing" hidden><ul id="billing-list" class="small"></ul>
           <button id="billing-sync" class="btn small" type="button">Sync now</button></div>
         <p class="muted small">Enter what your AI provider actually billed (its console shows it). Talixio compares it with its own estimate for the same month and corrects the budget from the last three bills.</p>
-        <form id="bill-form" class="row wrap"><input type="month" id="bill-month" required> <input type="number" id="bill-amount" step="0.01" min="0" placeholder="Amount" required>
-          <select id="bill-currency"><option>EUR</option><option>USD</option></select> <button class="btn small" type="submit">Record the bill</button></form>
+        <form id="bill-form" class="row wrap"><input type="month" id="bill-month" required aria-label="Month billed"> <input type="number" id="bill-amount" step="0.01" min="0" placeholder="Amount" required aria-label="Amount">
+          <select id="bill-currency" aria-label="Currency"><option>EUR</option><option>USD</option></select> <button class="btn small" type="submit">Record the bill</button></form>
         <div class="table-wrap"><table id="bills"><thead><tr><th>Period</th><th>Billed</th><th>Estimated</th><th>Ratio</th></tr></thead><tbody></tbody></table></div>
       </details>
       <div id="usage" class="usage"></div>
@@ -909,22 +1058,6 @@
   <div id="viewer-body" class="viewer-body"></div>
 </aside>
 <datalist id="folder-list"></datalist>
-<div id="more-sheet" class="sheet" hidden>
-  <div class="sheet-card more-card" role="dialog" aria-label="More">
-    <div id="more-assistants" class="more-assistants" hidden></div>
-    <a href="#notifications" data-view="notifications">Notifications <b id="more-notif-count" class="badge" hidden></b></a>
-    <a href="#tasks" data-view="tasks">Automations</a>
-    <a href="#mail" data-view="mail">Mail to handle</a>
-    <a href="#people" data-view="people">People</a>
-    <a href="#apps" data-view="apps">Apps</a>
-    <a href="#activity" data-view="activity">Activity and costs</a>
-    <a href="#privacy" data-view="privacy">Privacy</a>
-    <a href="#settings" data-view="settings">Settings</a>
-    <button id="more-install" class="btn primary" type="button" hidden>Install app</button>
-    <button id="more-logout" class="btn" type="button">Sign out</button>
-    <p id="more-version" class="app-version"></p>
-  </div>
-</div>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="i18n/fr.js"></script>
 <script src="i18n.js"></script>

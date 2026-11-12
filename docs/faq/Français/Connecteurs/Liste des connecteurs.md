@@ -3,7 +3,7 @@
 Des connecteurs (serveurs MCP) qui fonctionnent avec Talixio, triés par thème. Cliquez sur **▶ Installer** :
 Talixio s'ouvre dans un nouvel onglet et prépare l'installation. Vous gardez la main à chaque étape.
 
-- Pour un connecteur **sur GitHub**, la fenêtre *Installer un connecteur* s'ouvre et récupère le dépôt.
+- Pour un connecteur **sur GitHub**, la fenêtre *Installer un connecteur* s'ouvre avec son adresse remplie : vérifiez-la, puis appuyez sur le bouton pour récupérer le dépôt.
   Vérifiez ce qu'elle a trouvé, remplissez les réglages éventuels, puis cliquez sur *Installer*.
 - Pour un **service en ligne**, Talixio vous demande de confirmer, puis l'ajoute et s'y connecte.
 

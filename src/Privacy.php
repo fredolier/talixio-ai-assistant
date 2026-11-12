@@ -37,6 +37,17 @@ final class Privacy
     public static bool $privateRead = false;
     /** @var array<string,true> the web addresses found in that content: opening one of them leaks nothing new */
     public static array $links = [];
+    /** @var array<string,true> the sites the user named in this request ("book on sncf-connect.com"): the browser may act there (Tools::browserGuard) */
+    public static array $userSites = [];
+
+    /** The sites a text names, as full addresses or bare domains ("lemonde.fr"). */
+    public static function sitesIn(string $text): array
+    {
+        preg_match_all('#(?:https?://)?((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24})(?=[/:\s,;!?)"\'»]|\.(?:\s|$)|$)#iu', $text, $m);
+        $out = [];
+        foreach ($m[1] as $h) if (($site = Config::siteOf($h)) !== '' && !preg_match('/\.(?:md|pdf|txt|docx?|xlsx?|csv|png|jpe?g)$/i', $site)) $out[$site] = true;
+        return $out;
+    }
     /** The current answer's trace: what went out, what stayed here, which documents, what was blocked. */
     public static ?array $trace = null;
     /** Told about each request as it leaves (live pills in the app). */
@@ -116,7 +127,21 @@ final class Privacy
     public function mayRead(string $level, ?int $space = null, ?string $folder = null): bool
     {
         if ($this->hidden($level, $space, $folder)) return false;
+        if (self::$confine !== '' && $folder !== null && $folder !== self::$confine && !str_starts_with($folder, rtrim(self::$confine, '/') . '/')) return false;
         return $level === 'internal' || self::$person || in_array($this->modelBlocked($level), [null, 'sovereign-only'], true);
+    }
+
+    /**
+     * While another person's assistant is answered (Federation::runAsks): the library is seen only inside this folder,
+     * the folder of the space its question reads (audit S10). '' = no limit; NOWHERE = no document at all.
+     */
+    public static string $confine = '';
+    public const NOWHERE = "/:none:"; // no library folder can be called that (":" is replaced in names)
+
+    public static function confined(string $folder, callable $fn): mixed
+    {
+        $was = self::$confine; self::$confine = $folder;
+        try { return $fn(); } finally { self::$confine = $was; }
     }
 
     /** True while the app serves a person's own search (not a model's). */
@@ -159,7 +184,7 @@ final class Privacy
     public function noOutsideEmbedding(): array
     {
         $strict = $this->strictSpaces();
-        if ($this->app->cfg->embeddings === 'sovereign') $strict = array_values(array_filter($strict, fn($s) => $s['privacy'] === 'secret'));
+        if ($this->app->embedCfg()->embeddings === 'sovereign') $strict = array_values(array_filter($strict, fn($s) => $s['privacy'] === 'secret'));
         if (!$strict) return [];
         $ids = [];
         $spaceIds = array_column($strict, 'id');
@@ -193,7 +218,59 @@ final class Privacy
     }
 
     /** A new piece of work: nothing untrusted read yet. */
-    public static function trustAgain(): void { self::$untrusted = false; self::$privateRead = false; self::$links = []; }
+    public static function trustAgain(): void { self::$untrusted = false; self::$privateRead = false; self::$links = []; self::$userSites = []; }
+
+    /** What the current work has read, to be carried on by another piece of work (a job's report, a tool process). */
+    public static function snapshot(): array
+    {
+        return ['untrusted' => self::$untrusted, 'private' => self::$privateRead, 'taint' => self::$taint, 'links' => array_slice(array_keys(self::$links), 0, 500),
+            'sites' => array_slice(array_keys(self::$userSites), 0, 50)];
+    }
+
+    /** Carry on from a snapshot: it only ever raises the guard (untrusted, private, taint), never lowers it. */
+    public static function adopt(?array $s): void
+    {
+        if (!$s) return;
+        if (!empty($s['untrusted'])) self::$untrusted = true;
+        if (!empty($s['private'])) self::$privateRead = true;
+        self::$taint = max(self::$taint, min(count(self::LEVELS) - 1, (int)($s['taint'] ?? 0)));
+        foreach ((array)($s['links'] ?? []) as $u) if (is_string($u) && count(self::$links) < 2000) self::$links[$u] = true;
+        foreach ((array)($s['sites'] ?? []) as $u) if (is_string($u) && count(self::$userSites) < 50) self::$userSites[$u] = true;
+    }
+
+    /** Several snapshots as one (a directive's workers): the strictest of each. Null when none read anything of note. */
+    public static function merge(array $snaps): ?array
+    {
+        $out = ['untrusted' => false, 'private' => false, 'taint' => 0, 'links' => []];
+        foreach ($snaps as $s) {
+            if (!is_array($s)) continue;
+            $out['untrusted'] = $out['untrusted'] || !empty($s['untrusted']);
+            $out['private'] = $out['private'] || !empty($s['private']);
+            $out['taint'] = max($out['taint'], (int)($s['taint'] ?? 0));
+            $out['links'] = array_slice(array_values(array_unique(array_merge($out['links'], array_filter((array)($s['links'] ?? []), 'is_string')))), 0, 500);
+        }
+        return self::notable($out) ? $out : null;
+    }
+
+    /** Whether a snapshot asks anything of the work that carries it on. */
+    public static function notable(?array $s): bool { return is_array($s) && (!empty($s['untrusted']) || !empty($s['private']) || (int)($s['taint'] ?? 0) > 0); }
+
+    /** Set in the tool process Claude Code starts: the file it shares this state through with the answer that started it. */
+    public static string $shareFile = '';
+
+    /** Merge this process's state with the shared file and write the result back (both sides call it; under a lock). */
+    public static function sync(string $file = ''): void
+    {
+        $file = $file !== '' ? $file : self::$shareFile;
+        if ($file === '' || !($h = @fopen($file, 'c+'))) return;
+        try {
+            flock($h, LOCK_EX);
+            self::adopt(json_decode((string)stream_get_contents($h), true) ?: null);
+            ftruncate($h, 0); rewind($h);
+            fwrite($h, (string)json_encode(self::snapshot(), JSON_UNESCAPED_SLASHES));
+            fflush($h);
+        } finally { flock($h, LOCK_UN); fclose($h); }
+    }
 
     // ---- the trace of one answer ----
 
@@ -348,7 +425,7 @@ final class Privacy
     private static function label(array $svc, string $purpose): string
     {
         return ['search' => 'Web search', 'web' => 'Reading a web page', 'transcription' => 'Transcription', 'embeddings' => 'Search by meaning',
-            'connector' => 'Connector', 'calendar' => 'Calendar', 'music' => 'Music', 'chat' => 'Chat app', 'model' => 'Model', 'vision' => 'Reading images', 'billing' => 'Reading costs'][$purpose] ?? ucfirst($purpose);
+            'connector' => 'Connector', 'calendar' => 'Calendar', 'music' => 'Music', 'chat' => 'Chat app', 'model' => 'Model', 'vision' => 'Reading images', 'billing' => 'Reading costs', 'assistants' => 'Other assistants'][$purpose] ?? ucfirst($purpose);
     }
 
     private function log(string $service, string $purpose, int $bytes, string $level, bool $blocked): void
@@ -407,6 +484,7 @@ final class Privacy
     public function flows(): array
     {
         $c = $this->app->mainCfg; $out = [];
+        $v = $this->app->voiceCfg(); $ec = $this->app->embedCfg(); // what transcription and search by meaning really run on (the routing may differ from the main settings)
         $add = function (string $id, string $name, string $what, string $status, string $why, array $fix = [], string $terms = '') use (&$out) {
             $out[] = compact('id', 'name', 'what', 'status', 'why', 'fix', 'terms');
         };
@@ -429,19 +507,19 @@ final class Privacy
         };
 
         // transcription
-        if ($c->transcribe === 'local') $add('transcription', 'Transcription (whisper.cpp)', 'Voice notes and meeting recordings.', 'local', 'Runs on this server.');
-        elseif ($c->transcribe === 'gemini') $add('transcription', 'Transcription (Google Gemini)', 'Voice notes and meeting recordings.', $c->geminiPaid ? 'good' : 'bad',
-            $c->geminiPaid ? 'Paid plan: not used to train models.' : 'Free tier: Google may use the recordings to improve its products.',
+        if ($v->transcribe === 'local') $add('transcription', 'Transcription (whisper.cpp)', 'Voice notes and meeting recordings.', 'local', 'Runs on this server.');
+        elseif ($v->transcribe === 'gemini') $add('transcription', 'Transcription (Google Gemini)', 'Voice notes and meeting recordings.', $v->geminiPaid ? 'good' : 'bad',
+            $v->geminiPaid ? 'Paid plan: not used to train models.' : 'Free tier: Google may use the recordings to improve its products.',
             $whisperReady ? [['label' => 'Transcribe on this server', 'set' => ['TALIXIO_TRANSCRIBE' => 'local']]] : [['label' => 'My Gemini key is on a paid plan', 'set' => ['TALIXIO_GEMINI_PAID' => '1']]], $terms('gemini'));
-        elseif ($c->transcribe === 'openai') $add('transcription', 'Transcription (OpenAI)', 'Voice notes and meeting recordings.', 'good', 'API terms: not used to train models.', [], $terms('openai'));
-        elseif ($c->transcribe === 'sovereign') $add('transcription', 'Transcription (' . Sovereign::info($c->sovereign)['name'] . ')', 'Voice notes and meeting recordings.', 'good', $eu($c->sovereign), [], $terms($c->sovereign));
+        elseif ($v->transcribe === 'openai') $add('transcription', 'Transcription (OpenAI)', 'Voice notes and meeting recordings.', 'good', 'API terms: not used to train models.', [], $terms('openai'));
+        elseif ($v->transcribe === 'sovereign') $add('transcription', 'Transcription (' . Sovereign::info($v->sovereign)['name'] . ')', 'Voice notes and meeting recordings.', 'good', $eu($v->sovereign), [], $terms($v->sovereign));
 
         // search by meaning
-        $e = $c->embeddings;
+        $e = $ec->embeddings;
         if ($e === 'ollama') $add('embeddings', 'Search by meaning (Ollama)', 'Text of your memory and documents, to index them.', 'local', 'Runs on this server.');
-        elseif ($e === 'gemini') $add('embeddings', 'Search by meaning (Google Gemini)', 'Text of your memory and documents, to index them.', $c->geminiPaid ? 'good' : 'bad',
-            $c->geminiPaid ? 'Paid plan: not used to train models.' : 'Free tier: Google may use the text to improve its products.', [['label' => 'Use Ollama on this server', 'href' => '#settings/memory']], $terms('gemini'));
-        elseif ($e === 'sovereign') $add('embeddings', 'Search by meaning (' . Sovereign::info($c->sovereign)['name'] . ')', 'Text of your memory and documents, to index them.', 'good', $eu($c->sovereign), [], $terms($c->sovereign));
+        elseif ($e === 'gemini') $add('embeddings', 'Search by meaning (Google Gemini)', 'Text of your memory and documents, to index them.', $ec->geminiPaid ? 'good' : 'bad',
+            $ec->geminiPaid ? 'Paid plan: not used to train models.' : 'Free tier: Google may use the text to improve its products.', [['label' => 'Use Ollama on this server', 'href' => '#settings/memory']], $terms('gemini'));
+        elseif ($e === 'sovereign') $add('embeddings', 'Search by meaning (' . Sovereign::info($ec->sovereign)['name'] . ')', 'Text of your memory and documents, to index them.', 'good', $eu($ec->sovereign), [], $terms($ec->sovereign));
         elseif (in_array($e, ['openai', 'voyage'], true)) $add('embeddings', 'Search by meaning (' . ($e === 'openai' ? 'OpenAI' : 'Voyage AI') . ')', 'Text of your memory and documents, to index them.', 'good', 'API terms: not used to train models.', [], $terms($e));
 
         // web search
@@ -493,18 +571,18 @@ final class Privacy
         $outside = array_filter($flows, fn($f) => $f['status'] !== 'local');
         $issues = array_values(array_filter($flows, fn($f) => in_array($f['status'], ['bad', 'warn'], true) && ($f['status'] === 'bad' || $f['fix'])));
         $level = !$outside ? 'local' : (array_filter($flows, fn($f) => $f['status'] === 'bad') ? 'personal' : 'business');
-        $c = $this->app->cfg;
-        $ai = array_filter([$this->modelService(), $c->transcribe === 'sovereign' ? $c->sovereign : $c->transcribe, $c->embeddings === 'sovereign' ? $c->sovereign : $c->embeddings],
+        $v = $this->app->voiceCfg(); $ec = $this->app->embedCfg();
+        $ai = array_filter([$this->modelService(), $v->transcribe === 'sovereign' ? $v->sovereign : $v->transcribe, $ec->embeddings === 'sovereign' ? $ec->sovereign : $ec->embeddings],
             fn($x) => !in_array($x, ['local', 'off', 'ollama'], true));
         $european = $level !== 'personal' && !array_filter($ai, fn($x) => !self::isSovereign($x)); // every AI service is local or European
         $auth = new Auth($this->app);
         $security = [
             ['label' => 'HTTPS', 'ok' => str_starts_with($this->app->shares()->baseUrl(), 'https://') || $this->app->shares()->baseUrl() === ''],
             ['label' => 'Two-step sign-in', 'ok' => $auth->totpEnabled()],
-            ['label' => 'Nightly backups', 'ok' => $this->app->cfg->backupKeep > 0],
+            ['label' => 'Nightly backups'] + (function () { $b = $this->app->backup()->status(); return ['ok' => in_array($b['state'], ['ok', 'never'], true), 'state' => $b['state'], 'last' => $b['last'], 'error' => $b['error']]; })(), // its real state (audit Q15)
         ];
-        $spaces = array_map(fn($s) => ['id' => (int)$s['id'], 'name' => $s['id'] ? $s['name'] : 'General', 'level' => $s['privacy'] ?? 'internal', 'color' => $s['color']], $this->app->spaces()->all());
-        return ['level' => $level, 'european' => $european, 'sovereign_only' => $c->sovereignOnly, 'model_grade' => $this->modelGrade(), 'flows' => $flows, 'issues' => count($issues), 'security' => $security, 'spaces' => $spaces];
+        $spaces = array_map(fn($s) => ['id' => (int)$s['id'], 'name' => $s['id'] ? $s['name'] : I18n::t($this->app, 'General'), 'level' => $s['privacy'] ?? 'internal', 'color' => $s['color']], $this->app->spaces()->all());
+        return ['level' => $level, 'european' => $european, 'model_grade' => $this->modelGrade(), 'flows' => $flows, 'issues' => count($issues), 'security' => $security, 'spaces' => $spaces];
     }
 
     /** The journal: requests per service, today and over $days days, and per space. */

@@ -30,7 +30,7 @@ final class Notifier
         $unread = $this->record($title, $text, $space, $url);
         if ($c->notifyNeutral || $this->app->privacy()->spaceLevel($space) !== 'internal') { // the content stays in the app
             $title = $c->name;
-            $text = I18n::t($this->app, 'New message in {space}', ['space' => $space ? $sp['name'] : 'General']);
+            $text = I18n::t($this->app, 'New message in {space}', ['space' => $space ? $sp['name'] : I18n::t($this->app, 'General')]);
         }
         if ($space) $title = "{$sp['name']} · $title";
         $plain = $space && !str_contains($text, $sp['name']) ? "[{$sp['name']}] $text" : $text; // chat apps: say which space it comes from

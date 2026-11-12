@@ -78,13 +78,16 @@ final class Approvals
         }
         if ($a['mode'] === 'inline') return I18n::t($this->app, 'Approved: {what}. Continuing.', ['what' => $a['summary']]); // the waiting session carries on
         $before = $this->app->space; $this->app->setSpace((int)$a['space']);
+        $was = Privacy::snapshot(); Privacy::trustAgain(); // what this one action reads is recorded with its result
         try { $result = Privacy::approved(fn() => $this->app->tools->execute($a['tool'], json_decode($a['args'], true) ?: [])); } // you approved this one action
-        finally { $this->app->setSpace($before); }
+        finally { $read = Privacy::snapshot(); Privacy::trustAgain(); Privacy::adopt($was); $this->app->setSpace($before); }
         $ok = !str_starts_with($result, 'error');
         $st->q('UPDATE approvals SET result=?, status=? WHERE id=?', [mb_substr($result, 0, 20000), $ok ? 'done' : 'failed', $id]);
         $head = I18n::t($this->app, $ok ? 'Done: {what}' : 'Failed: {what}', ['what' => $a['summary']]);
         // kept whole in the conversation (the assistant reads it when asked about it); data shown as a block
-        $st->addMessage('assistant', 'approval', $head . "\n\n" . self::block($result, 20000), null, [], (int)$a['space']);
+        // a page, an email or a connector's result replayed in the next turns: still content written by others (Agent::chat)
+        $trust = $read['untrusted'] ? ['trust' => ['untrusted' => true, 'private' => $read['private'], 'links' => $read['links']]] : null;
+        $st->addMessage('assistant', 'approval', $head . "\n\n" . self::block($result, 20000), $trust, [], (int)$a['space']);
         return $head . "\n\n" . mb_substr($result, 0, 600) . (mb_strlen($result) > 600 ? ' […]' : ''); // a chat app gets the start
     }
 

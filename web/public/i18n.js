@@ -10,8 +10,13 @@
  */
 (() => {
   const I18N = window.I18N || (window.I18N = {});
+  // The interface language can be pinned from the account menu, kept per instance in this browser (like the theme);
+  // without one it follows document.documentElement.dataset.lang, then the browser.
+  const pinned = () => {
+    try { const b = new URL(document.baseURI).pathname.replace(/\/$/, ''); return localStorage.getItem((b ? b.slice(1) + ':' : '') + 'talixio.lang') || ''; } catch { return ''; }
+  };
   const pick = () => {
-    const want = (document.documentElement.dataset.lang || 'auto').toLowerCase();
+    const want = (pinned() || document.documentElement.dataset.lang || 'auto').toLowerCase();
     const langs = want !== 'auto' ? [want] : (navigator.languages || [navigator.language || 'en']);
     for (const l of langs) { const k = String(l).toLowerCase().slice(0, 2); if (k === 'en' || I18N[k]) return k; }
     return 'en';
@@ -41,11 +46,27 @@
           return p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }).join('');
         const literal = key.replace(/\{[a-z0-9_]+\}/gi, '').length; // try the most specific patterns first
+        // too few fixed letters ("by {w}", "in {folder}") to recognise the app's own sentence: it would rewrite any text
+        // that starts with "by " or "in " (audit Q23). Such keys still serve t(), which names them exactly.
+        if ((key.replace(/\{[a-z0-9_]+\}/gi, '').match(/[A-Za-z]/g) || []).length < 4) continue;
         patterns.push({ re: new RegExp('^' + re + '$', 's'), names, out: v, literal });
       } else exact.set(key, v);
     }
     patterns.sort((a, b) => b.literal - a.literal);
   }
+
+  /**
+   * "{a} fichier(s)" agrees with its number (audit U16): in French one and zero take the singular ("1 fichier",
+   * "0 nouvelle réponse"), more the plural ("3 nouvelles réponses", "2 nouveaux mails"). Only in a translation, and only
+   * when a value is a number; "http(s)" is left alone.
+   */
+  const agree = (out, values) => {
+    if (!dict || !/\((?:s|x|es)\)/.test(out)) return out;
+    const n = values.map(v => String(v).replace(/[\s\u202f\u00a0]/g, '')).find(v => /^-?\d+([.,]\d+)?$/.test(v));
+    if (n === undefined) return out;
+    const many = Math.abs(parseFloat(n.replace(',', '.'))) >= 2;
+    return out.replace(/(?<!http)\((s|x|es)\)/g, (_, e) => many ? e : '');
+  };
 
   /** The translation of a text, or null. Keeps the text's surrounding spaces. */
   function lookup(text) {
@@ -58,7 +79,9 @@
         const m = p.re.exec(key);
         if (!m || m.slice(1).some(v => v.includes('<'))) continue; // a value never spans markup ("{a} of {b}" must not swallow two links)
         out = p.out;
-        p.names.forEach((n, i) => { const v = m[i + 1]; out = out.split('{' + n + '}').join(exact.get(norm(v)) ?? v); });
+        // a number written the English way inside the sentence ("2.00") takes the language's decimal comma (audit U18)
+        p.names.forEach((n, i) => { const v = m[i + 1]; out = out.split('{' + n + '}').join(exact.get(norm(v)) ?? (LANG === 'fr' ? v.replace(/^(\d+)\.(\d+)$/, '$1,$2') : v)); });
+        out = agree(out, m.slice(1));
         break;
       }
     }
@@ -71,7 +94,7 @@
   /** For code: translate a text and fill its {placeholders}. */
   window.t = (text, vars) => {
     let out = (dict && (templates.get(norm(text)) ?? (vars ? null : lookup(text)))) || text;
-    if (vars) for (const [k, v] of Object.entries(vars)) out = out.split('{' + k + '}').join(v);
+    if (vars) { for (const [k, v] of Object.entries(vars)) out = out.split('{' + k + '}').join(v); out = agree(out, Object.values(vars)); }
     return out;
   };
   if (!dict && !collect) { window.i18nApply = () => {}; return; }

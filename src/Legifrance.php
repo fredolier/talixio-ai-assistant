@@ -20,10 +20,7 @@ final class Legifrance
 
     private function saveToken(array $t): void
     {
-        $tmp = $this->file() . '.tmp';
-        file_put_contents($tmp, json_encode($t, JSON_UNESCAPED_SLASHES));
-        chmod($tmp, 0600);
-        rename($tmp, $this->file());
+        JsonFile::write($this->file(), $t, 0600); // whole or not at all: a half-written token file would sign you out (audit Q12)
     }
 
     /** A valid bearer token (client_credentials), cached until it is about to expire. */

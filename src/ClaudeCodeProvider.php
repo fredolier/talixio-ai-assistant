@@ -28,6 +28,9 @@ final class ClaudeCodeProvider implements Provider
             }
             $sys = trim("$system\n\n$context") . ($transcript !== '' ? "\n\n# Conversation so far\n\n$transcript" : '');
 
+            // Talixio's tools run in another process (talixio mcp): what this answer has read, and what they read, is shared through this file
+            $trust = "$work/.trust";
+            Privacy::sync($trust);
             $allowed = array_map(fn($n) => "mcp__talixio__$n", $tools->names());
             if ($this->webSearch && $tools->allowsWeb()) $allowed[] = 'WebSearch'; // pages are read with Talixio's fetch_url, which refuses local addresses
             if (glob("$work/*")) $allowed[] = 'Read(./*)'; // the images of this turn, nothing else on the machine
@@ -35,7 +38,7 @@ final class ClaudeCodeProvider implements Provider
                 '--disallowedTools', 'Bash,Edit,Write,MultiEdit,NotebookEdit,Task,Agent,Glob,Grep,WebFetch',
                 '--append-system-prompt', $sys];
             if ($tools->names()) {
-                file_put_contents("$work/.mcp.json", json_encode(['mcpServers' => ['talixio' => ['command' => PHP_BINARY, 'args' => [$this->talixioBin, 'mcp'], 'env' => $tools->env()]]], JSON_UNESCAPED_SLASHES));
+                file_put_contents("$work/.mcp.json", json_encode(['mcpServers' => ['talixio' => ['command' => PHP_BINARY, 'args' => [$this->talixioBin, 'mcp'], 'env' => $tools->env() + ['TALIXIO_TRUST_FILE' => $trust]]]], JSON_UNESCAPED_SLASHES));
                 array_push($cmd, '--mcp-config', "$work/.mcp.json", '--strict-mcp-config');
             }
             if ($allowed) array_push($cmd, '--allowedTools', implode(',', $allowed));
@@ -48,12 +51,13 @@ final class ClaudeCodeProvider implements Provider
             if (!is_resource($proc)) throw new \RuntimeException("cannot run {$this->bin}");
             fwrite($pipes[0], $prompt);
             fclose($pipes[0]);
-            $result = null; $raw = '';
+            $result = null; $raw = ''; $web = [];
             try {
                 while (($line = fgets($pipes[1])) !== false) {
                     $raw .= $line;
                     $ev = json_decode($line, true);
                     if (!is_array($ev)) continue;
+                    $this->markWeb($ev, $web, $trust);
                     if (($ev['type'] ?? '') === 'assistant' && $onEvent) {
                         foreach ($ev['message']['content'] ?? [] as $b) {
                             if (($b['type'] ?? '') === 'tool_use') $onEvent(['type' => 'tool', 'name' => preg_replace('/^mcp__talixio__/', '', $b['name']), 'input' => (array)($b['input'] ?? [])]);
@@ -67,6 +71,7 @@ final class ClaudeCodeProvider implements Provider
                 throw $e;
             }
             $code = proc_close($proc);
+            Privacy::sync($trust); // what the tools read in their process counts for this answer too
             if (!$result) $result = json_decode(trim($raw), true); // plain json output (older CLIs or fakes)
             if (!is_array($result)) throw new \RuntimeException("claude exited $code: " . mb_substr(trim((string)@file_get_contents($errFile) ?: $raw), 0, 400));
             $u = $result['usage'] ?? [];
@@ -80,6 +85,27 @@ final class ClaudeCodeProvider implements Provider
             foreach (glob("$work/{,.}*", GLOB_BRACE) ?: [] as $f) if (is_file($f)) @unlink($f);
             @rmdir($work);
         }
+    }
+
+    /**
+     * Claude Code's own web search runs out of Tools::run: once it is called the answer has read web pages (untrusted),
+     * and the addresses it found may be opened without asking, as after Talixio's web_search. Told to the tool process
+     * at once, before its next tool call.
+     */
+    private function markWeb(array $ev, array &$web, string $trust): void
+    {
+        $changed = false;
+        foreach ((array)($ev['message']['content'] ?? []) as $b) {
+            if (!is_array($b)) continue;
+            if (($ev['type'] ?? '') === 'assistant' && ($b['type'] ?? '') === 'tool_use' && in_array($b['name'] ?? '', ['WebSearch', 'WebFetch'], true)) {
+                $web[(string)($b['id'] ?? '')] = true; Privacy::$untrusted = true; $changed = true;
+            } elseif (($ev['type'] ?? '') === 'user' && ($b['type'] ?? '') === 'tool_result' && isset($web[(string)($b['tool_use_id'] ?? '')])) {
+                preg_match_all('#https?://[^\s<>"\'`)\]\\\\]+#i', (string)json_encode($b['content'] ?? '', JSON_UNESCAPED_SLASHES), $m);
+                foreach ($m[0] as $u) Privacy::$links[rtrim($u, '.,;:!?')] = true;
+                $changed = true;
+            }
+        }
+        if ($changed) Privacy::sync($trust);
     }
 
     /**

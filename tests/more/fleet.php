@@ -105,6 +105,11 @@ $env = $f->spec('alice', $st)['Env']; $sec = $f->spec('alice', $st)['HostConfig'
 check('fleet: the template carries Google, the European provider and a pending reset, without Ollama or AppArmor', in_array('TALIXIO_GOOGLE_CLIENT_SECRET=gsecret', $env, true) && in_array('TALIXIO_SOVEREIGN_URL=https://eu.acme.example/v1', $env, true)
     && in_array('TALIXIO_SOVEREIGN_ONLY=1', $env, true) && in_array('TALIXIO_RESET=abc:totp', $env, true) && !preg_grep('/^TALIXIO_EMBEDDINGS=/', $env) && !in_array('apparmor=unconfined', $sec, true)
     && in_array('TALIXIO_BASE_PATH=', $env, true) && in_array('TZ=Europe/Paris', $env, true), json_encode($env));
+check('fleet: no mail server name set, none given to the assistants', !preg_grep('/^TALIXIO_EMAIL_AUTHSERV_ID=/', $env));
+$f->setSettings(['email_authserv' => ' MX.Acme.example ']);
+check('fleet: one mail server name for every assistant, from the admin page (1.35.38)', in_array('TALIXIO_EMAIL_AUTHSERV_ID=mx.acme.example', $f->spec('alice', ['settings' => $f->state()['settings']] + $st)['Env'], true)
+    && str_contains($throws(fn() => $f->setSettings(['email_authserv' => 'mx; rm'])), 'mx.example.com'));
+$f->setSettings(['email_authserv' => '']);
 $f->setSettings(['domain' => 'localhost', 'mode' => 'path', 'memory_mb' => 512, 'cpus' => 1, 'ollama' => true, 'eu_provider' => '', 'google_client_id' => '', 'apparmor_unconfined' => true]);
 check('fleet: path addresses', $f->url('alice') === 'https://localhost/alice/');
 
@@ -525,10 +530,11 @@ $code = fn() => Auth::totp($secret, intdiv(time(), 30));
 $freshCode = function () use ($conf, $saveConf, $code) { $c = $conf(); $c['totp_last'] = 0; $saveConf($c); return $code(); };
 check('admin: the admin password is long enough', $a('/api/setup', ['setup_code' => $setup, 'password' => 'short', 'code' => $code()])['error'] === 'The password needs at least 12 characters.');
 check('admin: a wrong authenticator code is refused', str_contains($a('/api/setup', ['setup_code' => $setup, 'password' => 'correct horse battery', 'code' => '000000x'])['error'] ?? '', 'That code is not right'));
-$s2 = $a('/api/setup', ['setup_code' => $setup, 'password' => 'correct horse battery', 'code' => $code()]);
+$used = $code(); // the same code below: computed again, it could fall in the next 30-second window and be a fresh one
+$s2 = $a('/api/setup', ['setup_code' => $setup, 'password' => 'correct horse battery', 'code' => $used]);
 check('admin: setup signs in', ($s2['ok'] ?? false) === true && $a('/api/me')['signed_in'] === true && !empty($conf()['password_hash']) && !isset($conf()['setup_code']), json_encode($s2));
 check('admin: setup happens once', $a('/api/setup', ['setup_code' => $setup])['error'] === 'Already set up.');
-check('admin: a code is used once', $a('/api/password', ['current' => 'correct horse battery', 'code' => $code(), 'new' => 'another long password'])['error'] === 'Wrong current password or code.');
+check('admin: a code is used once', ($a('/api/password', ['current' => 'correct horse battery', 'code' => $used, 'new' => 'another long password'])['error'] ?? '') === 'Wrong current password or code.');
 
 // actions through the agent
 $cr = $a('/api/instances', ['id' => 'frank', 'name' => 'Frank', 'email' => 'frank@acme.example', 'memory_mb' => 768, 'evil' => '--privileged']);

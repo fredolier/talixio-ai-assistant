@@ -12,6 +12,13 @@ une pour ouvrir sa conversation et la marquer comme lue, ou *Tout marquer comme 
 aussi de l'écran verrouillé du téléphone. Les 200 dernières sont gardées, pendant 60 jours. Dans un espace
 Secret, la liste dit seulement où regarder.
 
+## Rapports de votre pilote autonome
+Les rapports d'avancement du pilote autonome (voir *Pilotage*) sont discrets par défaut : ni push, ni e-mail. Un nombre rouge
+s'affiche sur l'entrée **Pilotage** et sur les onglets de **Votre pilote autonome** : les réponses des agents sont dans la conversation
+de chaque agent (un compteur par agent, effacé quand vous l'ouvrez) et les rapports d'ensemble dans le **Journal** (effacé quand vous l'ouvrez). L'interrupteur **Rapports de la flotte** de la carte d'état du
+pilote permet de choisir : **Pastille dans l'app** (par défaut), **Push + e-mail**, ou **Désactivée** (rien n'est affiché).
+Un rapport qui répète le précédent, ou un simple signal de maintien, n'est jamais compté.
+
 ## Telegram
 Créez un bot avec @BotFather, mettez son jeton dans Réglages → Telegram, écrivez au bot : il répond
 avec votre identifiant, à mettre dans la liste des identifiants autorisés.
@@ -30,6 +37,15 @@ Les messages de l'assistant (tâches planifiées, briefing, rapports, réponses)
 l'espace et sa couleur, les titres, listes, tableaux et liens du message, et un bouton qui ouvre l'app.
 Pour que les liens et le bouton fonctionnent, l'app doit connaître son adresse : l'ouvrir une fois dans le navigateur suffit
 (ou Réglages → adresse publique). Les e-mails envoyés en votre nom depuis votre boîte restent sobres, sans ce cadre.
+
+**Expéditeurs vérifiés.** Avec *Exiger un expéditeur vérifié (SPF/DKIM)* coché (par défaut), l'assistant ne répond qu'aux
+e-mails vérifiés par votre serveur de mail. Depuis la 1.35.35, il lui faut aussi le *Nom de votre serveur de mail dans
+Authentication-Results* (réglages avancés) : le premier mot de la ligne `Authentication-Results:` que votre serveur ajoute
+à un e-mail reçu (ouvrez la source d'un e-mail reçu, par ex. `mx.example.com`). Sans lui, aucun e-mail n'obtient de réponse
+et *Canaux* le signale, avec le nom donné par le dernier e-mail reçu : un expéditeur pourrait sinon écrire une ligne qui imite
+celle de votre serveur. Inutile avec Gmail et Microsoft 365 (reconnus au nom du serveur IMAP). Sur un serveur à plusieurs,
+la page d'administration peut le renseigner une fois pour tous (*Réglages* → *E-mail entrant pour tous*) ; le réglage de
+chacun l'emporte.
 
 ## Boîtes Outlook / Microsoft 365
 Microsoft supprime les mots de passe pour SMTP et IMAP (smtp.office365.com, outlook.office365.com) ; beaucoup

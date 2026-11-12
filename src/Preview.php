@@ -46,9 +46,15 @@ final class Preview
 
     // ---- page shell ----
 
+    /**
+     * Read in the preview frame, which inherits the app page's policy (web pictures allowed): a document, a saved page or an
+     * email loads nothing from outside, so opening it tells no one (tracking pictures, audit S16). Its own and inline ones show.
+     */
+    public const CSP = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: \'self\'; style-src \'unsafe-inline\'; font-src data:">';
+
     public static function page(string $title, string $body): string
     {
-        return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base target="_blank">'
+        return '<!doctype html><html><head><meta charset="utf-8">' . self::CSP . '<meta name="viewport" content="width=device-width, initial-scale=1"><base target="_blank">'
             . '<title>' . self::e($title) . '</title><style>' . self::CSS . '</style></head><body>' . $body . '</body></html>';
     }
 
@@ -94,7 +100,7 @@ CSS;
     /** A saved web page as it looks; served sandboxed without scripts. Links open in a new tab. */
     public static function htmlPage(string $html): string
     {
-        $base = '<base target="_blank">';
+        $base = self::CSP . '<base target="_blank">'; // first in the head: before anything of the page can load
         if (preg_match('/<head\b[^>]*>/i', $html, $m, PREG_OFFSET_CAPTURE)) return substr_replace($html, $m[0][0] . $base, $m[0][1], strlen($m[0][0]));
         return '<!doctype html><meta charset="utf-8">' . $base . $html;
     }

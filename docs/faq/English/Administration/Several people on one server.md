@@ -17,7 +17,7 @@ Ollama, the agent and the admin page, then shows a **setup code**.
   reset two-step sign-in, remove (with or without their data).
 - *From another server*: bring in an existing assistant (see *Moving an assistant to another server*).
 - **Updates**, **Settings** (domain, addresses as /person or as subdomains, default
-  limits, Ollama, Google client, shared European provider), **Security** (allowed addresses, password), **Activity** (log).
+  limits, Ollama, Google client, the mail server's name for incoming email, shared European provider), **Security** (allowed addresses, password), **Activity** (log).
 
 ## Is the server the right size?
 At the top of the People tab, the **Server** panel shows:

@@ -23,7 +23,7 @@ final class Embeddings
         'voyage' => ['backend' => 'voyage', 'model' => 'voyage-3.5-lite', 'memory_mb' => 0, 'speed' => 0,
             'label' => 'Voyage AI', 'about' => 'Nothing to compute here. Needs a Voyage key; a free allowance, then a few cents a month.'],
         'sovereign' => ['backend' => 'sovereign', 'model' => '', 'memory_mb' => 0, 'speed' => 0,
-            'label' => 'European provider', 'about' => 'Nothing to compute here. Uses the key of the European provider (Mistral, Scaleway, OVHcloud or Infomaniak): the texts stay in Europe; allowed for Confidential spaces.'],
+            'label' => 'European provider', 'about' => 'Nothing to compute here. Uses the key of the European provider (Mistral, Scaleway, OVHcloud, Infomaniak or AKI.IO): the texts stay in Europe; allowed for Confidential spaces.'],
         'off' => ['backend' => 'off', 'model' => '', 'memory_mb' => 0, 'speed' => 0,
             'label' => 'Off', 'about' => 'Search by words only. Nothing is computed or sent.'],
     ];

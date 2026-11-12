@@ -25,7 +25,8 @@ final class Web
             header("Content-Security-Policy: default-src 'self'$connect; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
             header('X-Frame-Options: SAMEORIGIN'); // no other site can frame the app and trick a click (older browsers read this one)
             $html = (string)file_get_contents(dirname(__DIR__) . '/web/public/app.html');
-            $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '">', $html, 1); // the interface language (i18n.js)
+            // data-session: whether this browser holds a session at all, so the page shows the sign-in without a refused request first (audit U14)
+            $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '" data-session="' . (isset($_COOKIE[self::cookie('talixio')]) ? '1' : '0') . '">', $html, 1); // the interface language (i18n.js)
             if ($this->app->cfg->lang === 'auto') I18n::remember($this->app, (string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
             // the scripts' address carries the version (v/<version>/app.js, served by router.php): a page always gets the
             // scripts of its own version, never older ones from an installed app's cache, even an older service worker's
@@ -44,6 +45,9 @@ final class Web
         if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         if ($path === '/api/conductor/inbox') { $this->conductorInbox($method); return; } // the delegated cloud orchestrator reports in: its own secret, no session here
+        if ($path === '/api/conductor/tick') { $this->conductorTick($method); return; } // one typed call per orchestrator pass: its own secret, no session here
+        if ($path === '/api/conductor/pull') { $this->conductorPull($method); return; } // a poll-mode orchestrator pulls its queued instructions: its own secret, no session here
+        if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye', '/api/federation/ask', '/api/federation/queries'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
         $this->startSession();
         try {
@@ -66,14 +70,19 @@ final class Web
             if (preg_match('#^/api/files/(\d+)/pdf(?:/[^/]+)?$#', $path, $fm) && $method === 'GET') { $this->serveOfficePdf((int)$fm[1]); return; }
             if (preg_match('#^/api/files/(\d+)/versions/(\d+)/file$#', $path, $fm) && $method === 'GET') { $this->serveVersion((int)$fm[1], (int)$fm[2]); return; }
             if (preg_match('#^/api/files/(\d+)/(thumb|page/(\d+))$#', $path, $fm) && $method === 'GET') { $this->servePreview((int)$fm[1], (int)($fm[3] ?? 0)); return; }
-            if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/'), isset($_GET['ids']) && $_GET['ids'] !== '' ? array_map('intval', explode(',', (string)$_GET['ids'])) : null); return; }
+            if ($path === '/api/library/zip' && $method === 'GET') { $this->serveZip((string)($_GET['folder'] ?? '/'), isset($_GET['ids']) && $_GET['ids'] !== '' ? array_map('intval', explode(',', (string)$_GET['ids'])) : null, isset($_GET['paths']) && $_GET['paths'] !== '' ? array_slice(explode('|', (string)$_GET['paths']), 0, 200) : null); return; }
             if ($path === '/api/privacy/journal.csv' && $method === 'GET') { $this->privacyCsv(); return; }
             if ($path === '/api/privacy/register' && $method === 'GET') {
                 header('Content-Type: text/markdown; charset=utf-8'); header('Cache-Control: no-store');
                 header('Content-Disposition: attachment; filename="record-of-processing-' . date('Y-m-d') . '.md"');
                 echo $this->app->privacy()->register(); return;
             }
-            if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
+            if ($path === '/api/pilot/status.md' && $method === 'GET') { // the permanent status file, read-only (rewritten fresh on each view)
+                header('Content-Type: text/markdown; charset=utf-8'); header('Cache-Control: no-store');
+                if (!empty($_GET['download'])) header('Content-Disposition: attachment; filename="pilot-status.md"');
+                echo $this->app->conductor()->refreshStatusFile(true); return;
+            }
+            if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''), !empty($body['peek']))); return; }
             $out = $this->route($method, $path, $body);
             $this->json($out, isset($out['errors']) ? 422 : 200); // values that did not validate
         } catch (Conflict $e) {
@@ -94,7 +103,13 @@ final class Web
         $ref = bin2hex(random_bytes(4));
         Log::error("$where [$ref]: " . get_class($e) . ": {$e->getMessage()} at " . basename($e->getFile()) . ':' . $e->getLine());
         return $e instanceof \Error || $e instanceof \PDOException || $e instanceof \JsonException
-            ? "Something went wrong on the server (reference $ref, in the log)." : $e->getMessage();
+            ? "Something went wrong on the server (reference $ref, in the log)." : self::withoutPaths($e->getMessage());
+    }
+
+    /** A message for the browser without the server's file paths (audit Q25): "/var/lib/talixio/backups" says "…/backups"; web addresses stay. */
+    public static function withoutPaths(string $msg): string
+    {
+        return (string)preg_replace_callback('#(?<![\w:/.~-])/(?:[\w.@%+~-]+/)+([\w.@%+~-]*)#u', fn($m) => '…/' . $m[1], $msg);
     }
 
     /** Sends each /api/<area>/... request to the handler of its area. */
@@ -102,10 +117,10 @@ final class Web
     {
         $area = explode('/', $path)[2] ?? '';
         return match ($area) {
-            'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
-            'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor' => $this->routeChat($m, $path, $b),
+            'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'routing', 'catalogue', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
+            'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor', 'pilot', 'federation' => $this->routeChat($m, $path, $b),
             'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
-            'google', 'microsoft', 'spotify', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
+            'google', 'microsoft', 'spotify', 'oauth', 'legifrance', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
             'memory', 'mind', 'skills', 'roles', 'scripts' => $this->routeMind($m, $path, $b),
             'library', 'files', 'shares', 'privacy' => $this->routeLibrary($m, $path, $b),
             'board' => $this->board($m, $path, $b),
@@ -134,6 +149,10 @@ final class Web
             $path === '/api/accounts/test' && $m === 'POST' => $this->app->accounts()->test($b, ($b['id'] ?? '') !== '' ? (string)$b['id'] : null),
             (bool)preg_match('#^/api/accounts/([a-z0-9-]+)$#', $path, $mm) && $m === 'POST' => ['account' => $this->app->accounts()->save($b, $mm[1])],
             (bool)preg_match('#^/api/accounts/([a-z0-9-]+)/delete$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->accounts()->delete($mm[1]); return ['ok' => true]; })(),
+            $path === '/api/routing' && $m === 'GET' => $this->routingView(isset($_GET['space']) && $_GET['space'] !== '' && $_GET['space'] !== 'global' ? (int)$_GET['space'] : null),
+            $path === '/api/routing' && $m === 'POST' => $this->setRouting($b),
+            $path === '/api/catalogue' && $m === 'GET' => $this->app->catalogue()->catalogue(),
+            $path === '/api/catalogue/refresh' && $m === 'POST' => $this->app->catalogue()->refresh(time()),
             $path === '/api/activity' => $this->activity(),
             $path === '/api/bill' && $m === 'POST' => (function () use ($b) {
                 try { return $this->app->calibration()->report((float)($b['amount'] ?? -1), (string)($b['currency'] ?? 'EUR'), (string)($b['month'] ?? '')); }
@@ -146,6 +165,7 @@ final class Web
             $path === '/api/sovereign' && $m === 'GET' => $this->sovereign($this->app),
             $path === '/api/sovereign/test' && $m === 'POST' => $this->withPrices(Sovereign::test((string)($b['service'] ?? ''), $this->sovereignKey($b), (string)($b['url'] ?? ''))),
             $path === '/api/sovereign/apply' && $m === 'POST' => $this->sovereignApply($b),
+            $path === '/api/sovereign/lock' && $m === 'POST' => $this->sovereignLock($b),
             $path === '/api/settings/password' && $m === 'POST' => $this->changePassword($b),
             $path === '/api/security' => ['totp' => $this->auth()->totpEnabled()],
             (bool)preg_match('#^/api/security/totp/(setup|enable|disable)$#', $path, $mm) && $m === 'POST' => $this->totp($mm[1], $b),
@@ -182,8 +202,41 @@ final class Web
             $path === '/api/messages/search' => ['results' => $this->searchMessages((string)($_GET['q'] ?? ''), (int)($_GET['space'] ?? 0), ($_GET['mode'] ?? '') !== 'quick'),
                 'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
             $path === '/api/conductor' && $m === 'GET' => $this->app->conductor()->statusInfo(),
+            $path === '/api/pilot' && $m === 'GET' => $this->app->pilot()->overview(),
+            $path === '/api/pilot' && $m === 'POST' => (function () use ($b) { $r = $this->app->pilot()->setPolicy($b); if (is_string($r)) throw new \InvalidArgumentException($r); return $r; })(),
+            $path === '/api/pilot/verdict' && $m === 'POST' => (function () use ($b) { $r = $this->app->pilot()->verdict((string)($b['decision_id'] ?? ''), !empty($b['ok']), (string)($b['note'] ?? '')); if (is_string($r)) throw new \InvalidArgumentException($r); return $r; })(),
+            $path === '/api/federation' && $m === 'GET' => $this->federationState(),
+            $path === '/api/federation/invite' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->invite((array)($b['give'] ?? []))),
+            $path === '/api/federation/accept' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->accept((string)($b['invite'] ?? ''), (array)($b['give'] ?? [])) + $this->federationState()),
+            $path === '/api/federation/permissions' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->setPermissions((int)($b['peer'] ?? 0), (array)($b['give'] ?? []), (array)($b['accept'] ?? [])); return $this->federationState(); }),
+            $path === '/api/federation/revoke' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->revoke((int)($b['peer'] ?? 0)); return $this->federationState(); }),
+            $path === '/api/federation/send' && $m === 'POST' => $this->fedDo(fn() => ['delivered' => $this->app->federation()->send((int)($b['peer'] ?? 0), (string)($b['text'] ?? ''))] + $this->federationState()),
+            $path === '/api/federation/publish' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->publish((string)($b['note'] ?? '')) + $this->federationState()),
+            $path === '/api/federation/pull-now' && $m === 'POST' => $this->fedDo(fn() => ['arrived' => $this->app->federation()->pullFrom((int)($b['peer'] ?? 0))] + $this->federationState()),
+            $path === '/api/federation/view' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->viewOf((int)($b['peer'] ?? 0))),
+            $path === '/api/federation/query' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->saveQuery($b); return $this->federationState(); }),
+            $path === '/api/federation/query/delete' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->deleteQuery((int)($b['id'] ?? 0)); return $this->federationState(); }),
+            $path === '/api/federation/peer-queries' && $m === 'POST' => $this->fedDo(fn() => ['queries' => $this->app->federation()->queriesOf((int)($b['peer'] ?? 0))]),
+            $path === '/api/federation/ask' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->ask((int)($b['peer'] ?? 0), (int)($b['query'] ?? 0), (string)($b['param'] ?? ''))),
+            $path === '/api/federation/subs' && $m === 'POST' => $this->fedDo(function () use ($b) { $this->app->federation()->refreshSubs((int)($b['peer'] ?? 0)); return $this->federationState(); }),
+            $path === '/api/federation/follow' && $m === 'POST' => $this->fedDo(function () use ($b) {
+                $f = $this->app->federation(); $id = (int)($b['id'] ?? 0);
+                if (isset($b['on']) && !$b['on']) $f->unfollow($id); else $f->follow($id, !empty($b['daily']), (string)($b['alias'] ?? ''), (string)($b['value'] ?? ''));
+                return $this->federationState();
+            }),
+            $path === '/api/federation/ask-sub' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->askSub((int)($b['id'] ?? 0), isset($b['value']) ? (string)$b['value'] : null) + $this->federationState()),
+            $path === '/api/federation/read' && $m === 'POST' => (function () use ($b) { $this->app->federation()->markRead((int)($b['peer'] ?? 0)); return $this->federationState(); })(),
+            $path === '/api/federation/auto' && $m === 'POST' => (function () use ($b) { $this->app->federation()->setAuto(!empty($b['on'])); return $this->federationState(); })(),
             $path === '/api/conductor/setup' && $m === 'POST' => ['instruction' => $this->app->conductor()->setup()],
             $path === '/api/conductor/disconnect' && $m === 'POST' => ['message' => $this->app->conductor()->disconnect()] + $this->app->conductor()->statusInfo(),
+            $path === '/api/conductor/notify' && $m === 'POST' => $this->app->conductor()->setNotify((string)($b['mode'] ?? '')),
+            $path === '/api/conductor/read' && $m === 'POST' => $this->app->conductor()->markRead(),
+            (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/thread$#', $path, $mm) && $m === 'GET' => ['thread' => $this->app->conductor()->agentThread($mm[1])],
+            (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/read$#', $path, $mm) && $m === 'POST' => $this->app->conductor()->markAgentRead($mm[1]),
+            (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/say$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
+                if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space']; // ground + guard against the dispatching space
+                return $this->app->conductor()->agentSay($mm[1], (string)($b['text'] ?? ''), (int)$this->app->space, !empty($b['clarify']));
+            })(),
             $path === '/api/spaces' && $m === 'GET' => ['spaces' => $this->app->spaces()->all(true), 'colors' => Spaces::COLORS],
             $path === '/api/spaces' && $m === 'POST' => ['space' => $this->app->spaces()->save($b)],
             (bool)preg_match('#^/api/spaces/(\d+)$#', $path, $mm) && $m === 'POST' => ['space' => $this->app->spaces()->save($b, (int)$mm[1])],
@@ -295,7 +348,7 @@ final class Web
             $path === '/api/legifrance/test' && $m === 'POST' => ['ok' => true, 'message' => $this->app->legifrance()->test()],
             $path === '/api/meaning' && $m === 'GET' => (new Meaning($this->app))->status(),
             $path === '/api/meaning/choose' && $m === 'POST' => (new Meaning($this->app))->choose((string)($b['preset'] ?? '')),
-            $path === '/api/meaning/pull' && $m === 'POST' => (function () { $mn = new Meaning($this->app); $mn->startPull($this->app->cfg->embeddingsModel); return ['ok' => true]; })(),
+            $path === '/api/meaning/pull' && $m === 'POST' => (function () { $mn = new Meaning($this->app); $mn->startPull($this->app->embedCfg()->embeddingsModel); return ['ok' => true]; })(),
             $path === '/api/meaning/measure' && $m === 'POST' => (function () { set_time_limit(0); return (new Meaning($this->app))->measure(); })(),
             $path === '/api/connectors/packages' => ['packages' => (new ConnectorPackage($this->app))->packages()],
             $path === '/api/connectors/inspect' => (new ConnectorPackage($this->app))->inspect((int)($_GET['file'] ?? 0)),
@@ -329,6 +382,7 @@ final class Web
                 $cfg = $this->app->mcp()->servers()[$name] ?? $this->fail(404, 'no such connector');
                 return ['url' => $this->app->mcpOAuth()->start($name, $cfg, $this->app->mcp()->cache()[$name]['auth_meta'] ?? null)];
             })(),
+            $path === '/api/oauth/back' && $m === 'POST' => $this->oauthBackRead(),
             $path === '/api/mcp/oauth/forget' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcpOAuth()->forget((string)($b['server'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/mcp/refresh' && $m === 'POST' => (function () { set_time_limit(0); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/shell/check' && $m === 'POST' => (function () { try { return ['ok' => true, 'text' => $this->app->shell()->check()]; } catch (\Throwable $e) { return ['ok' => false, 'text' => $e->getMessage()]; } })(),
@@ -356,6 +410,20 @@ final class Web
             $path === '/api/memory' && $m === 'POST' => (function () use ($b) { $this->app->ws->write((string)$b['file'], (string)$b['content']); return ['ok' => true]; })(),
             $path === '/api/skills' => ['skills' => $this->app->skills()->all()],
             $path === '/api/roles' && $m === 'GET' => ['roles' => $this->roleCatalog(), 'overlaps' => $this->app->skills()->overlaps(), 'archived' => $this->roleCatalog(true)],
+            $path === '/api/roles' && $m === 'POST' => (function () use ($b) {
+                // Create a new role from the catalogue — the same path (and duplicate check) as the assistant's role_save tool.
+                $name = trim((string)($b['name'] ?? ''));
+                $purpose = trim((string)($b['purpose'] ?? ''));
+                $content = trim((string)($b['content'] ?? ''));
+                if ($name === '' || $purpose === '' || $content === '') $this->fail(422, 'A new role needs a name, a one-line purpose and a brief.');
+                if (($this->app->skills()->meta($name)['kind'] ?? '') === 'role') $this->fail(409, 'A role by that name already exists — open it to improve it, or choose another name.');
+                $args = ['name' => $name, 'purpose' => $purpose, 'content' => $content];
+                foreach (['tier', 'skills', 'tools'] as $k) if (trim((string)($b[$k] ?? '')) !== '') $args[$k] = (string)$b[$k];
+                $msg = $this->app->tools->run('role_save', $args);
+                $spec = trim((string)($b['specialization'] ?? ''));
+                if ($spec !== '' && ($this->app->skills()->meta($name)['kind'] ?? '') === 'role') $this->app->skills()->setField(Skills::slug($name), 'specialization', $spec);
+                return ['message' => $msg, 'role' => Skills::slug($name)];
+            })(),
             (bool)preg_match('#^/api/roles/([\w-]+)/evaluate$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_evaluate', ['role' => $mm[1]])],
             (bool)preg_match('#^/api/roles/([\w-]+)/publish$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_publish', ['role' => $mm[1], 'note' => (string)($b['note'] ?? '')])],
             (bool)preg_match('#^/api/roles/([\w-]+)/improve$#', $path, $mm) && $m === 'POST' => ['message' => $this->app->tools->run('role_improve', ['role' => $mm[1], 'content' => (string)($b['content'] ?? '')])],
@@ -479,7 +547,7 @@ final class Web
     private function routeLibrary(string $m, string $path, array $b): array
     {
         return match (true) {
-            $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/')) + ['stats' => $this->app->library()->stats(), 'shared' => $this->app->shares()->sharedIndex(),
+            $path === '/api/library' => $this->app->library()->list((string)($_GET['folder'] ?? '/'), !empty($_GET['flat'])) + ['stats' => $this->app->library()->stats(), 'shared' => $this->app->shares()->sharedIndex(),
                 'level' => $this->app->privacy()->folderLevel(Library::normalize((string)($_GET['folder'] ?? '/')))],
             $path === '/api/privacy' => $this->app->privacy()->overview() + ['journal' => $this->app->privacy()->journal()],
             $path === '/api/shares' && $m === 'GET' => ['shares' => $this->app->shares()->list((string)($_GET['scope'] ?? 'active'), isset($_GET['file']) ? (int)$_GET['file'] : null, isset($_GET['folder']) ? (string)$_GET['folder'] : null),
@@ -558,13 +626,27 @@ final class Web
     {
         $msg = 'connected';
         try {
-            if (isset($_GET['error'])) throw new \RuntimeException('Google: ' . $_GET['error']);
-            $this->app->google()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+            $this->app->google()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''), (string)($_GET['error'] ?? ''));
         } catch (\Throwable $e) {
             Log::warn("google: {$e->getMessage()}");
             $msg = $e->getMessage();
         }
-        header('Location: ' . Config::basePath() . '/?google=' . rawurlencode($msg) . '#settings', true, 303);
+        $this->oauthBack('google', $msg);
+    }
+
+    /** The way back from a sign-in page. Its message stays here, read once by the app (POST /api/oauth/back): the address the
+     *  browser lands on carries none, so a link made elsewhere cannot show its own words in the app (audit, lot 6). */
+    private function oauthBack(string $for, string $msg, string $purpose = ''): void
+    {
+        $this->app->store->set('oauth_back', json_encode(['for' => $for, 'msg' => $msg, 'purpose' => $purpose, 'ts' => time()]));
+        header('Location: ' . Config::basePath() . '/?' . $for . '=back#settings', true, 303);
+    }
+
+    private function oauthBackRead(): array
+    {
+        $b = json_decode((string)$this->app->store->get('oauth_back'), true);
+        $this->app->store->set('oauth_back', '');
+        return is_array($b) && ($b['ts'] ?? 0) > time() - 600 ? ['for' => (string)$b['for'], 'msg' => (string)$b['msg'], 'purpose' => (string)$b['purpose']] : ['for' => null];
     }
 
     private function microsoftState(): array
@@ -586,7 +668,7 @@ final class Web
             $msg = $e->getMessage();
             $this->app->microsoft($ms->finished)->failed($msg); // kept under the button: the message after the redirect is easy to miss
         }
-        header('Location: ' . Config::basePath() . '/?microsoft=' . rawurlencode($msg) . ($ms->finished !== '' ? '&for=' . $ms->finished : '') . '#settings', true, 303);
+        $this->oauthBack('microsoft', $msg, $ms->finished);
     }
 
     /** Tasks board. The app acts as "you" and may change any space's cards. */
@@ -624,6 +706,13 @@ final class Web
     {
         if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space'];
         $a = $this->app->apps()->get($id) ?? $this->fail(404, 'not found');
+        if (($a['status'] ?? '') === 'pending') { // not approved yet: its code does not run, even opened directly (audit S17)
+            while (ob_get_level() > 0) ob_end_clean();
+            http_response_code(403);
+            header('Content-Type: text/plain; charset=utf-8'); header("Content-Security-Policy: default-src 'none'; sandbox");
+            echo 'This app waits for your approval: it does not run before.';
+            return;
+        }
         $nonce = base64_encode(random_bytes(16));
         while (ob_get_level() > 0) ob_end_clean();
         header('Content-Type: text/html; charset=utf-8');
@@ -712,8 +801,8 @@ final class Web
     {
         $msg = '';
         try {
-            if (isset($_GET['error'])) throw new \RuntimeException('sign-in cancelled: ' . $_GET['error'] . (isset($_GET['error_description']) ? ' (' . $_GET['error_description'] . ')' : ''));
-            $name = $this->app->mcpOAuth()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+            $error = isset($_GET['error']) ? $_GET['error'] . (isset($_GET['error_description']) ? ' (' . $_GET['error_description'] . ')' : '') : '';
+            $name = $this->app->mcpOAuth()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''), (string)$error);
             set_time_limit(0);
             $cache = $this->app->mcp()->refresh();
             $msg = !empty($cache[$name]['error']) ? "$name: signed in, but " . $cache[$name]['error'] : "connected:$name";
@@ -721,7 +810,7 @@ final class Web
             Log::warn("mcp oauth: {$e->getMessage()}");
             $msg = $e->getMessage();
         }
-        header('Location: ' . Config::basePath() . '/?mcp=' . rawurlencode($msg) . '#settings', true, 303);
+        $this->oauthBack('mcp', $msg);
     }
 
     private function spotifyState(): array
@@ -737,13 +826,12 @@ final class Web
     {
         $msg = 'connected';
         try {
-            if (isset($_GET['error'])) throw new \RuntimeException('Spotify: ' . $_GET['error']);
-            $this->app->spotify()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''));
+            $this->app->spotify()->finish((string)($_GET['code'] ?? ''), (string)($_GET['state'] ?? ''), (string)($_GET['error'] ?? ''));
         } catch (\Throwable $e) {
             Log::warn("spotify: {$e->getMessage()}");
             $msg = $e->getMessage();
         }
-        header('Location: ' . Config::basePath() . '/?spotify=' . rawurlencode($msg) . '#settings', true, 303);
+        $this->oauthBack('spotify', $msg);
     }
 
     private function heartbeats(): array
@@ -761,7 +849,7 @@ final class Web
             'tiers' => array_map(fn(Tier $t) => $t->label(), $c->tiers), 'budget' => $this->app->budget()->status(),
             'embeddings' => $c->embeddings, 'max_parallel_jobs' => $c->maxParallelJobs, 'job_max_usd' => $c->jobMaxUsd, 'job_max_usd_limit' => $c->jobMaxUsdLimit, 'job_effort' => $c->jobEffort,
             'version' => Version::get()['number'], 'version_label' => Version::get()['label'],
-            'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()), 'notifications_unread' => $this->app->notifier()->unread(),
+            'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()), 'notifications_unread' => $this->app->notifier()->unread(), 'fleet_unread' => $this->app->conductor()->unread(),
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store),
@@ -773,13 +861,16 @@ final class Web
     {
         $c = $this->app->cfg; $st = $this->app->store;
         $err = fn(string $ch) => $st->get("channel_error_$ch") ?: null;
+        $miss = json_decode((string)$st->get('email_authserv_missing'), true);
+        $authErr = is_array($miss) && $c->emailRequireAuth && Email::authServ($c) === ''
+            ? $miss['at'] . ' incoming email is not answered: set the name of your mail server (Settings → Channels → Assistant\'s email)' . ($miss['seen'] !== '' ? "; the last email received gives: {$miss['seen']}" : '') : null;
         $notify = $this->app->notifier()->channels();
         $mask = fn(string $v) => strlen($v) > 6 ? substr($v, 0, 3) . str_repeat('•', strlen($v) - 5) . substr($v, -2) : $v; // phone numbers
         return ['notify_on' => $c->notify, 'channels' => [
             ['id' => 'webpush', 'name' => 'Push notifications (this app)', 'state' => $notify['webpush'], 'error' => $err('webpush'),
              'detail' => $this->app->webPush()->count() . ' device(s) subscribed', 'chat' => false],
             ['id' => 'email', 'name' => 'Email', 'state' => $this->app->email()->canSend() ? ($this->app->email()->canReceive() ? 'on' : 'notifications only') : 'not configured',
-             'error' => $err('email'), 'chat' => $this->app->email()->canReceive(),
+             'error' => $err('email') ?? $authErr, 'chat' => $this->app->email()->canReceive(),
              'detail' => $c->smtpHost ? "From {$c->emailFrom}" . ($c->emailTo ? " · notifications to {$c->emailTo}" : '') . ($c->imapHost ? ' · answers ' . implode(', ', $c->emailAllowed) : '') : 'Set it up in Settings → Channels → Assistant\'s email'],
             ['id' => 'signal', 'name' => 'Signal', 'state' => $notify['signal'], 'error' => $err('signal'), 'chat' => $this->app->signal()->enabled(),
              'detail' => $c->signalNumber ? "Number {$c->signalNumber} · answers " . implode(', ', array_map($mask, $c->signalAllowed)) : 'Install with install.sh --with-signal, register a number, then fill in Settings → Channels → Signal'],
@@ -820,6 +911,15 @@ final class Web
      */
     private function shareInbox(): void
     {
+        // a share comes from the phone's share sheet (no Sec-Fetch-Site, or "none") or from the app itself: a form
+        // posted by another site is refused, so a page you visit cannot drop files into your inbox
+        $site = strtolower((string)($_SERVER['HTTP_SEC_FETCH_SITE'] ?? ''));
+        if ($site !== '' && $site !== 'none' && $site !== 'same-origin') {
+            http_response_code(403);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo 'Sharing works from the share menu of your phone or computer, not from another website.';
+            return;
+        }
         // the session cookie is not always sent with a share (it comes from another app): without it,
         // shares are small and rate-limited, so nobody can fill the disk by posting here
         $signedIn = false;
@@ -860,21 +960,25 @@ final class Web
         $files = []; $total = 0; $skipped = 0;
         $up = $_FILES['files'] ?? null;
         if ($up) {
-            $names = (array)$up['name']; $tmps = (array)$up['tmp_name']; $errs = (array)$up['error']; $types = (array)$up['type']; $sizes = (array)$up['size'];
+            $names = (array)$up['name']; $tmps = (array)$up['tmp_name']; $errs = (array)$up['error']; $sizes = (array)$up['size'];
             foreach ($names as $i => $name) {
                 if (($errs[$i] ?? 1) !== UPLOAD_ERR_OK) { if (($errs[$i] ?? 1) !== UPLOAD_ERR_NO_FILE) $skipped++; continue; }
                 if (count($files) >= 10 || $total + (int)$sizes[$i] > $maxBytes) { $skipped++; continue; }
                 $total += (int)$sizes[$i];
                 $n = count($files);
-                if (move_uploaded_file($tmps[$i], "$dir/$n")) $files[] = ['name' => (string)$name, 'type' => (string)($types[$i] ?? '')];
+                // the type is read from the content: the one the sender declares is not trusted
+                if (move_uploaded_file($tmps[$i], "$dir/$n")) $files[] = ['name' => (string)$name, 'type' => (string)((new \finfo(FILEINFO_MIME_TYPE))->file("$dir/$n") ?: 'application/octet-stream')];
             }
         }
         file_put_contents("$dir/meta.json", json_encode(['owner' => $owner, 'text' => mb_substr($text, 0, 20000), 'files' => $files, 'skipped' => $skipped, 'max_mb' => intdiv($maxBytes, 1_000_000)]));
         header('Location: ' . Config::basePath() . '/?share=' . $token . '#chat', true, 303);
     }
 
-    /** Signed-in user takes a shared item: files are stored like uploads and prefilled in the composer. */
-    private function shareClaim(string $token): array
+    /**
+     * Signed-in user takes a shared item: files are stored like uploads and prefilled in the composer.
+     * $peek: only say what the share holds (names, text), so the app can ask before anything is stored.
+     */
+    private function shareClaim(string $token, bool $peek = false): array
     {
         if (!preg_match('/^[a-f0-9]{32}$/', $token)) $this->fail(400, 'bad share');
         $dir = $this->app->cfg->dataDir . "/share-inbox/$token";
@@ -882,6 +986,8 @@ final class Web
         // the browser that shared it: anyone else gets the same answer as for an expired share
         if (!is_array($meta) || !hash_equals((string)($meta['owner'] ?? ''), hash('sha256', (string)($_COOKIE[self::cookie('talixio_share')] ?? ''))))
             $this->fail(404, 'This share has expired. Share it again.');
+        if ($peek) return ['text' => (string)$meta['text'], 'files' => array_values(array_map(fn($f) => ['name' => (string)$f['name']], array_filter((array)$meta['files'], fn($f, $i) => is_file("$dir/$i"), ARRAY_FILTER_USE_BOTH))),
+            'skipped' => (int)($meta['skipped'] ?? 0), 'max_mb' => (int)($meta['max_mb'] ?? 0)];
         $out = [];
         foreach ($meta['files'] as $i => $f) {
             if (!is_file("$dir/$i")) continue;
@@ -898,6 +1004,31 @@ final class Web
         if ($errors) { return ['errors' => $errors, 'error' => 'Some values are not valid.']; }
         Settings::apply($this->app->cfg->dataDir);
         return ['ok' => true, 'groups' => Settings::describe($this->app->cfg->dataDir)];
+    }
+
+    /** The model-routing map plus what each usage resolves to in a scope (null = the global default). */
+    private function routingView(?int $space): array
+    {
+        $r = $this->app->routing();
+        return ['usages' => Routing::USAGES, 'scope' => $space ?? 'global', 'map' => $r->all(), 'effective' => $r->effective($space)];
+    }
+
+    /** Set or clear one binding. account null (or clear:true) falls back; '' is the main settings; else an AI account. */
+    private function setRouting(array $b): array
+    {
+        $space = isset($b['space']) && $b['space'] !== '' && $b['space'] !== 'global' ? (int)$b['space'] : null;
+        $account = !empty($b['clear']) ? null : (string)($b['account'] ?? '');
+        $usage = (string)($b['usage'] ?? '');
+        $this->app->routing()->set($space, $usage, $account, (string)($b['model'] ?? ''), (string)($b['via'] ?? ''));
+        if ($usage === 'embedding') { // search by meaning now runs on another model: have a local one downloaded, and rebuild the index
+            $this->app->routingChanged();
+            $ec = $this->app->embedCfg();
+            if ($account !== null && $ec->embeddings === 'ollama' && !Meaning::shared()) {
+                $mn = new Meaning($this->app); $o = $mn->ollama();
+                if ($o['up'] && !Meaning::installed($ec->embeddingsModel, $o['models'])) $mn->startPull($ec->embeddingsModel);
+            }
+        }
+        return $this->routingView($space);
     }
 
     /** The "Europe only" card: the providers, what is set, and what still leaves Europe. */
@@ -946,6 +1077,15 @@ final class Web
         $this->app->store->set('sovereign_models', json_encode(['id' => $service . '|' . rtrim($url !== '' ? $url : Sovereign::SERVICES[$service]['url'], '/'), 'ts' => time(), 'tiers' => $test['tiers']]));
         $app = new App(Config::fromEnv()); // the new settings, to say what still leaves Europe
         return ['ok' => true, 'test' => $test] + $this->sovereign($app);
+    }
+
+    // Just the Europe lock, on its own: the model table's lock toggles it without touching which provider answers.
+    // It is a standalone runtime guard (Privacy refuses any non-European AI/search service when it is on).
+    private function sovereignLock(array $b): array
+    {
+        $errors = Settings::save($this->app->cfg->dataDir, ['TALIXIO_SOVEREIGN_ONLY' => empty($b['only']) ? '0' : '1'], []);
+        if ($errors) { return ['errors' => $errors, 'error' => 'Could not save the Europe lock.']; }
+        return ['ok' => true] + $this->sovereign(new App(Config::fromEnv()));
     }
 
     private function changePassword(array $b): array
@@ -1251,9 +1391,15 @@ final class Web
     {
         $f = $this->app->files()->get($id);
         if (!$f || !is_file($f['path'])) $this->fail(404, 'not found');
-        $mime = $f['mime'];
-        $inline = !$download && self::showsInline($f['kind'], $mime, (string)(new \finfo(FILEINFO_MIME_TYPE))->file($f['path']));
-        $type = $inline ? ($f['kind'] === 'text' ? preg_replace('/;.*/', '', $mime) . '; charset=utf-8' : $mime) : 'application/octet-stream';
+        $mime = strtolower((string)$f['mime']); $real = strtolower((string)(new \finfo(FILEINFO_MIME_TYPE))->file($f['path']));
+        $inline = !$download && self::showsInline($f['kind'], $mime, $real);
+        // the type sent is the one the content was checked to be, never the sender's word alone (audit S8)
+        $type = !$inline ? 'application/octet-stream' : match ($f['kind']) {
+            'pdf' => 'application/pdf',
+            'image' => $real,
+            'text' => preg_replace('/;.*/', '', $mime) . '; charset=utf-8',
+            default => $mime,
+        };
         // PDFs need the browser's own viewer, which a sandboxed response blocks; they still get no scripts or network access
         $this->sendPath($f['path'], $type, self::disposition($inline ? 'inline' : 'attachment', $f['name']),
             $f['kind'] === 'pdf' && $inline ? "default-src 'none'; object-src 'self'" : "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox");
@@ -1275,7 +1421,8 @@ final class Web
      */
     public static function showsInline(string $kind, string $mime, string $real): bool
     {
-        if (preg_match('/svg|html|xml/', $mime . ' ' . $real)) return false;
+        $mime = strtolower($mime); $real = strtolower($real);
+        if (preg_match('/svg|html|xml|javascript|ecmascript/', $mime . ' ' . $real)) return false;
         return match ($kind) {
             'image' => str_starts_with($mime, 'image/') && str_starts_with($real, 'image/'),
             'pdf' => $real === 'application/pdf',
@@ -1296,8 +1443,8 @@ final class Web
         header('Content-Type: text/html; charset=utf-8');
         header('X-Content-Type-Options: nosniff');
         header('Cache-Control: private, no-cache');
-        // own opaque origin, no scripts, no forms; pictures and fonts of saved pages may load
-        header("Content-Security-Policy: default-src 'none'; img-src data: https:; style-src 'unsafe-inline' https:; font-src data: https:; sandbox allow-popups allow-popups-to-escape-sandbox");
+        // own opaque origin, no scripts, no forms, nothing loaded from outside (a picture in an email tells its sender it was read)
+        header("Content-Security-Policy: default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'; font-src data:; sandbox allow-popups allow-popups-to-escape-sandbox"); // nothing from outside (audit S16)
         header('Referrer-Policy: no-referrer');
         echo $html;
     }
@@ -1323,11 +1470,11 @@ final class Web
         $this->sendPath($p, 'image/jpeg', 'inline', "default-src 'none'; sandbox");
     }
 
-    private function serveZip(string $folder, ?array $only = null): void
+    private function serveZip(string $folder, ?array $only = null, ?array $paths = null): void
     {
         set_time_limit(0);
         $folder = Library::normalize($folder);
-        try { $tmp = $this->app->files()->zipFolder($folder, $only); }
+        try { $tmp = $this->app->files()->zipFolder($folder, $only, $paths); }
         catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
         $name = ($folder === '/' ? 'Library' : basename($folder)) . '-' . date('Y-m-d') . '.zip';
         try { $this->sendPath($tmp, 'application/zip', self::disposition('attachment', $name), "default-src 'none'; sandbox", false); }
@@ -1550,16 +1697,23 @@ final class Web
     private function login(string $password, string $code): void
     {
         $auth = $this->auth(); $ip = Auth::clientIp();
-        if (($wait = $auth->lockedFor($ip)) > 0) {
-            header('Retry-After: ' . $wait);
-            $this->fail(429, 'Too many failed attempts. Try again in ' . self::minutes($wait) . '.');
+        $tooMany = function (int $wait): void { header('Retry-After: ' . $wait); $this->fail(429, 'Too many failed attempts. Try again in ' . self::minutes($wait) . '.'); };
+        if (($wait = $auth->lockedFor($ip, false)) > 0) $tooMany($wait); // this address's own limits: always
+        // the pause for everyone (many failures from many addresses) does not lock the person out (audit S13): an address
+        // they signed in from lately, or the right password with the right second-factor code, still gets in. Anyone else gets
+        // the same answer as before, right password or not, so the pause gives nothing away.
+        if (($all = $auth->lockedFor($ip)) > 0) {
+            $ok = $auth->hasPassword() && $auth->checkPassword($password)
+                && ($auth->knownGood($ip) || ($auth->totpEnabled() && trim($code) !== '' && $auth->checkCode($auth->totpSecret(), $code)));
+            if (!$ok) $tooMany($all);
         }
         if (!$auth->hasPassword() || !$auth->checkPassword($password)) { $auth->failed($ip); $this->fail(401, 'Wrong password.'); }
-        if ($auth->totpEnabled()) {
+        if ($auth->totpEnabled() && !($all > 0 && !$auth->knownGood($ip))) { // during the pause the code was checked above
             if (trim($code) === '') { $this->json(['error' => 'Enter the 6-digit code from your authenticator app.', 'need_code' => true], 401); return; }
             if (!$auth->checkCode($auth->totpSecret(), $code)) { $auth->failed($ip); $this->json(['error' => 'Wrong code.', 'need_code' => true], 401); return; }
         }
         $auth->clear("login:$ip");
+        $auth->rememberGood($ip);
         session_regenerate_id(true);
         $_SESSION['ok'] = true;
         $_SESSION['gen'] = $auth->generation();
@@ -1648,6 +1802,78 @@ final class Web
         } catch (\Throwable $e) {
             $this->json(['error' => self::internalError($e)], 500);
         }
+    }
+
+    /** POST /api/conductor/tick: one call per orchestrator pass (roster + reports + acks in, instructions + problems out). Bearer secret only. */
+    private function conductorTick(string $method): void
+    {
+        ob_start();
+        try {
+            if ($method !== 'POST') $this->fail(405, 'POST only');
+            $msg = json_decode((string)file_get_contents('php://input'), true) ?: [];
+            if (!is_array($msg)) $this->fail(400, 'JSON object expected');
+            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+            [$code, $resp] = $this->app->conductor()->tick($msg, $bearer);
+            $this->json($resp, $code);
+        } catch (\Throwable $e) {
+            $this->json(['error' => self::internalError($e)], 500);
+        }
+    }
+
+    /**
+     * GET /api/conductor/pull: a poll-mode orchestrator (one that could not mint a webhook) pulls the instructions
+     * Talixio has queued for it, authenticated by the steady Bearer secret issued at pairing — never by the web
+     * session. The queue is drained atomically, so each instruction is handed out once.
+     */
+    private function conductorPull(string $method): void
+    {
+        ob_start();
+        try {
+            if ($method !== 'GET') $this->fail(405, 'GET only');
+            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+            [$code, $resp] = $this->app->conductor()->pull($bearer, ($_GET['ack'] ?? '') === '1');
+            $this->json($resp, $code);
+        } catch (\Throwable $e) {
+            $this->json(['error' => self::internalError($e)], 500);
+        }
+    }
+
+    /** Federation calls from another person's assistant: authenticated by the secret issued at pairing (or the one-time code), never by the web session. */
+    private function federationPublic(string $path, string $method): void
+    {
+        ob_start();
+        try {
+            $fed = $this->app->federation();
+            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+            $body = $method === 'POST' ? (json_decode((string)file_get_contents('php://input'), true) ?: []) : [];
+            if (!is_array($body)) $this->fail(400, 'JSON object expected');
+            [$code, $resp] = match (true) {
+                $path === '/api/federation/pair' && $method === 'POST' => $fed->pair($body),
+                $path === '/api/federation/push' && $method === 'POST' => $fed->receive($body, $bearer),
+                $path === '/api/federation/pull' && $method === 'GET' => $fed->pullBy($bearer, ($_GET['ack'] ?? '') === '1', ($_GET['view'] ?? '') === '1'),
+                $path === '/api/federation/bye' && $method === 'POST' => $fed->bye($bearer),
+                $path === '/api/federation/ask' && $method === 'POST' => $fed->receiveAsk($body, $bearer),
+                $path === '/api/federation/queries' && $method === 'GET' => $fed->queriesFor($bearer),
+                default => [405, ['error' => 'method not allowed']],
+            };
+            $this->json($resp, $code);
+        } catch (\Throwable $e) {
+            $this->json(['error' => self::internalError($e)], 500);
+        }
+    }
+
+    /** What the Other assistants screen shows: my address, peers, what arrived, the digest as it would leave. */
+    private function federationState(): array
+    {
+        $f = $this->app->federation();
+        return ['name' => $f->name(), 'base' => $f->base(), 'peers' => $f->peers(), 'inbox' => $f->inbox(0, false, 30), 'digest' => $f->digest(), 'auto' => $f->auto(), 'queries' => $f->queries(), 'offer' => $f->offerOverview(), 'subs' => $f->subs(),
+            'last' => (int)$this->app->store->get('fed_last', '0')];
+    }
+
+    /** Run a federation action; network failures reach the person as a plain message, not a 500. */
+    private function fedDo(callable $fn): array
+    {
+        try { return $fn(); } catch (\RuntimeException $e) { throw new \InvalidArgumentException($e->getMessage()); }
     }
 
     /** POST /api/apps/receive?t=: the browser hands over an app (its package, as JSON) from a linked assistant. */

@@ -33,16 +33,38 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
   l'espace. Le rapport d'un job suit la même règle.
 - **Apprentissage** : ce que l'assistant apprend sur vous dans un espace Confidentiel ou Secret
   reste dans cet espace.
-- **Autres espaces** : les routines et jobs d'un espace que le modèle n'a pas le droit de lire ne
+- **Autres espaces** : les routines, jobs et tâches du tableau d'un espace que le modèle n'a pas le droit de lire ne
   sont ni listés ni modifiables depuis ailleurs ; le dossier d'un espace Secret n'est pas montré
   en dehors de lui.
 - **Recherche web** : la recherche web propre au fournisseur est coupée dès que le travail dépasse
   Interne ; celle de Talixio demande votre validation (Confidentiel) ou est refusée (Secret).
+- **Contenu écrit par d'autres** : dès qu'une réponse a lu un e-mail, une page web (y compris la recherche web
+  propre au modèle), un document que vous avez importé ou joint, votre agenda, le résultat d'un connecteur ou un
+  message d'un autre assistant ou d'un agent, un texte glissé dedans ne peut pas agir seul : dès lors, seule la lecture
+  se fait librement (recherche, lecture de fichiers, du mail, de l'agenda, du tableau ; préparation d'un brouillon de
+  mail), et tout ce qui modifie ou envoie quelque chose (mémoire, compétences, routines, tâches, contacts, notes, jobs,
+  flotte de code, messages à d'autres assistants, commandes shell, ouverture d'une adresse web absente de ce contenu)
+  attend votre validation. Dans le navigateur, saisir, cliquer et choisir se font sans demander sur un site que vous
+  avez nommé dans votre demande ou mis en confiance, sauf si la réponse a lu vos propres données (elles pourraient être
+  saisies dans la page) ; sinon vous validez cette action sur le moment. Vos propres notes, écrites et modifiées en dernier par vous dans l'app, ne comptent pas.
+  Un résultat validé qui venait d'un tel contenu garde la règle tant qu'il est dans la conversation récente, et une
+  compétence apprise d'un tel travail attend elle aussi votre validation.
+  Un job en arrière-plan, une directive ou un job repris transmet ce qu'il a lu à son rapport : le tour qui le
+  relaie (et les suivants, tant que le rapport est dans la conversation récente) demande de la même façon, et un job
+  qui a lu un fichier Confidentiel rapporte au niveau Confidentiel (pas de recherche web, rien copié dans la mémoire
+  commune).
 - **Sites web de confiance** : les sites listés dans Réglages → Navigateur et validations → Sites web de
   confiance (sous-domaines inclus) s'ouvrent sans demander, y compris depuis un espace Confidentiel, une
   routine ou après la lecture d'un e-mail. Le bouton « Toujours autoriser » d'une validation ajoute le site
   pour vous ; pour une recherche web, il active « Recherche web depuis les espaces Confidentiels sans
-  demander ». Les espaces Secrets n'accèdent jamais au web. Tant que des validations attendent, vous recevez
+  demander ». Les espaces Secrets n'accèdent jamais au web. La liste se gère comme un tableau de pastilles : chaque
+  site a sa croix ✕, on en ajoute un par son nom ou son adresse complète (`https://www.lemonde.fr/page` devient
+  `lemonde.fr`), on cherche dans la liste, on l'**importe / exporte** en texte (un site par ligne) ; ce qui n'est
+  pas un site web est refusé.
+- **Sites web bloqués** (même page) : sites qui ne sont jamais ouverts, quel que soit l'espace et même si vous
+  validiez — l'assistant est prévenu que le site est bloqué. Sous-domaines inclus ; un site bloqué l'emporte sur
+  un site de confiance.
+  Tant que des validations attendent, vous recevez
   une seule notification, pas un e-mail par demande.
 
 ## Sous chaque réponse

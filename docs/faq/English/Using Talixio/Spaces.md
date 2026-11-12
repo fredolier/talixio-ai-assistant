@@ -38,7 +38,8 @@ can move from one to the other with everything that belongs to it.
 - What goes with it: the conversation and its summaries, the instructions and notes, the model,
   colour and confidentiality level, the tasks (with their dependencies, history and time spent),
   the routines and jobs, what the assistant learned about it, and its **library folder**. Documents
-  from elsewhere in the library that the conversation or the tasks point to are copied too.
+  from elsewhere in the library that the conversation or the tasks point to are copied too. The routines arrive
+  paused: turn on in Routines those you want to run here.
 - What stays: the AI account of the space (keys never travel; the other assistant uses its own
   settings, change it there if needed), shared links, notifications.
 - If the other assistant already has a space with the same name, task code or folder, the moved

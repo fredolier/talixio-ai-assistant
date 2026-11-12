@@ -203,9 +203,33 @@ Given 5.1, Talixio cannot be a pure external API client. Two buildable shapes:
       anything but delivering a payload into that one session). It hands the URL to
       Talixio once; Talixio POSTs the (KB-grounded) instruction there to wake it on
       demand. **No account-wide token ever lives in the Talixio container.**
+    - **Inbound, poll fallback (1.4.0):** a *local* Claude Code session has no
+      `watch_url`, so it cannot be pushed to. It pairs instead with
+      `{"type":"pair","mode":"poll",…}`, receives the same steady Bearer secret, and
+      then **GETs `/api/conductor/pull`** on its own heartbeat to drain the
+      instructions Talixio has queued for it (the queue is drained atomically, so
+      each instruction is handed out exactly once). `fleet_dispatch` enqueues in poll
+      mode instead of POSTing; everything downstream — the KB grounding, the privacy
+      guard, the untrusted-reply posture — is identical. Push and poll are two shapes
+      of the same bridge and coexist; a binding is one or the other, never both.
     - **Outbound (orchestrator → Talixio):** an authenticated POST to a small
       Talixio endpoint (`/api/conductor/inbox`), surfaced in chat and the
-      notifications inbox.
+      notifications inbox. A keep-warm tick must carry no `text` (or set
+      `"tick":true` / `"silent":true` / a `kind` of `tick|liveness|heartbeat|keepalive`)
+      so it refreshes the roster without notifying. Because the ~10-min heartbeat is
+      easy to send with a stray status line and would then notify (and e-mail) every
+      tick, the inbox also **drops a report whose `text` is a verbatim repeat of the
+      last one it notified** — the flag is the courtesy, the repeat-check is the
+      backstop; only genuinely new text raises a notification. **How a fresh
+      report then surfaces is the user's choice** (`fleet_notify`, stored in the
+      binding, toggled in *Votre pilote autonome*; default `inapp`): `off` surfaces
+      nothing; `inapp` records the report in a short in-app feed (the "Recent
+      reports" card) and bumps an unread count shown as a badge on the Pilotage menu
+      and the *Votre pilote autonome* sub-tab, but sends no push; `push` does the
+      same **and** fires the push+e-mail notification (the pre-1.12 behaviour). The
+      badge clears when the user opens *Votre pilote autonome* (`/api/conductor/read`).
+      The keep-warm/repeat suppression above runs first, so only genuinely new text
+      ever reaches any of these three paths.
     - **The monitor loop:** the orchestrator keeps itself warm with its own
       `create_trigger` / `send_later` heartbeat; each tick it polls `get_session` /
       `list_sessions`, reads results with `list_events`, and re-dispatches —
@@ -454,3 +478,61 @@ its first slice is the small documented-surface piece, not the imagined board.*
   one-to-one first?
 - Does the session conductor belong in the Activity page (directives + jobs +
   sessions as siblings) or its own board? Lean: its own board, linked from Activity.
+
+### 5.5 A session's question reaches the cockpit as text (1.17.0, circuit changed in 1.17.1)
+
+A roster entry carries `state` and `task`, which never said *what* a blocked session is waiting for — the orchestrator sees a
+session's state, not the text of its question. Two things fix that.
+
+**The `waiting` roster field.** `agents[].waiting` = `{kind: decision|approval|instruction, type (free, ≤24: the user's ladder level,
+e.g. L1–L5), question (≤1500), options (≤6 × 120), cost (≤240)}`; a bare `question` string is read as a decision. Display data like
+the rest of the roster — bounded, shown, never executed. The cockpit lists waiting sessions first with the question, option buttons
+that answer through the agent's thread, the cost and a count in the status line. A question that *appears* (agent id + text hash not
+in the previous roster) is news even on a keep-warm tick: a feed line, an unread, a push in push mode.
+
+**The circuit (the « route questions » hook).** 1.17.0 asked blocked sessions to write `QUESTION-<session>.md` files for the
+orchestrator to `cat`; that convention is **abandoned** — companions run on other machines, a blocked session can write nothing,
+and nothing carried the answer back. Now the hook, active per session (`/autopilot-on|off|status`, OFF by default, so the question
+goes to the user as before), blocks the question and the session sends it to the orchestrator itself (SendMessage) with the full
+text, options, ladder level and cost of a wrong choice. The orchestrator pastes it **verbatim** in a report to the inbox with
+`"agent":"<session>"` (it lands in that agent's thread and the feed). The assistant decides and answers with `fleet_dispatch`
+`{agent, instruction, decision_id}`: the payload carries the agent and the `decision_id` (cleaned, ≤64 chars), the answer is kept in
+the thread with it, and the orchestrator delivers it and reports the session's next step with the same `agent`/`decision_id`.
+Approvals and permission prompts are never routed — only the user can give them in that session (kind `approval`: no buttons).
+Which decisions the assistant may take (ladder L1–L3) and which stay with the user (L4, L5; pushes, deploys, deletions, e-mail,
+credentials) is policy of the user's own roles, not of this code.
+
+### 5.6 The cockpit for a fleet (1.18.0)
+
+« Votre pilote autonome » was one long list: every report, whichever agent it came from, above the roster. It is now three tabs,
+each a list and a pane that scroll on their own (so the page never grows with the number of messages): **Needs you**, **Agents**,
+**Journal** (`pilotage.md`). What changed in the data:
+
+- **Where a report lands.** A report tagged with an `agent` is that agent's reply: it goes to its thread (kept to the last 200
+  turns), with an **unread count per agent** (`agent_unread`, shown on the roster entry as `unread`, cleared by
+  `POST /api/conductor/agents/<id>/read` when its conversation is opened). An untagged report is fleet-wide: a line in the
+  **journal** (`reports`, 100 kept) with a `kind` — `alert` when the orchestrator sends `"level":"alert"|"error"` or when a
+  session starts waiting for the user, else `summary`. `POST /api/conductor/read` clears the journal count only. The Pilotage badge
+  counts both (`unread`).
+- **Who answers what.** Answering a session that waits (from the cockpit, `agentSay`, or by the assistant, `fleet_dispatch` with
+  an `agent`) is a *decision*: it carries a `decision_id` (the roster's `waiting.decision_id`, else generated) which the
+  orchestrator echoes back, and it is written in the **decision journal** (`decisions`, 60 kept): the agent, the question as it
+  was, the answer, and **by whom** (`user` or `assistant`). Turns sent by the assistant's tool are marked `by: assistant` in the
+  thread. This is the raw material of the learning described in the roadmap (predictions compared with the user's real answers).
+- A roster entry may also carry `url` (the session's own link, http(s) only), and its `state` may be `offline`.
+
+## Orchestrator link hardening (1.29.0)
+
+Found by reading the orchestrator's own account after it went silent: its helpers and secret lived in a session scratchpad under `/tmp`, wiped on restart; its identity changed per restart and was hard-coded; `pull` drained the queue before the instruction was handled. Fixes: durable `~/.config/talixio-orchestrator/` in the pairing prompt; identity from `ListAgents`; `pull?ack=1` + `{"type":"ack"}` with a 120 s lease; cockpit « silent » warning after 30 min. Open: a single `tick` command Talixio could ship, and provisioning the secret by env var.
+
+## Typed pass and trace (1.35.0)
+`POST /api/conductor/tick` (Bearer secret from pairing, no new key; one call per ≥5 s) replaces report + ack + pull: it takes
+`{agents, reports[{agent, kind: question|approval|answer|status|alert, title, text, decision_id}], ack[], note}`, stores them through the
+existing `inbox()` paths (`quiet` flag so one pass is traced once), and returns `{instructions, waiting, problems, next_in}`.
+`problems` is computed by code, not by the model: a `waiting` state without a question, an incomplete question ("not retrieved", < 20
+chars), a decision without options or cost. Every pass — also keep-warm ticks and legacy `report` calls — is appended to `ticks`
+(ring of 100: ts, via, agents, waiting, reports, instructions, problems, note) and shown newest first under the Journal's **Passes** filter
+(quiet runs folded; no extra tab); a silence is flagged on the status line. Each return in an agent's thread carries a `kind`
+(question | approval | answer | alert | status — given by the orchestrator, else inferred) and the thread tells them apart. Next slices: per-agent classification of each return (question / approval / answer / status) in the
+agent thread, the "needs you" strip with one-click answers, rules proposed from repeated answers, autopilot shadow mode, secret
+rotation/revocation with last-used date, rate limit.

@@ -1,17 +1,50 @@
 # The library (your documents)
 
+## The page at a glance
+- **One slim line at the top**: the path of the open folder (each part is clickable), the search, **⋮** (what you can do
+  with this folder, and how the list is sorted) and **＋ New** (upload, new note, new folder). On a phone the search is a
+  magnifier that opens over the line; the list starts right under it.
+- **The list is a table**: *Name*, *Type*, *Size*, *Modified*, *By* (who last changed the file: you, the assistant, a
+  routine…). **Click a column title to sort**, click again to reverse; the choice is remembered on this device. Folders stay on top.
+  On a phone, the sort is in **⋮ → Sort by**.
+- **Select several files**: tick the boxes (the box in the header selects them all), **Shift-click** a second file to
+  select the range, **Ctrl/Cmd-click** to add one, or on a phone tap a file's icon. The line at the top becomes the
+  selection bar: **Move to…**, **Download zip**, **Delete** (asks once more). Esc or ✕ clears the selection.
+  Dragging one of the selected files to a folder moves them all.
+- **Folders in a selection**: tick a folder's box (or Ctrl/Cmd-click it): the bar offers **Download zip** and **Move to…**
+  for the folders and their content. To delete a folder, use its own ⋮ menu.
+- **Everything below** (View → Show): lists every file under the current folder in one list, with its folder under the name.
+- **Favourites**: *Pin to the tree* in a folder's ⋮ menu adds it to the top of the tree on this device; ✕ removes it.
+  A folder's **Modified** date is that of its newest file.
+- **Preview pane** (button next to the layout icons, computer only): a click on a file shows its thumbnail, details and
+  a text excerpt on the right instead of opening it; a double click (or Enter) opens it. Open and Download are in the pane.
+- **Previews load nothing from outside** (since 1.35.35): a saved web page or an email shown in the library displays
+  without its pictures and styles hosted elsewhere, so that opening it does not tell their sender you read it.
+- **Navigating like an explorer**: at the left of the path, **Folder tree** shows or hides the tree (hidden by default on a
+  narrow window), **Back** and **Up one folder**. **Right click** a file, a folder or the empty list for the same actions
+  as ⋮. Keys: **Ctrl/Cmd+A** select all, **Delete**, **F2** rename, **arrows** move, **Enter** open, **Alt+←** back,
+  **Alt+↑** or **Backspace** up.
+- **Details / Compact list / Tiles** (the three icons next to View): the table, one thin line per file, or a grid
+  with thumbnails. Everything else (selection, sorting, filters) works the same; the choice is remembered.
+- **View** (next to ⋮): sort, **group** (by type or by date) and **filter** by type, date or state (shared by link,
+  unreadable or being read, with a suggested place). The list follows as you click; an active filter shows as a chip on
+  the toolbar (✕ removes it), a filter belongs to the folder where you set it, and the grouping is remembered.
+- At the bottom: how many folders and files are shown and their size, and the state of the indexing.
+
 ## Adding documents
-- **Upload** or drag and drop on the Library page, into the open folder.
+- **＋ New → Upload** or drag and drop on the Library page, into the open folder.
 - Attachments from the chat, Telegram or Signal go to `/Inbox`;
   recordings go to `/Meetings`.
-- On Android: **Share → Talixio** from any app.
+- On Android: **Share → Talixio** from any app. The app then asks *"2 shared files: add them?"* with their names:
+  nothing reaches `/Inbox` or your message before you tap **Add**. A share posted by another website is refused.
 
 ## Filing
 - The app suggests a folder and a clear name for each new document in `/Inbox`
   ("scan_0012.pdf → /Admin/Invoices/EDF invoice 2026-10.pdf"): *File it*, *Change…* or *File them all*.
-  It learns from how you file. Settings → *Filing new documents (Inbox)*: suggest, file
-  the obvious ones, or off.
-- Folders: create, rename, move, delete (to the trash); a folder can be downloaded as a ZIP.
+  It learns from how you file. Settings → *Library and memory* → *Documents* → *Filing new documents (Inbox)*: suggest, file
+  the obvious ones, or off. The same tab switches the reading of images and scanned PDFs on or off; the model that does it
+  is chosen in *Model and budget* → *Models* → the *Images* card (until then, the fast model).
+- Folders: create (＋ New), rename, move, delete (to the trash; ⋮ at the top, or the ⋯ on the folder's row); a folder can be downloaded as a ZIP.
 - The folder tree **collapses and expands** (the arrow in front of each folder; the button at the top collapses everything).
   The path of the open folder stays expanded, and the state is remembered on this device. While dragging a file,
   a collapsed folder opens if you hold it there for a moment.
@@ -28,7 +61,7 @@
   shows it; *Cancel* (or Esc) stops it and keeps what has already been found. Switching folders or starting
   another search stops the previous one; *Close the search* goes back to the folder.
   It cites the document and the page; a click opens it at that page.
-- *Ask about this folder* starts a question about its documents.
+- *Ask about this folder* (in the ⋮ menu at the top) starts a question about its documents.
 
 
 **Search by name with a regular expression**: tick *Regex* next to the search box to match file and folder names with a pattern (e.g. `facture 2026-0\d`, `\.pdf$`). In the results you can tick several files and **move**, **download as a zip** or **delete** them in one go.
@@ -46,7 +79,7 @@
   the others are its versions.
 
 ## Recent changes
-- *Recent changes* (top of the Library) lists the files created or changed in the last hour, today, 2 days or
+- *Recent changes* (⋮ menu at the top of the Library) lists the files created or changed in the last hour, today, 2 days or
   7 days: folder, what happened (created, changed, moved, renamed, restored), by whom (**you**, **the assistant**,
   **a routine**, **the network drive**) and when. A dot marks a file someone else changed that you have not opened
   since; *Mark all as seen* clears them. Click a file to open it.
@@ -59,7 +92,7 @@
 ## Deleting, the trash
 - *Delete* (on an open file, or on a folder with its files) moves it to the **trash**; it is not
   deleted for good. What is in the trash leaves the searches, the assistant and the share links.
-- The **Trash** is at the bottom of the folder tree (on a phone: the *Trash* button at the top of the page).
+- The **Trash** is at the bottom of the folder tree (on a phone: ⋮ → *Trash*).
   It shows where each file came from, when it was deleted and how many days are left.
 - *Restore* puts it back in its place (the folder is created again if needed). A deleted folder comes back
   in one piece, with its files in their subfolders. Nothing is read or transcribed again: it is searchable again right away.
@@ -69,7 +102,7 @@
 - Files deleted before version 0.19.0 are not there: they were erased right away.
 
 ## Notes
-*New note* creates an editable Markdown note. The assistant can also save notes (`kb_save_note`).
+*＋ New → New note* creates an editable Markdown note. The assistant can also save notes (`kb_save_note`).
 
 *Edit* on a Markdown file opens a visual editor: headings, lists, checklists, tables and links look as they will
 be read. Type `/` on an empty line for headings, lists, quotes, code, tables or a divider; select text for the

@@ -4,8 +4,8 @@ namespace Talixio;
 
 /**
  * European AI providers reached through their OpenAI-compatible APIs: Mistral (France), Scaleway (France), OVHcloud
- * (France), Infomaniak (Switzerland). Data is processed in Europe under European law, by companies not subject to the
- * US CLOUD Act. One key serves the conversation model, search by meaning and transcription.
+ * (France), Infomaniak (Switzerland), AKI.IO (Germany). Data is processed in Europe under European law, by companies not
+ * subject to the US CLOUD Act. One key serves the conversation model, search by meaning and transcription.
  * Tier models are picked from the models the key can use (cached for a day); explicit TALIXIO_MODEL* settings win.
  */
 final class Sovereign
@@ -28,10 +28,15 @@ final class Sovereign
             'terms' => 'https://www.infomaniak.com/en/legal', 'embed' => 'bge_multilingual_gemma2', 'transcribe' => 'whisper', 'key' => true,
             'fallback' => ['fast' => 'mistral3', 'standard' => 'qwen3', 'deep' => 'qwen3'], 'note' => '',
             'keys' => 'https://manager.infomaniak.com/', 'about' => 'Open models hosted in Switzerland. Paste the address shown in your AI Tools dashboard (it holds your product id).'],
+        'aki' => ['name' => 'AKI.IO', 'country' => 'Germany', 'url' => 'https://aki.io/openai/v1', 'hosts' => ['aki.io'],
+            'terms' => 'https://aki.io/terms-of-use', 'embed' => 'bge-m3', 'transcribe' => 'whisper', 'key' => true, // no transcription endpoint: 'whisper' matches none of its models, so test() reports it unavailable
+            'fallback' => ['fast' => 'kolibri-1-tl5', 'standard' => 'deepseek-v4.1-flash-1017-tl5', 'deep' => 'deepseek-v4.1-flash-1017-tl5'], // TL5 = processed in Germany
+            'keys' => 'https://aki.io/login', 'about' => 'Open models hosted in Germany. Talixio picks the TL5 (German-resident) models for you. Pay as you go.',
+            'note' => 'Only models tagged TL5 are processed in Germany, so those are the ones used by default — AKI\'s other models can be served from Alibaba Cloud in Singapore, which leaves Europe. Set a non-TL5 model only if you accept that.'],
     ];
 
     /** The order they are offered in. */
-    public const ORDER = ['ovhcloud', 'mistral', 'scaleway', 'infomaniak'];
+    public const ORDER = ['ovhcloud', 'mistral', 'scaleway', 'infomaniak', 'aki'];
 
     /** Not a chat model: vectors, audio, moderation, OCR, code-only. */
     private const NOT_CHAT = '/embed|bge|e5-|minilm|rerank|whisper|voxtral|transcri|tts|audio|speech|guard|moderation|ocr|pixtral|codestral|devstral|diffusion|flux|stable|sdxl|image/i';
@@ -43,6 +48,9 @@ final class Sovereign
     {
         $fb = self::info($service)['fallback'];
         $chat = array_values(array_filter($ids, fn($i) => !preg_match(self::NOT_CHAT, $i)));
+        // AKI: only models tagged TL5 are processed in Germany; the rest can leave Europe (Alibaba Cloud, Singapore).
+        // When the key lists any TL5 model, keep the sovereign ones so an AKI assistant stays in Germany by default.
+        if ($service === 'aki') { $tl5 = array_values(array_filter($chat, fn($i) => stripos($i, 'tl5') !== false)); if ($tl5) $chat = $tl5; }
         if (!$chat) return $fb;
         if ($service === 'mistral') {
             $pick = function (string $family) use ($chat): ?string {
@@ -137,8 +145,8 @@ final class Sovereign
         $c = $app->cfg; $out = [];
         $eu = fn(string $x) => in_array($x, ['local', 'off', 'ollama', 'sovereign', 'searxng'], true);
         if ($c->provider !== 'sovereign' && !in_array($c->provider, ['echo'], true) && !$c->localModels()) $out[] = ['name' => 'AI model', 'why' => 'The conversation model is not a European provider.', 'href' => '#settings/model'];
-        if (!$eu($c->transcribe)) $out[] = ['name' => 'Transcription', 'why' => 'Recordings go to a provider outside Europe.', 'href' => '#settings/library'];
-        if (!$eu($c->embeddings)) $out[] = ['name' => 'Search by meaning', 'why' => 'Your texts are indexed by a provider outside Europe.', 'href' => '#settings/library'];
+        if (!$eu($app->voiceCfg()->transcribe)) $out[] = ['name' => 'Transcription', 'why' => 'Recordings go to a provider outside Europe.', 'href' => '#settings/library'];
+        if (!$eu($app->embedCfg()->embeddings)) $out[] = ['name' => 'Search by meaning', 'why' => 'Your texts are indexed by a provider outside Europe.', 'href' => '#settings/library'];
         if (!$eu($c->search)) $out[] = ['name' => 'Web search', 'why' => 'Search queries go to a service outside Europe. Use your own SearXNG, or turn it off.', 'href' => '#settings/library'];
         if (in_array('telegram', $c->notify, true) && $c->telegramToken !== '') $out[] = ['name' => 'Telegram', 'why' => 'Telegram\'s servers can read the messages. Signal or email are better choices.', 'href' => '#settings/channels'];
         if ($app->google()->connected()) $out[] = ['name' => 'Google Calendar', 'why' => 'Your events are held by Google. A European calendar (Infomaniak, OVHcloud, Nextcloud…) can be added by its link instead.', 'href' => '#settings/accounts'];

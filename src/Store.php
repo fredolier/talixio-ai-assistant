@@ -14,8 +14,32 @@ final class Store
             \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
             \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
         ]);
-        $this->db->exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=15000;');
-        $this->migrate();
+        $this->db->exec('PRAGMA busy_timeout=15000'); // first: switching to WAL may itself wait for another process
+        // a new database turned to WAL by several processes at once: the switch does not always wait (busy_timeout), so retry
+        for ($try = 0; ; $try++) {
+            try { if ($this->path === ':memory:' || strtolower((string)$this->db->query('PRAGMA journal_mode')->fetchColumn()) !== 'wal') $this->db->exec('PRAGMA journal_mode=WAL'); break; }
+            catch (\PDOException $e) { if ($try >= 50 || !str_contains($e->getMessage(), 'locked')) throw $e; usleep(100_000); }
+        }
+        $this->migrateOnce();
+    }
+
+    /**
+     * The schema is brought up to date by one process at a time, in one transaction (its back-fills with it), and not at
+     * all when it already is: PRAGMA user_version holds a fingerprint of this file's migration code (audit Q2, Q22).
+     */
+    private function migrateOnce(): void
+    {
+        $want = crc32((string)@file_get_contents(__FILE__)) & 0x7fffffff;
+        $have = fn() => (int)$this->db->query('PRAGMA user_version')->fetchColumn();
+        if ($this->path !== ':memory:' && $have() === $want) return;
+        $this->db->exec('BEGIN IMMEDIATE'); // waits (busy_timeout) for another process migrating the same database
+        try {
+            if ($this->path === ':memory:' || $have() !== $want) { $this->migrate(); $this->db->exec("PRAGMA user_version = $want"); }
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $e) {
+            try { $this->db->exec('ROLLBACK'); } catch (\Throwable) {} // opened with exec(): PDO's inTransaction() does not know
+            throw $e;
+        }
     }
 
     private function migrate(): void
@@ -96,7 +120,21 @@ final class Store
         $this->addColumn('jobs', 'directive', 'INTEGER'); // the agent-factory directive this worker job belongs to
         $this->addColumn('jobs', 'role', "TEXT NOT NULL DEFAULT ''"); // the worker role this job runs (kind='worker')
         $this->addColumn('jobs', 'session', "TEXT NOT NULL DEFAULT ''"); // a Tier-D delegated code session's handle (kind='conductor', Conductor)
+        // what is read often: the costs of the day and month (every status call), the queue, a directive's workers, the routines due (audit Q18)
+        $this->db->exec('CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts); CREATE INDEX IF NOT EXISTS jobs_status ON jobs(status);
+            CREATE INDEX IF NOT EXISTS jobs_directive ON jobs(directive) WHERE directive IS NOT NULL; CREATE INDEX IF NOT EXISTS tasks_next_run ON tasks(next_run) WHERE enabled = 1;');
+        $this->addColumn('jobs', 'trust', "TEXT NOT NULL DEFAULT ''"); // what the job read (Privacy::snapshot as JSON): carried into the work that follows it
+        // the sorted inbox (Triage); also read by a contact's page, so it exists from the start
+        $this->db->exec("CREATE TABLE IF NOT EXISTS mail_triage(uid INTEGER PRIMARY KEY, message_id TEXT NOT NULL DEFAULT '', ts INTEGER NOT NULL,
+            sender TEXT NOT NULL, email TEXT NOT NULL, subject TEXT NOT NULL, snippet TEXT NOT NULL, label TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '',
+            due TEXT NOT NULL DEFAULT '', by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', seen INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS mail_triage_status ON mail_triage(status, label);");
         $this->addColumn('tasks', 'job', 'INTEGER'); // a routine that runs this job again, instead of a prompt
+        // monthly watches were written "M H 1-7 * D" until 1.35.7, which cron reads as "days 1-7 OR every D": the first D of the month
+        foreach ($this->db->query("SELECT id, cron FROM tasks WHERE cron GLOB '[0-9]* [0-9]* 1-7 [*] [0-7]'")->fetchAll() as $t) {
+            $cron = preg_replace('/^(\d+ \d+) 1-7 \* ([0-7])$/', '$1 * * $2#1', (string)$t['cron']);
+            $this->db->prepare('UPDATE tasks SET cron = ?, next_run = ? WHERE id = ?')->execute([$cron, Cron::next($cron, time()), $t['id']]);
+        }
         // the assistant's mind (Mind): observations from the history, beliefs built from them, a journal of how it changes
         $this->db->exec("CREATE TABLE IF NOT EXISTS mind_obs(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, strength INTEGER NOT NULL DEFAULT 1,
                 space INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'chat', messages TEXT NOT NULL DEFAULT '[]', processed INTEGER NOT NULL DEFAULT 0);
@@ -150,12 +188,42 @@ final class Store
             CREATE INDEX IF NOT EXISTS relay_messages_box ON relay_messages(recipient, id);
             CREATE TABLE IF NOT EXISTS relay_grants(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, owner TEXT NOT NULL, peer TEXT NOT NULL,
                 scope TEXT NOT NULL, UNIQUE(owner, peer, scope));');
+        // assistant-to-assistant federation (docs/design/federation.md): paired peers (each direction has its own secret,
+        // the one that calls me is kept only as a hash), what arrived (untrusted), and what is queued for a peer to pull.
+        $this->db->exec('CREATE TABLE IF NOT EXISTS fed_peers(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL, out_secret TEXT NOT NULL DEFAULT \'\',
+                in_hash TEXT NOT NULL DEFAULT \'\', give TEXT NOT NULL DEFAULT \'[]\', they_give TEXT NOT NULL DEFAULT \'[]\', accept TEXT NOT NULL DEFAULT \'[]\',
+                status TEXT NOT NULL DEFAULT \'active\', last_in INTEGER NOT NULL DEFAULT 0, last_out INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS fed_inbox(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, peer INTEGER NOT NULL, mid TEXT NOT NULL, kind TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT \'\', body TEXT NOT NULL DEFAULT \'\', read INTEGER, UNIQUE(peer, mid));
+            CREATE TABLE IF NOT EXISTS fed_outbox(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, peer INTEGER NOT NULL, mid TEXT NOT NULL, kind TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT \'\', body TEXT NOT NULL DEFAULT \'\', delivered INTEGER);
+            CREATE INDEX IF NOT EXISTS fed_outbox_peer ON fed_outbox(peer, delivered);
+            -- questions I let paired assistants ask (each with its own prompt, space and allowed peers), and the asks received
+            CREATE TABLE IF NOT EXISTS fed_queries(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, name TEXT NOT NULL, descr TEXT NOT NULL DEFAULT \'\', prompt TEXT NOT NULL,
+                space INTEGER NOT NULL DEFAULT 0, peers TEXT NOT NULL DEFAULT \'[]\', param INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1,
+                max_day INTEGER NOT NULL DEFAULT 0, gap_min INTEGER NOT NULL DEFAULT 0, last_at INTEGER NOT NULL DEFAULT 0, last_answer TEXT NOT NULL DEFAULT \'\');
+            CREATE TABLE IF NOT EXISTS fed_asks(id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, peer INTEGER NOT NULL, query INTEGER NOT NULL, param TEXT NOT NULL DEFAULT \'\',
+                mid TEXT NOT NULL, status TEXT NOT NULL DEFAULT \'queued\', error TEXT NOT NULL DEFAULT \'\', fresh INTEGER NOT NULL DEFAULT 0, done INTEGER);');
+        $this->addColumn('fed_inbox', 're', "TEXT NOT NULL DEFAULT ''"); // the ask an answer replies to
+        $this->addColumn('fed_outbox', 're', "TEXT NOT NULL DEFAULT ''");
+        // the questions of paired assistants that I follow: cached from their list, with my alias, whether to ask every day, and the last answer
+        $this->db->exec('CREATE TABLE IF NOT EXISTS fed_subs(id INTEGER PRIMARY KEY, peer INTEGER NOT NULL, qid INTEGER NOT NULL, name TEXT NOT NULL, descr TEXT NOT NULL DEFAULT \'\',
+                param INTEGER NOT NULL DEFAULT 0, alias TEXT NOT NULL DEFAULT \'\', daily INTEGER NOT NULL DEFAULT 0, followed INTEGER NOT NULL DEFAULT 0, gone INTEGER NOT NULL DEFAULT 0,
+                last_mid TEXT NOT NULL DEFAULT \'\', last_ask INTEGER NOT NULL DEFAULT 0, last_value TEXT NOT NULL DEFAULT \'\', last_answer TEXT NOT NULL DEFAULT \'\', last_at INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(peer, qid));');
         if ($this->get('briefing_v2') === '') { // the morning briefing becomes 5 rated lines; keep what the user added ("Also: …")
             foreach ($this->q("SELECT id, prompt FROM tasks WHERE title = 'Morning briefing' AND job IS NULL")->fetchAll() as $t) {
                 $i = strpos((string)$t['prompt'], "\nAlso: ");
                 $this->q('UPDATE tasks SET prompt = ? WHERE id = ?', [Routines::briefingPrompt($i === false ? '' : trim(substr($t['prompt'], $i + 7))), $t['id']]);
             }
             $this->set('briefing_v2', '1');
+        }
+        if ($this->get('briefing_v3') === '') { // the briefing also reads the statuses of followed assistants (federation)
+            foreach ($this->q("SELECT id, prompt FROM tasks WHERE title = 'Morning briefing' AND job IS NULL")->fetchAll() as $t) {
+                $i = strpos((string)$t['prompt'], "\nAlso: ");
+                $this->q('UPDATE tasks SET prompt = ? WHERE id = ?', [Routines::briefingPrompt($i === false ? '' : trim(substr($t['prompt'], $i + 7))), $t['id']]);
+            }
+            $this->set('briefing_v3', '1');
         }
         if ($this->get('docs_backfilled') === '') { // index history written before RAG existed
             $this->db->exec("INSERT INTO docs(kind, ref, ts, label, text)
@@ -232,6 +300,57 @@ final class Store
         }
         return array_map(fn($r) => ['meta' => $r['meta'] ? json_decode($r['meta'], true) : null,
             'files' => array_values(array_filter(array_map(fn($i) => $info[$i] ?? null, json_decode((string)$r['files'], true) ?: [])))] + $r, $rows);
+    }
+
+    /**
+     * Daily clean-up of what only grows (audit Q18): the main thread's tool log after $toolLogDays, delivered messages
+     * between agents and assistants, finished questions, old observations. Costs are kept: usage rows older than 90 days
+     * are folded into one row per day, model and kind. Returns the rows removed per table.
+     */
+    public function prune(int $now, int $toolLogDays = 90): array
+    {
+        $day = 86400; $out = [];
+        $rules = [
+            'tool_log' => ['job_id IS NULL AND ts < ?', $toolLogDays > 0 ? $now - $toolLogDays * $day : 0],
+            'relay_messages' => ['delivered IS NOT NULL AND ts < ?', $now - 30 * $day],
+            'fed_outbox' => ['delivered IS NOT NULL AND ts < ?', $now - 30 * $day],
+            'fed_asks' => ["status IN ('done', 'failed') AND ts < ?", $now - 90 * $day],
+            'fed_inbox' => ['ts < ?', $now - 180 * $day],
+            'mind_obs' => ['processed IS NOT NULL AND processed != 0 AND ts < ?', $now - 365 * $day],
+            'mind_journal' => ['ts < ?', $now - 365 * $day],
+            'role_runs' => ['ts < ?', $now - 365 * $day],
+        ];
+        foreach ($rules as $table => [$where, $before]) {
+            if ($before <= 0) continue;
+            try { $out[$table] = $this->q("DELETE FROM $table WHERE $where", [$before])->rowCount(); } catch (\PDOException) {} // a table of a feature not used yet
+        }
+        $this->db->exec('BEGIN IMMEDIATE');
+        try {
+            $cut = $now - 90 * $day; $key = "strftime('%Y-%m-%d', ts, 'unixepoch', 'localtime'), model, source, tier, account";
+            $groups = $this->q("SELECT MIN(ts) ts, model, source, tier, account, SUM(input_tokens) i, SUM(output_tokens) o, SUM(cost_usd) c, SUM(cache_read) cr, SUM(cache_write) cw, COUNT(*) n
+                FROM usage WHERE ts < ? GROUP BY $key HAVING COUNT(*) > 1", [$cut])->fetchAll();
+            $this->q("DELETE FROM usage WHERE ts < ? AND ($key) IN (SELECT $key FROM usage WHERE ts < ? GROUP BY $key HAVING COUNT(*) > 1)", [$cut, $cut]);
+            foreach ($groups as $g) $this->q('INSERT INTO usage(ts, model, input_tokens, output_tokens, cost_usd, source, tier, cache_read, cache_write, account) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                [$g['ts'], $g['model'], $g['i'], $g['o'], $g['c'], $g['source'], $g['tier'], $g['cr'], $g['cw'], $g['account']]);
+            $out['usage'] = array_sum(array_map(fn($g) => (int)$g['n'] - 1, $groups));
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $e) { try { $this->db->exec('ROLLBACK'); } catch (\Throwable) {} throw $e; }
+        return array_filter($out);
+    }
+
+    /**
+     * The guard carried by messages of a space from $oldestId on (Privacy::snapshot shapes): a tool result the user
+     * approved, or a job report, that came from content written by others. They count as long as they are in the history.
+     * @return list<array>
+     */
+    public function trustFrom(int $oldestId, int $space = 0): array
+    {
+        $out = [];
+        foreach ($this->q("SELECT meta FROM messages WHERE space = ? AND id >= ? AND meta LIKE '%\"trust\"%'", [$space, $oldestId]) as $r) {
+            $t = json_decode((string)$r['meta'], true)['trust'] ?? null;
+            if (is_array($t)) $out[] = $t;
+        }
+        return $out;
     }
 
     /**
@@ -359,6 +478,13 @@ final class Store
     public static function tagList(string $s): array { return array_values(array_filter(explode(',', $s), fn($x) => $x !== '')); }
     public function jobsWithStatus(string $status): array { return $this->q('SELECT * FROM jobs WHERE status=? ORDER BY id', [$status])->fetchAll(); }
     public function updateJob(int $id, array $fields): void { $this->update('jobs', $id, $fields); }
+
+    /** A run's outcome, written only if the job is still running: a cancel that came first stays (audit Q17). */
+    public function finishJob(int $id, array $fields): bool
+    {
+        $set = implode(', ', array_map(fn($k) => "$k = ?", array_keys($fields)));
+        return $this->q("UPDATE jobs SET $set WHERE id = ? AND status = 'running'", [...array_values($fields), $id])->rowCount() === 1;
+    }
 
     /** Atomically move a queued job to running. */
     public function claimJob(int $id): bool

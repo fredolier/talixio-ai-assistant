@@ -132,7 +132,8 @@ final class Director
         $this->app->jobId = null; // relaying is the chat's work
         $how = 'A directive (a team of workers) has finished. Relay the combined result to the user concisely, say what each role produced and flag anything that needs their decision; '
             . 'then ask whether it met the bar — if they accept or reject it, call directive_rate so the roles learn from it.';
-        $reply = $this->app->agent()->chat('job', "[Directive #$did \"{$d['title']}\" finished. Its combined result follows. $how]\n\n$aggregate", 'standard', [], null, (int)$d['space']);
+        $trust = Privacy::merge(array_map(fn($w) => json_decode((string)($w['trust'] ?? ''), true), $workers)); // what any worker read goes with the combined result
+        $reply = $this->app->agent()->chat('job', "[Directive #$did \"{$d['title']}\" finished. Its combined result follows. $how]\n\n$aggregate", 'standard', [], null, (int)$d['space'], $trust);
         $this->app->notifier()->notify("Directive: {$d['title']}", $reply, (int)$d['space']);
     }
 

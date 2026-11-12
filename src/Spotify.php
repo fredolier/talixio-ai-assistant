@@ -22,10 +22,7 @@ final class Spotify
 
     private function saveTokens(array $t): void
     {
-        $tmp = $this->file() . '.tmp';
-        file_put_contents($tmp, json_encode($t, JSON_UNESCAPED_SLASHES));
-        chmod($tmp, 0600);
-        rename($tmp, $this->file());
+        JsonFile::write($this->file(), $t, 0600); // whole or not at all: a half-written token file would sign you out (audit Q12)
     }
 
     public static function redirectUri(string $publicUrl = ''): string { return preg_replace('#/api/google/callback$#', '/api/spotify/callback', Google::redirectUri($publicUrl)); }
@@ -40,11 +37,13 @@ final class Spotify
     }
 
     /** Back from Spotify: check the state, trade the code for tokens. Returns the account name. */
-    public function finish(string $code, string $state): string
+    public function finish(string $code, string $state, string $error = ''): string
     {
         $saved = json_decode($this->app->store->get('spotify_state'), true);
-        $this->app->store->set('spotify_state', '');
+        // a wrong state changes nothing: anyone can call this address, and must not cancel a sign-in in progress (audit, lot 6)
         if (!is_array($saved) || !hash_equals((string)$saved['state'], $state) || $saved['ts'] < time() - 900) throw new \InvalidArgumentException('This sign-in link expired. Press "Connect" again.');
+        $this->app->store->set('spotify_state', '');
+        if ($error !== '') throw new \RuntimeException('Spotify: ' . strtok($error, "\r\n")); // its refusal, only on the way back from a sign-in started here
         $t = $this->token(['grant_type' => 'authorization_code', 'code' => $code, 'redirect_uri' => $saved['redirect']]);
         if (empty($t['refresh_token'])) throw new \RuntimeException('Spotify gave no lasting access. Try connecting again.');
         $this->saveTokens(['refresh_token' => $t['refresh_token'], 'access_token' => $t['access_token'] ?? '', 'expires' => time() + (int)($t['expires_in'] ?? 3600) - 60, 'connected' => time()]);

@@ -258,7 +258,7 @@ check('tools: when reads plain words', Tools::when(['when' => 'every monday at 8
 check('tools: when falls back to cron', Tools::when(['cron' => '0 8 * * 1'], $t0)['cron'] === '0 8 * * 1');
 check('tools: when falls back to at', Tools::when(['at' => '2026-10-20T10:00'], $t0) === ['cron' => null, 'next' => strtotime('2026-10-20 10:00')]);
 check('tools: when without a schedule is an error', str_starts_with($caught(fn() => Tools::when([], $t0)), 'say when'));
-check('tools: outside content sources are untrusted', Tools::untrustedSource('mcp_x_y') && Tools::untrustedSource('browser_open') && Tools::untrustedSource('mail_read') && !Tools::untrustedSource('kb_search'));
+check('tools: outside content sources are untrusted', Tools::untrustedSource('mcp_x_y') && Tools::untrustedSource('browser_open') && Tools::untrustedSource('mail_read') && Tools::untrustedSource('kb_search') && !Tools::untrustedSource('kb_list')); // kb_search too since the audit (S4): documents are often written by others
 
 // ---------- Tools: library, memory, shares, jobs ----------
 $app = $mkApp('tl');
@@ -309,6 +309,7 @@ check('tools: share_create gives the link with its terms', (bool)preg_match('#^l
 $app->store->q('UPDATE shares SET last_access = ? WHERE id = 1', [time()]);
 $r = $x('share_list');
 check('tools: share_list shows who, state and last access', str_contains($r, '#1 ') && str_contains($r, '| for Alex') && str_contains($r, '(last '), $r);
+check('tools: share_list never gives the links themselves, whose secret opens the documents (audit S20)', !str_contains($r, '/s/') && !preg_match('#https?://#', $r), $r);
 check('tools: share_revoke an unknown link', $x('share_revoke', ['id' => 99]) === 'error: no such active link');
 check('tools: share_revoke', $x('share_revoke', ['id' => 1]) === 'revoked' && $x('share_revoke', ['id' => 2]) === 'revoked');
 check('tools: share_list with nothing active', $x('share_list') === 'no shared links');
@@ -638,7 +639,8 @@ $aapp->spaces()->setForChannel('signal', 0);
 $aapp->store->q('INSERT INTO usage(ts,model,input_tokens,output_tokens,cost_usd,source) VALUES(?,?,?,?,?,?)', [strtotime('first day of last month 12:00'), 'claude-sonnet-4-5', 10, 10, 1.25, 'chat']);
 $anext = fn() => 'Sure.';
 $ag->chat('web', 'hello again');
-check('agent: once a month the turn asks for the real bill', str_contains(end($afm->calls)['context'], 'Cost calibration: after answering') && (int)$aapp->store->get('bill_asked', '0') > 0);
+// the ask only starts on the 3rd of the month (Calibration::due), so on the 1st and 2nd the turn rightly stays quiet
+check('agent: once a month the turn asks for the real bill', (int)date('j') < 3 ? !str_contains(end($afm->calls)['context'], 'Cost calibration') : (str_contains(end($afm->calls)['context'], 'Cost calibration: after answering') && (int)$aapp->store->get('bill_asked', '0') > 0));
 $aapp->store->q('DELETE FROM usage');
 $aapp->cfg->anthropicKey = '';
 check('agent: no key says how to set one up', str_starts_with($ag->chat('web', 'hello'), 'No AI model is set up yet'));
@@ -689,8 +691,21 @@ $r = $x2('board_delete', ['code' => $codes['Prepare the Acme quote']]);
 check('tools: board_delete names the tasks that were waiting', $r === "{$codes['Prepare the Acme quote']} moved to the trash. These tasks were waiting for it: {$codes['Send the Acme quote']}", $r);
 check('tools: board_delete without waiting tasks', $x2('board_delete', ['code' => $codes['Send the Acme quote']]) === "{$codes['Send the Acme quote']} moved to the trash");
 App::$inWorker = true; $t2->jobId = 7;
-check('tools: the sandbox environment says where it runs', $t2->tools->env() === ['TALIXIO_SPACE' => '0', 'TALIXIO_IN_WORKER' => '1', 'TALIXIO_JOB' => '7']);
+check('tools: the sandbox environment says where it runs', $t2->tools->env() === ['TALIXIO_SPACE' => '0', 'TALIXIO_IN_WORKER' => '1', 'TALIXIO_JOB' => '7', 'TALIXIO_CONFINE' => '']); // the folder limit of a peer question (1.35.16): none here
 App::$inWorker = $inWorkerSaved; $t2->jobId = null;
+
+// audit Q5: a missing or malformed argument gets a short message, without a file path, a stack or a PHP warning
+$qa = $mkApp('args');
+$warn = [];
+set_error_handler(function (int $no, string $msg) use (&$warn) { if (error_reporting() & $no) $warn[] = $msg; return true; });
+$r1 = $qa->tools->execute('skill_save', []);
+$r2 = $qa->tools->execute('memory_append', ['file' => 'MEMORY.md', 'text' => ['a', 'b']]);
+$r3 = $qa->tools->execute('skill_save', ['name' => 'x', 'description' => 'when x', 'content' => '1. do x']);
+restore_error_handler();
+check('tools: a missing argument is named, without a path', $r1 === 'error: missing argument: name' && $warn === [], json_encode([$r1, $warn]));
+check('tools: a list where a text is expected is refused clearly', $r2 === 'error: invalid argument: text (expected a text, not a list)', $r2);
+check('tools: well-formed arguments still run', !str_starts_with($r3, 'error'), $r3);
+check('tools: no tool error carries a server path', !preg_match('#/(home|var|tmp|srv)/#', $r1 . $r2));
 
 // ---------- end: restore global state ----------
 Http::$hook = $hookSaved;

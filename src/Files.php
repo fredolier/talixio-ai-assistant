@@ -25,6 +25,20 @@ final class Files
         };
     }
 
+    /**
+     * The type kept for a new file (audit S8): what its content is. The sender's type is kept only where the content says
+     * little (plain text, a zip that is an Office file, unknown bytes), and never when it claims a page, a script or an SVG
+     * the content is not.
+     */
+    public static function storedType(string $declared, string $real): string
+    {
+        $declared = strtolower(trim(preg_replace('/;.*/', '', $declared))); $real = strtolower($real);
+        $generic = in_array($real, ['application/octet-stream', 'text/plain', 'application/zip', 'inode/x-empty', 'application/x-empty', 'application/x-ole-storage', 'application/cdfv2'], true);
+        if ($declared === '' || !$generic) return $real ?: ($declared ?: 'application/octet-stream');
+        if (preg_match('/html|svg|xml|javascript|ecmascript/', $declared)) return $real;
+        return $declared;
+    }
+
     public const VERSIONS_MAX = 20; // earlier contents kept per file (and each for Library::TRASH_DAYS days)
 
     /**
@@ -44,9 +58,7 @@ final class Files
             if ($replace) { $this->replace($same, $tmp, $mime); return $same; }
             $name = $lib->freeName($folder, $name);
         }
-        if ($mime === '' || $mime === 'application/octet-stream') {
-            $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($tmp) ?: 'application/octet-stream';
-        }
+        $mime = self::storedType($mime, (string)((new \finfo(FILEINFO_MIME_TYPE))->file($tmp) ?: 'application/octet-stream'));
         $dir = $c->filesDir() . '/' . date('Y/m');
         if (!is_dir($dir)) mkdir($dir, 0750, true);
         $kind = self::kind($mime, $name);
@@ -270,15 +282,14 @@ final class Files
         return trim(preg_replace("/\n{3,}/", "\n\n", implode("\n\n", $out)));
     }
 
-    /** One short vision call (fast tier) when allowed and affordable; null otherwise. */
+    /** One short vision call when allowed and affordable (the vision binding's model, else the fast tier); null otherwise. */
     private function vision(array $parts, string $instruction): ?string
     {
-        $c = $this->app->cfg;
-        if (!$c->visionIndex || $c->provider === 'echo' || $this->app->budget()->status()['state'] !== 'ok') return null;
-        $tier = $c->tier('fast');
+        if (!$this->app->cfg->visionIndex || $this->app->cfg->provider === 'echo' || $this->app->budget()->status()['state'] !== 'ok') return null;
+        [$c, $tier] = $this->app->tierFor('vision');
         try {
-            $text = $this->app->provider($tier)->complete($instruction, '', [['role' => 'user', 'content' => $parts]], $this->app->tools->only('none'),
-                function (array $u) use ($tier) { $this->app->store->addUsage($u, $this->app->pricing()->cost($u), 'indexing', $tier->name, null, $this->app->cfg->account); });
+            $text = $this->app->provider($tier, $c)->complete($instruction, '', [['role' => 'user', 'content' => $parts]], $this->app->tools->only('none'),
+                function (array $u) use ($tier, $c) { $this->app->store->addUsage($u, $this->app->pricingFor($c)->cost($u), 'indexing', $tier->name, null, $c->account); });
         } catch (Abort $e) {
             throw $e;
         } catch (\Throwable $e) {
@@ -511,13 +522,20 @@ final class Files
     }
 
     /** Zip of a folder and its subfolders, keeping the tree; $only: just these file ids (a shared link's). Returns a temporary file path. */
-    public function zipFolder(string $folder, ?array $only = null): string
+    public function zipFolder(string $folder, ?array $only = null, ?array $paths = null): string
     {
         if (!class_exists(\ZipArchive::class)) throw new \RuntimeException('Downloading folders needs php-zip: run sudo ./install.sh again');
         $folder = Library::normalize($folder);
         [$w, $a] = Library::within($folder);
         $rows = $this->app->store->q("SELECT id, name, folder, path, size FROM files WHERE $w AND deleted_at IS NULL ORDER BY folder, name", $a)->fetchAll();
-        if ($only !== null) $rows = array_values(array_filter($rows, fn($r) => in_array((int)$r['id'], $only, true)));
+        if ($paths !== null) { // a selection of folders (and of files): their content, whole
+            $paths = array_map([Library::class, 'normalize'], $paths);
+            $rows = array_values(array_filter($rows, function ($r) use ($only, $paths) {
+                if ($only !== null && in_array((int)$r['id'], $only, true)) return true;
+                foreach ($paths as $p) if ($r['folder'] === $p || str_starts_with($r['folder'], rtrim($p, '/') . '/')) return true;
+                return false;
+            }));
+        } elseif ($only !== null) $rows = array_values(array_filter($rows, fn($r) => in_array((int)$r['id'], $only, true)));
         if (array_sum(array_column($rows, 'size')) > 4_000_000_000) throw new \InvalidArgumentException('This folder is too large to download at once (over 4 GB): download its subfolders.');
         $tmp = tempnam(sys_get_temp_dir(), 'talixio-zip');
         $zip = new \ZipArchive();

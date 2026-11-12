@@ -15,6 +15,9 @@
   Pour ajouter les vôtres : **Nouveau script** ou **Importer un .py** sur cette page, ou ouvrez un `.py` de la bibliothèque
   et choisissez **Utiliser comme script** (dans Plus sur téléphone) :
   une confirmation dans la visionneuse indique où il se trouve, avec **Voir le script**.
+  Le bac à sable suit les espaces : chaque espace a son propre dossier de travail, il ne prend que les documents que
+  l'espace courant peut lire, et ce qu'il produit à partir de documents Confidentiels n'est enregistré que dans un
+  dossier au moins aussi protégé.
 - **Caractère et valeurs** : ce qui compte pour vous, comment vous travaillez, ce qu'il doit faire
   mieux ; chaque croyance avec ses preuves, *Pourquoi ?* et *Oublier*. Jamais sur la santé, la religion,
   la politique, la sexualité ou les origines.

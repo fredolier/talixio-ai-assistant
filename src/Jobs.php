@@ -111,10 +111,8 @@ final class Jobs
 
     public function cancel(int $id): bool
     {
-        $j = $this->app->store->job($id);
-        if (!$j || !in_array($j['status'], ['queued', 'running'], true)) return false;
-        $this->app->store->updateJob($id, ['status' => 'cancelled', 'finished' => time()]);
-        return true;
+        // in one statement: a job that finishes at the same moment is either cancelled or done, never both (audit Q17)
+        return $this->app->store->q("UPDATE jobs SET status = 'cancelled', finished = ? WHERE id = ? AND status IN ('queued', 'running')", [time(), $id])->rowCount() === 1;
     }
 
     /** Finished jobs are put away on their own after this many days (still searchable under Archived). */
@@ -132,12 +130,12 @@ final class Jobs
     /** Put away every finished job of a space and/or tag (all of them by default). Returns how many. */
     public function archiveFinished(?int $space = null, string $tag = '', int $olderThan = 0): int
     {
-        $n = 0;
-        foreach ($this->app->store->jobs(100000, $space, $tag, false) as $j) {
-            if (in_array($j['status'], ['queued', 'running'], true) || ($olderThan && (int)($j['finished'] ?: $j['created']) > $olderThan)) continue;
-            $this->app->store->updateJob((int)$j['id'], ['archived' => 1]); $n++;
-        }
-        return $n;
+        // one query, not every job loaded (audit Q18); workers stay with their directive, as in the list
+        $where = ["archived = 0", "(kind IS NULL OR kind != 'worker')", "status NOT IN ('queued', 'running')"]; $args = [];
+        if ($space !== null) { $where[] = 'space = ?'; $args[] = $space; }
+        if ($tag !== '') { $where[] = "tags LIKE ? ESCAPE '\\'"; $args[] = '%,' . addcslashes(mb_strtolower($tag), '%_\\') . ',%'; }
+        if ($olderThan) { $where[] = 'COALESCE(NULLIF(finished, 0), created) <= CAST(? AS INTEGER)'; $args[] = $olderThan; }
+        return $this->app->store->q('UPDATE jobs SET archived = 1 WHERE ' . implode(' AND ', $where), $args)->rowCount();
     }
 
     /** Jobs done without trouble and without tags are put away sooner: their report is in the chat and the library. */
@@ -146,11 +144,8 @@ final class Jobs
     /** Worker, hourly: plain done jobs after ARCHIVE_DONE_DAYS, the others (failed, stopped, tagged to keep) after ARCHIVE_DAYS. */
     public function autoArchive(int $now): int
     {
-        $n = 0;
-        foreach ($this->app->store->jobs(100000, null, '', false) as $j) {
-            if ($j['status'] !== 'done' || trim((string)($j['tags'] ?? '')) !== '' || (int)($j['finished'] ?: $j['created']) > $now - self::ARCHIVE_DONE_DAYS * 86400) continue;
-            $this->app->store->updateJob((int)$j['id'], ['archived' => 1]); $n++;
-        }
+        $n = $this->app->store->q("UPDATE jobs SET archived = 1 WHERE archived = 0 AND (kind IS NULL OR kind != 'worker') AND status = 'done' AND TRIM(COALESCE(tags, '')) = ''
+            AND COALESCE(NULLIF(finished, 0), created) <= CAST(? AS INTEGER)", [$now - self::ARCHIVE_DONE_DAYS * 86400])->rowCount();
         return $n + $this->archiveFinished(null, '', $now - self::ARCHIVE_DAYS * 86400);
     }
 
@@ -248,6 +243,10 @@ final class Jobs
                 }
             } elseif (($store->job($id)['status'] ?? '') === 'cancelled') {
                 proc_terminate($proc);
+            } elseif (($max = $this->app->cfg->jobMaxMinutes) > 0 && time() - (int)($store->job($id)['started'] ?? time()) > $max * 60) { // a job stuck on a call (audit Q13)
+                proc_terminate($proc);
+                $store->q("UPDATE jobs SET status = 'failed', result = ?, finished = ? WHERE id = ? AND status = 'running'", [
+                    "Stopped: it was still running after $max minutes (Settings → Budget: longest a background job may run).", time(), $id]);
             }
         }
         if (self::draining($this->app->cfg->dataDir)) return; // an update is waiting for the running jobs to finish
@@ -284,6 +283,7 @@ final class Jobs
         if ($j['status'] === 'queued') $store->claimJob($id);
         $this->app->setSpace((int)$j['space']); // library searches start in the space's folder; its confidentiality level applies
         Privacy::$taint = 0; Privacy::trustAgain();
+        if (!empty($j['parent'])) Privacy::adopt(json_decode((string)($store->job((int)$j['parent'])['trust'] ?? ''), true) ?: null); // it reads the earlier run's findings
         $max = (float)$j['max_cost_usd'];
         $effort = $this->tune((string)($j['effort'] ?? ''));
         $warned = false;
@@ -306,26 +306,29 @@ final class Jobs
                 $store->updateJob($id, ['result' => 'Transcribing…']);
                 $f = $this->app->files()->get((int)$j['file_id']) ?? throw new \RuntimeException('recording not found');
                 $transcript = $this->app->files()->text((int)$f['id']);
+                Privacy::$untrusted = true; // what other people said in the meeting is not an instruction
                 $store->updateJob($id, ['result' => 'Summarising…']);
                 $task .= "\n\nRecording: {$f['name']}, " . date('Y-m-d H:i', (int)$f['created']) . ". The full transcript is saved as file #{$f['id']} (searchable later).\n\n# Transcript\n" . mb_substr($transcript, 0, 300000);
             }
             if ($j['kind'] === 'reflect') { $this->reflect($j, $guard); return; }
             if ($j['kind'] === 'eval') { // the assessor's A/B of a role improvement (agent factory, phase 2)
                 $text = $this->app->assessor()->runEvaluation($j, $guard);
-                $store->updateJob($id, ['status' => 'done', 'result' => $text, 'cost_usd' => (float)$store->job($id)['cost_usd'], 'finished' => time()]);
+                $store->updateJob($id, ['status' => 'done', 'result' => $text, 'cost_usd' => (float)$store->job($id)['cost_usd'], 'finished' => time(), 'trust' => json_encode(Privacy::snapshot())]);
                 $this->report($id);
                 return;
             }
             [$text, $meta] = $this->app->agent()->run('job', $j['tier'], 'job', [['role' => 'user', 'content' => $task]], $brief, 'job', $id, $guard);
             if ($j['kind'] === 'meeting') $store->addDoc('summary', $id, 'meeting summary: ' . $j['title'], $text, null, (int)($j['space'] ?? 0)); // its space's level applies
-            $store->updateJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);
+            $store->finishJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);
             if (trim((string)$text) !== '') $this->saveReport($store->job($id), $text);
         } catch (Abort $e) {
-            if ($e->getMessage() === 'cancelled') { if ($j['kind'] === 'worker') $this->app->director()->onWorkerDone($id); return; } // cancelled: no chat report, but the directive may now be done
-            $store->updateJob($id, ['status' => 'failed', 'result' => 'Stopped: ' . $e->getMessage(), 'finished' => time()]);
+            if ($e->getMessage() === 'cancelled') { $store->updateJob($id, ['trust' => json_encode(Privacy::snapshot())]); if ($j['kind'] === 'worker') $this->app->director()->onWorkerDone($id); return; } // cancelled: no chat report, but the directive may now be done
+            $store->finishJob($id, ['status' => 'failed', 'result' => 'Stopped: ' . $e->getMessage(), 'finished' => time()]);
         } catch (\Throwable $e) {
-            $store->updateJob($id, ['status' => 'failed', 'result' => 'Error: ' . $e->getMessage(), 'finished' => time()]);
+            $store->finishJob($id, ['status' => 'failed', 'result' => 'Error: ' . $e->getMessage(), 'finished' => time()]);
         }
+        $store->updateJob($id, ['trust' => json_encode(Privacy::snapshot())]); // what it read: its report turn, a directive and continue_job carry it on
+        if (($store->job($id)['status'] ?? '') === 'cancelled' && $j['kind'] !== 'worker') return; // cancelled while it finished: no report
         if ($j['kind'] === 'worker') $this->app->director()->onWorkerDone($id); // the directive reports once, not each worker
         elseif ($j['kind'] !== 'reflect') $this->report($id); // learning is quiet unless it learned something
     }
@@ -350,6 +353,7 @@ final class Jobs
     {
         $id = (int)$j['id']; $store = $this->app->store;
         $before = (int)$store->q('SELECT COALESCE(MAX(id),0) FROM tool_log')->fetchColumn();
+        Privacy::adopt(json_decode((string)($j['trust'] ?? ''), true) ?: null); // learned from content written by others: skill_save asks first
         [$text, $meta] = $this->app->agent()->run('learn', 'fast', 'reflect', [['role' => 'user', 'content' => $j['instructions']]], '', 'reflect', $id, $guard);
         $saved = $store->q("SELECT args, result FROM tool_log WHERE id > ? AND tool = 'skill_save' AND result NOT LIKE 'error%'", [$before])->fetchAll();
         $store->updateJob($id, ['status' => 'done', 'result' => $saved ? implode("\n", array_column($saved, 'result')) : 'Nothing worth keeping.', 'cost_usd' => $meta['cost'], 'finished' => time()]);
@@ -404,7 +408,9 @@ final class Jobs
             $how .= sprintf(' The full report is saved in the library as [%s](/files/%d) in %s: give the user this link, and offer to file it elsewhere (move it) if they want.',
                 str_replace(['[', ']'], '', $f['name']), $f['id'], $f['folder']);
         }
-        $reply = $this->app->agent()->chat('job', "[Background job #{$j['id']} \"{$j['title']}\" $head. Its report follows. $how]\n\n{$j['result']}", 'standard', [], null, (int)$j['space']);
+        // the report repeats what the job read (web pages, emails, Confidential files): its guard and level go with it (audit S3)
+        $reply = $this->app->agent()->chat('job', "[Background job #{$j['id']} \"{$j['title']}\" $head. Its report follows. $how]\n\n{$j['result']}", 'standard', [], null, (int)$j['space'],
+            json_decode((string)($j['trust'] ?? ''), true) ?: null);
         $this->app->notifier()->notify($j['title'], $reply, (int)$j['space']);
     }
 }

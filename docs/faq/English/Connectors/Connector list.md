@@ -3,7 +3,7 @@
 Connectors (MCP servers) that work with Talixio, by topic. Click **▶ Install**: Talixio opens in a new tab
 and prepares the installation. You stay in control at every step.
 
-- For a connector **on GitHub**, the *Install a connector* window opens and fetches the repository.
+- For a connector **on GitHub**, the *Install a connector* window opens with its address filled in: check it, then press the button to fetch the repository.
   Check what it found, fill in any settings, then click *Install*.
 - For an **online service**, Talixio asks you to confirm, then adds it and connects to it.
 

@@ -18,12 +18,8 @@ final class McpOAuth
 
     private function put(string $server, ?array $entry): void
     {
-        $all = $this->all();
-        if ($entry === null) unset($all[$server]); else $all[$server] = $entry;
-        $tmp = $this->file() . '.tmp';
-        file_put_contents($tmp, json_encode($all, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        chmod($tmp, 0600);
-        rename($tmp, $this->file());
+        // under a lock: two connectors signing in at once keep both tokens (audit Q12)
+        JsonFile::update($this->file(), function (array $all) use ($server, $entry) { if ($entry === null) unset($all[$server]); else $all[$server] = $entry; return [$all, null]; }, 0600, JSON_PRETTY_PRINT);
     }
 
     public function get(string $server): array { return $this->all()[$server] ?? []; }
@@ -120,12 +116,13 @@ final class McpOAuth
     }
 
     /** Step 2, back from the sign-in page: check the state, trade the code for tokens. Returns the server's name. */
-    public function finish(string $code, string $state): string
+    public function finish(string $code, string $state, string $error = ''): string
     {
         foreach ($this->all() as $server => $e) {
             $p = $e['pending'] ?? null;
             if (!$p || !hash_equals((string)$p['state'], $state)) continue;
             if ($p['ts'] < time() - 900) throw new \InvalidArgumentException('This sign-in link expired: press "Sign in" again.');
+            if ($error !== '') { unset($e['pending']); $this->put($server, $e); throw new \RuntimeException('sign-in cancelled: ' . strtok($error, "\r\n")); } // its refusal: only for a sign-in started here (audit, lot 6)
             $t = $this->token($e, ['grant_type' => 'authorization_code', 'code' => $code, 'redirect_uri' => $e['client']['redirect_uri'], 'code_verifier' => $p['verifier']]);
             $e['tokens'] = $t; unset($e['pending']);
             $this->put($server, $e);

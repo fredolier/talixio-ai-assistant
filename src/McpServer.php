@@ -34,7 +34,9 @@ final class McpServer
                 'name' => $t['name'], 'description' => $t['description'], 'inputSchema' => $t['parameters'],
             ], $this->tools->schemas())],
             'tools/call' => (function () use ($p) {
-                $raw = $this->tools->run((string)($p['name'] ?? ''), (array)($p['arguments'] ?? []));
+                Privacy::sync(); // the answer may have read the web meanwhile (Claude Code's own search)
+                try { $raw = $this->tools->run((string)($p['name'] ?? ''), (array)($p['arguments'] ?? [])); }
+                finally { Privacy::sync(); } // and it learns what this tool read
                 [$text, $imgs] = Content::toolImages($raw);
                 $content = [['type' => 'text', 'text' => $text]];
                 foreach ($imgs as $i) $content[] = ['type' => 'image', 'data' => $i['data'], 'mimeType' => $i['mime']];

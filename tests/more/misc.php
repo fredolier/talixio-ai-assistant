@@ -8,6 +8,25 @@ use Talixio\{App, Board, Config, ConnectorPackage, Doctor, Sovereign, SpotifyErr
 $d = test_dir('misc');
 $root = dirname(__DIR__, 2);
 
+// audit Q24: the code nothing used is gone, and stays gone (classes built from data, such as t-flat or ty llm, are in use)
+$dead = array_filter(['libFiltered', 'pStateLabel', '.pilot-talk', '.ptt', '.micbig', '.pilot-composer', '.pilot-scale', '.viewer-md', '.mb-dh'],
+    fn($w) => str_contains((string)file_get_contents("$root/web/public/" . ($w[0] === '.' ? 'app.css' : 'app.js')), $w));
+check('hygiene: the unused functions and styles the audit listed are removed', !$dead, implode(' ', $dead));
+
+// install-stack.sh (audit, lot 6): what is given goes into commands and into .env, read as shell; it is checked before anything runs
+$stack = "$root/deploy/docker/install-stack.sh";
+$refused = function (array $args) use ($stack): bool {
+    $p = proc_open(array_merge(['bash', $stack], $args), [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); fclose($pipes[1]); fclose($pipes[2]);
+    return proc_close($p) === 2 && !str_contains($out, '==>');
+};
+check('install-stack: an identifier, model, port, domain or email that is no plain name is refused before anything runs',
+    $refused(['--migrate', 'x;id']) && $refused(['--migrate', 'Fred']) && $refused(['--whisper-model', 'small;reboot']) && $refused(['--behind-proxy', '8080 -v /:/h'])
+    && $refused(['--domain', 'a.example$(id)']) && $refused(['--email', 'x@y;z']));
+$src = (string)file_get_contents($stack);
+check('install-stack: .env is private from its first byte, and a branch name from git is checked before it is written there',
+    strpos($src, 'umask 077') < strpos($src, 'cat > "$ENV"') && str_contains($src, 'GIT_BRANCH=${GIT_BR:-main}') && str_contains($src, 'BR="$(plain_branch'));
+
 // ---- the environment, changed per section and put back after
 $envKeys = [];
 $setEnv = function (array $vars) use (&$envKeys) {
@@ -300,18 +319,19 @@ $rec = $bd->recent((int)$spB['id']);
 check('board: recent changes of one space', count($rec) >= 1 && array_unique(array_column($rec, 'space')) === [(int)$spB['id']] && count($bd->recent(null, 3)) === 3);
 check('board: dates of a space', array_column($bd->inRange('2026-11-01', '2026-12-31', (int)$spB['id']), 'id') === [$c2['id']] && count($bd->inRange('2026-11-01', '2026-12-31')) >= 3);
 // lines and full description
-$full = $bd->create(['title' => 'Everything', 'start_date' => '2026-11-02', 'due_date' => '2026-11-03', 'start_time' => '09:00', 'end_time' => '10:00', 'estimate_hours' => '3h', 'tags' => 'a,b',
+$dS = date('Y-m-d', strtotime('+30 days')); $dD = date('Y-m-d', strtotime('+31 days')); // never overdue, whatever the day
+$full = $bd->create(['title' => 'Everything', 'start_date' => $dS, 'due_date' => $dD, 'start_time' => '09:00', 'end_time' => '10:00', 'estimate_hours' => '3h', 'tags' => 'a,b',
     'in_calendar' => true, 'location' => 'Room 1', 'attendees' => 'ann@acme.example', 'body' => "Notes\n- [x] one\n- [ ] two", 'links' => [['label' => 'Spec', 'type' => 'url', 'ref' => 'https://acme.example/spec']],
     'depends_on' => [$e1['code']]], $A);
 $bd->addTime($full['id'], 1);
 $bd->setGlobalOrder([$full['code']]);
 $blk = $bd->create(['title' => 'After everything', 'depends_on' => [$full['id']]], $A);
 $desc = $bd->describeCard($bd->get($full['id']));
-check('board: a card described with every field', str_contains($desc, 'start 2026-11-02, due 2026-11-03, from 09:00 to 10:00, workload 3h, spent 1h, checklist 1/2, #a #b, waits for ' . $e1['code'] . ', space Maison, overall #1, in calendar, at Room 1, guests ann@acme.example (invitation not sent yet)')
+check('board: a card described with every field', str_contains($desc, "start $dS, due $dD, from 09:00 to 10:00, workload 3h, spent 1h, checklist 1/2, #a #b, waits for {$e1['code']}, space Maison, overall #1, in calendar, at Room 1, guests ann@acme.example (invitation not sent yet)")
     && str_contains($desc, "\nNotes\n") && str_contains($desc, "Blocks: {$blk['code']} After everything") && str_contains($desc, 'Links: Spec (url https://acme.example/spec)') && str_contains($desc, '⚠ Waits for'), $desc);
 $bd->update($e1['id'], ['status' => 'done']);
 $ics = $bd->ics();
-check('board: calendar feed: a timed task with its place; a done one is ticked', str_contains($ics, 'LOCATION:Room 1') && str_contains($ics, 'DTSTART:' . gmdate('Ymd\THis\Z', strtotime('2026-11-02 09:00'))) && str_contains($ics, 'TRANSP:OPAQUE'));
+check('board: calendar feed: a timed task with its place; a done one is ticked', str_contains($ics, 'LOCATION:Room 1') && str_contains($ics, 'DTSTART:' . gmdate('Ymd\THis\Z', strtotime("$dS 09:00"))) && str_contains($ics, 'TRANSP:OPAQUE'));
 $bd->update($e1['id'], ['in_calendar' => true, 'due_date' => '2026-11-01']);
 check('board: a done task in the feed is ticked', str_contains($bd->ics(), 'SUMMARY:✓ ' . $e1['code']));
 $tok = $bd->icsToken();
@@ -916,6 +936,21 @@ $setEnv(['PATH' => getenv('PATH') === "$d/emptybin" ? $fenv['PATH'] : getenv('PA
 $big = $zipOf('big.zip', ['server.py' => 'x', 'blob.bin' => ['size' => (80 << 20) + 10]]);
 check('connector: a zip unpacking past 80 MB is refused and nothing is left', str_contains($err(fn() => $cp->install($big, 'big', [], false)), 'too big') && !glob("$cpDir/connectors/.big-*"));
 
+// audit S6: dependencies are installed without their scripts; a package's own install scripts never run either
+if (trim((string)shell_exec('command -v node')) !== '') {
+    @mkdir("$d/npmbin", 0700);
+    file_put_contents("$d/npmbin/npm", "#!/bin/sh\necho \"\$@\" >> " . escapeshellarg("$d/npm-args.txt") . "\n"); chmod("$d/npmbin/npm", 0755);
+    $was = getenv('PATH'); putenv("PATH=$d/npmbin:$was");
+    $zs = $zipOf('scripts.zip', ['package.json' => json_encode(['name' => 'scripted', 'main' => 'index.js', 'dependencies' => ['left-pad' => '1'], 'scripts' => ['postinstall' => 'touch PWNED']]),
+        'index.js' => 'process.exit(0);']); // a server that ends at once: only the install matters here
+    $cp->install($zs, 'scripted', [], false);
+    try { $cp->finish(); } catch (\Throwable $e) {}
+    putenv("PATH=$was");
+    $npmArgs = (string)@file_get_contents("$d/npm-args.txt");
+    check('connector: npm installs dependencies with --ignore-scripts', str_contains($npmArgs, 'install') && str_contains($npmArgs, '--ignore-scripts'), $npmArgs);
+    check('connector: the package\'s own postinstall did not run', !glob("$cpDir/connectors/*scripted*/PWNED") && !glob("$cpDir/connectors/.scripted-*/PWNED"));
+}
+
 // a Python server from GitHub, with a link and an executable file, installed (its server does not answer)
 $ghz = "$d/ghpy.zip"; $z = new \ZipArchive(); $z->open($ghz, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
 $z->addFromString('pyt-dev/server.py', "import sys\nsys.exit(0)\n"); $z->addFromString('pyt-dev/run.sh', "#!/bin/sh\n");
@@ -924,17 +959,17 @@ $z->addFromString('pyt-dev/link', '/etc/passwd'); $z->setExternalAttributesName(
 $z->addFromString('pyt-dev/sub/link2', '/etc/passwd'); $z->setExternalAttributesName('pyt-dev/sub/link2', \ZipArchive::OPSYS_UNIX, 0120777 << 16);
 $z->addFromString('pyt-dev/sub/server.py', 'x');
 $z->close();
-ConnectorPackage::$fetch = fn(string $u) => file_get_contents($ghz);
+ConnectorPackage::$fetch = fn(string $u) => str_contains($u, 'api.github.com') ? '{"sha":"' . str_repeat('c', 40) . '"}' : file_get_contents($ghz);
 $g = $cp->fromGithub('https://github.com/acme/pyt/tree/dev');
 check('connector from GitHub: a branch without a folder keeps the branch in its address', $g['github'] === 'https://github.com/acme/pyt/tree/dev' && $g['runtime'] === 'python');
 $gs = $cp->fromGithub('https://github.com/acme/pyt/tree/dev/sub');
 $gz = new \ZipArchive(); $gz->open($app->files()->get($gs['file'])['path']); $gnames = []; for ($k = 0; $k < $gz->numFiles; $k++) $gnames[] = $gz->getNameIndex($k); $gz->close();
 check('connector from GitHub: links are left out of a sub-folder', $gnames === ['server.py']);
-ConnectorPackage::$fetch = fn(string $u) => 'not a zip';
+ConnectorPackage::$fetch = fn(string $u) => str_contains($u, 'api.github.com') ? '{"sha":"' . str_repeat('c', 40) . '"}' : 'not a zip';
 check('connector from GitHub: something else than a zip is said', str_contains($err(fn() => $cp->fromGithub('https://github.com/acme/pyt')), 'not a .zip archive'));
 $hz = "$d/ghbig.zip"; $z = new \ZipArchive(); $z->open($hz, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
 $z->addFromString('r-main/s/server.py', 'x'); $z->addFromString('r-main/s/blob.bin', str_repeat("\0", (80 << 20) + 10)); $z->close();
-ConnectorPackage::$fetch = fn(string $u) => file_get_contents($hz);
+ConnectorPackage::$fetch = fn(string $u) => str_contains($u, 'api.github.com') ? '{"sha":"' . str_repeat('c', 40) . '"}' : file_get_contents($hz);
 check('connector from GitHub: a sub-folder past 80 MB is refused', str_contains($err(fn() => $cp->fromGithub('https://github.com/acme/r/tree/main/s')), 'too big for a connector'));
 ConnectorPackage::$fetch = null;
 @unlink($hz);
@@ -956,7 +991,7 @@ check('connector: finish with nothing running does nothing', $cp->status()['stat
 check('connector: the library zips are listed, /Connecteurs first', ($cp->packages()[0]['folder'] ?? '') === ConnectorPackage::FOLDER && count(array_filter($cp->packages(), fn($p) => str_ends_with($p['name'], '.zip'))) === count($cp->packages()));
 check('connector from GitHub: other sites and ".." folders are refused', str_contains($err(fn() => ConnectorPackage::parseGithub('https://gitlab.com/acme/x')), 'GitHub repository')
     && str_contains($err(fn() => ConnectorPackage::parseGithub('https://github.com/acme/x/tree/main/a/%2e%2e/b')), 'GitHub repository'));
-ConnectorPackage::$fetch = fn(string $u) => file_get_contents($ghz);
+ConnectorPackage::$fetch = fn(string $u) => str_contains($u, 'api.github.com') ? '{"sha":"' . str_repeat('c', 40) . '"}' : file_get_contents($ghz);
 check('connector from GitHub: a folder that is not there is said', str_contains($err(fn() => $cp->fromGithub('https://github.com/acme/pyt/tree/dev/nowhere')), 'no folder "nowhere"'));
 // the same repository again, now with a server that answers: the old download goes to the trash, the old install is replaced
 $z = new \ZipArchive(); $z->open($ghz, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);

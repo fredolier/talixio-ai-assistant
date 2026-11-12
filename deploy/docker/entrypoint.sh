@@ -12,6 +12,7 @@ web() {
 worker() { exec php /opt/talixio/bin/talixio worker; }
 
 [ $# -gt 0 ] && exec php /opt/talixio/bin/talixio "$@"   # a one-off command, e.g. doctor
+sh /opt/talixio/deploy/check-php2shell.sh >/tmp/php2shell.txt 2>&1 || [ $? -ne 1 ] || { echo "SECURITY: this PHP is exposed to PHP2Shell (CVE-2026-109618): rebuild the dependencies image (install-stack.sh --rebuild-base)" >&2; cat /tmp/php2shell.txt >&2; }
 php /opt/talixio/bin/talixio boot                         # first password / resets asked from the admin page
 
 # tini -g sends docker's stop signal to every process here, these loops included

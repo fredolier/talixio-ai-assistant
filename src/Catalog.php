@@ -35,9 +35,7 @@ final class Catalog
     private static function write(string $file, array $d, int $mode): void
     {
         @mkdir(dirname($file), 0755, true);
-        file_put_contents("$file.tmp", json_encode($d, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-        chmod("$file.tmp", $mode);
-        rename("$file.tmp", $file);
+        JsonFile::write($file, $d, $mode, JSON_PRETTY_PRINT); // whole or not at all (audit Q12)
     }
 
     private function saveState(array $s): void

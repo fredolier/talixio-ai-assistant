@@ -1,17 +1,53 @@
 # La bibliothèque (vos documents)
 
+## La page en un coup d'œil
+- **Une seule ligne en haut** : le chemin du dossier ouvert (chaque partie se clique), la recherche, **⋮** (ce que
+  l'on peut faire de ce dossier, et le tri de la liste) et **＋ Nouveau** (téléverser, nouvelle note, nouveau dossier).
+  Sur téléphone, la recherche est une loupe qui s'ouvre sur la ligne ; la liste commence juste dessous.
+- **La liste est un tableau** : *Nom*, *Type*, *Taille*, *Modifié*, *Par* (qui a modifié le fichier en dernier : vous,
+  l'assistant, une routine…). **Cliquez sur le titre d'une colonne pour trier**, encore pour inverser ; le choix est
+  retenu sur cet appareil. Les dossiers restent en haut. Sur téléphone, le tri est dans **⋮ → Trier par**.
+- **Sélectionner plusieurs fichiers** : cochez les cases (celle de l'en-tête les coche tous), **Maj-clic** sur un
+  second fichier pour sélectionner la plage, **Ctrl/Cmd-clic** pour en ajouter un, ou, sur téléphone, touchez l'icône
+  d'un fichier. La ligne du haut devient la barre de sélection : **Déplacer vers…**, **Télécharger le zip**,
+  **Supprimer** (redemande une fois). Échap ou ✕ efface la sélection. Glisser l'un des fichiers sélectionnés vers un
+  dossier les déplace tous.
+- **Dossiers dans une sélection** : cochez la case d'un dossier (ou Ctrl/Cmd-clic) : la barre propose **Télécharger en zip**
+  et **Déplacer vers…** pour les dossiers et leur contenu. Pour supprimer un dossier, utilisez son propre menu ⋮.
+- **Tout ce qui est dessous** (Affichage → Afficher) : liste tous les fichiers sous le dossier courant, avec leur dossier sous le nom.
+- **Favoris** : *Épingler dans l'arbre* dans le menu ⋮ d'un dossier l'ajoute en haut de l'arbre sur cet appareil ; ✕ le retire.
+  La date **Modifié** d'un dossier est celle de son fichier le plus récent.
+- **Volet d'aperçu** (bouton à côté des icônes d'affichage, sur ordinateur) : un clic sur un fichier montre sa vignette,
+  ses détails et un extrait du texte à droite au lieu de l'ouvrir ; un double clic (ou Entrée) l'ouvre. Ouvrir et
+  Télécharger sont dans le volet.
+- **Les aperçus ne chargent rien de l'extérieur** (depuis la 1.35.35) : une page web enregistrée ou un e-mail affiché dans la
+  bibliothèque s'affiche sans ses images et styles hébergés ailleurs, pour que l'ouvrir n'apprenne pas à l'expéditeur que vous l'avez lu.
+- **Naviguer comme dans un explorateur** : à gauche du chemin, **Arborescence** affiche ou masque l'arbre (masqué par défaut
+  sur une fenêtre étroite), **Retour** et **Dossier parent**. Le **clic droit** sur un fichier, un dossier ou la zone vide
+  donne les mêmes actions que ⋮. Touches : **Ctrl/Cmd+A** tout sélectionner, **Suppr**, **F2** renommer, **flèches** se
+  déplacer, **Entrée** ouvrir, **Alt+←** retour, **Alt+↑** ou **Retour arrière** dossier parent.
+- **Détails / Liste compacte / Tuiles** (les trois icônes à côté d'Affichage) : le tableau, une ligne fine par fichier,
+  ou une grille avec vignettes. Le reste (sélection, tris, filtres) fonctionne pareil ; le choix est mémorisé.
+- **Affichage** (à côté de ⋮) : trier, **regrouper** (par type ou par date) et **filtrer** par type, date ou état (partagé
+  par lien, illisible ou en cours de lecture, avec un rangement suggéré). La liste suit à chaque clic ; un filtre actif
+  s'affiche en pastille sur la barre (✕ pour le retirer), un filtre appartient au dossier où on l'a posé, et le
+  regroupement est retenu.
+- En bas : le nombre de dossiers et de fichiers affichés et leur taille, et l'état de l'indexation.
+
 ## Ajouter des documents
-- **Téléverser** ou glisser-déposer dans la page Bibliothèque, dans le dossier ouvert.
+- **＋ Nouveau → Téléverser** ou glisser-déposer dans la page Bibliothèque, dans le dossier ouvert.
 - Les pièces jointes de la conversation, de Telegram ou de Signal arrivent dans `/Inbox` ;
   les enregistrements dans `/Meetings`.
-- Sur Android : **Partager → Talixio** depuis n'importe quelle app.
+- Sur Android : **Partager → Talixio** depuis n'importe quelle app. L'app demande alors *« 2 fichiers partagés : les
+  ajouter ? »* avec leurs noms : rien n'arrive dans `/Inbox` ni dans votre message avant d'appuyer sur **Ajouter**.
+  Un partage envoyé par un autre site web est refusé.
 
 ## Ranger
 - L'app propose un dossier et un nom clair pour chaque nouveau document de `/Inbox`
   (« scan_0012.pdf → /Admin/Factures/Facture EDF 2026-10.pdf ») : *Ranger*, *Modifier…* ou *Tout ranger*.
-  Elle apprend de vos rangements. Réglages → *Rangement des nouveaux documents* : proposer, ranger
+  Elle apprend de vos rangements. Réglages → *Bibliothèque et mémoire* → *Documents* → *Rangement des nouveaux documents* : proposer, ranger
   les évidents, ou désactivé.
-- Dossiers : créer, renommer, déplacer, supprimer (à la corbeille) ; un dossier se télécharge en ZIP.
+- Dossiers : créer (＋ Nouveau), renommer, déplacer, supprimer (à la corbeille ; ⋮ en haut, ou le ⋯ sur la ligne du dossier) ; un dossier se télécharge en ZIP.
 - L'arborescence se **plie et se déplie** (la flèche devant chaque dossier ; le bouton en haut replie tout).
   Le chemin du dossier ouvert reste déplié, et l'état est retenu sur cet appareil. En glissant un fichier,
   un dossier replié s'ouvre si l'on reste dessus un instant.
@@ -28,7 +64,7 @@
   l'indique ; *Annuler* (ou Échap) l'arrête en gardant ce qui est déjà trouvé. Changer de dossier ou lancer
   une autre recherche arrête la précédente ; *Fermer la recherche* revient au dossier.
   Il cite le document et la page ; un clic l'ouvre à cette page.
-- *Demander à propos de ce dossier* lance une question sur ses documents.
+- *Demander à propos de ce dossier* (dans le menu ⋮ en haut) lance une question sur ses documents.
 
 
 **Recherche par nom avec une expression régulière** : cochez *Regex* à côté de la recherche pour filtrer les noms de fichiers et de dossiers avec un motif (par ex. `facture 2026-0\d`, `\.pdf$`). Dans les résultats, cochez plusieurs fichiers pour les **déplacer**, les **télécharger en zip** ou les **supprimer** d'un coup.
@@ -46,7 +82,7 @@
   le plus récent est gardé, les autres sont ses versions.
 
 ## Modifications récentes
-- *Modifications récentes* (en haut de la Bibliothèque) liste les fichiers créés ou modifiés dans la dernière heure,
+- *Modifications récentes* (menu ⋮ en haut de la Bibliothèque) liste les fichiers créés ou modifiés dans la dernière heure,
   aujourd'hui, sur 2 jours ou 7 jours : dossier, ce qui s'est passé (créé, modifié, déplacé, renommé, restauré),
   par qui (**vous**, **l'assistant**, **une routine**, **le lecteur réseau**) et quand. Un point signale un fichier
   modifié par un autre que vous et pas ouvert depuis ; *Tout marquer comme vu* les efface. Cliquez pour l'ouvrir.
@@ -61,7 +97,7 @@
 ## Supprimer, la corbeille
 - *Supprimer* (sur un fichier ouvert, ou sur un dossier avec ses fichiers) met à la **corbeille**, pas
   à la poubelle définitive. Ce qui y est sort des recherches, de l'assistant et des liens de partage.
-- La **Corbeille** est en bas de l'arborescence (sur téléphone : le bouton *Corbeille* en haut de la page).
+- La **Corbeille** est en bas de l'arborescence (sur téléphone : ⋮ → *Corbeille*).
   Elle montre d'où vient chaque fichier, quand il a été supprimé et combien de jours il reste.
 - *Restaurer* le remet à sa place (le dossier est recréé s'il le faut). Un dossier supprimé revient
   d'un bloc, avec ses fichiers rangés dans leurs sous-dossiers. Rien n'est relu ni retranscrit : il redevient cherchable aussitôt.
@@ -71,7 +107,7 @@
 - Les fichiers supprimés avant la version 0.19.0 n'y sont pas : ils étaient effacés tout de suite.
 
 ## Notes
-*Nouvelle note* crée une note Markdown modifiable. L'assistant peut aussi en enregistrer (`kb_save_note`).
+*＋ Nouveau → Nouvelle note* crée une note Markdown modifiable. L'assistant peut aussi en enregistrer (`kb_save_note`).
 
 *Modifier* sur un fichier Markdown ouvre un éditeur visuel : titres, listes, cases à cocher, tableaux et liens
 s'affichent comme à la lecture. Tapez `/` sur une ligne vide pour les titres, listes, citations, code, tableaux ou

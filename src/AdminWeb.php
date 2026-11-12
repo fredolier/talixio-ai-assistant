@@ -22,9 +22,7 @@ final class AdminWeb
 
     private function saveConf(array $c): void
     {
-        file_put_contents("$this->file.tmp", json_encode($c, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        chmod("$this->file.tmp", 0600);
-        rename("$this->file.tmp", $this->file);
+        JsonFile::write($this->file, $c, 0600, JSON_PRETTY_PRINT); // whole or not at all (audit Q12)
     }
 
     /** At start: the one-time code that lets the first visitor set the admin password (shown in the container logs). */
@@ -255,7 +253,7 @@ final class AdminWeb
             return;
         }
         if ($path === '/api/settings' && $m === 'POST') {
-            $r = $this->agent('POST', '/settings', array_intersect_key($b, array_flip(['domain', 'mode', 'memory_mb', 'cpus', 'ollama', 'ollama_model', 'google_client_id', 'google_client_secret', 'apparmor_unconfined', 'eu_provider', 'eu_key', 'eu_url', 'eu_only'])), 1000);
+            $r = $this->agent('POST', '/settings', array_intersect_key($b, array_flip(['domain', 'mode', 'memory_mb', 'cpus', 'ollama', 'ollama_model', 'google_client_id', 'google_client_secret', 'email_authserv', 'apparmor_unconfined', 'eu_provider', 'eu_key', 'eu_url', 'eu_only'])), 1000);
             $this->audit('settings changed', ['keys' => array_keys($b)]); // names only, never the values
             $this->json($r);
             return;

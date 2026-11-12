@@ -38,7 +38,7 @@ final class App
         if ($cfg->provider === 'gemini') GeminiModels::apply($cfg, $this->store);
         if ($cfg->provider === 'sovereign') Sovereign::apply($cfg, $this->store);
         $this->ws = new Workspace($cfg->workspaceDir());
-        $this->embeddings = new Embeddings($cfg);
+        $this->embeddings = new Embeddings($this->embedCfg());
         $this->tools = new Tools($this);
         Content::$imageLoader = fn(int $id) => $this->files()->imagePart($id);
         Http::$hook = fn(string $url, int $bytes) => $this->privacy()->outbound($url, $bytes); // every request to the outside is checked and logged
@@ -70,26 +70,113 @@ final class App
     /** The configuration a space's model calls use: the main settings, or its AI account's. */
     public function configFor(int $space): Config
     {
-        $id = $this->spaces()->accountOf($space);
+        return $this->accountConfig($this->spaces()->accountOf($space)) ?? $this->mainCfg;
+    }
+
+    /** The Config an AI account runs on (built once from the main settings, then cached); null when it no longer exists. */
+    public function accountConfig(string $id): ?Config
+    {
         if ($id === '') return $this->mainCfg;
         if (isset($this->accountCfg[$id])) return $this->accountCfg[$id];
         $a = $this->accounts()->get($id, true);
-        if (!$a) return $this->mainCfg; // deleted meanwhile
+        if (!$a) return null; // deleted meanwhile
         $c = $this->mainCfg->forAccount($a);
         if ($c->provider === 'gemini') GeminiModels::apply($c, $this->store, "gemini_models_$id");
         if ($c->provider === 'sovereign') Sovereign::apply($c, $this->store, "sovereign_models_$id");
         return $this->accountCfg[$id] = $c;
     }
 
+    /**
+     * The config and tier a usage runs on in the current space, honouring the routing map (Routing): a per-space
+     * override, then — when the space has no AI account of its own — the global default, else today's path (the
+     * space's config). An unset or unresolvable binding falls back, so an empty map behaves exactly as before.
+     * @return array{0:Config,1:Tier}
+     */
+    public function tierFor(string $usage): array
+    {
+        $name = in_array($usage, Tier::NAMES, true) ? $usage : ($usage === 'vision' ? 'fast' : 'standard'); // vision falls back to the fast tier
+        $b = $this->binding($usage === 'vision' ? 'vision' : $name);
+        if ($b !== null && ($c = $this->accountConfig($b['account'])) !== null) {
+            $tier = $c->tier($name);
+            if ($b['model'] !== '') { $tier = clone $tier; $tier->model = $b['model']; }
+            return [$c, $tier];
+        }
+        return [$this->cfg, $this->cfg->tier($name)];
+    }
+
+    /**
+     * The binding a usage runs on in the current space: a per-space override, else — when the space has no AI account
+     * of its own — the global default; null when nothing is set. Embeddings are global only.
+     */
+    public function binding(string $usage): ?array
+    {
+        $map = $this->routing()->all();
+        if ($usage === 'embedding') return $map['global'][$usage] ?? null;
+        $b = $map['spaces'][(string)$this->space][$usage] ?? null;
+        if ($b === null && $this->spaces()->accountOf($this->space) === '') $b = $map['global'][$usage] ?? null;
+        return $b;
+    }
+
+    /**
+     * The config transcription runs on: the voice binding's account and model when one is set (whisper.cpp on this
+     * server, or a European, OpenAI or Gemini account), else the main settings. A binding on a provider that cannot
+     * transcribe (Claude, a speech-synthesis service) is ignored, so the main settings keep working.
+     */
+    public function voiceCfg(): Config
+    {
+        $b = $this->binding('voice');
+        $a = $b === null ? null : $this->accountConfig($b['account']);
+        if ($b === null || $a === null) return $this->mainCfg;
+        $mode = ($b['via'] ?? '') === 'local' || preg_match('/^whisper\.cpp|\(local\)/i', $b['model']) ? 'local'
+            : match ($a->provider) { 'sovereign' => 'sovereign', 'openai' => 'openai', 'gemini' => 'gemini', default => null };
+        if ($mode === null) return $this->mainCfg;
+        $c = clone $a;
+        $c->transcribe = $mode;
+        $c->transcribeModel = $mode === 'local' ? ($this->mainCfg->transcribe === 'local' ? $this->mainCfg->transcribeModel : '') : $b['model']; // keep the whisper model chosen for the main settings
+        if ($mode === 'gemini' && $b['account'] !== '') $c->geminiKey = $a->openaiKey; // an AI account keeps the Gemini key as its OpenAI-compatible one
+        return $c;
+    }
+
+    /**
+     * The config search by meaning runs on: the embedding binding when one is set, else the main settings. The vector
+     * size and the Ollama and Voyage settings always come from the main settings.
+     */
+    public function embedCfg(): Config
+    {
+        try {
+            $b = $this->binding('embedding');
+            $a = $b === null ? null : $this->accountConfig($b['account']);
+        } catch (\Throwable) { return $this->mainCfg; }
+        if ($b === null || $a === null) return $this->mainCfg;
+        $via = ($b['via'] ?? '') ?: match ($a->provider) { 'sovereign' => 'sovereign', 'openai' => 'openai', 'gemini' => 'gemini', default => '' };
+        if ($via === 'local') $via = 'ollama';
+        if (!in_array($via, ['ollama', 'openai', 'gemini', 'sovereign'], true)) return $this->mainCfg;
+        $c = clone ($via === 'ollama' ? $this->mainCfg : $a);
+        $c->embeddings = $via;
+        $c->embeddingsModel = $b['model'] !== '' ? $b['model'] : match ($via) {
+            'sovereign' => Sovereign::info($c->sovereign)['embed'], 'openai' => 'text-embedding-3-small', 'gemini' => 'gemini-embedding-001', default => $this->mainCfg->embeddingsModel };
+        $c->embeddingsDims = $this->mainCfg->embeddingsDims; $c->ollamaUrl = $this->mainCfg->ollamaUrl; $c->voyageKey = $this->mainCfg->voyageKey;
+        if ($via === 'gemini' && $b['account'] !== '') $c->geminiKey = $a->openaiKey;
+        return $c;
+    }
+
+    /** The routing map changed: search by meaning may now run on another model (its index is rebuilt in the background). */
+    public function routingChanged(): void
+    {
+        $fake = $this->embeddings->fake;
+        $this->embeddings = new Embeddings($this->embedCfg());
+        $this->embeddings->fake = $fake;
+    }
+
     /** Forget the account configurations built so far (an account was changed). */
-    public function accountsChanged(): void { $this->accountCfg = []; $this->cfg = $this->configFor($this->space); }
+    public function accountsChanged(): void { $this->accountCfg = []; $this->cfg = $this->configFor($this->space); $this->routingChanged(); }
 
     public static function fromEnv(): self { return new self(Config::fromEnv()); }
 
-    public function provider(Tier $tier): Provider
+    public function provider(Tier $tier, ?Config $cfg = null): Provider
     {
         if ($this->providerOverride) return $this->providerOverride;
-        $c = $this->cfg;
+        $c = $cfg ?? $this->cfg;
         return match ($c->provider) {
             'anthropic' => new AnthropicProvider($c->anthropicKey, $tier, $c->search === 'builtin' && $this->privacy()->effective() === 'internal', $c->anthropicBaseUrl), // the model's own search can't be checked here
             'openai', 'gemini' => new OpenAIProvider($c->openaiKey, $tier, $c->openaiBaseUrl),
@@ -110,7 +197,8 @@ final class App
     }
     public function billing(): Billing { return new Billing($this); }
     public function calibration(): Calibration { return new Calibration($this); }
-    public function pricing(): Pricing { return new Pricing($this->cfg->prices, $this->cfg->localModels() || $this->cfg->provider === 'echo'); }
+    public function pricing(): Pricing { return $this->pricingFor($this->cfg); }
+    public function pricingFor(Config $c): Pricing { return new Pricing($c->prices, $c->localModels() || $c->provider === 'echo'); }
     public function notifier(): Notifier { return new Notifier($this); }
     public function email(): Email { return new Email($this); }
     public function files(): Files { return new Files($this); }
@@ -125,6 +213,7 @@ final class App
     public function relay(): Relay { return new Relay($this); }
     public function claudeCli(): ClaudeCli { return $this->claudeCliOverride ?? new ShellClaudeCli($this->cfg->claudeBin, $this->cfg->dataDir . '/conductor/logs', $this->cfg->claudeToken); }
     public function conductor(): Conductor { return new Conductor($this, $this->claudeCli()); }
+    public function pilot(): Pilot { return new Pilot($this); }
     public function mind(): Mind { return new Mind($this); }
     public function graph(): Graph { return new Graph($this); }
     public function shares(): Shares { return new Shares($this); }
@@ -137,7 +226,10 @@ final class App
     public function triage(): Triage { return new Triage($this); }
     public function accounts(): Accounts { return new Accounts($this); }
     public function spaces(): Spaces { return new Spaces($this); }
+    public function routing(): Routing { return new Routing($this); }
+    public function catalogue(): ModelCatalog { return new ModelCatalog($this); }
     public function links(): Links { return new Links($this); }
+    public function federation(): Federation { return new Federation($this); }
     public function routines(): Routines { return new Routines($this); }
     public function board(): Board { return $this->board ??= new Board($this); }
     public function google(): Google { return new Google($this); }

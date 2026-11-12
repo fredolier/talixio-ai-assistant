@@ -24,8 +24,17 @@ final class Config
     public function trustedSite(string $url): bool
     {
         $h = self::siteOf($url);
-        if ($h === '') return false;
+        if ($h === '' || $this->blockedSite($url)) return false;
         foreach ($this->webTrusted as $t) if ($h === $t || str_ends_with($h, ".$t")) return true;
+        return false;
+    }
+
+    /** Whether a web address is on a blocked site (the site itself or one of its subdomains): never opened. */
+    public function blockedSite(string $url): bool
+    {
+        $h = self::siteOf($url);
+        if ($h === '') return false;
+        foreach ($this->webBlocked as $t) if ($h === $t || str_ends_with($h, ".$t")) return true;
         return false;
     }
 
@@ -106,11 +115,18 @@ final class Config
     public string $braveKey = '';
     public string $tavilyKey = '';
     public string $searxngUrl = '';
+    public string $forecastModel = 'timesfm-2.5'; // which model the service runs (timesfm-2.5, chronos-2)
+    public string $forecastUrl = '';            // a TimesFM service (deploy/docker/models.Dockerfile); empty = the built-in simple method
+    public string $decisionUrl = '';            // a System One decision model (Jev / Kev / Rizzo Flow…): POST /v1/systemone
+    public string $decisionKey = '';
+    public string $decisionModel = '';
     public float $budgetDaily = 0.0;
     public float $budgetMonthly = 0.0;
     public float $eurUsd = 1.10;               // to compare bills in euros with prices in dollars
     public string $prices = '';
     public int $maxParallelJobs = 3;
+    public int $toolLogDays = 90;                // the main conversation's tool log is kept this long (0 = for ever); jobs keep theirs
+    public int $jobMaxMinutes = 120;             // a background job still running after this is stopped (0 = no limit)
     public float $jobMaxUsd = 2.0;               // default cost cap of a background job
     public float $jobMaxUsdLimit = 10.0;         // the most the assistant may give one job when asked
     public string $jobEffort = 'medium';         // default effort of background jobs (Tier::EFFORTS)
@@ -159,6 +175,7 @@ final class Config
     public string $mailboxSent = 'Sent';
     /** @var string[] tools that run without asking (default: none) */ public array $autoApprove = [];
     /** @var string[] sites opened without asking (subdomains included) */ public array $webTrusted = [];
+    /** @var string[] sites never opened (subdomains included); wins over webTrusted */ public array $webBlocked = [];
     public bool $webSearchTrusted = false;
     public string $signalCli = 'signal-cli';
     public string $browser = 'auto';             // auto (on if Chromium/Chrome is installed) | off
@@ -286,6 +303,11 @@ final class Config
         $c->braveKey = $e('BRAVE_API_KEY');
         $c->tavilyKey = $e('TAVILY_API_KEY');
         $c->searxngUrl = rtrim($e('SEARXNG_URL'), '/');
+        $c->forecastUrl = rtrim($e('TALIXIO_FORECAST_URL'), '/');
+        $c->forecastModel = in_array($e('TALIXIO_FORECAST_MODEL'), ['timesfm-2.5', 'chronos-2'], true) ? $e('TALIXIO_FORECAST_MODEL') : 'timesfm-2.5';
+        $c->decisionUrl = rtrim($e('TALIXIO_DECISION_URL'), '/');
+        $c->decisionKey = $e('TALIXIO_DECISION_KEY');
+        $c->decisionModel = $e('TALIXIO_DECISION_MODEL');
         $c->search = strtolower($e('TALIXIO_SEARCH', 'auto'));
         if ($c->search === 'auto') {
             $c->search = match (true) {
@@ -303,6 +325,8 @@ final class Config
         $c->eurUsd = (float)$e('TALIXIO_EUR_USD', '1.10') ?: 1.10;
         $c->prices = $e('TALIXIO_PRICES');
         $c->maxParallelJobs = max(1, (int)$e('TALIXIO_MAX_PARALLEL_JOBS', '3'));
+        $c->jobMaxMinutes = max(0, (int)$e('TALIXIO_JOB_MAX_MINUTES', '120'));
+        $c->toolLogDays = max(0, (int)$e('TALIXIO_TOOL_LOG_DAYS', '90'));
         $c->jobMaxUsd = max(0.0, (float)$e('TALIXIO_JOB_MAX_USD', '2.00'));
         $c->jobMaxUsdLimit = max($c->jobMaxUsd, (float)$e('TALIXIO_JOB_MAX_USD_LIMIT', '10'));
         $c->jobEffort = self::effort($e('TALIXIO_JOB_EFFORT', 'medium')) ?: 'medium';
@@ -363,6 +387,7 @@ final class Config
         $c->mailboxDrafts = $e('TALIXIO_MAILBOX_DRAFTS', 'Drafts');
         $c->mailboxSent = $e('TALIXIO_MAILBOX_SENT', 'Sent');
         $c->autoApprove = $list($e('TALIXIO_AUTO_APPROVE'));
+        $c->webBlocked = array_values(array_filter(array_map(fn($h) => self::siteOf($h), $list($e('TALIXIO_WEB_BLOCKED'))), 'strlen'));
         $c->webTrusted = array_values(array_filter(array_map(fn($h) => self::siteOf($h), $list($e('TALIXIO_WEB_TRUSTED'))), 'strlen'));
         $c->webSearchTrusted = $e('TALIXIO_WEB_SEARCH_TRUSTED', '0') === '1';
         $c->signalCli = $e('TALIXIO_SIGNAL_CLI', 'signal-cli');

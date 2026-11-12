@@ -11,6 +11,13 @@ are unread; the app icon counts them too, with the approvals waiting. Tap one to
 mark it read, or *Mark all read*. Opening the page also clears them from the phone's lock screen.
 The last 200 are kept, for 60 days. In a Secret space, the list only says where to look.
 
+## Reports from your autonomous pilot
+Progress reports from the autonomous pilot (see *Pilotage*) are quiet by default: no push, no email. A red count shows on
+the **Pilotage** entry and on the tabs of **Your autonomous pilot**: the agents' replies are in each agent's conversation (a count per
+agent, cleared when you open it) and the fleet-wide reports in the **Journal** (cleared when you open it). The **Fleet reports** switch on the pilot's status card lets you choose:
+**In-app badge** (default), **Push + e-mail**, or **Off** (nothing is shown). A report that merely repeats the previous
+one, or a routine keep-warm ping, never counts.
+
 ## Telegram
 Create a bot with @BotFather, put its token in Settings → Telegram, then message the bot: it replies
 with your id, which you add to the *Allowed chat ids* list.
@@ -29,6 +36,14 @@ The assistant's messages (scheduled tasks, briefing, reports, replies) arrive fo
 the space and its color, the message's headings, lists, tables and links, and a button that opens the app.
 For the links and the button to work, the app must know its address: opening it once in the browser is enough
 (or Settings → *Public address*). Emails sent on your behalf from your mailbox stay plain, without this frame.
+
+**Verified senders.** With *Require a verified sender (SPF/DKIM)* ticked (the default), the assistant only answers an email
+your mail server has checked. Since 1.35.35 it also needs *Name of your mail server in Authentication-Results*
+(advanced settings): the first word of the `Authentication-Results:` line your server adds to a received email
+(open a received email's source, e.g. `mx.example.com`). Without it, no email is answered and *Channels* says so, with the
+name the last email gave: a sender could otherwise write a line that looks like your server's. Not needed with Gmail and
+Microsoft 365 (known from the IMAP server's name). On a server for several people, the admin page can set it once for
+everyone (*Settings* → *Incoming email for everyone*); a person's own setting wins.
 
 ## Outlook / Microsoft 365 mailboxes
 Microsoft is turning off passwords for SMTP and IMAP (smtp.office365.com, outlook.office365.com); many

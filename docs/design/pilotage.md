@@ -6,6 +6,30 @@
 > (`orchestration.md` §9.1–§9.5, all shipped through 0.28.99). Nothing here opens a
 > new trust edge; it surfaces, groups and governs what the services already expose.
 > Validated against the clickable mockup (`scratchpad/fleet-ui-mockups.html`, v7).
+>
+> **Deliberate divergences from the mockup** (the mockup is a concept sketch, not
+> the contract — these stay as shipped):
+> - **KB tab** surfaces a *library glance* (space, library root, file/subfolder/size
+>   stats, hub-pull state, "Open the Library" link), not the mockup's hub-resource
+>   document list — see Slice 5.
+> - **Rôles tab** renders the specialization "map" close to the mockup: bordered
+>   per-specialization **group cards** (`.pspec-card`, header + `· N rôles` count)
+>   holding clickable **role nodes** (`.pnode` — an accept-rate ring whose size
+>   scales with run volume), and clicking a node opens a **detail card** below
+>   (`#prole-detail` → `roleDetail`: ring, metrics, sparkline, inline specialization
+>   editor, lifecycle actions). Archived roles open from an **Archivés…** toolbar
+>   button, not a trailing `<details>`. What stays divergent from the mockup: there
+>   is **no local-vs-corporate split** (no such field in `/api/roles`), so no
+>   corporate group or legend; and the node is a ring, not the mockup's SVG
+>   ring-cluster. Roles are authored conversationally (the assistant's `role_save`
+>   tool, which runs the same duplicate check the mockup's drawer promises),
+>   installed from the store (`role_install`), seeded by the director and the
+>   fleet, or — since 1.6.0 — created from the catalogue's **+ Nouveau rôle**
+>   header button, an inline form (name, one-line purpose, optional
+>   specialization, brief) wired to `POST /api/roles` → the same `role_save`
+>   tool and its duplicate check.
+> - **Chantiers** are launched from the chat composer ("Parler au pilote"), so there
+>   is no "+ Nouveau chantier" header button.
 
 ## 1. Why — one place to steer the assistant's own work
 
@@ -32,7 +56,11 @@ shell (slice 1a).
   pull). Read-only glance; deep edits stay in Library.
 - **Pilote autonome (agents)** — the Conductor/Fleet: the delegated orchestrator
   session and the Tier-D agents it runs across machines. (Renamed from "flotte"
-  → **agents**, decided with the mockup.)
+  → **agents**, decided with the mockup.) Fleet reports surface here quietly by
+  default: a **"Rapports de la flotte"** toggle (in-app badge · push+e-mail · off,
+  default in-app) sits on the status card, a **"Rapports récents"** card shows the
+  last reports, and an unread count badges both the Pilotage rail entry and this
+  sub-tab, clearing when the tab is opened. Backend + modes: orchestration.md §5.2.
 - **Rôles** — the role registry as a managed catalogue: grouped by
   **specialization**, each with its Assessor metrics, an **overlap** signal, and
   the lifecycle actions (Évaluer / Améliorer / Publier / Archiver / Supprimer /
@@ -236,6 +264,26 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
 - This completes the six Pilotage slices; **1.0.0** is reserved for the cut on the
   user's confirmation.
 
+### Slice 7 — « what do I answer? » + the permanent status file · *Small–Medium*
+
+- **Problem.** Questions arrived but the cockpit did not say what the user was expected to do. The *Needs you* detail now
+  reads top to bottom: who asks (`.pl-who`), the question verbatim (`.pl-q`), one-tap options (`[data-answer]`) plus a
+  free-text/dictation box (`#pl-need-input`, draft kept per agent), what the pilot would answer (proposal + confidence, or a
+  plain « no proposal »), and the cost of a wrong choice (« the orchestrator did not say » when absent).
+- **Incomplete data.** `plIncomplete(w)`: « not retrieved yet »-style text, or no options and a very short question. It shows a
+  hint and **Ask the orchestrator for the full question**, which posts to the existing `/api/conductor/agents/{id}/say` with
+  `clarify:true`. `agentSay(..., clarify)` delivers the line but tags no `decision_id`, writes no decision-journal entry and
+  does not score the pilot's prediction: a request for information is not an answer.
+- **Inbox zero.** Empty list/detail say nothing waits and when the orchestrator last spoke (`lastReport`).
+- **Status file.** `Conductor::refreshStatusFile()` rewrites `<data dir>/pilot-status.md` (temp file + rename) after each
+  report, ack, answer/dispatch, pair/disconnect, notify change and pilot decision/verdict/policy change; polls refresh it at most
+  every 2 minutes. It skips the write when only the `Generated:` line would differ, and does nothing for an instance that never
+  paired. Built from `statusInfo()` (so no secret, no webhook, no transcript URL); times are absolute; agent-written text is
+  quoted. `GET /api/pilot/status.md[?download=1]` (authenticated, read-only) rebuilds and serves it; the **Status file** button
+  on the status card shows it with Copy / Download and the file's path.
+- **Not done (next slice).** Making the pilot's role clearer (what it did on its own vs. what waits), pushing the file to
+  the Library, per-question « snooze », and a one-line « next step for you » banner on the Agents tab.
+
 ## 5. Open decisions (carry from the mockup)
 
 - ~~`scope` reused vs. a new `specialization` field~~ — **settled (slice 3):**
@@ -264,3 +312,18 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
   transcribe) — lean yes for slice 1a — or add live/streaming transcription later?
   And: after transcribing a directive to the pilot, require a read-back-then-send
   (lean yes, dictation is never auto-sent) vs. an opt-in "send on release".
+
+> **1.17.0 — what a blocked agent asks.** The agents roster lists the sessions that wait for the user first, each with the
+> question as the orchestrator copied it (kind: decision / approval / instruction, the user's own type tag, options as answer
+> buttons, the cost of a wrong choice). An approval (a click only the user can give, e.g. a revoked token) offers no buttons and
+> says so. See `orchestration.md` §5.5 (1.17.1: questions reach the pilot through the « route questions » hook, not files).
+
+> **1.18.0 — the cockpit for a fleet.** « Votre pilote autonome » keeps its status card (pairing, fleet-reports switch) and the
+> push-to-talk card, and between them three tabs (`#pl-tabs`, `PL` in `app.js`): **Needs you** (the sessions that wait, each with
+> its question, options and cost; an approval has no buttons; then *Decided recently* — who answered what), **Agents** (a list with
+> search, filters Waiting/Active/Idle/Offline and « Group by machine », and the selected agent's conversation in a pane of fixed
+> height: the question pinned on top, older messages loaded by « ↑ n older messages », a composer pinned at the bottom with
+> dictation, a draft kept per agent), **Journal** (fleet-wide reports and alerts, grouped by day, filter All/Alerts/Summaries,
+> search, full text in the pane). Each tab has a count badge. On a narrow screen the list and the pane replace each other
+> (« ‹ Back »). The old inline roster, the long « Recent reports » feed and the « Discuss » dialog are gone. See
+> `orchestration.md` §5.6 for the data.

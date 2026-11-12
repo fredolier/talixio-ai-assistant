@@ -106,7 +106,8 @@ final class Routines
             . "3. Tasks (board_list with all_spaces): overdue, due today, blocked; then today's routines and reminders (list_tasks).\n"
             . "4. The weather today in the user's town (from USER.md; skip it if unknown) with a quick web search.\n"
             . "5. The library (kb_recent, hours 24): if files are new or changed since yesterday, one 📄 line: \"Since yesterday: N new and M changed files\", naming the main ones.\n"
-            . "6. Anything else that matters today (follow-ups promised, birthdays in USER.md...).\n"
+            . "6. Answers from followed assistants (peer_status): one line per status that changed, naming whose it is; skip it when there is none.\n"
+            . "7. Anything else that matters today (follow-ups promised, birthdays in USER.md...).\n"
             . "Write only a Markdown bullet list, nothing before or after it: one line per item, starting with an emoji for its kind (📅 ✉️ ✅ ⚠️ 🌦️ 📄 🎂 💡), "
             . "then the essential in under 20 words (time, who, what to do). Merge small things of the same kind into one line. Skip what is empty or not useful today. "
             . "In the user's language. The user can ask for details afterwards."
@@ -140,7 +141,7 @@ final class Routines
     public function setupWeekly(string $time, int $day = 0, string $folder = ''): array
     {
         [$h, $m] = self::time($time);
-        $folder = Library::normalize($folder !== '' ? $folder : Library::NOTES . '/Weekly reviews');
+        $folder = Library::normalize($folder !== '' ? $folder : Library::NOTES . '/' . I18n::t($this->app, 'Weekly reviews'));
         Library::guard($folder);
         return $this->upsert($this->find(self::WEEKLY), self::WEEKLY, self::weeklyPrompt($folder), "$m $h * * " . max(0, min(6, $day)), 'standard');
     }
@@ -171,7 +172,7 @@ final class Routines
         $w['folder'] = Library::normalize($w['folder'] !== '' ? $w['folder'] : '/Drafts/' . $w['name']);
         Library::guard($w['folder']);
         [$h, $m] = self::time($w['time']);
-        $cron = match ($w['every']) { 'daily' => "$m $h * * *", 'monthly' => "$m $h 1-7 * {$w['day']}", default => "$m $h * * {$w['day']}" };
+        $cron = match ($w['every']) { 'daily' => "$m $h * * *", 'monthly' => "$m $h * * {$w['day']}#1", default => "$m $h * * {$w['day']}" };
         if ($id !== null && !$this->app->store->get(self::WATCH_PREFIX . $id)) throw new \InvalidArgumentException('no such watch');
         $t = $this->upsert($id ?? $this->find($w['name']), $w['name'], self::watchPrompt($w), $cron, 'standard');
         $this->app->store->set(self::WATCH_PREFIX . $t['id'], json_encode($w, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));

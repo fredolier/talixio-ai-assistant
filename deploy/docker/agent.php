@@ -66,7 +66,7 @@ try {
             $fleet->reloadCaddy();
             if (($before['ollama'] ?? true) !== $after['ollama']) { try { $fleet->setOllama($after['ollama']); } catch (\Throwable $e) { error_log('ollama: ' . $e->getMessage()); } }
             // what instances get from these settings changed: make their containers again
-            $keys = ['mode', 'ollama', 'ollama_model', 'google_client_id', 'google_client_secret', 'apparmor_unconfined', 'domain', 'eu_provider', 'eu_key', 'eu_url', 'eu_only'];
+            $keys = ['mode', 'ollama', 'ollama_model', 'google_client_id', 'google_client_secret', 'email_authserv', 'apparmor_unconfined', 'domain', 'eu_provider', 'eu_key', 'eu_url', 'eu_only'];
             $redo = array_filter($keys, fn($k) => ($before[$k] ?? null) !== ($after[$k] ?? null));
             if ($redo) foreach (array_keys($fleet->state()['instances']) as $id) $fleet->recreate($id);
             $json(['settings' => Fleet::publicSettings($after), 'recreated' => (bool)$redo]);

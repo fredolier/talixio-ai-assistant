@@ -23,7 +23,7 @@ final class Settings
             ]],
             'brain' => ['AI model', 'The assistant\'s brain. "Check configuration" makes one test call per tier.', [
                 ['TALIXIO_PROVIDER', 'Provider', 'select', 'claude-code uses your Claude Pro/Max plan (installed with --with-claude-code).', ['anthropic' => 'Claude (API)', 'claude-code' => 'Claude Code (Pro/Max plan)', 'gemini' => 'Gemini (API)', 'openai' => 'OpenAI or compatible server (Ollama…)', 'sovereign' => 'European provider (OVHcloud, Mistral…)', 'echo' => 'Echo (test, no model)']],
-                ['TALIXIO_SOVEREIGN', 'European provider', 'select', 'Hosted in Europe, under the GDPR. One key also does transcription and memory search.', ['ovhcloud' => 'OVHcloud AI Endpoints (France)', 'mistral' => 'Mistral AI (France)', 'scaleway' => 'Scaleway (France)', 'infomaniak' => 'Infomaniak (Switzerland)']],
+                ['TALIXIO_SOVEREIGN', 'European provider', 'select', 'Hosted in Europe, under the GDPR. One key also does transcription and memory search.', ['ovhcloud' => 'OVHcloud AI Endpoints (France)', 'mistral' => 'Mistral AI (France)', 'scaleway' => 'Scaleway (France)', 'infomaniak' => 'Infomaniak (Switzerland)', 'aki' => 'AKI.IO (Germany)']],
                 ['TALIXIO_SOVEREIGN_KEY', 'European provider API key', 'secret', 'See "Europe only" above for where to get one.'],
                 ['TALIXIO_SOVEREIGN_URL', 'European provider address', 'url', 'Empty = the provider\'s usual address. Infomaniak: the address from your AI Tools dashboard.'],
                 ['TALIXIO_SOVEREIGN_ONLY', 'Europe only', 'bool', 'Never send anything to an AI or search service outside Europe: what has no European option is turned off.'],
@@ -47,6 +47,8 @@ final class Settings
                 ['TALIXIO_BUDGET_MONTHLY_USD', 'Monthly budget ($)', 'number', ''],
                 ['TALIXIO_EUR_USD', 'Euro to dollar rate', 'number', 'To compare a bill in euros (Mistral bills in euros) with the estimates in dollars.'],
                 ['TALIXIO_MAX_PARALLEL_JOBS', 'Sub-agents in parallel', 'number', ''],
+                ['TALIXIO_TOOL_LOG_DAYS', 'Keep the log of the assistant\'s actions (days)', 'number', 'What the assistant did in the conversation (tools used, their results), shown in Activity. Older entries are removed. 0 = keep everything.'],
+                ['TALIXIO_JOB_MAX_MINUTES', 'Longest a background job may run (minutes)', 'number', 'A job still running after this is stopped and marked as failed. 0 = no limit.'],
                 ['TALIXIO_JOB_MAX_USD', 'Cap per background job ($)', 'number', 'Default for each job. A job that reaches it is stopped (it is warned at 80% to write its report). 0 = no cap.'],
                 ['TALIXIO_JOB_MAX_USD_LIMIT', 'Highest cap for one job ($)', 'number', 'When you ask for a bigger job ("budget 5 $"), the assistant may raise its cap up to this.'],
                 ['TALIXIO_JOB_EFFORT', 'Effort of background jobs', 'select', 'Default; can be chosen per job. Higher: deeper thinking and more steps (low 15, medium 30, high 60, xhigh 100, max 200), so longer and more expensive.', ['low' => 'low', 'medium' => 'medium', 'high' => 'high', 'xhigh' => 'very high', 'max' => 'max']],
@@ -79,6 +81,7 @@ final class Settings
                 ['TALIXIO_IMAP_PASSWORD', 'IMAP password', 'secret', 'Empty = SMTP password.'],
                 ['TALIXIO_EMAIL_ALLOWED', 'Allowed senders', 'list', 'The only addresses it answers. Empty = your address.'],
                 ['TALIXIO_EMAIL_REQUIRE_AUTH', 'Require a verified sender (SPF/DKIM)', 'bool', 'Ignores email with a forged sender. Untick only if your emails get no answer.'],
+                ['TALIXIO_EMAIL_AUTHSERV_ID', 'Name of your mail server in Authentication-Results', 'text', 'Needed to answer emails when a verified sender is required: the first word your mail server writes in the Authentication-Results line of a received email (e.g. mx.example.com). Not needed for Gmail and Microsoft 365. If emails get no answer, Channels shows the name the last one gave.'],
             ]],
             'mailbox' => ['Your mailbox', 'Your own mailbox (e.g. frederic@talixio.com): reads without marking as read, writes drafts, sends only after your approval.', [
                 ['TALIXIO_MAILBOX_IMAP_HOST', 'IMAP server', 'text', 'OVH: ssl0.ovh.net. Empty = off.'],
@@ -119,30 +122,39 @@ final class Settings
                 ['TALIXIO_TELEGRAM_TOKEN', 'Bot token', 'secret', 'From @BotFather.'],
                 ['TALIXIO_TELEGRAM_ALLOWED_IDS', 'Allowed chat ids', 'list', 'Message the bot: it replies with your id.'],
             ]],
-            'search' => ['Web search and memory', '', [
+            'search' => ['Search and memory', 'Web search, and the settings behind search by meaning. Which model computes the vectors is chosen in Model and budget → Models → Embeddings.', [
                 ['TALIXIO_SEARCH', 'Web search', 'select', 'auto: Claude\'s or Gemini\'s built-in search, otherwise the service set below.', ['auto' => 'auto', 'builtin' => 'built-in (Claude)', 'gemini' => 'Google via Gemini', 'brave' => 'Brave', 'tavily' => 'Tavily', 'searxng' => 'SearXNG', 'off' => 'off']],
                 ['BRAVE_API_KEY', 'Brave Search key', 'secret', ''],
                 ['TAVILY_API_KEY', 'Tavily key', 'secret', ''],
                 ['SEARXNG_URL', 'SearXNG address', 'url', ''],
-                ['TALIXIO_EMBEDDINGS', 'Search by meaning (embeddings)', 'select', 'Keyword search always works. After a change, memory is re-indexed in the background.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'voyage' => 'Voyage', 'ollama' => 'Ollama (local)', 'sovereign' => 'European provider', 'off' => 'off']],
-                ['TALIXIO_EMBEDDINGS_MODEL', 'Embeddings model', 'text', 'Empty = the service\'s default. Ollama: qwen3-embedding:0.6b (recommended, multilingual), embeddinggemma, bge-m3. Install with install.sh --with-ollama; a new model must be pulled first (ollama pull …).'],
-                ['TALIXIO_EMBEDDINGS_DIMS', 'Vector size', 'number', 'Empty = automatic (512 for models built for it: faster search, nearly the same quality). 0 = full size. Changing it re-indexes memory in the background.'],
                 ['VOYAGE_API_KEY', 'Voyage key', 'secret', ''],
                 ['TALIXIO_OLLAMA_URL', 'Ollama address', 'url', ''],
-                ['TALIXIO_GRAPH', 'Knowledge graph of the library', 'bool', 'Notes the people, companies, projects and places each document mentions, so the assistant can gather everything about a name and what is linked to a file. One fast-model call per new or changed document, in the background; never for a folder the model may not read.'],
-                ['TALIXIO_GRAPH_DAILY', 'Documents added to the graph per day (max)', 'number', 'Caps the cost: the rest waits for the next days.'],
+            ]],
+            'prediction' => ['Forecast and decisions', 'Two specialised models next to the language model. Forecast: time series (sales, usage, prices…) with Google TimesFM; the assistant uses it whenever you give it figures. Decisions: a model that answers choice / score / yes-no questions with real probabilities (Jev from TypeSafe, or an open one such as Kev that speaks the same protocol). Leave empty to turn off; nothing is sent anywhere until you set an address.', [
+                ['TALIXIO_FORECAST_URL', 'TimesFM service address', 'url', 'Empty = a simple built-in method. With Docker: install with --with-models, then http://talixio-caddy:8765 (see the FAQ).'],
+                ['TALIXIO_FORECAST_MODEL', 'Forecast model', 'select', 'Which model the service runs: TimesFM 2.5 (Google) or Chronos-2 (Amazon), both open and local.', ['timesfm-2.5' => 'TimesFM 2.5', 'chronos-2' => 'Chronos-2']],
+                ['TALIXIO_DECISION_URL', 'Decision model address', 'url', 'The server that answers POST /v1/systemone: TypeSafe\'s cloud (your data goes there) or your own Kev / Rizzo Flow server.'],
+                ['TALIXIO_DECISION_KEY', 'Decision model key', 'secret', 'Sent as a Bearer token. Empty if your server has none.'],
+                ['TALIXIO_DECISION_MODEL', 'Decision model name', 'text', 'e.g. kev-latest. Empty = the server\'s default.'],
             ]],
             'tasks' => ['Tasks', 'The tasks board of each space.', [
                 ['TALIXIO_TASK_REMINDER', 'Reminder the day before a due date', 'text', 'At this time (e.g. 18:00), a notification lists the tasks due tomorrow, per space. Empty = off.'],
                 ['TALIXIO_TASKS_GOOGLE', 'Tasks marked "show in my calendar" go to Google Calendar or Outlook', 'select', 'When Google Calendar or Outlook is connected: added as all-day events (start to due date) and kept up to date. Otherwise use the private calendar link (Tasks → Calendar).', ['1' => 'on', '0' => 'off']],
             ]],
-            'audio' => ['Audio, meetings and library', '', [
+            'documents' => ['Documents', 'How new documents are filed and read.', [
+                ['TALIXIO_AUTO_FILE', 'Filing new documents (Inbox)', 'select', 'The folder is guessed from your documents already filed (free), the fast model helps when unsure or to give a clear name.', ['suggest' => 'suggest, I confirm', 'auto' => 'file the obvious ones myself', 'off' => 'off']],
+                ['TALIXIO_VISION_INDEX', 'Read images and scanned PDFs', 'select', 'Library: the fast model describes photos and transcribes scans so they can be searched (small cost per image or page).', ['1' => 'on', '0' => 'off']],
+            ]],
+            // Chosen from the table in Model and budget (Voice, Embeddings): kept as settings so the file and the table's own
+            // strips can read and write them, and as the fallback while no model is chosen there. The card is never shown.
+            'models' => ['Models chosen in the table', 'Transcription, search by meaning and meetings: set from Model and budget → Models.', [
                 ['TALIXIO_TRANSCRIBE', 'Transcription', 'select', 'auto: Gemini when its key is set, else local when whisper.cpp is installed. Local: the audio never leaves this server, but it is slower (about half the recording\'s length) and has no speaker names (install with sudo ./install.sh --with-whisper). European provider: the audio stays in Europe (Whisper or Voxtral at Mistral, Scaleway, OVHcloud or Infomaniak), with its key.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'local' => 'Local (whisper.cpp, on this server)', 'sovereign' => 'European provider', 'off' => 'off']],
                 ['TALIXIO_TRANSCRIBE_MODEL', 'Transcription model', 'text', 'Empty = automatic. Local: large-v3-turbo-q5_0 (default), medium, small, or the path of a model file.'],
                 ['TALIXIO_MEETING_TIER', 'Tier for meeting summaries', 'select', '', ['standard' => 'standard', 'deep' => 'deep', 'fast' => 'fast']],
                 ['TALIXIO_VOICE_NOTE_MAX_SECONDS', 'Longer than this (seconds) = a meeting', 'number', ''],
-                ['TALIXIO_AUTO_FILE', 'Filing new documents (Inbox)', 'select', 'The folder is guessed from your documents already filed (free), the fast model helps when unsure or to give a clear name.', ['suggest' => 'suggest, I confirm', 'auto' => 'file the obvious ones myself', 'off' => 'off']],
-                ['TALIXIO_VISION_INDEX', 'Read images and scanned PDFs', 'select', 'Library: the fast model describes photos and transcribes scans so they can be searched (small cost per image or page).', ['1' => 'on', '0' => 'off']],
+                ['TALIXIO_EMBEDDINGS', 'Search by meaning (embeddings)', 'select', 'Keyword search always works. After a change, memory is re-indexed in the background.', ['auto' => 'auto', 'gemini' => 'Gemini', 'openai' => 'OpenAI', 'voyage' => 'Voyage', 'ollama' => 'Ollama (local)', 'sovereign' => 'European provider', 'off' => 'off']],
+                ['TALIXIO_EMBEDDINGS_MODEL', 'Embeddings model', 'text', 'Empty = the service\'s default. Ollama: qwen3-embedding:0.6b (recommended, multilingual), embeddinggemma, bge-m3. Install with install.sh --with-ollama; a new model must be pulled first (ollama pull …).'],
+                ['TALIXIO_EMBEDDINGS_DIMS', 'Vector size', 'number', 'Empty = automatic (512 for models built for it: faster search, nearly the same quality). 0 = full size. Changing it re-indexes memory in the background.'],
             ]],
             'browser' => ['Browser and approvals', '', [
                 ['TALIXIO_BROWSER', 'Browser', 'select', 'Installed with install.sh --with-browser.', ['auto' => 'on when installed', 'off' => 'off']],
@@ -150,7 +162,8 @@ final class Settings
                 ['TALIXIO_BROWSER_ALLOW_PRIVATE', 'Allow local network addresses', 'bool', 'Not recommended: a web page could reach your devices.'],
                 ['TALIXIO_BROWSER_NO_SANDBOX', 'Disable Chromium\'s sandbox', 'bool', 'Only if Chromium won\'t start otherwise.'],
                 ['TALIXIO_APPROVAL_WAIT_SECONDS', 'Wait for an approval (seconds)', 'number', 'For a web form being filled in.'],
-                ['TALIXIO_WEB_TRUSTED', 'Trusted websites', 'list', 'Opened without asking, also from Confidential spaces and routines (never from Secret ones). Subdomains included, e.g. lemonde.fr, gouv.fr.'],
+                ['TALIXIO_WEB_TRUSTED', 'Trusted websites', 'sites', 'Opened without asking, also from Confidential spaces and routines (never from Secret ones). Subdomains included, e.g. lemonde.fr, gouv.fr.'],
+                ['TALIXIO_WEB_BLOCKED', 'Blocked websites', 'sites', 'Never opened, whatever the space and even if you approve: the assistant is told the site is blocked. Subdomains included. A blocked site wins over a trusted one.'],
                 ['TALIXIO_WEB_SEARCH_TRUSTED', 'Web search from Confidential spaces without asking', 'bool', 'The search words go to your search service. Never from Secret spaces.'],
                 ['TALIXIO_AUTO_APPROVE', 'Actions without approval', 'multi', 'Not recommended: you won\'t be asked for these any more.', ['calendar_add' => 'Add to calendar', 'mail_send' => 'Send email as you', 'browser_submit' => 'Submit a web form']],
             ]],
@@ -159,10 +172,12 @@ final class Settings
                 ['TALIXIO_SHELL_NETWORK', 'Internet access in the sandbox', 'bool', 'To install Python packages (pip) or download data. Off is safer: with it on, a command can send out what it reads, so commands count as going outside (approval in Confidential spaces, never in Secret ones).'],
                 ['TALIXIO_SHELL_TIMEOUT', 'Time limit per command (seconds)', 'number', ''],
             ]],
-            'learning' => ['Learning', 'What the assistant learns by itself from your history.', [
+            'learning' => ['Learning', 'What the assistant learns by itself: from your history, from tasks, and from your documents.', [
                 ['TALIXIO_MIND', 'Character and values', 'bool', 'Learns by itself from your history what matters to you, how you decide, and what kind of assistant to be; it weighs this in its choices (Memory page). A few cents a day.'],
                 ['TALIXIO_LEARN', 'Learn from tasks (skills)', 'bool', 'After a multi-step task, a small agent decides whether to keep it (max $0.05).'],
                 ['TALIXIO_LEARN_MIN_STEPS', 'Minimum steps to learn', 'number', ''],
+                ['TALIXIO_GRAPH', 'Knowledge graph of the library', 'bool', 'Notes the people, companies, projects and places each document mentions, so the assistant can gather everything about a name and what is linked to a file. One fast-model call per new or changed document, in the background; never for a folder the model may not read.'],
+                ['TALIXIO_GRAPH_DAILY', 'Documents added to the graph per day (max)', 'number', 'Caps the cost: the rest waits for the next days.'],
             ]],
             'maintenance' => ['Backups and updates', '', [
                 ['TALIXIO_BACKUP_KEEP', 'Backups kept', 'number', 'One per night. 0 = no backups.'],
@@ -182,10 +197,10 @@ final class Settings
     /** Where each group shows on the Settings page (its sections, in order). */
     public const SECTIONS = [
         'assistant' => 'essentials', 'tasks' => 'essentials',
-        'brain' => 'model', 'budget' => 'model',
+        'brain' => 'model', 'budget' => 'model', 'prediction' => 'model',
         'notify' => 'channels', 'email' => 'channels', 'signal' => 'channels', 'telegram' => 'channels',
         'mailbox' => 'accounts', 'calendar' => 'accounts', 'spotify' => 'accounts', 'legifrance' => 'accounts',
-        'search' => 'library', 'audio' => 'library', 'learning' => 'library',
+        'search' => 'library', 'documents' => 'library', 'models' => 'model', 'learning' => 'learning',
         'browser' => 'security', 'shell' => 'security',
         'maintenance' => 'system', 'advanced' => 'system',
     ];
@@ -194,9 +209,9 @@ final class Settings
     public const ADVANCED = [
         'TALIXIO_HISTORY_MESSAGES', 'TALIXIO_HISTORY_TOKENS',
         'TALIXIO_SOVEREIGN_URL', 'TALIXIO_MODEL_FAST', 'TALIXIO_MODEL', 'TALIXIO_MODEL_DEEP', 'TALIXIO_DEEP_THINKING_TOKENS', 'TALIXIO_DEEP_REASONING_EFFORT', 'TALIXIO_ESCALATE', 'TALIXIO_TOOLS',
-        'TALIXIO_MAX_PARALLEL_JOBS', 'TALIXIO_JOB_MAX_USD_LIMIT', 'TALIXIO_JOB_EFFORT', 'TALIXIO_PRICES', 'ANTHROPIC_WORKSPACE_ID', 'OPENAI_PROJECT_ID',
+        'TALIXIO_MAX_PARALLEL_JOBS', 'TALIXIO_JOB_MAX_MINUTES', 'TALIXIO_TOOL_LOG_DAYS', 'TALIXIO_JOB_MAX_USD_LIMIT', 'TALIXIO_JOB_EFFORT', 'TALIXIO_PRICES', 'ANTHROPIC_WORKSPACE_ID', 'OPENAI_PROJECT_ID',
         'TALIXIO_NTFY_TOKEN', 'TALIXIO_VAPID_SUBJECT', 'TALIXIO_HEARTBEAT_MINUTES',
-        'TALIXIO_SMTP_SECURITY', 'TALIXIO_IMAP_PORT', 'TALIXIO_IMAP_USER', 'TALIXIO_IMAP_PASSWORD', 'TALIXIO_EMAIL_REQUIRE_AUTH',
+        'TALIXIO_SMTP_SECURITY', 'TALIXIO_IMAP_PORT', 'TALIXIO_IMAP_USER', 'TALIXIO_IMAP_PASSWORD', 'TALIXIO_EMAIL_REQUIRE_AUTH', 'TALIXIO_EMAIL_AUTHSERV_ID',
         'TALIXIO_MAILBOX_IMAP_PORT', 'TALIXIO_MAILBOX_SMTP_HOST', 'TALIXIO_MAILBOX_SMTP_PORT',
         'TALIXIO_SPOTIFY_DEVICE',
         'TALIXIO_EMBEDDINGS', 'TALIXIO_EMBEDDINGS_MODEL', 'TALIXIO_EMBEDDINGS_DIMS', 'VOYAGE_API_KEY', 'TALIXIO_OLLAMA_URL',
@@ -211,7 +226,7 @@ final class Settings
 
     /** Defaults used by Config when nothing is set (shown in the app as placeholders). */
     public const DEFAULTS = [
-        'TALIXIO_NAME' => 'Talixio', 'TALIXIO_LANG' => 'auto', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_HISTORY_TOKENS' => '12000', 'TALIXIO_PROVIDER' => 'anthropic',
+        'TALIXIO_NAME' => 'Talixio', 'TALIXIO_FORECAST_MODEL' => 'timesfm-2.5', 'TALIXIO_LANG' => 'auto', 'TALIXIO_TIMEZONE' => 'UTC', 'TALIXIO_HISTORY_MESSAGES' => '40', 'TALIXIO_HISTORY_TOKENS' => '12000', 'TALIXIO_PROVIDER' => 'anthropic',
         'TALIXIO_DEEP_THINKING_TOKENS' => '8000', 'TALIXIO_BUDGET_DAILY_USD' => '0', 'TALIXIO_BUDGET_MONTHLY_USD' => '0', 'TALIXIO_EUR_USD' => '1.10', 'TALIXIO_MAX_PARALLEL_JOBS' => '3',
         'TALIXIO_JOB_MAX_USD' => '2.00', 'TALIXIO_JOB_MAX_USD_LIMIT' => '10', 'TALIXIO_JOB_EFFORT' => 'medium', 'TALIXIO_NOTIFY' => 'webpush,email,signal,telegram,ntfy', 'TALIXIO_HEARTBEAT_MINUTES' => '0', 'TALIXIO_TASK_REMINDER' => '18:00', 'TALIXIO_TASKS_GOOGLE' => '1',
         'TALIXIO_SMTP_PORT' => '587', 'TALIXIO_SMTP_AUTH' => 'password', 'TALIXIO_MAILBOX_AUTH' => 'password', 'TALIXIO_SMTP_SECURITY' => 'auto', 'TALIXIO_IMAP_PORT' => '993', 'TALIXIO_EMAIL_REQUIRE_AUTH' => '1',
@@ -285,8 +300,13 @@ final class Settings
      */
     public static function save(string $dataDir, array $changes, array $reset = []): array
     {
+        return self::change($dataDir, fn(array $over) => self::checked($over, $changes, $reset));
+    }
+
+    /** save()'s checks on the current overrides: [new overrides, or null when a value is refused; the errors]. */
+    private static function checked(array $over, array $changes, array $reset): array
+    {
         $fields = self::fields();
-        $over = self::load($dataDir);
         $errors = [];
         foreach ($changes as $k => $v) {
             if (!isset($fields[$k])) { $errors[$k] = 'unknown setting'; continue; }
@@ -302,6 +322,16 @@ final class Settings
                 if (array_diff($vals, array_keys($f['options']))) { $errors[$k] = 'not one of the choices'; continue; }
                 $v = $vals ? implode(',', $vals) : 'none';
             }
+            if ($f['type'] === 'sites') { // web sites: 'https://www.lemonde.fr/x' or 'lemonde.fr' -> 'lemonde.fr', each once
+                $sites = []; $bad = '';
+                foreach (preg_split('/[\s,;]+/', $v, -1, PREG_SPLIT_NO_EMPTY) as $x) {
+                    $s = Config::siteOf($x);
+                    if (!preg_match('/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]+$/', $s) && $s !== 'localhost') { $bad = $x; break; }
+                    $sites[$s] = true;
+                }
+                if ($bad !== '') { $errors[$k] = 'not a web site address: ' . mb_substr($bad, 0, 60); continue; }
+                $v = implode(',', array_keys($sites));
+            }
             if ($f['type'] === 'list') $v = implode(',', array_filter(array_map('trim', preg_split('/[,\n]+/', $v)), 'strlen'));
             if ($f['type'] === 'url' && $v !== '' && !preg_match('#^https?://#i', $v)) { $errors[$k] = 'an http(s) address is expected'; continue; }
             if ($k === 'TALIXIO_TIMEZONE' && $v !== '' && !in_array($v, \DateTimeZone::listIdentifiers(), true)) { $errors[$k] = 'unknown time zone, e.g. Europe/Paris'; continue; }
@@ -309,33 +339,38 @@ final class Settings
             $over[$k] = $v;
         }
         foreach ($reset as $k) unset($over[$k]);
-        if (!$errors) self::write($dataDir, $over);
-        return $errors;
+        return [$errors ? null : $over, $errors];
+    }
+
+    /**
+     * Read-change-write the overrides under a lock (audit Q12): two saves at once (the app and the worker) keep both changes.
+     * $fn gets the current overrides and returns [new overrides or null for no change, result].
+     */
+    private static function change(string $dataDir, callable $fn): mixed
+    {
+        return JsonFile::update(self::file($dataDir), function (array $cur) use ($fn) {
+            [$over, $ret] = $fn(array_filter($cur, 'is_string'));
+            if ($over !== null) ksort($over);
+            return [$over, $ret];
+        }, 0600, JSON_PRETTY_PRINT);
     }
 
     /** Only a hash of the app password is kept (and the plain one from older versions is removed). */
     public static function setPassword(string $dataDir, string $password): void
     {
-        $over = self::load($dataDir);
-        unset($over['TALIXIO_WEB_PASSWORD']);
-        $over['TALIXIO_WEB_PASSWORD_HASH'] = password_hash($password, PASSWORD_DEFAULT);
-        self::write($dataDir, $over);
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        self::change($dataDir, function (array $over) use ($hash) { unset($over['TALIXIO_WEB_PASSWORD']); $over['TALIXIO_WEB_PASSWORD_HASH'] = $hash; return [$over, null]; });
     }
 
     /** Two-step sign-in secret ('' turns it off). */
     public static function setTotp(string $dataDir, string $secret): void
     {
-        $over = self::load($dataDir);
-        if ($secret === '') unset($over['TALIXIO_TOTP_SECRET']); else $over['TALIXIO_TOTP_SECRET'] = $secret;
-        self::write($dataDir, $over);
+        self::change($dataDir, function (array $over) use ($secret) { if ($secret === '') unset($over['TALIXIO_TOTP_SECRET']); else $over['TALIXIO_TOTP_SECRET'] = $secret; return [$over, null]; });
     }
 
     public static function write(string $dataDir, array $over): void
     {
         ksort($over);
-        $tmp = self::file($dataDir) . '.tmp';
-        file_put_contents($tmp, json_encode($over, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
-        chmod($tmp, 0600);
-        rename($tmp, self::file($dataDir));
+        JsonFile::write(self::file($dataDir), $over, 0600, JSON_PRETTY_PRINT); // whole or not at all
     }
 }

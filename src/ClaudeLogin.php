@@ -28,9 +28,7 @@ final class ClaudeLogin
 
     private static function setState(string $dir, array $s): void
     {
-        file_put_contents("$dir/state.json.tmp", json_encode($s + ['ts' => time()], JSON_UNESCAPED_SLASHES));
-        chmod("$dir/state.json.tmp", 0600);
-        rename("$dir/state.json.tmp", "$dir/state.json");
+        JsonFile::write("$dir/state.json", $s + ['ts' => time()], 0600);
     }
 
     /** Start a sign-in: returns the link to open (waits for Claude Code to print it). */

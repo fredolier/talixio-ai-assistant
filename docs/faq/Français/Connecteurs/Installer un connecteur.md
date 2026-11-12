@@ -56,6 +56,10 @@ Pour un serveur qui n'est pas sur GitHub (ou dans un dépôt privé) :
   son propre dossier, les programmes du système et le réseau, pas vos documents, vos e-mails ni vos clés.
   Il atteint toutefois ce que ses réglages lui donnent : n'installez que du code dont vous connaissez l'origine.
 - Un projet TypeScript qui doit être compilé l'est (`npm run build`) si le paquet n'a pas de fichier prêt.
+- Son installation se fait dans le même bac à sable : les dépendances viennent de npm sans leurs scripts
+  d'installation (un connecteur dont les dépendances en ont besoin ne peut pas être installé ainsi, et le dit),
+  un dossier `node_modules` livré dans le `.zip` est ignoré, et un connecteur venu de GitHub est récupéré au
+  commit exact affiché dans la validation, même si le dépôt change ensuite.
 - Python : seuls les serveurs sans dépendances à installer sont pris en charge pour l'instant.
 
 ## Ce qu'il ne faut pas faire

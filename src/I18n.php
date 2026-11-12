@@ -116,6 +116,19 @@ final class I18n
     {
         $out = $lang === 'fr' ? (self::FR[$text] ?? $text) : $text;
         foreach ($vars as $k => $v) $out = str_replace('{' . $k . '}', (string)$v, $out);
+        return $lang === 'fr' ? self::agree($out, $vars) : $out;
+    }
+
+    /** "fichier(s)" agrees with the number among the values (one and zero singular, more plural), as i18n.js does (audit U16). */
+    public static function agree(string $out, array $vars): string
+    {
+        if (!preg_match('/\((?:s|x|es)\)/', $out)) return $out;
+        foreach ($vars as $v) {
+            $n = str_replace([' ', "\u{202f}", "\u{a0}"], '', (string)$v);
+            if (!preg_match('/^-?\d+([.,]\d+)?$/', $n)) continue;
+            $many = abs((float)str_replace(',', '.', $n)) >= 2;
+            return (string)preg_replace_callback('/(?<!http)\((s|x|es)\)/', fn($m) => $many ? $m[1] : '', $out);
+        }
         return $out;
     }
 

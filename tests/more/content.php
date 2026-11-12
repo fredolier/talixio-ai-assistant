@@ -200,8 +200,8 @@ $many = "n\n" . implode("\n", range(1, 2100)) . "\n";
 $cv = Preview::csv($many);
 check('preview: CSV shows the first 2,000 rows and says so', str_contains($cv, 'First 2,000 rows shown') && str_contains($cv, '<td class="num">1999</td>') && !str_contains($cv, '<td class="num">2001</td>'));
 check('preview: CSV tabs detected, empty CSV', str_contains(Preview::csv("a\tb\n1\t2\n"), '<th>a</th><th>b</th>') && Preview::csv('') === '<p class="muted">(empty)</p>');
-check('preview: an HTML page without a head gets a base anyway', Preview::htmlPage('<p>x</p>') === '<!doctype html><meta charset="utf-8"><base target="_blank"><p>x</p>'
-    && str_contains(Preview::htmlPage('<html><head lang="fr"><title>t</title></head></html>'), '<head lang="fr"><base target="_blank"><title>'));
+check('preview: an HTML page without a head gets a base anyway', Preview::htmlPage('<p>x</p>') === '<!doctype html><meta charset="utf-8">' . Preview::CSP . '<base target="_blank"><p>x</p>' /* and, since 1.35.35, the policy that loads nothing from outside */
+    && str_contains(Preview::htmlPage('<html><head lang="fr"><title>t</title></head></html>'), '<head lang="fr">' . Preview::CSP . '<base target="_blank"><title>'));
 
 // render(): each kind through one entry point
 $envBefore = array_map(fn($k) => [$k, getenv($k)], ['TALIXIO_DATA_DIR', 'TALIXIO_PROVIDER', 'TALIXIO_EMBEDDINGS', 'TALIXIO_NOTIFY']);
@@ -215,7 +215,7 @@ $file = function (string $name, string $content, string $kind = 'text', string $
 check('preview: renders text and office files only', Preview::renders(['kind' => 'office']) && !Preview::renders(['kind' => 'image']));
 $r = $pv->render($file('Note', "\xEF\xBB\xBF# Bonjour", 'text', 'text/markdown', true));
 check('preview: a note is rendered as Markdown (byte-order mark dropped)', str_contains($r, '<article class="doc"><h1>Bonjour</h1></article>') && str_contains($r, '<title>Note</title>'), $r);
-check('preview: an HTML page by its type', str_contains($pv->render($file('page', '<head></head><p>hi</p>', 'text', 'text/html')), '<head><base target="_blank">'));
+check('preview: an HTML page by its type', str_contains($pv->render($file('page', '<head></head><p>hi</p>', 'text', 'text/html')), '<head>' . Preview::CSP . '<base target="_blank">'));
 $eml = $pv->render($file('mail.eml', "From: Alex <alex@acme.example>\r\nTo: team@acme.example\r\nSubject: =?UTF-8?B?w4l0w6k=?=\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><style>p{}</style><title>T</title></head><body><p>Bonjour</p><script>alert(1)</script></body></html>"));
 check('preview: an email with its headers and its HTML body, page parts dropped',
     str_contains($eml, '<tr><th>From</th><td>Alex &lt;alex@acme.example&gt;</td></tr>') && str_contains($eml, '<tr><th>Subject</th><td>Été</td></tr>')
@@ -470,7 +470,8 @@ $fc->provider = 'anthropic'; $fc->visionIndex = true;
 $fake->script = fn() => 'A receipt from Acme.';
 $imgRead = $files->save(tap_tmp($png), 'receipt.png', 'image/png', '/Inbox');
 check('files: images are described by the model', $files->text($imgRead) === "Image description:\nA receipt from Acme." && $files->imagePart($imgRead)['mime'] === 'image/png');
-$gif = $files->save(tap_tmp($png), 'odd.bmp', 'image/bmp', '/Inbox');
+$bmp = (function () { $im = imagecreatetruecolor(4, 4); ob_start(); imagebmp($im); return (string)ob_get_clean(); })(); // a real BMP: since 1.35.14 the type is read from the content
+$gif = $files->save(tap_tmp($bmp), 'odd.bmp', 'image/bmp', '/Inbox');
 check('files: images in other formats are sent as JPEG', $files->imagePart($gif)['mime'] === 'image/jpeg');
 $fc->provider = 'echo';
 check('files: no description without a model', $files->text($files->save(tap_tmp($png), 'b.png', 'image/png', '/Inbox')) === '');
@@ -524,6 +525,8 @@ check('files: a zip keeps the tree, renames clashing names and skips missing fil
 $emptyZip = $files->zipFolder('/Projects/Empty');
 $zr = new ZipArchive(); $zr->open($emptyZip); $en = $zr->getNameIndex(0); $zr->close(); @unlink($emptyZip);
 check('files: an empty folder downloads as an empty folder', $en === 'Empty/');
+$pz = $files->zipFolder('/', null, ['/Projects/A']); $zr = new ZipArchive(); $zr->open($pz); $pn = []; for ($i = 0; $i < $zr->numFiles; $i++) $pn[] = $zr->getNameIndex($i); $zr->close(); @unlink($pz);
+check('files: a zip of chosen folders keeps their path from the library root', count($pn) === 2 && !array_filter($pn, fn($n) => !str_starts_with($n, 'Projects/A/')), json_encode($pn));
 $fa->store->q('UPDATE files SET size = 5000000000 WHERE id = ?', [$z1]);
 check('files: a folder over 4 GB is not zipped', (function () use ($files) { try { $files->zipFolder('/Projects'); return false; } catch (\InvalidArgumentException $e) { return str_contains($e->getMessage(), 'over 4 GB'); } })());
 

@@ -86,6 +86,7 @@ final class Accounts
         $st = $this->app->store;
         $st->q("UPDATE spaces SET account = '' WHERE account = ?", [$id]);
         if ($st->get('general_account', '') === $id) $st->set('general_account', '');
+        $this->app->routing()->pruneAccount($id); // its per-usage bindings fall back to the main settings
         foreach (['gemini', 'sovereign'] as $k) $st->set("{$k}_models_$id", '');
         Log::info("AI account deleted: $name");
         $this->app->accountsChanged();
