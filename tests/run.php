@@ -2093,6 +2093,7 @@ check('library: renaming a note to .html makes it a web page', !$md['note'] && $
 $md = $lib->renameFile((int)$md['id'], 'Brouillon.md');
 check('library: and back to .md, a note again', $md['note'] == 1 && $md['mime'] === 'text/markdown');
 $la->store->q("UPDATE files SET note = 1, mime = 'text/markdown' WHERE id = ?", [$page['id']]); $la->store->set('fix.html_notes', '');
+$la->store->db->exec('PRAGMA user_version = 0'); // as after an update: since 1.35.19 the migration runs once per schema change, not at every open
 new \Talixio\Store($la->store->path);
 check('library: notes already named .html are repaired once', !$lf->get((int)$page['id'])['note'] && $lf->get((int)$page['id'])['mime'] === 'text/html' && $lf->get((int)$md['id'])['note'] == 1);
 // kb_make_document: real document files made on the server (LibreOffice), nothing sent outside
@@ -3969,7 +3970,7 @@ $ws = $rt->watches();
 check('watch and draft: needs topics; monthly on the first Tuesday; drafts in /Drafts/Fil IA by a background job', $err === 'Say what to watch.' && $wa['cron'] === '15 8 * * 2#1'
     && str_contains($wa['prompt'], 'delegate') && str_contains($wa['prompt'], '/Drafts/Fil IA') && count($ws) === 1 && $ws[0]['id'] === $wa['id'] && $ws[0]['topics'] === 'AI for small businesses');
 $app->store->q("UPDATE tasks SET cron = '15 8 1-7 * 2', next_run = ? WHERE id = ?", [strtotime('tomorrow 08:15'), $wa['id']]); // as written before 1.35.7
-new \Talixio\Store($app->store->path); // opening the store migrates it
+$app->store->db->exec('PRAGMA user_version = 0'); new \Talixio\Store($app->store->path); // the next version opens the store: it migrates it
 $mt = $app->store->task((int)$wa['id']);
 check('watch and draft: a monthly watch written the old way is migrated to the first Tuesday', $mt['cron'] === '15 8 * * 2#1' && date('N', (int)$mt['next_run']) === '2' && (int)date('j', (int)$mt['next_run']) <= 7, json_encode($mt));
 $rt->setupWatch(['name' => 'Fil IA', 'topics' => 'AI', 'every' => 'weekly', 'day' => 1, 'time' => '08:00'], $wa['id']);

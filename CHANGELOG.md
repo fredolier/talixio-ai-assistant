@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.19 (2026-11-12)
+
+- Fix (audit Q2, Q22): **opening the database from several processes at once could fail**. The web app, the worker and the background jobs each brought the schema up to date when they opened the database, with no lock: on a new database (first start) or after an update, several at once failed with "duplicate column name" (3 to 5 out of 8 in the audit's test). Now one process migrates at a time, in a single transaction with its back-fills, and the others wait for it; once the schema is up to date, opening the database no longer replays the migration (a fingerprint of the migration code is kept in the database, so an update still migrates once). The wait for a locked database is set before the switch to WAL, which is also retried. Tested with 8 processes opening a new and an old database together, several runs at once.
+- Tests: two tests relied on the migration running at every opening; they now simulate an update.
+
 ## 1.35.18 (2026-11-12)
 
 - Security (audit S6): **installing a connector no longer runs its code outside the sandbox**. The installation ran `npm install` with its dependencies' install scripts, `npm run build` and a browser download (`node node_modules/…/cli.js`, which could come from the `.zip` itself) as the app's user, outside the sandbox the approval promised; and a GitHub repository was fetched at whatever its branch held when the download happened. Now dependencies are installed with `--ignore-scripts` (a connector that needs them cannot be installed this way and says so), the install, build and browser download run in the same sandbox as the connector when bubblewrap is there, a `node_modules` folder shipped in the `.zip` is never unpacked, and a GitHub address is pinned to the commit it points to when you are asked, shown in the approval and fetched as such. Tested with a stand-in npm and a simulated GitHub; bubblewrap is not on the test machine, so the sandboxed install itself is not exercised, nor a real npm or GitHub download. FAQ *Installing a connector* updated.

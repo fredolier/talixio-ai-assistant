@@ -14,8 +14,32 @@ final class Store
             \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
             \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
         ]);
-        $this->db->exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=15000;');
-        $this->migrate();
+        $this->db->exec('PRAGMA busy_timeout=15000'); // first: switching to WAL may itself wait for another process
+        // a new database turned to WAL by several processes at once: the switch does not always wait (busy_timeout), so retry
+        for ($try = 0; ; $try++) {
+            try { if ($this->path === ':memory:' || strtolower((string)$this->db->query('PRAGMA journal_mode')->fetchColumn()) !== 'wal') $this->db->exec('PRAGMA journal_mode=WAL'); break; }
+            catch (\PDOException $e) { if ($try >= 50 || !str_contains($e->getMessage(), 'locked')) throw $e; usleep(100_000); }
+        }
+        $this->migrateOnce();
+    }
+
+    /**
+     * The schema is brought up to date by one process at a time, in one transaction (its back-fills with it), and not at
+     * all when it already is: PRAGMA user_version holds a fingerprint of this file's migration code (audit Q2, Q22).
+     */
+    private function migrateOnce(): void
+    {
+        $want = crc32((string)@file_get_contents(__FILE__)) & 0x7fffffff;
+        $have = fn() => (int)$this->db->query('PRAGMA user_version')->fetchColumn();
+        if ($this->path !== ':memory:' && $have() === $want) return;
+        $this->db->exec('BEGIN IMMEDIATE'); // waits (busy_timeout) for another process migrating the same database
+        try {
+            if ($this->path === ':memory:' || $have() !== $want) { $this->migrate(); $this->db->exec("PRAGMA user_version = $want"); }
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $e) {
+            try { $this->db->exec('ROLLBACK'); } catch (\Throwable) {} // opened with exec(): PDO's inTransaction() does not know
+            throw $e;
+        }
     }
 
     private function migrate(): void
