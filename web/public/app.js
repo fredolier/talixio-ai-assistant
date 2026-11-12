@@ -146,7 +146,7 @@ function renderMessage(m) {
     const [, num, title, status] = m.content.match(/^\[Background job #(\d+) "(.*?)" (\w+)/) || [];
     const report = m.content.replace(/^\[[^\]]*\]\s*/, '');
     el.className = 'jobcard';
-    el.innerHTML = `<details><summary><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>Job ${status || 'finished'}: <b>${esc(title || 'background job')}</b> · ${fmtTime(m.ts)} · show the full report</span></summary><div class="report doc">${md(report)}</div></details>`;
+    el.innerHTML = `<details><summary><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg><span>${esc(t('Job {a}:', { a: t(status || 'finished') }))} <b>${esc(title || 'background job')}</b> · ${fmtTime(m.ts)} · show the full report</span></summary><div class="report doc">${md(report)}</div></details>`;
     return el;
   }
   if (m.role === 'assistant' && m.channel === 'approval' && m.content.includes('\n\n')) { // a tool's raw result: folded, the chat stays for the conversation
@@ -1709,7 +1709,7 @@ function cardHtml(c, opts = {}) {
   const warn = c.warnings.filter(w => w.kind !== 'waiting' && w.kind !== 'overdue');
   const bits = [];
   if (c.start_time) bits.push(`<span class="kb ${dueClass(c)}" title="${esc(c.start_time)}${c.end_time ? '–' + esc(c.end_time) : ''}">${BICON.due}${fmtDay(c.start_date || c.due_date)} ${esc(c.start_time)}</span>`);
-  else if (c.due_date) bits.push(`<span class="kb ${dueClass(c)}" title="Due ${esc(c.due_date)}${c.start_date ? ', starts ' + esc(c.start_date) : ''}">${BICON.due}${fmtDay(c.due_date)}</span>`);
+  else if (c.due_date) bits.push(`<span class="kb ${dueClass(c)}" title="${esc(t('Due {b}{c}', { b: c.due_date, c: c.start_date ? t(', starts') + ' ' + c.start_date : '' }))}">${BICON.due}${fmtDay(c.due_date)}</span>`);
   if (c.estimate_hours != null || c.spent_hours) bits.push(`<span class="kb${c.estimate_hours && c.spent_hours > c.estimate_hours ? ' late' : ''}" title="Workload${c.spent_hours ? ': ' + fmtH(c.spent_hours) + ' spent' : ''}${c.estimate_hours != null ? ' of ' + fmtH(c.estimate_hours) + ' planned' : ''}">${BICON.load}${c.spent_hours ? fmtH(c.spent_hours) + '/' : ''}${fmtH(c.estimate_hours) || '?'}</span>`);
   if (c.checklist.total) bits.push(`<span class="kb${c.checklist.done === c.checklist.total ? ' ok' : ''}" title="Checklist">${BICON.check}${c.checklist.done}/${c.checklist.total}</span>`);
   if (waits.length) bits.push(`<span class="kb wait" title="Waits for ${esc(waits.map(d => board.refs[d].code + ' ' + board.refs[d].title).join(', '))}">${BICON.lock}${esc(waits.map(d => board.refs[d].code).join(', '))}</span>`);
@@ -2158,7 +2158,7 @@ async function renderToday() {
     const s = spaceOf(c.space), bits = [`<span class="code">${esc(c.code)}</span>`];
     if (all) bits.push(`<span class="kc-space"><i style="background:${esc(s.color || 'var(--muted)')}"></i>${esc(s.name)}</span>`);
     if (c.start_time && (c.start_date || c.due_date) === t0) bits.push(`<span>${esc(c.start_time)}${c.end_time ? '–' + esc(c.end_time) : ''}</span>`);
-    else if (c.due_date && c.due_date !== t0) bits.push(`<span class="${dueClass(c)}">${c.due_date < t0 ? `due ${esc(fmtDay(c.due_date))}` : esc(fmtDay(c.due_date))}</span>`);
+    else if (c.due_date && c.due_date !== t0) bits.push(`<span class="${dueClass(c)}">${c.due_date < t0 ? esc(t('due {a}', { a: fmtDay(c.due_date) })) : esc(fmtDay(c.due_date))}</span>`);
     if (c.estimate_hours) bits.push(`<span>${fmtH(c.estimate_hours)}</span>`);
     if (c.checklist?.total) bits.push(`<span>☑ ${c.checklist.done}/${c.checklist.total}</span>`);
     if (c.status === 'doing') bits.push(`<span class="td-doing">In progress</span>`);

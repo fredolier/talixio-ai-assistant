@@ -46,6 +46,9 @@
           return p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }).join('');
         const literal = key.replace(/\{[a-z0-9_]+\}/gi, '').length; // try the most specific patterns first
+        // too few fixed letters ("by {w}", "in {folder}") to recognise the app's own sentence: it would rewrite any text
+        // that starts with "by " or "in " (audit Q23). Such keys still serve t(), which names them exactly.
+        if ((key.replace(/\{[a-z0-9_]+\}/gi, '').match(/[A-Za-z]/g) || []).length < 4) continue;
         patterns.push({ re: new RegExp('^' + re + '$', 's'), names, out: v, literal });
       } else exact.set(key, v);
     }
