@@ -496,3 +496,8 @@ node tests/browser/run.mjs   # the web app in a real browser; skipped if Playwri
 TALIXIO_PROVIDER=echo TALIXIO_WEB_PASSWORD=dev php -S 127.0.0.1:8080 -t web/public web/router.php
 TALIXIO_PROVIDER=anthropic ANTHROPIC_API_KEY=... php bin/talixio chat
 ```
+
+## License
+Copyright (C) 2026 Talixio. This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU Affero General Public License, version 3 (`AGPL-3.0-only`), in [`LICENSE`](LICENSE). It comes
+with no warranty. If you run a modified version for other people over a network, you must offer them its source.
