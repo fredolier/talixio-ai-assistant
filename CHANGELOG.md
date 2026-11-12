@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.29 (2026-11-12)
+
+- Interface, dark theme and contrast (audit 5.3, U22, U23, U29): the red counters (menu, tabs, Pilotage) had white text on the dark theme's light red (2.3:1): they now use a dark ink there. The orange *Alert* pill, the P2 priority, the blue "info" labels, the outgoing-data pill, the *Delete* item of row menus and the library's view counter had colours written in the styles with no dark-theme value; they now have one. In the light theme, Pilotage's tab counters and the director's link no longer fade the text with transparency (3.0 and 3.1:1). Every one of these measured at 4.5:1 or more, in both themes, with a contrast script in the browser.
+
 ## 1.35.28 (2026-11-12)
 
 - Interface on a phone (audit 5.2, U6–U9, U28): **Pilotage** shows its four tabs at once (two rows) instead of one and a half, without the introduction, and *Needs you* grows with what it lists instead of a fixed box; **Tasks** no longer cuts its title at the top, shows its six views in two rows instead of pushing the last one off screen, and folds the search and filters behind a **Filters** button (a filter in use stays in sight); the **task dialog** is one column under 420 px, so nothing goes past the right edge; a directive's worker no longer has its cost cut off; on touch screens, menu rows, small buttons, chips and message actions are at least 40 px high. Checked with screenshots at 390×844, light and dark. FAQ *Tasks and routines* updated.
