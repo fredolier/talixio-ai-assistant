@@ -1629,7 +1629,8 @@ check('pilot: the daily cap is bounded', $pi->overview()['daily_cap'] === 200);
 $pi->setPolicy(['enabled' => false, 'autonomy' => ['L2' => 'ask'], 'priorities' => [], 'rules' => [], 'daily_cap' => 20]);
 $roster([]);
 // the cockpit rebuilt for a fleet (1.18.0): replies per agent with their own unread count, a journal of fleet-wide reports and alerts, a decision journal
-$con->setNotify('inapp'); $con->markRead(); foreach (['u1', 'u2', 'sess-9'] as $xid) $con->markAgentRead($xid);
+// ok1 is from before the re-pairing above: since 1.35.8 its thread and its unread count are both kept
+$con->setNotify('inapp'); $con->markRead(); foreach (['ok1', 'u1', 'u2', 'sess-9'] as $xid) $con->markAgentRead($xid);
 $con->inbox(['type' => 'report', 'agent' => 'u1', 'text' => 'First reply from u1.'], $pollSecret);
 $con->inbox(['type' => 'report', 'agent' => 'u1', 'text' => 'Second reply from u1.'], $pollSecret);
 $con->inbox(['type' => 'report', 'agent' => 'u2', 'text' => 'A reply from u2.'], $pollSecret);

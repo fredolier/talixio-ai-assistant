@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.11 (2026-11-12)
+
+- Fix (audit Q5): **a tool called with a missing or malformed argument answered with a server error and file paths**. The model got PHP's message (with the path of the code on the server) and warnings went to the log. Each call is now checked against the tool's own description first: *missing argument: name*, or *invalid argument: text (expected a text, not a list)*; an error that still slips through names the argument only. Tools that accept "3" for a number or a single word for a list keep doing so.
+- Tests: a pilot test reset the unread counts of the agents it knew, relying on re-pairing to clear the others; since 1.35.8 those are kept, so it now clears them too.
+
 ## 1.35.10 (2026-11-12)
 
 - Fix (audit Q4): the Privacy page raised two PHP warnings on every load (an unused field read from an undefined variable). The field is removed; nothing on the page changes. A test now checks the page's data loads without a warning.

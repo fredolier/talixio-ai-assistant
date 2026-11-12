@@ -693,6 +693,19 @@ App::$inWorker = true; $t2->jobId = 7;
 check('tools: the sandbox environment says where it runs', $t2->tools->env() === ['TALIXIO_SPACE' => '0', 'TALIXIO_IN_WORKER' => '1', 'TALIXIO_JOB' => '7']);
 App::$inWorker = $inWorkerSaved; $t2->jobId = null;
 
+// audit Q5: a missing or malformed argument gets a short message, without a file path, a stack or a PHP warning
+$qa = $mkApp('args');
+$warn = [];
+set_error_handler(function (int $no, string $msg) use (&$warn) { if (error_reporting() & $no) $warn[] = $msg; return true; });
+$r1 = $qa->tools->execute('skill_save', []);
+$r2 = $qa->tools->execute('memory_append', ['file' => 'MEMORY.md', 'text' => ['a', 'b']]);
+$r3 = $qa->tools->execute('skill_save', ['name' => 'x', 'description' => 'when x', 'content' => '1. do x']);
+restore_error_handler();
+check('tools: a missing argument is named, without a path', $r1 === 'error: missing argument: name' && $warn === [], json_encode([$r1, $warn]));
+check('tools: a list where a text is expected is refused clearly', $r2 === 'error: invalid argument: text (expected a text, not a list)', $r2);
+check('tools: well-formed arguments still run', !str_starts_with($r3, 'error'), $r3);
+check('tools: no tool error carries a server path', !preg_match('#/(home|var|tmp|srv)/#', $r1 . $r2));
+
 // ---------- end: restore global state ----------
 Http::$hook = $hookSaved;
 App::$inWorker = $inWorkerSaved;

@@ -1270,6 +1270,20 @@ final class Tools
         return null;
     }
 
+    /**
+     * The model's arguments checked against the tool's schema: what is required is there, and no list or object stands
+     * where a single value is expected (tools cast the rest themselves: "3" for a number, one word for a list). Null when fine.
+     */
+    private static function badArgs(array $schema, array $args): ?string
+    {
+        foreach ((array)($schema['required'] ?? []) as $k) if (!array_key_exists($k, $args) || $args[$k] === null) return "error: missing argument: $k";
+        foreach ((array)$schema['properties'] as $k => $p) {
+            if (is_array($args[$k] ?? null) && in_array($p['type'] ?? '', ['string', 'integer', 'number', 'boolean'], true))
+                return "error: invalid argument: $k (expected " . (($p['type'] ?? '') === 'string' ? 'a text' : 'a single value') . ', not a list)';
+        }
+        return null;
+    }
+
     /** Runs a tool for real (after approval, or for tools that don't need one). */
     public function execute(string $name, array $args): string
     {
@@ -1280,7 +1294,10 @@ final class Tools
         if (!isset($this->tools[$name])) {
             $out = "error: unknown tool $name";
         } else {
-            try { $out = (string)($this->tools[$name][1])($args); }
+            try { $out = self::badArgs($this->tools[$name][0]['parameters'], $args) ?? (string)($this->tools[$name][1])($args); }
+            catch (\TypeError $e) { // a wrong argument that got past the schema check: its name only, never a path or a stack
+                $out = 'error: missing or invalid argument' . (preg_match('/\(\$(\w+)\)/', $e->getMessage(), $am) ? ": {$am[1]}" : '');
+            }
             catch (\Throwable $e) { $out = 'error: ' . $e->getMessage(); } // errors go back to the model
         }
         $this->app->store->logTool($name, $args, $out, $this->app->jobId);
