@@ -6,6 +6,9 @@
 - If the nightly backup fails (a full disk, a folder that cannot be written), you get **one** notice saying why;
   it is tried again every 6 hours, and the **Privacy** page shows *Last backup failed* with the reason, or
   *No backup for more than two days*, until one works again.
+- The secrets in a backup are **encrypted** with `/etc/talixio/secret.key`, which is not in the backup: copy
+  that file somewhere safe once (and, with an UrBackup agent or any other, add it to what is backed up, kept apart).
+  On a shared server, back up the agent's state folder (`fleet.json`): each assistant's key comes from it.
 
 ## Restoring (simple install)
 ```bash

@@ -20,14 +20,14 @@ final class Legifrance
 
     private function saveToken(array $t): void
     {
-        JsonFile::write($this->file(), $t, 0600); // whole or not at all: a half-written token file would sign you out (audit Q12)
+        JsonFile::write($this->file(), $t, 0600, 0, true); // sealed (audit S22), whole or not at all: a half-written token file would sign you out (audit Q12)
     }
 
     /** A valid bearer token (client_credentials), cached until it is about to expire. */
     private function accessToken(): string
     {
         if (!$this->configured()) throw new \RuntimeException('Légifrance is not set up: add your PISTE client id and secret in Settings → Connected accounts.');
-        $t = json_decode((string)@file_get_contents($this->file()), true) ?: [];
+        $t = JsonFile::read($this->file());
         if (($t['access_token'] ?? '') !== '' && ($t['expires'] ?? 0) > time()) return $t['access_token'];
         $c = $this->app->cfg;
         [$code, $body] = Http::request('POST', $c->pisteTokenUrl, ['Content-Type: application/x-www-form-urlencoded'],

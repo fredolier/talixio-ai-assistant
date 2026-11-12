@@ -133,7 +133,7 @@ final class Conductor
      * report coming in, an instruction being queued, the orchestrator draining its queue — cannot lose or resurrect
      * each other's changes. $fn receives the fresh binding and returns [newBinding, result]; result is returned.
      */
-    private function lockedUpdate(callable $fn) { return JsonFile::update($this->bindingFile(), $fn, 0600); } // private (webhook, secret); no lock, no write
+    private function lockedUpdate(callable $fn) { return JsonFile::update($this->bindingFile(), $fn, 0600, 0, true); } // private (webhook, secret); no lock, no write
 
     /** The address the orchestrator POSTs its reports to; it is told this (with the secret) once, at pairing. */
     public function inboxUrl(): string

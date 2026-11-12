@@ -2,6 +2,8 @@
 
 Tout part : conversations, mémoire, compétences, bibliothèque, tâches, réglages et clés, mot de passe,
 connexion en deux étapes, enregistrement Signal.
+Les secrets, chiffrés, voyagent avec la clé de l'ancien serveur ; le nouveau les chiffre à nouveau avec sa propre
+clé à son premier démarrage, puis oublie l'ancienne.
 
 ## 1. Sur l'ancien serveur, dans l'assistant
 Réglages → **Déménager vers un autre serveur** → *Créer un code de transfert*. Notez l'adresse de

@@ -6,6 +6,10 @@
 - Si la sauvegarde de la nuit échoue (disque plein, dossier impossible à écrire), vous recevez **une** notification
   qui dit pourquoi ; elle est retentée toutes les 6 heures, et la page **Confidentialité** affiche *Dernière sauvegarde
   en échec* avec la raison, ou *Aucune sauvegarde depuis plus de deux jours*, jusqu'à ce qu'une réussisse.
+- Les secrets d'une sauvegarde sont **chiffrés** avec `/etc/talixio/secret.key`, qui n'est pas dans la
+  sauvegarde : copiez ce fichier une fois en lieu sûr (et, avec un agent UrBackup ou un autre, ajoutez-le à ce qui
+  est sauvegardé, à part). Sur un serveur à plusieurs, sauvegardez le dossier d'état de l'agent (`fleet.json`) :
+  la clé de chaque assistant en vient.
 
 ## Restaurer (installation simple)
 ```bash

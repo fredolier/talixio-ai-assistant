@@ -12,17 +12,18 @@ final class JsonFile
     /** Tests only: called with the path before each write; may throw to simulate a failed write. */
     public static $failHook = null;
 
-    /** The file's data, [] when it is missing or not JSON. */
-    public static function read(string $path): array
+    /** The file's data, [] when it is missing or not JSON; a file kept sealed (Secrets) is opened unless !$open. */
+    public static function read(string $path, bool $open = true): array
     {
         $raw = @file_get_contents($path);
         $d = $raw === false ? null : json_decode($raw, true);
-        return is_array($d) ? $d : [];
+        return is_array($d) ? ($open ? Secrets::openArray($d) : $d) : [];
     }
 
     /** Replace the file's content with $data, atomically. Throws (the old file untouched) when it cannot be written. */
-    public static function write(string $path, array $data, int $mode = 0600, int $flags = 0): void
+    public static function write(string $path, array $data, int $mode = 0600, int $flags = 0, bool $seal = false): void
     {
+        if ($seal) $data = Secrets::sealArray($data); // the whole content encrypted, when this server has a key (audit S22)
         $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR | $flags); // $flags: JSON_PRETTY_PRINT for a file people read
         $dir = dirname($path);
         if (!is_dir($dir)) mkdir($dir, 0700, true);
@@ -42,7 +43,7 @@ final class JsonFile
      * Read, change and write the file under an exclusive lock held across the three steps. $fn gets the current data and
      * returns [new data, result] (new data null: nothing is written). Returns the result. Throws if the lock cannot be had.
      */
-    public static function update(string $path, callable $fn, int $mode = 0600, int $flags = 0): mixed
+    public static function update(string $path, callable $fn, int $mode = 0600, int $flags = 0, bool $seal = false): mixed
     {
         $dir = dirname($path);
         if (!is_dir($dir)) mkdir($dir, 0700, true);
@@ -50,7 +51,7 @@ final class JsonFile
         if (!$fh || !flock($fh, LOCK_EX)) throw new \RuntimeException('could not lock ' . basename($path));
         try {
             [$data, $ret] = $fn(self::read($path));
-            if ($data !== null) self::write($path, $data, $mode, $flags);
+            if ($data !== null) self::write($path, $data, $mode, $flags, $seal);
             return $ret;
         } finally {
             flock($fh, LOCK_UN); fclose($fh);

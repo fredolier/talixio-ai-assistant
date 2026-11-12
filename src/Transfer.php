@@ -65,9 +65,12 @@ final class Transfer
         mkdir($tmp, 0700);
         try {
             $this->app->store->db->exec('VACUUM INTO ' . $this->app->store->db->quote("$tmp/talixio.db")); // consistent copy while running
-            $ex = ['./talixio.db', './talixio.db-wal', './talixio.db-shm', './backups', './backup-snapshot.db', './.incoming', './.previous-*',
+            // the key that opens the secrets (audit S22): the new server seals them again with its own and removes this one
+            $key = Secrets::exportKey();
+            if ($key !== null) { file_put_contents("$tmp/" . Secrets::TRANSFER_KEY, $key); chmod("$tmp/" . Secrets::TRANSFER_KEY, 0600); }
+            $ex = ['./talixio.db', './' . Secrets::TRANSFER_KEY, './talixio.db-wal', './talixio.db-shm', './backups', './backup-snapshot.db', './.incoming', './.previous-*',
                 './previews', './sessions', './*.lock', './update-status.json', './mcp-cache.json', './share-inbox']; // rebuilt there, or this server's own
-            $cmd = 'tar -czf - -C ' . escapeshellarg($tmp) . ' talixio.db -C ' . escapeshellarg($c->dataDir) . ' '
+            $cmd = 'tar -czf - -C ' . escapeshellarg($tmp) . ' talixio.db' . ($key !== null ? ' ' . Secrets::TRANSFER_KEY : '') . ' -C ' . escapeshellarg($c->dataDir) . ' '
                 . implode(' ', array_map(fn($e) => '--exclude=' . escapeshellarg($e), $ex)) . ' . 2>/dev/null';
             while (ob_get_level()) ob_end_clean();
             header('Content-Type: application/gzip');
@@ -148,7 +151,10 @@ final class Transfer
         } catch (\Throwable $e) {
             throw new \RuntimeException('The copy received is not a Talixio database (' . $e->getMessage() . '). Nothing was changed here.');
         }
-        if ($publicUrl !== '') Settings::save($in, ['TALIXIO_PUBLIC_URL' => rtrim($publicUrl, '/')]);
+        if ($publicUrl !== '') { // the copy's secrets open with the key it brought (Settings keeps them sealed as they are)
+            $was = Secrets::$dataDir; Secrets::$dataDir = $in;
+            try { Settings::save($in, ['TALIXIO_PUBLIC_URL' => rtrim($publicUrl, '/')]); } finally { Secrets::$dataDir = $was; }
+        }
         // swap: what was here goes to .previous-<date> (only the last one is kept)
         foreach (glob("$dataDir/.previous-*", GLOB_ONLYDIR) ?: [] as $old) exec('rm -rf ' . escapeshellarg($old));
         $prev = "$dataDir/.previous-" . date('Ymd-His');

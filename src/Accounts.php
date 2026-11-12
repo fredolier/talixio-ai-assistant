@@ -142,13 +142,27 @@ final class Accounts
     private function raw(): array
     {
         $all = json_decode($this->app->store->get(self::KEY, ''), true);
-        return is_array($all) ? array_filter($all, fn($a) => is_array($a) && isset($a['id'], $a['kind'], $a['name'])) : [];
+        $all = is_array($all) ? array_filter($all, fn($a) => is_array($a) && isset($a['id'], $a['kind'], $a['name'])) : [];
+        return array_map(fn(array $a) => Secrets::sealKeys($a, self::SECRETS, false), $all);
     }
+
+    /** Kept encrypted in the database (audit S22). */
+    private const SECRETS = ['key', 'token', 'admin_key'];
 
     private function write(array $all): void
     {
         uasort($all, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+        $all = array_map(fn(array $a) => Secrets::sealKeys($a, self::SECRETS), $all);
         $this->app->store->set(self::KEY, json_encode($all, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
+    /** Seal again what is not sealed with this server's key (Secrets::migrate). Whether it was written. */
+    public function reseal(): bool
+    {
+        $all = json_decode($this->app->store->get(self::KEY, ''), true);
+        if (!is_array($all)) return false;
+        foreach ($all as $a) foreach (self::SECRETS as $k) if (is_array($a) && is_string($a[$k] ?? null) && Secrets::stale($a[$k])) { $this->write($this->raw()); return true; }
+        return false;
     }
 
     private function newId(string $name, array $all): string

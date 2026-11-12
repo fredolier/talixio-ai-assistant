@@ -33,6 +33,7 @@ final class App
     public function __construct(public Config $cfg)
     {
         $this->mainCfg = $cfg;
+        Secrets::$dataDir = $cfg->dataDir; // where a transfer leaves the old server's key (audit S22)
         $this->store = new Store($cfg->dbPath());
         if ($this->store->get('data_dir', '') !== $cfg->dataDir) $this->relocate(); // the data was moved (Docker, another server)
         if ($cfg->provider === 'gemini') GeminiModels::apply($cfg, $this->store);

@@ -251,8 +251,28 @@ final class Settings
 
     public static function load(string $dataDir): array
     {
-        $d = json_decode((string)@file_get_contents(self::file($dataDir)), true);
-        return is_array($d) ? array_filter($d, 'is_string') : [];
+        return self::seal(array_filter(JsonFile::read(self::file($dataDir)), 'is_string'), false);
+    }
+
+    /** The settings kept encrypted in settings.json (audit S22): the secret fields and the two-step sign-in secret. */
+    public static function secretKeys(): array
+    {
+        $out = ['TALIXIO_TOTP_SECRET'];
+        foreach (self::fields() as $k => $f) if ($f['type'] === 'secret') $out[] = $k;
+        return $out;
+    }
+
+    private static function seal(array $over, bool $seal = true): array { return Secrets::sealKeys($over, self::secretKeys(), $seal); }
+
+    /** Seal again what is not sealed with this server's key (Secrets::migrate). Whether the file was written. */
+    public static function reseal(string $dataDir): bool
+    {
+        $raw = array_filter(JsonFile::read(self::file($dataDir)), 'is_string');
+        $stale = false;
+        foreach (self::secretKeys() as $k) if (isset($raw[$k]) && Secrets::stale($raw[$k])) $stale = true;
+        if (!$stale) return false;
+        self::change($dataDir, fn(array $over) => [$over, null]);
+        return true;
     }
 
     /** @var array<string,string|false> environment values before overrides, to restore when an override is removed */
@@ -349,8 +369,8 @@ final class Settings
     private static function change(string $dataDir, callable $fn): mixed
     {
         return JsonFile::update(self::file($dataDir), function (array $cur) use ($fn) {
-            [$over, $ret] = $fn(array_filter($cur, 'is_string'));
-            if ($over !== null) ksort($over);
+            [$over, $ret] = $fn(self::seal(array_filter($cur, 'is_string'), false));
+            if ($over !== null) { ksort($over); $over = self::seal($over); }
             return [$over, $ret];
         }, 0600, JSON_PRETTY_PRINT);
     }
@@ -371,6 +391,6 @@ final class Settings
     public static function write(string $dataDir, array $over): void
     {
         ksort($over);
-        JsonFile::write(self::file($dataDir), $over, 0600, JSON_PRETTY_PRINT); // whole or not at all
+        JsonFile::write(self::file($dataDir), self::seal($over), 0600, JSON_PRETTY_PRINT); // whole or not at all; secrets sealed (audit S22)
     }
 }

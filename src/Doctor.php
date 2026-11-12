@@ -26,6 +26,10 @@ final class Doctor
         foreach (['curl', 'pdo_sqlite', 'mbstring', 'openssl'] as $ext) $this->line(extension_loaded($ext), "PHP extension $ext");
         $this->line(is_writable($c->dataDir), "data folder {$c->dataDir} writable");
         $this->line((new Auth($app))->hasPassword(), 'app password set');
+        if (!extension_loaded('sodium')) $this->line(false, 'PHP extension sodium (saved secrets are kept unencrypted without it)');
+        elseif (Secrets::enabled()) $this->line(Secrets::$unreadable === 0, 'saved secrets encrypted (key: ' . (getenv('TALIXIO_SECRET_KEY') ? 'given by the server' : Secrets::keyFile()) . ')'
+            . (Secrets::$unreadable ? '; ' . Secrets::$unreadable . ' cannot be read with this key: put the right key back, or enter them again' : ''));
+        else $this->line(false, 'saved secrets not encrypted: no key in ' . Secrets::keyFile() . ' (install.sh makes it; see the FAQ, Privacy)');
         $eu = $c->provider === 'sovereign' ? Sovereign::SERVICES[$c->sovereign] ?? null : null;
         $this->line($c->modelProblem() === null, $eu ? "European provider key ({$eu['name']})" : "{$c->provider} credentials");
         if ($eu) { // the European stamp, or what still leaves Europe

@@ -3927,7 +3927,11 @@ check('faq: found again by folder and name, copies removed', !$dupes && (int)$s-
 $td = "$dir/transfer"; mkdir("$td/src", 0777, true); mkdir("$td/dst", 0777, true);
 file_put_contents("$td/dst/old-data.txt", 'what was here');
 putenv("TALIXIO_DATA_DIR=$td/src");
+$tK1 = \Talixio\Secrets::newKey(); $tK2 = \Talixio\Secrets::newKey(); // the old server's key, the new one's (audit S22)
+putenv("TALIXIO_SECRET_KEY=$tK1"); \Talixio\Secrets::reset();
 $sa = App::fromEnv();
+\Talixio\Settings::save("$td/src", ['ANTHROPIC_API_KEY' => 'sk-ant-moved-along']);
+\Talixio\JsonFile::write("$td/src/spotify.json", ['refresh_token' => 'sp-moved-along'], 0600, 0, true);
 $sa->store->addMessage('user', 'web', 'Bonjour depuis l\'ancien serveur');
 $sa->ws->write('USER.md', '- Name: Fred (transfer test)');
 \Talixio\Settings::setPassword("$td/src", 'the-same-password');
@@ -3936,8 +3940,9 @@ putenv("TALIXIO_DATA_DIR=$dir");
 $tPort = $freePort();
 $tws = proc_open([PHP_BINARY, '-S', "127.0.0.1:$tPort", '-t', dirname(__DIR__) . '/web/public', dirname(__DIR__) . '/web/router.php'],
     [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$td/web.log", 'w'], 2 => ['file', "$td/web.log", 'a']], $pp, null,
-    ['TALIXIO_DATA_DIR' => "$td/src", 'TALIXIO_PROVIDER' => 'echo', 'TALIXIO_EMBEDDINGS' => 'off', 'PATH' => getenv('PATH'), 'TALIXIO_NOTIFY' => 'none']);
+    ['TALIXIO_DATA_DIR' => "$td/src", 'TALIXIO_PROVIDER' => 'echo', 'TALIXIO_EMBEDDINGS' => 'off', 'PATH' => getenv('PATH'), 'TALIXIO_NOTIFY' => 'none', 'TALIXIO_SECRET_KEY' => $tK1]);
 $waitPort($tPort);
+putenv("TALIXIO_SECRET_KEY=$tK2"); \Talixio\Secrets::reset(); // here: the new server
 $quiet = fn() => null;
 $refused = function (string $src, bool $allow) use ($td, $code, $quiet) { try { Transfer::pull("$td/dst", $src, $code, false, '', $quiet, $allow); return ''; } catch (\InvalidArgumentException $e) { return $e->getMessage(); } };
 check('transfer: plain http only to a private address, and only when asked for', str_contains($refused("http://127.0.0.1:$tPort", false), 'https://')
@@ -3952,6 +3957,18 @@ check('transfer: everything copied (conversation, memory, password), the new add
     && str_contains((string)@file_get_contents("$td/dst/workspace/USER.md"), 'transfer test')
     && password_verify('the-same-password', \Talixio\Settings::load("$td/dst")['TALIXIO_WEB_PASSWORD_HASH'] ?? '')
     && (\Talixio\Settings::load("$td/dst")['TALIXIO_PUBLIC_URL'] ?? '') === 'https://new.example.com/fred', $sum);
+$tRaw = json_decode((string)file_get_contents("$td/dst/settings.json"), true);
+check('transfer: the secrets come sealed with the old server\'s key, and that key with them', \Talixio\Secrets::sealed($tRaw['ANTHROPIC_API_KEY'] ?? '')
+    && trim((string)@file_get_contents("$td/dst/.transfer-key")) === $tK1 && (fileperms("$td/dst/.transfer-key") & 0777) === 0600 && !str_contains((string)file_get_contents("$td/dst/settings.json"), 'moved-along'));
+putenv("TALIXIO_DATA_DIR=$td/dst"); $tda = App::fromEnv(); putenv("TALIXIO_DATA_DIR=$dir");
+$tOpen = \Talixio\Settings::load("$td/dst")['ANTHROPIC_API_KEY'] ?? '';
+$tTok = \Talixio\JsonFile::read("$td/dst/spotify.json", false)['talixio_sealed'] ?? '';
+$tTokStale = \Talixio\Secrets::stale($tTok) && (\Talixio\JsonFile::read("$td/dst/spotify.json")['refresh_token'] ?? '') === 'sp-moved-along';
+$tN = \Talixio\Secrets::migrate($tda); $tRaw = json_decode((string)file_get_contents("$td/dst/settings.json"), true);
+check('transfer: the new server opens them, seals them again with its own key, then drops the old key', $tOpen === 'sk-ant-moved-along' && $tTokStale && $tN === 1
+    && !\Talixio\Secrets::stale(\Talixio\JsonFile::read("$td/dst/spotify.json", false)['talixio_sealed'] ?? 'x') && (\Talixio\JsonFile::read("$td/dst/spotify.json")['refresh_token'] ?? '') === 'sp-moved-along'
+    && !is_file("$td/dst/.transfer-key") && !\Talixio\Secrets::stale($tRaw['ANTHROPIC_API_KEY']) && (\Talixio\Settings::load("$td/dst")['ANTHROPIC_API_KEY'] ?? '') === 'sk-ant-moved-along'
+    && \Talixio\Secrets::migrate($tda) === 0, "$tOpen $tN");
 check('transfer: a test copy is paused, cannot be copied on with the same code, and what was here is kept aside',
     (json_decode($kv($dpdo, 'paused'), true)['reason'] ?? '') === 'copy' && $kv($dpdo, 'transfer_code') === ''
     && !is_file("$td/dst/old-data.txt") && glob("$td/dst/.previous-*/old-data.txt") && !is_dir("$td/dst/.incoming"));
@@ -3970,6 +3987,7 @@ try { Transfer::pull("$td/dst", "http://127.0.0.1:$tPort", $code, true, '', $qui
 check('transfer: the code ends with the final copy', str_contains($err, 'refused'), $err);
 proc_terminate($tws); proc_close($tws);
 $dpdo = $spdo = null;
+putenv('TALIXIO_SECRET_KEY'); \Talixio\Secrets::reset();
 
 // ---- lot 1: quick capture, rated routines, weekly review, watch and draft, "where is…" ----
 use Talixio\Routines;

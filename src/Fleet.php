@@ -168,6 +168,7 @@ final class Fleet
         if ($set['google_client_id'] !== '') array_push($env, 'TALIXIO_GOOGLE_CLIENT_ID=' . $set['google_client_id'], 'TALIXIO_GOOGLE_CLIENT_SECRET=' . $set['google_client_secret']);
         $env[] = 'TALIXIO_INSTANCE_NAME=' . ($i['name'] ?? '');
         $env[] = 'TALIXIO_STORE=/store';
+        if (!empty($s['secret_root'])) $env[] = 'TALIXIO_SECRET_KEY=' . self::secretKey($s, $id); // its secrets encrypted at rest; the key is not in its volume (audit S22)
         if (!empty($i['links']) && !empty($s['sso_key'])) { // the person's other assistants: one sign-in opens them all (Links)
             $links = [];
             foreach (self::group($s, $id) as $to)
@@ -220,6 +221,7 @@ final class Fleet
         $lock = fopen("{$this->stateDir}/sync.lock", 'c'); // the agent's start and an update may both run it
         if ($lock) flock($lock, LOCK_EX);
         $s = $this->state(); $done = [];
+        if (empty($s['secret_root']) && $s['instances']) $s = $this->mutate(function (array &$s) { $s['secret_root'] ??= bin2hex(random_bytes(32)); return $s; }); // once: each assistant gets its key (audit S22)
         foreach (array_keys($s['instances']) as $id) {
             [$code, $c] = $this->docker('GET', '/containers/' . $this->containerName($id) . '/json');
             if ($code !== 200 || !is_array($c)) continue; // not made yet, or Docker answers later: nothing to compare
@@ -311,6 +313,7 @@ final class Fleet
         $hash = password_hash($password, PASSWORD_DEFAULT);
         $s = $this->mutate(function (array &$s) use ($id, $name, $email, $memoryMb, $cpus, $hash) {
             if (isset($s['instances'][$id])) throw new \InvalidArgumentException("\"$id\" already exists.");
+            $s['secret_root'] ??= bin2hex(random_bytes(32));
             $s['instances'][$id] = ['name' => mb_substr(trim($name), 0, 80), 'email' => mb_substr(trim($email), 0, 200), 'memory_mb' => $memoryMb ?? $s['settings']['memory_mb'],
                 'cpus' => $cpus ?? $s['settings']['cpus'], 'created' => time(), 'password_hash' => $hash, 'reset' => '', 'timezone' => 'Europe/Paris'];
             return $s;
@@ -326,6 +329,7 @@ final class Fleet
     {
         if (!self::validId($id)) throw new \InvalidArgumentException('invalid identifier');
         $s = $this->mutate(function (array &$s) use ($id, $name) {
+            $s['secret_root'] ??= bin2hex(random_bytes(32));
             $s['instances'][$id] = ($s['instances'][$id] ?? []) + ['name' => $name, 'email' => '', 'memory_mb' => $s['settings']['memory_mb'], 'cpus' => $s['settings']['cpus'],
                 'created' => time(), 'password_hash' => '', 'reset' => '', 'timezone' => 'Europe/Paris'];
             return $s;
@@ -345,6 +349,7 @@ final class Fleet
     {
         if (!self::validId($id)) throw new \InvalidArgumentException('The identifier is 2 to 30 lower-case letters, digits or dashes, starting with a letter.');
         $s = $this->mutate(function (array &$s) use ($id, $name) {
+            $s['secret_root'] ??= bin2hex(random_bytes(32));
             $s['instances'][$id] = ($s['instances'][$id] ?? []) + ['name' => mb_substr(trim($name), 0, 80), 'email' => '', 'memory_mb' => $s['settings']['memory_mb'], 'cpus' => $s['settings']['cpus'],
                 'created' => time(), 'password_hash' => '', 'reset' => '', 'timezone' => 'Europe/Paris'];
             return $s;
@@ -451,6 +456,12 @@ final class Fleet
     }
 
     /** The key an instance checks its sign-in links with; a new generation (a link removed) makes the old links useless. */
+    /** The key that seals an assistant's secrets: its own, made from the agent's secret_root (keep fleet.json in the backups). */
+    public static function secretKey(array $s, string $id): string
+    {
+        return hash_hmac('sha256', "secrets:$id", (string)$s['secret_root']);
+    }
+
     public static function ssoKey(array $s, string $id): string
     {
         return hash_hmac('sha256', "sso:$id:" . (int)($s['instances'][$id]['sso_gen'] ?? 0), (string)$s['sso_key']);

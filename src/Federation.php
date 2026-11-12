@@ -102,10 +102,22 @@ final class Federation
         return [200, ['ok' => true, 'secret' => $mine, 'name' => $this->name(), 'give' => $inv['give'] ?? []]];
     }
 
+    /** Seal again the secrets not sealed with this server's key (Secrets::migrate). How many were written (0 or 1 store). */
+    public function reseal(): int
+    {
+        $n = 0;
+        foreach ($this->app->store->q("SELECT id, out_secret FROM fed_peers WHERE out_secret != ''")->fetchAll() as $r) {
+            if (!Secrets::stale((string)$r['out_secret'])) continue;
+            $plain = Secrets::open((string)$r['out_secret']);
+            $this->app->store->q('UPDATE fed_peers SET out_secret = ? WHERE id = ?', [Secrets::seal($plain), (int)$r['id']]); $n++;
+        }
+        return $n ? 1 : 0;
+    }
+
     private function addPeer(string $name, string $url, string $outSecret, string $inSecretClear, array $give, array $theyGive, array $accept): int
     {
         $this->app->store->q('INSERT INTO fed_peers(ts, name, url, out_secret, in_hash, give, they_give, accept, status) VALUES (?,?,?,?,?,?,?,?,?)',
-            [time(), $name, $url, $outSecret, self::h($inSecretClear), json_encode(array_values($give)), json_encode(array_values($theyGive)), json_encode(array_values($accept)), 'active']);
+            [time(), $name, $url, Secrets::seal($outSecret), self::h($inSecretClear), json_encode(array_values($give)), json_encode(array_values($theyGive)), json_encode(array_values($accept)), 'active']); // the secret we send, sealed (audit S22)
         $id = (int)$this->app->store->db->lastInsertId();
         Log::info("federation: paired with peer #$id");
         return $id;
@@ -163,7 +175,7 @@ final class Federation
     {
         $p = $this->peer($id);
         if (!$p) return false;
-        try { $this->call('POST', $p['url'] . '/api/federation/bye', (string)$p['out_secret'], ['bye' => true], 8); } catch (\Throwable $e) { Log::info('federation: bye not delivered: ' . $e->getMessage()); }
+        try { $this->call('POST', $p['url'] . '/api/federation/bye', Secrets::open((string)$p['out_secret']), ['bye' => true], 8); } catch (\Throwable $e) { Log::info('federation: bye not delivered: ' . $e->getMessage()); }
         $this->app->store->q("UPDATE fed_peers SET status = 'revoked', out_secret = '', in_hash = '' WHERE id = ?", [$id]);
         $this->app->store->q('UPDATE fed_outbox SET delivered = ? WHERE peer = ? AND delivered IS NULL', [time(), $id]);
         return true;
@@ -234,7 +246,7 @@ final class Federation
         $oid = (int)$this->app->store->db->lastInsertId();
         if (!$push) return false; // left in the outbox: the worker pushes it, or the peer pulls it
         try {
-            [$code] = $this->call('POST', $p['url'] . '/api/federation/push', (string)$p['out_secret'], ['mid' => $mid, 'kind' => $kind, 'title' => $title, 'body' => $body, 're' => $re, 'from' => $this->name()], 15);
+            [$code] = $this->call('POST', $p['url'] . '/api/federation/push', Secrets::open((string)$p['out_secret']), ['mid' => $mid, 'kind' => $kind, 'title' => $title, 'body' => $body, 're' => $re, 'from' => $this->name()], 15);
         } catch (\Throwable $e) { Log::info("federation: push to #{$p['id']} failed: " . $e->getMessage()); return false; }
         if ($code !== 200) return false;
         $this->app->store->q('UPDATE fed_outbox SET delivered = ? WHERE id = ?', [time(), $oid]);
@@ -302,7 +314,7 @@ final class Federation
         $n = 0;
         $rows = $id > 0 ? array_filter([$this->peer($id)]) : $this->app->store->q("SELECT * FROM fed_peers WHERE status = 'active'")->fetchAll();
         foreach ($rows as $p) {
-            try { [$code, $body] = $this->call('GET', $p['url'] . '/api/federation/pull?ack=1&view=0', (string)$p['out_secret'], null, 15); }
+            try { [$code, $body] = $this->call('GET', $p['url'] . '/api/federation/pull?ack=1&view=0', Secrets::open((string)$p['out_secret']), null, 15); }
             catch (\Throwable $e) { Log::info("federation: pull from #{$p['id']} failed: " . $e->getMessage()); continue; }
             $r = json_decode($body, true);
             if ($code !== 200 || !is_array($r)) continue;
@@ -322,7 +334,7 @@ final class Federation
     {
         $p = $this->peer($id);
         if (!$p) throw new \InvalidArgumentException('unknown peer');
-        [$code, $body] = $this->call('GET', $p['url'] . '/api/federation/pull?ack=0&view=1', (string)$p['out_secret'], null, 15);
+        [$code, $body] = $this->call('GET', $p['url'] . '/api/federation/pull?ack=0&view=1', Secrets::open((string)$p['out_secret']), null, 15);
         $r = json_decode($body, true);
         if ($code !== 200 || !is_array($r)) throw new \RuntimeException("the other assistant did not answer (HTTP $code)");
         return is_array($r['digest'] ?? null) ? ['title' => mb_substr((string)$r['digest']['title'], 0, 200), 'body' => mb_substr((string)$r['digest']['body'], 0, self::MAX_BODY)] : ['title' => '', 'body' => ''];
@@ -415,7 +427,7 @@ final class Federation
     {
         $p = $this->peer($peer);
         if (!$p) throw new \InvalidArgumentException('unknown peer');
-        [$code, $body] = $this->call('GET', $p['url'] . '/api/federation/queries', (string)$p['out_secret'], null, 15);
+        [$code, $body] = $this->call('GET', $p['url'] . '/api/federation/queries', Secrets::open((string)$p['out_secret']), null, 15);
         $r = json_decode($body, true);
         if ($code !== 200 || !is_array($r)) throw new \RuntimeException("the other assistant did not answer (HTTP $code)");
         return array_map(fn($q) => ['id' => (int)$q['id'], 'name' => mb_substr((string)$q['name'], 0, 80), 'descr' => mb_substr((string)($q['descr'] ?? ''), 0, 300), 'param' => !empty($q['param'])], array_slice((array)($r['queries'] ?? []), 0, 50));
@@ -426,7 +438,7 @@ final class Federation
     {
         $p = $this->peer($peer);
         if (!$p) throw new \InvalidArgumentException('unknown peer');
-        [$code, $body] = $this->call('POST', $p['url'] . '/api/federation/ask', (string)$p['out_secret'], ['query' => $query, 'param' => mb_substr($param, 0, 200), 'mid' => $mid = bin2hex(random_bytes(8))], 15);
+        [$code, $body] = $this->call('POST', $p['url'] . '/api/federation/ask', Secrets::open((string)$p['out_secret']), ['query' => $query, 'param' => mb_substr($param, 0, 200), 'mid' => $mid = bin2hex(random_bytes(8))], 15);
         $r = json_decode($body, true);
         if ($code >= 400 || !is_array($r)) throw new \InvalidArgumentException(is_array($r) && !empty($r['error']) ? (string)$r['error'] : "the other assistant refused the question (HTTP $code)");
         $this->app->store->q('UPDATE fed_peers SET last_out = ? WHERE id = ?', [time(), $peer]);
@@ -579,7 +591,7 @@ final class Federation
         foreach ($this->app->store->q('SELECT * FROM fed_outbox WHERE delivered IS NULL AND ts > ? ORDER BY id LIMIT 20', [time() - 86400])->fetchAll() as $o) {
             $p = $this->peer((int)$o['peer']);
             if (!$p || isset($bad[$p['id']])) continue; // one unreachable peer must not hold up the worker
-            try { [$code] = $this->call('POST', $p['url'] . '/api/federation/push', (string)$p['out_secret'], ['mid' => $o['mid'], 'kind' => $o['kind'], 'title' => $o['title'], 'body' => $o['body'], 're' => $o['re'], 'from' => $this->name()], 15); }
+            try { [$code] = $this->call('POST', $p['url'] . '/api/federation/push', Secrets::open((string)$p['out_secret']), ['mid' => $o['mid'], 'kind' => $o['kind'], 'title' => $o['title'], 'body' => $o['body'], 're' => $o['re'], 'from' => $this->name()], 15); }
             catch (\Throwable $e) { $bad[$p['id']] = 1; continue; }
             if ($code === 200) { $this->app->store->q('UPDATE fed_outbox SET delivered = ? WHERE id = ?', [time(), (int)$o['id']]); $n++; }
         }
