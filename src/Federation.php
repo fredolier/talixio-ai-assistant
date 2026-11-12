@@ -550,7 +550,10 @@ final class Federation
             try {
                 if ($this->app->privacy()->spaceLevel((int)$q['space']) !== 'internal') throw new \RuntimeException('space no longer shareable');
                 $this->app->space = (int)$q['space'];
-                [$reply] = $this->app->agent()->run('peer', 'standard', 'peer', [['role' => 'user', 'content' => $prompt]], '', 'peer');
+                // its documents only: the folder of the question's space (General has none, so no document is read)
+                $folder = (int)$q['space'] > 0 ? (string)($this->app->spaces()->get((int)$q['space'])['folder'] ?? '') : '';
+                [$reply] = Privacy::confined($folder !== '' ? $folder : Privacy::NOWHERE,
+                    fn() => $this->app->agent()->run('peer', 'standard', 'peer', [['role' => 'user', 'content' => $prompt]], '', 'peer'));
                 $answer = mb_substr(trim((string)$reply), 0, self::MAX_BODY);
             } catch (\Throwable $e) { $err = $e->getMessage(); Log::info('federation: question failed: ' . $err); }
             finally { $this->app->space = $before; }

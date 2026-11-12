@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.16 (2026-11-12)
+
+- Security (audit S10): **a question from another person's assistant reads only the documents of its space**. A question was answered with read-only tools, but those could search and read the whole library (all Internal documents), and the asker's value (`{param}`) could steer them there. Now, while such a question is answered, the library is limited to the folder of the question's space, also with Claude Code (whose tools run in another process); a question on *General*, which has no folder, reads no document (its board and tasks still answer). Tested between two assistants in one process. FAQ *Other assistants* updated.
+
 ## 1.35.15 (2026-11-12)
 
 - Security (audit S7): **the sandboxed shell now follows the spaces' confidentiality**. `shell_run` and `script_run` copied any library file into the sandbox, Confidential and Secret ones included, without the checks `file_read` applies and without raising the work's level; the sandbox's `/work` folder was shared by every space; and `shell_save` could put what was made from Confidential files into `/Inbox`. Now only files the work may read are copied in (a Secret space's file is not found from elsewhere), copying one in raises the level as reading it would, each space has its own `/work` (files already in the old shared folder stay with General), and `shell_save` refuses a less protected folder. Running a command after reading content written by others asks first (1.35.13). Tested with a stand-in for bubblewrap, which is not installed on the test machine. FAQ *Memory and learning* updated.

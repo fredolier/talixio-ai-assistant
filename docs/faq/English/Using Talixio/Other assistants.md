@@ -29,7 +29,8 @@ A **question** is a prompt you write once, on your side: *"Write the status of p
 You give it a name and a short description, choose the **space** it reads (never a confidential or secret one) and **who may ask it**.
 The other assistant only sees the name and the description; it picks the question and cannot change the prompt. Your assistant answers
 in the background with read-only tools (board, tasks, documents of that space — no memory, mail, web or writes) and sends the answer
-to the asker's inbox. The asker uses **Ask a question…** on the paired assistant, or tells its assistant (*"ask Marie's assistant for the Atlas status"*).
+to the asker's inbox. Its documents are only those in the space's folder, whatever the question asks; a question on *General*
+(which has no folder) reads no document. The asker uses **Ask a question…** on the paired assistant, or tells its assistant (*"ask Marie's assistant for the Atlas status"*).
 
 A question can take one short value (write `{param}` in the prompt), handled as data, not as an instruction.
 

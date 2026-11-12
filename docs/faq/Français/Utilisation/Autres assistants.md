@@ -31,7 +31,8 @@ Une **question** est un prompt que vous écrivez une fois, de votre côté : *«
 blocages, prochaines étapes. »* Vous lui donnez un nom et une courte description, vous choisissez l'**espace** qu'elle lit (jamais un espace
 confidentiel ou secret) et **qui peut la poser**. L'autre assistant ne voit que le nom et la description ; il choisit la question et ne peut
 pas modifier le prompt. Votre assistant répond en arrière-plan avec des outils en lecture seule (tableau, tâches, documents de cet espace —
-ni mémoire, ni courriels, ni web, ni écriture) et envoie la réponse dans la boîte de réception de celui qui a demandé. Il utilise **Poser une
+ni mémoire, ni courriels, ni web, ni écriture) et envoie la réponse dans la boîte de réception de celui qui a demandé. Ses documents sont
+seulement ceux du dossier de l'espace, quoi que demande la question ; une question sur *Général* (sans dossier) ne lit aucun document. Il utilise **Poser une
 question…** sur l'assistant jumelé, ou le demande à son assistant (*« demande à l'assistant de Marie le statut d'Atlas »*).
 
 Une question peut accepter une courte valeur (écrivez `{param}` dans le prompt), traitée comme une donnée, pas comme une instruction.

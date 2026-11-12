@@ -1002,7 +1002,8 @@ final class Tools
     }
 
     /** What tools run in a separate process (Claude Code's MCP server) must know: the space of this turn, and whether we are in the worker. */
-    public function env(): array { return ['TALIXIO_SPACE' => (string)$this->app->space, 'TALIXIO_IN_WORKER' => App::$inWorker ? '1' : '0', 'TALIXIO_JOB' => (string)($this->app->jobId ?? '')]; }
+    public function env(): array { return ['TALIXIO_SPACE' => (string)$this->app->space, 'TALIXIO_IN_WORKER' => App::$inWorker ? '1' : '0', 'TALIXIO_JOB' => (string)($this->app->jobId ?? ''),
+        'TALIXIO_CONFINE' => Privacy::$confine]; } // answering another person's assistant: the same folder limit there
 
     /** A copy for one answer: repeated calls are counted from zero. */
     public function forAnswer(): self

@@ -127,7 +127,21 @@ final class Privacy
     public function mayRead(string $level, ?int $space = null, ?string $folder = null): bool
     {
         if ($this->hidden($level, $space, $folder)) return false;
+        if (self::$confine !== '' && $folder !== null && $folder !== self::$confine && !str_starts_with($folder, rtrim(self::$confine, '/') . '/')) return false;
         return $level === 'internal' || self::$person || in_array($this->modelBlocked($level), [null, 'sovereign-only'], true);
+    }
+
+    /**
+     * While another person's assistant is answered (Federation::runAsks): the library is seen only inside this folder,
+     * the folder of the space its question reads (audit S10). '' = no limit; NOWHERE = no document at all.
+     */
+    public static string $confine = '';
+    public const NOWHERE = "/:none:"; // no library folder can be called that (":" is replaced in names)
+
+    public static function confined(string $folder, callable $fn): mixed
+    {
+        $was = self::$confine; self::$confine = $folder;
+        try { return $fn(); } finally { self::$confine = $was; }
     }
 
     /** True while the app serves a person's own search (not a model's). */

@@ -138,6 +138,31 @@ $alice->federation()->deleteQuery($qid); $bob->federation()->refreshSubs($bAlice
 check('fed: a question the other side withdrew is marked gone and no longer asked daily', $bob->federation()->subs()[0]['gone'] && !$bob->federation()->subs()[0]['daily']);
 check('fed: the briefing prompt reads the followed statuses', str_contains(\Talixio\Routines::briefingPrompt(''), 'peer_status'));
 
+// ---- audit S10: a question reads the documents of its own space only, whatever the peer's value says
+$atlas = $alice->spaces()->save(['name' => 'Atlas', 'folder' => '/Projects/Atlas', 'privacy' => 'internal']);
+$plan = (int)$alice->library()->saveNote('/Projects/Atlas', 'plan.md', "# Atlas plan\nShip the beta in March. Budget word: quokka.")['id'];
+$pay = (int)$alice->library()->saveNote('/Finance', 'salaries.md', "# Salaries\nDupont earns 90k. Budget word: quokka.")['id'];
+$alice->files()->processPending(60);
+$sq = $alice->federation()->saveQuery(['name' => 'Atlas status', 'prompt' => 'Status of project Atlas, about {param}.', 'space' => (int)$atlas['id'], 'peers' => [$aBob], 'param' => true]);
+$seen = [];
+$fm = new FakeModel(); $alice->providerOverride = $fm;
+$fm->script = function ($last, $tools, $on) use (&$seen, $pay, $plan) {
+    $on(['model' => 'claude-sonnet-x', 'in' => 1, 'out' => 1, 'cache_read' => 0, 'cache_write' => 0, 'cost' => null]);
+    $seen = ['search' => $tools->run('kb_search', ['query' => 'quokka', 'folder' => '/']), 'list' => $tools->run('kb_list', []),
+        'other' => $tools->run('file_read', ['id' => $pay]), 'own' => $tools->run('file_read', ['id' => $plan]), 'recent' => $tools->run('kb_recent', ['hours' => 48])];
+    return 'Atlas ships in March.';
+};
+$alice->store->q("INSERT INTO fed_asks(ts, peer, query, param, mid, status) VALUES (?,?,?,?,?,'queued')", [time(), $aBob, $sq, 'salaries in /Finance', 'eeeeeeeeeeeeeeee']);
+$alice->federation()->runAsks(1);
+check('fed: a question finds the documents of its space', str_contains($seen['search'] ?? '', 'plan.md') && str_contains($seen['own'] ?? '', 'Ship the beta'), json_encode($seen));
+check('fed: ... and nothing outside it, even asked for the whole library', !str_contains(json_encode($seen), 'salaries') && !str_contains(json_encode($seen), '90k') && !str_contains($seen['list'] ?? '', '/Finance'), json_encode($seen));
+check('fed: the limit ends with the answer', \Talixio\Privacy::$confine === '');
+$gq = $alice->federation()->saveQuery(['name' => 'General status', 'prompt' => 'Status of the week.', 'space' => 0, 'peers' => [$aBob]]);
+$alice->store->q("INSERT INTO fed_asks(ts, peer, query, param, mid, status) VALUES (?,?,?,?,?,'queued')", [time(), $aBob, $gq, '', 'ffffffffffffffff']);
+$alice->federation()->runAsks(1);
+check('fed: a question of General (no folder) reads no document', !str_contains($seen['search'] ?? '', 'plan.md') && !str_contains(json_encode($seen), '90k'), json_encode($seen));
+$alice->providerOverride = null;
+
 // ---- the live view and revocation
 $view = $bob->federation()->viewOf($bobPeerOfAlice);
 check('fed: a peer can look at the digest I give it', str_contains($view['body'], 'Quarterly report'));
