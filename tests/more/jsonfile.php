@@ -34,5 +34,28 @@ check('jsonfile: a pairing code is used once', $c1 === 200 && $c2 === 403, "$c1 
 check('jsonfile: the binding is private', (fileperms("$d/app/conductor.json") & 0777) === 0600);
 $con->disconnect();
 check('jsonfile: disconnecting removes the binding', !is_file("$d/app/conductor.json") && !$con->connected());
+// settings and the pilot's policy: changes made at the same time are all kept; a failed write keeps the old settings
+$fields = [['TALIXIO_NAME', 'Robin'], ['TALIXIO_HEARTBEAT_MINUTES', '45'], ['TALIXIO_TIMEZONE', 'Europe/Paris']];
+$lost = 0;
+for ($round = 0; $round < 5; $round++) { // three processes each save one setting, all at the same instant
+    $sd = "$d/settings-$round"; @mkdir($sd); $at = microtime(true) + 0.4;
+    $ps = [];
+    foreach ($fields as [$k, $v]) {
+        $code = 'require ' . var_export(__DIR__ . '/../../src/autoload.php', true) . '; while (microtime(true) < ' . $at . ') usleep(500); Talixio\Settings::save(' . var_export($sd, true) . ', [' . var_export($k, true) . ' => ' . var_export($v, true) . ']);';
+        $ps[] = proc_open([PHP_BINARY, '-r', $code], [], $pp);
+    }
+    foreach ($ps as $p) proc_close($p);
+    $st = Talixio\Settings::load($sd);
+    foreach ($fields as [$k, $v]) if (($st[$k] ?? '') !== $v) $lost++;
+}
+check('jsonfile: settings saved by several processes at the same instant are all kept', $lost === 0, "$lost lost");
+Talixio\Settings::save($sd, ['TALIXIO_NAME' => 'Kept']);
+JsonFile::$failHook = function () { throw new RuntimeException('disk full'); };
+try { Talixio\Settings::save($sd, ['TALIXIO_NAME' => 'Lost']); } catch (RuntimeException) {}
+JsonFile::$failHook = null;
+check('jsonfile: a failed settings write keeps the previous settings', Talixio\Settings::load($sd)['TALIXIO_NAME'] === 'Kept');
+$pi = $app->pilot();
+$pi->setPolicy(['rules' => ['Never touch billing']]);
+check('jsonfile: the pilot\'s policy is kept privately', in_array('Never touch billing', $pi->rules(), true) && (fileperms("$d/app/pilot.json") & 0777) === 0600);
 $keep === false ? putenv('TALIXIO_DATA_DIR') : putenv("TALIXIO_DATA_DIR=$keep");
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

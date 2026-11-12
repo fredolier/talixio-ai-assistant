@@ -45,13 +45,7 @@ final class Fleet
         return $s;
     }
 
-    private function save(array $s): void
-    {
-        $tmp = $this->stateFile . '.tmp';
-        file_put_contents($tmp, json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        chmod($tmp, 0600);
-        rename($tmp, $this->stateFile);
-    }
+    private function save(array $s): void { JsonFile::write($this->stateFile, $s, 0600, JSON_PRETTY_PRINT); } // whole or not at all (audit Q12)
 
     /**
      * The long action the admin page follows (job.json). One whose process is gone (the agent was restarted or

@@ -297,8 +297,13 @@ final class Settings
      */
     public static function save(string $dataDir, array $changes, array $reset = []): array
     {
+        return self::change($dataDir, fn(array $over) => self::checked($over, $changes, $reset));
+    }
+
+    /** save()'s checks on the current overrides: [new overrides, or null when a value is refused; the errors]. */
+    private static function checked(array $over, array $changes, array $reset): array
+    {
         $fields = self::fields();
-        $over = self::load($dataDir);
         $errors = [];
         foreach ($changes as $k => $v) {
             if (!isset($fields[$k])) { $errors[$k] = 'unknown setting'; continue; }
@@ -331,33 +336,38 @@ final class Settings
             $over[$k] = $v;
         }
         foreach ($reset as $k) unset($over[$k]);
-        if (!$errors) self::write($dataDir, $over);
-        return $errors;
+        return [$errors ? null : $over, $errors];
+    }
+
+    /**
+     * Read-change-write the overrides under a lock (audit Q12): two saves at once (the app and the worker) keep both changes.
+     * $fn gets the current overrides and returns [new overrides or null for no change, result].
+     */
+    private static function change(string $dataDir, callable $fn): mixed
+    {
+        return JsonFile::update(self::file($dataDir), function (array $cur) use ($fn) {
+            [$over, $ret] = $fn(array_filter($cur, 'is_string'));
+            if ($over !== null) ksort($over);
+            return [$over, $ret];
+        }, 0600, JSON_PRETTY_PRINT);
     }
 
     /** Only a hash of the app password is kept (and the plain one from older versions is removed). */
     public static function setPassword(string $dataDir, string $password): void
     {
-        $over = self::load($dataDir);
-        unset($over['TALIXIO_WEB_PASSWORD']);
-        $over['TALIXIO_WEB_PASSWORD_HASH'] = password_hash($password, PASSWORD_DEFAULT);
-        self::write($dataDir, $over);
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        self::change($dataDir, function (array $over) use ($hash) { unset($over['TALIXIO_WEB_PASSWORD']); $over['TALIXIO_WEB_PASSWORD_HASH'] = $hash; return [$over, null]; });
     }
 
     /** Two-step sign-in secret ('' turns it off). */
     public static function setTotp(string $dataDir, string $secret): void
     {
-        $over = self::load($dataDir);
-        if ($secret === '') unset($over['TALIXIO_TOTP_SECRET']); else $over['TALIXIO_TOTP_SECRET'] = $secret;
-        self::write($dataDir, $over);
+        self::change($dataDir, function (array $over) use ($secret) { if ($secret === '') unset($over['TALIXIO_TOTP_SECRET']); else $over['TALIXIO_TOTP_SECRET'] = $secret; return [$over, null]; });
     }
 
     public static function write(string $dataDir, array $over): void
     {
         ksort($over);
-        $tmp = self::file($dataDir) . '.tmp';
-        file_put_contents($tmp, json_encode($over, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
-        chmod($tmp, 0600);
-        rename($tmp, self::file($dataDir));
+        JsonFile::write(self::file($dataDir), $over, 0600, JSON_PRETTY_PRINT); // whole or not at all
     }
 }

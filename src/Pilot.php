@@ -28,9 +28,10 @@ final class Pilot
 
     private function file(): string { return $this->app->cfg->dataDir . '/pilot.json'; }
 
-    public function state(): array
+    public function state(): array { return self::withDefaults(JsonFile::read($this->file())); }
+
+    private static function withDefaults(array $s): array
     {
-        $s = is_file($f = $this->file()) ? (json_decode((string)file_get_contents($f), true) ?: []) : [];
         $s['autonomy'] = array_merge(array_fill_keys(self::LEVELS, 'ask'), array_intersect_key((array)($s['autonomy'] ?? []), array_flip(self::LEVELS)));
         foreach (self::KEPT as $l) $s['autonomy'][$l] = 'ask';
         $s += ['enabled' => false, 'threshold' => 0.75, 'priorities' => [], 'rules' => [], 'daily_cap' => 20, 'predictions' => [], 'outcomes' => [], 'pending' => 0, 'last_wake' => 0];
@@ -39,13 +40,8 @@ final class Pilot
 
     private function mutate(callable $fn): mixed
     {
-        $fh = @fopen($this->file() . '.lock', 'c');
-        if ($fh) flock($fh, LOCK_EX);
-        try {
-            [$s, $ret] = $fn($this->state());
-            file_put_contents($this->file(), json_encode($s, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX);
-            return $ret;
-        } finally { if ($fh) { flock($fh, LOCK_UN); fclose($fh); } }
+        // under the lock, written whole or not at all (it was written in place, and went on without the lock when it failed)
+        return JsonFile::update($this->file(), fn(array $raw) => $fn(self::withDefaults($raw)), 0600, JSON_PRETTY_PRINT);
     }
 
     /** What the cockpit shows: the policy, the accuracy per level, and what the assistant suggests you change. */

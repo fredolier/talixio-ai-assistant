@@ -21,9 +21,9 @@ final class JsonFile
     }
 
     /** Replace the file's content with $data, atomically. Throws (the old file untouched) when it cannot be written. */
-    public static function write(string $path, array $data, int $mode = 0600): void
+    public static function write(string $path, array $data, int $mode = 0600, int $flags = 0): void
     {
-        $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR | $flags); // $flags: JSON_PRETTY_PRINT for a file people read
         $dir = dirname($path);
         if (!is_dir($dir)) mkdir($dir, 0700, true);
         $tmp = $path . '.tmp-' . bin2hex(random_bytes(4));
@@ -42,7 +42,7 @@ final class JsonFile
      * Read, change and write the file under an exclusive lock held across the three steps. $fn gets the current data and
      * returns [new data, result] (new data null: nothing is written). Returns the result. Throws if the lock cannot be had.
      */
-    public static function update(string $path, callable $fn, int $mode = 0600): mixed
+    public static function update(string $path, callable $fn, int $mode = 0600, int $flags = 0): mixed
     {
         $dir = dirname($path);
         if (!is_dir($dir)) mkdir($dir, 0700, true);
@@ -50,7 +50,7 @@ final class JsonFile
         if (!$fh || !flock($fh, LOCK_EX)) throw new \RuntimeException('could not lock ' . basename($path));
         try {
             [$data, $ret] = $fn(self::read($path));
-            if ($data !== null) self::write($path, $data, $mode);
+            if ($data !== null) self::write($path, $data, $mode, $flags);
             return $ret;
         } finally {
             flock($fh, LOCK_UN); fclose($fh);

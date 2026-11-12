@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.21 (2026-11-12)
+
+- Fix (audit Q12, second part): **settings saved at the same moment were lost**. The settings file was read, changed and written back without a lock, so when the app and the worker (or two tabs) saved at the same time, one change silently undid the other (9 of 15 changes lost in the test of this release); it was also replaced without checking it had been fully written. Settings, the password and the two-step sign-in secret now go through `JsonFile` (under a lock, written whole or not at all), as do the autonomous pilot's policy (which was written in place) and the multi-user administration's state file (written whole; its read-change-write steps are not yet under a lock, that is the next part). Tested with three processes saving different settings at the same instant, and a simulated failed write.
+
 ## 1.35.20 (2026-11-12)
 
 - Fix (audit Q10, Q12, first part): **the autonomous pilot's connection file is written safely**. It was replaced without checking that it had been fully written (a full disk could leave it empty, losing the pairing and the journal), some writes (setting up, pairing, disconnecting, the 5-second limit between passes) were made outside the lock that the others used, and when that lock could not be taken the update went on without it. A new shared helper, `JsonFile`, writes to a temporary file, checks every byte, then replaces the old file, and does read-change-write under one lock; the pilot now uses it everywhere, a pairing code is checked and used up under that lock, and no lock means no write. The other state files (settings, the pilot's policy, the fleet, connectors, tokens) move to it in the next deliveries. Tested with a simulated failed write and six processes updating one file at once.
