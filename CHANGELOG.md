@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.15 (2026-11-12)
+
+- Security (audit S7): **the sandboxed shell now follows the spaces' confidentiality**. `shell_run` and `script_run` copied any library file into the sandbox, Confidential and Secret ones included, without the checks `file_read` applies and without raising the work's level; the sandbox's `/work` folder was shared by every space; and `shell_save` could put what was made from Confidential files into `/Inbox`. Now only files the work may read are copied in (a Secret space's file is not found from elsewhere), copying one in raises the level as reading it would, each space has its own `/work` (files already in the old shared folder stay with General), and `shell_save` refuses a less protected folder. Running a command after reading content written by others asks first (1.35.13). Tested with a stand-in for bubblewrap, which is not installed on the test machine. FAQ *Memory and learning* updated.
+
 ## 1.35.14 (2026-11-12)
 
 - Security (audit S8): **a fake PDF was served with the type its sender chose**. A file named `.pdf` whose content merely contained `%PDF-` was shown in the browser with the type given at upload, so it could come back as `text/javascript` or `text/HTML` (the check was case-sensitive) on the app's own address. Now a PDF is always sent as `application/pdf`, an image with the type its content has, the type checks ignore case and also refuse scripts, and a new file's type is read from its content (the sender's type is kept only where the content says little, as for plain text or Office files, and never when it claims a page, a script or an SVG the content is not). Files already stored are covered by the first part. Tested by uploading the two cases of the audit and an SVG named `.png`.

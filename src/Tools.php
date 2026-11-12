@@ -815,7 +815,10 @@ final class Tools
             $this->register('shell_save', "Save a file from the sandbox's /work folder into the user's library (e.g. a chart, a converted document, a CSV). Default folder /Inbox.",
                 ['path' => ['type' => 'string'], 'folder' => ['type' => 'string'], 'name' => ['type' => 'string']], ['path'],
                 function (array $a) {
-                    $f = $this->app->shell()->save($a['path'], (string)($a['folder'] ?? ''), (string)($a['name'] ?? ''));
+                    $folder = (string)($a['folder'] ?? '');
+                    if ($folder === '') $folder = ($sf = $this->app->space ? (string)($this->app->spaces()->get($this->app->space)['folder'] ?? '') : '') !== '' ? $sf : Library::INBOX;
+                    $this->noWriteDown(Library::normalize($folder), $this->app->privacy()->effective()); // what the commands read stays at its level (audit S7)
+                    $f = $this->app->shell()->save($a['path'], $folder, (string)($a['name'] ?? ''));
                     return 'saved ' . Library::join($f['folder'], $f['name']) . " (file #{$f['id']})";
                 });
         }
@@ -1494,12 +1497,26 @@ final class Tools
             . ($i['deps'] || $i['build'] ? ', its dependencies are being installed (about a minute)' : '') . ". Its tools are available from a following message; Settings → Connectors shows when it is ready. No restart needed.";
     }
 
+    /**
+     * Library files copied into the sandbox: only those this work may read (not a Secret space's from elsewhere, nor above
+     * what the model may read), and what they are raises the work's level, as file_read does (audit S7).
+     */
+    private function sandboxFiles(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        foreach ($ids as $id) {
+            $f = $this->readableFile($id);
+            Privacy::doc((string)$f['name'], (int)$f['size'], $this->app->privacy()->folderLevel((string)$f['folder']));
+        }
+        return $ids;
+    }
+
     /** In "ask" mode every command waits for the user's approval first. */
     private function shellRun(array $a): string
     {
         $cmd = trim((string)$a['command']);
         if ($cmd === '') return 'error: empty command';
-        $files = array_map('intval', (array)($a['files'] ?? []));
+        $files = $this->sandboxFiles((array)($a['files'] ?? []));
         if ($this->app->cfg->shell === 'ask' && !in_array('shell_run', $this->app->cfg->autoApprove, true)) {
             if (App::$inWorker) return "error: shell commands need the user's approval, which can't be awaited here. Use delegate to hand the task to a background job (it will ask the user and wait).";
             $summary = "Run in the sandbox" . ($this->app->cfg->shellNetwork ? ' (with internet)' : '') . ":\n" . mb_substr($cmd, 0, 3000) . ($files ? "\nWith files #" . implode(', #', $files) : '');
@@ -1529,7 +1546,7 @@ final class Tools
         $scripts = $this->app->scripts();
         $name = (string)$a['name'];
         if ($scripts->read($name) === null) return "error: no script named '$name'. Yours: " . (implode(', ', array_column($scripts->all(), 'name')) ?: 'none yet');
-        $files = array_map('intval', (array)($a['files'] ?? []));
+        $files = $this->sandboxFiles((array)($a['files'] ?? []));
         $cmd = $scripts->command($name, (array)($a['args'] ?? []));
         if ($this->app->cfg->shell === 'ask' && !$scripts->approved($name) && !in_array('shell_run', $this->app->cfg->autoApprove, true)) {
             if (App::$inWorker) return "error: this script changed since the user approved it, and approval can't be awaited here. Use delegate to hand the task to a background job.";

@@ -14,8 +14,12 @@ final class Shell
 
     public function __construct(private App $app) {}
 
+    /** Tests only: a stand-in for bubblewrap where it is not installed. */
+    public static ?string $binaryOverride = null;
+
     public static function binary(): ?string
     {
+        if (self::$binaryOverride !== null) return self::$binaryOverride;
         foreach (['/usr/bin/bwrap', '/usr/local/bin/bwrap'] as $b) if (is_executable($b)) return $b;
         return null;
     }
@@ -24,7 +28,8 @@ final class Shell
 
     public function workDir(): string
     {
-        $d = $this->app->cfg->dataDir . '/sandbox/work';
+        // one /work per space: what a Confidential space's commands leave there is not seen from another (audit S7)
+        $d = $this->app->cfg->dataDir . '/sandbox/work' . ($this->app->space > 0 ? '-' . (int)$this->app->space : '');
         if (!is_dir($d)) mkdir($d, 0700, true);
         return $d;
     }

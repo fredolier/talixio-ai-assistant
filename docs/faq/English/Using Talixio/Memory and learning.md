@@ -13,6 +13,8 @@
   you approve a script's code once. View, edit or delete them on the Memory page. To add your own: **New script**
   or **Upload a .py** there, or open a `.py` in the library and choose **Use as a script** (under More on a phone):
   a confirmation in the viewer says where it went, with **Show the script**.
+  The sandbox follows the spaces: each space has its own working folder, it only takes in documents the current
+  space may read, and what it makes from Confidential documents is only saved in a folder at least as protected.
 - **Character and values**: what matters to you, how you work, what it should do
   better; each belief with its evidence, *Why?* and *Forget*. Never about health, religion,
   politics, sexuality or origins.
