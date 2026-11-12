@@ -1,5 +1,9 @@
 # Tasks, reminders and routines
 
+Three words for what the assistant does for you: a **task** is something to do, on the board; a **routine**
+comes back on a schedule (reminder, briefing, report); a **mission** is work handed to one or several agents,
+which comes back with a report.
+
 ## Tasks (one board per space)
 - Columns Ideas / To do / In progress / Blocked / Done; codes per space (MAI-12), priority P1 to P5,
   start and due dates, effort, time spent, labels, description, dependencies (even across spaces).
@@ -53,7 +57,7 @@
   You can have several watches; *Settings* on a watch routine reopens its parameters. If a skill
   covers the same topic (e.g. your newsletter style), the watch follows it.
 
-## Background work (Jobs)
+## Missions (background work)
 For long research, the assistant starts sub-agents (up to 3 in parallel), each with
 a cost cap ($2 by default; "budget $5" for more). The report arrives in the space that asked for it.
 
@@ -66,7 +70,7 @@ The assistant gives you the link. The chat message may be shorter; the file keep
 To file it elsewhere, just ask ("put this report in /Projects").
 
 ### Tidying jobs: archive, delete, schedule
-The **Jobs** page has a search (title, instructions, report) and an **Active / Archived** selector.
+The **Missions** tab (background jobs) has a search (title, instructions, report) and an **Active / Archived** selector.
 Each finished job shows the link to its report note. The link follows the note even if you
 move or rename it. If the note has been deleted, the job says so. Each finished job also offers:
 - **Archive**: the job leaves the list, without losing anything; you find it under *Archived*.

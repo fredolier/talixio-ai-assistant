@@ -30,10 +30,10 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
 - **Écriture** : ce qui vient d'un espace Confidentiel ou Secret n'est enregistré que dans un
   dossier au moins aussi protégé (le dossier de son espace). Il n'est pas copié dans la mémoire
   commune, les contacts ou les compétences, que tous les espaces lisent ; il va dans les notes de
-  l'espace. Le rapport d'un job suit la même règle.
+  l'espace. Le rapport d'une mission suit la même règle.
 - **Apprentissage** : ce que l'assistant apprend sur vous dans un espace Confidentiel ou Secret
   reste dans cet espace.
-- **Autres espaces** : les routines, jobs et tâches du tableau d'un espace que le modèle n'a pas le droit de lire ne
+- **Autres espaces** : les routines, missions et tâches du tableau d'un espace que le modèle n'a pas le droit de lire ne
   sont ni listés ni modifiables depuis ailleurs ; le dossier d'un espace Secret n'est pas montré
   en dehors de lui.
 - **Recherche web** : la recherche web propre au fournisseur est coupée dès que le travail dépasse
@@ -42,15 +42,15 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
   propre au modèle), un document que vous avez importé ou joint, votre agenda, le résultat d'un connecteur ou un
   message d'un autre assistant ou d'un agent, un texte glissé dedans ne peut pas agir seul : dès lors, seule la lecture
   se fait librement (recherche, lecture de fichiers, du mail, de l'agenda, du tableau ; préparation d'un brouillon de
-  mail), et tout ce qui modifie ou envoie quelque chose (mémoire, compétences, routines, tâches, contacts, notes, jobs,
+  mail), et tout ce qui modifie ou envoie quelque chose (mémoire, compétences, routines, tâches, contacts, notes, missions,
   flotte de code, messages à d'autres assistants, commandes shell, ouverture d'une adresse web absente de ce contenu)
   attend votre validation. Dans le navigateur, saisir, cliquer et choisir se font sans demander sur un site que vous
   avez nommé dans votre demande ou mis en confiance, sauf si la réponse a lu vos propres données (elles pourraient être
   saisies dans la page) ; sinon vous validez cette action sur le moment. Vos propres notes, écrites et modifiées en dernier par vous dans l'app, ne comptent pas.
   Un résultat validé qui venait d'un tel contenu garde la règle tant qu'il est dans la conversation récente, et une
   compétence apprise d'un tel travail attend elle aussi votre validation.
-  Un job en arrière-plan, une directive ou un job repris transmet ce qu'il a lu à son rapport : le tour qui le
-  relaie (et les suivants, tant que le rapport est dans la conversation récente) demande de la même façon, et un job
+  Une mission, qu'elle soit lancée, menée par le directeur ou reprise, transmet ce qu'elle a lu à son rapport : le tour qui le
+  relaie (et les suivants, tant que le rapport est dans la conversation récente) demande de la même façon, et une mission
   qui a lu un fichier Confidentiel rapporte au niveau Confidentiel (pas de recherche web, rien copié dans la mémoire
   commune).
 - **Sites web de confiance** : les sites listés dans Réglages → Navigateur et validations → Sites web de

@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.41 (2026-11-12)
+
+- Interface (audit 8.5, accepted by the owner): one vocabulary for the work the assistant does by itself. In French, three words only: **routine** (what comes back on a schedule, before "tâche planifiée"), **mission** (work handed to one or several agents, before "job", "travaux de fond", "chantier" and "directive"), **tâche** (only the things to do on the board). The Automations page's two tabs are now **Routines** and **Missions** (also in English), Pilotage's Chantiers tab is **Missions**, and the background process is "processus d'arrière-plan" (before "worker"). The assistant is told to use the same words. The French "Jobs" read "Emploi" (a wrong translation), now "Missions". Only what is shown changes: the code's names (`jobs`, `tasks`, `directives`, `#jobs`), the API and the name of report notes ("Job - title - date") are unchanged. The English interface keeps its words (job, worksite) apart from the two tabs. FAQ updated in both languages (a short glossary opens "Tasks and routines"). Tested: no French text of the app uses the old words any more, and the assistant's instructions carry the new ones.
+
 ## 1.35.40 (2026-11-12)
 
 - License (audit 7.6, owner's decision D5): the project is published under the GNU Affero General Public License, version 3 (`LICENSE`, the unchanged text of the Free Software Foundation; the README says so). The repository was public with no license, which by default let nobody use it. Nothing changes in the app.

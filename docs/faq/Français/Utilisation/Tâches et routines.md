@@ -1,5 +1,9 @@
 # Tâches, rappels et routines
 
+Trois mots pour ce que l'assistant fait pour vous : une **tâche** est une chose à faire, sur le tableau ; une
+**routine** revient selon un calendrier (rappel, briefing, rapport) ; une **mission** est un travail confié à un
+ou plusieurs agents, qui revient avec un rapport.
+
 ## Tâches (un tableau par espace)
 - Colonnes Idées / À faire / En cours / Bloqué / Fait ; codes par espace (MAI-12), priorité P1 à P5,
   dates de début et d'échéance, charge, temps passé, étiquettes, description, dépendances (même entre espaces).
@@ -57,33 +61,33 @@
   Plusieurs veilles sont possibles ; *Réglages* sur une routine de veille rouvre ses paramètres. Si une compétence
   porte le même sujet (ex. votre style de newsletter), la veille la suit.
 
-## Travaux de fond (Jobs)
+## Missions
 Pour les recherches longues, l'assistant lance des sous-agents (jusqu'à 3 en parallèle), chacun avec
 un plafond de coût (2 $ par défaut ; « budget 5 $ » pour plus). Le rapport arrive dans l'espace qui l'a demandé.
 
 Le rapport **complet** est aussi enregistré comme note dans la bibliothèque, dès la fin du travail :
-- dans la **Boîte de réception** par défaut, nommé « Job - titre - date » ;
+- dans la **Boîte de réception** par défaut, nommé « Job - titre - date » (le nom des notes de rapport ne change pas) ;
 - dans un autre dossier si vous le dites en lançant la recherche (« range le rapport dans /Projets/Vélo ») ;
 - pour un compte rendu de réunion, à côté de l'enregistrement.
 
 L'assistant vous en donne le lien. Le message du chat peut être plus court ; le fichier, lui, garde tout.
 Pour le classer ailleurs, demandez-le (« range ce rapport dans /Projets »).
 
-### Ranger les jobs : archiver, supprimer, programmer
-La page **Jobs** a une recherche (titre, consignes, rapport) et un sélecteur **Actifs / Archivés**.
-Chaque job terminé affiche le lien vers sa note de rapport. Le lien suit la note même si vous la
-déplacez ou la renommez. Si la note a été supprimée, le job l'indique. Chaque job terminé propose aussi :
-- **Archiver** : le job quitte la liste, sans rien perdre ; vous le retrouvez sous *Archivés*.
-  **Archiver les terminés** range d'un coup tous les jobs terminés de la vue affichée. Les jobs réussis
+### Ranger les missions : archiver, supprimer, programmer
+L'onglet **Missions** a une recherche (titre, consignes, rapport) et un sélecteur **Actives / Archivées**.
+Chaque mission terminée affiche le lien vers sa note de rapport. Le lien suit la note même si vous la
+déplacez ou la renommez. Si la note a été supprimée, la mission l'indique. Chaque mission terminée propose aussi :
+- **Archiver** : la mission quitte la liste, sans rien perdre ; vous la retrouvez sous *Archivées*.
+  **Archiver les terminés** range d'un coup toutes les missions terminées de la vue affichée. Les missions réussies
   sont archivés d'eux-mêmes au bout de **2 jours** (leur rapport reste dans le fil et la bibliothèque) ;
   ceux en échec ou arrêtés, et ceux auxquels vous avez mis une étiquette pour les garder, au bout de **30 jours**.
-- **Supprimer** : efface le job et ses étapes pour de bon. La note de rapport reste dans la bibliothèque,
-  et ses coûts restent dans l'historique de consommation. Un job relancé par une routine ne peut pas
-  être supprimé : supprimez d'abord la routine, ou archivez le job.
-- **Programmer…** : crée une routine qui relance le même job (mêmes consignes, modèle, effort, plafond et
+- **Supprimer** : efface la mission et ses étapes pour de bon. La note de rapport reste dans la bibliothèque,
+  et ses coûts restent dans l'historique de consommation. Une mission relancée par une routine ne peut pas
+  être supprimée : supprimez d'abord la routine, ou archivez la mission.
+- **Programmer…** : crée une routine qui relance la même mission (mêmes consignes, modèle, effort, plafond et
   dossier de rapport), soit une fois à une date donnée, soit chaque jour, chaque jour de semaine, chaque
   semaine ou chaque mois. La routine apparaît dans **Routines**, où vous pouvez la mettre en pause ou la
-  supprimer. Chaque passage crée un nouveau job, avec son propre rapport.
+  supprimer. Chaque passage crée une nouvelle mission, avec son propre rapport.
 
-Vous pouvez aussi le demander à l'assistant : « archive les jobs terminés », « relance la veille vélo chaque
-lundi à 8 h », « retrouve le job sur les hôtels ».
+Vous pouvez aussi le demander à l'assistant : « archive les missions terminées », « relance la veille vélo chaque
+lundi à 8 h », « retrouve la mission sur les hôtels ».

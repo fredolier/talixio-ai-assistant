@@ -1041,4 +1041,11 @@ check('connector: a server showing its window gets the full Chromium, for each d
 check('connector: both Chromiums there, nothing to download', ConnectorPackage::browserInstalls($pw, "$d/pwdata") === []);
 $restoreEnv();
 
+// one vocabulary for background work (audit 8.5): in French, routine (on a schedule), mission (delegated), tâche (the board)
+$frVals = [];
+foreach (explode("\n", (string)file_get_contents("$root/web/public/i18n/fr.js")) as $l) if (preg_match('/^\s*"(?:[^"\\\\]|\\\\.)*":\s*"((?:[^"\\\\]|\\\\.)*)"/', $l, $mm)) $frVals[] = $mm[1];
+$old = array_values(array_filter($frVals, fn($v) => preg_match('/\bjobs?\b|chantiers?|\bworkers?\b|tâches? planifiées?|\bdirectives?\b(?! au pilote)/iu', preg_replace('/href=\\\\"[^"]*\\\\"|talixio-worker/', '', $v))));
+check('vocabulary: the French app says routine, mission and tâche, not job, worker, chantier, directive or tâche planifiée', !$old, implode(' | ', array_slice($old, 0, 5)));
+check('vocabulary: the assistant is told the same words', str_contains((new \Talixio\Agent(\Talixio\App::fromEnv()))->systemPrompt(), 'is a "mission"'));
+
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

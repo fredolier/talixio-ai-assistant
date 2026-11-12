@@ -17,7 +17,7 @@ Les deux assistants doivent avoir une adresse joignable en **https** par l'autre
 donne ensuite à chaque sens son propre secret ; il n'est jamais affiché, et le côté qui le reçoit n'en garde qu'une empreinte.
 
 ## Ce que vous partagez
-- **Le bilan quotidien** : les *titres* de ce qui a été terminé ou a avancé ces dernières 24 heures (tâches de fond, directives,
+- **Le bilan quotidien** : les *titres* de ce qui a été terminé ou a avancé ces dernières 24 heures (missions,
   routines) et une ligne facultative que vous écrivez vous-même. L'écran montre le texte exact qui part. Jamais le contenu des tâches,
   des conversations, des courriels, des fichiers ou de la mémoire.
 - **Les messages** : de courts textes, envoyés seulement quand vous le demandez (ou en le demandant à l'assistant : *« dis à l'assistant
