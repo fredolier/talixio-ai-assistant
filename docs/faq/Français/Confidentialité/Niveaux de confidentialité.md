@@ -33,7 +33,7 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
   l'espace. Le rapport d'un job suit la même règle.
 - **Apprentissage** : ce que l'assistant apprend sur vous dans un espace Confidentiel ou Secret
   reste dans cet espace.
-- **Autres espaces** : les routines et jobs d'un espace que le modèle n'a pas le droit de lire ne
+- **Autres espaces** : les routines, jobs et tâches du tableau d'un espace que le modèle n'a pas le droit de lire ne
   sont ni listés ni modifiables depuis ailleurs ; le dossier d'un espace Secret n'est pas montré
   en dehors de lui.
 - **Recherche web** : la recherche web propre au fournisseur est coupée dès que le travail dépasse

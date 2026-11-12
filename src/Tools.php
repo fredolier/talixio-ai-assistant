@@ -917,6 +917,7 @@ final class Tools
                 $all = !empty($a['all_spaces']);
                 if ($all && $here() !== 0) return 'error: only General sees the other spaces\' tasks; list this space\'s.';
                 $cards = $bd()->list(['space' => $all ? null : $here(), 'status' => $a['status'] ?? '', 'tag' => $a['tag'] ?? '', 'q' => $a['query'] ?? '', 'global' => $all]);
+                if ($all) $cards = array_values(array_filter($cards, fn($c) => $this->boardReadable($c))); // other spaces' tasks: only at a level this work may read (audit S11)
                 if (!$cards) return 'no tasks' . (!empty($a['status']) || !empty($a['tag']) || !empty($a['query']) ? ' match' : ' yet');
                 $out = [];
                 foreach ($all ? ['all' => $cards] : array_reduce($cards, function ($g, $c) { $g[$c['status']][] = $c; return $g; }, []) as $k => $list) {
@@ -927,6 +928,7 @@ final class Tools
         $this->register('board_get', 'One task in full (description, dependencies, links). Tasks of other spaces show only their title and status, unless you are in General.',
             ['code' => ['type' => 'string']], ['code'], function (array $a) use ($bd, $here) {
                 $c = $bd()->need((string)$a['code']);
+                if (!$this->boardReadable($c)) return "error: no task {$a['code']}"; // a Secret space's task, or one this model may not read: as if it did not exist
                 if ($here() !== 0 && $c['space'] !== $here()) return $bd()->line($bd()->brief($c) + ['estimate_hours' => null, 'spent_hours' => 0, 'checklist' => ['total' => 0], 'tags' => [], 'depends_on' => [], 'global_rank' => null, 'in_calendar' => 0, 'body' => ''], true) . ' (another space: details hidden)';
                 return $bd()->describeCard($c);
             });
@@ -1166,6 +1168,15 @@ final class Tools
         $jid = (int)($this->app->jobId ?? 0);
         if (!$jid) return 'error: check_inbox only works inside a worker job.';
         return $this->app->relay()->render($this->app->relay()->pull(Relay::addr('worker', $jid)));
+    }
+
+    /** A task of the board the work may see: its space's level allows it (then that level counts for the work, as a document would). */
+    private function boardReadable(array $c): bool
+    {
+        $p = $this->app->privacy(); $space = (int)$c['space']; $level = $p->spaceLevel($space);
+        if (!$p->mayRead($level, $space)) return false;
+        Privacy::raise($level);
+        return true;
     }
 
     /** Whether the work may see this library folder (and what is in it): not a Secret space's from elsewhere, nor above what this model may read. */

@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.17 (2026-11-12)
+
+- Security (audit S11): **the assistant's board tools respect the spaces' levels**. From General, `board_list` with every space and `board_get` returned the titles and descriptions of Secret and Confidential spaces' tasks to any model. Now a Secret space's tasks are not seen outside it, a Confidential space's only by a model allowed to read it, and seeing them makes the work Confidential (no web search, nothing copied into shared memory). Your own Board page in the app is unchanged. FAQ *Confidentiality levels* updated.
+
 ## 1.35.16 (2026-11-12)
 
 - Security (audit S10): **a question from another person's assistant reads only the documents of its space**. A question was answered with read-only tools, but those could search and read the whole library (all Internal documents), and the asker's value (`{param}`) could steer them there. Now, while such a question is answered, the library is limited to the folder of the question's space, also with Claude Code (whose tools run in another process); a question on *General*, which has no folder, reads no document (its board and tasks still answer). Tested between two assistants in one process. FAQ *Other assistants* updated.

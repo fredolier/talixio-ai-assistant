@@ -49,6 +49,20 @@ Privacy::end(); Privacy::$taint = 0;
 check('isolation: the provider\'s web search is back for Internal work', $app->tools->allowsWeb());
 $app->cfg->provider = 'claude-code';
 
+// ---- audit S11: the board of other spaces, from General
+$bConf = $app->board()->create(['title' => 'Iso merger due diligence', 'body' => 'confidential terms'], $cid, 'you');
+$bSec = $app->board()->create(['title' => 'Vault codes rotation', 'body' => 'secret steps'], $sid, 'you');
+$bGen = $app->board()->create(['title' => 'Buy printer paper'], 0, 'you');
+$app->setSpace(0); Privacy::begin(); $app->cfg->provider = 'claude-code';
+$all = $app->tools->run('board_list', ['all_spaces' => true]);
+check('isolation: from General, all_spaces hides the tasks of spaces this model may not read', str_contains($all, 'Buy printer paper') && !str_contains($all, 'Iso merger') && !str_contains($all, 'Vault codes'), $all);
+check('isolation: board_get of such a task finds nothing', str_starts_with($app->tools->run('board_get', ['code' => $bConf['code']]), 'error: no task') && str_starts_with($app->tools->run('board_get', ['code' => $bSec['code']]), 'error: no task'));
+$app->cfg->provider = 'anthropic'; Privacy::begin();
+$all = $app->tools->run('board_list', ['all_spaces' => true, 'query' => '']);
+check('isolation: a business account sees a Confidential space\'s tasks, and the work becomes Confidential', str_contains($all, 'Iso merger') && $pv->effective() === 'confidential', $all);
+check('isolation: ... never a Secret space\'s', !str_contains($all, 'Vault codes') && str_starts_with($app->tools->run('board_get', ['code' => $bSec['code']]), 'error: no task'));
+Privacy::end(); Privacy::$taint = 0; $app->cfg->provider = 'claude-code';
+
 // ---- acting on other spaces: jobs and routines of a space the model may not read are not seen
 Privacy::trustAgain(); // a new answer: what an earlier section read does not carry over (the untrusted guard, audit S5)
 $app->store->addTask('Iso weekly', 'check Iso', '0 8 * * 1', time() + 3600, 'standard', $cid);
