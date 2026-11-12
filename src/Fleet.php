@@ -29,14 +29,18 @@ final class Fleet
     {
         $this->socket = $socket ?? (getenv('DOCKER_SOCKET') ?: '/var/run/docker.sock');
         $this->stateFile = $stateDir . '/fleet.json';
-        if (!is_dir($stateDir)) mkdir($stateDir, 0700, true);
+        if (!is_dir($stateDir) && !@mkdir($stateDir, 0700, true) && !is_dir($stateDir)) throw new \RuntimeException("cannot create $stateDir"); // two processes may make it at once
     }
 
     // ---------- state ----------
 
     public function state(): array
     {
-        $s = json_decode((string)@file_get_contents($this->stateFile), true) ?: [];
+        return self::defaults(JsonFile::read($this->stateFile));
+    }
+
+    private static function defaults(array $s): array
+    {
         $s['settings'] = ($s['settings'] ?? []) + ['domain' => getenv('TALIXIO_DOMAIN') ?: 'localhost', 'mode' => 'path', 'memory_mb' => 1024, 'cpus' => 1.5,
             'ollama' => true, 'ollama_model' => 'qwen3-embedding:0.6b', 'google_client_id' => '', 'google_client_secret' => '', 'email_authserv' => '', 'apparmor_unconfined' => true,
             'eu_provider' => '', 'eu_key' => '', 'eu_url' => '', 'eu_only' => false];
@@ -45,7 +49,25 @@ final class Fleet
         return $s;
     }
 
-    private function save(array $s): void { JsonFile::write($this->stateFile, $s, 0600, JSON_PRETTY_PRINT); } // whole or not at all (audit Q12)
+    /**
+     * A change to fleet.json under its lock: $fn(array &$s) changes the state, read inside the lock, and what it returns is
+     * returned; the new state is written whole (audit Q12). Two changes at once (the admin page, the agent, an update) no
+     * longer write over each other (audit 4.2). Docker calls stay outside: they take seconds, the lock is for the file only.
+     * An exception in $fn writes nothing.
+     */
+    private function mutate(callable $fn): mixed
+    {
+        return JsonFile::update($this->stateFile, function (array $raw) use ($fn) {
+            $s = self::defaults($raw);
+            $ret = $fn($s);
+            return [$s, $ret];
+        }, 0600, JSON_PRETTY_PRINT);
+    }
+
+    private static function has(array $s, string $id): void
+    {
+        if (!isset($s['instances'][$id])) throw new \InvalidArgumentException("no instance $id");
+    }
 
     /**
      * The long action the admin page follows (job.json). One whose process is gone (the agent was restarted or
@@ -71,17 +93,18 @@ final class Fleet
     {
         $tag = date('Ymd-His');
         $this->tag(self::IMAGE . ':current', self::IMAGE, $tag);
-        $s = $this->state();
-        $s['image'] = ['current' => self::IMAGE . ':current', 'previous' => $s['image']['previous'] ?? null, 'built' => self::IMAGE . ":$tag", 'built_at' => time(),
-            'branch' => preg_match('/^[A-Za-z0-9._\/-]{1,100}$/', $branch) ? $branch : ($s['image']['branch'] ?? '')];
-        $this->save($s);
+        $this->mutate(function (array &$s) use ($tag, $branch) {
+            $s['image'] = ['current' => self::IMAGE . ':current', 'previous' => $s['image']['previous'] ?? null, 'built' => self::IMAGE . ":$tag", 'built_at' => time(),
+                'branch' => preg_match('/^[A-Za-z0-9._\/-]{1,100}$/', $branch) ? $branch : ($s['image']['branch'] ?? '')];
+        });
         $this->job(); // a job the restart cut short
     }
 
     /** Domain, path or subdomains, default limits, shared services. */
     public function setSettings(array $d): array
     {
-        $s = $this->state(); $set = $s['settings'];
+        return $this->mutate(function (array &$s) use ($d) {
+        $set = $s['settings'];
         if (isset($d['domain'])) {
             $dom = strtolower(trim((string)$d['domain']));
             if (!preg_match('/^(?=.{1,200}$)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$|^localhost$/', $dom)) throw new \InvalidArgumentException('Give a domain name like assistant.example.com.');
@@ -100,8 +123,8 @@ final class Fleet
         if (isset($d['eu_url'])) { $u = rtrim(trim((string)$d['eu_url']), '/'); if ($u !== '' && !preg_match('#^https://\S{4,300}$#', $u)) throw new \InvalidArgumentException('The European provider\'s address starts with https://.'); $set['eu_url'] = $u; }
         if (isset($d['eu_only'])) $set['eu_only'] = (bool)$d['eu_only'];
         $s['settings'] = $set;
-        $this->save($s);
         return $set;
+        });
     }
 
     /** The settings as the admin page sees them: secrets only say whether they are set. */
@@ -284,14 +307,16 @@ final class Fleet
     public function create(string $id, string $name = '', string $email = '', ?int $memoryMb = null, ?float $cpus = null): array
     {
         if (!self::validId($id)) throw new \InvalidArgumentException('The identifier is 2 to 30 lower-case letters, digits or dashes, starting with a letter (not ' . implode(', ', array_slice(self::RESERVED, 0, 6)) . '…).');
-        $s = $this->state();
-        if (isset($s['instances'][$id])) throw new \InvalidArgumentException("\"$id\" already exists.");
         $password = self::password();
-        $s['instances'][$id] = ['name' => mb_substr(trim($name), 0, 80), 'email' => mb_substr(trim($email), 0, 200), 'memory_mb' => $memoryMb ?? $s['settings']['memory_mb'],
-            'cpus' => $cpus ?? $s['settings']['cpus'], 'created' => time(), 'password_hash' => password_hash($password, PASSWORD_DEFAULT), 'reset' => '', 'timezone' => 'Europe/Paris'];
-        $this->save($s);
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        $s = $this->mutate(function (array &$s) use ($id, $name, $email, $memoryMb, $cpus, $hash) {
+            if (isset($s['instances'][$id])) throw new \InvalidArgumentException("\"$id\" already exists.");
+            $s['instances'][$id] = ['name' => mb_substr(trim($name), 0, 80), 'email' => mb_substr(trim($email), 0, 200), 'memory_mb' => $memoryMb ?? $s['settings']['memory_mb'],
+                'cpus' => $cpus ?? $s['settings']['cpus'], 'created' => time(), 'password_hash' => $hash, 'reset' => '', 'timezone' => 'Europe/Paris'];
+            return $s;
+        });
         try { $this->createAndStart($id, $s); }
-        catch (\Throwable $e) { $s = $this->state(); unset($s['instances'][$id]); $this->save($s); try { $this->removeContainer($id); } catch (\Throwable) {} throw $e; }
+        catch (\Throwable $e) { $this->mutate(function (array &$s) use ($id) { unset($s['instances'][$id]); }); try { $this->removeContainer($id); } catch (\Throwable) {} throw $e; }
         $this->reloadCaddy();
         return ['id' => $id, 'password' => $password, 'url' => $this->url($id)];
     }
@@ -300,10 +325,11 @@ final class Fleet
     public function adopt(string $id, string $name = ''): array
     {
         if (!self::validId($id)) throw new \InvalidArgumentException('invalid identifier');
-        $s = $this->state();
-        $s['instances'][$id] = ($s['instances'][$id] ?? []) + ['name' => $name, 'email' => '', 'memory_mb' => $s['settings']['memory_mb'], 'cpus' => $s['settings']['cpus'],
-            'created' => time(), 'password_hash' => '', 'reset' => '', 'timezone' => 'Europe/Paris'];
-        $this->save($s);
+        $s = $this->mutate(function (array &$s) use ($id, $name) {
+            $s['instances'][$id] = ($s['instances'][$id] ?? []) + ['name' => $name, 'email' => '', 'memory_mb' => $s['settings']['memory_mb'], 'cpus' => $s['settings']['cpus'],
+                'created' => time(), 'password_hash' => '', 'reset' => '', 'timezone' => 'Europe/Paris'];
+            return $s;
+        });
         $this->removeContainer($id);
         $this->createAndStart($id, $s);
         $this->reloadCaddy();
@@ -318,10 +344,11 @@ final class Fleet
     public function transferIn(string $id, string $name, string $source, string $code, bool $final, callable $progress): void
     {
         if (!self::validId($id)) throw new \InvalidArgumentException('The identifier is 2 to 30 lower-case letters, digits or dashes, starting with a letter.');
-        $s = $this->state();
-        $s['instances'][$id] = ($s['instances'][$id] ?? []) + ['name' => mb_substr(trim($name), 0, 80), 'email' => '', 'memory_mb' => $s['settings']['memory_mb'], 'cpus' => $s['settings']['cpus'],
-            'created' => time(), 'password_hash' => '', 'reset' => '', 'timezone' => 'Europe/Paris'];
-        $this->save($s);
+        $s = $this->mutate(function (array &$s) use ($id, $name) {
+            $s['instances'][$id] = ($s['instances'][$id] ?? []) + ['name' => mb_substr(trim($name), 0, 80), 'email' => '', 'memory_mb' => $s['settings']['memory_mb'], 'cpus' => $s['settings']['cpus'],
+                'created' => time(), 'password_hash' => '', 'reset' => '', 'timezone' => 'Europe/Paris'];
+            return $s;
+        });
         $progress('stopping', "Stopping {$id}…");
         $this->removeContainer($id);
         $this->ensureNetwork(self::PREFIX . 'i-' . $id);
@@ -383,22 +410,24 @@ final class Fleet
 
     public function setLimits(string $id, int $memoryMb, float $cpus): void
     {
-        $s = $this->state(); $this->need($id);
-        $s['instances'][$id]['memory_mb'] = max(256, min(16384, $memoryMb));
-        $s['instances'][$id]['cpus'] = max(0.25, min(16.0, round($cpus, 2)));
-        $this->save($s);
+        $this->mutate(function (array &$s) use ($id, $memoryMb, $cpus) {
+            self::has($s, $id);
+            $s['instances'][$id]['memory_mb'] = max(256, min(16384, $memoryMb));
+            $s['instances'][$id]['cpus'] = max(0.25, min(16.0, round($cpus, 2)));
+        });
         $this->recreate($id);
     }
 
     /** A new name or email; its container and its linked assistants' are made again (they carry the name). */
     public function rename(string $id, string $name, string $email): void
     {
-        $s = $this->state(); $this->need($id);
         $name = mb_substr(trim($name), 0, 80); $email = mb_substr(trim($email), 0, 200);
-        $i = $s['instances'][$id];
-        if (($i['name'] ?? '') === $name && ($i['email'] ?? '') === $email) return;
-        $s['instances'][$id]['name'] = $name; $s['instances'][$id]['email'] = $email;
-        $this->save($s);
+        [$i, $s] = $this->mutate(function (array &$s) use ($id, $name, $email) {
+            self::has($s, $id);
+            $i = $s['instances'][$id];
+            $s['instances'][$id]['name'] = $name; $s['instances'][$id]['email'] = $email;
+            return [$i, $s];
+        });
         if (($i['name'] ?? '') === $name) return; // the email is only for the admin page
         foreach ([$id, ...self::group($s, $id)] as $x) $this->recreate($x);
     }
@@ -406,10 +435,9 @@ final class Fleet
     /** Forgotten password: a new one (shown once); every device signs in again. */
     public function resetPassword(string $id): string
     {
-        $s = $this->state(); $this->need($id);
         $password = self::password();
-        $s['instances'][$id]['reset'] = bin2hex(random_bytes(6)) . ':password:' . password_hash($password, PASSWORD_DEFAULT);
-        $this->save($s);
+        $reset = bin2hex(random_bytes(6)) . ':password:' . password_hash($password, PASSWORD_DEFAULT);
+        $this->mutate(function (array &$s) use ($id, $reset) { self::has($s, $id); $s['instances'][$id]['reset'] = $reset; });
         $this->recreate($id);
         return $password;
     }
@@ -417,9 +445,8 @@ final class Fleet
     /** Lost phone: two-step sign-in off (the person turns it on again). */
     public function resetTotp(string $id): void
     {
-        $s = $this->state(); $this->need($id);
-        $s['instances'][$id]['reset'] = bin2hex(random_bytes(6)) . ':totp';
-        $this->save($s);
+        $reset = bin2hex(random_bytes(6)) . ':totp';
+        $this->mutate(function (array &$s) use ($id, $reset) { self::has($s, $id); $s['instances'][$id]['reset'] = $reset; });
         $this->recreate($id);
     }
 
@@ -446,8 +473,9 @@ final class Fleet
      */
     public function setLinks(string $id, array $ids): array
     {
-        $s = $this->state(); $this->need($id);
         $ids = array_values(array_unique(array_map('strval', $ids)));
+        $redo = $this->mutate(function (array &$s) use ($id, $ids) {
+        self::has($s, $id);
         foreach ($ids as $to) {
             if ($to === $id) throw new \InvalidArgumentException('an assistant cannot link to itself');
             if (!isset($s['instances'][$to])) throw new \InvalidArgumentException("no instance $to");
@@ -455,7 +483,7 @@ final class Fleet
         $s['sso_key'] ??= bin2hex(random_bytes(32));
         $before = $s['instances'][$id]['links'] ?? [];
         $added = array_values(array_diff($ids, $before)); $removed = array_values(array_diff($before, $ids));
-        if (!$added && !$removed) return $ids;
+        if (!$added && !$removed) return [];
         $old = $s;
         $s['instances'][$id]['links'] = $ids;
         foreach ($added as $to) $s['instances'][$to]['links'] = array_values(array_unique([...($s['instances'][$to]['links'] ?? []), $id]));
@@ -463,7 +491,8 @@ final class Fleet
         $redo = [];
         foreach ([$id, ...$added, ...$removed] as $x) array_push($redo, $x, ...self::group($old, $x), ...self::group($s, $x));
         if ($removed) foreach ([$id, ...$removed] as $x) $s['instances'][$x]['sso_gen'] = (int)($s['instances'][$x]['sso_gen'] ?? 0) + 1; // both sides get a new key
-        $this->save($s);
+        return $redo;
+        });
         foreach (array_unique($redo) as $x) $this->recreate($x);
         return $ids;
     }
@@ -477,9 +506,10 @@ final class Fleet
         $this->docker('POST', "/networks/$net/disconnect", ['Container' => self::CADDY, 'Force' => true]);
         $this->docker('DELETE', "/networks/$net");
         if ($deleteData) $this->docker('DELETE', '/volumes/' . self::PREFIX . $id);
-        $s = $this->state(); unset($s['instances'][$id]);
-        foreach ($s['instances'] as $x => $i) if (in_array($id, $i['links'] ?? [], true)) $s['instances'][$x]['links'] = array_values(array_diff($i['links'], [$id])); // recreated when next changed
-        $this->save($s);
+        $this->mutate(function (array &$s) use ($id) {
+            unset($s['instances'][$id]);
+            foreach ($s['instances'] as $x => $i) if (in_array($id, $i['links'] ?? [], true)) $s['instances'][$x]['links'] = array_values(array_diff($i['links'], [$id])); // recreated when next changed
+        });
         $this->reloadCaddy();
     }
 
@@ -752,13 +782,14 @@ final class Fleet
         } finally {
             self::run(['rm', '-rf', $src, "$src.tar"]);
         }
-        $s = $this->state();
-        $old = $s['image']['current'];
+        $old = $this->state()['image']['current'];
         [, $oldImg] = $this->docker('GET', '/images/' . rawurlencode($old) . '/json');
         $this->tag($tag, self::IMAGE, 'current');
         if (is_array($oldImg) && isset($oldImg['Id'])) $this->tag($oldImg['Id'], self::IMAGE, 'previous');
-        $s['image'] = ['current' => self::IMAGE . ':current', 'previous' => isset($oldImg['Id']) ? self::IMAGE . ':previous' : null, 'built' => $tag, 'built_at' => time(), 'branch' => $branch];
-        $this->save($s);
+        $s = $this->mutate(function (array &$s) use ($oldImg, $tag, $branch) {
+            $s['image'] = ['current' => self::IMAGE . ':current', 'previous' => isset($oldImg['Id']) ? self::IMAGE . ':previous' : null, 'built' => $tag, 'built_at' => time(), 'branch' => $branch];
+            return $s;
+        });
         foreach (array_keys($s['instances']) as $id) {
             $progress('rolling', "Moving $id to the new version…");
             $this->recreate($id);
