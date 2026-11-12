@@ -2408,7 +2408,7 @@ $raw = function (string $path, array $headers = []) use ($webPort, $ck) {
     return [$code, strtolower(substr($out, 0, $hs)), substr($out, $hs)];
 };
 [$code, $h, $body] = $raw('/', ['Accept-Language: fr-FR,fr;q=0.9,en;q=0.8']);
-check('i18n: the page loads the translations and says the chosen language', $code === 200 && str_contains($body, '<html lang="en" data-lang="auto">')
+check('i18n: the page loads the translations and says the chosen language', $code === 200 && str_contains($body, '<html lang="en" data-lang="auto" data-session="1">') /* signed in: since 1.35.27 the page says a session cookie is there */
     && str_contains($body, '<script src="v/' . \Talixio\Web::assetVersion() . '/i18n/fr.js"') && strpos($body, 'i18n.js') < strpos($body, 'app.js'));
 check('the app cannot be framed by another site', str_contains($h, "frame-ancestors 'self'") && str_contains($h, "object-src 'none'") && str_contains($h, 'x-frame-options: sameorigin'));
 // an installed app keeps the scripts in its cache: the page asks for those of its own version, so a newer page never runs older scripts

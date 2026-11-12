@@ -485,6 +485,23 @@ const flows = {
       /Bibliothèque|Corbeille|Nouveau/.test(await p2.textContent('body')));
     await ctx2.close();
   },
+  async firstLook({ browser, base, check }) {
+    // audit 5.1: what a French user sees first, the language pinned as the account menu does
+    const ctx = await browser.newContext({ locale: 'fr-FR' }), p = await ctx.newPage();
+    await p.goto(base + '/');
+    await p.evaluate(() => { try { const b = new URL(document.baseURI).pathname.replace(/\/$/, ''); localStorage.setItem((b ? b.slice(1) + ':' : '') + 'talixio.lang', 'fr'); } catch {} });
+    const refused = []; p.on('response', r => { if (r.status() === 401) refused.push(new URL(r.url()).pathname); });
+    await p.goto(base + '/'); await p.waitForSelector('#password'); await p.waitForTimeout(500);
+    check('first look: the sign-in page asks the server nothing it would refuse (audit U14)', refused.length === 0, refused.join(' '));
+    await p.fill('#password', 'pw'); await p.press('#password', 'Enter');
+    await p.waitForSelector('#shell:not([hidden])');
+    await p.evaluate(() => { location.hash = '#library'; }); await p.waitForTimeout(600); await p.evaluate(() => { location.hash = '#chat'; }); await p.waitForTimeout(1500);
+    const ph = await p.getAttribute('#input', 'placeholder');
+    check('first look: the message box says "Écrire à …" once, not translated twice (audit U3)', /^Écrire à /.test(ph) && !/à à/.test(ph), ph);
+    await p.evaluate(() => { location.hash = '#memory'; }); await p.waitForTimeout(800);
+    check('first look: Memory lists no role among the skills, so no "Delete" on the protected assessor (audit U13)', !(await p.textContent('#skills')).includes('assessor'));
+    await ctx.close();
+  },
   async files({ page, check }) {
     const closeAll = () => page.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close()));
     await go(page, 'library');

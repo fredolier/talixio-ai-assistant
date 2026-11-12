@@ -754,20 +754,24 @@ function folderPicker(input, on = true) {
     const choose = path => { input.value = path; box.hidden = true; input.focus(); input.dispatchEvent(new Event('change')); };
     fp.render = () => {
       if (!fp.on) { box.hidden = true; return; }
+      const tree = fp.tree || []; // not read yet: "Loading folders…"
       const v = input.value.trim(), lv = v.toLowerCase();
-      const list = !v || v === fp.start ? fp.tree : fp.tree.filter(f => f.path.toLowerCase().includes(lv.replace(/\/+$/, '')));
-      const fresh = v.startsWith('/') && v !== '/' && !fp.tree.some(f => f.path.toLowerCase() === lv.replace(/\/+$/, ''));
-      box.innerHTML = (fp.tree.length ? '' : `<div class="muted small fp-note">${esc(t('Loading folders…'))}</div>`)
+      const list = !v || v === fp.start ? tree : tree.filter(f => f.path.toLowerCase().includes(lv.replace(/\/+$/, '')));
+      const fresh = v.startsWith('/') && v !== '/' && !tree.some(f => f.path.toLowerCase() === lv.replace(/\/+$/, ''));
+      box.innerHTML = (tree.length ? '' : `<div class="muted small fp-note">${esc(t('Loading folders…'))}</div>`)
         + list.map(f => `<button type="button" role="option" data-p="${esc(f.path)}" class="${f.path === fp.start ? 'cur' : ''}" style="padding-left:${10 + 14 * (f.depth - 1)}px"${f.readonly ? ' disabled' : ''}>`
           + `<span class="no-i18n">📁 ${esc(f.name)}</span>${f.total ? `<span class="muted small">${f.total}</span>` : ''}</button>`).join('')
         + (fresh ? `<div class="muted small fp-note">${esc(t('New folder, created on save: {path}', { path: v }))}</div>` : '')
-        + (fp.tree.length && !list.length && !fresh ? `<div class="muted small fp-note">${esc(t('No folder matches'))}</div>` : '');
+        + (tree.length && !list.length && !fresh ? `<div class="muted small fp-note">${esc(t('No folder matches'))}</div>` : '');
       fp.active = -1; box.hidden = false;
       box.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
     };
     box.addEventListener('mousedown', e => e.preventDefault()); // keep the focus in the input
     box.addEventListener('click', e => { const b = e.target.closest('button[data-p]'); if (b) choose(b.dataset.p); });
-    input.addEventListener('focus', () => fp.render());
+    input.addEventListener('focus', () => { // the folders are read when the field is used, not when the page loads (before sign-in: audit U14)
+      if (!fp.tree) api('api/library/tree').then(({ tree }) => { fp.tree = tree; if (document.activeElement === input) fp.render(); }).catch(() => {});
+      fp.render();
+    });
     input.addEventListener('input', () => fp.render());
     input.addEventListener('blur', () => setTimeout(() => { box.hidden = true; }, 150));
     input.addEventListener('keydown', e => {
@@ -784,7 +788,7 @@ function folderPicker(input, on = true) {
   const fp = input._fp;
   fp.on = on; fp.start = input.value.trim();
   if (!on) { fp.box.hidden = true; return; }
-  api('api/library/tree').then(({ tree }) => { fp.tree = tree; if (document.activeElement === input) fp.render(); }).catch(() => {});
+  fp.tree = null; // read again at the next focus
 }
 
 async function loadFolderList() {
@@ -1324,6 +1328,7 @@ async function loadJobs() {
   const box = $('#jobs'); box.innerHTML = '';
   const filtered = (jobsFilter.space ?? '') !== '' || jobsFilter.tag || jobsFilter.q || jobsFilter.archived;
   if (!jobs.length) {
+    if (!filtered && (directives || []).length) return; // a directive is running: its card is the content, not "no jobs yet" (audit U11)
     box.innerHTML = filtered ? '<div class="placeholder">No job matches these filters. <a href="#jobs" data-a="clear">Show them all</a></div>'
       : '<div class="placeholder">No jobs yet. Ask for research, e.g. <q>compare the three best e-bikes under €2000</q>.</div>';
     box.querySelector('[data-a=clear]')?.addEventListener('click', e => { e.preventDefault(); jobsFilter.space = ''; jobsFilter.tag = ''; jobsFilter.q = ''; jobsFilter.archived = false; saveJobsFilter(); loadJobs(); });
@@ -2906,7 +2911,10 @@ function initialValue(f) {
   if (f.type === 'multi') return (eff || '').split(',').filter(Boolean).join(',');
   if (f.type === 'secret') return '';
   if (f.type === 'sites') return siteList(f.value).join(',');
-  if (f.type === 'select') return eff;
+  if (f.type === 'select') { // a value the list does not offer (set in the server's environment) shows as the list's choice: not an unsaved change (audit U12)
+    const el = document.getElementById('set-' + f.key);
+    return el && ![...el.options].some(o => o.value === eff) ? el.value : eff;
+  }
   return f.value;
 }
 /** Settings → Library → Search: which model is in use for search by meaning, the index, and what it costs here.
@@ -4656,7 +4664,7 @@ const MEM_HELP = {
   'HEARTBEAT.md': 'Checklist for periodic checks (needs TALIXIO_HEARTBEAT_MINUTES). It only messages you when something needs attention.',
 };
 async function loadSkills() {
-  const { skills } = await api('api/skills');
+  const skills = (await api('api/skills')).skills.filter(k => k.kind !== 'role'); // roles are managed in Pilotage → Roles (and the assessor cannot be deleted): audit U13
   state.memInfo.skills = skills.length; renderMemNav();
   const box = $('#skills'); box.innerHTML = '';
   if (!skills.length) { box.innerHTML = '<div class="placeholder">No skills yet. After multi-step tasks it writes down how it did them, so next time is faster and closer to what you want.</div>'; return; }
@@ -7672,4 +7680,6 @@ async function startPreview() {
 if (previewId) start = startPreview; // after sign-in, come back to the document
 
 registerServiceWorker();
-api('api/status').then(async () => { await start(); if (!previewId) handleLaunch(); }).catch(() => showLogin());
+// no session cookie at all (said by the server in the page): the sign-in at once, without a refused request (audit U14)
+if (document.documentElement.dataset.session === '0' && navigator.onLine) showLogin();
+else api('api/status').then(async () => { await start(); if (!previewId) handleLaunch(); }).catch(() => showLogin());

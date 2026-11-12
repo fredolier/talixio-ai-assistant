@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.27 (2026-11-12)
+
+- Interface fixes (audit 5.1, U3–U5, U10–U14): the message box no longer reads "Message à à Talixio…" (it said its text twice in French) and stays on one line on a phone (cut with "…"); with the menu folded, the assistant's name no longer breaks in two ("Talix / io"); links are in the app's colour instead of the browser's blue (Activity, Tasks…); "show handled" in Mail stays on one line; Jobs no longer says "No jobs yet" under a directive that is running; Settings no longer shows "1 unsaved change" when a value set on the server is not in its list, and the save bar no longer covers the last fields; Memory → Skills no longer lists roles (they are managed in Pilotage → Roles, and the protected assessor showed a Delete button); the sign-in page no longer makes three requests the server refuses (the folder list is read when a folder field is used, and the page knows there is no session). Checked with screenshots (desktop and phone); the doubled "à à" was seen with the server's language set to French, the new browser test guards the message box but did not reproduce it on the old code.
+
 ## 1.35.26 (2026-11-12)
 
 - Fix (audit Q12, third part): **the other state files are written whole or not at all**. The sign-in tokens of Google, Microsoft, Spotify and Légifrance, the connectors' settings, their sign-ins and tool lists, the store's state, the shared catalogue, the Claude sign-in state and the administration's settings were each written to a temporary file and renamed without checking that the write had worked: a full disk could leave an empty file and sign you out of a service. They now all go through `JsonFile` (checked, then swapped), and connectors' sign-ins are updated under a lock so two at once keep both. Still to do (noted in the audit plan): the multi-user administration's state has read-change-write steps that are not yet under a lock. Tested with a simulated failed write for the sign-in tokens.

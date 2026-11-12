@@ -25,7 +25,8 @@ final class Web
             header("Content-Security-Policy: default-src 'self'$connect; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
             header('X-Frame-Options: SAMEORIGIN'); // no other site can frame the app and trick a click (older browsers read this one)
             $html = (string)file_get_contents(dirname(__DIR__) . '/web/public/app.html');
-            $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '">', $html, 1); // the interface language (i18n.js)
+            // data-session: whether this browser holds a session at all, so the page shows the sign-in without a refused request first (audit U14)
+            $html = preg_replace('/<html lang="en">/', '<html lang="en" data-lang="' . htmlspecialchars($this->app->cfg->lang) . '" data-session="' . (isset($_COOKIE[self::cookie('talixio')]) ? '1' : '0') . '">', $html, 1); // the interface language (i18n.js)
             if ($this->app->cfg->lang === 'auto') I18n::remember($this->app, (string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
             // the scripts' address carries the version (v/<version>/app.js, served by router.php): a page always gets the
             // scripts of its own version, never older ones from an installed app's cache, even an older service worker's

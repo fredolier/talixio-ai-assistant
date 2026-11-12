@@ -21,6 +21,7 @@
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent)} /* links in the app's colour, not the browser's blue (audit U5); styled links override it */
 h1,h2,h3{margin:0;line-height:1.2;text-wrap:balance}
 h1,h2{font-family:var(--serif);font-weight:600}
 h2{font-size:1.45rem} h3{font-size:1rem;margin-top:8px}
@@ -609,6 +610,8 @@ tr:last-child td{border-bottom:0}
 .rail a span,.brand span,#logout span{white-space:nowrap;overflow:hidden}
 #brand-name{min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 #brand-name.long{font-size:1rem}
+/* folded menu: the name is hidden, not cut in two ("Talix / io"): the id rule above would win over .brand>span (audit U4) */
+.shell.collapsed #brand-name{display:none}
 .shell.collapsed{grid-template-columns:64px 1fr}
 .shell.collapsed .rail{padding:18px 8px;align-items:center}
 .shell.collapsed .brand{flex-direction:column;padding:0 0 14px;gap:12px}
@@ -1394,6 +1397,9 @@ details.adv[open]>summary::before{transform:rotate(90deg)}
 .settings-page.searching .set-sec>header p{display:none}
 .set-save{position:sticky;bottom:12px;z-index:5;display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--bg);border-radius:var(--r);padding:10px 12px 10px 16px;box-shadow:0 6px 24px rgb(0 0 0/.18)}
 .set-save[hidden]{display:none}
+#view-settings:has(#set-save:not([hidden])){padding-bottom:72px} /* the bar does not cover the last fields (audit U12) */
+#input::placeholder{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} /* one line, cut with … on a phone (audit U3) */
+#mail-all-label{white-space:nowrap} /* "show handled" on one line (audit U10) */
 .set-save .btn.ghost{color:var(--bg);border-color:transparent}
 .set-save .btn.ghost:hover{background:color-mix(in srgb,var(--bg) 14%,transparent)}
 @media (max-width:760px){
