@@ -81,7 +81,7 @@ final class Web
                 if (!empty($_GET['download'])) header('Content-Disposition: attachment; filename="pilot-status.md"');
                 echo $this->app->conductor()->refreshStatusFile(true); return;
             }
-            if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''))); return; }
+            if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''), !empty($body['peek']))); return; }
             $out = $this->route($method, $path, $body);
             $this->json($out, isset($out['errors']) ? 422 : 200); // values that did not validate
         } catch (Conflict $e) {
@@ -880,6 +880,15 @@ final class Web
      */
     private function shareInbox(): void
     {
+        // a share comes from the phone's share sheet (no Sec-Fetch-Site, or "none") or from the app itself: a form
+        // posted by another site is refused, so a page you visit cannot drop files into your inbox
+        $site = strtolower((string)($_SERVER['HTTP_SEC_FETCH_SITE'] ?? ''));
+        if ($site !== '' && $site !== 'none' && $site !== 'same-origin') {
+            http_response_code(403);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo 'Sharing works from the share menu of your phone or computer, not from another website.';
+            return;
+        }
         // the session cookie is not always sent with a share (it comes from another app): without it,
         // shares are small and rate-limited, so nobody can fill the disk by posting here
         $signedIn = false;
@@ -920,21 +929,25 @@ final class Web
         $files = []; $total = 0; $skipped = 0;
         $up = $_FILES['files'] ?? null;
         if ($up) {
-            $names = (array)$up['name']; $tmps = (array)$up['tmp_name']; $errs = (array)$up['error']; $types = (array)$up['type']; $sizes = (array)$up['size'];
+            $names = (array)$up['name']; $tmps = (array)$up['tmp_name']; $errs = (array)$up['error']; $sizes = (array)$up['size'];
             foreach ($names as $i => $name) {
                 if (($errs[$i] ?? 1) !== UPLOAD_ERR_OK) { if (($errs[$i] ?? 1) !== UPLOAD_ERR_NO_FILE) $skipped++; continue; }
                 if (count($files) >= 10 || $total + (int)$sizes[$i] > $maxBytes) { $skipped++; continue; }
                 $total += (int)$sizes[$i];
                 $n = count($files);
-                if (move_uploaded_file($tmps[$i], "$dir/$n")) $files[] = ['name' => (string)$name, 'type' => (string)($types[$i] ?? '')];
+                // the type is read from the content: the one the sender declares is not trusted
+                if (move_uploaded_file($tmps[$i], "$dir/$n")) $files[] = ['name' => (string)$name, 'type' => (string)((new \finfo(FILEINFO_MIME_TYPE))->file("$dir/$n") ?: 'application/octet-stream')];
             }
         }
         file_put_contents("$dir/meta.json", json_encode(['owner' => $owner, 'text' => mb_substr($text, 0, 20000), 'files' => $files, 'skipped' => $skipped, 'max_mb' => intdiv($maxBytes, 1_000_000)]));
         header('Location: ' . Config::basePath() . '/?share=' . $token . '#chat', true, 303);
     }
 
-    /** Signed-in user takes a shared item: files are stored like uploads and prefilled in the composer. */
-    private function shareClaim(string $token): array
+    /**
+     * Signed-in user takes a shared item: files are stored like uploads and prefilled in the composer.
+     * $peek: only say what the share holds (names, text), so the app can ask before anything is stored.
+     */
+    private function shareClaim(string $token, bool $peek = false): array
     {
         if (!preg_match('/^[a-f0-9]{32}$/', $token)) $this->fail(400, 'bad share');
         $dir = $this->app->cfg->dataDir . "/share-inbox/$token";
@@ -942,6 +955,8 @@ final class Web
         // the browser that shared it: anyone else gets the same answer as for an expired share
         if (!is_array($meta) || !hash_equals((string)($meta['owner'] ?? ''), hash('sha256', (string)($_COOKIE[self::cookie('talixio_share')] ?? ''))))
             $this->fail(404, 'This share has expired. Share it again.');
+        if ($peek) return ['text' => (string)$meta['text'], 'files' => array_values(array_map(fn($f) => ['name' => (string)$f['name']], array_filter((array)$meta['files'], fn($f, $i) => is_file("$dir/$i"), ARRAY_FILTER_USE_BOTH))),
+            'skipped' => (int)($meta['skipped'] ?? 0), 'max_mb' => (int)($meta['max_mb'] ?? 0)];
         $out = [];
         foreach ($meta['files'] as $i => $f) {
             if (!is_file("$dir/$i")) continue;

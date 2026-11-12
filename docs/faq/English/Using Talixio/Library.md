@@ -33,7 +33,8 @@
 - **＋ New → Upload** or drag and drop on the Library page, into the open folder.
 - Attachments from the chat, Telegram or Signal go to `/Inbox`;
   recordings go to `/Meetings`.
-- On Android: **Share → Talixio** from any app.
+- On Android: **Share → Talixio** from any app. The app then asks *"2 shared files: add them?"* with their names:
+  nothing reaches `/Inbox` or your message before you tap **Add**. A share posted by another website is refused.
 
 ## Filing
 - The app suggests a folder and a clear name for each new document in `/Inbox`

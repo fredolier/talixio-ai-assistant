@@ -36,7 +36,9 @@
 - **＋ Nouveau → Téléverser** ou glisser-déposer dans la page Bibliothèque, dans le dossier ouvert.
 - Les pièces jointes de la conversation, de Telegram ou de Signal arrivent dans `/Inbox` ;
   les enregistrements dans `/Meetings`.
-- Sur Android : **Partager → Talixio** depuis n'importe quelle app.
+- Sur Android : **Partager → Talixio** depuis n'importe quelle app. L'app demande alors *« 2 fichiers partagés : les
+  ajouter ? »* avec leurs noms : rien n'arrive dans `/Inbox` ni dans votre message avant d'appuyer sur **Ajouter**.
+  Un partage envoyé par un autre site web est refusé.
 
 ## Ranger
 - L'app propose un dossier et un nom clair pour chaque nouveau document de `/Inbox`

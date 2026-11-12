@@ -7589,14 +7589,24 @@ async function handleLaunch() {
   }
   if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', '/' + location.hash);
   if (token) {
+    // a share is only looked at first: nothing is stored nor written in the message box before the user says yes
+    // (a link to /?share=… can come from somewhere else than this browser's share sheet)
     try {
-      const d = await post('api/share/claim', { token });
-      if (d.text) { $('#input').value = d.text; autosize(); }
-      for (const f of d.files) { state.pending.push({ id: f.id, info: f }); }
-      renderPending();
+      const p = await post('api/share/claim', { token, peek: true });
+      const names = p.files.map(f => f.name);
+      const what = names.length ? t(names.length === 1 ? '1 shared file: add it?' : '{n} shared files: add them?', { n: names.length }) : t('Shared text: add it to your message?');
       location.hash = '#chat';
-      toast(d.skipped ? `${d.skipped} file(s) were too large to share this way (max ${d.max_mb} MB): attach them with the paperclip.` : 'Shared content ready: add a message if you like, then send.');
-      $('#input').focus();
+      banner(`${what}${names.length ? ' ' + names.join(', ') : p.text ? ' ' + Array.from(p.text).slice(0, 80).join('') : ''}`, t('Add'), async () => {
+        banner('');
+        try {
+          const d = await post('api/share/claim', { token });
+          if (d.text) { $('#input').value = d.text; autosize(); }
+          for (const f of d.files) { state.pending.push({ id: f.id, info: f }); }
+          renderPending();
+          toast(d.skipped ? `${d.skipped} file(s) were too large to share this way (max ${d.max_mb} MB): attach them with the paperclip.` : 'Shared content ready: add a message if you like, then send.');
+          $('#input').focus();
+        } catch (e) { toast(e.message); }
+      });
     } catch (e) { toast(e.message); }
   }
   if (params.get('action') === 'capture') { location.hash = '#chat'; openCapture(); }

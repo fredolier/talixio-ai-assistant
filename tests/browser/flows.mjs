@@ -549,6 +549,26 @@ const flows = {
     check('markdown: a crafted link sends no request to another host', outside.length === 0, outside.join(' '));
     check('markdown: a plain link and a link in bold still render', JSON.stringify(res.links) === JSON.stringify([['https://example.org/a', '', 'the doc'], ['https://example.org/b', 'b', 'bold link']]), JSON.stringify(res.links));
   },
+  async shareTarget({ page, check, base }) {
+    // audit S2: a share is only stored once the user says yes in the app
+    const url = await page.evaluate(async () => {
+      const fd = new FormData(); fd.append('text', 'shared words'); fd.append('files', new File(['hello'], 'shared-probe.txt', { type: 'text/plain' }));
+      return (await fetch('share', { method: 'POST', body: fd })).url;
+    });
+    check('share: posting from the app gives a share link', /[?&]share=[a-f0-9]{32}/.test(url), url);
+    const inInbox = async () => JSON.stringify(await api(page, 'api/library?folder=/Inbox')).includes('shared-probe.txt');
+    await page.goto(url);
+    await page.waitForSelector('#banner:not([hidden]) #banner-action:not([hidden])', { timeout: 8000 });
+    const asked = await page.textContent('#banner-text');
+    check('share: the app asks before adding, and names the files', asked.includes('shared-probe.txt'), asked);
+    check('share: nothing is in the inbox nor in the message box before the user agrees',
+      !(await inInbox()) && (await page.inputValue('#input')) === '' && await page.isHidden('#pending-files'));
+    await page.click('#banner-action');
+    await page.waitForSelector('#pending-files:not([hidden])', { timeout: 8000 });
+    check('share: once agreed, the file is attached and the text prefilled', await inInbox() && (await page.inputValue('#input')).includes('shared words')
+      && (await page.textContent('#pending-files')).includes('shared-probe.txt'));
+    await page.fill('#input', ''); await page.evaluate(() => { state.pending.length = 0; renderPending(); });
+  },
   async cardText({ page, check }) {
     await go(page, 'board');
     await page.click('#view-board .kcard');

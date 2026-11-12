@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.4 (2026-11-12)
+
+- Security (audit S2): **a website could drop files into your library through the share target**. `POST /share` (the target of *Share → Talixio* on Android) accepted a form posted by any page you visited while signed in, and the app then claimed the share on its own: up to 10 files landed in `/Inbox`, were indexed, and the message box was prefilled. Now (1) the server refuses a share whose browser says it was sent by another site (`Sec-Fetch-Site` other than `none` or `same-origin`; a share without that header, as from older webviews, is still taken); (2) the app first shows *"N shared files: add them?"* with their names and stores nothing, nor prefills the message, before you tap **Add**; (3) a shared file's type is read from its content, not taken from the sender. Tests replay the cross-site post and check that nothing reaches `/Inbox` before you agree. **Not tried on a real phone**: sharing from the Android share sheet is expected to send `Sec-Fetch-Site: none` or no header, which is still accepted, but this was not checked on a device. FAQ *Library* updated.
+
 ## 1.35.3 (2026-11-12)
 
 - Security (audit S1): **a crafted link in an answer could no longer restyle the page or call another site**. The Markdown renderer used an internal marker that a link address could smuggle into a second link, so text written by the model, a background job or a tool result could add attributes (a full-screen style with a background image loaded at once, without a click) to a link. The marker is now stripped from the text and refused in every link address, and a link whose address holds a space, a quote or a marker is shown as plain text. Answers already stored are safe too: the fix is in the rendering. A browser test replays the attack (no `style` or `on…` attribute, no request to another host) next to ordinary links.

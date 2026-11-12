@@ -301,13 +301,28 @@ $shareRaw = function (string $jar, array $fields) use ($raw) {
     return [$r['code'], preg_match('/[?&]share=([a-f0-9]{32})/', $r['h']['location'] ?? '', $mm) ? $mm[1] : ''];
 };
 $f1 = tap_tmp('hello from a phone'); $f2 = tap_tmp('second file');
+// audit S2: a form posted by another site must not drop files into the inbox
+$before = glob("$d/share-inbox/*", GLOB_ONLYDIR) ?: [];
+$xs = $raw('/share', 'POST', ['text' => 'from evil', 'files[0]' => new CURLFile($f1, 'text/html', 'x.html')], 'a', ['Sec-Fetch-Site: cross-site']);
+check('web1: a share posted from another site is refused', $xs['code'] === 403 && !isset($xs['h']['location']) && (glob("$d/share-inbox/*", GLOB_ONLYDIR) ?: []) == $before, json_encode([$xs['code'], $xs['h']]));
+$xs = $raw('/share', 'POST', ['text' => 'from a sibling'], 'a', ['Sec-Fetch-Site: same-site']);
+check('web1: a share posted from a sibling site is refused', $xs['code'] === 403);
+foreach (['none', 'same-origin'] as $sfs) {
+    $xs = $raw('/share', 'POST', ['text' => 'from the share sheet'], 'a', ["Sec-Fetch-Site: $sfs"]);
+    check("web1: a share with Sec-Fetch-Site $sfs is taken", $xs['code'] === 303 && str_contains($xs['h']['location'] ?? '', '?share='), (string)$xs['code']);
+}
+foreach (glob("$d/share-inbox/*", GLOB_ONLYDIR) as $x) exec('rm -rf ' . escapeshellarg($x));
 $big = tap_tmp(str_repeat('x', 3_000_000)); // above the server's upload limit
 [$code, $tok] = $shareRaw('a', ['text' => 'look at this', 'url' => 'https://acme.example/x',
-    'files[0]' => new CURLFile($f1, 'text/plain', 'note.txt'), 'files[1]' => new CURLFile($f2, 'text/plain', 'second.txt'), 'files[2]' => new CURLFile($big, 'text/plain', 'big.txt')]);
+    'files[0]' => new CURLFile($f1, 'text/html', 'note.txt'), 'files[1]' => new CURLFile($f2, 'text/plain', 'second.txt'), 'files[2]' => new CURLFile($big, 'text/plain', 'big.txt')]);
 check('web1: a signed-in share is kept', $code === 303 && $tok !== '' && is_file("$d/share-inbox/$tok/meta.json"), (string)$code);
 $meta = json_decode((string)@file_get_contents("$d/share-inbox/$tok/meta.json"), true);
 check('web1: a signed-in share may be large, and a file over the limit is skipped', ($meta['max_mb'] ?? 0) === 200 && count($meta['files'] ?? []) === 2 && ($meta['skipped'] ?? 0) === 1, json_encode($meta));
+check('web1: a shared file\'s type is read from its content, not taken from the sender', ($meta['files'][0]['type'] ?? '') === 'text/plain', json_encode($meta));
 @unlink("$d/share-inbox/$tok/1"); // one file gone before the claim
+$pk = $web('/api/share/claim', ['token' => $tok, 'peek' => true]);
+check('web1: peeking at a share lists it and stores nothing', ($pk['files'] ?? null) === [['name' => 'note.txt']] && ($pk['text'] ?? '') === "look at this\nhttps://acme.example/x"
+    && is_file("$d/share-inbox/$tok/0"), json_encode($pk));
 $cl = $web('/api/share/claim', ['token' => $tok]);
 check('web1: claiming the share stores its files in the inbox', ($cl['text'] ?? '') === "look at this\nhttps://acme.example/x" && count($cl['files'] ?? []) === 1
     && ($cl['files'][0]['name'] ?? '') === 'note.txt' && $cl['skipped'] === 1 && !is_dir("$d/share-inbox/$tok"), json_encode($cl));
