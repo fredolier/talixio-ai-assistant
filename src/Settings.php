@@ -47,6 +47,7 @@ final class Settings
                 ['TALIXIO_BUDGET_MONTHLY_USD', 'Monthly budget ($)', 'number', ''],
                 ['TALIXIO_EUR_USD', 'Euro to dollar rate', 'number', 'To compare a bill in euros (Mistral bills in euros) with the estimates in dollars.'],
                 ['TALIXIO_MAX_PARALLEL_JOBS', 'Sub-agents in parallel', 'number', ''],
+                ['TALIXIO_JOB_MAX_MINUTES', 'Longest a background job may run (minutes)', 'number', 'A job still running after this is stopped and marked as failed. 0 = no limit.'],
                 ['TALIXIO_JOB_MAX_USD', 'Cap per background job ($)', 'number', 'Default for each job. A job that reaches it is stopped (it is warned at 80% to write its report). 0 = no cap.'],
                 ['TALIXIO_JOB_MAX_USD_LIMIT', 'Highest cap for one job ($)', 'number', 'When you ask for a bigger job ("budget 5 $"), the assistant may raise its cap up to this.'],
                 ['TALIXIO_JOB_EFFORT', 'Effort of background jobs', 'select', 'Default; can be chosen per job. Higher: deeper thinking and more steps (low 15, medium 30, high 60, xhigh 100, max 200), so longer and more expensive.', ['low' => 'low', 'medium' => 'medium', 'high' => 'high', 'xhigh' => 'very high', 'max' => 'max']],
@@ -206,7 +207,7 @@ final class Settings
     public const ADVANCED = [
         'TALIXIO_HISTORY_MESSAGES', 'TALIXIO_HISTORY_TOKENS',
         'TALIXIO_SOVEREIGN_URL', 'TALIXIO_MODEL_FAST', 'TALIXIO_MODEL', 'TALIXIO_MODEL_DEEP', 'TALIXIO_DEEP_THINKING_TOKENS', 'TALIXIO_DEEP_REASONING_EFFORT', 'TALIXIO_ESCALATE', 'TALIXIO_TOOLS',
-        'TALIXIO_MAX_PARALLEL_JOBS', 'TALIXIO_JOB_MAX_USD_LIMIT', 'TALIXIO_JOB_EFFORT', 'TALIXIO_PRICES', 'ANTHROPIC_WORKSPACE_ID', 'OPENAI_PROJECT_ID',
+        'TALIXIO_MAX_PARALLEL_JOBS', 'TALIXIO_JOB_MAX_MINUTES', 'TALIXIO_JOB_MAX_USD_LIMIT', 'TALIXIO_JOB_EFFORT', 'TALIXIO_PRICES', 'ANTHROPIC_WORKSPACE_ID', 'OPENAI_PROJECT_ID',
         'TALIXIO_NTFY_TOKEN', 'TALIXIO_VAPID_SUBJECT', 'TALIXIO_HEARTBEAT_MINUTES',
         'TALIXIO_SMTP_SECURITY', 'TALIXIO_IMAP_PORT', 'TALIXIO_IMAP_USER', 'TALIXIO_IMAP_PASSWORD', 'TALIXIO_EMAIL_REQUIRE_AUTH',
         'TALIXIO_MAILBOX_IMAP_PORT', 'TALIXIO_MAILBOX_SMTP_HOST', 'TALIXIO_MAILBOX_SMTP_PORT',

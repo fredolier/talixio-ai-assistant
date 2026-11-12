@@ -6,6 +6,19 @@ final class Http
 {
     /** Called before every request with its URL and size: Privacy checks it (may throw) and logs it. */
     public static $hook = null;
+    /** How waiting between tries is done (tests replace it). */
+    public static $sleep = null;
+
+    /** Worth trying again: too many requests, the server overloaded or failing (Anthropic answers 529 when overloaded). */
+    private const RETRY_CODES = [408, 429, 500, 502, 503, 504, 529];
+
+    /** Seconds to wait before try $n (1, 2…): the server's Retry-After when it gives one (at most 60 s), else 2, 4, 8… s. */
+    private static function pause(int $n, array $headers): void
+    {
+        $ra = trim((string)($headers['retry-after'] ?? ''));
+        $s = ctype_digit($ra) ? min(60, (int)$ra) : min(30, 2 ** $n);
+        if (self::$sleep) (self::$sleep)($s); else sleep($s);
+    }
 
     public static function check(string $url, int $bytes): void { if (self::$hook) (self::$hook)($url, $bytes); }
 
@@ -17,7 +30,7 @@ final class Http
         $resp = [];
         $ch = curl_init($url);
         curl_setopt_array($ch, $curlOpts + [
-            CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => min($timeout, 15), // an unreachable server fails fast
             CURLOPT_HTTPHEADER => $headers, CURLOPT_USERAGENT => 'Talixio/0.2',
             CURLOPT_HEADERFUNCTION => function ($ch, string $line) use (&$resp) {
                 if (str_contains($line, ':')) { [$k, $v] = explode(':', $line, 2); $resp[strtolower(trim($k))] = trim($v); }
@@ -32,10 +45,19 @@ final class Http
         return [$code, (string)$out, $resp];
     }
 
-    public static function json(string $url, array $payload, array $headers = [], int $timeout = 180): array
+    /**
+     * POST JSON, read JSON. $tries > 1 (the model providers, audit Q13): a network error, a 429 or a server error is tried
+     * again after a pause; only where sending twice does no harm (a model call, not a message sent to someone).
+     */
+    public static function json(string $url, array $payload, array $headers = [], int $timeout = 180, int $tries = 1): array
     {
-        [$code, $body] = self::request('POST', $url, array_merge(['Content-Type: application/json'], $headers),
-            json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), $timeout);
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        for ($n = 1; ; $n++) {
+            try { [$code, $body, $h] = self::request('POST', $url, array_merge(['Content-Type: application/json'], $headers), $json, $timeout); }
+            catch (\RuntimeException $e) { if ($n >= $tries || !str_starts_with($e->getMessage(), 'HTTP error')) throw $e; self::pause($n, []); continue; }
+            if ($n < $tries && in_array($code, self::RETRY_CODES, true)) { self::pause($n, $h); continue; }
+            break;
+        }
         $data = json_decode($body, true);
         if ($code >= 400 || !is_array($data)) throw new \RuntimeException("API error $code: " . mb_substr($body, 0, 400));
         return $data;
@@ -45,18 +67,33 @@ final class Http
      * POST JSON and read a server-sent-events stream. Calls $onEvent(string $event, array $data) per event.
      * Throws with the response body on HTTP errors.
      */
-    public static function sse(string $url, array $payload, array $headers, callable $onEvent, int $timeout = 600): void
+    public static function sse(string $url, array $payload, array $headers, callable $onEvent, int $timeout = 600, int $tries = 1): void
+    {
+        // tried again only before anything reached the user: a stream that already gave text is never replayed (audit Q13)
+        for ($n = 1; ; $n++) {
+            $delivered = false; $retryAfter = [];
+            try { self::sseOnce($url, $payload, $headers, function ($e, $d) use ($onEvent, &$delivered) { $delivered = true; $onEvent($e, $d); }, $timeout, $retryAfter); return; }
+            catch (\RuntimeException $e) {
+                $again = $n < $tries && !$delivered && (str_starts_with($e->getMessage(), 'HTTP error') || (bool)preg_match('/^API error (' . implode('|', self::RETRY_CODES) . '):/', $e->getMessage()));
+                if (!$again) throw $e;
+                self::pause($n, $retryAfter);
+            }
+        }
+    }
+
+    private static function sseOnce(string $url, array $payload, array $headers, callable $onEvent, int $timeout, array &$respHeaders): void
     {
         $status = 0; $buf = ''; $errBody = ''; $thrown = null;
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         self::check($url, strlen($json));
         $ch = curl_init($url);
         curl_setopt_array($ch, [
-            CURLOPT_POST => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_USERAGENT => 'Talixio/0.5',
+            CURLOPT_POST => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_USERAGENT => 'Talixio/0.5',
             CURLOPT_HTTPHEADER => array_merge(['Content-Type: application/json', 'Accept: text/event-stream'], $headers),
             CURLOPT_POSTFIELDS => $json,
-            CURLOPT_HEADERFUNCTION => function ($ch, string $line) use (&$status) {
+            CURLOPT_HEADERFUNCTION => function ($ch, string $line) use (&$status, &$respHeaders) {
                 if (preg_match('#^HTTP/\S+ (\d{3})#', $line, $m)) $status = (int)$m[1];
+                elseif (str_contains($line, ':')) { [$k, $v] = explode(':', $line, 2); $respHeaders[strtolower(trim($k))] = trim($v); }
                 return strlen($line);
             },
             CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$buf, &$status, &$errBody, &$thrown, $onEvent) {

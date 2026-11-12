@@ -36,7 +36,7 @@ final class AnthropicProvider implements Provider
             if ($i > 0 && ($specs = $specsOf())) $payload['tools'] = $specs;
             $sent = self::cacheUpTo($messages);
             $r = $onEvent ? $this->stream($payload + ['messages' => $sent], $onEvent)
-                : Http::json("{$this->baseUrl}/v1/messages", $payload + ['messages' => $sent], $this->headers(), 600);
+                : Http::json("{$this->baseUrl}/v1/messages", $payload + ['messages' => $sent], $this->headers(), 600, 3);
             $u = $r['usage'] ?? [];
             $onUsage(['model' => $this->tier->model, 'in' => (int)($u['input_tokens'] ?? 0), 'out' => (int)($u['output_tokens'] ?? 0),
                 'cache_read' => (int)($u['cache_read_input_tokens'] ?? 0), 'cache_write' => (int)($u['cache_creation_input_tokens'] ?? 0), 'cost' => null]);
@@ -71,7 +71,7 @@ final class AnthropicProvider implements Provider
         else $messages[] = ['role' => 'user', 'content' => $note];
         $last = $payload + ['messages' => $messages];
         if ($specs) $last['tool_choice'] = ['type' => 'none'];
-        $r = $onEvent ? $this->stream($last, $onEvent) : Http::json("{$this->baseUrl}/v1/messages", $last, $this->headers(), 600);
+        $r = $onEvent ? $this->stream($last, $onEvent) : Http::json("{$this->baseUrl}/v1/messages", $last, $this->headers(), 600, 3);
         $u = $r['usage'] ?? [];
         $onUsage(['model' => $this->tier->model, 'in' => (int)($u['input_tokens'] ?? 0), 'out' => (int)($u['output_tokens'] ?? 0),
             'cache_read' => (int)($u['cache_read_input_tokens'] ?? 0), 'cache_write' => (int)($u['cache_creation_input_tokens'] ?? 0), 'cost' => null]);
@@ -150,7 +150,7 @@ final class AnthropicProvider implements Provider
                     break;
                 case 'error': throw new \RuntimeException('API error: ' . ($d['error']['message'] ?? 'stream error'));
             }
-        });
+        }, 600, 3); // tried again (3 times at most) only before the first event (Http::sse)
         ksort($msg['content']);
         $msg['content'] = array_values($msg['content']);
         return $msg;

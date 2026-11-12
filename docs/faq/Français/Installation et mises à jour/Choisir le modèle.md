@@ -91,6 +91,9 @@ eux : l'assistant est donc traité en Allemagne sans rien faire de plus. Choisir
 - Trois niveaux : **rapide** (résumés, vérifications), **standard** (conversation), **approfondi** (raisonnements difficiles).
 - **Budget** : limites par jour et par mois en dollars. Au-delà de 80 %, il passe au niveau rapide ;
   à 100 %, il n'appelle plus de modèle.
+- Un appel au modèle refusé parce que le fournisseur est surchargé ou limite le débit (ou un raté du réseau) est
+  retenté deux fois, après l'attente que demande le fournisseur, tant que rien de la réponse n'a encore été affiché.
+  Un job en arrière-plan encore en cours après 2 heures (Réglages → Budget, *Durée maximale d'un job en arrière-plan*) est arrêté.
 - Les coûts affichés sont des estimations à partir des prix publics. Une fois par mois, l'assistant demande ce que
   votre fournisseur a réellement facturé (ou saisissez-le dans Activité → la ligne sous les jauges) : le budget est alors
   corrigé par le rapport entre les vraies factures et les estimations, sur les trois dernières factures.

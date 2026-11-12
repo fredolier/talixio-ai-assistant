@@ -88,6 +88,9 @@ assistant is processed in Germany with no extra step. Choosing a non-TL5 model b
 - Three tiers: **fast** (summaries, checks), **standard** (conversation), **deep** (hard reasoning).
 - **Budget**: daily and monthly limits in dollars. Above 80%, it switches to the fast tier;
   at 100%, it stops calling any model.
+- A model call refused because the provider is overloaded or limits the rate (or a network hiccup) is tried
+  again twice, after the wait the provider asks for, as long as nothing of the answer has been shown yet.
+  A background job still running after 2 hours (Settings → Budget, *Longest a background job may run*) is stopped.
 - The costs shown are estimates based on public prices. Once a month the assistant asks what your provider
   really billed (or enter it under Activity → the line below the meters): the budget is then corrected
   by the ratio between the real bills and the estimates, over the last three bills.

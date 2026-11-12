@@ -21,7 +21,7 @@ final class OpenAIProvider implements Provider
             if ($specs = array_map(fn($t) => ['type' => 'function', 'function' => $t], $tools->schemas())) $payload['tools'] = $specs;
             try {
                 $r = $onEvent ? $this->stream($payload + ['messages' => $msgs], $onEvent)
-                    : Http::json("{$this->baseUrl}/chat/completions", $payload + ['messages' => $msgs], ['Authorization: Bearer ' . ($this->key ?: 'none')], 300);
+                    : Http::json("{$this->baseUrl}/chat/completions", $payload + ['messages' => $msgs], ['Authorization: Bearer ' . ($this->key ?: 'none')], 300, 3);
             } catch (\RuntimeException $e) {
                 // a model that refuses this effort (Mistral: none|high only, plain chat models: none at all): its default instead
                 if (!isset($payload['reasoning_effort']) || !preg_match('/^API error 4\d\d\b.*reasoning_effort/s', $e->getMessage())) throw $e;
@@ -52,7 +52,7 @@ final class OpenAIProvider implements Provider
         // out of steps: one last answer without tools says where things stand (instead of a bare "stopped")
         $msgs[] = ['role' => 'user', 'content' => 'Tool step limit reached: no more tools. Answer the user now, in their language: what is done, what is not, and what you need from them to finish.'];
         $last = $payload + ['messages' => $msgs] + (isset($payload['tools']) ? ['tool_choice' => 'none'] : []);
-        $r = $onEvent ? $this->stream($last, $onEvent) : Http::json("{$this->baseUrl}/chat/completions", $last, ['Authorization: Bearer ' . ($this->key ?: 'none')], 300);
+        $r = $onEvent ? $this->stream($last, $onEvent) : Http::json("{$this->baseUrl}/chat/completions", $last, ['Authorization: Bearer ' . ($this->key ?: 'none')], 300, 3);
         $u = $r['usage'] ?? ['prompt_tokens' => (int)(strlen(json_encode($msgs)) / 4), 'completion_tokens' => 0];
         $onUsage(['model' => $this->tier->model, 'in' => (int)($u['prompt_tokens'] ?? 0), 'out' => (int)($u['completion_tokens'] ?? 0), 'cache_read' => 0, 'cache_write' => 0, 'cost' => null]);
         return self::text($r['choices'][0]['message']['content'] ?? '') ?: '(stopped after too many tool steps)';
@@ -86,7 +86,7 @@ final class OpenAIProvider implements Provider
                     foreach ($tc as $key => $v) if (!in_array($key, ['index', 'id', 'function', 'type'], true)) $cur[$key] = $v; // e.g. Gemini thought signatures
                     $calls[$idx] = $cur;
                 }
-            });
+            }, 600, 3); // tried again only before the first event (Http::sse)
         if ($calls) { ksort($calls); $msg['tool_calls'] = array_values($calls); if ($msg['content'] === '') $msg['content'] = null; }
         return ['choices' => [['message' => $msg]], 'usage' => $usage];
     }

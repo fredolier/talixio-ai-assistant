@@ -248,6 +248,10 @@ final class Jobs
                 }
             } elseif (($store->job($id)['status'] ?? '') === 'cancelled') {
                 proc_terminate($proc);
+            } elseif (($max = $this->app->cfg->jobMaxMinutes) > 0 && time() - (int)($store->job($id)['started'] ?? time()) > $max * 60) { // a job stuck on a call (audit Q13)
+                proc_terminate($proc);
+                $store->q("UPDATE jobs SET status = 'failed', result = ?, finished = ? WHERE id = ? AND status = 'running'", [
+                    "Stopped: it was still running after $max minutes (Settings → Budget: longest a background job may run).", time(), $id]);
             }
         }
         if (self::draining($this->app->cfg->dataDir)) return; // an update is waiting for the running jobs to finish
