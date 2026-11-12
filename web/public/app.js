@@ -727,7 +727,10 @@ async function loadPrivacy() {
     if (x.href) { location.hash = x.href.split('/')[0]; return; }
     try { await post('api/settings', { changes: x.set }); toast('Saved.'); loadPrivacy(); } catch (e) { toast(e.message); }
   });
-  $('#pv-security').innerHTML = d.security.map(s => `<div class="pv-sec ${s.ok ? 'ok' : 'warn'}"><i class="dot"></i><span>${esc(s.label)}</span><span class="muted small">${s.ok ? 'Active' : 'Not set up'}</span></div>`).join('');
+  // the backup says its real state: failed (with why), late, not run yet (audit Q15)
+  const secState = s => s.state === 'failed' ? t('Last backup failed: {e}', { e: s.error || '' }) : s.state === 'late' ? t('No backup for more than two days')
+    : s.state === 'never' ? t('Not run yet') : s.ok ? t('Active') : t('Not set up');
+  $('#pv-security').innerHTML = d.security.map(s => `<div class="pv-sec ${s.ok ? 'ok' : 'warn'}"><i class="dot"></i><span>${esc(s.label)}</span><span class="muted small${s.state === 'failed' ? ' no-i18n' : ''}">${esc(secState(s))}</span></div>`).join('');
   const j = d.journal, max = Math.max(1, ...j.today.map(r => +r.calls));
   const names = Object.fromEntries(d.spaces.map(s => [s.id, s.id ? s.name : t('General')]));
   const req = v => esc(t(+v === 1 ? '1 request' : '{n} requests', { n: v })), blk = v => esc(t(+v === 1 ? '1 blocked' : '{n} blocked', { n: v }));

@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.22 (2026-11-12)
+
+- Fix (audit Q11, Q14, Q15): **the background worker is sturdier**. A routine whose schedule cannot be read (imported, or from a restored database) stopped the whole worker — no more routines, mail or reminders; now that routine is paused, you are told once, and the rest goes on. The hourly and daily housekeeping (task and library trash, old jobs, old share links, the privacy journal) ran only if a tick fell in the first 15 seconds of the hour or day, which a slow tick missed; it now runs from when it last ran. A failing nightly backup was tried again at every tick without telling anyone, and the Privacy page said "Active" as long as backups were turned on: now a failure is recorded, you get one notice with the reason, it is tried again every 6 hours, and the Privacy page shows *Last backup failed* (with why), *No backup for more than two days* or *Not run yet*. FAQ *Backups and restore* updated.
+
 ## 1.35.21 (2026-11-12)
 
 - Fix (audit Q12, second part): **settings saved at the same moment were lost**. The settings file was read, changed and written back without a lock, so when the app and the worker (or two tabs) saved at the same time, one change silently undid the other (9 of 15 changes lost in the test of this release); it was also replaced without checking it had been fully written. Settings, the password and the two-step sign-in secret now go through `JsonFile` (under a lock, written whole or not at all), as do the autonomous pilot's policy (which was written in place) and the multi-user administration's state file (written whole; its read-change-write steps are not yet under a lock, that is the next part). Tested with three processes saving different settings at the same instant, and a simulated failed write.

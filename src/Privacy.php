@@ -579,7 +579,7 @@ final class Privacy
         $security = [
             ['label' => 'HTTPS', 'ok' => str_starts_with($this->app->shares()->baseUrl(), 'https://') || $this->app->shares()->baseUrl() === ''],
             ['label' => 'Two-step sign-in', 'ok' => $auth->totpEnabled()],
-            ['label' => 'Nightly backups', 'ok' => $this->app->cfg->backupKeep > 0],
+            ['label' => 'Nightly backups'] + (function () { $b = $this->app->backup()->status(); return ['ok' => in_array($b['state'], ['ok', 'never'], true), 'state' => $b['state'], 'last' => $b['last'], 'error' => $b['error']]; })(), // its real state (audit Q15)
         ];
         $spaces = array_map(fn($s) => ['id' => (int)$s['id'], 'name' => $s['id'] ? $s['name'] : 'General', 'level' => $s['privacy'] ?? 'internal', 'color' => $s['color']], $this->app->spaces()->all());
         return ['level' => $level, 'european' => $european, 'model_grade' => $this->modelGrade(), 'flows' => $flows, 'issues' => count($issues), 'security' => $security, 'spaces' => $spaces];

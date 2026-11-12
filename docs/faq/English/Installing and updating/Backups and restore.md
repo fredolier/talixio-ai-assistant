@@ -3,6 +3,9 @@
 - **Every night**, a backup of the database, memory, skills, files and keys
   (the last 7 are kept), in `/var/lib/talixio/backups` (or `TALIXIO_BACKUP_DIR`, for example a mounted disk).
 - A backup right now: `sudo talixio backup` (under Docker: admin page → the person → *Backup*).
+- If the nightly backup fails (a full disk, a folder that cannot be written), you get **one** notice saying why;
+  it is tried again every 6 hours, and the **Privacy** page shows *Last backup failed* with the reason, or
+  *No backup for more than two days*, until one works again.
 
 ## Restoring (simple install)
 ```bash

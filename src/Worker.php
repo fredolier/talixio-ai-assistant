@@ -82,9 +82,14 @@ final class Worker
         $paused = Transfer::paused($store) !== null; // only this server's housekeeping: nothing that answers, sends or acts
         foreach ($paused ? [] : $store->dueTasks($now) as $t) {
             // advance first so a crash never makes a task fire twice
-            $store->updateTask((int)$t['id'], $t['cron']
-                ? ['next_run' => Cron::next($t['cron'], $now), 'last_run' => $now]
-                : ['enabled' => 0, 'next_run' => null, 'last_run' => $now]);
+            try { $next = $t['cron'] ? Cron::next($t['cron'], $now) : null; }
+            catch (\Throwable $e) { // a schedule that cannot be read (imported, restored): this routine is paused and said once, the others go on (audit Q11)
+                $store->updateTask((int)$t['id'], ['enabled' => 0, 'next_run' => null]);
+                Log::error("task {$t['id']}: bad schedule \"{$t['cron']}\": {$e->getMessage()}");
+                $this->guard("task {$t['id']}", fn() => $app->notifier()->notify($t['title'], I18n::t($app, 'This routine was paused: its schedule "{cron}" cannot be read ({e}). Fix it in Routines.', ['cron' => $t['cron'], 'e' => $e->getMessage()]), (int)($t['space'] ?? 0)));
+                continue;
+            }
+            $store->updateTask((int)$t['id'], $t['cron'] ? ['next_run' => $next, 'last_run' => $now] : ['enabled' => 0, 'next_run' => null, 'last_run' => $now]);
             if (!empty($t['job'])) { // a scheduled job: start it, its report comes when it is done
                 try { $app->jobs()->runScheduled($t); }
                 catch (\Throwable $e) { $this->guard("task {$t['id']}", fn() => $app->notifier()->notify($t['title'], I18n::t($app, 'The scheduled job could not start: {e}', ['e' => $e->getMessage()]), (int)($t['space'] ?? 0))); }
@@ -133,17 +138,31 @@ final class Worker
             $this->guard('catalogue', fn() => $app->catalogue()->refresh($now));
         }
         $this->guard('embeddings', fn() => $app->recall()->embedPending());
-        if ($now % 600 < 15) $this->guard('update', fn() => $app->updater()->notifyIfNew());
-        if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->run()));
-        if ($now % 3600 < 15) $this->guard('tasks trash', fn() => $app->board()->purge());
-        if ($now % 3600 < 15) $this->guard('jobs archive', fn() => $app->jobs()->autoArchive($now));
-        if ($now % 3600 < 15) $this->guard('library trash', fn() => $app->library()->purgeTrash());
+        if ($this->every('update', 600, $now)) $this->guard('update', fn() => $app->updater()->notifyIfNew());
+        if ($app->backup()->due($now)) $this->guard('backup', fn() => Log::info('backup: ' . $app->backup()->nightly($now)));
+        // hourly and daily housekeeping from when it last ran (not "in the first 15 s of the hour", which a slow tick missed: audit Q14)
+        if ($this->every('hourly', 3600, $now)) {
+            $this->guard('tasks trash', fn() => $app->board()->purge());
+            $this->guard('jobs archive', fn() => $app->jobs()->autoArchive($now));
+            $this->guard('library trash', fn() => $app->library()->purgeTrash());
+        }
         $this->guard('library changes', fn() => $app->library()->digest($now));
-        if ($now % 86400 < 15) $this->guard('old shares', fn() => $app->shares()->purge());
-        if ($now % 86400 < 15) $this->guard('privacy journal', fn() => $app->privacy()->purge());
+        if ($this->every('daily', 86400, $now)) {
+            $this->guard('old shares', fn() => $app->shares()->purge());
+            $this->guard('privacy journal', fn() => $app->privacy()->purge());
+        }
         if ($paused) return;
         $this->guard('tasks calendar', fn() => $app->board()->syncGoogle());
         $this->guard('tasks reminder', fn() => $app->board()->remind($now));
+    }
+
+    /** Whether $seconds have passed since the last time this ran (kept in the database: a restart does not reset it). Marks it as run. */
+    private function every(string $what, int $seconds, int $now): bool
+    {
+        $k = "worker_last_$what";
+        if ($now - (int)$this->app->store->get($k, '0') < $seconds) return false;
+        $this->app->store->set($k, (string)$now);
+        return true;
     }
 
     private function guard(string $what, callable $fn): void
