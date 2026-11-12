@@ -861,13 +861,16 @@ final class Web
     {
         $c = $this->app->cfg; $st = $this->app->store;
         $err = fn(string $ch) => $st->get("channel_error_$ch") ?: null;
+        $miss = json_decode((string)$st->get('email_authserv_missing'), true);
+        $authErr = is_array($miss) && $c->emailRequireAuth && Email::authServ($c) === ''
+            ? $miss['at'] . ' incoming email is not answered: set the name of your mail server (Settings → Channels → Assistant\'s email)' . ($miss['seen'] !== '' ? "; the last email received gives: {$miss['seen']}" : '') : null;
         $notify = $this->app->notifier()->channels();
         $mask = fn(string $v) => strlen($v) > 6 ? substr($v, 0, 3) . str_repeat('•', strlen($v) - 5) . substr($v, -2) : $v; // phone numbers
         return ['notify_on' => $c->notify, 'channels' => [
             ['id' => 'webpush', 'name' => 'Push notifications (this app)', 'state' => $notify['webpush'], 'error' => $err('webpush'),
              'detail' => $this->app->webPush()->count() . ' device(s) subscribed', 'chat' => false],
             ['id' => 'email', 'name' => 'Email', 'state' => $this->app->email()->canSend() ? ($this->app->email()->canReceive() ? 'on' : 'notifications only') : 'not configured',
-             'error' => $err('email'), 'chat' => $this->app->email()->canReceive(),
+             'error' => $err('email') ?? $authErr, 'chat' => $this->app->email()->canReceive(),
              'detail' => $c->smtpHost ? "From {$c->emailFrom}" . ($c->emailTo ? " · notifications to {$c->emailTo}" : '') . ($c->imapHost ? ' · answers ' . implode(', ', $c->emailAllowed) : '') : 'Set it up in Settings → Channels → Assistant\'s email'],
             ['id' => 'signal', 'name' => 'Signal', 'state' => $notify['signal'], 'error' => $err('signal'), 'chat' => $this->app->signal()->enabled(),
              'detail' => $c->signalNumber ? "Number {$c->signalNumber} · answers " . implode(', ', array_map($mask, $c->signalAllowed)) : 'Install with install.sh --with-signal, register a number, then fill in Settings → Channels → Signal'],

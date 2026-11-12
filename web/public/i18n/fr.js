@@ -1,8 +1,11 @@
 window.I18N = window.I18N || {};
 /* French interface: English text (as it appears on screen) → French. {placeholders} match any value. See i18n.js. */
 window.I18N.fr = {
+"Incoming email for everyone (optional)": "E-mail entrant pour tous (facultatif)",
+"The name your mail server writes first in the Authentication-Results line of a received email (e.g. mx.example.com). The assistants answer an email only when this line comes from your server. Set here, it serves every assistant; a person can still set their own in Settings. Not needed for Gmail and Microsoft 365.": "Le nom que votre serveur de mail écrit en premier dans la ligne Authentication-Results d'un e-mail reçu (par ex. mx.example.com). Les assistants ne répondent à un e-mail que si cette ligne vient de votre serveur. Renseigné ici, il sert à tous les assistants ; chacun peut encore mettre le sien dans ses Réglages. Inutile pour Gmail et Microsoft 365.",
+"Mail server name": "Nom du serveur de mail",
 "Name of your mail server in Authentication-Results": "Nom de votre serveur de mail dans Authentication-Results",
-"Needed to answer emails when a verified sender is required: the first word your mail server writes in the Authentication-Results line of a received email (e.g. mx.example.com). Without it, a forged line could pass.": "Nécessaire pour répondre aux e-mails quand un expéditeur vérifié est exigé : le premier mot que votre serveur de mail écrit dans la ligne Authentication-Results d'un e-mail reçu (par ex. mx.example.com). Sans lui, une ligne falsifiée pourrait passer.",
+"Needed to answer emails when a verified sender is required: the first word your mail server writes in the Authentication-Results line of a received email (e.g. mx.example.com). Not needed for Gmail and Microsoft 365. If emails get no answer, Channels shows the name the last one gave.": "Nécessaire pour répondre aux e-mails quand un expéditeur vérifié est exigé : le premier mot que votre serveur de mail écrit dans la ligne Authentication-Results d'un e-mail reçu (par ex. mx.example.com). Inutile pour Gmail et Microsoft 365. Si les e-mails restent sans réponse, Canaux affiche le nom donné par le dernier reçu.",
 "Check the address, then press the button to download it.": "Vérifiez l'adresse, puis appuyez sur le bouton pour le télécharger.",
 "Repeat": "Répétition",
 "Date": "Date",

@@ -86,6 +86,10 @@
         <label>Client secret<input id="st-gsecret" type="password" autocomplete="off" placeholder="unchanged"></label>
         <pre id="st-redirects" class="small"></pre>
       </fieldset>
+      <fieldset><legend>Incoming email for everyone (optional)</legend>
+        <p class="muted small">The name your mail server writes first in the Authentication-Results line of a received email (e.g. mx.example.com). The assistants answer an email only when this line comes from your server. Set here, it serves every assistant; a person can still set their own in Settings. Not needed for Gmail and Microsoft 365.</p>
+        <label>Mail server name<input id="st-authserv" autocomplete="off" placeholder="mx.example.com"></label>
+      </fieldset>
       <fieldset><legend>AI in Europe for everyone (optional)</legend>
         <p class="muted small">One account with a European provider for all the assistants: their messages, documents and recordings stay with a provider hosted in Europe, under the GDPR. Each person can still choose otherwise in their Settings.</p>
         <label>Provider<select id="st-eu"><option value="">None (each person sets their own)</option><option value="ovhcloud">OVHcloud AI Endpoints (France)</option><option value="mistral">Mistral AI (France)</option><option value="scaleway">Scaleway (France)</option><option value="infomaniak">Infomaniak (Switzerland)</option></select></label>

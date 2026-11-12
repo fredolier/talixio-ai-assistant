@@ -751,6 +751,15 @@ $c->smtpHost = '127.0.0.1'; $c->smtpSecurity = 'none'; $c->smtpUser = 'bot@examp
 $c->emailTo = 'fred@example.com'; $c->emailAllowed = ['fred@example.com']; $c->imapHost = '127.0.0.1';
 // since the audit (S18) the name of our own mail server is needed to trust its Authentication-Results line
 check('email auth: without the name of our mail server, no email is answered', ($c->emailAuthServ = '') === '' && !(new \Talixio\Email($app))->handle($eml));
+$miss = json_decode((string)$app->store->get('email_authserv_missing'), true);
+check('email auth: the name the email gave is kept to be shown in Channels (not in the error the worker clears)', ($miss['seen'] ?? '') === 'mx.example.net', json_encode($miss));
+// Gmail and Microsoft 365 need nothing: the name comes from the IMAP server (1.35.38)
+$c->imapHost = 'imap.gmail.com'; $ag = Email::authServ($c); $c->imapHost = 'outlook.office365.com'; $am = Email::authServ($c); $c->imapHost = '127.0.0.1';
+check('email auth: Gmail and Microsoft 365 are known, another server is not', $ag === 'mx.google.com' && $am === Email::NO_NAME && Email::authServ($c) === '');
+$o365 = 'spf=pass (sender IP is 203.0.113.5) smtp.mailfrom=example.com; dkim=pass (signature was verified) header.d=example.com;dmarc=pass action=none header.from=example.com;compauth=pass reason=100';
+check('email auth: Microsoft 365\'s line, with no server name, is read; a line with a name is not taken for it',
+    Email::authenticated($o365, 'fred@example.com', Email::NO_NAME) && !Email::authenticated("evil.example; dkim=pass header.d=example.com", 'fred@example.com', Email::NO_NAME)
+    && !Email::authenticated('spf=pass smtp.mailfrom=example.com', 'fred@example.com', Email::NO_NAME));
 $c->emailAuthServ = 'mx.example.net';
 check('email auth: a line written by another server is not trusted', !Email::authenticated("evil.example; dkim=pass header.d=example.com", 'fred@example.com', 'mx.example.net'));
 $mail = "$dir/mail"; @mkdir($mail);
@@ -763,6 +772,7 @@ $ip = $spawn('imap.php', [(string)$iport, $mail]); $sp = $spawn('smtp.php', [(st
 $n = $app->email()->poll(new Imap('127.0.0.1', $iport, 'bot', 'x', 'INBOX', 'none'));
 proc_terminate($ip); proc_close($ip); proc_close($sp);
 check('email: only the verified allowlisted sender is answered', $n === 1, "answered $n");
+check('email auth: once the name is set, the warning in Channels goes', $app->store->get('email_authserv_missing') === '');
 check('email: all fetched mail marked seen', substr_count((string)@file_get_contents("$mail/stored.log"), '\Seen') === 3);
 $t = (string)@file_get_contents($log);
 check('email: reply threaded to the original', str_contains($t, 'In-Reply-To: <m1@example.com>') && str_contains($t, 'RCPT TO:<fred@example.com>') && str_contains($t, 'Subject: Re: =?UTF-8?Q?Caf'), $t);

@@ -90,12 +90,16 @@ final class Email
         if (!in_array($from, $c->emailAllowed, true)) { Log::warn("email: ignored sender $from (not in TALIXIO_EMAIL_ALLOWED)"); return false; }
         if (isset($h['auto-submitted']) && strtolower($h['auto-submitted']) !== 'no') return false; // never answer robots or ourselves
         // without the name of our own mail server, a sender could write an Authentication-Results line that looks like ours (audit S18)
-        if ($c->emailRequireAuth && $c->emailAuthServ === '') {
-            Log::warn("email: ignored $from: set TALIXIO_EMAIL_AUTHSERV_ID (Settings → Channels → Assistant's email) to the name your mail server writes in Authentication-Results");
-            $this->app->store->set('channel_error_email', date('Y-m-d H:i') . ' incoming email needs the name of your mail server (Settings → Channels → Assistant\'s email)');
+        $serv = self::authServ($c);
+        if ($c->emailRequireAuth && $serv === '') {
+            $seen = self::authServOf($h['authentication-results'] ?? '');
+            Log::warn("email: ignored $from: set TALIXIO_EMAIL_AUTHSERV_ID (Settings → Channels → Assistant's email) to the name your mail server writes in Authentication-Results" . ($seen !== '' ? " (this email: $seen)" : ''));
+            // its own key: the worker clears the channel's error after each poll that did not fail
+            $this->app->store->set('email_authserv_missing', json_encode(['at' => date('Y-m-d H:i'), 'seen' => $seen]));
             return false;
         }
-        if ($c->emailRequireAuth && !self::authenticated($h['authentication-results'] ?? '', $from, $c->emailAuthServ)) {
+        $this->app->store->set('email_authserv_missing', '');
+        if ($c->emailRequireAuth && !self::authenticated($h['authentication-results'] ?? '', $from, $serv)) {
             Log::warn("email: ignored $from: no DMARC or DKIM pass in Authentication-Results (set TALIXIO_EMAIL_REQUIRE_AUTH=0 if your server doesn't add it)");
             return false;
         }
@@ -116,13 +120,38 @@ final class Email
      * Only the topmost Authentication-Results counts (the one our own server added; the sender can write any below
      * it), and only from $authserv when set. SPF alone is not enough: it checks the envelope, not the From line.
      */
+    /** Microsoft 365 and Outlook.com write their results with no server name first: they are expected that way. */
+    public const NO_NAME = '-';
+
+    /**
+     * The name the person's mail server writes first in Authentication-Results: the setting (in a fleet, the admin
+     * page's, unless the person set their own), else the one of a known mail provider, from the IMAP server's name.
+     */
+    public static function authServ(Config $c): string
+    {
+        if ($c->emailAuthServ !== '') return $c->emailAuthServ;
+        $h = strtolower($c->imapHost);
+        if (in_array($h, ['imap.gmail.com', 'imap.googlemail.com'], true)) return 'mx.google.com';
+        if (in_array($h, ['outlook.office365.com', 'imap-mail.outlook.com', 'outlook.office.com'], true)) return self::NO_NAME;
+        return '';
+    }
+
+    /** The server name a received email's topmost Authentication-Results starts with ('' when none). */
+    public static function authServOf(string $results): string
+    {
+        $first = trim(strtok(strtolower(trim(strtok($results, "\n") ?: '')), ';') ?: '');
+        $name = (string)strtok($first, " \t");
+        return preg_match('/^[a-z0-9][a-z0-9.-]{0,200}$/', $name) ? $name : '';
+    }
+
     public static function authenticated(string $results, string $from, string $authserv = ''): bool
     {
         $domain = substr(strrchr($from, '@') ?: '', 1);
         $results = strtolower(trim(strtok($results, "\n") ?: ''));
         if ($domain === '' || $results === '') return false;
         $parts = explode(';', $results);
-        if ($authserv !== '' && trim(strtok($parts[0], " \t") ?: '') !== strtolower($authserv)) return false;
+        if ($authserv === self::NO_NAME) { if (!preg_match('/^\s*(spf|dkim|dmarc|arc|compauth)=/', $parts[0])) return false; array_unshift($parts, ''); } // its first part is already a result
+        elseif ($authserv !== '' && trim(strtok($parts[0], " \t") ?: '') !== strtolower($authserv)) return false;
         foreach (array_slice($parts, 1) as $r) {
             $r = trim($r);
             if (preg_match('/^dmarc=pass\b.*header\.from=([^\s;]+)/', $r, $m) && self::sameDomain($m[1], $domain)) return true;

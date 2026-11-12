@@ -38,7 +38,7 @@ final class Fleet
     {
         $s = json_decode((string)@file_get_contents($this->stateFile), true) ?: [];
         $s['settings'] = ($s['settings'] ?? []) + ['domain' => getenv('TALIXIO_DOMAIN') ?: 'localhost', 'mode' => 'path', 'memory_mb' => 1024, 'cpus' => 1.5,
-            'ollama' => true, 'ollama_model' => 'qwen3-embedding:0.6b', 'google_client_id' => '', 'google_client_secret' => '', 'apparmor_unconfined' => true,
+            'ollama' => true, 'ollama_model' => 'qwen3-embedding:0.6b', 'google_client_id' => '', 'google_client_secret' => '', 'email_authserv' => '', 'apparmor_unconfined' => true,
             'eu_provider' => '', 'eu_key' => '', 'eu_url' => '', 'eu_only' => false];
         $s['instances'] = $s['instances'] ?? [];
         $s['image'] = $s['image'] ?? ['current' => self::IMAGE . ':current', 'previous' => null];
@@ -93,6 +93,7 @@ final class Fleet
         if (isset($d['ollama'])) $set['ollama'] = (bool)$d['ollama'];
         if (isset($d['ollama_model'])) { $m = trim((string)$d['ollama_model']); if (!preg_match('/^[a-z0-9][a-z0-9._:\/-]{0,80}$/i', $m)) throw new \InvalidArgumentException('Unexpected model name.'); $set['ollama_model'] = $m; }
         foreach (['google_client_id', 'google_client_secret'] as $k) if (isset($d[$k])) $set[$k] = mb_substr(trim((string)$d[$k]), 0, 300);
+        if (isset($d['email_authserv'])) { $a = strtolower(trim((string)$d['email_authserv'])); if ($a !== '' && !preg_match('/^[a-z0-9][a-z0-9.-]{0,200}$/', $a)) throw new \InvalidArgumentException('The mail server\'s name looks like mx.example.com.'); $set['email_authserv'] = $a; }
         if (isset($d['apparmor_unconfined'])) $set['apparmor_unconfined'] = (bool)$d['apparmor_unconfined'];
         if (isset($d['eu_provider'])) { if ($d['eu_provider'] !== '' && !isset(Sovereign::SERVICES[$d['eu_provider']])) throw new \InvalidArgumentException('Unknown European provider.'); $set['eu_provider'] = (string)$d['eu_provider']; }
         if (isset($d['eu_key'])) $set['eu_key'] = mb_substr(trim((string)$d['eu_key']), 0, 300);
@@ -140,6 +141,7 @@ final class Fleet
         if (!empty($i['reset'])) $env[] = 'TALIXIO_RESET=' . $i['reset'];                                // a new password or 2-step reset, applied once
         if ($set['ollama']) array_push($env, 'TALIXIO_EMBEDDINGS=ollama', 'TALIXIO_EMBEDDINGS_MODEL=' . $set['ollama_model'], 'TALIXIO_OLLAMA_URL=http://' . self::CADDY . ':11434');
         if (self::modelsOn()) $env[] = 'TALIXIO_FORECAST_URL=http://' . self::CADDY . ':8765'; // the TimesFM service (install-stack.sh --with-models), through Caddy
+        if (($set['email_authserv'] ?? '') !== '') $env[] = 'TALIXIO_EMAIL_AUTHSERV_ID=' . $set['email_authserv']; // everyone's, unless a person sets their own in Settings
         if ($set['google_client_id'] !== '') array_push($env, 'TALIXIO_GOOGLE_CLIENT_ID=' . $set['google_client_id'], 'TALIXIO_GOOGLE_CLIENT_SECRET=' . $set['google_client_secret']);
         $env[] = 'TALIXIO_INSTANCE_NAME=' . ($i['name'] ?? '');
         $env[] = 'TALIXIO_STORE=/store';

@@ -253,7 +253,7 @@ final class AdminWeb
             return;
         }
         if ($path === '/api/settings' && $m === 'POST') {
-            $r = $this->agent('POST', '/settings', array_intersect_key($b, array_flip(['domain', 'mode', 'memory_mb', 'cpus', 'ollama', 'ollama_model', 'google_client_id', 'google_client_secret', 'apparmor_unconfined', 'eu_provider', 'eu_key', 'eu_url', 'eu_only'])), 1000);
+            $r = $this->agent('POST', '/settings', array_intersect_key($b, array_flip(['domain', 'mode', 'memory_mb', 'cpus', 'ollama', 'ollama_model', 'google_client_id', 'google_client_secret', 'email_authserv', 'apparmor_unconfined', 'eu_provider', 'eu_key', 'eu_url', 'eu_only'])), 1000);
             $this->audit('settings changed', ['keys' => array_keys($b)]); // names only, never the values
             $this->json($r);
             return;

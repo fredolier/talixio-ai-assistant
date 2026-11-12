@@ -40,8 +40,10 @@ For the links and the button to work, the app must know its address: opening it 
 **Verified senders.** With *Require a verified sender (SPF/DKIM)* ticked (the default), the assistant only answers an email
 your mail server has checked. Since 1.35.35 it also needs *Name of your mail server in Authentication-Results*
 (advanced settings): the first word of the `Authentication-Results:` line your server adds to a received email
-(open a received email's source, e.g. `mx.example.com`). Without it, no email is answered and the channel shows an error:
-a sender could otherwise write a line that looks like your server's.
+(open a received email's source, e.g. `mx.example.com`). Without it, no email is answered and *Channels* says so, with the
+name the last email gave: a sender could otherwise write a line that looks like your server's. Not needed with Gmail and
+Microsoft 365 (known from the IMAP server's name). On a server for several people, the admin page can set it once for
+everyone (*Settings* → *Incoming email for everyone*); a person's own setting wins.
 
 ## Outlook / Microsoft 365 mailboxes
 Microsoft is turning off passwords for SMTP and IMAP (smtp.office365.com, outlook.office365.com); many

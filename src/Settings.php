@@ -81,7 +81,7 @@ final class Settings
                 ['TALIXIO_IMAP_PASSWORD', 'IMAP password', 'secret', 'Empty = SMTP password.'],
                 ['TALIXIO_EMAIL_ALLOWED', 'Allowed senders', 'list', 'The only addresses it answers. Empty = your address.'],
                 ['TALIXIO_EMAIL_REQUIRE_AUTH', 'Require a verified sender (SPF/DKIM)', 'bool', 'Ignores email with a forged sender. Untick only if your emails get no answer.'],
-                ['TALIXIO_EMAIL_AUTHSERV_ID', 'Name of your mail server in Authentication-Results', 'text', 'Needed to answer emails when a verified sender is required: the first word your mail server writes in the Authentication-Results line of a received email (e.g. mx.example.com). Without it, a forged line could pass.'],
+                ['TALIXIO_EMAIL_AUTHSERV_ID', 'Name of your mail server in Authentication-Results', 'text', 'Needed to answer emails when a verified sender is required: the first word your mail server writes in the Authentication-Results line of a received email (e.g. mx.example.com). Not needed for Gmail and Microsoft 365. If emails get no answer, Channels shows the name the last one gave.'],
             ]],
             'mailbox' => ['Your mailbox', 'Your own mailbox (e.g. frederic@talixio.com): reads without marking as read, writes drafts, sends only after your approval.', [
                 ['TALIXIO_MAILBOX_IMAP_HOST', 'IMAP server', 'text', 'OVH: ssl0.ovh.net. Empty = off.'],

@@ -105,6 +105,11 @@ $env = $f->spec('alice', $st)['Env']; $sec = $f->spec('alice', $st)['HostConfig'
 check('fleet: the template carries Google, the European provider and a pending reset, without Ollama or AppArmor', in_array('TALIXIO_GOOGLE_CLIENT_SECRET=gsecret', $env, true) && in_array('TALIXIO_SOVEREIGN_URL=https://eu.acme.example/v1', $env, true)
     && in_array('TALIXIO_SOVEREIGN_ONLY=1', $env, true) && in_array('TALIXIO_RESET=abc:totp', $env, true) && !preg_grep('/^TALIXIO_EMBEDDINGS=/', $env) && !in_array('apparmor=unconfined', $sec, true)
     && in_array('TALIXIO_BASE_PATH=', $env, true) && in_array('TZ=Europe/Paris', $env, true), json_encode($env));
+check('fleet: no mail server name set, none given to the assistants', !preg_grep('/^TALIXIO_EMAIL_AUTHSERV_ID=/', $env));
+$f->setSettings(['email_authserv' => ' MX.Acme.example ']);
+check('fleet: one mail server name for every assistant, from the admin page (1.35.38)', in_array('TALIXIO_EMAIL_AUTHSERV_ID=mx.acme.example', $f->spec('alice', ['settings' => $f->state()['settings']] + $st)['Env'], true)
+    && str_contains($throws(fn() => $f->setSettings(['email_authserv' => 'mx; rm'])), 'mx.example.com'));
+$f->setSettings(['email_authserv' => '']);
 $f->setSettings(['domain' => 'localhost', 'mode' => 'path', 'memory_mb' => 512, 'cpus' => 1, 'ollama' => true, 'eu_provider' => '', 'google_client_id' => '', 'apparmor_unconfined' => true]);
 check('fleet: path addresses', $f->url('alice') === 'https://localhost/alice/');
 
