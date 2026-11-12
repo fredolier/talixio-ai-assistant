@@ -1,6 +1,8 @@
 window.I18N = window.I18N || {};
 /* French interface: English text (as it appears on screen) → French. {placeholders} match any value. See i18n.js. */
 window.I18N.fr = {
+"Name of your mail server in Authentication-Results": "Nom de votre serveur de mail dans Authentication-Results",
+"Needed to answer emails when a verified sender is required: the first word your mail server writes in the Authentication-Results line of a received email (e.g. mx.example.com). Without it, a forged line could pass.": "Nécessaire pour répondre aux e-mails quand un expéditeur vérifié est exigé : le premier mot que votre serveur de mail écrit dans la ligne Authentication-Results d'un e-mail reçu (par ex. mx.example.com). Sans lui, une ligne falsifiée pourrait passer.",
 "Check the address, then press the button to download it.": "Vérifiez l'adresse, puis appuyez sur le bouton pour le télécharger.",
 "Repeat": "Répétition",
 "Date": "Date",

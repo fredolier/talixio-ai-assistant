@@ -137,6 +137,13 @@ final class Mailbox
         return "sent to $to" . ($cc !== '' ? " (cc $cc)" : '') . ": \"$subject\"";
     }
 
+    /** Who a mail would go to (a reply: the address it answers), for the approval that comes before sending it (audit S19). */
+    public function recipient(string $to, int $replyTo = 0): string
+    {
+        if ($replyTo <= 0) return $to;
+        try { return $this->compose($to, '', '', $replyTo)[0]; } catch (\Throwable) { return $to; }
+    }
+
     public function canSend(): bool { return $this->enabled() && $this->app->cfg->mailboxSmtpHost !== '' && $this->app->cfg->mailboxFrom !== ''; }
 
     /** A mail with extra parts (a meeting invitation) to several people at once, as the user; a copy goes to Sent. */

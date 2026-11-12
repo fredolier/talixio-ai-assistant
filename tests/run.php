@@ -749,6 +749,10 @@ check('email auth: fail is rejected', !Email::authenticated('mx; dkim=fail heade
 $c = $app->cfg;
 $c->smtpHost = '127.0.0.1'; $c->smtpSecurity = 'none'; $c->smtpUser = 'bot@example.com'; $c->smtpPassword = 'x'; $c->emailFrom = 'Talixio <bot@example.com>';
 $c->emailTo = 'fred@example.com'; $c->emailAllowed = ['fred@example.com']; $c->imapHost = '127.0.0.1';
+// since the audit (S18) the name of our own mail server is needed to trust its Authentication-Results line
+check('email auth: without the name of our mail server, no email is answered', ($c->emailAuthServ = '') === '' && !(new \Talixio\Email($app))->handle($eml));
+$c->emailAuthServ = 'mx.example.net';
+check('email auth: a line written by another server is not trusted', !Email::authenticated("evil.example; dkim=pass header.d=example.com", 'fred@example.com', 'mx.example.net'));
 $mail = "$dir/mail"; @mkdir($mail);
 file_put_contents("$mail/1.eml", $eml);
 file_put_contents("$mail/2.eml", str_replace(['Fred <Fred@Example.com>', 'm1@'], ['Eve <eve@evil.com>', 'm2@'], $eml));
@@ -1182,6 +1186,7 @@ $app_log = (string)file_get_contents("$mb/appended.log");
 check('mailbox: draft is a threaded reply without auto-submitted', str_contains($app_log, 'folder=Brouillons flags=\Draft \Seen') && str_contains($app_log, 'In-Reply-To: <c1@example.com>') && !str_contains($app_log, 'Auto-Submitted'));
 $r = $app->tools->run('mail_send', ['reply_to_uid' => 1, 'body' => 'Signed, see attached.']);
 check('mailbox: sending waits for approval', str_contains($r, 'Waiting for the user') && str_contains($app->approvals()->pending()[0]['summary'], 'reply to email uid 1'));
+check('mailbox: the approval of a reply names the address it goes to (audit S19)', str_contains($app->approvals()->pending()[0]['summary'], 'Send email to alice@example.com (reply to email uid 1)'), $app->approvals()->pending()[0]['summary']);
 $sp = $spawn('smtp.php', [(string)$sport, "$dir/smtp-mb.log"]); $waitPort($sport);
 $res = $app->approvals()->decide((int)$app->approvals()->pending()[0]['id'], true);
 proc_close($sp);

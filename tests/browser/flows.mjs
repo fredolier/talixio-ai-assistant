@@ -516,6 +516,29 @@ const flows = {
     const tabs = await page.evaluate(() => [...document.querySelectorAll('.ptab')].every(t => { const p = document.getElementById(t.getAttribute('aria-controls') || '-'); return p && p.getAttribute('role') === 'tabpanel'; }));
     check('keyboard: each Pilotage tab names the panel it shows', tabs);
   },
+  async previewTracking({ browser, base, check }) {
+    // audit S16: a saved page or an email with a picture from outside: previewing it loads nothing from outside.
+    // Its own page: the blocked requests are written in that page's console, which is the point here.
+    const ctx = await browser.newContext(), page = await ctx.newPage();
+    await page.goto(base + '/'); await page.fill('#password', 'pw'); await page.press('#password', 'Enter'); await page.waitForSelector('#shell:not([hidden])');
+    const sent = [];
+    const spy = r => { if (r.url().includes('tracker.example') && r.failure()?.errorText !== 'csp') sent.push(r.url() + ' ' + (r.failure()?.errorText || 'loaded')); };
+    page.on('requestfinished', spy); page.on('requestfailed', spy);
+    const id = await page.evaluate(async () => {
+      const fd = new FormData();
+      fd.append('file', new File(['<html><head><title>News</title></head><body><p>Hello</p><img src="https://tracker.example/open.gif?who=me"><link rel="stylesheet" href="https://tracker.example/s.css"></body></html>'], 'newsletter.html', { type: 'text/html' }));
+      fd.append('folder', '/Inbox');
+      const r = await (await fetch('api/files', { method: 'POST', headers: { 'X-Talixio': '1' }, body: fd })).json();
+      return r.id || r.file?.id;
+    });
+    await page.evaluate(async id => {
+      const f = document.createElement('iframe'); f.sandbox = 'allow-popups'; document.body.appendChild(f);
+      f.srcdoc = (await (await fetch(`api/files/${id}/preview`)).json()).html;
+    }, id);
+    await page.waitForTimeout(1200);
+    check('preview: a page with a picture from outside shows without loading it', sent.length === 0, sent.join(' '));
+    await ctx.close();
+  },
   async files({ page, check }) {
     const closeAll = () => page.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close()));
     await go(page, 'library');

@@ -329,10 +329,17 @@ final class Tools
             });
         $this->register('share_list', 'The links to library documents shared with people outside: what, for whom, until when, how many times opened. all: also the ended ones.',
             ['all' => ['type' => 'boolean']], [], function (array $a) {
+                // this space's links only (General: those it may read), and never their addresses: each holds the secret that
+                // opens the documents to anyone; the person finds them in the library (audit S20)
+                $scope = $this->spaceFolder();
+                $mine = array_filter($this->app->shares()->list(!empty($a['all']) ? 'all' : 'active'), function ($s) use ($scope) {
+                    $folder = $s['file_id'] ? (string)($this->app->files()->get((int)$s['file_id'])['folder'] ?? '') : (string)$s['folder'];
+                    if ($folder === '' || !$this->canRead($folder)) return false;
+                    return $scope === '' || $folder === $scope || str_starts_with($folder, rtrim($scope, '/') . '/');
+                });
                 $rows = array_map(fn($s) => "#{$s['id']} {$s['path']}" . ($s['label'] !== '' ? " | for {$s['label']}" : '') . " | {$s['state']}"
-                    . ($s['expires'] ? ' until ' . date('Y-m-d', $s['expires']) : '') . " | opened {$s['views']}x" . ($s['last_access'] ? ' (last ' . date('Y-m-d H:i', $s['last_access']) . ')' : '') . " | {$s['url']}",
-                    $this->app->shares()->list(!empty($a['all']) ? 'all' : 'active'));
-                return $rows ? implode("\n", $rows) : 'no shared links';
+                    . ($s['expires'] ? ' until ' . date('Y-m-d', $s['expires']) : '') . " | opened {$s['views']}x" . ($s['last_access'] ? ' (last ' . date('Y-m-d H:i', $s['last_access']) . ')' : ''), $mine);
+                return $rows ? implode("\n", $rows) . "\n(The links themselves are in the library: the person opens the document's Share menu.)" : 'no shared links';
             });
         $this->register('share_revoke', 'Stop a shared link (it shows "no longer available" from now on).', ['id' => ['type' => 'integer']], ['id'],
             fn(array $a) => $this->app->shares()->revoke((int)$a['id']) ? 'revoked' : 'error: no such active link');
@@ -749,7 +756,8 @@ final class Tools
             $this->register('mail_send', "Send an email as the user (asks the user to approve first). For a reply give reply_to_uid.",
                 ['to' => ['type' => 'string'], 'subject' => ['type' => 'string'], 'body' => ['type' => 'string'], 'reply_to_uid' => ['type' => 'integer'], 'cc' => ['type' => 'string']], ['body'],
                 fn(array $a) => $this->app->mailbox()->send((string)($a['to'] ?? ''), (string)($a['subject'] ?? ''), $a['body'], (int)($a['reply_to_uid'] ?? 0), (string)($a['cc'] ?? '')),
-                fn(array $a) => 'Send email' . (!empty($a['to']) ? " to {$a['to']}" : '') . (!empty($a['reply_to_uid']) ? " (reply to email uid {$a['reply_to_uid']})" : '')
+                fn(array $a) => 'Send email' . (($rcpt = $this->app->mailbox()->recipient((string)($a['to'] ?? ''), (int)($a['reply_to_uid'] ?? 0))) !== '' ? " to $rcpt" : '') // the address, not only "reply to uid N" (audit S19)
+                    . (!empty($a['reply_to_uid']) ? " (reply to email uid {$a['reply_to_uid']})" : '')
                     . (!empty($a['cc']) ? ", cc {$a['cc']}" : '') . (!empty($a['subject']) ? ": \"{$a['subject']}\"" : '') . "\n\n" . $a['body']);
         }
 

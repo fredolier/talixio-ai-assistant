@@ -81,6 +81,7 @@ final class Settings
                 ['TALIXIO_IMAP_PASSWORD', 'IMAP password', 'secret', 'Empty = SMTP password.'],
                 ['TALIXIO_EMAIL_ALLOWED', 'Allowed senders', 'list', 'The only addresses it answers. Empty = your address.'],
                 ['TALIXIO_EMAIL_REQUIRE_AUTH', 'Require a verified sender (SPF/DKIM)', 'bool', 'Ignores email with a forged sender. Untick only if your emails get no answer.'],
+                ['TALIXIO_EMAIL_AUTHSERV_ID', 'Name of your mail server in Authentication-Results', 'text', 'Needed to answer emails when a verified sender is required: the first word your mail server writes in the Authentication-Results line of a received email (e.g. mx.example.com). Without it, a forged line could pass.'],
             ]],
             'mailbox' => ['Your mailbox', 'Your own mailbox (e.g. frederic@talixio.com): reads without marking as read, writes drafts, sends only after your approval.', [
                 ['TALIXIO_MAILBOX_IMAP_HOST', 'IMAP server', 'text', 'OVH: ssl0.ovh.net. Empty = off.'],
@@ -210,7 +211,7 @@ final class Settings
         'TALIXIO_SOVEREIGN_URL', 'TALIXIO_MODEL_FAST', 'TALIXIO_MODEL', 'TALIXIO_MODEL_DEEP', 'TALIXIO_DEEP_THINKING_TOKENS', 'TALIXIO_DEEP_REASONING_EFFORT', 'TALIXIO_ESCALATE', 'TALIXIO_TOOLS',
         'TALIXIO_MAX_PARALLEL_JOBS', 'TALIXIO_JOB_MAX_MINUTES', 'TALIXIO_TOOL_LOG_DAYS', 'TALIXIO_JOB_MAX_USD_LIMIT', 'TALIXIO_JOB_EFFORT', 'TALIXIO_PRICES', 'ANTHROPIC_WORKSPACE_ID', 'OPENAI_PROJECT_ID',
         'TALIXIO_NTFY_TOKEN', 'TALIXIO_VAPID_SUBJECT', 'TALIXIO_HEARTBEAT_MINUTES',
-        'TALIXIO_SMTP_SECURITY', 'TALIXIO_IMAP_PORT', 'TALIXIO_IMAP_USER', 'TALIXIO_IMAP_PASSWORD', 'TALIXIO_EMAIL_REQUIRE_AUTH',
+        'TALIXIO_SMTP_SECURITY', 'TALIXIO_IMAP_PORT', 'TALIXIO_IMAP_USER', 'TALIXIO_IMAP_PASSWORD', 'TALIXIO_EMAIL_REQUIRE_AUTH', 'TALIXIO_EMAIL_AUTHSERV_ID',
         'TALIXIO_MAILBOX_IMAP_PORT', 'TALIXIO_MAILBOX_SMTP_HOST', 'TALIXIO_MAILBOX_SMTP_PORT',
         'TALIXIO_SPOTIFY_DEVICE',
         'TALIXIO_EMBEDDINGS', 'TALIXIO_EMBEDDINGS_MODEL', 'TALIXIO_EMBEDDINGS_DIMS', 'VOYAGE_API_KEY', 'TALIXIO_OLLAMA_URL',

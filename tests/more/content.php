@@ -200,8 +200,8 @@ $many = "n\n" . implode("\n", range(1, 2100)) . "\n";
 $cv = Preview::csv($many);
 check('preview: CSV shows the first 2,000 rows and says so', str_contains($cv, 'First 2,000 rows shown') && str_contains($cv, '<td class="num">1999</td>') && !str_contains($cv, '<td class="num">2001</td>'));
 check('preview: CSV tabs detected, empty CSV', str_contains(Preview::csv("a\tb\n1\t2\n"), '<th>a</th><th>b</th>') && Preview::csv('') === '<p class="muted">(empty)</p>');
-check('preview: an HTML page without a head gets a base anyway', Preview::htmlPage('<p>x</p>') === '<!doctype html><meta charset="utf-8"><base target="_blank"><p>x</p>'
-    && str_contains(Preview::htmlPage('<html><head lang="fr"><title>t</title></head></html>'), '<head lang="fr"><base target="_blank"><title>'));
+check('preview: an HTML page without a head gets a base anyway', Preview::htmlPage('<p>x</p>') === '<!doctype html><meta charset="utf-8">' . Preview::CSP . '<base target="_blank"><p>x</p>' /* and, since 1.35.35, the policy that loads nothing from outside */
+    && str_contains(Preview::htmlPage('<html><head lang="fr"><title>t</title></head></html>'), '<head lang="fr">' . Preview::CSP . '<base target="_blank"><title>'));
 
 // render(): each kind through one entry point
 $envBefore = array_map(fn($k) => [$k, getenv($k)], ['TALIXIO_DATA_DIR', 'TALIXIO_PROVIDER', 'TALIXIO_EMBEDDINGS', 'TALIXIO_NOTIFY']);
@@ -215,7 +215,7 @@ $file = function (string $name, string $content, string $kind = 'text', string $
 check('preview: renders text and office files only', Preview::renders(['kind' => 'office']) && !Preview::renders(['kind' => 'image']));
 $r = $pv->render($file('Note', "\xEF\xBB\xBF# Bonjour", 'text', 'text/markdown', true));
 check('preview: a note is rendered as Markdown (byte-order mark dropped)', str_contains($r, '<article class="doc"><h1>Bonjour</h1></article>') && str_contains($r, '<title>Note</title>'), $r);
-check('preview: an HTML page by its type', str_contains($pv->render($file('page', '<head></head><p>hi</p>', 'text', 'text/html')), '<head><base target="_blank">'));
+check('preview: an HTML page by its type', str_contains($pv->render($file('page', '<head></head><p>hi</p>', 'text', 'text/html')), '<head>' . Preview::CSP . '<base target="_blank">'));
 $eml = $pv->render($file('mail.eml', "From: Alex <alex@acme.example>\r\nTo: team@acme.example\r\nSubject: =?UTF-8?B?w4l0w6k=?=\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><style>p{}</style><title>T</title></head><body><p>Bonjour</p><script>alert(1)</script></body></html>"));
 check('preview: an email with its headers and its HTML body, page parts dropped',
     str_contains($eml, '<tr><th>From</th><td>Alex &lt;alex@acme.example&gt;</td></tr>') && str_contains($eml, '<tr><th>Subject</th><td>Été</td></tr>')

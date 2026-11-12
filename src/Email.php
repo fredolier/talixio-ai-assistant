@@ -89,6 +89,12 @@ final class Email
         $from = strtolower(Smtp::address(Mime::decodeHeader($h['from'] ?? '')));
         if (!in_array($from, $c->emailAllowed, true)) { Log::warn("email: ignored sender $from (not in TALIXIO_EMAIL_ALLOWED)"); return false; }
         if (isset($h['auto-submitted']) && strtolower($h['auto-submitted']) !== 'no') return false; // never answer robots or ourselves
+        // without the name of our own mail server, a sender could write an Authentication-Results line that looks like ours (audit S18)
+        if ($c->emailRequireAuth && $c->emailAuthServ === '') {
+            Log::warn("email: ignored $from: set TALIXIO_EMAIL_AUTHSERV_ID (Settings → Channels → Assistant's email) to the name your mail server writes in Authentication-Results");
+            $this->app->store->set('channel_error_email', date('Y-m-d H:i') . ' incoming email needs the name of your mail server (Settings → Channels → Assistant\'s email)');
+            return false;
+        }
         if ($c->emailRequireAuth && !self::authenticated($h['authentication-results'] ?? '', $from, $c->emailAuthServ)) {
             Log::warn("email: ignored $from: no DMARC or DKIM pass in Authentication-Results (set TALIXIO_EMAIL_REQUIRE_AUTH=0 if your server doesn't add it)");
             return false;

@@ -18,6 +18,8 @@
   A folder's **Modified** date is that of its newest file.
 - **Preview pane** (button next to the layout icons, computer only): a click on a file shows its thumbnail, details and
   a text excerpt on the right instead of opening it; a double click (or Enter) opens it. Open and Download are in the pane.
+- **Previews load nothing from outside** (since 1.35.35): a saved web page or an email shown in the library displays
+  without its pictures and styles hosted elsewhere, so that opening it does not tell their sender you read it.
 - **Navigating like an explorer**: at the left of the path, **Folder tree** shows or hides the tree (hidden by default on a
   narrow window), **Back** and **Up one folder**. **Right click** a file, a folder or the empty list for the same actions
   as ⋮. Keys: **Ctrl/Cmd+A** select all, **Delete**, **F2** rename, **arrows** move, **Enter** open, **Alt+←** back,

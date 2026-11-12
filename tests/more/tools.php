@@ -309,6 +309,7 @@ check('tools: share_create gives the link with its terms', (bool)preg_match('#^l
 $app->store->q('UPDATE shares SET last_access = ? WHERE id = 1', [time()]);
 $r = $x('share_list');
 check('tools: share_list shows who, state and last access', str_contains($r, '#1 ') && str_contains($r, '| for Alex') && str_contains($r, '(last '), $r);
+check('tools: share_list never gives the links themselves, whose secret opens the documents (audit S20)', !str_contains($r, '/s/') && !preg_match('#https?://#', $r), $r);
 check('tools: share_revoke an unknown link', $x('share_revoke', ['id' => 99]) === 'error: no such active link');
 check('tools: share_revoke', $x('share_revoke', ['id' => 1]) === 'revoked' && $x('share_revoke', ['id' => 2]) === 'revoked');
 check('tools: share_list with nothing active', $x('share_list') === 'no shared links');

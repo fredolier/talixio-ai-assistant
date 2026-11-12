@@ -38,6 +38,12 @@ l'espace et sa couleur, les titres, listes, tableaux et liens du message, et un 
 Pour que les liens et le bouton fonctionnent, l'app doit connaître son adresse : l'ouvrir une fois dans le navigateur suffit
 (ou Réglages → adresse publique). Les e-mails envoyés en votre nom depuis votre boîte restent sobres, sans ce cadre.
 
+**Expéditeurs vérifiés.** Avec *Exiger un expéditeur vérifié (SPF/DKIM)* coché (par défaut), l'assistant ne répond qu'aux
+e-mails vérifiés par votre serveur de mail. Depuis la 1.35.35, il lui faut aussi le *Nom de votre serveur de mail dans
+Authentication-Results* (réglages avancés) : le premier mot de la ligne `Authentication-Results:` que votre serveur ajoute
+à un e-mail reçu (ouvrez la source d'un e-mail reçu, par ex. `mx.example.com`). Sans lui, aucun e-mail n'obtient de réponse
+et le canal affiche une erreur : un expéditeur pourrait sinon écrire une ligne qui imite celle de votre serveur.
+
 ## Boîtes Outlook / Microsoft 365
 Microsoft supprime les mots de passe pour SMTP et IMAP (smtp.office365.com, outlook.office365.com) ; beaucoup
 d'organisations les refusent déjà (« 535 5.7.3 Authentication unsuccessful » ou « 5.7.30 »). Connectez-vous

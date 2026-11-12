@@ -20,6 +20,8 @@
 - **Volet d'aperçu** (bouton à côté des icônes d'affichage, sur ordinateur) : un clic sur un fichier montre sa vignette,
   ses détails et un extrait du texte à droite au lieu de l'ouvrir ; un double clic (ou Entrée) l'ouvre. Ouvrir et
   Télécharger sont dans le volet.
+- **Les aperçus ne chargent rien de l'extérieur** (depuis la 1.35.35) : une page web enregistrée ou un e-mail affiché dans la
+  bibliothèque s'affiche sans ses images et styles hébergés ailleurs, pour que l'ouvrir n'apprenne pas à l'expéditeur que vous l'avez lu.
 - **Naviguer comme dans un explorateur** : à gauche du chemin, **Arborescence** affiche ou masque l'arbre (masqué par défaut
   sur une fenêtre étroite), **Retour** et **Dossier parent**. Le **clic droit** sur un fichier, un dossier ou la zone vide
   donne les mêmes actions que ⋮. Touches : **Ctrl/Cmd+A** tout sélectionner, **Suppr**, **F2** renommer, **flèches** se

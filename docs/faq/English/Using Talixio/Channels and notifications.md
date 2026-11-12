@@ -37,6 +37,12 @@ the space and its color, the message's headings, lists, tables and links, and a 
 For the links and the button to work, the app must know its address: opening it once in the browser is enough
 (or Settings → *Public address*). Emails sent on your behalf from your mailbox stay plain, without this frame.
 
+**Verified senders.** With *Require a verified sender (SPF/DKIM)* ticked (the default), the assistant only answers an email
+your mail server has checked. Since 1.35.35 it also needs *Name of your mail server in Authentication-Results*
+(advanced settings): the first word of the `Authentication-Results:` line your server adds to a received email
+(open a received email's source, e.g. `mx.example.com`). Without it, no email is answered and the channel shows an error:
+a sender could otherwise write a line that looks like your server's.
+
 ## Outlook / Microsoft 365 mailboxes
 Microsoft is turning off passwords for SMTP and IMAP (smtp.office365.com, outlook.office365.com); many
 tenants already refuse them ("535 5.7.3 Authentication unsuccessful" or "5.7.30"). Sign in with the

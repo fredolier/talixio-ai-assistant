@@ -1426,8 +1426,8 @@ final class Web
         header('Content-Type: text/html; charset=utf-8');
         header('X-Content-Type-Options: nosniff');
         header('Cache-Control: private, no-cache');
-        // own opaque origin, no scripts, no forms; pictures and fonts of saved pages may load
-        header("Content-Security-Policy: default-src 'none'; img-src data: https:; style-src 'unsafe-inline' https:; font-src data: https:; sandbox allow-popups allow-popups-to-escape-sandbox");
+        // own opaque origin, no scripts, no forms, nothing loaded from outside (a picture in an email tells its sender it was read)
+        header("Content-Security-Policy: default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'; font-src data:; sandbox allow-popups allow-popups-to-escape-sandbox"); // nothing from outside (audit S16)
         header('Referrer-Policy: no-referrer');
         echo $html;
     }
