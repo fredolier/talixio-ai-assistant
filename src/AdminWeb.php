@@ -22,9 +22,7 @@ final class AdminWeb
 
     private function saveConf(array $c): void
     {
-        file_put_contents("$this->file.tmp", json_encode($c, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        chmod("$this->file.tmp", 0600);
-        rename("$this->file.tmp", $this->file);
+        JsonFile::write($this->file, $c, 0600, JSON_PRETTY_PRINT); // whole or not at all (audit Q12)
     }
 
     /** At start: the one-time code that lets the first visitor set the admin password (shown in the container logs). */

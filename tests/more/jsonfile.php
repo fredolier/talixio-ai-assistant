@@ -57,5 +57,14 @@ check('jsonfile: a failed settings write keeps the previous settings', Talixio\S
 $pi = $app->pilot();
 $pi->setPolicy(['rules' => ['Never touch billing']]);
 check('jsonfile: the pilot\'s policy is kept privately', in_array('Never touch billing', $pi->rules(), true) && (fileperms("$d/app/pilot.json") & 0777) === 0600);
+// the sign-in tokens of Google, Microsoft and Spotify: a failed write keeps the ones that work
+foreach (['google' => $app->google(), 'microsoft' => $app->microsoft(), 'spotify' => $app->spotify()] as $what => $svc) {
+    $save = new ReflectionMethod($svc, 'saveTokens');
+    $save->invoke($svc, ['access_token' => "good-$what", 'refresh_token' => 'r']);
+    JsonFile::$failHook = function () { throw new RuntimeException('disk full'); };
+    try { $save->invoke($svc, ['access_token' => 'half']); } catch (RuntimeException) {}
+    JsonFile::$failHook = null;
+    check("jsonfile: a failed write keeps the $what sign-in", ($svc->tokens()['access_token'] ?? '') === "good-$what");
+}
 $keep === false ? putenv('TALIXIO_DATA_DIR') : putenv("TALIXIO_DATA_DIR=$keep");
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

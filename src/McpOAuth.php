@@ -18,12 +18,8 @@ final class McpOAuth
 
     private function put(string $server, ?array $entry): void
     {
-        $all = $this->all();
-        if ($entry === null) unset($all[$server]); else $all[$server] = $entry;
-        $tmp = $this->file() . '.tmp';
-        file_put_contents($tmp, json_encode($all, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        chmod($tmp, 0600);
-        rename($tmp, $this->file());
+        // under a lock: two connectors signing in at once keep both tokens (audit Q12)
+        JsonFile::update($this->file(), function (array $all) use ($server, $entry) { if ($entry === null) unset($all[$server]); else $all[$server] = $entry; return [$all, null]; }, 0600, JSON_PRETTY_PRINT);
     }
 
     public function get(string $server): array { return $this->all()[$server] ?? []; }

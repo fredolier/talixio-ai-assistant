@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.26 (2026-11-12)
+
+- Fix (audit Q12, third part): **the other state files are written whole or not at all**. The sign-in tokens of Google, Microsoft, Spotify and Légifrance, the connectors' settings, their sign-ins and tool lists, the store's state, the shared catalogue, the Claude sign-in state and the administration's settings were each written to a temporary file and renamed without checking that the write had worked: a full disk could leave an empty file and sign you out of a service. They now all go through `JsonFile` (checked, then swapped), and connectors' sign-ins are updated under a lock so two at once keep both. Still to do (noted in the audit plan): the multi-user administration's state has read-change-write steps that are not yet under a lock. Tested with a simulated failed write for the sign-in tokens.
+
 ## 1.35.25 (2026-11-12)
 
 - Fix (audit Q16, Q17, Q25): three small ones. **Summer time**: a routine set in the hour the clock skips (02:30 on the last Sunday of March in Europe) was put off by a whole day; it now runs right after the jump (03:30), and the night the clock goes back it still runs once. **Cancelling a job as it finishes**: the cancel and the end of the job could overwrite each other (a cancelled job shown as done, or reporting anyway); now whichever comes first wins, and a cancelled job sends no report. **Error messages**: the app's own errors still say what went wrong, but without the server's file paths (`/var/lib/talixio/backups` becomes `…/backups`; web addresses are kept).

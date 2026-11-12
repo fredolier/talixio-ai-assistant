@@ -22,10 +22,7 @@ final class Spotify
 
     private function saveTokens(array $t): void
     {
-        $tmp = $this->file() . '.tmp';
-        file_put_contents($tmp, json_encode($t, JSON_UNESCAPED_SLASHES));
-        chmod($tmp, 0600);
-        rename($tmp, $this->file());
+        JsonFile::write($this->file(), $t, 0600); // whole or not at all: a half-written token file would sign you out (audit Q12)
     }
 
     public static function redirectUri(string $publicUrl = ''): string { return preg_replace('#/api/google/callback$#', '/api/spotify/callback', Google::redirectUri($publicUrl)); }

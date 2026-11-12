@@ -53,10 +53,7 @@ final class Mcp
             if (!is_array($s) || (!isset($s['command']) && !isset($s['url']))) throw new \InvalidArgumentException("server \"$n\": give a command (local) or a url (remote)");
             if (isset($s['url']) && !preg_match('#^https?://#i', (string)$s['url'])) throw new \InvalidArgumentException("server \"$n\": the url must start with http(s)://");
         }
-        $tmp = $this->file() . '.tmp';
-        file_put_contents($tmp, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
-        chmod($tmp, 0600);
-        rename($tmp, $this->file());
+        JsonFile::write($this->file(), $d, 0600, JSON_PRETTY_PRINT); // whole or not at all (audit Q12)
     }
 
     public function cache(): array { return json_decode((string)@file_get_contents($this->cacheFile()), true) ?: []; }
@@ -83,7 +80,7 @@ final class Mcp
                 Log::warn("mcp $name: {$e->getMessage()}");
             }
         }
-        file_put_contents($this->cacheFile(), json_encode($cache, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        JsonFile::write($this->cacheFile(), $cache, 0600);
         return $cache;
     }
 
