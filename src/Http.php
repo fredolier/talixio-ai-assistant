@@ -152,6 +152,22 @@ final class Http
         throw new \RuntimeException('too many redirects');
     }
 
+    /**
+     * cURL options that send a request to $url only at a public address, pinned (no DNS change between the check and the
+     * call): for the addresses other people give us (a paired assistant, an orchestrator's webhook, audit S12).
+     * TALIXIO_ALLOW_PRIVATE_PEERS=1 lets two assistants on one machine or network talk (development, a LAN).
+     */
+    public static function publicResolve(string $url): array
+    {
+        if (getenv('TALIXIO_ALLOW_PRIVATE_PEERS') === '1') return [];
+        $p = parse_url($url);
+        $host = (string)($p['host'] ?? '');
+        if (!in_array(strtolower((string)($p['scheme'] ?? '')), ['http', 'https'], true) || $host === '') throw new \InvalidArgumentException('only http(s) URLs are allowed');
+        $port = (int)($p['port'] ?? (strtolower((string)$p['scheme']) === 'https' ? 443 : 80));
+        $ip = self::publicIp($host);
+        return [CURLOPT_RESOLVE => [trim($host, '[]') . ":$port:" . (str_contains($ip, ':') ? "[$ip]" : $ip)], CURLOPT_FOLLOWLOCATION => false, CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS];
+    }
+
     public static function publicIp(string $host): string
     {
         $host = trim($host, '[]');

@@ -94,11 +94,16 @@ final class Auth
 
     public function clear(string $key): void { $this->app->store->q('DELETE FROM throttle WHERE k = ?', [$key]); }
 
-    /** Seconds to wait before this address may try again (0 = allowed). */
-    public function lockedFor(string $ip): int
+    /**
+     * Seconds to wait before this address may try again (0 = allowed). $everyone: also the pause for all addresses
+     * (too many failures from many addresses); without it, only this address's own limits (audit S13).
+     */
+    public function lockedFor(string $ip, bool $everyone = true): int
     {
         $this->app->store->q('DELETE FROM throttle WHERE ts < ?', [time() - 86400]);
-        foreach ([["login:$ip", self::WINDOW, self::MAX_FAILS], ["login:$ip", 86400, self::MAX_FAILS_DAY], ['login:*', 3600, self::MAX_FAILS_ALL]] as [$key, $window, $max]) {
+        $rules = [["login:$ip", self::WINDOW, self::MAX_FAILS], ["login:$ip", 86400, self::MAX_FAILS_DAY]];
+        if ($everyone) $rules[] = ['login:*', 3600, self::MAX_FAILS_ALL];
+        foreach ($rules as [$key, $window, $max]) {
             if ($this->count($key, $window) >= $max) {
                 $oldest = (int)$this->app->store->q('SELECT ts FROM throttle WHERE k = ? AND ts > ? ORDER BY ts LIMIT 1 OFFSET ?',
                     [$key, time() - $window, $this->count($key, $window) - $max])->fetchColumn();
@@ -106,6 +111,21 @@ final class Auth
             }
         }
         return 0;
+    }
+
+    /** An address the person signed in from, kept 30 days: during a pause for everyone, it may still sign in (audit S13). */
+    public function rememberGood(string $ip): void
+    {
+        $known = array_filter(json_decode($this->app->store->get('login_good', ''), true) ?: [], fn($ts) => $ts > time() - 30 * 86400);
+        $known[hash('sha256', $ip)] = time();
+        arsort($known);
+        $this->app->store->set('login_good', json_encode(array_slice($known, 0, 20, true)));
+    }
+
+    public function knownGood(string $ip): bool
+    {
+        $ts = (json_decode($this->app->store->get('login_good', ''), true) ?: [])[hash('sha256', $ip)] ?? 0;
+        return $ts > time() - 30 * 86400;
     }
 
     /** Record a failed sign-in; tells the user once when an address gets locked out. */

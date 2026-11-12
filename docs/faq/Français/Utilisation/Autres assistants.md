@@ -13,7 +13,7 @@ Rien n'est partagé par défaut. Vous ne donnez jamais « accès à votre assist
    expire au bout de 24 heures.
 2. L'autre choisit **J'ai une invitation…**, la colle, décide s'il partage son propre bilan en retour, puis jumelle.
 
-Les deux assistants doivent avoir une adresse joignable en **https** par l'autre (Réglages → Système → adresse publique). Le jumelage
+Les deux assistants doivent avoir une adresse joignable en **https** par l'autre (Réglages → Système → adresse publique). Ce doit être une adresse publique : une adresse de votre propre réseau (privée, locale ou de métadonnées cloud) est refusée, sauf si le serveur définit `TALIXIO_ALLOW_PRIVATE_PEERS=1` (deux assistants sur un même réseau). Le jumelage
 donne ensuite à chaque sens son propre secret ; il n'est jamais affiché, et le côté qui le reçoit n'en garde qu'une empreinte.
 
 ## Ce que vous partagez

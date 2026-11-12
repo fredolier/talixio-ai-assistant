@@ -12,7 +12,7 @@ Nothing is shared by default. You are never giving "access to your assistant": y
    after 24 hours.
 2. The other person chooses **I have an invitation…**, pastes it, decides whether to share their own digest in return, and pairs.
 
-Both assistants need an address that the other can reach over **https** (Settings → System → public address). Pairing then gives each
+Both assistants need an address that the other can reach over **https** (Settings → System → public address). It must be a public address: one inside your own network (a private, local or cloud-metadata address) is refused, unless the server sets `TALIXIO_ALLOW_PRIVATE_PEERS=1` (two assistants on one network). Pairing then gives each
 direction its own secret; it is never shown, and the receiving side keeps only a fingerprint of it.
 
 ## What you share

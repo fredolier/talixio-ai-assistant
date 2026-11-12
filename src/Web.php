@@ -1673,16 +1673,23 @@ final class Web
     private function login(string $password, string $code): void
     {
         $auth = $this->auth(); $ip = Auth::clientIp();
-        if (($wait = $auth->lockedFor($ip)) > 0) {
-            header('Retry-After: ' . $wait);
-            $this->fail(429, 'Too many failed attempts. Try again in ' . self::minutes($wait) . '.');
+        $tooMany = function (int $wait): void { header('Retry-After: ' . $wait); $this->fail(429, 'Too many failed attempts. Try again in ' . self::minutes($wait) . '.'); };
+        if (($wait = $auth->lockedFor($ip, false)) > 0) $tooMany($wait); // this address's own limits: always
+        // the pause for everyone (many failures from many addresses) does not lock the person out (audit S13): an address
+        // they signed in from lately, or the right password with the right second-factor code, still gets in. Anyone else gets
+        // the same answer as before, right password or not, so the pause gives nothing away.
+        if (($all = $auth->lockedFor($ip)) > 0) {
+            $ok = $auth->hasPassword() && $auth->checkPassword($password)
+                && ($auth->knownGood($ip) || ($auth->totpEnabled() && trim($code) !== '' && $auth->checkCode($auth->totpSecret(), $code)));
+            if (!$ok) $tooMany($all);
         }
         if (!$auth->hasPassword() || !$auth->checkPassword($password)) { $auth->failed($ip); $this->fail(401, 'Wrong password.'); }
-        if ($auth->totpEnabled()) {
+        if ($auth->totpEnabled() && !($all > 0 && !$auth->knownGood($ip))) { // during the pause the code was checked above
             if (trim($code) === '') { $this->json(['error' => 'Enter the 6-digit code from your authenticator app.', 'need_code' => true], 401); return; }
             if (!$auth->checkCode($auth->totpSecret(), $code)) { $auth->failed($ip); $this->json(['error' => 'Wrong code.', 'need_code' => true], 401); return; }
         }
         $auth->clear("login:$ip");
+        $auth->rememberGood($ip);
         session_regenerate_id(true);
         $_SESSION['ok'] = true;
         $_SESSION['gen'] = $auth->generation();

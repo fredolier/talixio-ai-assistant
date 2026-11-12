@@ -620,8 +620,9 @@ final class Conductor
             return ['ok' => true, 'queued' => true];
         }
         try {
-            [$code] = Http::request('POST', (string)$this->binding()['webhook'], ['Content-Type: application/json'],
-                json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 30);
+            $hook = (string)$this->binding()['webhook'];
+            [$code] = Http::request('POST', $hook, ['Content-Type: application/json'],
+                json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 30, Http::publicResolve($hook)); // never inside this server's network (audit S12)
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => 'unreachable', 'detail' => $e->getMessage()];
         }

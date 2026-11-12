@@ -1506,6 +1506,7 @@ check('fleet: statusInfo reports the connection without leaking the secret or we
 $app->tools->run('kb_save_note', ['name' => 'Release policy', 'content' => 'We ship on Thursdays after the suite is green.', 'folder' => '/Notes']);
 $seen = null; $prevHook = Talixio\Http::$hook;
 Talixio\Http::$hook = function (string $url, int $bytes) use (&$seen) { $seen = [$url, $bytes]; };
+putenv('TALIXIO_ALLOW_PRIVATE_PEERS=1'); // orch.example has no DNS here; the public-address check (1.35.33) is tested in tests/more/lowsec.php
 $disp = $con->toFleet('Plan the Thursday release');
 Talixio\Http::$hook = $prevHook;
 check('fleet: dispatch posts a grounded instruction to the orchestrator webhook',
@@ -1531,6 +1532,7 @@ $seen = null; $prevHook = Talixio\Http::$hook;
 Talixio\Http::$hook = function (string $url, int $bytes) use (&$seen) { $seen = [$url, $bytes]; };
 $say = $con->agentSay('ok1', 'Please add a test.');
 Talixio\Http::$hook = $prevHook;
+putenv('TALIXIO_ALLOW_PRIVATE_PEERS');
 check('fleet: agentSay posts a grounded line to the orchestrator webhook, tagged for one agent, and returns the thread',
     $seen !== null && $seen[0] === 'https://orch.example/hook' && $seen[1] > 0 && array_key_exists('thread', $say));
 // privacy choke: a confidential space may not reach outside the assistant

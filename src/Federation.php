@@ -642,7 +642,8 @@ final class Federation
         if ($body !== null) $h[] = 'Content-Type: application/json';
         $json = $body === null ? null : json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (self::$transport) return (self::$transport)($method, $url, $secret, $body);
-        [$code, $resp] = Privacy::as('assistants', fn() => Http::request($method, $url, $h, $json, $timeout));
+        $pin = Http::publicResolve($url); // another person's address: never one inside this server's network (audit S12)
+        [$code, $resp] = Privacy::as('assistants', fn() => Http::request($method, $url, $h, $json, $timeout, $pin));
         return [$code, $resp];
     }
 }
