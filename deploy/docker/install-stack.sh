@@ -39,6 +39,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+# these go into commands and into .env, which is read as shell: plain names only (audit, lot 6)
+[ -z "$MIGRATE" ] || [[ "$MIGRATE" =~ ^[a-z][a-z0-9-]{1,29}$ ]] || { echo "--migrate: 2 to 30 lower-case letters, digits or dashes, starting with a letter" >&2; exit 2; }
+[[ "$WMODEL" =~ ^[A-Za-z0-9._-]{1,60}$ ]] || { echo "--whisper-model: a model name such as large-v3-turbo-q5_0, small or none" >&2; exit 2; }
+[ -z "$PROXY" ] || [[ "$PROXY" =~ ^([0-9.]+:|\[[0-9a-fA-F:]+\]:)?[0-9]{1,5}$ ]] || { echo "--behind-proxy: [ADDR:]PORT, e.g. 8080 or 127.0.0.1:8080" >&2; exit 2; }
+[ -z "$DOMAIN" ] || [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]{1,253}$ ]] || { echo "--domain: a host name such as assistant.example.com" >&2; exit 2; }
+[ -z "$EMAIL" ] || [[ "$EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$ ]] || { echo "--email: an address such as you@example.com" >&2; exit 2; }
+# what git says, kept only when it is a plain branch name or address (a branch may hold $( ), which .env would run)
+plain_branch() { [[ "$1" =~ ^[A-Za-z0-9._/-]{1,100}$ ]] && printf '%s' "$1"; }
+plain_url() { [[ "$1" =~ ^[A-Za-z0-9@:/._~%+-]{1,300}$ ]] && printf '%s' "$1"; }
 [ "$(id -u)" = 0 ] || { echo "Run as root (sudo)." >&2; exit 1; }
 
 if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
@@ -53,7 +62,9 @@ ENV="$STACK/.env"
 if [ ! -f "$ENV" ]; then
   [ -n "$DOMAIN" ] || { echo "First run: give --domain (and --email)." >&2; exit 2; }
   say "Writing $ENV"
-  GIT_URL="$(git -C "$REPO" remote get-url origin 2>/dev/null || true)"
+  GIT_URL="$(plain_url "$(git -C "$REPO" remote get-url origin 2>/dev/null || true)" || true)"
+  GIT_BR="$(plain_branch "$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)" || true)"
+  ( umask 077; : > "$ENV" ) # private from its first byte: it holds the agent's token
   cat > "$ENV" <<EOF
 # Talixio stack. Keep this file private (it holds the agent's token).
 DOMAIN=$DOMAIN
@@ -63,11 +74,11 @@ DOCKER_GID=$(getent group docker | cut -d: -f3)
 # Updates from the admin page build this repository. A private one needs a read-only token: GIT_TOKEN=
 # (GitHub: a fine-grained token on this repository, Contents: Read)
 GIT_URL=$GIT_URL
-GIT_BRANCH=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)
+GIT_BRANCH=${GIT_BR:-main}
 EOF
   chmod 600 "$ENV"
 else # updates from the admin page build the branch this clone is on
-  BR="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  BR="$(plain_branch "$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)" || true)"
   if [ -n "$BR" ] && [ "$BR" != HEAD ]; then
     if grep -q '^GIT_BRANCH=' "$ENV"; then sed -i "s|^GIT_BRANCH=.*|GIT_BRANCH=$BR|" "$ENV"; else echo "GIT_BRANCH=$BR" >> "$ENV"; fi
   fi

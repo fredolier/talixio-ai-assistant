@@ -13,6 +13,20 @@ $dead = array_filter(['libFiltered', 'pStateLabel', '.pilot-talk', '.ptt', '.mic
     fn($w) => str_contains((string)file_get_contents("$root/web/public/" . ($w[0] === '.' ? 'app.css' : 'app.js')), $w));
 check('hygiene: the unused functions and styles the audit listed are removed', !$dead, implode(' ', $dead));
 
+// install-stack.sh (audit, lot 6): what is given goes into commands and into .env, read as shell; it is checked before anything runs
+$stack = "$root/deploy/docker/install-stack.sh";
+$refused = function (array $args) use ($stack): bool {
+    $p = proc_open(array_merge(['bash', $stack], $args), [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); fclose($pipes[1]); fclose($pipes[2]);
+    return proc_close($p) === 2 && !str_contains($out, '==>');
+};
+check('install-stack: an identifier, model, port, domain or email that is no plain name is refused before anything runs',
+    $refused(['--migrate', 'x;id']) && $refused(['--migrate', 'Fred']) && $refused(['--whisper-model', 'small;reboot']) && $refused(['--behind-proxy', '8080 -v /:/h'])
+    && $refused(['--domain', 'a.example$(id)']) && $refused(['--email', 'x@y;z']));
+$src = (string)file_get_contents($stack);
+check('install-stack: .env is private from its first byte, and a branch name from git is checked before it is written there',
+    strpos($src, 'umask 077') < strpos($src, 'cat > "$ENV"') && str_contains($src, 'GIT_BRANCH=${GIT_BR:-main}') && str_contains($src, 'BR="$(plain_branch'));
+
 // ---- the environment, changed per section and put back after
 $envKeys = [];
 $setEnv = function (array $vars) use (&$envKeys) {
