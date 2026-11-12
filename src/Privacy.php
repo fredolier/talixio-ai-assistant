@@ -211,6 +211,23 @@ final class Privacy
         foreach ((array)($s['links'] ?? []) as $u) if (is_string($u) && count(self::$links) < 2000) self::$links[$u] = true;
     }
 
+    /** Several snapshots as one (a directive's workers): the strictest of each. Null when none read anything of note. */
+    public static function merge(array $snaps): ?array
+    {
+        $out = ['untrusted' => false, 'private' => false, 'taint' => 0, 'links' => []];
+        foreach ($snaps as $s) {
+            if (!is_array($s)) continue;
+            $out['untrusted'] = $out['untrusted'] || !empty($s['untrusted']);
+            $out['private'] = $out['private'] || !empty($s['private']);
+            $out['taint'] = max($out['taint'], (int)($s['taint'] ?? 0));
+            $out['links'] = array_slice(array_values(array_unique(array_merge($out['links'], array_filter((array)($s['links'] ?? []), 'is_string')))), 0, 500);
+        }
+        return self::notable($out) ? $out : null;
+    }
+
+    /** Whether a snapshot asks anything of the work that carries it on. */
+    public static function notable(?array $s): bool { return is_array($s) && (!empty($s['untrusted']) || !empty($s['private']) || (int)($s['taint'] ?? 0) > 0); }
+
     /** Set in the tool process Claude Code starts: the file it shares this state through with the answer that started it. */
     public static string $shareFile = '';
 

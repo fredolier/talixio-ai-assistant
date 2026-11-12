@@ -45,6 +45,10 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
   attendent votre validation. Vos propres notes, écrites et modifiées en dernier par vous dans l'app, ne comptent pas.
   Un résultat validé qui venait d'un tel contenu garde la règle tant qu'il est dans la conversation récente, et une
   compétence apprise d'un tel travail attend elle aussi votre validation.
+  Un job en arrière-plan, une directive ou un job repris transmet ce qu'il a lu à son rapport : le tour qui le
+  relaie (et les suivants, tant que le rapport est dans la conversation récente) demande de la même façon, et un job
+  qui a lu un fichier Confidentiel rapporte au niveau Confidentiel (pas de recherche web, rien copié dans la mémoire
+  commune).
 - **Sites web de confiance** : les sites listés dans Réglages → Navigateur et validations → Sites web de
   confiance (sous-domaines inclus) s'ouvrent sans demander, y compris depuis un espace Confidentiel, une
   routine ou après la lecture d'un e-mail. Le bouton « Toujours autoriser » d'une validation ajoute le site

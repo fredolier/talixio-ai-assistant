@@ -285,8 +285,9 @@ final class Agent
      * A message from the user on some channel. "/fast" or "/deep" at the start picks the tier.
      * $files: ids of attached files (images are shown to the model, documents and audio as text).
      * $onEvent receives live progress (text deltas, tool use) for streaming UIs. Returns the reply.
+     * $trust: a Privacy snapshot of the work this message relays (a job's report): its guard carries on in this turn.
      */
-    public function chat(string $channel, string $text, string $tier = 'standard', array $files = [], ?callable $onEvent = null, ?int $space = null): string
+    public function chat(string $channel, string $text, string $tier = 'standard', array $files = [], ?callable $onEvent = null, ?int $space = null, ?array $trust = null): string
     {
         $store = $this->app->store;
         $spaces = $this->app->spaces();
@@ -361,7 +362,8 @@ final class Agent
         if ($onEvent) Privacy::$onEvent = $onEvent;
         try {
             $ref = $files ? $this->app->files()->reference($files) : '';
-            $store->addMessage('user', $channel, trim($text . ($ref !== '' ? "\n$ref" : '')), null, $files, $space);
+            // $trust: what the work this message reports on read (a job, a directive): kept with it, applied below while it is in the history
+            $store->addMessage('user', $channel, trim($text . ($ref !== '' ? "\n$ref" : '')), Privacy::notable($trust) ? ['trust' => $trust] : null, $files, $space);
             $history = $store->history($this->app->cfg->historyMessages, $oldest, $this->app->cfg->historyTokens * 4, $space);
             foreach ($store->trustFrom($oldest, $space) as $t) Privacy::adopt($t); // an approved tool's result or a job report read by others stays untrusted while in the history
             if ($history) {

@@ -284,6 +284,7 @@ final class Jobs
         if ($j['status'] === 'queued') $store->claimJob($id);
         $this->app->setSpace((int)$j['space']); // library searches start in the space's folder; its confidentiality level applies
         Privacy::$taint = 0; Privacy::trustAgain();
+        if (!empty($j['parent'])) Privacy::adopt(json_decode((string)($store->job((int)$j['parent'])['trust'] ?? ''), true) ?: null); // it reads the earlier run's findings
         $max = (float)$j['max_cost_usd'];
         $effort = $this->tune((string)($j['effort'] ?? ''));
         $warned = false;
@@ -306,13 +307,14 @@ final class Jobs
                 $store->updateJob($id, ['result' => 'Transcribing…']);
                 $f = $this->app->files()->get((int)$j['file_id']) ?? throw new \RuntimeException('recording not found');
                 $transcript = $this->app->files()->text((int)$f['id']);
+                Privacy::$untrusted = true; // what other people said in the meeting is not an instruction
                 $store->updateJob($id, ['result' => 'Summarising…']);
                 $task .= "\n\nRecording: {$f['name']}, " . date('Y-m-d H:i', (int)$f['created']) . ". The full transcript is saved as file #{$f['id']} (searchable later).\n\n# Transcript\n" . mb_substr($transcript, 0, 300000);
             }
             if ($j['kind'] === 'reflect') { $this->reflect($j, $guard); return; }
             if ($j['kind'] === 'eval') { // the assessor's A/B of a role improvement (agent factory, phase 2)
                 $text = $this->app->assessor()->runEvaluation($j, $guard);
-                $store->updateJob($id, ['status' => 'done', 'result' => $text, 'cost_usd' => (float)$store->job($id)['cost_usd'], 'finished' => time()]);
+                $store->updateJob($id, ['status' => 'done', 'result' => $text, 'cost_usd' => (float)$store->job($id)['cost_usd'], 'finished' => time(), 'trust' => json_encode(Privacy::snapshot())]);
                 $this->report($id);
                 return;
             }
@@ -321,11 +323,12 @@ final class Jobs
             $store->updateJob($id, ['status' => 'done', 'result' => $text ?: '(empty report)', 'cost_usd' => $meta['cost'], 'finished' => time()]);
             if (trim((string)$text) !== '') $this->saveReport($store->job($id), $text);
         } catch (Abort $e) {
-            if ($e->getMessage() === 'cancelled') { if ($j['kind'] === 'worker') $this->app->director()->onWorkerDone($id); return; } // cancelled: no chat report, but the directive may now be done
+            if ($e->getMessage() === 'cancelled') { $store->updateJob($id, ['trust' => json_encode(Privacy::snapshot())]); if ($j['kind'] === 'worker') $this->app->director()->onWorkerDone($id); return; } // cancelled: no chat report, but the directive may now be done
             $store->updateJob($id, ['status' => 'failed', 'result' => 'Stopped: ' . $e->getMessage(), 'finished' => time()]);
         } catch (\Throwable $e) {
             $store->updateJob($id, ['status' => 'failed', 'result' => 'Error: ' . $e->getMessage(), 'finished' => time()]);
         }
+        $store->updateJob($id, ['trust' => json_encode(Privacy::snapshot())]); // what it read: its report turn, a directive and continue_job carry it on
         if ($j['kind'] === 'worker') $this->app->director()->onWorkerDone($id); // the directive reports once, not each worker
         elseif ($j['kind'] !== 'reflect') $this->report($id); // learning is quiet unless it learned something
     }
@@ -405,7 +408,9 @@ final class Jobs
             $how .= sprintf(' The full report is saved in the library as [%s](/files/%d) in %s: give the user this link, and offer to file it elsewhere (move it) if they want.',
                 str_replace(['[', ']'], '', $f['name']), $f['id'], $f['folder']);
         }
-        $reply = $this->app->agent()->chat('job', "[Background job #{$j['id']} \"{$j['title']}\" $head. Its report follows. $how]\n\n{$j['result']}", 'standard', [], null, (int)$j['space']);
+        // the report repeats what the job read (web pages, emails, Confidential files): its guard and level go with it (audit S3)
+        $reply = $this->app->agent()->chat('job', "[Background job #{$j['id']} \"{$j['title']}\" $head. Its report follows. $how]\n\n{$j['result']}", 'standard', [], null, (int)$j['space'],
+            json_decode((string)($j['trust'] ?? ''), true) ?: null);
         $this->app->notifier()->notify($j['title'], $reply, (int)$j['space']);
     }
 }

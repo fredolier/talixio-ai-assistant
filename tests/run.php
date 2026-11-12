@@ -1783,6 +1783,9 @@ $fake->script = function ($last, $tools) {
     foreach (['list_tasks', 'list_jobs', 'usage_report', 'search_memory'] as $t) $tools->run($t, $t === 'search_memory' ? ['query' => 'invoice'] : []);
     return 'Two invoices are unpaid.';
 };
+// a clean conversation: since the audit (S3), a job report that read content written by others (an earlier meeting
+// summary here) keeps the next turns guarded while it is in the history, and a skill learned then waits for approval
+$s->q("UPDATE messages SET meta = NULL WHERE meta LIKE '%\"trust\"%'");
 $app->agent()->chat('web', 'Which invoices are unpaid?');
 $learn = $s->q("SELECT * FROM jobs WHERE kind='reflect' ORDER BY id DESC")->fetch();
 check('learning: multi-step turn queues a fast, capped learning job', $learn && $learn['tier'] === 'fast' && (float)$learn['max_cost_usd'] <= 0.05 && str_contains($learn['instructions'], '- search_memory'));

@@ -42,6 +42,9 @@ If a question asked in General reads a confidential document, the rest of the an
   filing a file) and opening a web address that was not in that content wait for your approval. Your own notes,
   written and last changed by you in the app, do not count. A result you approved that came from such content keeps
   the rule while it is in the recent conversation, and a skill learned from such work waits for your approval too.
+  A background job, a directive or a continued job carries what it read into its report: the turn that relays it
+  (and the next ones, while the report is in the recent conversation) asks the same way, and a job that read a
+  Confidential file reports at the Confidential level (no web search, nothing copied into shared memory).
 - **Trusted websites**: sites listed in Settings → Browser and approvals → Trusted websites (subdomains
   included) open without asking, also from Confidential spaces, routines and after reading an email. The
   "Always allow" button on an approval adds the site for you; for a web search it turns on "Web search from
