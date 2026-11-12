@@ -2694,6 +2694,7 @@ window.I18N.fr = {
 "# Tag": "# Étiquette",
 "# Other tag": "# Autre étiquette",
 "Filter by tag": "Filtrer par étiquette",
+"Filters": "Filtres",
 "Any priority": "Toutes priorités",
 "P2 and above": "P2 et plus",
 "P3 and above": "P3 et plus",

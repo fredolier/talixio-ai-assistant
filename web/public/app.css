@@ -1966,3 +1966,39 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .pl-free{margin:0}
 @media (max-width:640px){.pl-q.big{font-size:1.02rem}.pilot-status-head #pilot-orch-status{flex-basis:100%}}
 .pl-ask>.btn.small{align-self:flex-start}
+
+/* ---- on a phone (audit 5.2) ---- */
+#board-filter-btn{display:none} /* shown on a phone only, below */
+@media (max-width:560px){
+  /* U8 Pilotage: the four tabs fit (two rows), the introduction folds away, "Needs you" grows with what it lists */
+  #view-pilotage .page-head p{display:none}
+  #view-pilotage .pilot-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;overflow:visible}
+  #view-pilotage .ptab{justify-content:center;padding:7px 8px;font-size:.85rem;min-width:0}
+  #view-pilotage .ptab>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #view-pilotage .ptab-src{display:none}
+  .pl-split{height:auto;min-height:0}
+  /* U9 Tasks: room at the top, the view chooser in two rows, the filters behind a button */
+  .board-page{padding-top:14px}
+  .board-title .seg{display:grid;grid-template-columns:repeat(3,1fr);overflow:visible;width:100%}
+  .board-title .seg button{padding:6px 4px;font-size:.82rem}
+  #board-filter-btn{display:inline-flex;align-items:center}
+  .board-tools{flex-wrap:nowrap;gap:5px}
+  .board-tools .btn{padding:5px 7px;font-size:.76rem;white-space:nowrap}
+  #view-board .bfilters:not(.open){display:none}
+}
+@media (max-width:420px){
+  /* U6 the task dialog in one column, its tick boxes wrap */
+  .card-dialog .cd-grid{grid-template-columns:1fr}
+  .cd-grid .cd-check{white-space:normal;padding-top:0}
+}
+@media (max-width:560px){
+  /* U7 a worker's cost no longer cut off on the right */
+  .dir-w{flex-wrap:wrap}
+  .dir-w b{min-width:0}
+}
+/* U28 fingers: menu rows, small buttons, chips and message actions at least 40 px high */
+@media (pointer:coarse){
+  .space-item,.btn.small,.pl-chip,.act{min-height:40px}
+  .act{min-width:40px}
+  .pl-chip{display:inline-flex;align-items:center}
+}

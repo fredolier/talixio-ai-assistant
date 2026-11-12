@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.28 (2026-11-12)
+
+- Interface on a phone (audit 5.2, U6–U9, U28): **Pilotage** shows its four tabs at once (two rows) instead of one and a half, without the introduction, and *Needs you* grows with what it lists instead of a fixed box; **Tasks** no longer cuts its title at the top, shows its six views in two rows instead of pushing the last one off screen, and folds the search and filters behind a **Filters** button (a filter in use stays in sight); the **task dialog** is one column under 420 px, so nothing goes past the right edge; a directive's worker no longer has its cost cut off; on touch screens, menu rows, small buttons, chips and message actions are at least 40 px high. Checked with screenshots at 390×844, light and dark. FAQ *Tasks and routines* updated.
+
 ## 1.35.27 (2026-11-12)
 
 - Interface fixes (audit 5.1, U3–U5, U10–U14): the message box no longer reads "Message à à Talixio…" (it said its text twice in French) and stays on one line on a phone (cut with "…"); with the menu folded, the assistant's name no longer breaks in two ("Talix / io"); links are in the app's colour instead of the browser's blue (Activity, Tasks…); "show handled" in Mail stays on one line; Jobs no longer says "No jobs yet" under a directive that is running; Settings no longer shows "1 unsaved change" when a value set on the server is not in its list, and the save bar no longer covers the last fields; Memory → Skills no longer lists roles (they are managed in Pilotage → Roles, and the protected assessor showed a Delete button); the sign-in page no longer makes three requests the server refuses (the folder list is read when a folder field is used, and the page knows there is no session). Checked with screenshots (desktop and phone); the doubled "à à" was seen with the server's language set to French, the new browser test guards the message box but did not reproduce it on the old code.

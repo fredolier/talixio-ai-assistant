@@ -10,7 +10,7 @@
   semaine, Critique et élevée, En attente, Sans date). Cochez plusieurs tâches pour changer d'un coup leur statut,
   leur date, leur priorité, leur espace ou leurs étiquettes, ou les mettre à la corbeille. Clavier : flèches ou j/k,
   x pour sélectionner, Entrée pour ouvrir, Échap pour vider la sélection.
-- **Filtres** au-dessus de chaque vue (Aujourd'hui, Tableau, Liste, Semaine, Mois) : une recherche sur les mots du
+- **Filtres** au-dessus de chaque vue (Aujourd'hui, Tableau, Liste, Semaine, Mois ; sur téléphone, derrière le bouton **Filtres**) : une recherche sur les mots du
   titre, de la description, du code ou des étiquettes (sans tenir compte des accents), une étiquette (tapez quelques
   lettres pour la choisir parmi toutes ; les cinq plus utilisées sont à un clic), et une priorité minimale (P1
   seulement, P2 et plus…). *Effacer les filtres* les remet à zéro, et un compteur indique combien de tâches sont

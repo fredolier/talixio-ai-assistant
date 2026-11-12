@@ -1135,6 +1135,8 @@ $('#weekly-save').onclick = async () => {
   catch (e) { toast(e.message); }
 };
 folderPicker($('#weekly-folder')); folderPicker($('#watch-folder'));
+// on a phone the board's filters are folded behind a button (audit U9); one that is in use keeps them open
+$('#board-filter-btn').onclick = () => { const f = $('#board-filters'), open = !f.classList.contains('open'); f.classList.toggle('open', open); $('#board-filter-btn').setAttribute('aria-expanded', String(open)); };
 $('#watch-every').onchange = () => { $('#watch-day').hidden = $('#watch-every').value === 'daily'; };
 $('#watch-name').oninput = () => { $('#watch-folder').placeholder = '/Drafts/' + ($('#watch-name').value.trim() || '…'); };
 function fillWatch(w) {
@@ -1608,6 +1610,7 @@ const dueClass = c => { if (!c.due_date || c.status === 'done') return ''; const
 const board = { cards: [], refs: {}, statuses: {} };
 
 async function loadBoard() {
+  if ([...document.querySelectorAll('#board-filters input, #board-filters select')].some(e => e.value && e.selectedIndex !== 0)) $('#board-filters').classList.add('open'); // a filter in use stays in sight on a phone
   if (!state.spaces.length) await loadSpaces();
   if (boardPrefs.space === undefined) boardPrefs.space = String(state.space);
   const sel = $('#board-space');
