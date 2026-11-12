@@ -55,6 +55,10 @@ For a server that is not on GitHub (or in a private repository):
   folder, the system programs and the network, not your documents, mail or keys. Still, it can reach
   what its settings give it: only install code whose origin you know.
 - A TypeScript project that needs building is built (`npm run build`) if the package has no ready-made file.
+- Its installation runs in the same sandbox: the dependencies come from npm without their install scripts
+  (a connector whose dependencies need them cannot be installed this way, and says so), a `node_modules`
+  folder shipped in the `.zip` is ignored, and a connector from GitHub is fetched at the exact commit shown
+  in the approval, even if the repository changes afterwards.
 - Python: only servers with no dependencies to install are supported for now.
 
 ## What not to do

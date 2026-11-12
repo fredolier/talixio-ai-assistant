@@ -831,9 +831,12 @@ final class Tools
             "Install a local connector (an MCP server, Node.js or Python) from the address of its public GitHub repository, e.g. https://github.com/owner/repo or .../tree/main/folder for a server in a sub-folder. "
             . "Asks the user to approve first. It is downloaded into /Connecteurs and, if it needs no settings, installed and started by Talixio itself; otherwise you get the link the user opens to fill them in. "
             . "Use it when the user wants a connector from GitHub: never tell them to git clone, npm install, npm start or declare a localhost address. Only for MCP servers: an ordinary REST API is not one.",
-            ['url' => ['type' => 'string'], 'name' => ['type' => 'string', 'description' => 'short name, lowercase (optional)']], ['url'],
+            ['url' => ['type' => 'string'], 'name' => ['type' => 'string', 'description' => 'short name, lowercase (optional)'],
+             'commit' => ['type' => 'string', 'description' => 'leave empty: set by the app to the commit the user approves']], ['url'],
             fn(array $a) => $this->connectorFromGithub($a),
-            fn(array $a) => "Install the connector from GitHub: {$a['url']}\nIts code is downloaded into /Connecteurs, its dependencies installed (npm), and it runs inside your assistant: only approve code whose origin you trust.");
+            fn(array $a) => "Install the connector from GitHub: {$a['url']}" . (!empty($a['commit']) ? "\nAt commit {$a['commit']} (this exact code, even if the repository changes)" : '')
+                . "\nIts code is downloaded into /Connecteurs, its dependencies installed (npm, without their install scripts), and it runs inside your assistant"
+                . (Shell::binary() !== null ? ', in a sandbox that sees only its own folder' : ' with the rights of the app (no sandbox on this server)') . ': only approve code whose origin you trust.');
         $this->app->mcp()->register($this);
         $this->registerBoard();
         $this->app->spotify()->register($this);
@@ -1243,6 +1246,9 @@ final class Tools
             $this->app->store->logTool($name, $args, $gate, $this->app->jobId);
             return $gate;
         }
+        if ($name === 'connector_install_github' && empty($args['commit'])) { // what the user approves is pinned to the commit the address points to now (audit S6)
+            try { $args['commit'] = ConnectorPackage::commitOf((string)($args['url'] ?? '')); } catch (\Throwable $e) { return 'error: ' . $e->getMessage(); }
+        }
         $guard = isset($this->tools[$name]) && !$this->needsApproval($name) ? $this->afterUntrusted($name, $args) : null;
         if (isset($this->tools[$name]) && ($this->needsApproval($name) || $guard !== null)) {
             try { $out = $this->app->approvals()->request($name, $args, $guard ?? ($this->approval[$name])($args)); }
@@ -1499,7 +1505,7 @@ final class Tools
     private function connectorFromGithub(array $a): string
     {
         $cp = new ConnectorPackage($this->app);
-        $i = $cp->fromGithub((string)$a['url']);
+        $i = $cp->fromGithub((string)$a['url'], (string)($a['commit'] ?? '')); // the commit the user approved
         $file = '[' . Library::join(ConnectorPackage::FOLDER, $i['file_name']) . "](/files/{$i['file']})";
         if (!$i['entry'] && !$i['build']) return "error: downloaded as $file, but there is no MCP server in it (no package.json with bin or main, no server.js, index.js or server.py). It may not be an MCP server: look at its README, or a sub-folder (give its /tree/<branch>/<folder> address).";
         if ($i['env']) return "Downloaded as $file, not installed yet: it reads these settings: " . implode(', ', $i['env'])

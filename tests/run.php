@@ -3783,14 +3783,14 @@ if (trim((string)shell_exec('command -v node')) !== '') {
     $cs = $cp->status(); $srv = $app->mcp()->servers()['anki'] ?? [];
     check('connector: installed, declared and answering', $cs['state'] === 'done' && $cs['tools'] === 1 && ($srv['args'][0] ?? '') === 'src/server.js' && ($srv['cwd'] ?? '') === 'connectors/anki' && is_file("$dir/connectors/anki/src/server.js")
         && ($srv['env']['TALIXIO_PASSWORD'] ?? '') === 's3cret' && !isset($srv['env']['bad key']) && !isset($cs['env']), json_encode([$cs, $srv]));
-    check('connector: driving a browser (Playwright), its headless Chromium is downloaded into the data folder', @file_get_contents("$dir/ms-playwright/asked.txt") === 'install --only-shell chromium');
+    // since the audit (S6): a node_modules shipped in the .zip is not unpacked, so its cli.js (here a fake browser installer) never runs;
+    // dependencies come from npm only (offline here: the real Chromium download is not tested)
+    check('connector: a node_modules shipped in the .zip is not unpacked, and its cli.js is not run', !is_dir("$dir/connectors/anki/node_modules") && !is_file("$dir/ms-playwright/asked.txt"));
     check('connector: nothing written outside its folder', !file_exists("$dir/connectors/evil.txt") && !file_exists("$dir/evil.txt") && !file_exists("$dir/connectors/anki/../evil.txt"));
     $out = $app->mcp()->call('anki', 'open_tasks', []);
     check('connector: its tool works with the settings given', str_contains(is_string($out) ? $out : json_encode($out), "3 open tasks at https://anki.example.com for me@example.com (signed in), browsers in $dir/ms-playwright"), is_string($out) ? $out : json_encode($out));
-    @unlink("$dir/ms-playwright/asked.txt"); $app->mcp()->call('anki', 'open_tasks', []);
-    $again = is_file("$dir/ms-playwright/asked.txt");
-    @unlink("$dir/ms-playwright/asked.txt"); unlink("$dir/ms-playwright/chromium_headless_shell-9/INSTALLATION_COMPLETE"); $app->mcp()->call('anki', 'open_tasks', []);
-    check('connector: its browser missing (installed before it was downloaded), it is downloaded when a tool is used, once', !$again && @file_get_contents("$dir/ms-playwright/asked.txt") === 'install --only-shell chromium');
+    $app->mcp()->call('anki', 'open_tasks', []);
+    check('connector: using its tools does not run the shipped installer either', !is_file("$dir/ms-playwright/asked.txt"));
     $cp->install($zid, 'anki', ['TALIXIO_URL' => 'https://anki2.example.com', 'TALIXIO_PASSWORD' => ''], false); $cp->finish();
     $srv = $app->mcp()->servers()['anki'];
     check('connector: reinstalling keeps a secret left empty', $srv['env']['TALIXIO_PASSWORD'] === 's3cret' && $srv['env']['TALIXIO_URL'] === 'https://anki2.example.com' && $cp->status()['state'] === 'done');
@@ -3814,11 +3814,12 @@ $zz->addFromString('tools-main/servers/tasks/index.js', 'const k = process.env.T
 $zz->addFromString('tools-main/servers/other/server.js', 'other');
 $zz->close();
 $asked = [];
-\Talixio\ConnectorPackage::$fetch = function (string $u) use (&$asked, $ghz) { $asked[] = $u; return file_get_contents($ghz); };
+$sha = str_repeat('ab12', 10); // since the audit (S6) the archive is fetched at a commit: GitHub's API is asked which one first
+\Talixio\ConnectorPackage::$fetch = function (string $u) use (&$asked, $ghz, $sha) { $asked[] = $u; return str_contains($u, 'api.github.com') ? json_encode(['sha' => $sha]) : file_get_contents($ghz); };
 $gi = $cp->fromGithub('https://github.com/acme/tools/tree/main/servers/tasks');
 $gf = $app->files()->get($gi['file']);
 $gz = new \ZipArchive(); $gz->open($gf['path']); $inside = []; for ($i = 0; $i < $gz->numFiles; $i++) $inside[] = $gz->getNameIndex($i); $gz->close(); sort($inside);
-check('connector from GitHub: the sub-folder fetched into /Connecteurs, read like a .zip', $asked === ['https://github.com/acme/tools/archive/main.zip'] && $gf['folder'] === '/Connecteurs' && $gf['name'] === 'tasks.zip'
+check('connector from GitHub: the sub-folder fetched into /Connecteurs, read like a .zip', $asked === ['https://api.github.com/repos/acme/tools/commits/main', "https://github.com/acme/tools/archive/$sha.zip"] && $gi['commit'] === $sha && $gf['folder'] === '/Connecteurs' && $gf['name'] === 'tasks.zip'
     && $inside === ['index.js', 'package.json'] && $gi['entry'] === 'index.js' && $gi['name'] === 'tasks-mcp' && $gi['env'] === ['TASKS_API_KEY'] && $gi['github'] === 'https://github.com/acme/tools/tree/main/servers/tasks', json_encode([$asked, $inside, $gi]));
 $gi2 = $cp->fromGithub('https://github.com/acme/tools/tree/main/servers/tasks');
 check('connector from GitHub: fetched again, the previous copy goes to the trash', !$app->files()->get($gi['file']) && $app->files()->get($gi2['file'])['name'] === 'tasks.zip');
@@ -3828,7 +3829,15 @@ $out = $app->tools->execute('connector_install_github', ['url' => 'https://githu
 check('connector from GitHub (assistant): settings to fill in, so not installed: the link to the file is given, no secret asked in the chat', str_contains($out, 'TASKS_API_KEY') && preg_match('#\(/files/\d+\)#', $out) && str_contains($out, 'never ask for passwords'), $out);
 $asked = [];
 $whole = $cp->fromGithub('https://github.com/acme/tools');
-check('connector from GitHub: a whole repository, its default branch', $asked === ['https://github.com/acme/tools/archive/HEAD.zip'] && $app->files()->get($whole['file'])['name'] === 'tools.zip' && $whole['entry'] === null, json_encode([$asked, $whole]));
+check('connector from GitHub: a whole repository, its default branch', $asked === ['https://api.github.com/repos/acme/tools/commits/HEAD', "https://github.com/acme/tools/archive/$sha.zip"] && $app->files()->get($whole['file'])['name'] === 'tools.zip' && $whole['entry'] === null, json_encode([$asked, $whole]));
+$asked = [];
+$r = $app->tools->run('connector_install_github', ['url' => 'https://github.com/acme/tools/tree/main/servers/tasks']);
+$pend = $app->store->q("SELECT args, summary FROM approvals WHERE tool = 'connector_install_github' ORDER BY id DESC LIMIT 1")->fetch();
+check('connector from GitHub: the approval is pinned to the commit, shown to the user, and nothing is downloaded before it',
+    str_contains($r, "Waiting for the user's approval") && (json_decode($pend['args'], true)['commit'] ?? '') === $sha && str_contains($pend['summary'], "At commit $sha")
+    && str_contains($pend['summary'], 'without their install scripts') && $asked === ['https://api.github.com/repos/acme/tools/commits/main'], json_encode([$r, $pend, $asked]));
+try { $cp->fromGithub('https://github.com/acme/tools', 'not-a-commit'); $err = ''; } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
+check('connector from GitHub: only a commit id is accepted as the pin', $err === 'not a commit id');
 \Talixio\ConnectorPackage::$fetch = null;
 
 // connector questions come with the FAQ page (weaker models otherwise invent npm start, localhost, a restart)

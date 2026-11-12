@@ -3,6 +3,11 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.18 (2026-11-12)
+
+- Security (audit S6): **installing a connector no longer runs its code outside the sandbox**. The installation ran `npm install` with its dependencies' install scripts, `npm run build` and a browser download (`node node_modules/…/cli.js`, which could come from the `.zip` itself) as the app's user, outside the sandbox the approval promised; and a GitHub repository was fetched at whatever its branch held when the download happened. Now dependencies are installed with `--ignore-scripts` (a connector that needs them cannot be installed this way and says so), the install, build and browser download run in the same sandbox as the connector when bubblewrap is there, a `node_modules` folder shipped in the `.zip` is never unpacked, and a GitHub address is pinned to the commit it points to when you are asked, shown in the approval and fetched as such. Tested with a stand-in npm and a simulated GitHub; bubblewrap is not on the test machine, so the sandboxed install itself is not exercised, nor a real npm or GitHub download. FAQ *Installing a connector* updated.
+- Tests: a test of the tool processes' environment missed the folder limit added in 1.35.16 (1.35.16 and 1.35.17 were committed after their own tests only; the full suite passes again here).
+
 ## 1.35.17 (2026-11-12)
 
 - Security (audit S11): **the assistant's board tools respect the spaces' levels**. From General, `board_list` with every space and `board_get` returned the titles and descriptions of Secret and Confidential spaces' tasks to any model. Now a Secret space's tasks are not seen outside it, a Confidential space's only by a model allowed to read it, and seeing them makes the work Confidential (no web search, nothing copied into shared memory). Your own Board page in the app is unchanged. FAQ *Confidentiality levels* updated.

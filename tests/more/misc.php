@@ -917,6 +917,21 @@ $setEnv(['PATH' => getenv('PATH') === "$d/emptybin" ? $fenv['PATH'] : getenv('PA
 $big = $zipOf('big.zip', ['server.py' => 'x', 'blob.bin' => ['size' => (80 << 20) + 10]]);
 check('connector: a zip unpacking past 80 MB is refused and nothing is left', str_contains($err(fn() => $cp->install($big, 'big', [], false)), 'too big') && !glob("$cpDir/connectors/.big-*"));
 
+// audit S6: dependencies are installed without their scripts; a package's own install scripts never run either
+if (trim((string)shell_exec('command -v node')) !== '') {
+    @mkdir("$d/npmbin", 0700);
+    file_put_contents("$d/npmbin/npm", "#!/bin/sh\necho \"\$@\" >> " . escapeshellarg("$d/npm-args.txt") . "\n"); chmod("$d/npmbin/npm", 0755);
+    $was = getenv('PATH'); putenv("PATH=$d/npmbin:$was");
+    $zs = $zipOf('scripts.zip', ['package.json' => json_encode(['name' => 'scripted', 'main' => 'index.js', 'dependencies' => ['left-pad' => '1'], 'scripts' => ['postinstall' => 'touch PWNED']]),
+        'index.js' => 'process.exit(0);']); // a server that ends at once: only the install matters here
+    $cp->install($zs, 'scripted', [], false);
+    try { $cp->finish(); } catch (\Throwable $e) {}
+    putenv("PATH=$was");
+    $npmArgs = (string)@file_get_contents("$d/npm-args.txt");
+    check('connector: npm installs dependencies with --ignore-scripts', str_contains($npmArgs, 'install') && str_contains($npmArgs, '--ignore-scripts'), $npmArgs);
+    check('connector: the package\'s own postinstall did not run', !glob("$cpDir/connectors/*scripted*/PWNED") && !glob("$cpDir/connectors/.scripted-*/PWNED"));
+}
+
 // a Python server from GitHub, with a link and an executable file, installed (its server does not answer)
 $ghz = "$d/ghpy.zip"; $z = new \ZipArchive(); $z->open($ghz, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
 $z->addFromString('pyt-dev/server.py', "import sys\nsys.exit(0)\n"); $z->addFromString('pyt-dev/run.sh', "#!/bin/sh\n");
@@ -925,17 +940,17 @@ $z->addFromString('pyt-dev/link', '/etc/passwd'); $z->setExternalAttributesName(
 $z->addFromString('pyt-dev/sub/link2', '/etc/passwd'); $z->setExternalAttributesName('pyt-dev/sub/link2', \ZipArchive::OPSYS_UNIX, 0120777 << 16);
 $z->addFromString('pyt-dev/sub/server.py', 'x');
 $z->close();
-ConnectorPackage::$fetch = fn(string $u) => file_get_contents($ghz);
+ConnectorPackage::$fetch = fn(string $u) => str_contains($u, 'api.github.com') ? '{"sha":"' . str_repeat('c', 40) . '"}' : file_get_contents($ghz);
 $g = $cp->fromGithub('https://github.com/acme/pyt/tree/dev');
 check('connector from GitHub: a branch without a folder keeps the branch in its address', $g['github'] === 'https://github.com/acme/pyt/tree/dev' && $g['runtime'] === 'python');
 $gs = $cp->fromGithub('https://github.com/acme/pyt/tree/dev/sub');
 $gz = new \ZipArchive(); $gz->open($app->files()->get($gs['file'])['path']); $gnames = []; for ($k = 0; $k < $gz->numFiles; $k++) $gnames[] = $gz->getNameIndex($k); $gz->close();
 check('connector from GitHub: links are left out of a sub-folder', $gnames === ['server.py']);
-ConnectorPackage::$fetch = fn(string $u) => 'not a zip';
+ConnectorPackage::$fetch = fn(string $u) => str_contains($u, 'api.github.com') ? '{"sha":"' . str_repeat('c', 40) . '"}' : 'not a zip';
 check('connector from GitHub: something else than a zip is said', str_contains($err(fn() => $cp->fromGithub('https://github.com/acme/pyt')), 'not a .zip archive'));
 $hz = "$d/ghbig.zip"; $z = new \ZipArchive(); $z->open($hz, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
 $z->addFromString('r-main/s/server.py', 'x'); $z->addFromString('r-main/s/blob.bin', str_repeat("\0", (80 << 20) + 10)); $z->close();
-ConnectorPackage::$fetch = fn(string $u) => file_get_contents($hz);
+ConnectorPackage::$fetch = fn(string $u) => str_contains($u, 'api.github.com') ? '{"sha":"' . str_repeat('c', 40) . '"}' : file_get_contents($hz);
 check('connector from GitHub: a sub-folder past 80 MB is refused', str_contains($err(fn() => $cp->fromGithub('https://github.com/acme/r/tree/main/s')), 'too big for a connector'));
 ConnectorPackage::$fetch = null;
 @unlink($hz);
@@ -957,7 +972,7 @@ check('connector: finish with nothing running does nothing', $cp->status()['stat
 check('connector: the library zips are listed, /Connecteurs first', ($cp->packages()[0]['folder'] ?? '') === ConnectorPackage::FOLDER && count(array_filter($cp->packages(), fn($p) => str_ends_with($p['name'], '.zip'))) === count($cp->packages()));
 check('connector from GitHub: other sites and ".." folders are refused', str_contains($err(fn() => ConnectorPackage::parseGithub('https://gitlab.com/acme/x')), 'GitHub repository')
     && str_contains($err(fn() => ConnectorPackage::parseGithub('https://github.com/acme/x/tree/main/a/%2e%2e/b')), 'GitHub repository'));
-ConnectorPackage::$fetch = fn(string $u) => file_get_contents($ghz);
+ConnectorPackage::$fetch = fn(string $u) => str_contains($u, 'api.github.com') ? '{"sha":"' . str_repeat('c', 40) . '"}' : file_get_contents($ghz);
 check('connector from GitHub: a folder that is not there is said', str_contains($err(fn() => $cp->fromGithub('https://github.com/acme/pyt/tree/dev/nowhere')), 'no folder "nowhere"'));
 // the same repository again, now with a server that answers: the old download goes to the trash, the old install is replaced
 $z = new \ZipArchive(); $z->open($ghz, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
