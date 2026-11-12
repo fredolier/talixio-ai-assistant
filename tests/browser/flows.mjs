@@ -502,6 +502,20 @@ const flows = {
     check('first look: Memory lists no role among the skills, so no "Delete" on the protected assessor (audit U13)', !(await p.textContent('#skills')).includes('assessor'));
     await ctx.close();
   },
+  async keyboard({ page, check }) {
+    // audit 5.5: a menu takes the keyboard when it opens, the arrows move in it; Pilotage's tabs name their panels
+    await go(page, 'chat');
+    await page.focus('#account-btn'); await page.keyboard.press('Enter'); await page.waitForTimeout(300);
+    const first = await page.evaluate(() => [document.activeElement?.closest('#account-menu') !== null, document.activeElement?.getAttribute('role'), document.activeElement?.textContent.trim()]);
+    check('keyboard: the account menu takes the focus when it opens, on an item that says it is one', first[0] && first[1] === 'menuitem', JSON.stringify(first));
+    await page.keyboard.press('ArrowDown'); await page.waitForTimeout(100);
+    const next = await page.evaluate(() => document.activeElement?.textContent.trim());
+    check('keyboard: the arrow moves to the next item', next !== first[2] && await page.evaluate(() => document.activeElement?.closest('#account-menu') !== null), next);
+    await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+    await go(page, 'pilotage');
+    const tabs = await page.evaluate(() => [...document.querySelectorAll('.ptab')].every(t => { const p = document.getElementById(t.getAttribute('aria-controls') || '-'); return p && p.getAttribute('role') === 'tabpanel'; }));
+    check('keyboard: each Pilotage tab names the panel it shows', tabs);
+  },
   async files({ page, check }) {
     const closeAll = () => page.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close()));
     await go(page, 'library');

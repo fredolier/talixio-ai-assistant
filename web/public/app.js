@@ -1137,6 +1137,24 @@ $('#weekly-save').onclick = async () => {
   catch (e) { toast(e.message); }
 };
 folderPicker($('#weekly-folder')); folderPicker($('#watch-folder'));
+// menus (assistant, spaces, More, account): the keyboard goes in when one opens, the arrows move, items say they are (audit U25)
+const menuItems = m => [...m.querySelectorAll('button, a[href], input')].filter(e => !e.disabled && e.offsetParent !== null);
+new MutationObserver(recs => {
+  for (const r of recs) {
+    const m = r.target;
+    if (!(m instanceof HTMLElement) || !m.classList.contains('space-menu') || m.hidden) continue;
+    menuItems(m).forEach(i => { if (i.tagName !== 'INPUT' && !i.getAttribute('role')) i.setAttribute('role', 'menuitem'); });
+    if (!m.contains(document.activeElement)) requestAnimationFrame(() => menuItems(m)[0]?.focus({ preventScroll: true }));
+  }
+}).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
+document.addEventListener('keydown', e => {
+  const m = document.activeElement?.closest?.('.space-menu');
+  if (!m || m.hidden || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) || document.activeElement.tagName === 'INPUT' && (e.key === 'Home' || e.key === 'End')) return;
+  const items = menuItems(m); if (!items.length) return;
+  e.preventDefault();
+  const i = items.indexOf(document.activeElement);
+  items[e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+});
 // on a phone the board's filters are folded behind a button (audit U9); one that is in use keeps them open
 $('#board-filter-btn').onclick = () => { const f = $('#board-filters'), open = !f.classList.contains('open'); f.classList.toggle('open', open); $('#board-filter-btn').setAttribute('aria-expanded', String(open)); };
 $('#watch-every').onchange = () => { $('#watch-day').hidden = $('#watch-every').value === 'daily'; };
@@ -1391,8 +1409,8 @@ async function loadJobs() {
       if (el.querySelector('.jsched')) return el.querySelector('.jsched').remove();
       const p = document.createElement('div'); p.className = 'jsched';
       const days = [1, 2, 3, 4, 5, 6, 0].map(d => `<option value="${d}">${esc(new Date(2024, 0, 7 + d).toLocaleDateString(undefined, { weekday: 'long' }))}</option>`).join('');
-      p.innerHTML = `<select data-f="rep"><option value="week">${esc(t('Every week'))}</option><option value="day">${esc(t('Every day'))}</option><option value="weekdays">${esc(t('Every weekday'))}</option><option value="month">${esc(t('Every month, on the 1st'))}</option><option value="once">${esc(t('Once'))}</option></select>`
-        + `<select data-f="dow">${days}</select><input data-f="date" type="date" hidden><input data-f="time" type="time" value="08:00">`
+      p.innerHTML = `<select data-f="rep" aria-label="${esc(t('Repeat'))}"><option value="week">${esc(t('Every week'))}</option><option value="day">${esc(t('Every day'))}</option><option value="weekdays">${esc(t('Every weekday'))}</option><option value="month">${esc(t('Every month, on the 1st'))}</option><option value="once">${esc(t('Once'))}</option></select>`
+        + `<select data-f="dow" aria-label="${esc(t('Day'))}">${days}</select><input data-f="date" type="date" aria-label="${esc(t('Date'))}" hidden><input data-f="time" type="time" aria-label="${esc(t('Time'))}" value="08:00">`
         + `<button class="btn small primary" data-f="ok">${esc(t('Schedule'))}</button><span class="muted">${esc(t('Same instructions, model, effort and cap; the report comes in the chat and in the library.'))}</span>`;
       const f = n => p.querySelector(`[data-f=${n}]`);
       const sync = () => { f('dow').hidden = f('rep').value !== 'week'; f('date').hidden = f('rep').value !== 'once'; };
@@ -3514,7 +3532,7 @@ function wireMbTabs() {
 /** The tabs show one face of the page: the catalogue, the provider cards, or the budget settings. */
 function mbApplyTab() {
   const tab = state.mb.tab;
-  $('#mb-tabs')?.querySelectorAll('.mb-tab').forEach(b => b.classList.toggle('on', b.dataset.mtab === tab));
+  $('#mb-tabs')?.querySelectorAll('.mb-tab').forEach(b => { b.classList.toggle('on', b.dataset.mtab === tab); b.setAttribute('aria-selected', String(b.dataset.mtab === tab)); });
   const show = (sel, on) => document.querySelectorAll(sel).forEach(e => { e.hidden = !on; });
   show('#mb-models', tab === 'models');
   show('#mb-phelp', tab === 'providers');
@@ -3703,7 +3721,7 @@ function mbRender() {
   box.innerHTML = `
     <div class="scopebar">
       <span class="muted small">${esc(t('Routing'))}</span>
-      <select id="mb-scope"><option value="global"${state.mb.scope === 'global' ? ' selected' : ''}>${esc(t('Global default (all spaces)'))}</option>
+      <select id="mb-scope" aria-label="${esc(t('Settings for'))}"><option value="global"${state.mb.scope === 'global' ? ' selected' : ''}>${esc(t('Global default (all spaces)'))}</option>
         <optgroup label="${esc(t('Override for a space'))}">${spaceOpts}</optgroup></select>
       <span class="muted small">${esc(state.mb.scope === 'global' ? t('Applied everywhere, unless a space overrides it.') : t('Inherited usages follow the global default; overridden ones are specific to this space.'))}</span>
       <button class="btn sm" id="mb-refresh" style="margin-left:auto">↻ ${esc(t('Refresh now'))}</button>
@@ -3711,8 +3729,8 @@ function mbRender() {
     <div class="usages" id="mb-usages"></div>
     <div id="mb-strip"></div>
     <div class="filters">
-      <input type="search" id="mb-q" placeholder="${esc(t('Search a model…'))}" value="${esc(state.mb.q)}">
-      <select id="mb-ftype">
+      <input type="search" id="mb-q" aria-label="${esc(t('Search a model…'))}" placeholder="${esc(t('Search a model…'))}" value="${esc(state.mb.q)}">
+      <select id="mb-ftype" aria-label="${esc(t('Kind of model'))}">
         <option value="">${esc(t('All types'))}</option>
         <option value="LLM"${state.mb.ftype === 'LLM' ? ' selected' : ''}>${esc(t('LLM (text)'))}</option>
         <option value="Vision"${state.mb.ftype === 'Vision' ? ' selected' : ''}>${esc(t('LLM vision'))}</option>
@@ -3722,8 +3740,8 @@ function mbRender() {
         <option value="Forecast"${state.mb.ftype === 'Forecast' ? ' selected' : ''}>${esc(t('Forecast'))}</option>
         <option value="Decision"${state.mb.ftype === 'Decision' ? ' selected' : ''}>${esc(t('Decisions'))}</option>
       </select>
-      <select id="mb-fprov"><option value="">${esc(t('All providers'))}</option>${provOpts}</select>
-      <select id="mb-ftl">
+      <select id="mb-fprov" aria-label="${esc(t('Provider'))}"><option value="">${esc(t('All providers'))}</option>${provOpts}</select>
+      <select id="mb-ftl" aria-label="${esc(t('Tier'))}">
         <option value="0">${esc(t('All trust levels'))}</option>
         <option value="3"${state.mb.ftl === 3 ? ' selected' : ''}>${esc(t('Level ≥ 3 (pro)'))}</option>
         <option value="4"${state.mb.ftl === 4 ? ' selected' : ''}>${esc(t('Level ≥ 4 (no retention)'))}</option>
@@ -4318,7 +4336,7 @@ function renderStore(box, st) {
     + `<div id="store-conn-list">` + (st.connectors.length ? st.connectors.map(connItem).join('')
       : `<p class="muted small">${esc(t('The store has no connector yet. The connectors listed in the FAQ arrive once the server is updated.'))}</p>`) + '</div>'
     + (hasApps ? `<div id="store-apps-list" hidden>${st.apps.map(appItem).join('')}</div>` : '')
-    + (mine.length ? `<p class="muted small">${esc(t('Share one of your connectors with everyone on this server (the admin reviews it first):'))}</p><form class="row wrap" id="store-conn-send"><select id="store-conn-pick">${mine.map(n => `<option class="no-i18n">${esc(n)}</option>`).join('')}</select>
+    + (mine.length ? `<p class="muted small">${esc(t('Share one of your connectors with everyone on this server (the admin reviews it first):'))}</p><form class="row wrap" id="store-conn-send"><select id="store-conn-pick" aria-label="${esc(t('Connector'))}">${mine.map(n => `<option class="no-i18n">${esc(n)}</option>`).join('')}</select>
         <input id="store-conn-note" placeholder="${esc(t('A word for the admin (optional)'))}" maxlength="500"><button class="btn small">${esc(t('Send for review'))}</button></form>
         <p class="muted small">${esc(t('Shares how to install it (its GitHub repository or address), never your keys or header values.'))}</p>` : '')
     + sent.map(x => `<p class="small muted"><span class="no-i18n">${esc(x.name)}</span>: ${esc(storeStatus(x))}</p>`).join('');
@@ -6128,7 +6146,7 @@ function appShare(app, el, storeOnly = false) {
   const list = state.assistants || [], sp = state.space ?? '';
   const file = pkg => ({ blob: new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' }), name: (app.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app') + '.talixio-app.json' });
   el.innerHTML = storeOnly ? `<div id="app-store-send"></div><p class="small" id="app-share-say" role="status"></p>` : `<p class="small">${esc(t('Shares the app’s code and what it reads, never its data, its saved state or a key. The other side approves it before it gets any data, and installs the connectors it uses with its own account.'))}</p>
-    ${list.length ? `<form class="row wrap" id="app-send"><select id="app-send-to">${list.map(a => `<option value="${esc(a.id)}" class="no-i18n">${esc(a.name)}</option>`).join('')}</select>
+    ${list.length ? `<form class="row wrap" id="app-send"><select id="app-send-to" aria-label="${esc(t('Send to'))}">${list.map(a => `<option value="${esc(a.id)}" class="no-i18n">${esc(a.name)}</option>`).join('')}</select>
       <button class="btn small">Copy to this assistant</button></form>` : ''}
     <p class="row wrap"><button type="button" class="btn small ghost" id="app-dl">Download it as a file</button>
       <span class="muted small">${esc(t('To give it to anyone: they add it with “Add an app from a file” in their Apps.'))}</span></p>
@@ -6346,7 +6364,7 @@ function plRenderNeed() {
           ${wa.url ? `<a class="btn primary" href="${esc(wa.url)}" target="_blank" rel="noopener">${esc(t('Open the session'))} ↗</a>` : `<p class="muted small">${esc(t('Nothing can be done from here.'))}</p>`}</div>`
       : `${prop ? `<div class="pl-prop"><div class="pl-prop-h">${esc(t('The pilot would answer'))} <span class="pl-pill no-i18n">${Math.round(prop.confidence * 100)}%</span></div><div class="pl-q no-i18n">${esc(prop.answer)}</div>${prop.rationale ? `<p class="muted small no-i18n">${esc(prop.rationale)}</p>` : ''}<button type="button" class="btn primary no-i18n" data-answer="${esc(prop.answer)}" data-agent-id="${aid}">${esc(t('Send this answer'))}</button></div>` : ''}
         ${opts}
-        <div class="pl-free"><textarea id="pl-need-input" rows="2" data-nid="${aid}" placeholder="${esc(opts || prop ? t('Or in your own words…') : t('Your answer…'))}">${esc(draft)}</textarea>
+        <div class="pl-free"><textarea id="pl-need-input" rows="2" data-nid="${aid}" aria-label="${esc(t('Your answer…'))}" placeholder="${esc(opts || prop ? t('Or in your own words…') : t('Your answer…'))}">${esc(draft)}</textarea>
           <button type="button" class="btn ghost icon dictate-btn" id="pl-need-mic" aria-label="${esc(t('Dictate'))}" title="${esc(t('Dictate: speak and I type it here'))}">🎙️</button>
           <button type="button" class="btn primary" data-need-send="${aid}">${esc(t('Send'))}</button></div>`;
     det.innerHTML = `<div class="pl-ph">${plBackBtn()}${plDot(wa)}<span class="pl-t no-i18n">${esc(wa.name)}</span><span class="pl-pill">${esc(plKind(w))}</span>${w.type ? `<span class="pl-pill no-i18n">${esc(w.type)}</span>` : ''}<span class="pl-sp muted small">${esc(pilotAgo(wa.ts))}</span></div>
@@ -6411,7 +6429,7 @@ function plRenderAuto() {
     <section class="pl-card"><h5>${esc(t('Autonomy'))}</h5>
       <table class="pl-lv"><thead><tr><th>${esc(t('Level'))}</th><th>${esc(t('Autonomy'))}</th><th>${esc(t('Right so far'))}</th></tr></thead><tbody>${Object.entries(a.levels).map(([l, v]) => `<tr>
         <td><b class="no-i18n">${l}</b> <span class="muted small">${esc(t(AUTO_LEVELS[l]))}</span></td>
-        <td>${v.kept ? `<span class="pl-kept">🔒 ${esc(t('Always yours'))}</span>` : `<select data-auto-lv="${l}">${modes.map(([m, n]) => `<option value="${m}" ${v.mode === m ? 'selected' : ''}>${esc(t(n))}</option>`).join('')}</select>`}
+        <td>${v.kept ? `<span class="pl-kept">🔒 ${esc(t('Always yours'))}</span>` : `<select data-auto-lv="${l}" aria-label="${esc(t('Autonomy') + ' · ' + l)}">${modes.map(([m, n]) => `<option value="${m}" ${v.mode === m ? 'selected' : ''}>${esc(t(n))}</option>`).join('')}</select>`}
           ${v.suggest ? `<button type="button" class="btn small" data-auto-up="${l}" data-to="${v.suggest}">${esc(t('Give it more room'))} → ${esc(t(modes.find(m => m[0] === v.suggest)[1]))}</button>` : ''}</td>
         <td class="no-i18n">${v.n ? `${Math.round(v.rate * 100)}% <span class="muted small">(${v.n})</span>` : '—'}</td></tr>`).join('')}</tbody></table>
       <div class="pl-nums">
@@ -6674,7 +6692,7 @@ function roleDetail(r) {
     <p class="muted small prole-desc">${esc(r.description || '')}</p>
     <div class="prole-metrics small"><span>${esc(acc)}</span>${trend}<span class="muted">${esc(bits)}</span>${pSpark(r.series)}</div>
     ${overlap}
-    <form class="prole-spec" data-role-spec="${esc(r.name)}"><label class="muted small">${esc(t('Specialization'))}</label><input class="prole-spec-in no-i18n" value="${esc(r.specialization || '')}" placeholder="${esc(t('none'))}"><button type="submit" class="btn ghost small">${esc(t('Set'))}</button></form>
+    <form class="prole-spec" data-role-spec="${esc(r.name)}"><label class="muted small">${esc(t('Specialization'))}</label><input class="prole-spec-in no-i18n" aria-label="${esc(t('Specialization'))}" value="${esc(r.specialization || '')}" placeholder="${esc(t('none'))}"><button type="submit" class="btn ghost small">${esc(t('Set'))}</button></form>
     <div class="prole-actions">
       <button class="btn ghost small" data-role-eval="${esc(r.name)}">${esc(t('Evaluate'))}</button>
       ${publish}

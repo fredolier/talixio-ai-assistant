@@ -149,13 +149,13 @@
         <p class="muted small">Steer your assistant’s own work — its agents, roles and worksites — in one place. Speak to it; it’s more natural.</p>
       </header>
       <nav class="pilot-tabs" role="tablist" aria-label="Pilotage">
-        <button type="button" class="ptab" data-ptab="kb" role="tab"><span>Knowledge base</span><span class="ptab-src no-i18n" id="pilot-tab-kbsrc"></span></button>
-        <button type="button" class="ptab" data-ptab="agents" role="tab"><span>Your autonomous pilot</span><span class="ptab-badge no-i18n" id="pilot-tab-agents" hidden></span></button>
-        <button type="button" class="ptab" data-ptab="roles" role="tab"><span>Roles</span><span class="ptab-n no-i18n" id="pilot-tab-roles"></span></button>
-        <button type="button" class="ptab" data-ptab="chantiers" role="tab"><span>Worksites</span><span class="ptab-n no-i18n" id="pilot-tab-chantiers"></span></button>
+        <button type="button" class="ptab" data-ptab="kb" role="tab" id="ptab-kb" aria-controls="ppanel-kb"><span>Knowledge base</span><span class="ptab-src no-i18n" id="pilot-tab-kbsrc"></span></button>
+        <button type="button" class="ptab" data-ptab="agents" role="tab" id="ptab-agents" aria-controls="ppanel-agents"><span>Your autonomous pilot</span><span class="ptab-badge no-i18n" id="pilot-tab-agents" hidden></span></button>
+        <button type="button" class="ptab" data-ptab="roles" role="tab" id="ptab-roles" aria-controls="ppanel-roles"><span>Roles</span><span class="ptab-n no-i18n" id="pilot-tab-roles"></span></button>
+        <button type="button" class="ptab" data-ptab="chantiers" role="tab" id="ptab-chantiers" aria-controls="ppanel-chantiers"><span>Worksites</span><span class="ptab-n no-i18n" id="pilot-tab-chantiers"></span></button>
       </nav>
 
-      <div class="pilot-panel" data-ppanel="agents" hidden>
+      <div class="pilot-panel" data-ppanel="agents" id="ppanel-agents" role="tabpanel" aria-labelledby="ptab-agents" hidden>
         <div class="card pilot-orch pilot-status">
           <div class="pilot-status-head">
             <h3 class="no-i18n" id="pilot-conn-title"><span class="pilot-dot" id="pilot-conn-dot"></span></h3>
@@ -214,16 +214,16 @@
         <div class="pl-panel" data-plp="autonomy" hidden><div class="pl-auto" id="pl-auto"></div></div>
       </div>
 
-      <div class="pilot-panel" data-ppanel="chantiers" hidden>
+      <div class="pilot-panel" data-ppanel="chantiers" id="ppanel-chantiers" role="tabpanel" aria-labelledby="ptab-chantiers" hidden>
         <div id="pilot-chantiers" class="list dir-list"></div>
         <p class="muted small pilot-xlink"><a href="#activity">See full activity and costs</a> ▸ <span>every agent and tool, not only the director’s.</span></p>
       </div>
 
-      <div class="pilot-panel" data-ppanel="roles" hidden>
+      <div class="pilot-panel" data-ppanel="roles" id="ppanel-roles" role="tabpanel" aria-labelledby="ptab-roles" hidden>
         <div id="pilot-roles"></div>
       </div>
 
-      <div class="pilot-panel" data-ppanel="kb" hidden>
+      <div class="pilot-panel" data-ppanel="kb" id="ppanel-kb" role="tabpanel" aria-labelledby="ptab-kb" hidden>
         <div id="pilot-kb"></div>
       </div>
     </section>
@@ -497,9 +497,9 @@
           <div class="set-sec" data-sec="model" hidden>
             <header><h3>Model and budget</h3><p class="muted small">The assistant's brain, and how much it may spend.</p></header>
             <div class="mb-tabs" id="mb-tabs" role="tablist">
-              <button type="button" class="mb-tab on" data-mtab="models" role="tab">Models</button>
-              <button type="button" class="mb-tab" data-mtab="providers" role="tab">Providers <span class="mb-c" id="mb-prov-c"></span></button>
-              <button type="button" class="mb-tab" data-mtab="budget" role="tab">Budget</button>
+              <button type="button" class="mb-tab on" data-mtab="models" role="tab" aria-selected="true">Models</button>
+              <button type="button" class="mb-tab" data-mtab="providers" role="tab" aria-selected="false">Providers <span class="mb-c" id="mb-prov-c"></span></button>
+              <button type="button" class="mb-tab" data-mtab="budget" role="tab" aria-selected="false">Budget</button>
             </div>
             <div class="card set-card mb-models" id="mb-models"></div>
             <p class="muted small mb-phelp" id="mb-phelp" hidden>All your access to AI services: paid, free, sovereign, or a model running on your own machine. Connect a provider with its key right on its card; its models then appear in the Models tab, where you choose which one answers. The Europe lock lives there too.</p>
@@ -839,8 +839,8 @@
         <div id="billing" class="billing" hidden><ul id="billing-list" class="small"></ul>
           <button id="billing-sync" class="btn small" type="button">Sync now</button></div>
         <p class="muted small">Enter what your AI provider actually billed (its console shows it). Talixio compares it with its own estimate for the same month and corrects the budget from the last three bills.</p>
-        <form id="bill-form" class="row wrap"><input type="month" id="bill-month" required> <input type="number" id="bill-amount" step="0.01" min="0" placeholder="Amount" required>
-          <select id="bill-currency"><option>EUR</option><option>USD</option></select> <button class="btn small" type="submit">Record the bill</button></form>
+        <form id="bill-form" class="row wrap"><input type="month" id="bill-month" required aria-label="Month billed"> <input type="number" id="bill-amount" step="0.01" min="0" placeholder="Amount" required aria-label="Amount">
+          <select id="bill-currency" aria-label="Currency"><option>EUR</option><option>USD</option></select> <button class="btn small" type="submit">Record the bill</button></form>
         <div class="table-wrap"><table id="bills"><thead><tr><th>Period</th><th>Billed</th><th>Estimated</th><th>Ratio</th></tr></thead><tbody></tbody></table></div>
       </details>
       <div id="usage" class="usage"></div>

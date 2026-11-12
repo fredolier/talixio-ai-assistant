@@ -55,7 +55,7 @@ svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .login-card p{margin:0 0 8px}
 label{font-size:.83rem;color:var(--muted)}
 input,textarea{font:inherit;color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
-input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 32%,transparent)} /* a ring, not only a 1 px border (audit U24) */
 
 /* shell */
 .shell{display:grid;grid-template-columns:220px 1fr;height:100%}

@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.32 (2026-11-12)
+
+- Accessibility (audit 5.5, U24–U27): fields show a clear ring when they have the focus, not only a slightly different border; the menus (assistant, spaces, More, account) take the keyboard when they open, the arrow keys (and Home, End) move from item to item, and each item says it is one to a screen reader; Pilotage's tabs name the panel they show, and the model cockpit's tabs say which one is selected; the fields that had no name for a screen reader now have one (the bill's month, amount and currency, the model cockpit's filters, the answer box of *Needs you*, a role's specialization, the autonomy choices, a routine's repeat, day and time, the destination of an app or a connector being shared). Touch targets and light-theme contrast were done in 1.35.28 and 1.35.29. Checked with a browser test (keyboard in the account menu, tabs and panels) and a scan of every view for unnamed fields; not tried with a real screen reader.
+
 ## 1.35.31 (2026-11-12)
 
 - French interface, the dictionary (audit Q23): 31 entries that held sample values from development ("Confidence 44%", "Due 2026-10-09", "seen 2× over 2 days, last Oct 6, 2026"…) are removed: the patterns with {placeholders} already translate those texts (3,395 entries before, 3,364 after). Thirteen patterns with too few fixed words ("by {w}", "in {folder}", "{n} new"…) no longer rewrite the text of the page, where they could turn any line starting with "by " or "in " into French, including a document's or an email's words outside the protected areas; the code that needs them asks for them by name. Three places that relied on them now do so too (a job's card, a task's due date). If a short phrase of the kind still shows in English somewhere, that is why: say where. The 283 entries a simple search finds nowhere in the code were not removed: many are built by the code from parts ("Add a task to " + a column) and removing them would break translations.

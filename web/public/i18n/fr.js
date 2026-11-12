@@ -1,6 +1,13 @@
 window.I18N = window.I18N || {};
 /* French interface: English text (as it appears on screen) → French. {placeholders} match any value. See i18n.js. */
 window.I18N.fr = {
+"Repeat": "Répétition",
+"Date": "Date",
+"Send to": "Envoyer à",
+"Month billed": "Mois facturé",
+"Currency": "Devise",
+"Settings for": "Réglages pour",
+"Kind of model": "Type de modèle",
 "limit {a}": "limite {a}",
 "{a} of {b} today": "{a} sur {b} aujourd'hui",
 "Search an agent": "Rechercher un agent",
