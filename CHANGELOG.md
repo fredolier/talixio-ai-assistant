@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.20 (2026-11-12)
+
+- Fix (audit Q10, Q12, first part): **the autonomous pilot's connection file is written safely**. It was replaced without checking that it had been fully written (a full disk could leave it empty, losing the pairing and the journal), some writes (setting up, pairing, disconnecting, the 5-second limit between passes) were made outside the lock that the others used, and when that lock could not be taken the update went on without it. A new shared helper, `JsonFile`, writes to a temporary file, checks every byte, then replaces the old file, and does read-change-write under one lock; the pilot now uses it everywhere, a pairing code is checked and used up under that lock, and no lock means no write. The other state files (settings, the pilot's policy, the fleet, connectors, tokens) move to it in the next deliveries. Tested with a simulated failed write and six processes updating one file at once.
+
 ## 1.35.19 (2026-11-12)
 
 - Fix (audit Q2, Q22): **opening the database from several processes at once could fail**. The web app, the worker and the background jobs each brought the schema up to date when they opened the database, with no lock: on a new database (first start) or after an update, several at once failed with "duplicate column name" (3 to 5 out of 8 in the audit's test). Now one process migrates at a time, in a single transaction with its back-fills, and the others wait for it; once the schema is up to date, opening the database no longer replays the migration (a fingerprint of the migration code is kept in the database, so an update still migrates once). The wait for a locked database is set before the switch to WAL, which is also retried. Tested with 8 processes opening a new and an old database together, several runs at once.

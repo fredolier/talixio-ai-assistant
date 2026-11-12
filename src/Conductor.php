@@ -125,37 +125,15 @@ final class Conductor
         return (string)json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
-    private function binding(): array
-    {
-        $f = $this->bindingFile();
-        return is_file($f) ? (json_decode((string)file_get_contents($f), true) ?: []) : [];
-    }
+    private function binding(): array { return JsonFile::read($this->bindingFile()); }
 
-    private function saveBinding(array $b): void
-    {
-        $f = $this->bindingFile();
-        file_put_contents("$f.tmp", json_encode($b, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        @chmod("$f.tmp", 0600); // holds the webhook URL and the inbox secret — private, never world-readable
-        rename("$f.tmp", $f);
-    }
 
     /**
      * Read-modify-write the binding under an exclusive lock, so the concurrent paths that touch the poll queue — a
      * report coming in, an instruction being queued, the orchestrator draining its queue — cannot lose or resurrect
      * each other's changes. $fn receives the fresh binding and returns [newBinding, result]; result is returned.
      */
-    private function lockedUpdate(callable $fn)
-    {
-        $fh = @fopen($this->bindingFile() . '.lock', 'c');
-        if ($fh) flock($fh, LOCK_EX);
-        try {
-            [$b, $ret] = $fn($this->binding());
-            $this->saveBinding($b);
-            return $ret;
-        } finally {
-            if ($fh) { flock($fh, LOCK_UN); fclose($fh); }
-        }
-    }
+    private function lockedUpdate(callable $fn) { return JsonFile::update($this->bindingFile(), $fn, 0600); } // private (webhook, secret); no lock, no write
 
     /** The address the orchestrator POSTs its reports to; it is told this (with the secret) once, at pairing. */
     public function inboxUrl(): string
@@ -235,9 +213,7 @@ final class Conductor
         // back — so it is not gated by the privacy guard. The outbound choke (toFleet) is where confidential/secret
         // spaces are refused; connecting a fleet from any space is safe.
         $code = bin2hex(random_bytes(16));
-        $b = $this->binding();
-        $b['pair'] = ['hash' => hash('sha256', $code), 'expires' => time() + self::PAIR_TTL];
-        $this->saveBinding($b);
+        $this->lockedUpdate(function (array $b) use ($code) { $b['pair'] = ['hash' => hash('sha256', $code), 'expires' => time() + self::PAIR_TTL]; return [$b, null]; });
         $inbox = $this->inboxUrl();
         $pull = $this->pullUrl();
         return "To connect your code fleet, start a **Claude Code session signed in to your account** (so it can see "
@@ -309,7 +285,7 @@ final class Conductor
     /** Forget the binding entirely (the user disconnects the fleet, or re-pairs from scratch). */
     public function disconnect(): string
     {
-        @unlink($this->bindingFile());
+        $this->lockedUpdate(function (array $b) { @unlink($this->bindingFile()); return [null, null]; }); // under the lock: no write in flight lands after it
         $this->refreshStatusFile();
         return 'the fleet orchestrator is disconnected; its webhook and secret are forgotten here.';
     }
@@ -323,27 +299,32 @@ final class Conductor
     {
         $b = $this->binding();
         if (self::text($msg['type'] ?? 'report') === 'pair') {
-            $p = $b['pair'] ?? null;
-            if (!is_array($p) || time() > (int)($p['expires'] ?? 0) || !hash_equals((string)($p['hash'] ?? ''), hash('sha256', self::text($msg['code'] ?? ''))))
-                return [403, ['error' => 'pairing code invalid or expired — run fleet_setup again']];
-            $webhook = self::text($msg['webhook'] ?? '');
-            $poll = self::text($msg['mode'] ?? '') === 'poll' || !empty($msg['poll']);
-            if (!$poll && !preg_match('#^https://[^\s]+$#', $webhook))
-                return [400, ['error' => 'a https webhook URL is required, or set "mode":"poll" to pull instructions instead']];
-            $secret = bin2hex(random_bytes(32));
-            // A fresh binding for this pairing; keep what the user sees and chose (roster, threads, journal, notification
-            // mode, unread counts) from any prior one, and make sure a mode switch (push→poll or back) never leaves a stale
-            // webhook or queue behind.
-            $keep = array_intersect_key($b, array_flip(['agents', 'agents_at', 'threads', 'fleet_notify', 'reports', 'decisions', 'ticks', 'journal_unread', 'agent_unread', 'unread']));
-            $base = ['secret' => $secret, 'session' => mb_substr(self::text($msg['session'] ?? ''), 0, 200),
-                'url' => mb_substr(self::text($msg['url'] ?? ''), 0, 500), 'created' => time(), 'last_report' => time()];
-            $base += $poll ? ['mode' => 'poll', 'queue' => []] : ['webhook' => $webhook];
-            $this->saveBinding($base + $keep);
+            // the code is checked and used up, and the new binding written, under one lock: a code pairs once (audit Q10)
+            $res = $this->lockedUpdate(function (array $b) use ($msg) {
+                $p = $b['pair'] ?? null;
+                if (!is_array($p) || time() > (int)($p['expires'] ?? 0) || !hash_equals((string)($p['hash'] ?? ''), hash('sha256', self::text($msg['code'] ?? ''))))
+                    return [null, [403, ['error' => 'pairing code invalid or expired — run fleet_setup again']]];
+                $webhook = self::text($msg['webhook'] ?? '');
+                $poll = self::text($msg['mode'] ?? '') === 'poll' || !empty($msg['poll']);
+                if (!$poll && !preg_match('#^https://[^\s]+$#', $webhook))
+                    return [null, [400, ['error' => 'a https webhook URL is required, or set "mode":"poll" to pull instructions instead']]];
+                $secret = bin2hex(random_bytes(32));
+                // A fresh binding for this pairing; keep what the user sees and chose (roster, threads, journal, notification
+                // mode, unread counts) from any prior one, and make sure a mode switch (push→poll or back) never leaves a stale
+                // webhook or queue behind.
+                $keep = array_intersect_key($b, array_flip(['agents', 'agents_at', 'threads', 'fleet_notify', 'reports', 'decisions', 'ticks', 'journal_unread', 'agent_unread', 'unread']));
+                $base = ['secret' => $secret, 'session' => mb_substr(self::text($msg['session'] ?? ''), 0, 200),
+                    'url' => mb_substr(self::text($msg['url'] ?? ''), 0, 500), 'created' => time(), 'last_report' => time()];
+                $base += $poll ? ['mode' => 'poll', 'queue' => []] : ['webhook' => $webhook];
+                return [$base + $keep, [200, ['secret' => $secret, 'poll' => $poll]]];
+            });
+            if ($res[0] !== 200) return $res;
+            $poll = $res[1]['poll'];
             $this->app->notifier()->notify('Fleet orchestrator connected',
                 'Your code-fleet orchestrator is paired' . ($poll ? ' (poll mode)' : '') . '. Ask me to send it work with fleet_dispatch, and watch its liveness with fleet_status.');
             $this->refreshStatusFile();
             // the only time the secret is returned; a poll orchestrator also learns where to pull from
-            return [200, ['ok' => true, 'secret' => $secret, 'inbox' => $this->inboxUrl(), 'mode' => $poll ? 'poll' : 'push'] + ($poll ? ['pull' => $this->pullUrl()] : [])];
+            return [200, ['ok' => true, 'secret' => $res[1]['secret'], 'inbox' => $this->inboxUrl(), 'mode' => $poll ? 'poll' : 'push'] + ($poll ? ['pull' => $this->pullUrl()] : [])];
         }
         if (($b['secret'] ?? '') === '' || $bearer === '' || !hash_equals((string)$b['secret'], $bearer))
             return [401, ['error' => 'unauthorized']];
@@ -552,8 +533,9 @@ final class Conductor
     {
         $b = $this->binding();
         if (($b['secret'] ?? '') === '' || $bearer === '' || !hash_equals((string)$b['secret'], $bearer)) return [401, ['error' => 'unauthorized']];
-        if (time() - (int)($b['last_tick'] ?? 0) < 5) return [429, ['error' => 'one pass at a time: wait a few seconds']];
-        $this->lockedUpdate(fn(array $b) => [['last_tick' => time()] + $b, null]);
+        // checked and set under the lock: two passes at the same instant cannot both get through
+        $free = $this->lockedUpdate(fn(array $b) => time() - (int)($b['last_tick'] ?? 0) < 5 ? [null, false] : [['last_tick' => time()] + $b, true]);
+        if (!$free) return [429, ['error' => 'one pass at a time: wait a few seconds']];
         $problems = [];
         $agents = isset($msg['agents']) && is_array($msg['agents']) ? $msg['agents'] : null;
         foreach ($agents ?? [] as $a) {
