@@ -150,6 +150,7 @@ final class Worker
         if ($this->every('daily', 86400, $now)) {
             $this->guard('old shares', fn() => $app->shares()->purge());
             $this->guard('privacy journal', fn() => $app->privacy()->purge());
+            $this->guard('database clean-up', function () use ($store, $now, $app) { if ($n = $store->prune($now, $app->cfg->toolLogDays)) Log::info('clean-up: ' . json_encode($n)); });
         }
         if ($paused) return;
         $this->guard('tasks calendar', fn() => $app->board()->syncGoogle());

@@ -1242,6 +1242,8 @@ window.I18N.fr = {
 "Stop {a}?": "Arrêter {a} ?",
 "Strikethrough": "Barré",
 "Sub-agents in parallel": "Sous-agents en parallèle",
+"Keep the log of the assistant's actions (days)": "Garder le journal des actions de l'assistant (jours)",
+"What the assistant did in the conversation (tools used, their results), shown in Activity. Older entries are removed. 0 = keep everything.": "Ce que l'assistant a fait dans la conversation (outils utilisés, leurs résultats), visible dans Activité. Les entrées plus anciennes sont supprimées. 0 = tout garder.",
 "Longest a background job may run (minutes)": "Durée maximale d'un job en arrière-plan (minutes)",
 "A job still running after this is stopped and marked as failed. 0 = no limit.": "Un job encore en cours au-delà est arrêté et marqué en échec. 0 = sans limite.",
 "Sub-agents the assistant starts for research and multi-step work. Each one has its own model tier and a cost cap; results come back in the chat.": "Sous-agents que l'assistant lance pour les recherches et les travaux en plusieurs étapes. Chacun a son propre niveau de modèle et un plafond de coût ; les résultats reviennent dans la discussion.",

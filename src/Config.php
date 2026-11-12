@@ -125,6 +125,7 @@ final class Config
     public float $eurUsd = 1.10;               // to compare bills in euros with prices in dollars
     public string $prices = '';
     public int $maxParallelJobs = 3;
+    public int $toolLogDays = 90;                // the main conversation's tool log is kept this long (0 = for ever); jobs keep theirs
     public int $jobMaxMinutes = 120;             // a background job still running after this is stopped (0 = no limit)
     public float $jobMaxUsd = 2.0;               // default cost cap of a background job
     public float $jobMaxUsdLimit = 10.0;         // the most the assistant may give one job when asked
@@ -325,6 +326,7 @@ final class Config
         $c->prices = $e('TALIXIO_PRICES');
         $c->maxParallelJobs = max(1, (int)$e('TALIXIO_MAX_PARALLEL_JOBS', '3'));
         $c->jobMaxMinutes = max(0, (int)$e('TALIXIO_JOB_MAX_MINUTES', '120'));
+        $c->toolLogDays = max(0, (int)$e('TALIXIO_TOOL_LOG_DAYS', '90'));
         $c->jobMaxUsd = max(0.0, (float)$e('TALIXIO_JOB_MAX_USD', '2.00'));
         $c->jobMaxUsdLimit = max($c->jobMaxUsd, (float)$e('TALIXIO_JOB_MAX_USD_LIMIT', '10'));
         $c->jobEffort = self::effort($e('TALIXIO_JOB_EFFORT', 'medium')) ?: 'medium';

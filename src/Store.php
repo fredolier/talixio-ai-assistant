@@ -120,6 +120,9 @@ final class Store
         $this->addColumn('jobs', 'directive', 'INTEGER'); // the agent-factory directive this worker job belongs to
         $this->addColumn('jobs', 'role', "TEXT NOT NULL DEFAULT ''"); // the worker role this job runs (kind='worker')
         $this->addColumn('jobs', 'session', "TEXT NOT NULL DEFAULT ''"); // a Tier-D delegated code session's handle (kind='conductor', Conductor)
+        // what is read often: the costs of the day and month (every status call), the queue, a directive's workers, the routines due (audit Q18)
+        $this->db->exec('CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts); CREATE INDEX IF NOT EXISTS jobs_status ON jobs(status);
+            CREATE INDEX IF NOT EXISTS jobs_directive ON jobs(directive) WHERE directive IS NOT NULL; CREATE INDEX IF NOT EXISTS tasks_next_run ON tasks(next_run) WHERE enabled = 1;');
         $this->addColumn('jobs', 'trust', "TEXT NOT NULL DEFAULT ''"); // what the job read (Privacy::snapshot as JSON): carried into the work that follows it
         // the sorted inbox (Triage); also read by a contact's page, so it exists from the start
         $this->db->exec("CREATE TABLE IF NOT EXISTS mail_triage(uid INTEGER PRIMARY KEY, message_id TEXT NOT NULL DEFAULT '', ts INTEGER NOT NULL,
@@ -297,6 +300,42 @@ final class Store
         }
         return array_map(fn($r) => ['meta' => $r['meta'] ? json_decode($r['meta'], true) : null,
             'files' => array_values(array_filter(array_map(fn($i) => $info[$i] ?? null, json_decode((string)$r['files'], true) ?: [])))] + $r, $rows);
+    }
+
+    /**
+     * Daily clean-up of what only grows (audit Q18): the main thread's tool log after $toolLogDays, delivered messages
+     * between agents and assistants, finished questions, old observations. Costs are kept: usage rows older than 90 days
+     * are folded into one row per day, model and kind. Returns the rows removed per table.
+     */
+    public function prune(int $now, int $toolLogDays = 90): array
+    {
+        $day = 86400; $out = [];
+        $rules = [
+            'tool_log' => ['job_id IS NULL AND ts < ?', $toolLogDays > 0 ? $now - $toolLogDays * $day : 0],
+            'relay_messages' => ['delivered IS NOT NULL AND ts < ?', $now - 30 * $day],
+            'fed_outbox' => ['delivered IS NOT NULL AND ts < ?', $now - 30 * $day],
+            'fed_asks' => ["status IN ('done', 'failed') AND ts < ?", $now - 90 * $day],
+            'fed_inbox' => ['ts < ?', $now - 180 * $day],
+            'mind_obs' => ['processed IS NOT NULL AND processed != 0 AND ts < ?', $now - 365 * $day],
+            'mind_journal' => ['ts < ?', $now - 365 * $day],
+            'role_runs' => ['ts < ?', $now - 365 * $day],
+        ];
+        foreach ($rules as $table => [$where, $before]) {
+            if ($before <= 0) continue;
+            try { $out[$table] = $this->q("DELETE FROM $table WHERE $where", [$before])->rowCount(); } catch (\PDOException) {} // a table of a feature not used yet
+        }
+        $this->db->exec('BEGIN IMMEDIATE');
+        try {
+            $cut = $now - 90 * $day; $key = "strftime('%Y-%m-%d', ts, 'unixepoch', 'localtime'), model, source, tier, account";
+            $groups = $this->q("SELECT MIN(ts) ts, model, source, tier, account, SUM(input_tokens) i, SUM(output_tokens) o, SUM(cost_usd) c, SUM(cache_read) cr, SUM(cache_write) cw, COUNT(*) n
+                FROM usage WHERE ts < ? GROUP BY $key HAVING COUNT(*) > 1", [$cut])->fetchAll();
+            $this->q("DELETE FROM usage WHERE ts < ? AND ($key) IN (SELECT $key FROM usage WHERE ts < ? GROUP BY $key HAVING COUNT(*) > 1)", [$cut, $cut]);
+            foreach ($groups as $g) $this->q('INSERT INTO usage(ts, model, input_tokens, output_tokens, cost_usd, source, tier, cache_read, cache_write, account) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                [$g['ts'], $g['model'], $g['i'], $g['o'], $g['c'], $g['source'], $g['tier'], $g['cr'], $g['cw'], $g['account']]);
+            $out['usage'] = array_sum(array_map(fn($g) => (int)$g['n'] - 1, $groups));
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $e) { try { $this->db->exec('ROLLBACK'); } catch (\Throwable) {} throw $e; }
+        return array_filter($out);
     }
 
     /**

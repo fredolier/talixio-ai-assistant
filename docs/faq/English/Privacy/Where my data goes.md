@@ -7,6 +7,9 @@ The **Privacy** page shows:
 - security: HTTPS, two-step sign-in, backups;
 - the **journal** of every request to the outside (service, purpose, size, space; never the content),
   exportable as CSV, kept for 180 days;
+- what the assistant did in the conversation (its tools and their results, in *Activity*) is kept 90 days
+  (Settings → Budget, *Keep the log of the assistant's actions*); messages exchanged with other assistants and
+  between agents are removed some months after they were delivered; costs stay, summed per day after 90 days;
 - a pre-filled **Record of processing (GDPR)**, to download and complete.
 
 To reach the Business level, you usually need:

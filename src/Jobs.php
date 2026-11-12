@@ -132,12 +132,12 @@ final class Jobs
     /** Put away every finished job of a space and/or tag (all of them by default). Returns how many. */
     public function archiveFinished(?int $space = null, string $tag = '', int $olderThan = 0): int
     {
-        $n = 0;
-        foreach ($this->app->store->jobs(100000, $space, $tag, false) as $j) {
-            if (in_array($j['status'], ['queued', 'running'], true) || ($olderThan && (int)($j['finished'] ?: $j['created']) > $olderThan)) continue;
-            $this->app->store->updateJob((int)$j['id'], ['archived' => 1]); $n++;
-        }
-        return $n;
+        // one query, not every job loaded (audit Q18); workers stay with their directive, as in the list
+        $where = ["archived = 0", "(kind IS NULL OR kind != 'worker')", "status NOT IN ('queued', 'running')"]; $args = [];
+        if ($space !== null) { $where[] = 'space = ?'; $args[] = $space; }
+        if ($tag !== '') { $where[] = "tags LIKE ? ESCAPE '\\'"; $args[] = '%,' . addcslashes(mb_strtolower($tag), '%_\\') . ',%'; }
+        if ($olderThan) { $where[] = 'COALESCE(NULLIF(finished, 0), created) <= CAST(? AS INTEGER)'; $args[] = $olderThan; }
+        return $this->app->store->q('UPDATE jobs SET archived = 1 WHERE ' . implode(' AND ', $where), $args)->rowCount();
     }
 
     /** Jobs done without trouble and without tags are put away sooner: their report is in the chat and the library. */
@@ -146,11 +146,8 @@ final class Jobs
     /** Worker, hourly: plain done jobs after ARCHIVE_DONE_DAYS, the others (failed, stopped, tagged to keep) after ARCHIVE_DAYS. */
     public function autoArchive(int $now): int
     {
-        $n = 0;
-        foreach ($this->app->store->jobs(100000, null, '', false) as $j) {
-            if ($j['status'] !== 'done' || trim((string)($j['tags'] ?? '')) !== '' || (int)($j['finished'] ?: $j['created']) > $now - self::ARCHIVE_DONE_DAYS * 86400) continue;
-            $this->app->store->updateJob((int)$j['id'], ['archived' => 1]); $n++;
-        }
+        $n = $this->app->store->q("UPDATE jobs SET archived = 1 WHERE archived = 0 AND (kind IS NULL OR kind != 'worker') AND status = 'done' AND TRIM(COALESCE(tags, '')) = ''
+            AND COALESCE(NULLIF(finished, 0), created) <= CAST(? AS INTEGER)", [$now - self::ARCHIVE_DONE_DAYS * 86400])->rowCount();
         return $n + $this->archiveFinished(null, '', $now - self::ARCHIVE_DAYS * 86400);
     }
 
