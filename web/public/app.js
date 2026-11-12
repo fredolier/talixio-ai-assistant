@@ -39,25 +39,26 @@ const CITE_SVG = '<svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="
 function md(src) {
   const blocks = [];
   const keep = html => { blocks.push(html); return `\u0000${blocks.length - 1}\u0000`; };
-  let s = esc(String(src).replace(/\r\n?/g, '\n').replace(/\t/g, '    '))
+  // \u0000 marks a kept-aside piece (keep): never taken from the text, so no address can carry one into an attribute
+  let s = esc(String(src).replace(/\u0000/g, '').replace(/\r\n?/g, '\n').replace(/\t/g, '    '))
     .replace(/^ {0,3}```[\w+-]*\n([\s\S]*?)\n? {0,3}```[ ]*$/gm, (_, code) => '\n' + keep(`<pre><code>${code}</code></pre>`) + '\n');
   // links are made first and kept aside: the formatting after them never reaches inside an address or a tag
   const fmt = t => t
     .replace(/\*\*([^*\n]+?)\*\*|__([^_\n]+?)__/g, (_, a, b) => `<strong>${a ?? b}</strong>`)
     .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>')
     .replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
-  const link = (href, cls, t, blank) => keep(`<a href="${href}"${cls ? ` class="${cls}"` : ''}${blank ? ' target="_blank" rel="noopener"' : ''}>${fmt(t)}</a>`);
+  const link = (href, cls, t, blank) => /[\s"'<>\u0000]/.test(href) ? fmt(t) : keep(`<a href="${href}"${cls ? ` class="${cls}"` : ''}${blank ? ' target="_blank" rel="noopener"' : ''}>${fmt(t)}</a>`);
   const inline = t => fmt(t
     .replace(/`([^`\n]+)`/g, (_, c) => keep(`<code>${c}</code>`))
     .replace(/\\(&gt;|&amp;|[\\`*_\[\]()#+\-.!|~])/g, (_, c) => keep(c)) // \* is a plain star
     .replace(/\[([^\]]+)\]\(\/files\/(\d+)(?:#p(\d+))?\)/g, (_, t, id, pg) => keep(`<a href="#" class="cite" data-file="${id}"${pg ? ` data-page="${pg}"` : ''} title="Open the document${pg ? ' at page ' + pg : ''}">${CITE_SVG}${fmt(t)}</a>`))
-    .replace(/\[([^\]]+)\]\((#library(?:\/[^\s)"]*)?)\)/g, (_, t, h) => keep(`<a href="${h}" class="cite folder">${FOLDER_SVG}${fmt(t)}</a>`)) // a library folder ("where is…?")
+    .replace(/\[([^\]]+)\]\((#library(?:\/[^\s)"\u0000]*)?)\)/g, (_, t, h) => keep(`<a href="${h}" class="cite folder">${FOLDER_SVG}${fmt(t)}</a>`)) // a library folder ("where is…?")
     // buttons that open an app on the phone (phone_action, Spotify): custom schemes only from this list
-    .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|deezer|tg|sgnl|uber|homeassistant):[^\s)"]+)\)/g, (_, t, h) => link(h, 'action', t.replace(/^▶\s*/, '')))
+    .replace(/\[([^\]]+)\]\(((?:tel|sms|mailto|geo|spotify|deezer|tg|sgnl|uber|homeassistant):[^\s)"\u0000]+)\)/g, (_, t, h) => link(h, 'action', t.replace(/^▶\s*/, '')))
     .replace(INTENT_MD, (_, t, h) => link(h, 'action', t.replace(/^▶\s*/, ''))) // Android intents: only "open this app, or its Play Store page"
-    .replace(/\[([^\]]+)\]\((\?connector=[^\s)"]+)\)/g, (_, t, h) => link(h, 'action connector', t.replace(/^▶\s*/, ''))) // "▶ Install" from the connector list
-    .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, (_, t, h) => link(h, 'action', t, true))
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, (_, t, h) => link(h, '', t, true))
+    .replace(/\[([^\]]+)\]\((\?connector=[^\s)"\u0000]+)\)/g, (_, t, h) => link(h, 'action connector', t.replace(/^▶\s*/, ''))) // "▶ Install" from the connector list
+    .replace(/\[▶\s*([^\]]+)\]\((https?:\/\/[^\s)"\u0000]+)\)/g, (_, t, h) => link(h, 'action', t, true))
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)"\u0000]+)\)/g, (_, t, h) => link(h, '', t, true))
     .replace(/(^|[\s(])(https?:\/\/[^\s<)"\u0000]+)/g, (_, pre, h) => pre + link(h, '', h, true)));
   const lines = s.split('\n'), n = lines.length, out = [];
   const LIST = /^( *)([-*+•]|\d{1,3}[.)])\s+(.*)$/, HR = /^ {0,3}([-*_])( *\1){2,} *$/, HEAD = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;

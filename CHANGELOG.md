@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.3 (2026-11-12)
+
+- Security (audit S1): **a crafted link in an answer could no longer restyle the page or call another site**. The Markdown renderer used an internal marker that a link address could smuggle into a second link, so text written by the model, a background job or a tool result could add attributes (a full-screen style with a background image loaded at once, without a click) to a link. The marker is now stripped from the text and refused in every link address, and a link whose address holds a space, a quote or a marker is shown as plain text. Answers already stored are safe too: the fix is in the rendering. A browser test replays the attack (no `style` or `on…` attribute, no request to another host) next to ordinary links.
+
 ## 1.35.2 (2026-11-11)
 
 - Pilotage, autonomous pilot: **a calmer, clearer screen to answer from**. The tall status card is now one line (settings — status file, connect/disconnect, report mode — are folded under ⚙ Settings). In *Needs you*, each question shows the question first and large, then what a wrong choice costs, then what to do: one big button per option, the pilot's suggestion on top when it has one, free words or voice below; the boilerplate is gone. An **approval** is now unmistakable: a lock, two steps (open the session, approve there) and an *Open the session* button. In an agent's conversation, the waiting question is no longer shown twice. Checked with screenshots of simulated data (desktop and phone); not tried with a real fleet.
