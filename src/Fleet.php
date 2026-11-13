@@ -930,6 +930,8 @@ final class Fleet
     public static function withStore(array $c): array
     {
         foreach ($c['HostConfig']['Mounts'] ?? [] as $m) if (($m['Target'] ?? '') === '/store') return $c;
+        // compose.yml's "store:/store" shows up under Binds ("source:target[:options]"), not Mounts
+        foreach ($c['HostConfig']['Binds'] ?? [] as $bnd) if ((explode(':', (string)$bnd)[1] ?? '') === '/store') return $c;
         $c['HostConfig']['Mounts'][] = ['Type' => 'volume', 'Source' => self::STORE, 'Target' => '/store'];
         $c['Config']['Env'] = array_values(array_filter($c['Config']['Env'] ?? [], fn($e) => !str_starts_with($e, 'TALIXIO_STORE_DIR=')));
         $c['Config']['Env'][] = 'TALIXIO_STORE_DIR=/store';

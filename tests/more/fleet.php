@@ -416,6 +416,16 @@ putenv("TALIXIO_GIT_URL=file://$d/no-repo");
 check('fleet: an unreachable repository is said so', str_contains($throws(fn() => $f->checkUpdate('main')), 'Could not fetch the code'));
 putenv("TALIXIO_GIT_URL=$url");
 
+// the agent made by compose.yml has the store as a bind ("store:/store"), not under Mounts: adding it again made Docker
+// refuse the new agent ("Duplicate mount point: /store"), so every update from the admin page left the agent behind (to 1.35.48)
+$composeAgent = ['HostConfig' => ['Binds' => ['talixio-agent-state:/state:rw', 'talixio-store:/store:rw', '/var/run/docker.sock:/var/run/docker.sock']],
+    'Config' => ['Env' => ['TALIXIO_STORE_DIR=/store']]];
+$ro = ['HostConfig' => ['Binds' => ['talixio-store:/store']], 'Config' => ['Env' => []]];
+$bare = ['HostConfig' => ['Binds' => ['talixio-agent-state:/state:rw']], 'Config' => ['Env' => ['A=1']]];
+check('fleet: an agent that has the store as a bind gets no second /store', Fleet::withStore($composeAgent) === $composeAgent && Fleet::withStore($ro) === $ro);
+check('fleet: an agent without the store gets it once', array_column(Fleet::withStore($bare)['HostConfig']['Mounts'], 'Target') === ['/store']
+    && Fleet::withStore(Fleet::withStore($bare)) === Fleet::withStore($bare) && in_array('TALIXIO_STORE_DIR=/store', Fleet::withStore($bare)['Config']['Env'], true));
+
 // an update where the agent itself cannot be made from the new image: it stays on the old one, Caddy refusing is only logged
 @mkdir("$d/caddy2"); putenv("CADDY_CONFIG_DIR=$d/caddy2");
 $agentC = ['Id' => '0123456789abcdef', 'Name' => '/talixio-agent', 'Image' => 'sha256:older'] + array_diff_key($admin, ['Id' => 1, 'Name' => 1, 'Image' => 1]);
