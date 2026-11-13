@@ -400,6 +400,14 @@ const flows = {
     await page.click('#set-save-btn'); await page.waitForTimeout(800);
     const val = async k => (await api(page, 'api/settings')).groups.flatMap(g => g.fields).find(f => f.key === k).value;
     check('sites: saved on the server, normalised', await val('TALIXIO_WEB_TRUSTED') === 'lemonde.fr');
+    const chipsOf = async () => JSON.stringify(await page.$$eval(`${box} .site-chip`, e => e.map(x => x.firstChild.textContent.trim()).sort()));
+    check('sites: after saving, the saved site is still shown', await chipsOf() === '["lemonde.fr"]', await chipsOf());
+    await page.reload(); await page.evaluate(() => { location.hash = '#settings/security'; }); await page.waitForTimeout(700);
+    await page.click('.set-sec[data-sec="security"] .set-tabs .tab:has-text("Browser")'); await page.waitForSelector(box, { timeout: 10000 });
+    check('sites: on opening the page again, the saved sites are shown', await chipsOf() === '["lemonde.fr"]', await chipsOf());
+    await page.fill(`${box} [data-site-new]`, 'gouv.fr'); await page.click(`${box} [data-site-add]`);
+    await page.click('#set-save-btn'); await page.waitForTimeout(800);
+    check('sites: a site added later keeps the ones saved before', await val('TALIXIO_WEB_TRUSTED') === 'lemonde.fr,gouv.fr' || await val('TALIXIO_WEB_TRUSTED') === 'gouv.fr,lemonde.fr', await val('TALIXIO_WEB_TRUSTED'));
     await page.fill('.field[data-key="TALIXIO_WEB_BLOCKED"] [data-site-new]', 'tracker.example'); await page.click('.field[data-key="TALIXIO_WEB_BLOCKED"] [data-site-add]');
     await page.click('#set-save-btn'); await page.waitForTimeout(800);
     check('sites: the blocked list is saved on its own', await val('TALIXIO_WEB_BLOCKED') === 'tracker.example');

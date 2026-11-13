@@ -218,8 +218,7 @@ final class Fleet
      */
     public function sync(): array
     {
-        $lock = fopen("{$this->stateDir}/sync.lock", 'c'); // the agent's start and an update may both run it
-        if ($lock) flock($lock, LOCK_EX);
+        return $this->exclusive(function () { // the agent's start and an update may both run it
         $s = $this->state(); $done = [];
         if (empty($s['secret_root']) && $s['instances']) $s = $this->mutate(function (array &$s) { $s['secret_root'] ??= bin2hex(random_bytes(32)); return $s; }); // once: each assistant gets its key (audit S22)
         foreach (array_keys($s['instances']) as $id) {
@@ -229,6 +228,27 @@ final class Fleet
             $this->recreate($id); $done[] = $id;
         }
         return $done;
+        });
+    }
+
+    /** @var resource|null */
+    private $lock = null;
+    private int $lockDepth = 0;
+
+    /**
+     * Run $f alone among the processes that remake containers (the agent's start, an update, install-stack.sh):
+     * two of them removing the same container at once fail ("removal ... already in progress"). Re-entrant.
+     */
+    private function exclusive(callable $f): mixed
+    {
+        if ($this->lockDepth === 0) {
+            $this->lock = fopen("{$this->stateDir}/sync.lock", 'c') ?: null;
+            if ($this->lock) flock($this->lock, LOCK_EX);
+        }
+        $this->lockDepth++;
+        try { return $f(); } finally {
+            if (--$this->lockDepth === 0 && $this->lock) { flock($this->lock, LOCK_UN); fclose($this->lock); $this->lock = null; }
+        }
     }
 
     // ---------- Docker Engine API (unix socket) ----------
@@ -300,6 +320,10 @@ final class Fleet
         $name = $this->containerName($id);
         $this->docker('POST', "/containers/$name/stop", null, ['t' => 15], 30);
         [$code, $d] = $this->docker('DELETE', "/containers/$name", null, ['force' => 'true']);
+        if ($code === 409 && str_contains(is_array($d) ? (string)($d['message'] ?? '') : (string)$d, 'already in progress')) {
+            // someone else (an older agent, a Docker restart) is removing it: wait until it is gone
+            for ($t = 0; $t < 60; $t++) { if ($this->docker('GET', "/containers/$name/json")[0] === 404) return; usleep(500000); }
+        }
         if ($code >= 400 && $code !== 404) throw new \RuntimeException("remove $name: " . (is_array($d) ? ($d['message'] ?? '') : $d));
     }
 
@@ -408,9 +432,11 @@ final class Fleet
     /** Same data, container made again (new image, new limits, new settings). */
     public function recreate(string $id, ?string $image = null): void
     {
-        $this->need($id);
-        $this->removeContainer($id);
-        $this->createAndStart($id, $this->state(), $image);
+        $this->exclusive(function () use ($id, $image) {
+            $this->need($id);
+            $this->removeContainer($id);
+            $this->createAndStart($id, $this->state(), $image);
+        });
     }
 
     public function setLimits(string $id, int $memoryMb, float $cpus): void
