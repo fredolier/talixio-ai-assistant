@@ -4,6 +4,12 @@
 Settings → *Run checks* (or `sudo talixio doctor`, under Docker
 `docker exec talixio-<you> talixio doctor`): each line in red tells you what is wrong.
 
+## "Crash dumps in the data folder"
+A program crashed and left a `core.<number>` file (tens of MB each) in the data folder. The line says which program
+(php, soffice.bin for LibreOffice, whisper-cli, chromium…), how many and the latest date: if it keeps happening,
+report it with that line. *Delete the crash dumps* next to it (or `talixio cleanup`, under Docker
+`docker exec talixio-<you> talixio cleanup`) frees the room. They are not copied by `talixio-hostbackup.sh`.
+
 ## "No AI model is set up yet"
 The assistant has no API key and no Claude sign-in. A box in the chat offers
 *Sign in with Claude* or *Use an API key*. After a move to Docker, the import of the settings

@@ -104,7 +104,7 @@ backup() {
 
   if [ -d "$DATA" ]; then
     say "simple install: $DATA"
-    "${RSYNC[@]}" "$DATA/" "$TARGET/simple/data/"
+    "${RSYNC[@]}" --exclude='/core.[0-9]*' "$DATA/" "$TARGET/simple/data/"   # crash dumps: see talixio doctor
     [ -d "$ETC" ] && { say "config: $ETC"; "${RSYNC[@]}" "$ETC/" "$TARGET/simple/etc/"; }
     [ -f "$ETC/secret.key" ] || warn "no $ETC/secret.key yet (it comes with version 1.35.42): run this again after the upgrade"
     if [ -f "$CADDY/Caddyfile" ] && grep -qi talixio "$CADDY/Caddyfile" 2>/dev/null; then say "Caddy: $CADDY"; "${RSYNC[@]}" "$CADDY/" "$TARGET/simple/caddy/"; fi
@@ -115,7 +115,7 @@ backup() {
   for v in $(volumes); do
     mp="$(docker volume inspect -f '{{.Mountpoint}}' "$v")"
     say "Docker volume $v"
-    "${RSYNC[@]}" "$mp/" "$TARGET/docker/volumes/$v/"
+    "${RSYNC[@]}" --exclude='/core.[0-9]*' "$mp/" "$TARGET/docker/volumes/$v/"
     did=1
   done
   stack="$(find_stack || true)"
@@ -189,7 +189,7 @@ list() {
 # ---------- size: what backup would copy ----------
 SIZE_TOTAL=0
 size_line() { # size_line PATH [LABEL] [INDENT]
-  local b; b="$(du -sb "$1" 2>/dev/null | cut -f1)"; b="${b:-0}"
+  local b; b="$(du -sb --exclude="core.[0-9]*" "$1" 2>/dev/null | cut -f1)"; b="${b:-0}"
   [ -z "${3:-}" ] && SIZE_TOTAL=$((SIZE_TOTAL + b))
   printf '%s%8s  %s\n' "${3:-}" "$(numfmt --to=iec --suffix=B "$b" 2>/dev/null || echo "$b")" "${2:-$1}"
 }

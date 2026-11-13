@@ -4,6 +4,12 @@
 Réglages → *Lancer les vérifications* (ou `sudo talixio doctor`, sous Docker
 `docker exec talixio-<vous> talixio doctor`) : chaque ligne en rouge dit ce qui ne va pas.
 
+## « Fichiers de plantage dans le dossier des données » (crash dumps)
+Un programme a planté et laissé un fichier `core.<nombre>` (des dizaines de Mo chacun) dans le dossier des données.
+La ligne dit quel programme (php, soffice.bin pour LibreOffice, whisper-cli, chromium…), combien et la date du dernier :
+si cela se répète, signalez-le avec cette ligne. *Supprimer les fichiers de plantage* à côté (ou `talixio cleanup`,
+sous Docker `docker exec talixio-<vous> talixio cleanup`) libère la place. `talixio-hostbackup.sh` ne les copie pas.
+
 ## « Aucun modèle d'IA n'est encore configuré »
 L'assistant n'a ni clé d'API ni connexion Claude. Un encart dans la conversation propose
 *Se connecter avec Claude* ou *Utiliser une clé d'API*. Après un passage à Docker, ce peut être l'import
