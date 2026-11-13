@@ -222,6 +222,15 @@ $f->resetTotp('alice');
 check('fleet: a two-step reset is recorded', str_ends_with($f->state()['instances']['alice']['reset'], ':totp'));
 $rules([['DELETE', '#^/containers/talixio-alice#', 500, ['message' => 'removal in progress']]]);
 check('fleet: a container that cannot be removed is an error', str_contains($throws(fn() => $f->recreate('alice')), 'remove talixio-alice: removal in progress'));
+// install-stack.sh restarted the agent, whose start remade the containers while the script remade them too (1.35.44)
+$rules([['DELETE', '#^/containers/talixio-alice#', 409, ['message' => 'removal of container talixio-alice is already in progress'], 'once' => 'rm'],
+    ['GET', '#^/containers/talixio-alice/json#', 404, ['message' => 'gone'], 'once' => 'gone']]);
+$dlog(); $e = $throws(fn() => $f->recreate('alice')); $lg = $dlog(); $rules();
+check('fleet: a container another process is removing is waited for, then made again', $e === '' && $has($lg, 'POST', '#^/containers/create\?name=talixio-alice#'), $e . json_encode($lg));
+$hold = proc_open([PHP_BINARY, '-r', '$l = fopen($argv[1], "c"); flock($l, LOCK_EX); touch($argv[1] . ".held"); usleep(1500000);', "$d/st/sync.lock"], [], $hp);
+for ($i = 0; $i < 200 && !file_exists("$d/st/sync.lock.held"); $i++) usleep(10000);
+$t0 = microtime(true); $f->recreate('alice'); $waited = microtime(true) - $t0; proc_close($hold); @unlink("$d/st/sync.lock.held");
+check('fleet: remaking a container waits while another process remakes them (the agent\'s start, an update)', $waited > 1.0, (string)$waited);
 
 // logs, doctor, backup
 $rules([['GET', '#^/containers/talixio-alice/logs#', 200, 'frames' => [

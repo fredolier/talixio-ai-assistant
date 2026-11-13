@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.45 (2026-11-13)
+
+- Multi-user server: `install-stack.sh` could stop with "removal of container … is already in progress". It restarts the agent, whose start remakes the assistants made by older code, while the script remakes them too, so both tried to remove the same container. Remaking a container (the agent's start, an update or rollback from the admin page, the script) now waits for any other one in progress, through the lock `sync` already used. A removal Docker reports as already in progress is waited for, up to 30 seconds, instead of being an error. Tested against the fake Docker of the test suite: a 409 "already in progress" followed by the container gone, and a recreate that waits while another process holds the lock. Not tried on a real Docker. The agent staying on its old version after an update from the admin page (seen on 0.28.76) is not addressed: its cause is not known yet.
+
 ## 1.35.44 (2026-11-13)
 
 - Backups: `talixio-hostbackup.sh size` lists what `backup` would copy, with each folder's size and the total: the data folder and its biggest parts first (the library, the nightly backups…), the config, Caddy's, each Docker volume; the transcription models with their size, counted only with `--with-models`. It needs no destination and changes nothing. Tested on fake folders.
