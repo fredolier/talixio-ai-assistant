@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.46 (2026-11-13)
+
+- Settings → Security → Browser: the trusted and blocked websites vanished from the list once saved, and when you opened the page again. They were saved, but the list was redrawn with a function that only reads full addresses (`https://…`), so `lemonde.fr` read as nothing. Worse, a site added afterwards then replaced every one saved before. The list now reads saved sites the same way as typed ones. A browser test saves, reopens the page and adds another site; it failed on the three steps before the fix. If some of your sites were lost this way, add them again: the ones saved last are on the server and now show.
+
 ## 1.35.45 (2026-11-13)
 
 - Multi-user server: `install-stack.sh` could stop with "removal of container … is already in progress". It restarts the agent, whose start remakes the assistants made by older code, while the script remakes them too, so both tried to remove the same container. Remaking a container (the agent's start, an update or rollback from the admin page, the script) now waits for any other one in progress, through the lock `sync` already used. A removal Docker reports as already in progress is waited for, up to 30 seconds, instead of being an error. Tested against the fake Docker of the test suite: a 409 "already in progress" followed by the container gone, and a recreate that waits while another process holds the lock. Not tried on a real Docker. The agent staying on its old version after an update from the admin page (seen on 0.28.76) is not addressed: its cause is not known yet.
