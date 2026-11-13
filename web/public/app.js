@@ -151,7 +151,7 @@ function renderMessage(m) {
   }
   if (m.role === 'assistant' && m.channel === 'approval' && m.content.includes('\n\n')) { // a tool's raw result: folded, the chat stays for the conversation
     const i = m.content.indexOf('\n\n');
-    el.className = 'jobcard';
+    el.className = 'jobcard'; if (m.id) el.dataset.id = m.id;
     el.innerHTML = `<details><summary><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg><span>${esc(m.content.slice(0, i))} · ${fmtTime(m.ts)} · ${esc(t('show the result'))}</span></summary><div class="report doc">${md(m.content.slice(i + 2))}</div></details>`;
     return el;
   }
@@ -273,6 +273,7 @@ function appendMessages(list, notify = false) {
   for (const m of list) {
     if (m.id <= state.lastId) continue;
     state.lastId = m.id;
+    for (const old of m.meta?.replaces || []) thread.querySelector(`[data-id="${Number(old)}"]`)?.remove(); // results of approvals gathered into this one
     thread.append(renderMessage(m));
     if (!state.firstLoaded || m.id < state.firstLoaded) state.firstLoaded = m.id;
     if (notify && m.role === 'assistant' && (document.hidden || m.channel !== 'web')) notifyBrowser(m);
@@ -1002,7 +1003,8 @@ async function loadApprovals() {
       : a.routine_title ? t('Always allow for the routine "{title}"', { title: a.routine_title }) : '';
     el.innerHTML = `<span class="label">Needs your approval · #${a.id}</span>
       <div class="actions"><button class="btn small" data-d="reject" type="button">Reject</button>${always ? `<button class="btn small" data-d="always" type="button">${esc(always)}</button>` : ''}<button class="btn small primary" data-d="approve" type="button">Approve</button></div>
-      <div class="what">${esc(a.summary)}</div>`;
+      <div class="what">${esc(a.summary)}</div>${a.args_decoded && Object.keys(a.args_decoded).length && !['fetch_url', 'browser_open', 'web_search'].includes(a.tool)
+        ? `<details class="what-args"><summary>${esc(t('Show the details'))}</summary><pre class="no-i18n">${esc(JSON.stringify(a.args_decoded, null, 2))}</pre></details>` : ''}`;
     el.querySelectorAll('button').forEach(b => b.onclick = async () => {
       el.querySelectorAll('button').forEach(x => x.disabled = true);
       try { const r = await post(`api/approvals/${a.id}/${b.dataset.d}`); appendMessages(r.messages); toast(b.dataset.d === 'reject' ? 'Rejected' : 'Approved'); }

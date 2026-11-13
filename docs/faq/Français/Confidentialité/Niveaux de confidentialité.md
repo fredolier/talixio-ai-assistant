@@ -49,6 +49,10 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
   saisies dans la page) ; sinon vous validez cette action sur le moment. Vos propres notes, écrites et modifiées en dernier par vous dans l'app, ne comptent pas.
   Une routine que vous avez autorisée à faire l'une de ces choses (*Toujours autoriser pour la routine*, voir *Tâches et
   routines*) la fait sans demander.
+  Une demande tient en une ligne (l'outil, les valeurs courtes, et la longueur d'un long texte comme le contenu
+  d'une note) ; *Voir le détail* dessous montre tout ce qu'elle écrirait, et un avis par e-mail ou messagerie
+  l'inclut. Les résultats validés à la suite vont dans un seul message du chat (« Fait : 9 actions validées »,
+  chaque résultat replié dessous), un par routine ; un message échangé entre-temps en commence un nouveau.
   Un résultat validé qui venait d'un tel contenu garde la règle tant qu'il est dans la conversation récente, et une
   compétence apprise d'un tel travail attend elle aussi votre validation.
   Une mission, qu'elle soit lancée, menée par le directeur ou reprise, transmet ce qu'elle a lu à son rapport : le tour qui le

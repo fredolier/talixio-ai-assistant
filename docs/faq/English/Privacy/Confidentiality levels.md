@@ -45,7 +45,11 @@ If a question asked in General reads a confidential document, the rest of the an
   choosing go ahead on a site you named in your request or trust, unless the answer has read your own data (it could be
   typed into the page); otherwise you approve that one action at once. Your own notes,
   written and last changed by you in the app, do not count. A routine you allowed to do one of these things
-  (*Always allow for the routine*, see *Tasks and routines*) does that one without asking. A result you approved that came from such content keeps
+  (*Always allow for the routine*, see *Tasks and routines*) does that one without asking.
+  A request is one line (the tool, short values, and the length of long text such as a note's content);
+  *Show the details* under it shows everything it would write, and an e-mail or chat notice includes it.
+  Results you approve one after the other go into one message in the chat ("Done: 9 approved actions", each
+  result folded under it), one per routine; something said in between starts a new one. A result you approved that came from such content keeps
   the rule while it is in the recent conversation, and a skill learned from such work waits for your approval too.
   A background job, a directive or a continued job carries what it read into its report: the turn that relays it
   (and the next ones, while the report is in the recent conversation) asks the same way, and a job that read a
