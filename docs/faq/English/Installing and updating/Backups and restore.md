@@ -10,6 +10,13 @@
   that file somewhere safe once (and, with an UrBackup agent or any other, add it to what is backed up, kept apart).
   On a shared server, back up the agent's state folder (`fleet.json`): each assistant's key comes from it.
 
+## The whole host, to another disk or server
+`sudo /opt/talixio/deploy/talixio-hostbackup.sh backup backup@nas:/srv/talixio` copies everything (data, config,
+the key; under Docker every Talixio volume) with rsync, the services stopped for the time of the copy.
+`… restore backup@nas:/srv/talixio` puts it back (on a new host, install Talixio first, at the same version);
+what it replaces is kept aside in `<folder>.before-restore-<date>`. Each copy is a mirror: keep versions with
+UrBackup or snapshots.
+
 ## Restoring (simple install)
 ```bash
 sudo systemctl stop talixio-web talixio-worker
