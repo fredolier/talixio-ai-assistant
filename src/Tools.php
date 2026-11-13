@@ -1305,6 +1305,23 @@ final class Tools
     }
 
     /**
+     * One line for an approval request: the tool and its arguments, long text replaced by its length (a 3,000-character
+     * dump of a note filled the chat, 1.35.51). The arguments themselves are shown folded under the request.
+     */
+    public static function brief(string $name, array $args): string
+    {
+        $parts = [];
+        foreach ($args as $k => $v) {
+            if (is_bool($v)) $v = $v ? 'yes' : 'no';
+            elseif (is_array($v)) $v = (string)json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $v = (string)$v;
+            $parts[] = mb_strlen($v) > 80 || str_contains($v, "\n") ? "$k (" . number_format(mb_strlen($v)) . ' characters)'
+                : (is_numeric($v) ? "$k $v" : "$k \"$v\"");
+        }
+        return "Run $name" . ($parts ? ': ' . implode(', ', $parts) : '');
+    }
+
+    /**
      * Once the work has read untrusted content, text planted in it must not act on its own: lasting changes
      * (memory, skills, routines, filing) and requests to a web address that wasn't in that content (which could carry
      * the user's data out in the address) wait for the user. Returns the approval summary, or null to run now.
@@ -1314,18 +1331,17 @@ final class Tools
         if (!Privacy::$untrusted) return null;
         if ($this->app->routine && $this->app->routines()->allows($this->app->routine, $name, $args)) return null; // you let this routine do it (its card lists it)
         $why = "\n\n(Asked after reading content written by others: an email, a web page, a document, an attachment or a connector's result.)";
-        $show = fn(array $a) => mb_substr(json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), 0, 3000);
         if (in_array($name, ['fetch_url', 'browser_open'], true)) {
             $url = trim((string)($args['url'] ?? ''));
             return isset(Privacy::$links[$url]) || isset(Privacy::$links[rtrim($url, '/')]) || $this->app->cfg->trustedSite($url) ? null : ($name === 'fetch_url' ? 'Fetch' : 'Open') . " the web address $url$why";
         }
         // shared memory and skills refuse Confidential work themselves (sharedWrite): an approval must not get round that
         if (in_array($name, ['memory_append', 'memory_replace', 'skill_save'], true) && $this->app->privacy()->effective() !== 'internal') return null;
-        if ($name === 'space_notes' && ($args['action'] ?? 'read') !== 'read') return "Run $name: " . $show($args) . $why;
-        if ($name === 'spaces' && ($args['action'] ?? 'list') === 'restore') return "Run $name: " . $show($args) . $why;
+        if ($name === 'space_notes' && ($args['action'] ?? 'read') !== 'read') return self::brief($name, $args) . $why;
+        if ($name === 'spaces' && ($args['action'] ?? 'list') === 'restore') return self::brief($name, $args) . $why;
         if (in_array($name, self::READS, true) || str_starts_with($name, 'mcp_')) return null; // reads; a connector's changes already ask
         if (in_array($name, ['browser_click', 'browser_type', 'browser_select'], true)) return null; // asked now, on the live page, by browserGuard
-        return "Run $name: " . $show($args) . $why; // anything else, also a tool not classified yet
+        return self::brief($name, $args) . $why; // anything else, also a tool not classified yet
     }
 
     /**

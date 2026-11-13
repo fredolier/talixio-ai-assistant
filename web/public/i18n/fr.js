@@ -2886,6 +2886,7 @@ window.I18N.fr = {
 "Recent decisions": "Décisions récentes",
 "Apps and connectors every assistant on this server can install. People send theirs for review; nothing reaches the store before you approve it. An app installed from the store still waits for its owner's approval before it runs.": "Les apps et connecteurs que chaque assistant de ce serveur peut installer. Chacun envoie les siens pour validation ; rien n’arrive dans le catalogue avant votre accord. Une app installée depuis le catalogue attend encore l’accord de son propriétaire avant de fonctionner.",
 "Details": "Détails",
+"Show the details": "Voir le détail",
 "Up one folder": "Dossier parent",
 "Up one folder (Alt+↑)": "Dossier parent (Alt+↑)",
 "Back (Alt+←)": "Retour (Alt+←)",

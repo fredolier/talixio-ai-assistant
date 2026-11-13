@@ -156,6 +156,27 @@ const flows = {
     await card.locator('[data-rm-grant="board_add"]').click(); await page.waitForTimeout(800);
     check('routine allow: ✕ takes it back', (await page.locator('#tasks .task', { hasText: 'Security watch' }).locator('.routine-allow').count()) === 0);
   },
+  async approvalNoise({ page, check, data, root }) {
+    // 1.35.51: a request is one line with the arguments folded; results approved one after the other make one message
+    const php = "$a=\\Talixio\\App::fromEnv();$c=str_repeat(\"echo kernel\\n\",200);"
+      + "foreach([1,2] as $n)$a->approvals()->request('board_add',['title'=>\"CVE-$n\",'notes'=>$c],\\Talixio\\Tools::brief('board_add',['title'=>\"CVE-$n\",'notes'=>$c]));";
+    execFileSync('php', ['-r', "require '" + join(root, 'src/autoload.php') + "';" + php],
+      { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
+    await go(page, 'chat'); await page.reload(); await page.waitForTimeout(800);
+    await page.waitForSelector('#approvals .approval', { timeout: 8000 });
+    const first = page.locator('#approvals .approval').first();
+    const what = await first.locator('.what').textContent();
+    check('approval noise: the request is one line, the long text given as its length', /Run board_add: title "CVE-\d", notes \([\d,]+ characters\)/.test(what) && !/echo kernel/.test(what), what);
+    check('approval noise: the arguments are folded under it', (await first.locator('details.what-args').count()) === 1 && !(await first.locator('details.what-args pre').isVisible()));
+    await first.locator('details.what-args summary').click();
+    check('approval noise: they open on a click', /echo kernel/.test(await first.locator('details.what-args pre').textContent()));
+    const before = await page.locator('#thread .jobcard').count();
+    for (let i = 0; i < 2; i++) { await page.locator('#approvals .approval [data-d="approve"]').first().click(); await page.waitForTimeout(900); }
+    const cards = page.locator('#thread .jobcard');
+    check('approval noise: two approvals leave one message in the chat', (await cards.count()) === before + 1 && /2 approved actions|2 actions validées/.test(await cards.last().textContent()), before + ' ' + (await cards.allTextContents()).join(' | ') + ' approvals left: ' + await page.locator('#approvals .approval').count());
+    const rows = execFileSync('php', ['-r', "$p=new PDO('sqlite:" + join(data, 'talixio.db') + "');echo json_encode($p->query(\"select content from messages where channel='approval' and content like '%CVE-%'\")->fetchAll(PDO::FETCH_COLUMN));"]).toString();
+    check('approval noise: one message is stored for the two', JSON.parse(rows).length === 1, rows.slice(0, 200));
+  },
   async crashDumps({ page, check, data }) {
     writeFileSync(join(data, 'core.4242'), 'a crash dump');
     await go(page, 'settings');

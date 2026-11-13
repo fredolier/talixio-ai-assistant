@@ -45,7 +45,10 @@ final class Approvals
         $waiting = (int)$st->q("SELECT COUNT(*) FROM approvals WHERE status='pending' AND id < ? AND created > ?", [$id, time() - 1800])->fetchColumn();
         if ($waiting) return $id;
         try {
-            $this->app->notifier()->notify('Approval needed', "$summary\n\nApprove in the app, or reply \"yes $id\" (or \"no $id\").", $this->app->space);
+            // away from the app, the notice is all there is to judge by: the arguments go with it (the summary shortens long text)
+            $json = json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            $details = $args && mb_strlen($json) > 200 ? "\n\nDetails:\n" . mb_substr($json, 0, 1500) . (mb_strlen($json) > 1500 ? ' […]' : '') : '';
+            $this->app->notifier()->notify('Approval needed', "$summary$details\n\nApprove in the app, or reply \"yes $id\" (or \"no $id\").", $this->app->space);
         } catch (\Throwable $e) {
             Log::warn("approval notify: {$e->getMessage()}");
         }
@@ -84,11 +87,41 @@ final class Approvals
         $ok = !str_starts_with($result, 'error');
         $st->q('UPDATE approvals SET result=?, status=? WHERE id=?', [mb_substr($result, 0, 20000), $ok ? 'done' : 'failed', $id]);
         $head = I18n::t($this->app, $ok ? 'Done: {what}' : 'Failed: {what}', ['what' => $a['summary']]);
-        // kept whole in the conversation (the assistant reads it when asked about it); data shown as a block
-        // a page, an email or a connector's result replayed in the next turns: still content written by others (Agent::chat)
-        $trust = $read['untrusted'] ? ['trust' => ['untrusted' => true, 'private' => $read['private'], 'links' => $read['links']]] : null;
-        $st->addMessage('assistant', 'approval', $head . "\n\n" . self::block($result, 20000), $trust, [], (int)$a['space']);
+        $this->record($a, $read['untrusted'] ? ['untrusted' => true, 'private' => $read['private'], 'links' => $read['links']] : null);
         return $head . "\n\n" . mb_substr($result, 0, 600) . (mb_strlen($result) > 600 ? ' […]' : ''); // a chat app gets the start
+    }
+
+    /**
+     * The result in the conversation, kept whole (the assistant reads it when asked about it). Approvals decided one
+     * after the other go into one message: the latest message, if it holds results of approvals from the last 30
+     * minutes of the same routine (or none), is replaced by one holding them all; nine approved notes made nine
+     * messages before (1.35.51). A page, an email or a connector's result replayed in the next turns is still
+     * content written by others (Agent::chat): the trust goes with the message.
+     */
+    private function record(array $a, ?array $trust): void
+    {
+        $st = $this->app->store; $space = (int)$a['space']; $routine = (int)($a['routine'] ?? 0);
+        $last = $st->q('SELECT * FROM messages WHERE space = ? ORDER BY id DESC LIMIT 1', [$space])->fetch() ?: null;
+        $lm = $last ? (json_decode((string)$last['meta'], true) ?: []) : [];
+        $ids = $last && $last['channel'] === 'approval' && is_array($lm['approvals'] ?? null) && (int)$last['ts'] > time() - 1800
+            && (int)($lm['routine_approvals'] ?? 0) === $routine ? array_map('intval', $lm['approvals']) : [];
+        $ids[] = (int)$a['id'];
+        $rows = array_values(array_filter(array_map(fn($i) => $this->get($i), $ids)));
+        $line = fn(array $r) => I18n::t($this->app, $r['status'] === 'done' ? 'Done: {what}' : 'Failed: {what}', ['what' => $r['summary']]);
+        if (count($rows) === 1) $content = $line($rows[0]) . "\n\n" . self::block((string)$rows[0]['result'], 20000);
+        else {
+            $failed = count(array_filter($rows, fn($r) => $r['status'] !== 'done'));
+            $title = $routine ? ($st->task($routine)['title'] ?? '') : '';
+            $head = I18n::t($this->app, $failed ? '{n} approved actions, {failed} failed' : 'Done: {n} approved actions', ['n' => count($rows), 'failed' => $failed])
+                . ($title !== '' ? ' ' . I18n::t($this->app, '(routine "{title}")', ['title' => $title]) : '');
+            $content = $head . "\n\n" . implode("\n\n---\n\n", array_map(fn($r) => '**' . str_replace("\n", ' ', $line($r)) . "**\n\n" . self::block((string)$r['result'], 4000), $rows));
+        }
+        $trust = Privacy::merge([$lm['trust'] ?? null, $trust]);
+        $meta = ['approvals' => $ids] + ($routine ? ['routine_approvals' => $routine] : []) + ($trust ? ['trust' => $trust] : []);
+        if (count($ids) > 1) $meta['replaces'] = [(int)$last['id']];
+        $st->addMessage('assistant', 'approval', $content, $meta, [], $space);
+        // added first: deleting the latest message first would give the new one its id again, and the app would skip it
+        if (count($ids) > 1) $st->deleteMessages([(int)$last['id']]);
     }
 
     /**

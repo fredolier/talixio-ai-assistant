@@ -113,6 +113,8 @@ main{min-width:0;height:100%;overflow:hidden}
 .approvals{display:flex;flex-direction:column;gap:8px;padding:10px max(16px,calc((100% - 760px)/2));border-top:1px solid var(--line);background:var(--surface);max-height:45vh;overflow-y:auto}
 .approval{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:start;border:1px solid var(--warn);border-radius:12px;padding:10px 12px;background:var(--bg)}
 .approval .label{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--warn)}
+.approval .what-args{grid-column:1/-1;font-size:.85rem}
+.approval .what-args pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow-y:auto;margin:.3rem 0 0}
 .approval .what{grid-column:1/-1;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.9rem;max-height:160px;overflow-y:auto}
 .approval .actions{display:flex;gap:6px}
 .recorder{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px max(16px,calc((100% - 760px)/2));border-top:1px solid var(--line);background:var(--accent-soft)}
