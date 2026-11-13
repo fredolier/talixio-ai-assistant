@@ -691,7 +691,7 @@ $r = $x2('board_delete', ['code' => $codes['Prepare the Acme quote']]);
 check('tools: board_delete names the tasks that were waiting', $r === "{$codes['Prepare the Acme quote']} moved to the trash. These tasks were waiting for it: {$codes['Send the Acme quote']}", $r);
 check('tools: board_delete without waiting tasks', $x2('board_delete', ['code' => $codes['Send the Acme quote']]) === "{$codes['Send the Acme quote']} moved to the trash");
 App::$inWorker = true; $t2->jobId = 7;
-check('tools: the sandbox environment says where it runs', $t2->tools->env() === ['TALIXIO_SPACE' => '0', 'TALIXIO_IN_WORKER' => '1', 'TALIXIO_JOB' => '7', 'TALIXIO_CONFINE' => '']); // the folder limit of a peer question (1.35.16): none here
+check('tools: the sandbox environment says where it runs', $t2->tools->env() === ['TALIXIO_SPACE' => '0', 'TALIXIO_IN_WORKER' => '1', 'TALIXIO_JOB' => '7', 'TALIXIO_CONFINE' => '', 'TALIXIO_ROUTINE' => '0']); // the folder limit of a peer question (1.35.16): none here
 App::$inWorker = $inWorkerSaved; $t2->jobId = null;
 
 // audit Q5: a missing or malformed argument gets a short message, without a file path, a stack or a PHP warning

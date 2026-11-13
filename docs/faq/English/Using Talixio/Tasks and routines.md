@@ -57,6 +57,15 @@ which comes back with a report.
   You can have several watches; *Settings* on a watch routine reopens its parameters. If a skill
   covers the same topic (e.g. your newsletter style), the watch follows it.
 
+## A routine that keeps asking for approval
+A routine that reads the web (a security watch, a press review) then writes something (its note, a task) asks
+for your approval each time: text planted in a page must not act on its own (see *Confidentiality levels*,
+content written by others). When it is always the same thing, click **Always allow for the routine "…"** on the
+request: it runs, and that routine does that same thing again without asking. The grant is narrow: *that* note
+(not any note), new tasks on the board, that task's update or time, new notes, documents. Memory, skills,
+routines, e-mails, scripts and every other routine or conversation still ask. The routine's card in **Routines**
+lists what it may do ("After reading the web, it may without asking: …"); **✕** takes one back.
+
 ## Missions (background work)
 For long research, the assistant starts sub-agents (up to 3 in parallel), each with
 a cost cap ($2 by default; "budget $5" for more). The report arrives in the space that asked for it.

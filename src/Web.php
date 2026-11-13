@@ -258,7 +258,8 @@ final class Web
             (bool)preg_match('#^/api/feedback/(\d+)/delete$#', $path, $mm) && $m === 'POST' => ['ok' => $this->app->routines()->forget((int)$mm[1])],
             // quick capture: a task or a note in one step, without the model
             $path === '/api/capture' && $m === 'POST' => $this->app->routines()->capture(($b['kind'] ?? '') === 'note' ? 'note' : 'task', (string)($b['text'] ?? ''), (int)($b['space'] ?? 0)),
-            $path === '/api/approvals' => ['approvals' => array_map(fn($a) => $a + ['args_decoded' => json_decode($a['args'], true)], $this->app->approvals()->pending())],
+            $path === '/api/approvals' => ['approvals' => array_map(fn($a) => $a + ['args_decoded' => json_decode($a['args'], true),
+                'routine_title' => (int)$a['routine'] && Routines::grantable($a['tool']) ? ($this->app->store->task((int)$a['routine'])['title'] ?? null) : null], $this->app->approvals()->pending())],
             (bool)preg_match('#^/api/approvals/(\d+)/(approve|reject|always)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) {
                 $before = $this->app->store->maxMessageId();
                 $msg = $mm[2] === 'always' ? $this->app->approvals()->always((int)$mm[1]) : $this->app->approvals()->decide((int)$mm[1], $mm[2] === 'approve', 'web');
@@ -276,9 +277,13 @@ final class Web
     {
         $s = $this->app->store;
         return match (true) {
-            $path === '/api/tasks' => ['tasks' => array_map(fn($t) => $t + ['next_text' => $t['next_run'] ? date('D j M, H:i', (int)$t['next_run']) : null,
+            $path === '/api/tasks' => ['tasks' => array_map(fn($t) => ['allow' => $this->app->routines()->grants((int)$t['id'])] + $t + ['next_text' => $t['next_run'] ? date('D j M, H:i', (int)$t['next_run']) : null,
                 'space_name' => (int)$t['space'] ? ($this->app->spaces()->get((int)$t['space'])['name'] ?? null) : null,
                 'feedback' => (int)$s->q('SELECT COUNT(*) FROM routine_feedback WHERE task = ?', [$t['id']])->fetchColumn()], $s->tasks())],
+            (bool)preg_match('#^/api/tasks/(\d+)/allow$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b, $s) { // remove what a routine may do without asking
+                $s->task((int)$mm[1]) ?? $this->fail(404, 'no such task');
+                return ['ok' => $this->app->routines()->revoke((int)$mm[1], (string)($b['remove'] ?? '')), 'allow' => $this->app->routines()->grants((int)$mm[1])];
+            })(),
             (bool)preg_match('#^/api/tasks/(\d+)/(toggle|delete)$#', $path, $mm) && $m === 'POST' => $this->taskAction((int)$mm[1], $mm[2]),
             (bool)preg_match('#^/api/tasks/(\d+)/tier$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b, $s) {
                 $s->task((int)$mm[1]) ?? $this->fail(404, 'no such task');

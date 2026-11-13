@@ -47,6 +47,8 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
   attend votre validation. Dans le navigateur, saisir, cliquer et choisir se font sans demander sur un site que vous
   avez nommé dans votre demande ou mis en confiance, sauf si la réponse a lu vos propres données (elles pourraient être
   saisies dans la page) ; sinon vous validez cette action sur le moment. Vos propres notes, écrites et modifiées en dernier par vous dans l'app, ne comptent pas.
+  Une routine que vous avez autorisée à faire l'une de ces choses (*Toujours autoriser pour la routine*, voir *Tâches et
+  routines*) la fait sans demander.
   Un résultat validé qui venait d'un tel contenu garde la règle tant qu'il est dans la conversation récente, et une
   compétence apprise d'un tel travail attend elle aussi votre validation.
   Une mission, qu'elle soit lancée, menée par le directeur ou reprise, transmet ce qu'elle a lu à son rapport : le tour qui le

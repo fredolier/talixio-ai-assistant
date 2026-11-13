@@ -130,6 +130,8 @@ final class Store
             due TEXT NOT NULL DEFAULT '', by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', seen INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS mail_triage_status ON mail_triage(status, label);");
         $this->addColumn('tasks', 'job', 'INTEGER'); // a routine that runs this job again, instead of a prompt
+        $this->addColumn('tasks', 'allow', "TEXT NOT NULL DEFAULT ''"); // what it may do without asking after reading the web (Routines::allows)
+        $this->addColumn('approvals', 'routine', 'INTEGER NOT NULL DEFAULT 0'); // asked by this routine, after reading the web: "always" grants it
         // monthly watches were written "M H 1-7 * D" until 1.35.7, which cron reads as "days 1-7 OR every D": the first D of the month
         foreach ($this->db->query("SELECT id, cron FROM tasks WHERE cron GLOB '[0-9]* [0-9]* 1-7 [*] [0-7]'")->fetchAll() as $t) {
             $cron = preg_replace('/^(\d+ \d+) 1-7 \* ([0-7])$/', '$1 * * $2#1', (string)$t['cron']);
