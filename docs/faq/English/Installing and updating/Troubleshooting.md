@@ -6,8 +6,9 @@ Settings → *Run checks* (or `sudo talixio doctor`, under Docker
 
 ## "Crash dumps in the data folder"
 A program crashed and left a `core.<number>` file (tens of MB each) in the data folder. The line says which program
-(php, soffice.bin for LibreOffice, whisper-cli, chromium…), how many and the latest date: if it keeps happening,
-report it with that line. *Delete the crash dumps* next to it (or `talixio cleanup`, under Docker
+(php, soffice.bin for LibreOffice, whisper-cli…), how many, the latest date and what ended it (for example "SIGSEGV,
+memory fault"): if it keeps happening, report it with that line. Since 1.35.50 the headless browser (chromium) writes
+no dumps any more and gets time to close, which was when it crashed; older chromium dumps can simply be deleted. *Delete the crash dumps* next to it (or `talixio cleanup`, under Docker
 `docker exec talixio-<you> talixio cleanup`) frees the room. They are not copied by `talixio-hostbackup.sh`.
 
 ## "No AI model is set up yet"

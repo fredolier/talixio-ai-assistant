@@ -80,7 +80,7 @@ final class Cli
                 case 'doctor':
                     return self::doctor($app);
                 case 'cleanup': // the crash dumps (core.<pid>) the doctor lists
-                    foreach (CoreDumps::find($app->cfg->dataDir) as $d) echo "  {$d['file']}  ", (int)ceil($d['size'] / 1048576), ' MB  ', date('Y-m-d H:i', $d['time']), '  ', $d['program'] ?: '?', $d['args'] !== '' ? "  ({$d['args']})" : '', "\n";
+                    foreach (CoreDumps::find($app->cfg->dataDir) as $d) echo "  {$d['file']}  ", (int)ceil($d['size'] / 1048576), ' MB  ', date('Y-m-d H:i', $d['time']), '  ', $d['program'] ?: '?', $d['args'] !== '' ? "  ({$d['args']})" : '', $d['signal'] ? '  ' . CoreDumps::signalName($d['signal']) : '', "\n";
                     [$n, $bytes] = CoreDumps::clean($app->cfg->dataDir);
                     echo $n ? "$n crash dump(s) deleted, " . (int)ceil($bytes / 1048576) . " MB freed.\n" : "No crash dump to delete.\n";
                     return 0;
