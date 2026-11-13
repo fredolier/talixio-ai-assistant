@@ -5,6 +5,7 @@
 #   sudo talixio-hostbackup.sh backup  DEST   [--no-stop] [--with-models] [--stack DIR] [--dry-run]
 #   sudo talixio-hostbackup.sh restore SRC    [--yes] [--stack DIR] [--dry-run]
 #   sudo talixio-hostbackup.sh list    SRC
+#   sudo talixio-hostbackup.sh size           [--with-models] [--stack DIR]   (what backup would copy, and how big)
 #
 # DEST / SRC: a local folder (/mnt/backup/talixio) or a remote one over ssh (backup@nas:/srv/talixio).
 # The copy is a mirror (what was deleted here is deleted there): keep versions with UrBackup or snapshots of DEST.
@@ -35,10 +36,11 @@ APP="${TALIXIO_HB_APP:-/opt/talixio}"
 say()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
-usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
-[ $# -ge 2 ] || usage
-CMD="$1"; TARGET="${2%/}"; shift 2
+[ $# -ge 1 ] || usage
+CMD="$1"; shift
+if [ "$CMD" = size ]; then TARGET=""; else [ $# -ge 1 ] || usage; TARGET="${1%/}"; shift; fi
 NOSTOP=0 MODELS=0 YES=0 DRY=() STACK=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -184,7 +186,37 @@ list() {
   rsync -a --list-only "$TARGET/" | sed 's/^/    /'
 }
 
+# ---------- size: what backup would copy ----------
+SIZE_TOTAL=0
+size_line() { # size_line PATH [LABEL] [INDENT]
+  local b; b="$(du -sb "$1" 2>/dev/null | cut -f1)"; b="${b:-0}"
+  [ -z "${3:-}" ] && SIZE_TOTAL=$((SIZE_TOTAL + b))
+  printf '%s%8s  %s\n' "${3:-}" "$(numfmt --to=iec --suffix=B "$b" 2>/dev/null || echo "$b")" "${2:-$1}"
+}
+sizes() {
+  local any=0 v mp d stack
+  if [ -d "$DATA" ]; then
+    echo "simple install:"
+    size_line "$DATA"
+    for d in "$DATA"/* "$DATA"/.[!.]*; do [ -e "$d" ] && size_line "$d" "$(basename "$d")" "            "; done | sort -k1,1 -h -r
+    [ -d "$ETC" ] && size_line "$ETC"
+    [ -f "$ETC/secret.key" ] || echo "          (no $ETC/secret.key yet: it comes with version 1.35.42)"
+    [ -f "$CADDY/Caddyfile" ] && grep -qi talixio "$CADDY/Caddyfile" 2>/dev/null && size_line "$CADDY"
+    if [ -d "$WHISPER" ]; then if [ "$MODELS" = 1 ]; then size_line "$WHISPER"; else echo "          ($WHISPER: $(du -sh "$WHISPER" 2>/dev/null | cut -f1), copied only with --with-models)"; fi; fi
+    any=1
+  fi
+  if [ -n "$(volumes)" ]; then
+    echo "Docker volumes:"
+    for v in $(volumes); do mp="$(docker volume inspect -f '{{.Mountpoint}}' "$v")"; size_line "$mp" "$v"; done
+    stack="$(find_stack || true)"
+    if [ -n "$stack" ] && [ -f "$stack/.env" ]; then size_line "$stack/.env"; else echo "          (stack folder not found: give --stack DIR)"; fi
+    any=1
+  fi
+  [ "$any" = 1 ] || die "nothing to copy: no $DATA and no talixio-* Docker volume"
+  printf -- '--------\n%8s  total\n' "$(numfmt --to=iec --suffix=B "$SIZE_TOTAL" 2>/dev/null || echo "$SIZE_TOTAL")"
+}
+
 case "$CMD" in
-  backup) backup ;; restore) restore ;; list) list ;;
+  backup) backup ;; restore) restore ;; list) list ;; size) sizes ;;
   *) usage ;;
 esac

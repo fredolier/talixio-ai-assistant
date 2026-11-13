@@ -14,7 +14,8 @@
 `sudo /opt/talixio/deploy/talixio-hostbackup.sh backup backup@nas:/srv/talixio` copies everything (data, config,
 the key; under Docker every Talixio volume) with rsync, the services stopped for the time of the copy.
 `… restore backup@nas:/srv/talixio` puts it back (on a new host, install Talixio first, at the same version);
-what it replaces is kept aside in `<folder>.before-restore-<date>`. Each copy is a mirror: keep versions with
+what it replaces is kept aside in `<folder>.before-restore-<date>`.
+`… size` lists what would be copied, with the size of each folder and the total. Each copy is a mirror: keep versions with
 UrBackup or snapshots.
 
 ## Restoring (simple install)

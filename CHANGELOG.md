@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.44 (2026-11-13)
+
+- Backups: `talixio-hostbackup.sh size` lists what `backup` would copy, with each folder's size and the total: the data folder and its biggest parts first (the library, the nightly backups…), the config, Caddy's, each Docker volume; the transcription models with their size, counted only with `--with-models`. It needs no destination and changes nothing. Tested on fake folders.
+
 ## 1.35.43 (2026-11-13)
 
 - Backups: `deploy/talixio-hostbackup.sh` copies everything an assistant host needs with rsync, to a local folder or over ssh, and puts it back. `backup DEST`: on a simple install, `/var/lib/talixio`, `/etc/talixio` (with `secret.key`) and Caddy's config when it serves Talixio (`--with-models` adds the transcription models); on a multi-user server, every `talixio-*` Docker volume and the stack's `.env`. It stops the services while copying (the database is a live SQLite file), then starts them again, even after an error or Ctrl-C; `--no-stop` copies while running, after a consistent `talixio backup` archive. `restore SRC` asks before going on, moves what it replaces or deletes aside (`<folder>.before-restore-<date>`), puts the ownership back for a new host's `talixio` user, and warns when the copy has no key or was made with another version. `list SRC` shows a copy. Each copy is a mirror: keep its versions with UrBackup or snapshots. Tested on fake folders (backup, a refused restore, a dry run, a restore that brings back a changed database and a deleted token and moves aside a stray file). Not tried: a copy over ssh, stopping and starting the real services, Docker volumes.
