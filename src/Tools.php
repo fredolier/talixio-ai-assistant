@@ -1016,7 +1016,7 @@ final class Tools
 
     /** What tools run in a separate process (Claude Code's MCP server) must know: the space of this turn, and whether we are in the worker. */
     public function env(): array { return ['TALIXIO_SPACE' => (string)$this->app->space, 'TALIXIO_IN_WORKER' => App::$inWorker ? '1' : '0', 'TALIXIO_JOB' => (string)($this->app->jobId ?? ''),
-        'TALIXIO_CONFINE' => Privacy::$confine]; } // answering another person's assistant: the same folder limit there
+        'TALIXIO_CONFINE' => Privacy::$confine, 'TALIXIO_ROUTINE' => (string)$this->app->routine]; } // the routine running: what you let it do (Routines::allows) // answering another person's assistant: the same folder limit there
 
     /** A copy for one answer: repeated calls are counted from zero. */
     public function forAnswer(): self
@@ -1259,7 +1259,8 @@ final class Tools
         }
         $guard = isset($this->tools[$name]) && !$this->needsApproval($name) ? $this->afterUntrusted($name, $args) : null;
         if (isset($this->tools[$name]) && ($this->needsApproval($name) || $guard !== null)) {
-            try { $out = $this->app->approvals()->request($name, $args, $guard ?? ($this->approval[$name])($args)); }
+            $routine = $guard !== null && Routines::grantable($name) ? $this->app->routine : 0; // "always allow" can then grant it to the routine
+            try { $out = $this->app->approvals()->request($name, $args, $guard ?? ($this->approval[$name])($args), $routine); }
             catch (\Throwable $e) { $out = 'error: ' . $e->getMessage(); }
             $this->app->store->logTool($name, $args, $out, $this->app->jobId);
             return $out;
@@ -1311,6 +1312,7 @@ final class Tools
     private function afterUntrusted(string $name, array $args): ?string
     {
         if (!Privacy::$untrusted) return null;
+        if ($this->app->routine && $this->app->routines()->allows($this->app->routine, $name, $args)) return null; // you let this routine do it (its card lists it)
         $why = "\n\n(Asked after reading content written by others: an email, a web page, a document, an attachment or a connector's result.)";
         $show = fn(array $a) => mb_substr(json_encode($a, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), 0, 3000);
         if (in_array($name, ['fetch_url', 'browser_open'], true)) {

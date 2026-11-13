@@ -506,11 +506,11 @@ final class Agent
     /** A scheduled task fires: the prompt is recorded in the thread so the conversation stays coherent. */
     public function runTask(string $title, string $prompt, string $tier = 'standard', int $space = 0, int $taskId = 0): string
     {
-        $this->routine = $taskId;
+        $this->routine = $taskId; $was = $this->app->routine; $this->app->routine = $taskId;
         try {
             return $this->chat('schedule', "[Scheduled task \"$title\" is due now. Do it and write the message for the user.]\n$prompt"
                 . ($taskId ? $this->app->routines()->feedbackPrompt($taskId) : ''), in_array($tier, Tier::NAMES, true) ? $tier : 'standard', [], null, $space);
-        } finally { $this->routine = 0; }
+        } finally { $this->routine = 0; $this->app->routine = $was; }
     }
 
     /**

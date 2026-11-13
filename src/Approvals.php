@@ -12,9 +12,9 @@ final class Approvals
     public function __construct(private App $app) {}
 
     /** Called instead of running a sensitive tool. Returns what the model is told. */
-    public function request(string $tool, array $args, string $summary): string
+    public function request(string $tool, array $args, string $summary, int $routine = 0): string
     {
-        $id = $this->create($tool, $args, $summary, 'deferred');
+        $id = $this->create($tool, $args, $summary, 'deferred', $routine);
         return "Waiting for the user's approval (request #$id): $summary. Nothing has been done yet; it will run only if they approve. Tell the user briefly what you're asking to do.";
     }
 
@@ -35,11 +35,11 @@ final class Approvals
         return false;
     }
 
-    private function create(string $tool, array $args, string $summary, string $mode): int
+    private function create(string $tool, array $args, string $summary, string $mode, int $routine = 0): int
     {
         $st = $this->app->store;
-        $st->q('INSERT INTO approvals(tool, args, summary, status, created, mode, space, channel) VALUES(?,?,?,?,?,?,?,?)',
-            [$tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $summary, 'pending', time(), $mode, $this->app->space, $this->app->channel]);
+        $st->q('INSERT INTO approvals(tool, args, summary, status, created, mode, space, channel, routine) VALUES(?,?,?,?,?,?,?,?,?)',
+            [$tool, json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $summary, 'pending', time(), $mode, $this->app->space, $this->app->channel, $routine]);
         $id = (int)$st->db->lastInsertId();
         // one notice per batch: no new email or message while an earlier request (last 30 minutes) still waits
         $waiting = (int)$st->q("SELECT COUNT(*) FROM approvals WHERE status='pending' AND id < ? AND created > ?", [$id, time() - 1800])->fetchColumn();
@@ -91,7 +91,10 @@ final class Approvals
         return $head . "\n\n" . mb_substr($result, 0, 600) . (mb_strlen($result) > 600 ? ' […]' : ''); // a chat app gets the start
     }
 
-    /** "Always allow": trust the site of a page request (or web search from Confidential spaces) for good, then approve. */
+    /**
+     * "Always allow": trust the site of a page request (or web search from Confidential spaces) for good, or let the
+     * routine that asked do this again without asking after reading the web (Routines::allows), then approve.
+     */
     public function always(int $id, string $channel = 'web'): string
     {
         $a = $this->get($id);
@@ -104,6 +107,8 @@ final class Approvals
             } elseif ($a['tool'] === 'web_search') {
                 $c->webSearchTrusted = true;
                 Settings::save($c->dataDir, ['TALIXIO_WEB_SEARCH_TRUSTED' => '1']);
+            } elseif ((int)($a['routine'] ?? 0) && Routines::grantable($a['tool'])) {
+                $this->app->routines()->grant((int)$a['routine'], $a['tool'], $args);
             }
         }
         return $this->decide($id, true, $channel);

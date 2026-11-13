@@ -1998,3 +1998,7 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
   /* U19 the library's title is not cut ("Bibliothèqu"): Back and Up give their room when there is nowhere to go */
   #lib-back:disabled,#lib-up:disabled{display:none}
 }
+
+/* a routine's card: what it may do without asking after reading the web */
+.routine-allow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+.routine-allow .chip button{margin-left:4px;border:0;background:none;cursor:pointer;color:inherit;padding:0 2px}

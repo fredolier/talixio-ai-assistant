@@ -191,6 +191,54 @@ final class Routines
         return $out;
     }
 
+    /**
+     * What a routine may do without asking once it has read the web (audit S5 still holds for everything else):
+     * only these, which add or change something you see and can undo (a task, a note: its versions are kept).
+     * A grant names the tool and, when the call names one (id), that one item: "update the note #320", not any note.
+     */
+    public const GRANTABLE = ['board_add', 'board_update', 'board_log_time', 'kb_save_note', 'kb_make_document'];
+
+    public static function grantable(string $tool): bool { return in_array($tool, self::GRANTABLE, true); }
+
+    private static function grantKey(string $tool, array $args): string
+    {
+        if (!array_key_exists('id', $args) || $args['id'] === null) return $tool;
+        return $tool . ':' . (is_int($args['id']) || (is_string($args['id']) && ctype_digit($args['id'])) ? (int)$args['id'] : 'bad'); // "320x" never matches a grant
+    }
+
+    /** @return list<array{key:string,tool:string,id:?int,name:string}> */
+    public function grants(int $task): array
+    {
+        $t = $this->app->store->task($task);
+        $g = json_decode((string)($t['allow'] ?? ''), true);
+        return is_array($g) ? array_values(array_filter($g, fn($x) => is_array($x) && self::grantable((string)($x['tool'] ?? '')))) : [];
+    }
+
+    public function allows(int $task, string $tool, array $args): bool
+    {
+        if (!self::grantable($tool)) return false;
+        return in_array(self::grantKey($tool, $args), array_column($this->grants($task), 'key'), true);
+    }
+
+    public function grant(int $task, string $tool, array $args): void
+    {
+        if (!self::grantable($tool) || !$this->app->store->task($task)) return;
+        $key = self::grantKey($tool, $args);
+        $g = array_values(array_filter($this->grants($task), fn($x) => $x['key'] !== $key));
+        if (str_ends_with($key, ':bad')) return;
+        $g[] = ['key' => $key, 'tool' => $tool, 'id' => isset($args['id']) ? (int)$args['id'] : null,
+            'name' => mb_substr((string)($args['name'] ?? $args['title'] ?? ''), 0, 120)];
+        $this->app->store->updateTask($task, ['allow' => json_encode($g, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+    }
+
+    public function revoke(int $task, string $key): bool
+    {
+        $g = $this->grants($task); $left = array_values(array_filter($g, fn($x) => $x['key'] !== $key));
+        if (count($left) === count($g)) return false;
+        $this->app->store->updateTask($task, ['allow' => $left ? json_encode($left, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '']);
+        return true;
+    }
+
     private function find(string $title): int
     {
         return (int)$this->app->store->q('SELECT id FROM tasks WHERE title = ? AND job IS NULL ORDER BY id LIMIT 1', [$title])->fetchColumn();

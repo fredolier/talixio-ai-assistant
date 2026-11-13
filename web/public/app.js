@@ -998,7 +998,8 @@ async function loadApprovals() {
   for (const a of list) {
     const el = document.createElement('div'); el.className = 'approval';
     const site = ['fetch_url', 'browser_open'].includes(a.tool) ? siteOf(a.args_decoded?.url || '') : '';
-    const always = site ? t('Always allow {site}', {site}) : a.tool === 'web_search' ? t('Always allow web search') : '';
+    const always = site ? t('Always allow {site}', {site}) : a.tool === 'web_search' ? t('Always allow web search')
+      : a.routine_title ? t('Always allow for the routine "{title}"', { title: a.routine_title }) : '';
     el.innerHTML = `<span class="label">Needs your approval · #${a.id}</span>
       <div class="actions"><button class="btn small" data-d="reject" type="button">Reject</button>${always ? `<button class="btn small" data-d="always" type="button">${esc(always)}</button>` : ''}<button class="btn small primary" data-d="approve" type="button">Approve</button></div>
       <div class="what">${esc(a.summary)}</div>`;
@@ -1187,6 +1188,15 @@ async function showFeedback(task, box) {
     box.hidden = false;
   } catch (e) { toast(e.message); }
 }
+/** What a routine may do without asking after reading the web ("Always allow" on one of its requests). */
+function grantLabel(g) {
+  const name = g.name || (g.id ? '#' + g.id : '');
+  return g.tool === 'board_add' ? t('Add tasks to the board')
+    : g.tool === 'board_update' ? (g.id ? t('Update the task #{id}', { id: g.id }) : t('Update tasks'))
+    : g.tool === 'board_log_time' ? (g.id ? t('Log time on the task #{id}', { id: g.id }) : t('Log time on tasks'))
+    : g.tool === 'kb_save_note' ? (g.id ? t('Update the note {name}', { name }) : t('Save new notes'))
+    : g.tool === 'kb_make_document' ? t('Make documents') : g.key;
+}
 async function loadTasks() {
   const [{ tasks }, { watches }] = await Promise.all([api('api/tasks'), api('api/tasks/watches')]);
   state.watches = watches;
@@ -1214,12 +1224,14 @@ async function loadTasks() {
     const next = t.enabled && t.next_text ? `Next: ${esc(t.next_text)}` : (t.last_run ? `Last ran ${fmtTime(t.last_run)}` : 'Paused');
     el.innerHTML = `<div><h3>${esc(t.title)}</h3><div class="when"><span class="chip">${when}</span>${t.space_name ? `<span class="chip" title="Answers in this space">${esc(t.space_name)}</span>` : ''}<span>${next}</span></div></div>
       <div class="actions">${tierSelect(t.tier, 'Model that runs this task')}${watches.some(w => w.id === t.id) ? '<button class="btn small" data-a="watch">Settings</button>' : ''}${t.feedback ? `<button class="btn small ghost" data-a="feedback" title="${esc(window.t('What you rated on its messages'))}">👍👎 ${t.feedback}</button>` : ''}<button class="btn small" data-a="run" title="Run it now">Run now</button><button class="btn small" data-a="toggle">${t.enabled ? 'Pause' : 'Resume'}</button><button class="btn small ghost" data-a="delete">Delete</button></div>
-      <p class="prompt">${esc(t.prompt)}</p><div class="feedback-list" hidden></div>`;
+      <p class="prompt">${esc(t.prompt)}</p>${(t.allow || []).length ? `<div class="routine-allow small"><span class="muted">${esc(window.t('After reading the web, it may without asking:'))}</span>
+        ${t.allow.map(g => `<span class="chip">${esc(grantLabel(g))}<button type="button" class="link" data-rm-grant="${esc(g.key)}" aria-label="${esc(window.t('Remove'))}" title="${esc(window.t('Ask me again'))}">✕</button></span>`).join('')}</div>` : ''}<div class="feedback-list" hidden></div>`;
     el.querySelector('select').onchange = async e => {
       try { await post(`api/tasks/${t.id}/tier`, { tier: e.target.value }); toast(`"${t.title}" will run on the ${e.target.value} tier.`); }
       catch (err) { toast(err.message); e.target.value = t.tier; }
     };
     el.querySelectorAll('button').forEach(b => b.onclick = async () => {
+      if (b.dataset.rmGrant) { try { await post(`api/tasks/${t.id}/allow`, { remove: b.dataset.rmGrant }); toast(window.t('It will ask again.')); loadTasks(); } catch (e) { toast(e.message); } return; }
       if (b.dataset.a === 'run') return runTaskNow(t, b);
       if (b.dataset.a === 'feedback') return showFeedback(t, el.querySelector('.feedback-list'));
       if (b.dataset.a === 'watch') { fillWatch(watches.find(w => w.id === t.id)); $('#watch-card').open = true; $('#watch-card').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }

@@ -139,6 +139,23 @@ const flows = {
     await page.selectOption('#theme-mode', '');
     if (await page.isVisible('#doctor-run')) { await page.click('#doctor-run'); await page.waitForTimeout(1500); }
   },
+  async routineAllow({ page, check, data, root }) {
+    // a routine asked, after reading the web, to add a task: "Always allow for the routine" grants it, its card lists it
+    const php = "$a=\\Talixio\\App::fromEnv();$t=$a->store->addTask('Security watch','Check the tracker.','0 11 * * *',time()+3600);"
+      + "$a->approvals()->request('board_add',['title'=>'apache2 DSA-6620-1'],'Run board_add: apache2',$t);";
+    execFileSync('php', ['-r', "require '" + join(root, 'src/autoload.php') + "';" + php],
+      { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
+    await go(page, 'chat'); await page.reload(); await page.waitForTimeout(800);
+    const btn = '#approvals .approval [data-d="always"]';
+    await page.waitForSelector(btn, { timeout: 8000 });
+    check('routine allow: a routine\'s request offers "Always allow for the routine"', /Security watch/.test(await page.textContent(btn)), await page.textContent(btn));
+    await page.click(btn); await page.waitForTimeout(800);
+    await go(page, 'tasks'); await page.waitForTimeout(600);
+    const card = page.locator('#tasks .task', { hasText: 'Security watch' });
+    check('routine allow: the routine\'s card lists what it may do without asking', /Add tasks to the board|Ajouter des tâches/.test(await card.textContent()));
+    await card.locator('[data-rm-grant="board_add"]').click(); await page.waitForTimeout(800);
+    check('routine allow: ✕ takes it back', (await page.locator('#tasks .task', { hasText: 'Security watch' }).locator('.routine-allow').count()) === 0);
+  },
   async crashDumps({ page, check, data }) {
     writeFileSync(join(data, 'core.4242'), 'a crash dump');
     await go(page, 'settings');

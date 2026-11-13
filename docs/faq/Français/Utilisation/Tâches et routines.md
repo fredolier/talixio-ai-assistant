@@ -61,6 +61,17 @@ ou plusieurs agents, qui revient avec un rapport.
   Plusieurs veilles sont possibles ; *Réglages* sur une routine de veille rouvre ses paramètres. Si une compétence
   porte le même sujet (ex. votre style de newsletter), la veille la suit.
 
+## Une routine qui demande sans cesse une validation
+Une routine qui lit le web (une veille sécurité, une revue de presse) puis écrit quelque chose (sa note, une tâche)
+demande votre validation à chaque fois : un texte glissé dans une page ne doit pas agir seul (voir *Niveaux de
+confidentialité*, contenu écrit par d'autres). Quand c'est toujours la même chose, cliquez sur **Toujours autoriser
+pour la routine « … »** sur la demande : l'action se fait, et cette routine refait la même chose sans demander.
+L'autorisation est étroite : *cette* note (pas n'importe quelle note), de nouvelles tâches au tableau, la mise à jour
+ou le temps de cette tâche, de nouvelles notes, des documents. La mémoire, les compétences, les routines, les e-mails,
+les scripts, ainsi que toute autre routine ou conversation, demandent toujours. La fiche de la routine dans
+**Routines** liste ce qu'elle peut faire (« Après avoir lu le web, elle peut sans demander : … ») ; **✕** retire une
+autorisation.
+
 ## Missions
 Pour les recherches longues, l'assistant lance des sous-agents (jusqu'à 3 en parallèle), chacun avec
 un plafond de coût (2 $ par défaut ; « budget 5 $ » pour plus). Le rapport arrive dans l'espace qui l'a demandé.

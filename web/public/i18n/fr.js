@@ -3381,5 +3381,17 @@ window.I18N.fr = {
   "Or in your own words…": "Ou avec vos mots…",
   "See the conversation": "Voir la conversation",
   "Delete the crash dumps": "Supprimer les fichiers de plantage",
-  "{n} crash dump(s) deleted, {mb} MB freed.": "{n} fichier(s) de plantage supprimé(s), {mb} Mo libérés."
+  "{n} crash dump(s) deleted, {mb} MB freed.": "{n} fichier(s) de plantage supprimé(s), {mb} Mo libérés.",
+  "Always allow for the routine \"{title}\"": "Toujours autoriser pour la routine « {title} »",
+  "Add tasks to the board": "Ajouter des tâches au tableau",
+  "Update the task #{id}": "Modifier la tâche n° {id}",
+  "Update tasks": "Modifier des tâches",
+  "Log time on the task #{id}": "Noter du temps sur la tâche n° {id}",
+  "Log time on tasks": "Noter du temps sur des tâches",
+  "Update the note {name}": "Mettre à jour la note {name}",
+  "Save new notes": "Enregistrer de nouvelles notes",
+  "Make documents": "Créer des documents",
+  "After reading the web, it may without asking:": "Après avoir lu le web, elle peut sans demander :",
+  "Ask me again": "Me demander à nouveau",
+  "It will ask again.": "Elle demandera à nouveau."
 };

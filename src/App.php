@@ -15,6 +15,7 @@ final class App
     public int $space = 0;
     /** The channel of the conversation being answered: approvals it raises are answered by a bare "yes" there only. */
     public string $channel = '';
+    public int $routine = 0; // the routine being run (Agent::runTask): what it may do without asking after reading the web (Routines::allows)
     /** Told to the model with the next tool result (e.g. a background job nearing its cost cap). */
     public string $notice = '';
     /** The background job this process is running (its tool steps are kept so it can be continued). */

@@ -42,6 +42,7 @@ final class Cli
                     $app->setSpace(max(0, (int)getenv('TALIXIO_SPACE')));
                     App::$inWorker = getenv('TALIXIO_IN_WORKER') === '1';
                     $app->jobId = (int)getenv('TALIXIO_JOB') ?: null;
+                    $app->routine = max(0, (int)getenv('TALIXIO_ROUTINE'));
                     Privacy::$shareFile = (string)getenv('TALIXIO_TRUST_FILE'); // what the answer has read so far, both ways
                     Privacy::$confine = (string)getenv('TALIXIO_CONFINE'); // answering another person's assistant: its space's folder only
                     (new McpServer($app->tools))->serve();
