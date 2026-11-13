@@ -3,6 +3,10 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.35.47 (2026-11-13)
+
+- Crash dumps: a program that crashes leaves a `core.<pid>` file (tens of MB) in the folder it ran in, which is the data folder in the multi-user server's containers. They piled up unseen (16 files, about 450 MB, on one assistant) and went into every host backup. **The doctor** (Settings → *Run checks*, `talixio doctor`) now lists them in red: how many, their size, which program crashed and the latest one's date and command line. The program is read from the dump itself (its ELF `NT_PRPSINFO` note), so no `file` or `strings` is needed in the container. **Delete the crash dumps**, the button next to that line, or `talixio cleanup` deletes them and says how much room was freed; only `core.<number>` files directly in the data folder are touched. **`talixio-hostbackup.sh`** no longer copies them, and `size` no longer counts them. The crashes themselves are not addressed yet, since which program crashed is not known; the doctor will now say. Dumps are still written, so the next crash can be identified. Tested: the reader on a real dump made here (`sh`) and on built ones (php, soffice.bin, an unreadable file), the doctor line, the command, the button (browser test), and the host backup leaving a dump out while keeping a document named `core.5`. Not tried: dumps from an arm64 server.
+
 ## 1.35.46 (2026-11-13)
 
 - Settings → Security → Browser: the trusted and blocked websites vanished from the list once saved, and when you opened the page again. They were saved, but the list was redrawn with a function that only reads full addresses (`https://…`), so `lemonde.fr` read as nothing. Worse, a site added afterwards then replaced every one saved before. The list now reads saved sites the same way as typed ones. A browser test saves, reopens the page and adds another site; it failed on the three steps before the fix. If some of your sites were lost this way, add them again: the ones saved last are on the server and now show.

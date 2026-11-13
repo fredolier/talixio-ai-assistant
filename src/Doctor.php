@@ -25,6 +25,7 @@ final class Doctor
         $this->line(PHP_VERSION_ID >= 80200, 'PHP ' . PHP_VERSION . ' (8.2+ needed)');
         foreach (['curl', 'pdo_sqlite', 'mbstring', 'openssl'] as $ext) $this->line(extension_loaded($ext), "PHP extension $ext");
         $this->line(is_writable($c->dataDir), "data folder {$c->dataDir} writable");
+        if ($dumps = CoreDumps::summary(CoreDumps::find($c->dataDir))) $this->out[] = ['status' => 'fail', 'text' => $dumps, 'action' => 'clean-dumps'];
         $this->line((new Auth($app))->hasPassword(), 'app password set');
         if (!extension_loaded('sodium')) $this->line(false, 'PHP extension sodium (saved secrets are kept unencrypted without it)');
         elseif (Secrets::enabled()) $this->line(Secrets::$unreadable === 0, 'saved secrets encrypted (key: ' . (getenv('TALIXIO_SECRET_KEY') ? 'given by the server' : Secrets::keyFile()) . ')'

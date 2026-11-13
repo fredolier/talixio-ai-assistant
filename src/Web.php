@@ -173,6 +173,7 @@ final class Web
                 'status' => $this->app->updater()->status(), 'auto' => $this->app->cfg->autoUpdate],
             (bool)preg_match('#^/api/update/(check|update|rollback)$#', $path, $mm) && $m === 'POST' => (function () use ($mm) { $this->app->updater()->request($mm[1]); return ['ok' => true]; })(),
             $path === '/api/doctor' && $m === 'POST' => (function () { set_time_limit(0); return ['results' => (new Doctor(App::fromEnv()))->run()]; })(),
+            $path === '/api/doctor/clean-dumps' && $m === 'POST' => (function () { [$n, $bytes] = CoreDumps::clean($this->app->cfg->dataDir); return ['ok' => true, 'deleted' => $n, 'mb' => (int)ceil($bytes / 1048576)]; })(),
             $path === '/api/notifications' => ['notifications' => $this->app->notifier()->inbox(), 'unread' => $this->app->notifier()->unread()],
             $path === '/api/notifications/read' && $m === 'POST' => ['ok' => true, 'marked' => $this->app->notifier()->markRead(isset($b['id']) ? (int)$b['id'] : null), 'unread' => $this->app->notifier()->unread()],
             $path === '/api/notifications/clear' && $m === 'POST' => ['ok' => true, 'removed' => $this->app->notifier()->clear()],

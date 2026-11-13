@@ -4014,7 +4014,13 @@ $('#doctor-run').onclick = async () => {
   const ul = $('#doctor'); ul.hidden = false; ul.innerHTML = '<li class="info">Running checks (this can take a few seconds)…</li>';
   try { const { results } = await post('api/doctor'); ul.innerHTML = results.map(r => r.status === 'eu'
     ? `<li class="eu"><span class="eu-seal">★ ${esc(t('EU · GDPR'))}</span><span>${esc(t('Everything stays in Europe: {provider}, under the GDPR.', { provider: r.provider }))}${r.locked ? ' ' + esc(t('Locked: nothing can be sent outside Europe.')) : ''}</span></li>`
-    : `<li class="${r.status}">${esc(r.text)}</li>`).join(''); }
+    : `<li class="${r.status}">${esc(r.text)}${r.action === 'clean-dumps' ? ` <button type="button" class="btn sm" data-a="clean-dumps">${esc(t('Delete the crash dumps'))}</button>` : ''}</li>`).join('');
+    const cl = ul.querySelector('[data-a="clean-dumps"]');
+    if (cl) cl.onclick = async () => {
+      cl.disabled = true;
+      try { const r = await post('api/doctor/clean-dumps'); cl.closest('li').className = 'ok'; cl.closest('li').textContent = t('{n} crash dump(s) deleted, {mb} MB freed.', { n: r.deleted, mb: r.mb }); }
+      catch (e) { cl.disabled = false; toast(e.message); }
+    }; }
   catch (e) { ul.innerHTML = `<li class="fail">${esc(e.message)}</li>`; }
   b.disabled = false; b.textContent = 'Run checks';
 };

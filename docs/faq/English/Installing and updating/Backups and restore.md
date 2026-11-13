@@ -15,7 +15,8 @@
 the key; under Docker every Talixio volume) with rsync, the services stopped for the time of the copy.
 `… restore backup@nas:/srv/talixio` puts it back (on a new host, install Talixio first, at the same version);
 what it replaces is kept aside in `<folder>.before-restore-<date>`.
-`… size` lists what would be copied, with the size of each folder and the total. Each copy is a mirror: keep versions with
+`… size` lists what would be copied, with the size of each folder and the total. Crash dumps (`core.<number>`) are
+left out: see *Troubleshooting*. Each copy is a mirror: keep versions with
 UrBackup or snapshots.
 
 ## Restoring (simple install)

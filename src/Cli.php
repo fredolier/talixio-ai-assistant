@@ -78,6 +78,11 @@ final class Cli
                     return 0;
                 case 'doctor':
                     return self::doctor($app);
+                case 'cleanup': // the crash dumps (core.<pid>) the doctor lists
+                    foreach (CoreDumps::find($app->cfg->dataDir) as $d) echo "  {$d['file']}  ", (int)ceil($d['size'] / 1048576), ' MB  ', date('Y-m-d H:i', $d['time']), '  ', $d['program'] ?: '?', $d['args'] !== '' ? "  ({$d['args']})" : '', "\n";
+                    [$n, $bytes] = CoreDumps::clean($app->cfg->dataDir);
+                    echo $n ? "$n crash dump(s) deleted, " . (int)ceil($bytes / 1048576) . " MB freed.\n" : "No crash dump to delete.\n";
+                    return 0;
                 case 'store-outbox': // run by the agent (the store): what the person sent for review, or "done KEY HASH STATUS [NOTE]"
                     $st = new AppStore($app);
                     if (($argv[2] ?? '') === 'done') return $st->mark((string)($argv[3] ?? ''), (string)($argv[4] ?? ''), (string)($argv[5] ?? ''), (string)($argv[6] ?? '')) ? 0 : 1;
@@ -102,7 +107,7 @@ final class Cli
                     $p = proc_open(array_merge([$c->signalCli, '--config', $c->dataDir . '/signal', '-a', $c->signalNumber], array_slice($argv, 2)), [STDIN, STDOUT, STDERR], $pipes);
                     return is_resource($p) ? proc_close($p) : 1;
                 default:
-                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|backup|password|totp [off]|signal ARGS|transfer-pull URL CODE [--final] [--url URL]|mcp|index|job ID|drain [off]|store-outbox [done KEY HASH STATUS NOTE]\n");
+                    fwrite(STDERR, "usage: talixio version|worker|chat|doctor|cleanup|backup|password|totp [off]|signal ARGS|transfer-pull URL CODE [--final] [--url URL]|mcp|index|job ID|drain [off]|store-outbox [done KEY HASH STATUS NOTE]\n");
                     return 2;
             }
         } catch (\Throwable $e) {

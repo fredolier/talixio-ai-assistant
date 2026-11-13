@@ -3379,5 +3379,7 @@ window.I18N.fr = {
   "Approve the action there": "Approuvez l'action dans cette session",
   "Nothing can be done from here.": "Rien ne peut se faire d'ici.",
   "Or in your own words…": "Ou avec vos mots…",
-  "See the conversation": "Voir la conversation"
+  "See the conversation": "Voir la conversation",
+  "Delete the crash dumps": "Supprimer les fichiers de plantage",
+  "{n} crash dump(s) deleted, {mb} MB freed.": "{n} fichier(s) de plantage supprimé(s), {mb} Mo libérés."
 };

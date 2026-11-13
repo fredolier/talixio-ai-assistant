@@ -1,6 +1,7 @@
 // The main things a person does in the app, each one checked against the page and the server.
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { existsSync, writeFileSync } from 'node:fs';
 const go = async (page, v) => { await page.evaluate(h => { location.hash = h; }, '#' + v); await page.waitForTimeout(500); };
 const api = (page, path) => page.evaluate(p => fetch(p).then(r => r.json()), path);
 
@@ -137,6 +138,15 @@ const flows = {
     check('settings: the dark theme applies', await page.evaluate(() => document.documentElement.outerHTML.includes('dark')));
     await page.selectOption('#theme-mode', '');
     if (await page.isVisible('#doctor-run')) { await page.click('#doctor-run'); await page.waitForTimeout(1500); }
+  },
+  async crashDumps({ page, check, data }) {
+    writeFileSync(join(data, 'core.4242'), 'a crash dump');
+    await go(page, 'settings');
+    await page.click('#doctor-run');
+    await page.waitForSelector('#doctor [data-a="clean-dumps"]', { timeout: 20000 });
+    check('doctor: crash dumps are listed with a button to delete them', /crash dump/.test(await page.textContent('#doctor')));
+    await page.click('#doctor [data-a="clean-dumps"]'); await page.waitForTimeout(800);
+    check('doctor: the button deletes them and says so', !existsSync(join(data, 'core.4242')) && /1 crash dump|1 fichier/.test(await page.textContent('#doctor')), await page.textContent('#doctor'));
   },
   async otherAssistants({ page, check }) {
     await go(page, 'settings');
