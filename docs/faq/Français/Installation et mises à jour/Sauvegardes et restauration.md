@@ -6,6 +6,18 @@
 - Si la sauvegarde de la nuit échoue (disque plein, dossier impossible à écrire), vous recevez **une** notification
   qui dit pourquoi ; elle est retentée toutes les 6 heures, et la page **Confidentialité** affiche *Dernière sauvegarde
   en échec* avec la raison, ou *Aucune sauvegarde depuis plus de deux jours*, jusqu'à ce qu'une réussisse.
+- Les secrets d'une sauvegarde sont **chiffrés** avec `/etc/talixio/secret.key`, qui n'est pas dans la
+  sauvegarde : copiez ce fichier une fois en lieu sûr (et, avec un agent UrBackup ou un autre, ajoutez-le à ce qui
+  est sauvegardé, à part). Sur un serveur à plusieurs, sauvegardez le dossier d'état de l'agent (`fleet.json`) :
+  la clé de chaque assistant en vient.
+
+## Tout l'hôte, vers un autre disque ou serveur
+`sudo /opt/talixio/deploy/talixio-hostbackup.sh backup backup@nas:/srv/talixio` copie tout (données, configuration,
+la clé ; sous Docker, chaque volume Talixio) avec rsync, les services arrêtés le temps de la copie.
+`… restore backup@nas:/srv/talixio` remet tout en place (sur un nouvel hôte, installez d'abord Talixio, à la même
+version) ; ce qui est remplacé est mis de côté dans `<dossier>.before-restore-<date>`.
+`… size` liste ce qui serait copié, avec la taille de chaque dossier et le total. Chaque copie est un miroir :
+gardez des versions avec UrBackup ou des instantanés.
 
 ## Restaurer (installation simple)
 ```bash

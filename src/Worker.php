@@ -24,6 +24,7 @@ final class Worker
             . ' signal=' . ($this->app->signal()->enabled() ? 'on' : 'off') . ' ntfy=' . ($cfg->ntfyUrl ? 'on' : 'off') . " heartbeat={$cfg->heartbeatMinutes}m budget=\${$cfg->budgetDaily}/day,\${$cfg->budgetMonthly}/month tz={$cfg->timezone}");
         App::$inWorker = true;
         @unlink(Jobs::drainFile($cfg->dataDir)); // the update that asked for it is over
+        try { Secrets::migrate($this->app); } catch (\Throwable $e) { Log::warn("secrets: {$e->getMessage()}"); } // before the settings' date is taken below
         $this->app->jobs()->recoverInterrupted();
         $this->app->files()->recoverInterrupted();
         try { (new Faq($this->app))->sync(); } catch (\Throwable $e) { Log::warn("faq: {$e->getMessage()}"); } // the notes about this version, in /FAQ

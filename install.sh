@@ -99,6 +99,13 @@ while IFS= read -r line; do
 done < "$SRC/config/talixio.env.example"
 [ -n "$BIND_ARG" ] && sed -i "s|^TALIXIO_WEB_BIND=.*|TALIXIO_WEB_BIND=$BIND_ARG|" "$ENV"
 chown root:talixio "$ENV"; chmod 640 "$ENV"
+# the key that encrypts the saved secrets (API keys, passwords, sign-in tokens), kept out of the data folder: a copy of
+# $DATA alone (a backup, a disk) does not give them. Back it up separately. Made once, never replaced.
+if [ ! -s "$ETC/secret.key" ]; then
+  say "Making the key that encrypts saved secrets ($ETC/secret.key; back it up apart from the data)"
+  ( umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$ETC/secret.key" )
+fi
+chown root:talixio "$ETC/secret.key"; chmod 640 "$ETC/secret.key"
 
 if [ "$WITH_CLAUDE" = 1 ] && [ -x "$DATA/.local/bin/claude" ]; then
   echo "    Claude Code already installed (it updates itself)"

@@ -2,6 +2,8 @@
 
 Everything goes: conversations, memory, skills, library, tasks, settings and keys, password,
 two-step sign-in, Signal registration.
+The secrets, encrypted, travel with the old server's key; the new server encrypts them again with its own key
+at its first start, then forgets the old one.
 
 ## 1. On the old server, in the assistant
 Settings → **Move to another server** → *Create a transfer code*. Note the assistant's

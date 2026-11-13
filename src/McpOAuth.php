@@ -14,12 +14,12 @@ final class McpOAuth
     public function __construct(private App $app) {}
 
     private function file(): string { return $this->app->cfg->dataDir . '/mcp-oauth.json'; }
-    private function all(): array { return json_decode((string)@file_get_contents($this->file()), true) ?: []; }
+    private function all(): array { return JsonFile::read($this->file()); } // opened when sealed (audit S22)
 
     private function put(string $server, ?array $entry): void
     {
         // under a lock: two connectors signing in at once keep both tokens (audit Q12)
-        JsonFile::update($this->file(), function (array $all) use ($server, $entry) { if ($entry === null) unset($all[$server]); else $all[$server] = $entry; return [$all, null]; }, 0600, JSON_PRETTY_PRINT);
+        JsonFile::update($this->file(), function (array $all) use ($server, $entry) { if ($entry === null) unset($all[$server]); else $all[$server] = $entry; return [$all, null]; }, 0600, JSON_PRETTY_PRINT, true);
     }
 
     public function get(string $server): array { return $this->all()[$server] ?? []; }

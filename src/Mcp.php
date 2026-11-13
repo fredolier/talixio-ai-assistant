@@ -30,7 +30,7 @@ final class Mcp
     /** @return array<string,array> name => server config */
     public function servers(): array
     {
-        $d = json_decode((string)@file_get_contents($this->file()), true);
+        $d = self::secrets(json_decode((string)@file_get_contents($this->file()), true) ?: [], false);
         $out = [];
         foreach ((array)($d['mcpServers'] ?? []) as $name => $s) {
             $name = preg_replace('/[^a-z0-9]+/', '_', strtolower((string)$name));
@@ -41,7 +41,41 @@ final class Mcp
 
     public function raw(): string
     {
-        return (string)(@file_get_contents($this->file()) ?: "{\n  \"mcpServers\": {}\n}\n");
+        $raw = (string)(@file_get_contents($this->file()) ?: "{\n  \"mcpServers\": {}\n}\n");
+        $d = json_decode($raw, true);
+        return is_array($d) ? json_encode(self::secrets($d, false), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n" : $raw; // shown opened, to be edited
+    }
+
+    /**
+     * The secrets of mcp.json sealed or opened (audit S22): the values of each server's headers and env, and its OAuth
+     * client secret. The rest (commands, addresses, names) stays readable.
+     */
+    private static function secrets(array $d, bool $seal): array
+    {
+        if (!is_array($d['mcpServers'] ?? null)) return $d;
+        $f = fn($v) => is_string($v) ? ($seal ? Secrets::seal($v) : Secrets::open($v)) : $v;
+        foreach ($d['mcpServers'] as $n => $s) {
+            if (!is_array($s)) continue;
+            foreach (['headers', 'env'] as $k) if (is_array($s[$k] ?? null)) $s[$k] = array_map($f, $s[$k]);
+            if (is_array($s['oauth'] ?? null) && isset($s['oauth']['client_secret'])) $s['oauth']['client_secret'] = $f($s['oauth']['client_secret']);
+            $d['mcpServers'][$n] = $s;
+        }
+        return $d;
+    }
+
+    /** Seal again what is not sealed with this server's key (Secrets::migrate). Whether the file was written. */
+    public function reseal(): bool
+    {
+        $d = json_decode((string)@file_get_contents($this->file()), true);
+        if (!is_array($d) || !is_array($d['mcpServers'] ?? null)) return false;
+        $stale = false;
+        foreach ($d['mcpServers'] as $s) if (is_array($s)) {
+            $vals = array_merge(array_values((array)($s['headers'] ?? [])), array_values((array)($s['env'] ?? [])), [(string)($s['oauth']['client_secret'] ?? '')]);
+            foreach ($vals as $v) if (is_string($v) && Secrets::stale($v)) $stale = true;
+        }
+        if (!$stale) return false;
+        JsonFile::write($this->file(), self::secrets(self::secrets($d, false), true), 0600, JSON_PRETTY_PRINT);
+        return true;
     }
 
     /** Validate and save the configuration (from Settings). */
@@ -53,7 +87,7 @@ final class Mcp
             if (!is_array($s) || (!isset($s['command']) && !isset($s['url']))) throw new \InvalidArgumentException("server \"$n\": give a command (local) or a url (remote)");
             if (isset($s['url']) && !preg_match('#^https?://#i', (string)$s['url'])) throw new \InvalidArgumentException("server \"$n\": the url must start with http(s)://");
         }
-        JsonFile::write($this->file(), $d, 0600, JSON_PRETTY_PRINT); // whole or not at all (audit Q12)
+        JsonFile::write($this->file(), self::secrets($d, true), 0600, JSON_PRETTY_PRINT); // whole or not at all (audit Q12), secrets sealed (S22)
     }
 
     public function cache(): array { return json_decode((string)@file_get_contents($this->cacheFile()), true) ?: []; }

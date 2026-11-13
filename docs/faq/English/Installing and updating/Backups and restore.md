@@ -6,6 +6,17 @@
 - If the nightly backup fails (a full disk, a folder that cannot be written), you get **one** notice saying why;
   it is tried again every 6 hours, and the **Privacy** page shows *Last backup failed* with the reason, or
   *No backup for more than two days*, until one works again.
+- The secrets in a backup are **encrypted** with `/etc/talixio/secret.key`, which is not in the backup: copy
+  that file somewhere safe once (and, with an UrBackup agent or any other, add it to what is backed up, kept apart).
+  On a shared server, back up the agent's state folder (`fleet.json`): each assistant's key comes from it.
+
+## The whole host, to another disk or server
+`sudo /opt/talixio/deploy/talixio-hostbackup.sh backup backup@nas:/srv/talixio` copies everything (data, config,
+the key; under Docker every Talixio volume) with rsync, the services stopped for the time of the copy.
+`… restore backup@nas:/srv/talixio` puts it back (on a new host, install Talixio first, at the same version);
+what it replaces is kept aside in `<folder>.before-restore-<date>`.
+`… size` lists what would be copied, with the size of each folder and the total. Each copy is a mirror: keep versions with
+UrBackup or snapshots.
 
 ## Restoring (simple install)
 ```bash
