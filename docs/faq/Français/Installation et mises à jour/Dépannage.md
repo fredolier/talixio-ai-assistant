@@ -6,8 +6,10 @@ Réglages → *Lancer les vérifications* (ou `sudo talixio doctor`, sous Docker
 
 ## « Fichiers de plantage dans le dossier des données » (crash dumps)
 Un programme a planté et laissé un fichier `core.<nombre>` (des dizaines de Mo chacun) dans le dossier des données.
-La ligne dit quel programme (php, soffice.bin pour LibreOffice, whisper-cli, chromium…), combien et la date du dernier :
-si cela se répète, signalez-le avec cette ligne. *Supprimer les fichiers de plantage* à côté (ou `talixio cleanup`,
+La ligne dit quel programme (php, soffice.bin pour LibreOffice, whisper-cli…), combien, la date du dernier et ce qui l'a
+arrêté (par exemple « SIGSEGV, memory fault ») : si cela se répète, signalez-le avec cette ligne. Depuis la 1.35.50, le
+navigateur sans fenêtre (chromium) n'en écrit plus et a le temps de se fermer, moment où il plantait ; les anciens
+fichiers de chromium peuvent simplement être supprimés. *Supprimer les fichiers de plantage* à côté (ou `talixio cleanup`,
 sous Docker `docker exec talixio-<vous> talixio cleanup`) libère la place. `talixio-hostbackup.sh` ne les copie pas.
 
 ## « Aucun modèle d'IA n'est encore configuré »

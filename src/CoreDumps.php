@@ -9,14 +9,15 @@ namespace Talixio;
  */
 final class CoreDumps
 {
-    /** @return list<array{file:string,size:int,time:int,program:string,args:string}> newest first */
+    /** @return list<array{file:string,size:int,time:int,program:string,args:string,signal:int}> newest first */
     public static function find(string $dir): array
     {
         $out = [];
         foreach (glob(rtrim($dir, '/') . '/core.*') ?: [] as $f) {
             if (!preg_match('/^core\.\d+$/', basename($f)) || !is_file($f) || is_link($f)) continue;
             $p = self::program($f);
-            $out[] = ['file' => basename($f), 'size' => (int)filesize($f), 'time' => (int)filemtime($f), 'program' => $p['program'] ?? '', 'args' => $p['args'] ?? ''];
+            $out[] = ['file' => basename($f), 'size' => (int)filesize($f), 'time' => (int)filemtime($f), 'program' => $p['program'] ?? '', 'args' => $p['args'] ?? '',
+                'signal' => self::signal($f)];
         }
         usort($out, fn($a, $b) => $b['time'] <=> $a['time']);
         return $out;
@@ -28,6 +29,39 @@ final class CoreDumps
      * @return array{program:string,args:string}|null
      */
     public static function program(string $path): ?array
+    {
+        $d = self::note($path, 3, 136); // NT_PRPSINFO: 40 bytes of state and ids, then pr_fname[16], pr_psargs[80]
+        if ($d === null) return null;
+        $z = fn(string $s) => trim(explode("\0", $s, 2)[0]);
+        return ['program' => $z(substr($d, 40, 16)), 'args' => $z(substr($d, 56, 80))];
+    }
+
+    /** The signal that ended the program (11 = SIGSEGV…), from the dump's first NT_PRSTATUS note; 0 when unknown. */
+    public static function signal(string $path): int
+    {
+        $d = self::note($path, 1, 14); // NT_PRSTATUS: si_signo, si_code, si_errno (3 ints), then pr_cursig (short)
+        if ($d === null) return 0;
+        return unpack('v', substr($d, 12, 2))[1] ?: unpack('V', substr($d, 0, 4))[1];
+    }
+
+    /** What a signal number means, for people. */
+    public static function signalName(int $sig): string
+    {
+        return match ($sig) {
+            0 => '',
+            4 => 'SIGILL, illegal instruction',
+            5 => 'SIGTRAP, failed internal check',
+            6 => 'SIGABRT, aborted',
+            7 => 'SIGBUS, memory error (often shared memory full)',
+            8 => 'SIGFPE, arithmetic error',
+            11 => 'SIGSEGV, memory fault',
+            31 => 'SIGSYS, system call refused by a sandbox',
+            default => "signal $sig",
+        };
+    }
+
+    /** The data of the first note of $type (at least $min bytes) in an ELF 64-bit little-endian core file (x86-64, arm64). */
+    private static function note(string $path, int $type, int $min): ?string
     {
         $h = @fopen($path, 'rb');
         if (!$h) return null;
@@ -45,12 +79,9 @@ final class CoreDumps
                 fseek($h, $off);
                 $notes = (string)fread($h, (int)$len);
                 for ($p = 0; $p + 12 <= strlen($notes);) {
-                    [, $nsz, $dsz, $type] = unpack('V3', substr($notes, $p, 12));
+                    [, $nsz, $dsz, $t] = unpack('V3', substr($notes, $p, 12));
                     $d = $p + 12 + (($nsz + 3) & ~3);
-                    if ($type === 3 && $dsz >= 136) { // NT_PRPSINFO: 40 bytes of state and ids, then pr_fname[16], pr_psargs[80]
-                        $z = fn(string $s) => trim(explode("\0", $s, 2)[0]);
-                        return ['program' => $z(substr($notes, $d + 40, 16)), 'args' => $z(substr($notes, $d + 56, 80))];
-                    }
+                    if ($t === $type && $dsz >= $min && $d + $dsz <= strlen($notes)) return substr($notes, $d, $dsz);
                     $p = $d + (($dsz + 3) & ~3);
                 }
             }
@@ -67,6 +98,7 @@ final class CoreDumps
         arsort($by);
         $who = implode(', ', array_map(fn($p, $n) => "$p ×$n", array_keys($by), $by));
         $cmd = $dumps[0]['args'] !== '' ? " (last: \"{$dumps[0]['args']}\")" : '';
+        if ($sig = self::signalName($dumps[0]['signal'] ?? 0)) $cmd .= ", ended by $sig";
         return count($dumps) . " crash dump(s) in the data folder, $mb MB: $who; latest " . date('Y-m-d H:i', $dumps[0]['time']) . "$cmd. Delete them with \"talixio cleanup\" (or the button).";
     }
 

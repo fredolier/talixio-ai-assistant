@@ -47,10 +47,29 @@ final class Browser
         self::$instance = null;
         if (!$b) return;
         try { $b->ws->send(json_encode(['id' => ++$b->id, 'method' => 'Browser.close'])); } catch (\Throwable) {}
-        if (is_resource($b->proc)) { usleep(200000); @proc_terminate($b->proc); @proc_close($b->proc); }
+        if (is_resource($b->proc)) self::stop($b->proc);
         if (is_resource($b->proxy)) { foreach ($b->proxyPipes as $p) @fclose($p); @proc_terminate($b->proxy); @proc_close($b->proxy); }
         if ($b->profileLock) { flock($b->profileLock, LOCK_UN); fclose($b->profileLock); }
         if ($b->tempProfile) exec('rm -rf ' . escapeshellarg($b->profile));
+    }
+
+    /**
+     * Lets Chromium finish closing (up to $grace seconds) before killing it. It used to get 0.2 s: killed while its page
+     * processes were still shutting down, they crashed and each left a crash dump (1.35.50).
+     * @param resource $proc
+     */
+    public static function stop($proc, float $grace = 2.0): void
+    {
+        $until = microtime(true) + $grace;
+        while (microtime(true) < $until && (@proc_get_status($proc)['running'] ?? false)) usleep(50000);
+        if (@proc_get_status($proc)['running'] ?? false) @proc_terminate($proc);
+        @proc_close($proc);
+    }
+
+    /** The command that starts Chromium with core dumps off: a crash of the browser writes no 20 MB "core" file (1.35.50). */
+    public static function command(array $args): array
+    {
+        return is_executable('/bin/sh') ? ['/bin/sh', '-c', 'ulimit -c 0; exec "$0" "$@"', ...$args] : $args;
     }
 
     private static array $found = [];
@@ -92,7 +111,7 @@ final class Browser
                 '--disable-gpu', '--disable-dev-shm-usage', '--disable-extensions', '--disable-background-networking', '--disable-sync', '--mute-audio',
                 '--window-size=1280,900', '--lang=' . ($c->browserLang ?: 'en-US'), ...$net, 'about:blank'];
             if ($noSandbox || $c->browserNoSandbox) array_splice($args, 1, 0, ['--no-sandbox']);
-            $this->proc = proc_open($args, [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', $this->profile . '/stderr.log', 'w']], $pipes);
+            $this->proc = proc_open(self::command($args), [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', $this->profile . '/stderr.log', 'w']], $pipes);
             for ($i = 0; $i < 100; $i++) {
                 if (is_file($this->profile . '/DevToolsActivePort')) break;
                 if (!proc_get_status($this->proc)['running']) break;
