@@ -2324,6 +2324,18 @@ $la->space = (int)$conf['id'];
 $n0 = count($la->approvals()->pending());
 check('privacy: confidential: a trusted site opens without asking, others still ask', $pv->toolGate('fetch_url', ['url' => 'https://www.lemonde.fr/eco']) === null
     && $pv->toolGate('web_search', ['query' => 'x']) !== null && count($la->approvals()->pending()) === $n0 + 1);
+// the request itself is checked again on its way out (Http → Privacy::outbound): a trusted site was let through by the
+// gate above and then refused there, so a Confidential space could not read any trusted site (to 1.35.51)
+$out = function (string $url) use ($pv) { try { $pv->outbound($url, 100); return 'sent'; } catch (\Talixio\PrivacyBlocked $e) { return $e->getMessage(); } };
+check('privacy: confidential: the request to a trusted site really goes out', $out('https://www.lemonde.fr/eco') === 'sent', $out('https://www.lemonde.fr/eco'));
+check('privacy: confidential: a site that is not trusted is still refused on its way out', str_starts_with($out('https://example.org/'), "blocked by the space's confidentiality level"));
+$la->cfg->webSearchTrusted = true;
+check('privacy: confidential: web search allowed for good really searches', $out('https://api.search.brave.com/res/v1/web/search?q=x') === 'sent');
+$la->cfg->webSearchTrusted = false;
+check('privacy: confidential: ... and not when it is not allowed', $out('https://api.search.brave.com/res/v1/web/search?q=x') !== 'sent');
+$la->space = (int)$sec['id'];
+check('privacy: secret: a trusted site is refused on its way out too', $out('https://www.lemonde.fr/eco') !== 'sent');
+$la->space = (int)$conf['id'];
 foreach ($la->approvals()->pending() as $p0) $la->approvals()->decide((int)$p0['id'], false);
 $nn = fn() => (int)$la->store->q("SELECT COUNT(*) FROM notifications WHERE title = 'Approval needed'")->fetchColumn();
 $n1 = $nn(); $pv->toolGate('web_search', ['query' => 'a']); $pv->toolGate('web_search', ['query' => 'b']); $pv->toolGate('web_search', ['query' => 'c']);
