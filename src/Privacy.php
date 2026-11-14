@@ -407,7 +407,10 @@ final class Privacy
             || $purpose === 'billing' // reads the provider's own cost figures, sends no content
             || $level === 'internal'
             || ($level === 'confidential' && in_array($purpose, ['model', 'vision'], true) && $svc['id'] === $this->modelService() && $this->modelBlocked('confidential') === null)
-            || ($level === 'confidential' && in_array($purpose, ['embeddings', 'transcription'], true) && self::isSovereign($svc['id'])); // stays in Europe, business terms
+            || ($level === 'confidential' && in_array($purpose, ['embeddings', 'transcription'], true) && self::isSovereign($svc['id'])) // stays in Europe, business terms
+            // what the user allowed for good (toolGate lets it through): the request must go out too, or a Confidential
+            // space could read no trusted site at all (to 1.35.51)
+            || ($level === 'confidential' && ($purpose === 'web' && $this->app->cfg->trustedSite($url) || $purpose === 'search' && $this->app->cfg->webSearchTrusted));
         $this->log($svc['id'], $purpose, $bytes, $level, !$allowed);
         if (!$allowed) {
             self::blocked(self::label($svc, $purpose));
