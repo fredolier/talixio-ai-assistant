@@ -150,12 +150,38 @@
       </header>
       <nav class="pilot-tabs" role="tablist" aria-label="Pilotage">
         <button type="button" class="ptab" data-ptab="kb" role="tab" id="ptab-kb" aria-controls="ppanel-kb"><span>Knowledge base</span><span class="ptab-src no-i18n" id="pilot-tab-kbsrc"></span></button>
-        <button type="button" class="ptab" data-ptab="agents" role="tab" id="ptab-agents" aria-controls="ppanel-agents"><span>Your autonomous pilot</span><span class="ptab-badge no-i18n" id="pilot-tab-agents" hidden></span></button>
+        <button type="button" class="ptab" data-ptab="agents" role="tab" id="ptab-agents" aria-controls="ppanel-agents"><span>Agents</span><span class="ptab-badge no-i18n" id="pilot-tab-agents" hidden></span></button>
         <button type="button" class="ptab" data-ptab="roles" role="tab" id="ptab-roles" aria-controls="ppanel-roles"><span>Roles</span><span class="ptab-n no-i18n" id="pilot-tab-roles"></span></button>
         <button type="button" class="ptab" data-ptab="chantiers" role="tab" id="ptab-chantiers" aria-controls="ppanel-chantiers"><span>Worksites</span><span class="ptab-n no-i18n" id="pilot-tab-chantiers"></span></button>
       </nav>
 
       <div class="pilot-panel" data-ppanel="agents" id="ppanel-agents" role="tabpanel" aria-labelledby="ptab-agents" hidden>
+        <section class="ab" id="ab" aria-label="Your agents">
+          <div class="ab-head">
+            <h3>Your agents</h3>
+            <span class="muted small no-i18n" id="ab-sub"></span>
+            <button type="button" id="ab-connect" class="btn ghost small" aria-expanded="false">Connect a machine</button>
+          </div>
+          <div class="card ab-setup" id="ab-setup" hidden>
+            <p class="small">Each coding agent reports to this board by itself, word for word and as it happens, and picks up your answers. No model sits in between. For Claude Code on macOS, Linux or WSL:</p>
+            <ol class="small">
+              <li><label>Name of this machine <input type="text" id="ab-machine" maxlength="40" placeholder="laptop"></label>
+                <a class="btn small" id="ab-dl" href="api/agents/hook.sh" download="agent-hook.sh">Download the script</a>
+                <br><span class="muted">Save it as:</span> <code class="no-i18n">~/.talixio/agent-hook.sh</code>
+                <br><span class="muted">It holds this board’s address and token: keep it to your own machines.</span></li>
+              <li><span>Add these hooks to ~/.claude/settings.json (merge them with the hooks already there):</span>
+                <pre class="ab-snippet no-i18n" id="ab-snippet"></pre>
+                <button type="button" class="btn small" id="ab-copy">Copy</button></li>
+              <li>Start a new Claude Code session: it appears here.</li>
+            </ol>
+            <p class="muted small">A permission request waits 30 seconds for your answer here, then the usual prompt shows in the terminal. A reply wakes a session that finished its turn. Another agent can report the same way: see the FAQ.</p>
+            <button type="button" class="btn ghost small danger" id="ab-token">New token</button>
+          </div>
+          <div class="ab-cols" id="ab-cols"></div>
+          <div class="card ab-detail" id="ab-detail" hidden></div>
+        </section>
+        <details class="ab-legacy" id="ab-legacy">
+          <summary>Cloud orchestrator (previous approach)</summary>
         <div class="card pilot-orch pilot-status">
           <div class="pilot-status-head">
             <h3 class="no-i18n" id="pilot-conn-title"><span class="pilot-dot" id="pilot-conn-dot"></span></h3>
@@ -212,6 +238,7 @@
             <div class="pl-rows" id="pl-jr-list"></div></div>
           <div class="pl-pane" id="pl-jr-detail"></div></div></div>
         <div class="pl-panel" data-plp="autonomy" hidden><div class="pl-auto" id="pl-auto"></div></div>
+        </details>
       </div>
 
       <div class="pilot-panel" data-ppanel="chantiers" id="ppanel-chantiers" role="tabpanel" aria-labelledby="ptab-chantiers" hidden>

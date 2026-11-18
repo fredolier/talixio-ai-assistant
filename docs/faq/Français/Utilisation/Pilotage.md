@@ -7,7 +7,43 @@ conversation. Il a quatre onglets.
 Un coup d'œil sur la bibliothèque de l'espace courant : ce qu'elle contient et son état. La recherche et le rangement restent
 dans *Fichiers*.
 
-## Votre pilote autonome
+## Agents
+L'onglet **Agents** est un tableau en direct des agents de code qui travaillent sur vos machines (Claude Code pour
+l'instant). Chaque session s'y signale **elle-même**, par un petit script de hook : ce que vous y avez tapé, son dernier
+message **mot pour mot**, les autorisations qu'elle demande, sa fin. Aucun modèle ne relaie ni ne réécrit rien, et les
+heures affichées sont les vraies. Le tableau se met à jour tout seul toutes les quelques secondes tant que vous le regardez.
+- **Trois colonnes.** **À vous** : une session qui demande une autorisation, ou qui a terminé son tour et que vous n'avez
+  pas encore regardée. **Au travail** : une session occupée par votre demande. **Au calme** : celles que vous avez
+  regardées, et celles qui sont terminées. Chaque carte montre le projet (son dossier), l'agent et la machine, depuis quand
+  elle n'a rien dit, et ses derniers mots.
+- **Cliquez une carte** pour lire le fil de la session (vos demandes, ses réponses, les demandes d'autorisation, ce que
+  vous avez envoyé d'ici et quand c'est arrivé) et lui répondre :
+  - **Répondre** : le texte part à la session. Une session qui a terminé son tour est réveillée et reprend le travail ; une
+    session encore occupée le reçoit à la fin de son tour en cours. Le message après l'envoi dit lequel (*Envoyé* ou
+    *En attente*).
+  - **Autoriser / Refuser** une demande d'autorisation (la commande ou le fichier concerné est affiché). La session attend
+    votre réponse ici **30 secondes** ; ensuite, la question habituelle s'affiche dans son terminal et vous y répondez là.
+  - **Marquer comme vu** range une session terminée dans Au calme ; **Oublier** la retire du tableau avec son fil.
+- **Connecter une machine** (bouton en haut) : donnez un nom à la machine, **téléchargez le script** et enregistrez-le sous
+  `~/.talixio/agent-hook.sh`, puis ajoutez les hooks affichés à `~/.claude/settings.json` (fusionnez-les avec les hooks
+  déjà présents). La prochaine session Claude Code sur cette machine apparaît sur le tableau. Il faut `sh` et `curl`
+  (macOS, Linux, ou WSL sous Windows), et la machine doit joindre l'adresse de cet assistant. Le script contient l'adresse
+  du tableau et un jeton : gardez-le sur vos propres machines. **Nouveau jeton** annule l'ancien (chaque machine a alors
+  besoin du script à nouveau).
+- **Autres agents.** Tout outil capable de lancer une commande quand quelque chose se passe peut se signaler de la même
+  façon : envoyez un objet JSON `{"session_id": "…", "hook_event_name": "Stop", "last_assistant_message": "…", "cwd": "…"}`
+  à `TALIXIO_AGENT=<son nom> sh ~/.talixio/agent-hook.sh reply` (ou `event`, ou `permission` avec `tool_name` et
+  `tool_input`). Les événements compris sont `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `Notification`,
+  `Stop` et `SessionEnd`.
+- **L'assistant voit aussi le tableau.** Demandez-lui « que font mes agents ? » (`agents_list`) : il lit l'état et les
+  derniers mots de chaque session, qu'il traite comme écrits par d'autres. Il peut répondre à une session pour vous
+  (`agent_answer` : une réponse, autoriser ou refuser), et vous demande votre accord avant, à chaque fois.
+- Une demande d'autorisation envoie aussi une notification (voir *Canaux et notifications*).
+
+### Orchestrateur cloud (approche précédente)
+Replié sous le tableau, l'ancien pilote reste disponible pour ceux qui en ont appairé un ; il sera retiré quand le tableau
+couvrira ce qu'il faisait.
+
 Le pilote est un orchestrateur (une session Claude Code) qui supervise des agents sur vos machines et fait ses rapports à Talixio.
 - La **carte d'état** dit s'il est connecté, quand il a fait son dernier rapport, combien d'agents il voit sur combien de machines,
   et combien attendent votre réponse, sur une seule ligne. Sous **⚙ Réglages** : **Fichier d'état**, **Reconnecter…**, **Déconnecter** et l'interrupteur **Rapports de la flotte**

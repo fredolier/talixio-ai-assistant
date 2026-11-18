@@ -327,6 +327,7 @@ function notifyBrowser(m) {
 
 async function poll() {
   if (!state.sending && state.status?.pending_approvals !== undefined) loadApprovals();
+  if (typeof abVisible === 'function' && abVisible()) abRefresh().catch(() => {});
   if (!document.hidden && Date.now() - (state.statusAt || 0) > 30000) refreshStatus(); // new notifications, worker state
   if (state.sending || document.hidden && !('Notification' in window && Notification.permission === 'granted')) return;
   try {
@@ -6643,7 +6644,101 @@ function plWire() {
   });
 }
 
+// ---- The agent board (1.36.0): each coding agent reports itself through a hook (AgentHub.php); no model in between.
+// Three columns, a card per session with its own last message and real age; click for the thread, a reply, allow/deny. ----
+const AB = { rev: -1, sel: null, sessions: [], wired: false, threadRev: -1 };
+const AB_COLS = [['need', 'Needs you'], ['working', 'Working'], ['quiet', 'Quiet']];
+const abTitle = s => s.project || s.agent;
+function abWire() {
+  if (AB.wired) return; AB.wired = true;
+  $('#ab-connect').onclick = async () => {
+    const box = $('#ab-setup'), open = box.hidden;
+    box.hidden = !open; $('#ab-connect').setAttribute('aria-expanded', String(open));
+    if (open) try { const r = await api('api/agents/setup'); $('#ab-snippet').textContent = JSON.stringify(r.settings, null, 2); } catch (e) { toast(e.message); }
+  };
+  const dl = () => { $('#ab-dl').href = 'api/agents/hook.sh?machine=' + encodeURIComponent($('#ab-machine').value.trim()); };
+  $('#ab-machine').oninput = dl; dl();
+  $('#ab-copy').onclick = () => copyText($('#ab-snippet').textContent);
+  $('#ab-token').onclick = async () => {
+    if (!confirm(t('Machines using the current token stop reporting until they get the new script. Continue?'))) return;
+    try { const r = await post('api/agents/token', {}); toast(r.message); } catch (e) { toast(e.message); }
+  };
+  $('#ab-cols').onclick = e => { const c = e.target.closest('[data-ab]'); if (c) abOpen(c.dataset.ab); };
+  $('#ab-detail').onclick = async e => {
+    const b = e.target.closest('[data-abact]'); if (!b || !AB.sel) return;
+    const act = b.dataset.abact, id = encodeURIComponent(AB.sel);
+    try {
+      if (act === 'close') { AB.sel = null; $('#ab-detail').hidden = true; abRender(); return; }
+      if (act === 'forget') { if (!confirm(t('Forget this session and its history on the board?'))) return; await post(`api/agents/s/${id}/forget`, {}); AB.sel = null; $('#ab-detail').hidden = true; }
+      else if (act === 'seen') await post(`api/agents/s/${id}/seen`, {});
+      else if (act === 'send') {
+        const ta = $('#ab-reply'), text = ta.value.trim(); if (!text) return;
+        const r = await post(`api/agents/s/${id}/reply`, { text }); ta.value = '';
+        toast(r.listening ? t('Sent: the session is listening and picks it up within seconds.') : t('Queued: the session gets it when it finishes its current turn.'));
+      } else {
+        const r = await post(`api/agents/s/${id}/${act}`, {});
+        toast(r.listening ? t('Sent to the session.') : t('Queued: if the terminal already shows its own prompt, answer there.'));
+      }
+      AB.rev = -1; await abRefresh();
+    } catch (err) { toast(err.message); }
+  };
+}
+async function abRefresh() {
+  const d = await api('api/agents');
+  if (d.rev === AB.rev) return;
+  AB.rev = d.rev; AB.sessions = d.sessions || [];
+  const need = AB.sessions.filter(s => s.column === 'need').length;
+  $('#ab-sub').textContent = AB.sessions.length ? [pN('1 session', '{n} sessions', AB.sessions.length), need ? pN('1 needs you', '{n} need you', need) : ''].filter(Boolean).join(' · ')
+    : t('No agent has reported yet.');
+  if (!AB.sessions.length && !AB.offered && $('#ab-setup').hidden) { AB.offered = true; $('#ab-connect').click(); }
+  abRender();
+  if (AB.sel) abOpen(AB.sel, true);
+}
+function abCard(s) {
+  const text = s.question || s.last_message || '';
+  const st = { permission: t('asks for permission'), working: t('working'), waiting: t('finished its turn'), ready: t('started'), ended: t('ended') }[s.state] || s.state;
+  return `<button type="button" class="ab-card${AB.sel === s.id ? ' on' : ''} ab-${esc(s.state)}" data-ab="${esc(s.id)}">
+    <span class="ab-c-top"><b class="no-i18n">${esc(abTitle(s))}</b><span class="muted small">${esc(pilotAgo(s.updated))}</span></span>
+    <span class="ab-c-meta muted small"><span class="no-i18n">${esc([s.agent, s.machine].filter(Boolean).join(' · '))}</span> · ${esc(st)}${s.pending ? ' · ' + esc(pN('1 answer queued', '{n} answers queued', s.pending)) : ''}</span>
+    ${text ? `<span class="ab-c-text no-i18n">${esc(text.slice(0, 280))}</span>` : ''}</button>`;
+}
+function abRender() {
+  $('#ab-cols').innerHTML = AB_COLS.map(([k, label]) => {
+    const list = AB.sessions.filter(s => s.column === k);
+    return `<div class="ab-col" data-col="${k}"><h4>${esc(t(label))} <span class="muted">${list.length || ''}</span></h4>${list.map(abCard).join('') || `<p class="muted small">${esc(t('Nothing here.'))}</p>`}</div>`;
+  }).join('');
+}
+async function abOpen(id, quiet) {
+  AB.sel = id;
+  const box = $('#ab-detail');
+  let d; try { d = await api(`api/agents/s/${encodeURIComponent(id)}/thread`); } catch (e) { if (!quiet) toast(e.message); return; }
+  const s = d.session, who = { agent: abTitle(s), you: t('You'), assistant: t('Assistant') };
+  const kind = { prompt: t('typed in the session'), permission: t('asks for permission'), notice: t('notice'), message: '', end: t('session ended'), queued: t('queued'), delivered: t('delivered') };
+  const thread = d.events.map(e => `<div class="ab-ev ab-${esc(e.who)} ab-k-${esc(e.kind)}"><span class="muted small">${esc(who[e.who] || e.who)}${kind[e.kind] ? ' · ' + esc(kind[e.kind]) : ''} · ${esc(new Date(e.ts * 1000).toLocaleString())}</span><div class="no-i18n">${esc(e.text)}</div></div>`).join('');
+  const listening = s.listening ? `<span class="ab-live">${esc(t('listening'))}</span>` : '';
+  const head = `<div class="ab-d-head"><h4 class="no-i18n">${esc(abTitle(s))}</h4><span class="muted small no-i18n">${esc([s.agent, s.machine, s.cwd].filter(Boolean).join(' · '))}</span>${listening}
+    <span class="ab-d-acts"><button type="button" class="btn ghost small" data-abact="seen">${esc(t('Mark as seen'))}</button><button type="button" class="btn ghost small danger" data-abact="forget">${esc(t('Forget'))}</button><button type="button" class="btn ghost small" data-abact="close" aria-label="${esc(t('Close'))}">✕</button></span></div>`;
+  const perm = s.state === 'permission' ? `<div class="ab-perm"><b>${esc(t('Permission asked'))}</b><code class="no-i18n">${esc(s.question)}</code>
+    <span><button type="button" class="btn small" data-abact="allow">${esc(t('Allow'))}</button> <button type="button" class="btn ghost small danger" data-abact="deny">${esc(t('Deny'))}</button></span></div>` : '';
+  const fresh = !box.querySelector('#ab-reply') || box.dataset.id !== id;
+  if (fresh) {
+    box.dataset.id = id;
+    box.innerHTML = `<div class="ab-d-top"></div><div class="ab-thread"></div>${s.state === 'ended' ? `<p class="muted small">${esc(t('This session has ended.'))}</p>`
+      : `<div class="ab-compose"><textarea id="ab-reply" rows="2" placeholder="${esc(t('Reply to this session…'))}"></textarea><button type="button" class="btn small" data-abact="send">${esc(t('Send'))}</button></div>`}`;
+  }
+  box.querySelector('.ab-d-top').innerHTML = head + perm; // the reply box is kept: a refresh never drops what is being typed
+  const th = box.querySelector('.ab-thread'), atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 40;
+  th.innerHTML = thread || `<p class="muted small">${esc(t('Nothing yet.'))}</p>`;
+  if (fresh || atEnd) th.scrollTop = th.scrollHeight;
+  box.hidden = false;
+  abRender();
+  if (!quiet && s.column === 'need' && s.state === 'waiting') post(`api/agents/s/${encodeURIComponent(id)}/seen`, {}).catch(() => {});
+}
+// while the Agents tab is on screen, the 4-second poll keeps the board live
+function abVisible() { return !$('#view-pilotage').hidden && $('.ptab[data-ptab="agents"]')?.getAttribute('aria-selected') === 'true' && !document.hidden; }
+
 async function pilotAgents() {
+  abWire(); abRefresh().catch(e => toast(e.message));
   plWire();
   if (!pilotAgents.wired) { pilotAgents.wired = true;
     $('#pilot-cfg').addEventListener('toggle', e => { e.currentTarget.dataset.touched = '1'; });
