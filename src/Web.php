@@ -123,7 +123,7 @@ final class Web
         return match ($area) {
             'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'routing', 'catalogue', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
             'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor', 'pilot', 'federation' => $this->routeChat($m, $path, $b),
-            'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
+            'tasks', 'heartbeats', 'heartbeat', 'jobs', 'directives', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
             'google', 'microsoft', 'spotify', 'oauth', 'legifrance', 'connectors', 'site-apis', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
             'memory', 'mind', 'skills', 'roles', 'scripts' => $this->routeMind($m, $path, $b),
             'library', 'files', 'shares', 'privacy' => $this->routeLibrary($m, $path, $b),
