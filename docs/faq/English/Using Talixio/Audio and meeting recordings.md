@@ -1,6 +1,8 @@
 # Voice notes, meetings and transcription
 
 - **Voice note**: the microphone in the app, or a voice message on Telegram/Signal. It is transcribed, then handled.
+  A voice message you **forward** (or an audio file) holds someone else's words: the assistant reads it like a document
+  written by others, so what it would change or send afterwards waits for your approval.
 - **Meeting**: microphone → *Summarise meeting* (keep the page open and the phone awake), or
   upload a recording (any audio longer than 3 minutes counts as a meeting).
   You get a summary, the decisions, the action items (who/what/when) and the open questions,

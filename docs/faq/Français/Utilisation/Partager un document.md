@@ -6,5 +6,6 @@
 - *Partages* liste tous les liens : copier, envoyer par e-mail, prolonger de 30 jours, révoquer, et qui a ouvert quoi et quand.
 - Vous êtes prévenu à la première ouverture d'un lien.
 - Espace **Confidentiel** : mot de passe obligatoire, 30 jours maximum. Espace **Secret** : pas de partage.
+- Mots de passe faux : 10 depuis une même adresse, ou 30 depuis toutes les adresses ensemble, bloquent le lien 15 minutes.
 - Si les liens doivent utiliser une autre adresse que celle où vous ouvrez l'app :
   Réglages → Assistant → *Adresse publique*.

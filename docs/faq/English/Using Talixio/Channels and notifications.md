@@ -22,6 +22,7 @@ one, or a routine keep-warm ping, never counts.
 ## Telegram
 Create a bot with @BotFather, put its token in Settings → Telegram, then message the bot: it replies
 with your id, which you add to the *Allowed chat ids* list.
+Messages go out without link previews: Telegram would otherwise open the addresses they contain.
 
 ## Signal
 You need a number dedicated to the assistant (a prepaid SIM card or an eSIM that can receive a text message).
@@ -45,6 +46,7 @@ your mail server has checked. Since 1.35.35 it also needs *Name of your mail ser
 name the last email gave: a sender could otherwise write a line that looks like your server's. Not needed with Gmail and
 Microsoft 365 (known from the IMAP server's name). On a server for several people, the admin page can set it once for
 everyone (*Settings* → *Incoming email for everyone*); a person's own setting wins.
+The assistant's mails load no image from outside when you open them: an image is shown as a link to it.
 
 ## Outlook / Microsoft 365 mailboxes
 Microsoft is turning off passwords for SMTP and IMAP (smtp.office365.com, outlook.office365.com); many

@@ -93,6 +93,8 @@ Http::$hook = function (string $url) { if (!str_starts_with($url, 'http://127.0.
 $tg->send(42, str_repeat('a', 4500));
 $log = (string)@file_get_contents("$d/tg.log");
 check('telegram: long messages go out in 4000-char parts', substr_count($log, 'sendMessage') === 2, $log);
+// Telegram's servers open the links of a message to show a preview: a planted address would carry what the answer holds (1.41.4)
+check('telegram: messages go out without link previews', str_contains($log, '"link_preview_options":{"is_disabled":true}'), substr($log, 0, 120));
 @unlink("$d/tg.log");
 file_put_contents("$d/updates.json", json_encode(['ok' => true, 'result' => [
     ['update_id' => 10, 'message' => ['chat' => ['id' => 7], 'text' => 'hello']],

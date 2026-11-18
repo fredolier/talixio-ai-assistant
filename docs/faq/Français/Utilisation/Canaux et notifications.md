@@ -23,6 +23,7 @@ Un rapport qui répète le précédent, ou un simple signal de maintien, n'est j
 ## Telegram
 Créez un bot avec @BotFather, mettez son jeton dans Réglages → Telegram, écrivez au bot : il répond
 avec votre identifiant, à mettre dans la liste des identifiants autorisés.
+Les messages partent sans aperçu des liens : sinon Telegram ouvrirait les adresses qu'ils contiennent.
 
 ## Signal
 Il faut un numéro dédié à l'assistant (une carte prépayée ou une eSIM qui reçoit un SMS).
@@ -47,6 +48,7 @@ et *Réglages → Canaux* le signale, avec le nom donné par le dernier e-mail r
 celle de votre serveur. Inutile avec Gmail et Microsoft 365 (reconnus au nom du serveur IMAP). Sur un serveur à plusieurs,
 la page d'administration peut le renseigner une fois pour tous (*Réglages* → *E-mail entrant pour tous*) ; le réglage de
 chacun l'emporte.
+Les e-mails de l'assistant ne chargent aucune image extérieure à l'ouverture : une image apparaît comme un lien vers elle.
 
 ## Boîtes Outlook / Microsoft 365
 Microsoft supprime les mots de passe pour SMTP et IMAP (smtp.office365.com, outlook.office365.com) ; beaucoup

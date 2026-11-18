@@ -3,6 +3,18 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.41.4 (2026-11-18)
+
+The rest of the security review: six ways in or out, each closed with a check that fails without its change.
+
+- **Network drive: a folder holding a Secret space's folder could be copied, moved or deleted.** The drive hid Secret folders themselves, but a COPY of their parent (say `/Shared`, holding a Secret `/Shared/Hidden`) brought the Secret files out into a visible copy, and a DELETE sent them to the trash unseen. Such a folder now answers « forbidden » (403) to COPY, MOVE and DELETE; doing it in the app, or moving the Secret folder out first, still works.
+- **Share links: the password cap was per address only.** Someone trying passwords from many addresses was never stopped. A link now also locks for 15 minutes after 30 wrong passwords from all addresses together (10 from one address, as before). The other side of this: someone who knows the link can lock it for a quarter of an hour.
+- **A forwarded voice message was taken as your own request.** A voice message is transcribed and handled as what you said; a forwarded one, or an audio file, holds someone else's words, and those words could ask the assistant to change memory or send something. It is now read like a document written by others, so changes and sends after it wait for your approval. A voice message you record (in the app, on Telegram, on Signal) is handled as before.
+- **The tools of a connector trusted for everything skipped the guard on others' content.** After reading an email or a web page, everything that changes something asks first, but every connector tool was exempt (« a connector's changes already ask »), which is not true for a connector set to `"trust": "all"`. Those tools ask too now; a tool you ticked as only reading still runs. A connector's own result counts as content written by others, so within one answer, a trusted connector's tool used after another connector's result asks as well; tick the tools that only read to keep such chains going.
+- **Telegram link previews and images in the assistant's mail.** Telegram's servers opened the addresses in a message to show a preview, and a mail app loads a mail's images when it is opened; an address planted in a document and repeated in an answer would carry what the answer holds. Telegram messages go out without previews, and the assistant's mail shows an image as a link to it.
+- Help pages updated in both languages: Network drive, Sharing a document, Voice notes, Installing a connector, Channels and notifications.
+- Tested (PHP): COPY, MOVE and DELETE of a folder holding a Secret one refused, nothing copied, moved or trashed; wrong passwords from ten addresses stopped after 30; a forwarded voice message asking to change memory waits for approval, your own voice note still changes it; a trusted connector's changing tool waits, its ticked read runs, and with nothing untrusted read it runs at once; the Telegram request without previews; a mail without `<img>`, the image as a link. **Not tried**: real Telegram and Signal traffic. Telegram marks forwarded messages, and the assistant relies on that. Signal is a guess: a voice message recorded in Signal is taken to have no file name, while a forwarded audio file has one, so a forwarded Signal voice message may still pass as yours. Real mail apps, and a real WebDAV client (Finder, Windows), were not tried either: the tests use curl.
+
 ## 1.41.3 (2026-11-18)
 
 A review of the confidentiality levels found seven ways content of a Confidential or Secret space could still leave or lose its level. Each is closed here.

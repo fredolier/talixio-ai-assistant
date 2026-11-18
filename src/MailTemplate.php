@@ -28,6 +28,9 @@ final class MailTemplate
         $title = trim($o['title'] ?? '');
         $md = self::dropTitle($markdown, $title);
         $body = self::body($md, $accent, $o['base'] ?? '');
+        // the assistant's mail loads nothing from outside when it is opened: an image becomes a link to it (1.41.4)
+        $body = preg_replace_callback('#<img\b[^>]*?src="([^"]*)"(?:[^>]*?\balt="([^"]*)")?[^>]*>#i',
+            fn($m) => '<a href="' . $m[1] . '" style="color:' . $accent . '">' . (($m[2] ?? '') !== '' ? $m[2] : 'image') . '</a>', $body);
         $label = implode(' · ', array_filter([trim($o['app'] ?? ''), trim($o['space'] ?? '')]));
         $url = self::link($o['url'] ?? '', $o['base'] ?? '');
         $button = $url !== '' && preg_match('#^https?://#i', $url)

@@ -49,7 +49,8 @@ Pour un serveur qui n'est pas sur GitHub (ou dans un dépôt privé) :
   deviné d'après les indications du connecteur et le nom de l'outil, vérifiez la description. Cochez
   un outil pour qu'il tourne sans demander, aussi dans les tâches de fond ; la case d'un groupe coche
   tout le groupe (seulement les lignes que le filtre affiche). Chaque case est enregistrée aussitôt. Ou
-  ajoutez `"trust": "all"` à son entrée pour faire confiance à tous ses outils.
+  ajoutez `"trust": "all"` à son entrée pour faire confiance à tous ses outils. Après que l'assistant a lu un contenu
+  écrit par d'autres (un e-mail, une page web…), les outils d'un tel connecteur demandent quand même, sauf ceux que vous avez cochés.
 - Les réglages (mot de passe compris) sont gardés dans `data/mcp.json`, dans votre assistant : ils font
   partie des sauvegardes et des transferts. Un compte dédié est préférable.
 - Le connecteur tourne dans un bac à sable quand bubblewrap est installé (toujours sous Docker) : il voit

@@ -67,7 +67,9 @@ final class Signal
                     $ext = explode('/', (string)($a['contentType'] ?? ''))[1] ?? 'bin';
                     $files[] = $this->app->files()->save($tmp, (string)($a['filename'] ?? '') ?: "signal-attachment.$ext", (string)($a['contentType'] ?? ''));
                 }
-                $this->send($from, $this->app->agent()->incoming('signal', $text, $files));
+                // a voice message recorded in Signal has no file name; a forwarded audio file has one (1.41.4)
+                $own = !array_filter($atts, fn($a) => str_starts_with((string)($a['contentType'] ?? ''), 'audio/') && empty($a['voiceNote']) && (string)($a['filename'] ?? '') !== '');
+                $this->send($from, $this->app->agent()->incoming('signal', $text, $files, $own));
             } catch (\Throwable $e) {
                 Log::error("signal: {$e->getMessage()}");
                 $this->send($from, "I couldn't process that: {$e->getMessage()}");

@@ -37,6 +37,8 @@
   - un fichier renommé ou déplacé garde son index, sous son nouveau nom ;
   - un fichier ou dossier supprimé va dans la corbeille de la bibliothèque (30 jours).
 - Les dossiers des espaces **Secret** n'apparaissent pas. La FAQ est en lecture seule.
+- Un dossier qui contient le dossier d'un espace Secret (par exemple `/Clients`, avec un `/Clients/Conseil` Secret) ne peut
+  être ni copié, ni déplacé, ni supprimé depuis le lecteur : il répond « interdit ». Faites-le dans l'app, ou sortez d'abord le dossier Secret.
 - Les fichiers techniques des systèmes (`.DS_Store`, `._…`, `Thumbs.db`, `desktop.ini`…) sont gardés à part, hors de la bibliothèque.
 - Enregistrer un fichier sous un nom déjà présent le remplace ; l'ancien contenu reste dans ses *Versions* (voir Bibliothèque).
   Deux fichiers du même nom d'avant la 0.28.29, tant qu'ils ne sont pas fusionnés : le plus récent garde son nom, les autres s'affichent « nom (#id).ext ».

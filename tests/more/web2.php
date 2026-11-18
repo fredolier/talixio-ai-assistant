@@ -626,6 +626,12 @@ check('web2 dav: MKCOL with a body is a 415', $dav('MKCOL', '/NewF', 'x')['code'
 check('web2 dav: MKCOL on an existing folder is a 405', $dav('MKCOL', '/Projects')['code'] === 405);
 check('web2 dav: MKCOL in a missing folder is a 409', $dav('MKCOL', '/Nope/Sub')['code'] === 409);
 check('web2 dav: MKCOL in a secret folder is a 404', $dav('MKCOL', '/Vault/Sub')['code'] === 404);
+// a folder holding a secret space's folder (/Shared holds /Shared/Hidden) cannot be copied, moved or deleted from the drive:
+// its secret files would come out, or go to the trash, unseen (1.41.4)
+$hiddenNow = fn() => $app->files()->get($hid);
+check('web2 dav: COPY of a folder holding a secret one is a 403, nothing copied', $dav('COPY', '/Shared', null, [$dest('/SharedCopy')])['code'] === 403 && !$app->library()->exists('/SharedCopy'));
+check('web2 dav: MOVE of a folder holding a secret one is a 403, nothing moved', $dav('MOVE', '/Shared', null, [$dest('/SharedMoved')])['code'] === 403 && $hiddenNow()['folder'] === '/Shared/Hidden');
+check('web2 dav: DELETE of a folder holding a secret one is a 403, nothing trashed', $dav('DELETE', '/Shared')['code'] === 403 && $hiddenNow()['deleted_at'] === null);
 check('web2 dav: MKCOL with a bad name is refused', $dav('MKCOL', '/' . rawurlencode(' bad '))['code'] === 403);
 check('web2 dav: MKCOL makes a folder', $dav('MKCOL', '/Drive')['code'] === 201 && $dav('MKCOL', '/Drive/In')['code'] === 201 && $app->library()->exists('/Drive/In'));
 check('web2 dav: DELETE nothing is a 404', $dav('DELETE', '/Nope')['code'] === 404);

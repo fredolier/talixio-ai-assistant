@@ -15,7 +15,7 @@ final class Telegram
     public function send(int $chat, string $text): void
     {
         foreach (mb_str_split($text, 4000) as $part) {
-            Http::json("{$this->api}/sendMessage", ['chat_id' => $chat, 'text' => $part], [], 30);
+            Http::json("{$this->api}/sendMessage", ['chat_id' => $chat, 'text' => $part, 'link_preview_options' => ['is_disabled' => true]], [], 30);
         }
     }
 
@@ -53,7 +53,9 @@ final class Telegram
             if ($text === '/start') { $this->send($chat, "Hi, I'm {$this->cfg->name}. Ask me anything."); continue; }
             try {
                 $files = $media ? [$this->download($media, isset($m['photo']) ? 'photo.jpg' : ($m['voice'] ?? null ? 'voice.ogg' : 'file'))] : [];
-                $this->send($chat, $this->app->agent()->incoming('telegram', $text, $files));
+                // a voice message the user recorded is their request; a forwarded one or an audio file is someone else's words (1.41.4)
+                $own = (isset($m['voice']) || isset($m['video_note'])) && !isset($m['forward_origin']) && !isset($m['forward_date']) && !isset($m['forward_from']);
+                $this->send($chat, $this->app->agent()->incoming('telegram', $text, $files, $own));
             } catch (\Throwable $e) {
                 $this->send($chat, "I couldn't process that: " . Web::internalError($e, 'telegram')); // logged there; no file paths or SQL sent out
             }

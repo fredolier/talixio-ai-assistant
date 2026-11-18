@@ -12,6 +12,7 @@ namespace Talixio;
 final class Shares
 {
     public const EXPIRY_DAYS = [1, 7, 30, 90, 0]; // 0 = no end date
+    private const MAX_TRIES_LINK = 30;           // wrong passwords per link from all addresses, per 15 minutes (1.41.4)
     private const MAX_TRIES = 10;                 // wrong passwords per link and address, per 15 minutes
 
     public function __construct(private App $app) {}
@@ -195,8 +196,11 @@ final class Shares
         $key = 'share_tries_' . $s['id'] . '_' . md5(Auth::clientIp());
         [$n, $since] = array_map('intval', explode(':', $st->get($key, '0:0')) + [1 => 0]);
         if ($since < time() - 900) { $n = 0; $since = time(); }
-        if ($n >= self::MAX_TRIES) throw new \RuntimeException('Too many wrong passwords. Try again in 15 minutes.');
-        if (!password_verify($password, (string)$s['password'])) { $st->set($key, ($n + 1) . ":$since"); return false; }
+        $all = 'share_tries_' . $s['id'];
+        [$na, $sinceA] = array_map('intval', explode(':', $st->get($all, '0:0')) + [1 => 0]);
+        if ($sinceA < time() - 900) { $na = 0; $sinceA = time(); }
+        if ($n >= self::MAX_TRIES || $na >= self::MAX_TRIES_LINK) throw new \RuntimeException('Too many wrong passwords. Try again in 15 minutes.');
+        if (!password_verify($password, (string)$s['password'])) { $st->set($key, ($n + 1) . ":$since"); $st->set($all, ($na + 1) . ":$sinceA"); return false; }
         $st->set($key, '0:0');
         setcookie($this->cookieName($s), $this->cookieValue($s), ['expires' => time() + 7 * 86400, 'path' => Config::basePath() . '/s/' . $s['token'],
             'httponly' => true, 'samesite' => 'Lax', 'secure' => Auth::secureCookies($this->app->cfg->publicUrl)]);
