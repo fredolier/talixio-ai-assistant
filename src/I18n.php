@@ -12,6 +12,9 @@ final class I18n
     public const LANGS = ['en', 'fr'];
 
     private const FR = [
+        'no such rule' => 'règle introuvable',
+        'unknown action' => 'action inconnue',
+        'a rule needs a few words (300 characters at most)' => 'une règle demande quelques mots (300 caractères au plus)',
         'An old cloud orchestrator is still running' => 'Un ancien orchestrateur cloud tourne encore',
         'A cloud orchestrator session still calls Talixio, which no longer uses one. You can close that session; your agents now report on the board (Pilotage → Agents).' => 'Une session d\'orchestrateur cloud appelle encore Talixio, qui n\'en utilise plus. Vous pouvez fermer cette session ; vos agents rendent compte désormais sur le tableau (Pilotage → Agents).',
         'The cloud orchestrator is switched off' => 'L\'orchestrateur cloud est désactivé',

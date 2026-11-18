@@ -1,6 +1,6 @@
 # Director knowledge: from agent exchanges to knowledge
 
-Status: design, 2026-11-18. The first deliveries are scheduled in `relay-retirement.md` §4.
+Status: levels 1-2 shipped in 1.44.0; level 3 (rules) and the hierarchy (§4) in 1.46.0. Scheduled in `relay-retirement.md` §4.
 
 ## 1. Why
 
@@ -41,7 +41,7 @@ Mind beliefs keep their observations.
 | 1. Decisions | one row per answer given to an agent: question, answer, **who** (you / assistant / rule), project, level L1-L5, topic | `learnBoard`, `command()`, the relay's `decisions` (migrated once) | at each answer, no model needed |
 | 1. Digests | a session's work summarised: goal, what was done, choices made, what is still open | the events since the last digest (fast model) | when a session ends, or after 30 min idle with ≥ 6 new events |
 | 2. Dossiers | one per project (machine + folder): what it is, where it stands, recent work, open questions, the rules that apply | its digests and decisions (fast model) | after a new digest, at most once a day per project |
-| 3. Rules | rules **deduced** from repeated decisions, e.g. "on this project, always run the tests before a commit" | decisions grouped by topic and project (standard model) | weekly, or after 10 new decisions |
+| 3. Rules | rules **deduced** from repeated decisions, e.g. "on this project, always run the tests before a commit" | the user's own decisions (standard model); the code keeps a rule only with ≥ 3 of them as evidence | after 10 new decisions of the user, or weekly with ≥ 3 new, in a worker tick with no other model call |
 
 Topics are a small fixed list so they stay comparable: `scope`, `design`, `code`, `tests`,
 `git`, `deploy`, `data`, `dependencies`, `docs`, `other`. A decision gets its topic from the board
@@ -63,8 +63,9 @@ rank wins on conflict, and the prompt says so:
 answers carrying a command the agent did not offer can never be sent alone, whatever the
 hierarchy says.
 
-`boardPrompt` gives the sources in this order, each labelled with its rank. It also adds the
-project's dossier, at most 1,500 characters.
+`boardPrompt` gives the sources in this order, each labelled with its rank ("Rank 1" … "Rank 5"). It also adds the
+project's dossier as context, before the ranked sources; the user's priorities stay a separate list (what matters
+most), not a rank. As shipped (1.46.0), rank 3 is Mind's whole section on the user, not only the `agents` beliefs.
 
 ## 5. Safety rules (non-negotiable)
 
@@ -94,7 +95,9 @@ SQLite, next to the board's tables (`AgentHub` constructor style, `CREATE TABLE 
 - `fk_digests(id, project, session, ts_from, ts_to, last_event, text)`.
 - `fk_projects(key, machine, cwd, title, dossier, updated)`; `key` = `machine:cwd`.
 - `fk_rules(id, project, topic, text, status, evidence, created, decided)`; `status` is
-  `proposed`, `confirmed` or `rejected`, and `evidence` is a JSON list of decision ids.
+  `proposed`, `confirmed` or `rejected`, and `evidence` is a JSON list of decision ids. `project` is empty for a rule
+  that applies to all projects. A proposal that looks like a known or rejected rule of the same scope (most words in
+  common) is dropped.
 
 `Pilot::precedents()` reads `fk_decisions` instead of the relay's `decisions()` and the
 predictions in `pilot.json`. The predictions keep their own job, which is scoring the autonomy

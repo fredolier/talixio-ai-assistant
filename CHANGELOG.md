@@ -3,6 +3,41 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.46.0 (2026-11-18)
+
+The director deduces rules from your own answers and decides by a ranked list of sources (levels 3 and §4 of `docs/design/director-knowledge.md`).
+
+- **Deduced rules.** When at least ten new answers of yours are in the decision log, or three in a week, a worker tick with no other model call asks the standard model to find choices you repeat. It only gets your own answers. The agents' questions are fenced as untrusted data. The model only proposes; the code keeps a rule only when at least three of **your** answers back it. The assistant's own answers never count, and evidence the log does not hold is dropped. A rule is given to one project, or to all projects when its answers span several. An unknown topic becomes *other*. A proposal that looks like a known rule, or one you rejected, of the same scope is dropped.
+- **You decide.** *What I know* has a new **Rules** part. It lists rules waiting for you, each with the answers it comes from, and the rules you confirmed. **Confirm** applies a rule. **Edit** puts it in your words and applies it. **Reject** (or **Stop applying** on a confirmed one) drops it for good, and the next deduction is told so. Forgetting a project, or Stop learning, forgets its rules.
+- **The hierarchy.** The board model's prompt now ranks its sources and says the higher rank wins:
+  1. your standing rules;
+  2. the rules you confirmed, this project's first, then those for all projects;
+  3. what Mind knows of how you decide;
+  4. your similar past decisions;
+  5. the model's judgement.
+
+  The project's dossier stays context, before the ranks. Confidence 0.9+ now needs a rank 1 or 2 rule, or a clear precedent. `limits()` is unchanged and keeps the last word (L4/L5, the cap, sensitive words, commands the agent did not offer).
+- **In the chat,** `agents_knowledge` now lists the confirmed rules (per project and for all projects) and how many proposals wait.
+- **Help pages, in both languages:** Pilotage (Rules, What weighs most).
+- Tested (PHP, `tests/more/rules.php`, which fails before this change):
+  - with two answers, nothing is due and no model call is made; one call once enough answers repeat;
+  - the prompt holds your answers, not the assistant's, and fences the questions;
+  - a rule backed by three of your answers is proposed and not applied;
+  - refused: a rule leaning on the assistant's answer, a rule backed by a single answer (including one an agent tried to steer), and a near-duplicate;
+  - a cross-project rule keeps only real evidence and gets *other* for an unknown topic; each rule carries its answers; no new answers means no new call;
+  - a proposed rule stays out of the board prompt; once confirmed, it is in, marked *this project* or *all projects*;
+  - the five ranks appear in order around your rule and the confirmed one; another project gets only the general rule;
+  - an edit confirms the rule with your words; the chat tool lists confirmed rules; a rejected rule leaves the prompt;
+  - ten new answers trigger a new call that is told what you rejected, and a look-alike of a rejected rule is not added;
+  - an unknown rule, an unknown action and an empty edit are refused, and the page route answers 400;
+  - the page lists the rules with their evidence and can decide them; forgetting a project forgets its rules.
+
+  Browser: a seeded proposal shows with its answers; Confirm, Edit (in your words) and Stop applying work from *What I know*. The decision log's "nothing matches" check now targets the log itself (`.ab-klog`), since the rule evidence uses the same list style.
+- Test fix: `tests/more/prune.php` put three rows meant for one day at 200 days ago +0, +1 and +2 hours. When the suite ran after 22:00, the last one fell on the next local day and two checks failed. They now start at 10:00 local time on that day.
+- **Not tried:**
+  - a real model's deduction on real answers: the quality of the rules it proposes, and whether three answers is the right bar;
+  - whether the ranked prompt changes real board decisions. The board eval (`tests/eval/board.php`) was not re-run against a live model.
+
 ## 1.45.0 (2026-11-18)
 
 The cloud relay (the fleet orchestrator) is switched off, as the owner decided. The agent board does what it did, with no model in between (`docs/design/relay-retirement.md` step 4).

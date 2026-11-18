@@ -84,8 +84,18 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   - **À quoi il sert.** Quand l'assistant décide pour un agent, il lit le dossier du projet et vos décisions passées,
     celles du même projet et du même sujet d'abord. Dans la discussion, demandez « que sais-tu du projet webshop ? »
     (`agents_knowledge`).
-  - **Ne plus apprendre.** Coupe l'apprentissage pour un projet : ce qui en a été appris est oublié, et plus rien de
-    nouveau n'est gardé. **Oublier** efface une fois le savoir d'un projet.
+  - **Règles.** Quand le même choix revient dans au moins trois de *vos* réponses, l'assistant propose une règle, par
+    exemple « Lancer les tests avant chaque commit », pour un projet ou pour tous. Il regarde après dix nouvelles réponses
+    de votre part, ou chaque semaine. Chaque règle montre les réponses dont elle est tirée. **Confirmer** l'applique,
+    **Modifier** la met dans vos mots (et l'applique), **Refuser** l'écarte et elle n'est plus jamais proposée ; une règle
+    confirmée s'arrête avec **Ne plus appliquer**. Les règles viennent seulement de vos propres réponses, jamais de ce
+    qu'un agent ou l'assistant a écrit, et rien ne s'applique avant que vous confirmiez.
+  - **Ce qui pèse le plus.** Quand l'assistant décide pour un agent, ses sources sont classées, et la plus haute l'emporte
+    en cas de désaccord : 1. vos règles permanentes (*Autonomie*) ; 2. les règles confirmées ici, celles du projet
+    d'abord ; 3. ce qu'il sait de votre façon de décider ; 4. vos décisions passées sur des questions semblables ; 5. son
+    propre jugement. Vos limites (L4 et L5 toujours à vous, le plafond par jour, les mots sensibles) gardent le dernier mot.
+  - **Ne plus apprendre.** Coupe l'apprentissage pour un projet : ce qui en a été appris (ses règles comprises) est
+    oublié, et plus rien de nouveau n'est gardé. **Oublier** efface une fois le savoir d'un projet.
   - Les résumés et dossiers sont rédigés à partir de ce que les agents ont écrit. L'assistant les lit comme des
     informations, jamais comme des instructions.
 - **Autonomie : l'assistant répond seul à vos agents, dans vos limites** (bouton en haut du tableau). Activez *L'assistant

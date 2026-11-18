@@ -78,8 +78,18 @@ The board updates by itself every few seconds while you look at it.
   - **How it is used.** When the assistant decides for an agent, it reads the project's dossier and your past decisions,
     those of the same project and topic first. In the chat, ask « what do you know about the webshop project? »
     (`agents_knowledge`).
-  - **Stop learning.** This turns learning off for one project: what was learned from it is forgotten, and nothing new
-    is kept. **Forget** clears a project's knowledge once.
+  - **Rules.** When the same choice comes back in at least three of *your* answers, the assistant proposes a rule, such
+    as « Run the tests before every commit », for one project or for all of them. It looks after ten new answers of
+    yours, or weekly. Each rule shows the answers it comes from. **Confirm** applies it, **Edit** puts it in your words
+    (and applies it), **Reject** drops it and it is never proposed again; a confirmed rule can be stopped with **Stop
+    applying**. Rules come only from your own answers, never from what an agent or the assistant wrote, and nothing
+    applies until you confirm it.
+  - **What weighs most.** When the assistant decides for an agent, its sources are ranked, and the higher one wins when
+    they disagree: 1. your standing rules (*Autonomy*); 2. the rules you confirmed here, this project's first; 3. what it
+    knows of how you decide; 4. your past decisions on similar questions; 5. its own judgement. Your limits (L4 and L5
+    always yours, the daily cap, the sensitive words) still have the last word.
+  - **Stop learning.** This turns learning off for one project: what was learned from it (its rules included) is
+    forgotten, and nothing new is kept. **Forget** clears a project's knowledge once.
   - Summaries and dossiers are written from what agents wrote. The assistant reads them as information, never as
     instructions.
 - **Autonomy: the assistant answers your agents by itself, within your limits** (button at the top of the board). Switch

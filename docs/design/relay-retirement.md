@@ -108,7 +108,7 @@ Old client after the upgrade. If the three public routes are simply deleted, its
 2. **1.43.0 - badge and chat parity (G1, G3, G4).** A needs-you count in `/api/status` feeds the rail and tab badges; the priorities tool gets a board name; `agents_list` takes an optional session. G2 (refusal from a confidential space) already shipped through `outsideRuntime`.
 3. **1.44.0 - director knowledge, level 1-2 (done).** Decision log, session digests, project dossiers; `precedents()` reads the decision log; "What I know" in Pilotage → Agents; `agents_knowledge` tool.
 4. **1.45.0 - switch the relay off (done).** Tombstones (410), the one-time cleanup (decisions → decision log, threads → digests, then `conductor.json` and `pilot-status.md` deleted, Journal and Passes dropped, one notification), the `fleet_*` tools and the legacy triage removed, `#ab-legacy` and the space-editor row removed.
-5. **1.46.0 - deduced rules and the decision hierarchy** (`director-knowledge.md` §3 level 3, §4).
+5. **1.46.0 - deduced rules and the decision hierarchy (done)** (`director-knowledge.md` §3 level 3, §4).
 6. **1.46.x - delete the dead code**, no behaviour change: `Conductor.php` bridge half, session routes, `PL` JS, CSS, i18n keys, relay tests, FAQ and design-doc sections.
 7. **Later - remove the tombstones and the cleanup code**, once no old client can still be running.
 

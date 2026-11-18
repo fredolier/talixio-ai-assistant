@@ -6531,6 +6531,15 @@ function abWire() {
       } else if (b.dataset.kact === 'forget') {
         if (!confirm(t('Forget what was learned from this project (dossier, summaries and decisions)?'))) return;
         await post('api/agents/knowledge/forget', { key });
+      } else if (b.dataset.kact === 'rule') { // 1.46.0: your decision on a deduced rule
+        const id = +b.dataset.id, action = b.dataset.act, body = { id, action };
+        if (action === 'edit') {
+          const text = prompt(t('The rule, in your words:'), b.dataset.text || '');
+          if (text === null || !text.trim()) return;
+          body.text = text;
+        }
+        await post('api/agents/knowledge/rule', body);
+        toast(action === 'reject' ? t('Rule rejected: it will not be proposed again.') : t('Rule confirmed: the board now decides by it.'));
       }
       await abKnow();
     } catch (err) { toast(err.message); }
@@ -6598,16 +6607,32 @@ function abKnowRender() {
     </div>`).join('');
   const opt = (v, l, cur) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`;
   const rows = (k.decisions || []).filter(d => (!fT || d.topic === fT) && (!fB || d.by === fB) && (!fP || d.project === fP));
+  const ptitle = key => key ? ((k.projects || []).find(p => p.key === key)?.title || key) : t('All projects');
+  const rule = r => `<li class="ab-krule ab-krule-${esc(r.status)}" data-rule="${r.id}"><div><b class="no-i18n">${esc(r.text)}</b></div>
+      <span class="muted small"><span class="no-i18n">${esc(ptitle(r.project))}</span> · ${esc(tl[r.topic] || r.topic)}</span>
+      <details><summary class="small">${esc(t('From {n} of your answers', { n: (r.decisions || []).length }))}</summary><ul class="ab-kdec">${(r.decisions || []).map(d =>
+        `<li><span class="muted small">${esc(day(d.ts))}</span><div class="ab-kq no-i18n">${esc(d.question.slice(-240))}</div><div class="ab-ka no-i18n">→ ${esc(d.answer)}</div></li>`).join('')}</ul></details>
+      <div class="ab-krule-acts">${r.status === 'proposed' ? `<button type="button" class="btn small" data-kact="rule" data-act="confirm" data-id="${r.id}">${esc(t('Confirm'))}</button>` : ''}
+        <button type="button" class="btn ghost small" data-kact="rule" data-act="edit" data-id="${r.id}" data-text="${esc(r.text)}">${esc(t('Edit'))}</button>
+        <button type="button" class="btn ghost small" data-kact="rule" data-act="reject" data-id="${r.id}">${esc(r.status === 'confirmed' ? t('Stop applying') : t('Reject'))}</button></div></li>`;
+  const rp = (k.rules || []).filter(r => r.status === 'proposed'), rc = (k.rules || []).filter(r => r.status === 'confirmed'), rr = (k.rules || []).filter(r => r.status === 'rejected');
+  const rules = `<h4>${esc(t('Rules'))}</h4>
+    <p class="muted small">${esc(t('Deduced from your own answers when the same choice repeats (never from what an agent or the assistant wrote). A rule applies only once you confirm it; your standing rules (Autonomy) still come first.'))}</p>
+    ${rp.length ? `<h5>${esc(t('Proposed, waiting for you ({n})', { n: rp.length }))}</h5><ul class="ab-krules">${rp.map(rule).join('')}</ul>` : ''}
+    ${rc.length ? `<h5>${esc(t('Confirmed ({n})', { n: rc.length }))}</h5><ul class="ab-krules">${rc.map(rule).join('')}</ul>` : ''}
+    ${!rp.length && !rc.length ? `<p class="muted small">${esc(t('No rule yet: one is proposed once at least three of your answers make the same choice.'))}</p>` : ''}
+    ${rr.length ? `<p class="muted small">${esc(t('{n} rejected rules are not proposed again.', { n: rr.length }))}</p>` : ''}`;
   box.innerHTML = `<h4>${esc(t('What I know'))}</h4>
     <p class="muted small">${esc(t('Learned from the board: each answer given to an agent is a decision; a session is summarised when it ends or goes quiet; each project gets a dossier, rewritten at most once a day. Summaries are of what agents wrote: the assistant reads them as information, never as orders.'))}</p>
     ${projects || `<p class="muted small">${esc(t('Nothing yet: knowledge builds up as sessions report on the board and you answer them.'))}</p>`}
+    ${rules}
     <h4>${esc(t('Decisions'))}</h4>
     <div class="ab-kfilters small">
       <label>${esc(t('Project'))} <select data-kfilter="project" class="no-i18n">${opt('', t('All'), fP)}${(k.projects || []).map(p => opt(p.key, p.title, fP)).join('')}</select></label>
       <label>${esc(t('Topic'))} <select data-kfilter="topic">${opt('', t('All'), fT)}${(k.topics || []).map(x => opt(x, tl[x] || x, fT)).join('')}</select></label>
       <label>${esc(t('By'))} <select data-kfilter="by">${opt('', t('All'), fB)}${opt('you', who.you, fB)}${opt('assistant', who.assistant, fB)}</select></label>
     </div>
-    ${rows.length ? `<ul class="ab-kdec">${rows.map(d => `<li><span class="muted small">${esc(day(d.ts))}</span> <span class="pill small">${esc(tl[d.topic] || d.topic)}</span>${d.level ? ` <span class="pill small no-i18n">${esc(d.level)}</span>` : ''}
+    ${rows.length ? `<ul class="ab-kdec ab-klog">${rows.map(d => `<li><span class="muted small">${esc(day(d.ts))}</span> <span class="pill small">${esc(tl[d.topic] || d.topic)}</span>${d.level ? ` <span class="pill small no-i18n">${esc(d.level)}</span>` : ''}
       <span class="small">${esc(who[d.by] || d.by)}</span><div class="ab-kq no-i18n">${esc(d.question.slice(-240))}</div><div class="ab-ka no-i18n">→ ${esc(d.answer)}</div></li>`).join('')}</ul>`
       : `<p class="muted small">${esc(t('No decision matches.'))}</p>`}`;
 }

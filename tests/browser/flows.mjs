@@ -895,8 +895,13 @@ const flows = {
     await page.waitForTimeout(4500);
     check('agent board: the board follows by itself (no reload): the session is working again', /webshop/.test(await page.textContent('#ab-cols [data-col=working]')), await page.textContent('#ab-cols'));
   },
-  async agentKnowledge({ page, check }) {
+  async agentKnowledge({ page, check, root, data }) {
     // 1.44.0: what the director learned from the board (after agentBoard: a reply and a denied permission in webshop on testbox)
+    // 1.46.0: one rule deduced from those answers, waiting for the user
+    execFileSync('php', ['-r', "require '" + join(root, 'src/autoload.php') + "';"
+      + "$a=\\Talixio\\App::fromEnv(); $ids=array_column($a->knowledge()->decisions('', '', 'you', 3), 'id');"
+      + "$a->store->q(\"INSERT INTO fk_rules(project, topic, text, status, evidence, created) VALUES('', 'deploy', 'Never deploy before Monday.', 'proposed', ?, ?)\", [json_encode($ids), time()]);"],
+      { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
     await go(page, 'pilotage');
     await page.click('#view-pilotage .ptab[data-ptab=agents]');
     await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
@@ -906,10 +911,23 @@ const flows = {
     check('agent knowledge: What I know lists the project, with its machine and its decisions', /webshop/.test(box) && /testbox/.test(box) && /No, wait for Monday\./.test(box) && /npm run deploy/.test(box), box.slice(0, 600));
     check('agent knowledge: a project without a summarised session says it has no dossier yet', (await page.$$('#ab-know .ab-kdossier')).length === 0);
     await page.selectOption('#ab-know [data-kfilter=topic]', 'deploy');
-    const dep = await page.textContent('#ab-know .ab-kdec');
+    const dep = await page.textContent('#ab-know .ab-klog');
     check('agent knowledge: the decision log filters by topic', /npm run deploy/.test(dep) || /Shall I deploy/.test(dep), dep);
     await page.selectOption('#ab-know [data-kfilter=topic]', 'docs');
-    check('agent knowledge: …and says when nothing matches', !(await page.$('#ab-know .ab-kdec')));
+    check('agent knowledge: …and says when nothing matches', !(await page.$('#ab-know .ab-klog')));
+    // the rule: proposed with the answers behind it, then confirmed, edited, and no longer applied
+    const pr = await page.textContent('#ab-know .ab-krule-proposed');
+    check('agent knowledge: a deduced rule waits for you, with the answers it comes from', /Never deploy before Monday\./.test(pr) && (await page.$$('#ab-know .ab-krule-proposed details .ab-kdec li')).length >= 1, pr);
+    await page.click('#ab-know .ab-krule-proposed [data-act=confirm]');
+    await page.waitForSelector('#ab-know .ab-krule-confirmed', { timeout: 6000 });
+    check('agent knowledge: Confirm applies the rule', (await api(page, 'api/agents/knowledge')).rules.find(r => /Monday/.test(r.text))?.status === 'confirmed');
+    page.once('dialog', d => d.accept('Never deploy on a Friday.'));
+    await page.click('#ab-know .ab-krule-confirmed [data-act=edit]');
+    await page.waitForFunction(() => /Friday/.test(document.querySelector('#ab-know .ab-krule-confirmed')?.textContent || ''), null, { timeout: 6000 });
+    check('agent knowledge: Edit keeps your words', (await api(page, 'api/agents/knowledge')).rules.some(r => r.text === 'Never deploy on a Friday.' && r.status === 'confirmed'));
+    await page.click('#ab-know .ab-krule-confirmed [data-act=reject]');
+    await page.waitForFunction(() => !document.querySelector('#ab-know .ab-krule-confirmed'), null, { timeout: 6000 });
+    check('agent knowledge: Stop applying rejects it, and the page says rejected rules are not proposed again', /not proposed again|ne sont plus proposées/.test(await page.textContent('#ab-know')));
     page.once('dialog', d => d.accept());
     await page.click('#ab-know .ab-kproj:has-text("webshop") [data-kact=exclude]');
     await page.waitForSelector('#ab-know .ab-kproj.off', { timeout: 6000 });
