@@ -890,6 +890,8 @@ const flows = {
   async agentAutonomy({ page, check, data }) {
     // 1.39.0: the autonomy settings live on the board; a suggestion shows in the session, Send this answer scores it, a verdict on what it sent
     const { readFileSync, existsSync } = await import('node:fs');
+    // 1.42.0: the autonomy controls must work without the old relay cockpit's wiring (plWire), which is going away
+    const plWired = await page.evaluate(() => { const was = PL.wired; PL.wired = true; return was; });
     await go(page, 'pilotage');
     await page.click('#view-pilotage .ptab[data-ptab=agents]');
     await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
@@ -934,6 +936,7 @@ const flows = {
     check('agent autonomy: the answer is queued for the session, from you', /Yes, sort the seeds too\./.test(await page.textContent('#ab-detail .ab-thread')));
     await page.click('#ab-auto-btn');
     await page.click('#ab-detail [data-abact=close]');
+    await page.evaluate(w => { PL.wired = w; }, plWired);
   },
   async agentStart({ page, check, data }) {
     // 1.38.0: start a session from the board on a machine whose listener runs, then stop it; the real scripts, a stand-in for claude
@@ -1077,11 +1080,7 @@ sleep 300
     await page.click('#pl-jr-f [data-f=all]');
     check('pilotage: the status line counts what waits for the user', /2 /.test(await page.textContent('#pilot-orch-status')) && /wait|attend/i.test(await page.textContent('#pilot-orch-status')));
     await page.evaluate(() => { document.querySelector('#pilot-cfg').open = true; });
-    await page.click('#pilot-status-btn'); await page.waitForFunction(() => /dossier-conseil/.test(document.querySelector('#pilot-status-text').textContent), null, { timeout: 6000 });
-    const stx = await page.textContent('#pilot-status-text');
-    check('pilotage: the Status file button shows the permanent status (agents, pending question, no secret) and where it lives',
-      /Garder le plan A ou B/.test(stx) && /WAITING FOR YOU/.test(stx) && !/orch\.example/.test(stx) && /pilot-status\.md/.test(await page.textContent('#pilot-status-path')) && /status\.md\?download=1/.test(await page.getAttribute('#pilot-status-dl', 'href')));
-    await page.click('#pilot-status-btn');
+    check('pilotage: the retired Status file button is gone', !(await page.$('#pilot-status-btn')) && !(await page.$('#pilot-status-dl')));
     await page.click('#pilot-notify [data-notify=off]'); await page.waitForTimeout(300);
     check('pilotage: switching fleet reports to Off is kept', (await page.$$('#pilot-notify [data-notify=off].on')).length === 1);
     await page.click('#pilot-notify [data-notify=inapp]'); await page.waitForTimeout(200);

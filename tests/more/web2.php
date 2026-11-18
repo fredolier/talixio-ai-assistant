@@ -43,6 +43,11 @@ $priv = fn(string $m, ...$a) => (new ReflectionMethod(Web::class, $m))->invoke(n
 
 check('web2: signing in works', ($web('/api/login', ['password' => $pw])['ok'] ?? false) === true);
 
+// the status file pilot-status.md is retired (1.42.0, owner's decision): its route is gone, the policy route still works
+$r = $w2raw('/api/pilot/status.md');
+check('web2 pilot: the status file route is gone', $r['code'] === 404 && !str_contains($r['body'], 'autonomous pilot status'), $r['code'] . ' ' . mb_substr($r['body'], 0, 200));
+check('web2 pilot: the autonomy settings are still served', isset($web('/api/pilot')['levels']));
+
 // ---- Pilotage slice 2: the Rôles catalogue aggregate (/api/roles) — runs before the password tests rotate the session ----
 $app->skills()->save('triage-x', 'Sort incoming mail into the right next action', 'Read the mail and decide what happens next.',
     ['kind' => 'role', 'tier' => 'standard', 'tools' => 'mailbox_list', 'version' => '2']);

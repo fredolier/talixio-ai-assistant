@@ -275,7 +275,7 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
   `clarify:true`. `agentSay(..., clarify)` delivers the line but tags no `decision_id`, writes no decision-journal entry and
   does not score the pilot's prediction: a request for information is not an answer.
 - **Inbox zero.** Empty list/detail say nothing waits and when the orchestrator last spoke (`lastReport`).
-- **Status file.** `Conductor::refreshStatusFile()` rewrites `<data dir>/pilot-status.md` (temp file + rename) after each
+- **Status file** (retired in 1.42.0 by the owner's decision; see `relay-retirement.md` and `director-knowledge.md`). `Conductor::refreshStatusFile()` rewrote `<data dir>/pilot-status.md` (temp file + rename) after each
   report, ack, answer/dispatch, pair/disconnect, notify change and pilot decision/verdict/policy change; polls refresh it at most
   every 2 minutes. It skips the write when only the `Generated:` line would differ, and does nothing for an instance that never
   paired. Built from `statusInfo()` (so no secret, no webhook, no transcript URL); times are absolute; agent-written text is

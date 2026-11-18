@@ -209,15 +209,8 @@
           <details class="pilot-cfg" id="pilot-cfg">
             <summary>Settings</summary>
             <div class="row">
-              <button type="button" id="pilot-status-btn" class="btn ghost small" aria-expanded="false" title="A Markdown file kept up to date with the state of the fleet">Status file</button>
               <button type="button" id="pilot-orch-connect" class="btn ghost small">Connect…</button>
               <button type="button" id="pilot-orch-disconnect" class="btn ghost small danger" hidden>Disconnect</button>
-            </div>
-            <div id="pilot-status-file" class="pilot-statusfile" hidden>
-              <p class="muted small">The pilot keeps this file up to date, so you can read it outside Talixio. It lives here:</p>
-              <code id="pilot-status-path" class="no-i18n"></code>
-              <div class="row"><button type="button" id="pilot-status-copy" class="btn small">Copy</button> <a id="pilot-status-dl" class="btn small" href="api/pilot/status.md?download=1" download="pilot-status.md">Download</a></div>
-              <pre id="pilot-status-text" class="no-i18n"></pre>
             </div>
             <div class="pilot-notify" id="pilot-notify-row" hidden>
               <span class="muted small">Fleet reports</span>
