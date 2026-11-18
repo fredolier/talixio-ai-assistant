@@ -1,7 +1,7 @@
 # Les connecteurs (MCP)
 
 Un connecteur donne à l'assistant les outils d'un autre service : GitHub, Notion, votre domotique, une
-autre application (par exemple un gestionnaire de tâches)… Réglages → **Connecteurs (MCP)**.
+autre application (par exemple un gestionnaire de tâches)… Réglages → Comptes connectés → **Connecteurs (MCP)**.
 
 Des connecteurs prêts à installer en un clic : *Connecteurs / Liste des connecteurs*.
 
@@ -13,7 +13,7 @@ une `url`, avec un jeton dans `headers`, ou le bouton **Se connecter** pour les 
 ## Un connecteur publié sur GitHub
 Un serveur MCP « local » est un petit programme (Node.js ou Python). S'il est sur GitHub, son adresse suffit :
 
-1. Réglages → Connecteurs → **Installer un connecteur…**
+1. Réglages → Comptes connectés → Connecteurs (MCP) → **Installer un connecteur…**
 2. Collez l'adresse du dépôt (`https://github.com/propriétaire/depot`, ou
    `https://github.com/propriétaire/depot/tree/main/dossier` si le serveur est dans un sous-dossier) →
    **Récupérer**. Talixio télécharge le dépôt et le range en `.zip` dans **/Connecteurs**.
@@ -32,7 +32,7 @@ Pour un serveur qui n'est pas sur GitHub (ou dans un dépôt privé) :
 1. Compressez **son dossier** en `.zip` (celui qui contient `package.json`, ou `src/server.js`, `server.js`,
    `index.js`, `server.py`…).
 2. Importez le `.zip` dans la bibliothèque, par exemple dans **/Connecteurs**.
-3. Ouvrez le fichier → **Installer comme connecteur** (ou Réglages → Connecteurs → *Installer un
+3. Ouvrez le fichier → **Installer comme connecteur** (ou Réglages → Comptes connectés → Connecteurs (MCP) → *Installer un
    connecteur…*).
 4. Donnez-lui un nom court (`anki`) et remplissez les réglages qu'il lit (adresse, compte, mot de passe…) :
    Talixio les trouve dans son code et son README.
@@ -42,8 +42,8 @@ Pour un serveur qui n'est pas sur GitHub (ou dans un dépôt privé) :
 - **Mettre à jour** : importez le nouveau `.zip` et réinstallez sous le même nom. Un mot de passe laissé
   vide garde l'ancien.
 - **Supprimer** : retirez son entrée dans *Configuration*, puis *Enregistrer et connecter*.
-- Chaque outil **demande votre validation** tant que vous n'en décidez pas autrement. Dans Réglages →
-  Connecteurs, chaque connecteur est une carte à déplier : elle dit ce que fait le connecteur, puis donne
+- Chaque outil **demande votre validation** tant que vous n'en décidez pas autrement. Dans Réglages → Comptes connectés →
+  Connecteurs (MCP), chaque connecteur est une carte à déplier : elle dit ce que fait le connecteur, puis donne
   un tableau de ses outils avec ce que fait chacun. Les outils sont groupés selon ce qu'ils semblent
   faire (*semblent seulement lire*, *incertain*, *peuvent modifier ou envoyer*) ; ce classement est
   deviné d'après les indications du connecteur et le nom de l'outil, vérifiez la description. Cochez
@@ -76,5 +76,5 @@ Un site sans connecteur ni API publique : l'assistant peut apprendre l'API qu'ut
 
 Exemples pas à pas : *Connecteurs / anki.talixio.com* (un connecteur à installer) et *Connecteurs / Home Assistant* (un service distant, par son adresse).
 
-Sur un serveur partagé par plusieurs personnes, les connecteurs validés par l'administrateur sont dans Réglages →
-Connecteurs → *Depuis le catalogue*, à installer d'un bouton (voir *Administration / Le catalogue*).
+Sur un serveur partagé par plusieurs personnes, les connecteurs validés par l'administrateur sont dans Réglages → Comptes connectés →
+Connecteurs (MCP) → *Depuis le catalogue*, à installer d'un bouton (voir *Administration / Le catalogue*).

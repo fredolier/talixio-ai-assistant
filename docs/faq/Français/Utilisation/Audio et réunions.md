@@ -39,11 +39,14 @@ Choisissez le modèle avec le bouton **V** d'une ligne du tableau : Whisper ou V
 - **Local (whisper.cpp)** : l'audio ne quitte pas le serveur, c'est gratuit, mais plus lent (environ la
   moitié de la durée de l'enregistrement sur 4 cœurs) et sans noms d'intervenants.
 - **Fournisseurs européens** (OVHcloud, Scaleway, Infomaniak : Whisper ; Mistral : Voxtral) : l'audio reste en Europe.
-- **Aucun modèle choisi** : automatique. Gemini si une clé est renseignée, sinon local si whisper.cpp est installé.
+- **Aucun modèle choisi** : automatique. Le fournisseur européen d'abord, s'il est votre fournisseur principal ou si le
+  **Verrou Europe (RGPD)** est activé (verrou activé sans fournisseur européen prêt : seulement en local) ; sinon Gemini si
+  une clé est renseignée ; puis OpenAI s'il est votre fournisseur ; puis local si whisper.cpp est installé ; sinon pas de
+  transcription.
 - Dans un espace **Confidentiel**, la transcription se fait toujours en local.
 
-## Quel modèle Gemini ? (Réglages → Modèle et budget → Modèles → carte *Voix*)
-Laissé vide, le choix est automatique, et c'est le bon réglage dans la plupart des cas.
+## Quel modèle Gemini ? (Réglages → Modèle et budget → Modèles → bouton **V**)
+Le modèle est la ligne choisie avec le bouton **V** ; sans choix, il est automatique, et c'est le bon réglage dans la plupart des cas.
 
 **Gemini** (le nom commence par `gemini`) :
 
@@ -54,8 +57,7 @@ Laissé vide, le choix est automatique, et c'est le bon réglage dans la plupart
 | `gemini-2.5-pro` | Plus cher et plus lent, rarement meilleur pour une transcription. |
 | `gemini-3-flash-preview`, … | Les modèles plus récents de votre clé marchent aussi (la liste est dans Réglages → Modèle et budget). |
 
-Vide : le modèle « standard » de Gemini si Gemini est votre fournisseur, sinon `gemini-2.5-flash`.
-Un nom de modèle whisper laissé dans ce champ est ignoré par Gemini.
+Avec Gemini mais sans modèle Gemini choisi : le modèle « standard » de Gemini si Gemini est votre fournisseur, sinon `gemini-2.5-flash`.
 
 **Local (whisper.cpp)** : le nom d'un fichier `ggml-<nom>.bin` dans `/opt/whisper.cpp/models`, ou son chemin.
 

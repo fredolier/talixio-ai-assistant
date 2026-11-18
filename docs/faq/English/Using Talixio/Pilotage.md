@@ -61,11 +61,13 @@ The board updates by itself every few seconds while you look at it.
   on *The assistant looks at the agents' questions by itself*. When a session finishes its turn, the assistant reads its
   last message (as data written by others, never as instructions) with your **priorities**, **standing rules**, the
   similar answers you gave before and what the Mind knows of how you decide, and works out the reply you would give, with
-  a level (L1 routine … L5 business) and an honest confidence. A message that only reports work done is left alone. The
+  a level (L1 Routine, L2 Small choices, L3 Real choices, L4 Values and business, L5 Critical) and an honest confidence. A message that only reports work done is left alone. The
   limits are then applied by Talixio itself, not by the model: for each level L1–L3 you choose *I propose, you answer*
-  (default), *I answer if sure, then tell you* or *I answer if sure, quietly*; it sends alone only above your confidence
+  (default), *I answer if sure, then tell you* or *I answer if sure, quietly* (L4 and L5 show 🔒 *Always yours*, with no
+  choice); it sends alone only above your confidence
   threshold (75 % by default) and under the **daily cap** (20 by default). **L4/L5, permission requests, and anything about
-  pushes, deploys, deletions, e-mails, credentials or payments are always yours**, whatever the setting. An answer it sends
+  pushes, deploys, deletions, e-mails, credentials or payments are always yours**, whatever the setting — as are merges, releases and publishing, migrations, installing a package, uploading data, sending to customers or subscribers, buying or a plan, hiring, skipping tests, a web address, and a reply holding a command the agent did not offer itself: these stay suggestions even when the model calls them routine. Your **priorities** and **standing rules** (one per line) can be typed or dictated with 🎙️; a
+  rule you tell it in the chat is added too. An answer it sends
   goes to the session like yours, marked *Assistant* in the thread; in the session's pane it asks **Was this the right
   call? Yes / No, that was wrong**. Otherwise its card shows 💡 *Suggested answer*, and the session's pane shows the answer,
   its level, its confidence and why it was not sent, with **Send this answer** or **Edit it first**. Each answer is scored:
@@ -82,9 +84,10 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
 - The **status card** says whether it is connected, when it last reported and how many agents it sees on how many machines,
   and how many wait for you, on a single line. Under **⚙ Settings**: **Status file**, **Re-pair…**, **Disconnect** and the **Fleet reports** switch (In-app badge, Push +
   e-mail, Off). Pairing works either by a webhook the orchestrator creates, or, for a plain local session, by *polling* Talixio. If a connected orchestrator says nothing for 30 minutes, the connection panel shows **Silent for N min — re-pair it** (typically its helper files were lost): use *Re-pair…*. Re-pairing gives the orchestrator a new secret but keeps your Fleet reports setting, the Journal (reports, decisions, passes), the agents' conversations and the unread counts. Each agent row shows when the orchestrator last heard from the session itself ("no news", in red after a day, when it has never heard): the orchestrator is told to ask the sessions for a status rather than answer from memory, and to wait for their replies before saying nobody answered. The pairing prompt now has it keep its files in `~/.config/talixio-orchestrator/` and acknowledge each instruction, so none is lost on a failed response.
-- To give the pilot an instruction, type or dictate it in the chat (it passes the same privacy checks as every other dispatch). In the Autonomy tab, the 🎙️ on *Your priorities* and *Standing rules* lets you dictate them aloud.
-- Three tabs, each with a list on the left and a pane on the right that scrolls on its own — the page never grows with the number
-  of messages. On a phone the pane replaces the list, with « ‹ Back ». Each tab carries a count:
+- To give the pilot an instruction, type or dictate it in the chat (it passes the same privacy checks as every other dispatch).
+- Four tabs (*Your autonomous pilot*): **Needs you**, **Agents** and **Journal** each have a list on the left and a pane on the
+  right that scrolls on its own — the page never grows with the number of messages. On a phone the pane replaces the list,
+  with « ‹ Back ». They carry a count:
   - **Needs you** (the question first and large, then what a wrong choice costs, then one big button per option, the pilot's suggestion on top when it has one, and free words or voice below; an approval shows a lock and two steps — open the session, approve there): the sessions that wait for you, each with the question as it was asked, its level (L1–L5), the options as
     buttons and the cost of a wrong choice. A **decision** you answer with a button (or *Answer another way…*, which opens the
     agent's conversation); an **approval** (a click only you can give, in that session, e.g. a revoked token) has no button:
@@ -102,24 +105,16 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
     conversation.
   - **Journal**: only the fleet-wide reports, grouped by day, filtered All / Alerts / Summaries, with a search; click one to read
     it in full. A session that starts waiting for you adds an alert.
+  - **Autonomy** only points to *Autonomy* at the top of the board (see above): the settings moved there in 1.39.0 and apply
+    to both.
 - A session can route its questions to the pilot with the « route questions » hook (`/autopilot-on`, `/autopilot-off`,
   `/autopilot-status`, per session; off by default, and then the question comes to you as usual). The pilot pastes the question as
   it is; your answer goes back with a decision id, and the pilot reports the session's next step. Approvals and permission
   prompts are never routed: only you can give them. A new question counts as news: it shows in the badge even on a quiet
   check-in. A pilot paired before this needs the instructions of the pairing message once: re-pair it, or send it those.
-- **Autonomy tab** (it moved to the board in 1.39.0: *Autonomy* at the top of the board; the same settings apply to both)**: the assistant decides within your limits.** Switch on *The assistant looks at the agents' questions by
-  itself*: when an agent asks something, it reads the question, the similar decisions you took before, what it knows of
-  how you work and your **priorities** (one per line, most important first), then calls `fleet_decide` with its answer and
-  an honest confidence. For each level L1–L5 you choose: *I propose, you answer* (default), *I answer if sure, then tell
-  you*, or *I answer if sure, quietly*; it answers alone only above the confidence you set (75 % by default). **L4/L5
-  (values, business), approvals, and anything about pushes, deploys, deletions, e-mails, credentials or payments are
-  always yours**, whatever the setting. A proposal appears on the question as a *Suggested answer* with a **Send this
-  answer** button. Every answer is written down with its confidence and scored: against your own answer when you give
-  one, or with **Yes / No, that was wrong** on what it sent. A miss lowers that level back at once; after enough right
-  answers it *suggests* giving it more room (it never raises its own limits). Corrections also teach the Mind how you decide. Below, **Standing rules** (one lasting preference per line, e.g. *never touch billing without asking me*) are given to the assistant with every question; tell it a rule in the chat and it records it. A **daily cap** (20 by default) limits how many answers it may send by itself each day; beyond it, it only proposes.
 - **The assistant can read the fleet's questions.** Ask « what are the agents waiting for? »: it lists the waiting questions
   (options, level, cost of a wrong choice), the latest decisions and who took them, recent alerts, and any agent's
-  conversation. It reads only; it answers (with the decision id) just what is yours to leave to it, never levels L4/L5,
+  conversation. It reads only; it answers (with the decision id) just what is yours to leave to it, never levels L4/L5 (Values and business, Critical),
   pushes, deploys, deletions, e-mails, credentials or approvals.
 - **Status file**: the **Status file** button on the status card shows, copies or downloads `pilot-status.md`, a Markdown file
   the assistant keeps up to date at every change (a report, an answer, a decision, a setting): whether the orchestrator is
@@ -145,11 +140,13 @@ older way keeps working.
 ## Roles
 The catalogue of the roles your assistant can take, grouped into one card per specialization. Each role is a node whose ring shows
 its acceptance rate and whose size follows how much it runs; **click one** to open its detail: metrics, trend, its
-specialization and the actions *evaluate, publish, improve (A/B), archive, delete*. Roles that look nearly identical are flagged.
+specialization and the actions *evaluate, publish, improve (A/B), archive*. Roles that look nearly identical are flagged.
 - **+ New role** creates one (name, purpose, optional specialization, brief); a name already in use is refused, and the
   assistant checks for near-duplicates.
 - A role can also be created by asking the assistant, or installed from the store.
-- **Archived…** reopens archived roles. The *assessor* role is protected: it has no lifecycle actions.
+- **Archived (n)** appears once a role is archived and lists them: **Reactivate** brings one back; **Delete** removes it
+  only if it never ran (a role with history stays archived, with its history). The *assessor* role is protected: it has no
+  lifecycle actions.
 
 ## Worksites
 The director's directives: open worksites, their progress and steering. They are launched from the chat box, from the chat.

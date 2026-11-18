@@ -33,7 +33,7 @@ Sources qu'une app peut déclarer :
 | Recherche | une recherche dans la bibliothèque |
 | Tâches, Agenda, Contacts | ceux de Talixio |
 | Script | un de vos scripts enregistrés |
-| Connecteur | un outil d'un connecteur, **seulement si vous l'avez marqué *lecture seule*** dans Réglages → Connecteurs |
+| Connecteur | un outil d'un connecteur, **seulement si vous avez coché sa case *S'exécute sans demander*** dans Réglages → Comptes connectés → Connecteurs (MCP) |
 
 ## Pourquoi c'est sûr
 
@@ -43,7 +43,7 @@ stockage à elle), et :
 - elle tourne dans un cadre isolé : pas de réseau, pas de cookies, aucun accès au reste de l'app ni à votre session ;
 - elle ne reçoit des données que de **ses sources déclarées** : une adresse web fixe, un fichier ou un dossier de la
   bibliothèque, une recherche dans la bibliothèque, les tâches de son espace, votre agenda, vos contacts, un de vos
-  scripts enregistrés, ou un outil de connecteur que vous avez marqué *lecture seule*. Rien d'autre ;
+  scripts enregistrés, ou un outil de connecteur dont vous avez coché *S'exécute sans demander*. Rien d'autre ;
 - **toute app créée ou modifiée par l'assistant attend votre validation.** Ouvrez-la : vous voyez les sources qu'elle
   lit (et le code si vous voulez), puis *Approuver*. D'ici là, elle ne s'exécute pas du tout et ne reçoit aucune donnée ;
 - une app appartient à un espace et suit son niveau de confidentialité : les apps d'un espace Secret ne sont pas
@@ -52,7 +52,7 @@ stockage à elle), et :
   arguments d'un script ne peuvent pas commencer par `-`.
 
 Un outil de connecteur peut agir (envoyer, supprimer, payer), et ce que le connecteur dit de lui-même n'est pas pris
-pour argent comptant : une app ne peut appeler qu'un outil que *vous* avez marqué lecture seule, avec les arguments
+pour argent comptant : une app ne peut appeler qu'un outil dont *vous* avez coché *S'exécute sans demander*, avec les arguments
 fixés au moment de votre validation.
 
 ## Partager une app

@@ -36,6 +36,9 @@ Si une question posée dans Général lit un document confidentiel, la suite de 
 - **Autres espaces** : les routines, missions et tâches du tableau d'un espace que le modèle n'a pas le droit de lire ne
   sont ni listés ni modifiables depuis ailleurs ; le dossier d'un espace Secret n'est pas montré
   en dehors de lui.
+- **Agents de code** : depuis un espace Confidentiel ou Secret (ou dès que le travail a lu quelque chose de ce
+  niveau), rien n'est envoyé à un agent de code : ni réponse à sa question, ni nouvelle session, car il tourne en
+  dehors de l'assistant. Autoriser, refuser et arrêter un agent fonctionnent toujours.
 - **Recherche web** : la recherche web propre au fournisseur est coupée dès que le travail dépasse
   Interne ; celle de Talixio demande votre validation (Confidentiel) ou est refusée (Secret).
 - **Contenu écrit par d'autres** : dès qu'une réponse a lu un e-mail, une page web (y compris la recherche web

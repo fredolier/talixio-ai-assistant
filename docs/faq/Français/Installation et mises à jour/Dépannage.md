@@ -44,4 +44,4 @@ ouvrez-le et choisissez *Relire*.
 - « model file not found » : relancez `sudo ./install.sh --with-whisper` (ou `install-stack.sh` sous Docker).
 
 ## Un e-mail ou Signal ne répond pas
-Page **Canaux** : la dernière erreur de chaque canal y est affichée. Vérifiez que l'expéditeur est dans la liste des autorisés.
+**Réglages → Canaux** : la dernière erreur de chaque canal y est affichée. Vérifiez que l'expéditeur est dans la liste des autorisés.

@@ -24,19 +24,19 @@ Everything is done from the app, without an administrator.
    | `TALIXIO_PASSWORD` | its password |
 
 5. **Install**. After a minute at most (installing dependencies), the window shows
-   "Ready: n tool(s) from “anki”". The tools appear in Settings → Connectors, under `anki`.
+   "Ready: n tool(s) from “anki”". The tools appear in Settings → Connected accounts → Connectors (MCP), under `anki`.
 
 ## Using it
 - Just ask: "What tasks do I have open in anki?".
 - The assistant also has **its own task board** (Tasks page). Say "in anki" when it is not
   obvious: otherwise it may use its own board.
 - Its tools **ask for your approval** in the app until you mark the reading ones (list,
-  search) in Settings → Connectors. Once you trust it, add `"trust": "all"` to the `anki` entry in
-  Settings → Connectors → *Configuration*.
+  search) in Settings → Connected accounts → Connectors (MCP). Once you trust it, add `"trust": "all"` to the `anki` entry in
+  Settings → Connected accounts → Connectors (MCP) → *Configuration*.
 - It also works from the phone, Telegram or Signal: it is the assistant that talks to anki.
 
 ## If it does not work
-The error message shows in the install window and in the `anki` card in Settings → Connectors.
+The error message shows in the install window and in the `anki` card in Settings → Connected accounts → Connectors (MCP).
 
 | Message | What to do |
 |---|---|
@@ -45,7 +45,7 @@ The error message shows in the install window and in the `anki` card in Settings
 | `installing dependencies` failed | the assistant could not reach npm: try again later, or tell the administrator (the server's Internet access) |
 | "No server found" | the `.zip` does not contain the right folder: it must be the one where `package.json` is |
 
-*Check again* (Settings → Connectors) restarts the server and reloads its tools.
+*Check again* (Settings → Connected accounts → Connectors (MCP)) restarts the server and reloads its tools.
 
 ## Updating, removing
 - **New version** of the MCP server: upload the new `.zip` and reinstall under the name `anki`.

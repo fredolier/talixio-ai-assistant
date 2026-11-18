@@ -113,6 +113,7 @@ final class Tools
             function (array $a) {
                 $hits = $this->app->recall()->search($a['query'], min(20, max(1, (int)($a['limit'] ?? 8))), PHP_INT_MAX, null, null, !empty($a['all_spaces']) ? null : $this->app->space);
                 Privacy::local('Memory search');
+                $this->app->recall()->markOthers($hits); // what others wrote, found here, is untrusted like through kb_search
                 return $hits ? Recall::format($hits) : 'nothing found';
             });
 
@@ -702,6 +703,7 @@ final class Tools
             . '"allow" or "deny" answers its permission request. The user approves first. session: the id from agents_list.',
             ['session' => ['type' => 'string'], 'kind' => ['type' => 'string', 'enum' => ['reply', 'allow', 'deny']], 'text' => ['type' => 'string']], ['session', 'kind'],
             function (array $a) {
+                if ((string)$a['kind'] === 'reply' && ($g = $this->outsideRuntime('Answer an agent session')) !== null) return $g; // allow / deny carry no content
                 try { $r = $this->app->agentHub()->command((string)$a['session'], (string)$a['kind'], (string)($a['text'] ?? ''), 'assistant'); }
                 catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
                 return ($r['listening'] ? 'sent: the session is listening and gets it within seconds.' : 'queued: the session gets it when its hook next listens.');
@@ -716,6 +718,7 @@ final class Tools
             ['machine' => ['type' => 'string'], 'folder' => ['type' => 'string', 'description' => 'one of the folders agents_list gives for that machine, exactly'],
              'prompt' => ['type' => 'string', 'description' => 'what the session should do, as you would type it in Claude Code']], ['machine', 'folder', 'prompt'],
             function (array $a) {
+                if (($g = $this->outsideRuntime('Start an agent session')) !== null) return $g;
                 try { $r = $this->app->agentHub()->start((string)$a['machine'], (string)$a['folder'], (string)$a['prompt'], 'assistant'); }
                 catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
                 return "queued as job:{$r['job']['id']}: the listener on {$a['machine']} starts it within seconds; it then shows on the board (agents_list).";
@@ -1063,6 +1066,19 @@ final class Tools
     }
 
     /** $approval: fn(args): summary. When given, the tool waits for the user's approval instead of running. */
+    /**
+     * A coding agent's model runs outside the assistant (1.41.2): what is sent to a board session, like a delegated code
+     * session (Conductor::guard), cannot come from a confidential or secret space, or from one that read such content.
+     */
+    private function outsideRuntime(string $label): ?string
+    {
+        $level = $this->app->privacy()->effective();
+        if ($level === 'internal') return null;
+        Privacy::blocked($label);
+        return 'error: not sent: this space (or what it read) is at the ' . ucfirst($level)
+            . ' level, and a coding agent runs outside the assistant. Do it from an internal space instead.';
+    }
+
     public function register(string $name, string $desc, array $props, array $required, callable $fn, ?callable $approval = null): void
     {
         if ($approval) $this->approval[$name] = $approval; else unset($this->approval[$name]);

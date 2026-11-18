@@ -5,11 +5,16 @@ Trois mots pour ce que l'assistant fait pour vous : une **tâche** est une chose
 ou plusieurs agents, qui revient avec un rapport.
 
 ## Tâches (un tableau par espace)
-- Colonnes Idées / À faire / En cours / Bloqué / Fait ; codes par espace (MAI-12), priorité P1 à P5,
+- Colonnes Idées / À faire / En cours / Bloquée / Terminé ; codes par espace (MAI-12), priorité P1 à P5,
   dates de début et d'échéance, charge, temps passé, étiquettes, description, dépendances (même entre espaces).
 - Vue **Aujourd'hui** (en retard, aujourd'hui, à suivre) et ajout en une ligne : « Appeler Alex demain à 9h #ventes 30m p2 ».
 - **Tableau** avec *Tous les espaces* : une rangée par espace, que l'on peut replier ; glissez une carte dans la
   rangée d'un autre espace pour l'y déplacer.
+- Vue **Ordre global** : toutes les tâches ouvertes de tous vos espaces en une seule liste classée, ce qu'il faut faire
+  d'abord. Glissez une tâche, ou utilisez ↑ ↓, pour changer sa place ; × la retire de l'ordre. Dessous, *Hors de l'ordre*
+  liste les autres tâches ouvertes (par priorité et échéance), chacune avec **Ajouter à la commande**. Une ligne en haut
+  résume chaque espace : tâches ouvertes, heures restantes, retards. **Demander une proposition à l'assistant** ouvre le
+  chat dans Général avec une demande d'ordre ; il ne l'applique qu'une fois que vous êtes d'accord.
 - Vue **Liste** : un tableau triable, groupé par échéance, statut, espace ou priorité, avec des vues rapides (Cette
   semaine, Critique et élevée, En attente, Sans date). Cochez plusieurs tâches pour changer d'un coup leur statut,
   leur date, leur priorité, leur espace ou leurs étiquettes, ou les mettre à la corbeille. Clavier : flèches ou j/k,
@@ -43,7 +48,7 @@ ou plusieurs agents, qui revient avec un rapport.
 
 ## Rappels et routines
 - Par la conversation : « rappelle-moi demain à 9 h », « chaque jour ouvré à 8 h, envoie-moi un briefing ».
-- Page **Routines** : les voir, les mettre en pause, *Lancer maintenant*, changer le niveau de modèle.
+- Page **Routines** : les voir, les mettre en pause, *Exécuter maintenant*, changer le niveau de modèle.
 - **Briefing du matin** : 5 lignes au plus, la plus importante d'abord (agenda du jour, e-mails à traiter,
   tâches, rappels, météo), chacune affichée comme une carte.
 - **👍 / 👎** : chaque ligne d'un message envoyé par une routine se note d'un clic (un second clic retire la note).
@@ -85,10 +90,10 @@ L'assistant vous en donne le lien. Le message du chat peut être plus court ; le
 Pour le classer ailleurs, demandez-le (« range ce rapport dans /Projets »).
 
 ### Ranger les missions : archiver, supprimer, programmer
-L'onglet **Missions** a une recherche (titre, consignes, rapport) et un sélecteur **Actives / Archivées**.
+L'onglet **Missions** a une recherche (titre, consignes, rapport) et un sélecteur **Actif / Archivés**.
 Chaque mission terminée affiche le lien vers sa note de rapport. Le lien suit la note même si vous la
 déplacez ou la renommez. Si la note a été supprimée, la mission l'indique. Chaque mission terminée propose aussi :
-- **Archiver** : la mission quitte la liste, sans rien perdre ; vous la retrouvez sous *Archivées*.
+- **Archiver** : la mission quitte la liste, sans rien perdre ; vous la retrouvez sous *Archivés*.
   **Archiver les terminés** range d'un coup toutes les missions terminées de la vue affichée. Les missions réussies
   sont archivés d'eux-mêmes au bout de **2 jours** (leur rapport reste dans le fil et la bibliothèque) ;
   ceux en échec ou arrêtés, et ceux auxquels vous avez mis une étiquette pour les garder, au bout de **30 jours**.

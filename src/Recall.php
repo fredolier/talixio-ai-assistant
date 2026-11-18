@@ -137,8 +137,33 @@ final class Recall
     /** Snippets worth adding to the prompt automatically: keyword matches or clearly similar meaning. */
     public function autoRecall(string $query, int $beforeMessageId, float $minSim, int $space = 0): string
     {
-        $hits = array_filter($this->search($query, 6, $beforeMessageId, null, null, $space), fn($h) => $h['keyword'] || ($h['sim'] ?? 0) >= $minSim);
+        // only the user's own writing comes by itself (1.41.2): a document or recording written by others, recalled into
+        // a turn that counts as the user's, could give orders there with nothing marking it; the model can still look
+        // it up with search_memory or kb_search, which mark what they find
+        $hits = array_filter($this->search($query, 8, $beforeMessageId, null, null, $space), fn($h) => ($h['keyword'] || ($h['sim'] ?? 0) >= $minSim) && !$this->byOthers($h));
         return self::format(array_slice($hits, 0, 4), 500);
+    }
+
+    /** A hit written by someone else: a library document or recording that is not the user's own note, a meeting summary, a message that carried such content. */
+    public function byOthers(array $h): bool
+    {
+        return match ($h['kind']) {
+            'file', 'transcript' => !$this->store->q("SELECT 1 FROM files WHERE id = ? AND note = 1 AND changed_by = 'you'", [(int)$h['ref']])->fetchColumn(),
+            'summary' => str_starts_with((string)$h['label'], 'meeting summary'),
+            'message' => str_contains((string)$this->store->q('SELECT meta FROM messages WHERE id = ?', [(int)$h['ref']])->fetchColumn(), '"trust"'),
+            default => true,
+        };
+    }
+
+    /** What search_memory found that others wrote makes the work untrusted, like kb_search (1.41.2). */
+    public function markOthers(array $hits): void
+    {
+        foreach ($hits as $h) {
+            if (!$this->byOthers($h)) continue;
+            Privacy::$untrusted = true; Privacy::$privateRead = true;
+            preg_match_all('#https?://[^\s<>"\'`)\]]+#i', (string)$h['text'], $um);
+            foreach ($um[0] as $u) Privacy::$links[rtrim($u, '.,;:!?')] = true;
+        }
     }
 
     public static function format(array $hits, int $chars = 800): string

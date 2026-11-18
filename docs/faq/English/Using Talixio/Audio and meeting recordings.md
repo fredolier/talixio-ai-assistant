@@ -35,11 +35,13 @@ length from which a recording counts as a meeting. The options:
 - **Local (whisper.cpp)**: the audio never leaves the server, and it is free, but slower (about
   half the length of the recording on 4 cores) and without speaker names.
 - **European providers** (OVHcloud, Scaleway, Infomaniak: Whisper; Mistral: Voxtral): the audio stays in Europe.
-- **No model chosen**: automatic. Gemini if a key is set, otherwise local if whisper.cpp is installed.
+- **No model chosen**: automatic. The European provider first, when it is your main provider or the **Europe lock (GDPR)**
+  is on (with the lock on and no European provider ready, only local is used); otherwise Gemini if a key is set; then
+  OpenAI if it is your provider; then local if whisper.cpp is installed; otherwise no transcription.
 - In a **Confidential** space, transcription is always done locally.
 
-## Which Gemini model? (Settings → Model and budget → Models → *Voice*)
-With Gemini chosen, the model is the row you pick; with none chosen, the choice is automatic, which is the right setting in most cases.
+## Which Gemini model? (Settings → Model and budget → Models → the **V** button)
+The model is the row you pick with the **V** button; with none chosen, the choice is automatic, which is the right setting in most cases.
 
 **Gemini** (the name starts with `gemini`):
 
@@ -50,8 +52,7 @@ With Gemini chosen, the model is the row you pick; with none chosen, the choice 
 | `gemini-2.5-pro` | More expensive and slower, rarely better for a transcription. |
 | `gemini-3-flash-preview`, … | Newer models available with your key work too (the list is in Settings → Model and budget). |
 
-Empty: Gemini's "standard" model if Gemini is your provider, otherwise `gemini-2.5-flash`.
-A whisper model name left in this field is ignored by Gemini.
+With Gemini but no Gemini model chosen: Gemini's "standard" model if Gemini is your provider, otherwise `gemini-2.5-flash`.
 
 **Local (whisper.cpp)**: the name of a `ggml-<name>.bin` file in `/opt/whisper.cpp/models`, or its path.
 

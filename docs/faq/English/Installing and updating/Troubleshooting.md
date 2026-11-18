@@ -43,4 +43,4 @@ open it and choose *Read again*.
 - "model file not found": run `sudo ./install.sh --with-whisper` again (or `install-stack.sh` under Docker).
 
 ## An email or Signal channel does not answer
-**Channels** page: the last error of each channel is shown there. Check that the sender is on the allowed list.
+**Settings → Channels**: the last error of each channel is shown there. Check that the sender is on the allowed list.

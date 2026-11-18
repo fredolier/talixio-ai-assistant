@@ -1,19 +1,20 @@
 # Channels and notifications
 
 ## App notifications
-**Channels** page → *Turn on for this device* (on iPhone: first add it to the Home Screen and
+**Settings → Channels** → *Turn on for this device* (on iPhone: first add it to the Home Screen and
 open it from there). One device at a time; no extra service. *Send a test notification* to check.
 
 ## Reading your notifications in the app
 Everything the assistant sends (reminders, scheduled tasks, job reports, approvals, alerts) is also kept in
-the app: **Notifications** in the menu (on a phone: *More* → *Notifications*). A red number shows how many
+the app: **Notifications** in the menu (on a phone, in the bottom bar). A red number shows how many
 are unread; the app icon counts them too, with the approvals waiting. Tap one to open its conversation and
 mark it read, or *Mark all read*. Opening the page also clears them from the phone's lock screen.
 The last 200 are kept, for 60 days. In a Secret space, the list only says where to look.
 
 ## Reports from your autonomous pilot
 Progress reports from the autonomous pilot (see *Pilotage*) are quiet by default: no push, no email. A red count shows on
-the **Pilotage** entry and on the tabs of **Your autonomous pilot**: the agents' replies are in each agent's conversation (a count per
+the **Pilotage** entry and on the tabs of **Your autonomous pilot** (Pilotage → Agents, in the folded *Cloud orchestrator
+(previous approach)* block): the agents' replies are in each agent's conversation (a count per
 agent, cleared when you open it) and the fleet-wide reports in the **Journal** (cleared when you open it). The **Fleet reports** switch on the pilot's status card lets you choose:
 **In-app badge** (default), **Push + e-mail**, or **Off** (nothing is shown). A report that merely repeats the previous
 one, or a routine keep-warm ping, never counts.
@@ -40,7 +41,7 @@ For the links and the button to work, the app must know its address: opening it 
 **Verified senders.** With *Require a verified sender (SPF/DKIM)* ticked (the default), the assistant only answers an email
 your mail server has checked. Since 1.35.35 it also needs *Name of your mail server in Authentication-Results*
 (advanced settings): the first word of the `Authentication-Results:` line your server adds to a received email
-(open a received email's source, e.g. `mx.example.com`). Without it, no email is answered and *Channels* says so, with the
+(open a received email's source, e.g. `mx.example.com`). Without it, no email is answered and *Settings → Channels* says so, with the
 name the last email gave: a sender could otherwise write a line that looks like your server's. Not needed with Gmail and
 Microsoft 365 (known from the IMAP server's name). On a server for several people, the admin page can set it once for
 everyone (*Settings* → *Incoming email for everyone*); a person's own setting wins.
