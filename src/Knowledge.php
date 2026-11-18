@@ -173,6 +173,53 @@ final class Knowledge
         return true;
     }
 
+    // ---- the relay's data (1.45.0) -----------------------------------------------------------------------------------
+
+    /**
+     * Once, when an older version left conductor.json (the cloud relay, retired in 1.45.0): its answered questions go
+     * into the decision log, each agent's thread becomes a note of a project named after the agent, then the file is
+     * deleted (it holds a live secret and a webhook) and the user is told. The journal and passes are dropped (the
+     * owner's decision). Returns what was imported, or null when there was nothing to do.
+     */
+    public function retireRelay(): ?array
+    {
+        $file = $this->app->cfg->dataDir . '/conductor.json';
+        if (!is_file($file)) return null;
+        $b = JsonFile::read($file);
+        $names = [];
+        foreach ((array)($b['agents'] ?? []) as $a) if (is_array($a) && ($a['id'] ?? '') !== '') $names[(string)$a['id']] = (string)($a['name'] ?? $a['id']);
+        $proj = fn(string $agent, string $name) => ['machine' => 'relay', 'cwd' => mb_substr(trim($name !== '' ? $name : $agent) ?: 'agent', 0, 80), 'id' => 'relay:' . $agent];
+        $nd = 0; $nt = 0;
+        $this->app->store->db->beginTransaction();
+        try {
+            foreach ((array)($b['decisions'] ?? []) as $d) {
+                if (!is_array($d) || trim((string)($d['answer'] ?? '')) === '') continue;
+                $agent = (string)($d['agent'] ?? '');
+                $level = preg_match('/\bL?([1-5])\b/i', (string)($d['type'] ?? ''), $m) ? 'L' . $m[1] : '';
+                $nd += $this->recordDecision($proj($agent, (string)($d['name'] ?? $names[$agent] ?? '')), (string)($d['question'] ?? ''), (string)$d['answer'],
+                    ($d['by'] ?? '') === 'assistant' ? 'assistant' : 'you', $level, '', 'relay', (int)($d['ts'] ?? time())) > 0 ? 1 : 0;
+            }
+            foreach ((array)($b['threads'] ?? []) as $agent => $turns) {
+                $turns = array_values(array_filter((array)$turns, fn($x) => is_array($x) && trim((string)($x['text'] ?? '')) !== ''));
+                if (!$turns) continue;
+                $p = $proj((string)$agent, $names[(string)$agent] ?? (string)$agent);
+                $key = self::projectKey($p['machine'], $p['cwd']);
+                if ($this->touchProject($key, $p['machine'], $p['cwd'])['exclude']) continue;
+                $lines = array_map(fn($x) => '[' . date('Y-m-d H:i', (int)($x['ts'] ?? 0)) . '] ' . (($x['role'] ?? '') === 'agent' ? 'AGENT' : (($x['by'] ?? '') === 'assistant' ? 'ASSISTANT' : 'USER'))
+                    . ': ' . mb_substr(preg_replace('/\s+/u', ' ', trim((string)$x['text'])), 0, 600), $turns);
+                $text = "Imported from the cloud orchestrator (retired in 1.45.0), not summarised: the last exchanges with this agent.\n" . mb_substr(implode("\n", $lines), -3800);
+                $this->app->store->q("INSERT INTO fk_digests(project, session, ts_from, ts_to, last_event, text, source) VALUES(?,?,?,?,0,?,'relay')",
+                    [$key, $p['id'], (int)($turns[0]['ts'] ?? 0), (int)(end($turns)['ts'] ?? 0), $text]);
+                $nt++;
+            }
+            $this->app->store->db->commit();
+        } catch (\Throwable $e) { $this->app->store->db->rollBack(); throw $e; }
+        foreach ([$file, "$file.lock", "$file.tmp"] as $x) if (is_file($x)) @unlink($x);
+        $this->app->notifier()->notify(I18n::t($this->app, 'The cloud orchestrator is switched off'),
+            I18n::t($this->app, 'Its pairing is deleted. What you answered through it is kept in Pilotage → Agents → What I know ({n} decisions, {t} agent threads). Your agents now report on the board.', ['n' => $nd, 't' => $nt]));
+        return ['decisions' => $nd, 'threads' => $nt];
+    }
+
     // ---- projects ---------------------------------------------------------------------------------------------------
 
     public function project(string $key): ?array

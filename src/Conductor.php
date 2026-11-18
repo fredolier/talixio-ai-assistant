@@ -394,7 +394,6 @@ final class Conductor
         if (!$this->quiet) $this->trace(['via' => 'report', 'agents' => count($agents ?? []), 'waiting' => count(array_filter($agents ?? [], fn($a) => !empty($a['waiting']))), 'reports' => $text !== '' && !$silent ? 1 : 0,
             'instructions' => 0, 'problems' => 0, 'note' => $newAsk ? 'a question appeared' : '']);
         foreach ($push as [$t, $x]) $this->app->notifier()->notify($t, $x);
-        if ($newAsk) { try { $this->app->pilot()->wake(); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); } } // a question appeared: the assistant looks at it soon
         return [200, ['ok' => true]];
     }
 

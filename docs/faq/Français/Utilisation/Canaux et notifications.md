@@ -17,13 +17,10 @@ Le tableau des agents (Pilotage → Agents) compte les sessions dans *À vous* s
 **Agents**. **Me notifier**, en haut du tableau, choisit ce qui est aussi envoyé en notification : *Demandes
 d'autorisation* (par défaut), *Autorisations et tours terminés*, ou *Aucun*.
 
-## Rapports de votre pilote autonome
-Les rapports d'avancement du pilote autonome (voir *Pilotage*) sont discrets par défaut : ni push, ni e-mail. Un nombre rouge
-s'affiche sur l'entrée **Pilotage** et sur les onglets de **Votre pilote autonome** (Pilotage → Agents, dans le bloc replié *Orchestrateur cloud
-(approche précédente)*) : les réponses des agents sont dans la conversation
-de chaque agent (un compteur par agent, effacé quand vous l'ouvrez) et les rapports d'ensemble dans le **Journal** (effacé quand vous l'ouvrez). L'interrupteur **Rapports de la flotte** de la carte d'état du
-pilote permet de choisir : **Pastille dans l'app** (par défaut), **Push + e-mail**, ou **Désactivée** (rien n'est affiché).
-Un rapport qui répète le précédent, ou un simple signal de maintien, n'est jamais compté.
+## Rapports de vos agents
+Depuis la 1.45.0, vos agents de code rendent compte sur le tableau (Pilotage → Agents). Le nombre rouge sur l'entrée
+**Pilotage** compte les sessions dans *À vous* ; le réglage **Me notifier** du tableau choisit ce qui arrive sur votre
+téléphone (voir plus haut). L'interrupteur *Rapports de la flotte* de l'orchestrateur cloud est parti avec lui.
 
 ## Telegram
 Créez un bot avec @BotFather, mettez son jeton dans Réglages → Telegram, écrivez au bot : il répond

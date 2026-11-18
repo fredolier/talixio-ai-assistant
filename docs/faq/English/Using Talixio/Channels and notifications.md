@@ -16,13 +16,10 @@ The agent board (Pilotage → Agents) counts the sessions in *Needs you* on the 
 tab. **Notify me**, at the top of the board, chooses what is also sent as a notification: *Permission requests* (the
 default), *Permissions and finished turns*, or *Nothing*.
 
-## Reports from your autonomous pilot
-Progress reports from the autonomous pilot (see *Pilotage*) are quiet by default: no push, no email. A red count shows on
-the **Pilotage** entry and on the tabs of **Your autonomous pilot** (Pilotage → Agents, in the folded *Cloud orchestrator
-(previous approach)* block): the agents' replies are in each agent's conversation (a count per
-agent, cleared when you open it) and the fleet-wide reports in the **Journal** (cleared when you open it). The **Fleet reports** switch on the pilot's status card lets you choose:
-**In-app badge** (default), **Push + e-mail**, or **Off** (nothing is shown). A report that merely repeats the previous
-one, or a routine keep-warm ping, never counts.
+## Reports from your agents
+Since 1.45.0 your coding agents report on the board (Pilotage → Agents). The red count on the **Pilotage** entry counts
+the sessions in *Needs you*; the board's **Notify me** setting chooses what reaches your phone (see above). The cloud
+orchestrator's *Fleet reports* switch went with it.
 
 ## Telegram
 Create a bot with @BotFather, put its token in Settings → Telegram, then message the bot: it replies

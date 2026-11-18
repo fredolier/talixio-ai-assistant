@@ -206,58 +206,6 @@
           <div class="ab-cols" id="ab-cols"></div>
           <div class="card ab-detail" id="ab-detail" hidden></div>
         </section>
-        <details class="ab-legacy" id="ab-legacy">
-          <summary>Cloud orchestrator (previous approach)</summary>
-        <div class="card pilot-orch pilot-status">
-          <div class="pilot-status-head">
-            <h3 class="no-i18n" id="pilot-conn-title"><span class="pilot-dot" id="pilot-conn-dot"></span></h3>
-            <div id="pilot-orch-status" class="muted small no-i18n"></div>
-          </div>
-          <pre id="pilot-orch-steps" class="pilot-steps" hidden></pre>
-          <details class="pilot-cfg" id="pilot-cfg">
-            <summary>Settings</summary>
-            <div class="row">
-              <button type="button" id="pilot-orch-connect" class="btn ghost small">Connect…</button>
-              <button type="button" id="pilot-orch-disconnect" class="btn ghost small danger" hidden>Disconnect</button>
-            </div>
-            <div class="pilot-notify" id="pilot-notify-row" hidden>
-              <span class="muted small">Fleet reports</span>
-              <div class="seg" id="pilot-notify" role="radiogroup" aria-label="Fleet reports">
-                <button type="button" data-notify="inapp" role="radio" title="A badge in Pilotage and the details here — no push">In-app badge</button>
-                <button type="button" data-notify="push" role="radio" title="A badge here, plus a push notification and e-mail">Push + e-mail</button>
-                <button type="button" data-notify="off" role="radio" title="Nothing — don’t surface fleet reports">Off</button>
-              </div>
-            </div>
-          </details>
-        </div>
-        <div class="pl-tabs" id="pl-tabs" role="tablist" aria-label="Your autonomous pilot">
-          <button type="button" class="pl-tab on" role="tab" data-pl="need">Needs you<span class="pl-bd no-i18n" id="pl-bd-need" hidden></span></button>
-          <button type="button" class="pl-tab" role="tab" data-pl="agents">Agents<span class="pl-pill no-i18n" id="pl-n-agents"></span><span class="pl-bd no-i18n" id="pl-bd-agents" hidden></span></button>
-          <button type="button" class="pl-tab" role="tab" data-pl="journal">Journal<span class="pl-pill no-i18n" id="pl-n-journal"></span><span class="pl-bd no-i18n" id="pl-bd-journal" hidden></span></button>
-          <button type="button" class="pl-tab" role="tab" data-pl="autonomy">Autonomy</button>
-        </div>
-        <div class="pl-panel on" data-plp="need"><div class="pl-split" id="pl-split-need">
-          <div class="pl-lst"><div class="pl-rows" id="pl-need-list"></div></div>
-          <div class="pl-pane" id="pl-need-detail"></div></div></div>
-        <div class="pl-panel" data-plp="agents" hidden><div class="pl-split" id="pl-split-agents">
-          <div class="pl-lst"><div class="pl-top">
-            <input type="search" id="pl-ag-q" placeholder="Search an agent…" aria-label="Search an agent">
-            <div class="pl-chips" id="pl-ag-f" role="group" aria-label="Filter agents">
-              <button type="button" class="pl-chip on" data-f="all">All</button><button type="button" class="pl-chip" data-f="waiting">Waiting</button><button type="button" class="pl-chip" data-f="active">Active</button><button type="button" class="pl-chip" data-f="idle">Idle</button><button type="button" class="pl-chip" data-f="offline">Offline</button>
-            </div>
-            <div class="pl-chips"><button type="button" class="pl-chip" id="pl-ag-group">Group by machine</button></div></div>
-            <div class="pl-rows" id="pl-ag-list"></div></div>
-          <div class="pl-pane" id="pl-ag-detail"></div></div></div>
-        <div class="pl-panel" data-plp="journal" hidden><div class="pl-split" id="pl-split-journal">
-          <div class="pl-lst"><div class="pl-top">
-            <input type="search" id="pl-jr-q" placeholder="Search the journal…" aria-label="Search the journal">
-            <div class="pl-chips" id="pl-jr-f" role="group" aria-label="Filter the journal">
-              <button type="button" class="pl-chip on" data-f="all">All</button><button type="button" class="pl-chip" data-f="alert">Alerts</button><button type="button" class="pl-chip" data-f="summary">Summaries</button><button type="button" class="pl-chip" data-f="pass">Passes</button>
-            </div></div>
-            <div class="pl-rows" id="pl-jr-list"></div></div>
-          <div class="pl-pane" id="pl-jr-detail"></div></div></div>
-        <div class="pl-panel" data-plp="autonomy" hidden><p class="muted small pl-moved">The autonomy settings moved to the agent board above: Autonomy.</p></div>
-        </details>
       </div>
 
       <div class="pilot-panel" data-ppanel="chantiers" id="ppanel-chantiers" role="tabpanel" aria-labelledby="ptab-chantiers" hidden>
@@ -970,16 +918,6 @@
       <label class="check"><input id="sp-hub-pull" type="checkbox"> Install shared assets from the company knowledge base</label>
       <label class="check"><input id="sp-hub-contribute" type="checkbox"> Contribute assets from this space for review</label>
       <p class="muted small">Off by default. Only the spaces you turn on reach the shared knowledge base.</p>
-    </div>
-    <div id="sp-orch-row" class="sub">
-      <label>Fleet orchestrator <span class="muted small">(delegated code sessions across your machines)</span></label>
-      <p id="sp-orch-status" class="muted small">…</p>
-      <p id="sp-orch-dispatch" class="muted small" hidden></p>
-      <div class="row wrap">
-        <button id="sp-orch-connect" class="btn ghost" type="button">Connect…</button>
-        <button id="sp-orch-disconnect" class="btn ghost danger" type="button" hidden>Disconnect</button>
-      </div>
-      <pre id="sp-orch-steps" class="orch-steps" hidden></pre>
     </div>
     <label for="sp-instructions">Instructions for this space</label>
     <textarea id="sp-instructions" rows="4" placeholder="Context, tone, language, what to watch for…"></textarea>

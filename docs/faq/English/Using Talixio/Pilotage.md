@@ -101,62 +101,17 @@ The board updates by itself every few seconds while you look at it.
   its own limits). It looks within seconds of the end of a turn (and every 15 minutes as a safety net), at most once per
   turn, and leaves alone a session you already answered, stopped, or older than 12 hours.
 
-### Cloud orchestrator (previous approach)
-Folded under the board, the earlier pilot is still there for those who paired one; it will be removed once the board
-covers what it did.
-
-The pilot is an orchestrator (a Claude Code session) that supervises agents on your machines and reports to Talixio.
-- The **status card** says whether it is connected, when it last reported and how many agents it sees on how many machines,
-  and how many wait for you, on a single line. Under **⚙ Settings**: **Re-pair…**, **Disconnect** and the **Fleet reports** switch (In-app badge, Push +
-  e-mail, Off). Pairing works either by a webhook the orchestrator creates, or, for a plain local session, by *polling* Talixio. If a connected orchestrator says nothing for 30 minutes, the connection panel shows **Silent for N min — re-pair it** (typically its helper files were lost): use *Re-pair…*. Re-pairing gives the orchestrator a new secret but keeps your Fleet reports setting, the Journal (reports, decisions, passes), the agents' conversations and the unread counts. Each agent row shows when the orchestrator last heard from the session itself ("no news", in red after a day, when it has never heard): the orchestrator is told to ask the sessions for a status rather than answer from memory, and to wait for their replies before saying nobody answered. The pairing prompt now has it keep its files in `~/.config/talixio-orchestrator/` and acknowledge each instruction, so none is lost on a failed response.
-- To give the pilot an instruction, type or dictate it in the chat (it passes the same privacy checks as every other dispatch).
-- Four tabs (*Your autonomous pilot*): **Needs you**, **Agents** and **Journal** each have a list on the left and a pane on the
-  right that scrolls on its own — the page never grows with the number of messages. On a phone the pane replaces the list,
-  with « ‹ Back ». They carry a count:
-  - **Needs you** (the question first and large, then what a wrong choice costs, then one big button per option, the pilot's suggestion on top when it has one, and free words or voice below; an approval shows a lock and two steps — open the session, approve there): the sessions that wait for you, each with the question as it was asked, its level (L1–L5), the options as
-    buttons and the cost of a wrong choice. A **decision** you answer with a button (or *Answer another way…*, which opens the
-    agent's conversation); an **approval** (a click only you can give, in that session, e.g. a revoked token) has no button:
-    open the session; an **instruction** is for you to tell the agent what to do next. Under *Decided recently* you see **who
-    answered what**: you, or the assistant on your behalf.
-    A question reads in this order: **who is asking**, **the question** word for word, **the options** as one-tap buttons (or,
-    when there are none, a box to answer in your own words — or dictate), **what the pilot would answer** with its confidence,
-    and **what a wrong choice costs**. When the orchestrator only passed on a summary, or the text says *full text not retrieved
-    yet*, a hint appears with **Ask the orchestrator for the full question**: it sends that request to the agent without
-    counting as an answer. When nothing waits, the tab says so and tells you when the orchestrator last spoke.
-  - **Agents**: the roster with a search, the filters Waiting / Active / Idle / Offline, and *Group by machine*. Pick one to read
-    its conversation: the question it waits on stays pinned on top, a message that is too long is cut with *Show all*, older
-    messages load with « ↑ n older messages », and the box at the bottom writes to that agent (or dictate). A red number on a row
-    counts its replies you have not read; it clears when you open the conversation. Each agent's replies stay in its own
-    conversation.
-  - **Journal**: only the fleet-wide reports, grouped by day, filtered All / Alerts / Summaries, with a search; click one to read
-    it in full. A session that starts waiting for you adds an alert.
-  - **Autonomy** only points to *Autonomy* at the top of the board (see above): the settings moved there in 1.39.0 and apply
-    to both.
-- A session can route its questions to the pilot with the « route questions » hook (`/autopilot-on`, `/autopilot-off`,
-  `/autopilot-status`, per session; off by default, and then the question comes to you as usual). The pilot pastes the question as
-  it is; your answer goes back with a decision id, and the pilot reports the session's next step. Approvals and permission
-  prompts are never routed: only you can give them. A new question counts as news: it shows in the badge even on a quiet
-  check-in. A pilot paired before this needs the instructions of the pairing message once: re-pair it, or send it those.
-- **The assistant can read the fleet's questions.** Ask « what are the agents waiting for? »: it lists the waiting questions
-  (options, level, cost of a wrong choice), the latest decisions and who took them, recent alerts, and any agent's
-  conversation. It reads only; it answers (with the decision id) just what is yours to leave to it, never levels L4/L5 (Values and business, Critical),
-  pushes, deploys, deletions, e-mails, credentials or approvals.
-- **Status file**: retired in 1.42.0. Talixio no longer writes `pilot-status.md` and removes the one an older version
-  left in its data folder. The board shows the same state live.
-- **Fleet reports**: how the pilot's reports reach you (see *Channels and notifications*): an in-app badge by default, the
-  Journal and the conversations, and optionally push + e-mail.
-
-### Passes: what the orchestrator did, pass after pass
-In **Journal**, the **Passes** filter lists every time the orchestrator checked in — also the quiet ones, folded into one line
-(*"12 quiet passes, nothing new"*): agents seen, how many were waiting, reports and instructions exchanged, and anything it must fix. If
-it stops checking in, the status line at the top says so (*"No pass for 40 min"*), so a silence is visible. In each agent's conversation,
-what comes back is told apart: a **Question** or an **Approval** (marked), an **Answer** to a decision, an **Alert**, or a plain
-status (smaller, quieter).
-
-The orchestrator now makes **one call per pass** (agents, reports and acknowledgements in; instructions and points to fix out). Points to
-fix are things like a waiting session sent without its question, or a question without its full text: the orchestrator is asked to
-retrieve it from that session before the next pass. Re-connect the pilot (*Connect…*) to give your orchestrator the new instructions; the
-older way keeps working.
+### The cloud orchestrator is gone (1.45.0)
+The earlier pilot, a cloud Claude Code session that relayed your agents to Talixio, is switched off. The board above
+does what it did, with no model in between. When you update:
+- its pairing is deleted (it held a secret and a webhook), and its folded cockpit (status card, Needs you, Agents,
+  Journal, Passes) is gone, as is the orchestrator panel in the space editor;
+- what you answered through it is kept: each answer is in *What I know*, under a project named after the agent, and
+  still guides the board like your other answers (what the assistant answered alone does not); each agent's last
+  exchanges are kept there as a note marked *Imported from the cloud orchestrator*. The Journal and the Passes are not
+  kept. A notification says how many decisions and threads were kept;
+- if an old orchestrator session is still running, it is told to stop and you get one notification a day until you
+  close it. Connect each machine with **Connect a machine** instead.
 
 ## Roles
 The catalogue of the roles your assistant can take, grouped into one card per specialization. Each role is a node whose ring shows
