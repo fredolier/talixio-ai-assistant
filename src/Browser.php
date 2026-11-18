@@ -26,6 +26,10 @@ final class Browser
     /** @var resource|null */
     private $proxy = null;
     private array $proxyPipes = [];
+    /** @var array<string,array> the page's own XHR/fetch calls, by request id (the last 80): what "learn this site's API" reads */
+    private array $calls = [];
+    /** @var array<string,array> what Chromium said about a request's cookies and headers, sometimes before the request itself */
+    private array $extra = [];
 
     private function __construct(private App $app) {}
 
@@ -128,6 +132,7 @@ final class Browser
         $this->session = $this->call('Target.attachToTarget', ['targetId' => $target, 'flatten' => true], false)['sessionId'];
         $this->call('Page.enable');
         $this->call('Runtime.enable');
+        $this->call('Network.enable', ['maxPostDataSize' => 65536]);
         $this->call('Fetch.enable', ['patterns' => [['urlPattern' => '*', 'requestStage' => 'Request']]]);
     }
 
@@ -171,8 +176,65 @@ final class Browser
             $this->ws->send(json_encode($reply, JSON_UNESCAPED_SLASHES));
             return;
         }
+        if (str_starts_with($m['method'], 'Network.')) { $this->network($m['method'], $m['params'] ?? []); return; }
         $this->events[] = $m;
         if (count($this->events) > 200) array_shift($this->events);
+    }
+
+    /** Note the page's own calls (XHR, fetch): their address, body and answer, and whether cookies or a token went with them. */
+    private function network(string $method, array $p): void
+    {
+        $id = (string)($p['requestId'] ?? '');
+        if ($method === 'Network.requestWillBeSentExtraInfo') {
+            $h = array_change_key_case((array)($p['headers'] ?? []));
+            $this->extra[$id] = ['cookies' => !empty($p['associatedCookies']) && (bool)array_filter($p['associatedCookies'], fn($c) => empty($c['blockedReasons'])), 'auth_header' => isset($h['authorization'])];
+            if (count($this->extra) > 200) unset($this->extra[array_key_first($this->extra)]); // not array_shift: it renumbers numeric ids
+            if (isset($this->calls[$id])) { $this->calls[$id] = $this->extra[$id] + $this->calls[$id]; }
+            return;
+        }
+        if ($method === 'Network.requestWillBeSent' && in_array($p['type'] ?? '', ['XHR', 'Fetch'], true)) {
+            $r = $p['request'] ?? [];
+            $h = array_change_key_case((array)($r['headers'] ?? []));
+            $this->calls[$id] = ($this->extra[$id] ?? []) + ['method' => (string)($r['method'] ?? 'GET'), 'url' => (string)($r['url'] ?? ''), 'post' => (string)($r['postData'] ?? ''),
+                'auth_header' => isset($h['authorization']), 'cookies' => false, 'status' => 0, 'mime' => '', 'done' => false];
+            if (count($this->calls) > 80) unset($this->calls[array_key_first($this->calls)]);
+            return;
+        }
+        if (!isset($this->calls[$id])) return;
+        if ($method === 'Network.responseReceived') { $this->calls[$id]['status'] = (int)($p['response']['status'] ?? 0); $this->calls[$id]['mime'] = (string)($p['response']['mimeType'] ?? ''); }
+        if ($method === 'Network.loadingFinished') $this->calls[$id]['done'] = true;
+        if ($method === 'Network.loadingFailed') unset($this->calls[$id]);
+    }
+
+    /**
+     * The JSON calls the pages made since the browser started (on $host only, when given), oldest first, cleaned by
+     * SiteApis::scrub: no cookies, tokens or keys, long answers shortened.
+     */
+    public function apiCalls(string $host = ''): array
+    {
+        $this->settle(0.3);
+        $host = strtolower(trim($host));
+        $out = []; $seen = [];
+        foreach ($this->calls as $id => $c) {
+            if (!$c['done'] || !preg_match('/json|javascript|text\/plain/i', $c['mime'])) continue;
+            $h = strtolower((string)parse_url($c['url'], PHP_URL_HOST));
+            if ($host !== '' && !in_array($host, [$h, SiteApis::host($c['url'])], true) && !str_ends_with($h, '.' . preg_replace('/:\d+$/', '', $host))) continue; // the site, with or without its port, or one of its sub-domains
+            $key = $c['method'] . ' ' . preg_replace('/\?.*$/s', '', $c['url']);
+            if (isset($seen[$key]) && count($seen[$key]) >= 2) continue; // the same endpoint again: two examples are enough
+            try { $b = $this->call('Network.getResponseBody', ['requestId' => (string)$id], true, 10); $c['body'] = !empty($b['base64Encoded']) ? '' : (string)($b['body'] ?? ''); }
+            catch (\Throwable) { $c['body'] = ''; } // no longer kept by the browser
+            if ($c['body'] !== '' && json_decode($c['body']) === null && !str_contains($c['mime'], 'json')) continue; // a script, not an API answer
+            $seen[$key][] = true;
+            $out[] = SiteApis::scrub($c);
+        }
+        return $out;
+    }
+
+    /** The Cookie header the browser would send to this address (the user's login there), '' when it has none. */
+    public function cookieHeader(string $url): string
+    {
+        $cs = $this->call('Network.getCookies', ['urls' => [$url]])['cookies'] ?? [];
+        return implode('; ', array_map(fn($c) => $c['name'] . '=' . $c['value'], $cs));
     }
 
     /** Only public http(s) addresses (plus data/blob URLs created by the page itself). */

@@ -734,6 +734,35 @@ const flows = {
     check('spaces: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#sp-orch-steps')));
     await page.click('#sp-cancel');
   },
+  async siteApis({ page, check, data }) {
+    // 1.37.0: connectors learned from a site's API are listed in Settings, with their key and Remove
+    const ep = (name, method, path, description) => ({ name, method, path, description, params: {}, fixed: {}, changes: false });
+    writeFileSync(join(data, 'site-apis.json'), JSON.stringify({ apis: {
+      shop: { name: 'shop', title: 'Test Shop', base: 'https://shop.example/api', auth: { type: 'header', name: 'X-Api-Key', prefix: '', help: 'Account, then Developer' }, key: '', at: 1,
+        endpoints: [ep('search', 'GET', '/products', 'Search products'), ep('add_to_cart', 'POST', '/cart', 'Add to the cart')] },
+      mine: { name: 'mine', title: 'My Orders', base: 'https://orders.example', auth: { type: 'cookies', help: '' }, key: '', at: 1, endpoints: [ep('orders', 'GET', '/api/orders', 'My orders')] } } }));
+    await page.evaluate(() => localStorage.setItem('setTab:accounts', 'mcp-card'));
+    await go(page, 'settings/accounts');
+    await page.waitForSelector('#sapi-list [data-sapi=shop]', { timeout: 8000 });
+    const shop = () => page.textContent('#sapi-list [data-sapi=shop]');
+    check('site apis: Settings lists the learned connectors with their site, sign-in and what runs without asking',
+      await page.isVisible('#sapi') && /shop\.example/.test(await shop()) && /2 outil|2 tool/.test(await shop()) && /1 (sans demander|run without)/.test(await shop()), await shop());
+    check('site apis: one without its key is flagged', await page.$eval('#sapi-list [data-sapi=shop]', el => el.classList.contains('bad')));
+    await page.click('#sapi-list [data-sapi=shop] summary');
+    check('site apis: opened, it shows each call and that changes ask first', /POST \/cart/.test(await shop()) && /(demande d'abord|asks first)/.test(await shop()) && /Account, then Developer/.test(await shop()));
+    await page.fill('#sapi-list [data-sapi=shop] [data-sapikey]', 'k-123');
+    await page.click('#sapi-list [data-sapi=shop] [data-sapisave]');
+    await page.waitForFunction(() => !document.querySelector('#sapi-list [data-sapi=shop]').classList.contains('bad'), null, { timeout: 6000 });
+    const list = await api(page, 'api/site-apis');
+    check('site apis: the key is saved, and never sent back to the page', list.apis.find(a => a.name === 'shop').has_key === true && !JSON.stringify(list).includes('k-123'));
+    page.once('dialog', d => d.accept());
+    await page.click('#sapi-list [data-sapi=mine] summary');
+    check('site apis: a cookie one says it uses the browser login and asks to log in again when it expires', /(navigateur de l'assistant|assistant's browser)/.test(await page.textContent('#sapi-list [data-sapi=mine]')));
+    await page.click('#sapi-list [data-sapi=mine] [data-sapidel]');
+    await page.waitForFunction(() => !document.querySelector('#sapi-list [data-sapi=mine]'), null, { timeout: 6000 });
+    check('site apis: Remove takes it away', (await api(page, 'api/site-apis')).apis.map(a => a.name).join() === 'shop');
+  },
+
   async agentBoard({ page, check, data }) {
     // 1.36.0: a coding agent reports itself through the hook script; the board shows its own words and sends answers back
     await go(page, 'pilotage');

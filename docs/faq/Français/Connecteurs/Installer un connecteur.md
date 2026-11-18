@@ -72,6 +72,8 @@ Pour un serveur qui n'est pas sur GitHub (ou dans un dépôt privé) :
   bibliothèque, dans les *Notes* de l'espace ; demandez à l'assistant de le déplacer ou de le renommer où vous
   voulez. Le fil n'en montre que le début, replié.
 
+Un site sans connecteur ni API publique : l'assistant peut apprendre l'API qu'utilisent ses pages et en faire un connecteur (*Connecteurs / Apprendre l'API d'un site*).
+
 Exemples pas à pas : *Connecteurs / anki.talixio.com* (un connecteur à installer) et *Connecteurs / Home Assistant* (un service distant, par son adresse).
 
 Sur un serveur partagé par plusieurs personnes, les connecteurs validés par l'administrateur sont dans Réglages →

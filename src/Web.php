@@ -121,7 +121,7 @@ final class Web
             'logout', 'status', 'assistants', 'claude-login', 'transfer', 'settings', 'sovereign', 'security', 'update', 'doctor', 'activity', 'bill', 'billing', 'channels', 'accounts', 'routing', 'catalogue', 'notifications', 'push', 'notify' => $this->routeSystem($m, $path, $b),
             'messages', 'chat', 'spaces', 'feedback', 'capture', 'search', 'approvals', 'conductor', 'pilot', 'federation' => $this->routeChat($m, $path, $b),
             'tasks', 'heartbeats', 'heartbeat', 'jobs', 'mail', 'contacts' => $this->routeWork($m, $path, $b),
-            'google', 'microsoft', 'spotify', 'oauth', 'legifrance', 'connectors', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
+            'google', 'microsoft', 'spotify', 'oauth', 'legifrance', 'connectors', 'site-apis', 'mcp', 'store', 'shell', 'meaning', 'dav' => $this->routeConnectors($m, $path, $b),
             'memory', 'mind', 'skills', 'roles', 'scripts' => $this->routeMind($m, $path, $b),
             'library', 'files', 'shares', 'privacy' => $this->routeLibrary($m, $path, $b),
             'board' => $this->board($m, $path, $b),
@@ -363,6 +363,15 @@ final class Web
             $path === '/api/connectors/github' && $m === 'POST' => (function () use ($b) { set_time_limit(300); return (new ConnectorPackage($this->app))->fromGithub((string)($b['url'] ?? '')); })(),
             $path === '/api/connectors/install' && $m === 'POST' => (new ConnectorPackage($this->app))->install((int)($b['file'] ?? 0), (string)($b['name'] ?? ''), (array)($b['env'] ?? [])),
             $path === '/api/connectors/install' && $m === 'GET' => (new ConnectorPackage($this->app))->status(),
+            $path === '/api/site-apis' && $m === 'GET' => ['apis' => $this->app->siteApis()->list()],
+            $path === '/api/site-apis/key' && $m === 'POST' => (function () use ($b) {
+                try { $this->app->siteApis()->setKey((string)($b['name'] ?? ''), (string)($b['key'] ?? '')); } catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+                return ['apis' => $this->app->siteApis()->list()];
+            })(),
+            $path === '/api/site-apis/remove' && $m === 'POST' => (function () use ($b) {
+                if (!$this->app->siteApis()->remove((string)($b['name'] ?? ''))) $this->fail(404, 'not found');
+                return ['apis' => $this->app->siteApis()->list()];
+            })(),
             $path === '/api/mcp' && $m === 'GET' => $this->connectors(),
             $path === '/api/mcp' && $m === 'POST' => (function () use ($b) { set_time_limit(0); $this->app->mcp()->saveRaw((string)($b['raw'] ?? '')); $this->app->mcp()->refresh(); return $this->connectors(); })(),
             $path === '/api/mcp/remove' && $m === 'POST' => (function () use ($b) { // uninstall (the store's Uninstall): the rest of mcp.json as it is

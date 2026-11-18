@@ -1,6 +1,17 @@
 window.I18N = window.I18N || {};
 /* French interface: English text (as it appears on screen) → French. {placeholders} match any value. See i18n.js. */
 window.I18N.fr = {
+  "Learned from sites": "Appris des sites",
+  "Connectors the assistant made from a site's own API, when you asked it to learn it. They only call that site. Reads run without asking; changes ask you each time.": "Connecteurs que l'assistant a faits à partir de l'API d'un site, quand vous lui avez demandé de l'apprendre. Ils n'appellent que ce site. Les lectures se font sans demander ; les modifications vous demandent à chaque fois.",
+  "Your login in the assistant's browser": "Votre connexion dans le navigateur de l'assistant",
+  "No sign-in": "Sans connexion",
+  "Key saved": "Clé enregistrée",
+  "Needs its key": "Clé à saisir",
+  "asks first": "demande d'abord",
+  "Save the key": "Enregistrer la clé",
+  "It uses your login to this site in the assistant's browser. When it expires, the assistant tells you and asks you to log in again.": "Il utilise votre connexion à ce site dans le navigateur de l'assistant. Quand elle expire, l'assistant vous le dit et vous demande de vous reconnecter.",
+  "Key saved.": "Clé enregistrée.",
+  "Remove this connector? Its tools go with it.": "Retirer ce connecteur ? Ses outils partent avec lui.",
 "Routines": "Routines",
 "Your agents": "Vos agents",
 "Connect a machine": "Connecter une machine",
