@@ -2018,6 +2018,8 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .ab-head h3{margin:0}
 .ab-head #ab-new-btn{margin-left:auto}
+.ab-notify{display:inline-flex;align-items:center;gap:6px}
+.ab-notify select{font:inherit;padding:3px 6px}
 .ab-new{margin-bottom:12px}
 .ab-new-form{display:flex;flex-direction:column;gap:8px}
 .ab-new-form[hidden]{display:none}

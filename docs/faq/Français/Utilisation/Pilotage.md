@@ -62,7 +62,15 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   derniers mots de chaque session, qu'il traite comme écrits par d'autres. Il peut répondre à une session pour vous
   (`agent_answer` : une réponse, autoriser ou refuser), en démarrer une sur une machine qui écoute (`agent_start`) et en
   arrêter une (`agent_stop`), et vous demande votre accord avant, à chaque fois.
-- Une demande d'autorisation envoie aussi une notification (voir *Canaux et notifications*).
+- **La pastille** sur Pilotage dans le menu et sur l'onglet Agents compte les sessions dans *À vous*. Elle
+  diminue à mesure que vous les ouvrez.
+- **Me notifier** (en haut du tableau) choisit ce qui arrive aussi sur votre téléphone et dans vos notifications (voir
+  *Canaux et notifications*) : *Demandes d'autorisation* (par défaut), *Autorisations et tours terminés* (aussi chaque
+  tour qu'un agent termine, avec ses derniers mots) ou *Aucun*.
+- **Depuis la discussion**, demandez « montre-moi toute la conversation de la session webshop » : l'assistant lit le fil
+  de cette session (`agents_list` avec la session). Dites-lui « pour mes agents, le travail client passe d'abord » ou
+  « ne jamais pousser un vendredi » : il enregistre vos priorités et règles permanentes pour l'autonomie du tableau
+  (`agents_priorities`). Juste après avoir lu ce qu'un agent a écrit, un tel changement attend votre accord.
 - **Autonomie : l'assistant répond seul à vos agents, dans vos limites** (bouton en haut du tableau). Activez *L'assistant
   regarde seul les questions des agents*. Quand une session termine son tour, l'assistant lit son dernier message (comme
   des données écrites par d'autres, jamais comme des instructions) avec vos **priorités**, vos **règles permanentes**, les
@@ -90,7 +98,7 @@ couvrira ce qu'il faisait.
 
 Le pilote est un orchestrateur (une session Claude Code) qui supervise des agents sur vos machines et fait ses rapports à Talixio.
 - La **carte d'état** dit s'il est connecté, quand il a fait son dernier rapport, combien d'agents il voit sur combien de machines,
-  et combien attendent votre réponse, sur une seule ligne. Sous **⚙ Réglages** : **Fichier d'état**, **Reconnecter…**, **Déconnecter** et l'interrupteur **Rapports de la flotte**
+  et combien attendent votre réponse, sur une seule ligne. Sous **⚙ Réglages** : **Reconnecter…**, **Déconnecter** et l'interrupteur **Rapports de la flotte**
   (Pastille dans l'app, Push + e-mail, Désactivée). Le jumelage se fait soit par un webhook que crée l'orchestrateur, soit, pour
   une simple session locale, en *interrogeant* Talixio à intervalle régulier. Si un orchestrateur connecté ne dit rien pendant 30 minutes, le panneau de connexion affiche **Silencieux depuis N min — ré-appairez-le** (en général ses fichiers d'aide ont disparu) : utilisez *Reconnecter…*. Reconnecter donne un nouveau secret à l'orchestrateur mais garde votre réglage Rapports de la flotte, le Journal (rapports, décisions, passages), les conversations des agents et les compteurs de non-lus. L'invite d'appairage lui fait désormais ranger ses fichiers dans `~/.config/talixio-orchestrator/` et accuser réception de chaque instruction, pour qu'aucune ne soit perdue si une réponse échoue.
 - Pour donner une consigne au pilote, écrivez-la ou dictez-la dans le chat (mêmes contrôles de confidentialité que toute autre consigne envoyée).
@@ -126,12 +134,8 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
   attente (options, niveau, coût d'un mauvais choix), les dernières décisions et qui les a prises, les alertes récentes et la
   conversation de n'importe quel agent. Il ne fait que lire ; il ne répond (avec l'identifiant de décision) que ce que vous
   lui laissez, jamais les niveaux L4/L5 (Valeurs et métier, Critique), les pushs, déploiements, suppressions, e-mails, identifiants ou approbations.
-- **Fichier d'état** : le bouton **Fichier d'état** de la carte d'état affiche, copie ou télécharge `pilot-status.md`, un fichier
-  Markdown que l'assistant tient à jour à chaque changement (un rapport, une réponse, une décision, un réglage) : l'orchestrateur
-  est-il vivant et sa dernière nouvelle, une ligne par agent (état, tâche, date et source de sa dernière nouvelle, en attente ou
-  non), les questions en attente mot pour mot avec leurs identifiants et options, les dernières décisions (qui a répondu quoi),
-  et vos priorités, règles, plafond quotidien et niveaux d'autonomie. La carte indique où il se trouve (dans le dossier de données
-  de l'assistant), pour le lire aussi depuis le serveur ou le synchroniser ailleurs. Il ne contient jamais de secret ni le webhook d'appairage.
+- **Fichier d'état** : retiré en 1.42.0. Talixio n'écrit plus `pilot-status.md` et supprime celui qu'une version
+  précédente avait laissé dans son dossier de données. Le tableau montre le même état en direct.
 - **Rapports de la flotte** : comment les rapports du pilote vous parviennent (voir *Canaux et notifications*) : une pastille dans
   l'app par défaut, le Journal et les conversations, et en option push + e-mail.
 

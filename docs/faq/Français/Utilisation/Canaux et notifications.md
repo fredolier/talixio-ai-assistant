@@ -12,6 +12,11 @@ une pour ouvrir sa conversation et la marquer comme lue, ou *Tout marquer comme 
 aussi de l'écran verrouillé du téléphone. Les 200 dernières sont gardées, pendant 60 jours. Dans un espace
 Secret, la liste dit seulement où regarder.
 
+## Vos agents de code
+Le tableau des agents (Pilotage → Agents) compte les sessions dans *À vous* sur l'entrée **Pilotage** et sur l'onglet
+**Agents**. **Me notifier**, en haut du tableau, choisit ce qui est aussi envoyé en notification : *Demandes
+d'autorisation* (par défaut), *Autorisations et tours terminés*, ou *Aucun*.
+
 ## Rapports de votre pilote autonome
 Les rapports d'avancement du pilote autonome (voir *Pilotage*) sont discrets par défaut : ni push, ni e-mail. Un nombre rouge
 s'affiche sur l'entrée **Pilotage** et sur les onglets de **Votre pilote autonome** (Pilotage → Agents, dans le bloc replié *Orchestrateur cloud

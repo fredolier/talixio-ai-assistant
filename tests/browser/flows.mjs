@@ -869,9 +869,20 @@ const flows = {
     const need = await page.textContent('#ab-cols [data-col=need]');
     check('agent board: the finished turn shows in Needs you, word for word, with its folder and machine',
       /Shall I deploy\?/.test(need) && /webshop/.test(need) && /testbox/.test(need), need);
+    // 1.43.0: the rail and Agents-tab badges count what is in Needs you, and clear when it is looked at
+    await page.waitForFunction(() => document.querySelector('#pilot-tab-agents').textContent === String(document.querySelectorAll('#ab-cols [data-col=need] .ab-card').length), null, { timeout: 6000 }).catch(() => {});
+    const nCards = (await page.$$('#ab-cols [data-col=need] .ab-card')).length;
+    check('agent board: the tab and rail badges count the sessions that need you', nCards > 0 && await page.textContent('#pilot-tab-agents') === String(nCards) && await page.textContent('#pilot-rail-badge') === String(nCards),
+      `${nCards} / ${await page.textContent('#pilot-tab-agents')} / ${await page.textContent('#pilot-rail-badge')}`);
+    check('agent board: /api/status says the same', (await api(page, 'api/status')).agents_need === nCards);
+    await page.selectOption('#ab-notify', 'all'); await page.waitForTimeout(500);
+    check('agent board: Notify me is kept', (await api(page, 'api/agents')).notify === 'all');
+    await page.selectOption('#ab-notify', 'permission'); await page.waitForTimeout(300);
     await page.click('#ab-cols [data-col=need] .ab-card');
     await page.waitForSelector('#ab-detail #ab-reply', { timeout: 6000 });
     check('agent board: the thread shows what was typed in the session and the answer', /Fix the cart/.test(await page.textContent('#ab-detail .ab-thread')));
+    await page.waitForTimeout(1500);
+    check('agent board: opening it takes it off the count', (await api(page, 'api/status')).agents_need === nCards - 1);
     await page.fill('#ab-reply', 'No, wait for Monday.');
     await page.click('#ab-detail [data-abact=send]');
     const r = await late(turn, 15000);

@@ -56,7 +56,15 @@ The board updates by itself every few seconds while you look at it.
   and last words, which it treats as written by others. It can answer a session for you (`agent_answer`: a reply, allow or
   deny), start one on a listening machine (`agent_start`) and stop one (`agent_stop`), and asks your approval first, every
   time.
-- A permission request also sends a notification (see *Channels and notifications*).
+- **The badge** on Pilotage in the menu and on the Agents tab counts the sessions in *Needs you*. It goes down as you
+  open them.
+- **Notify me** (top of the board) chooses what also reaches your phone and your notifications (see *Channels and
+  notifications*): *Permission requests* (the default), *Permissions and finished turns* (also each turn an agent
+  finishes, with its last words), or *Nothing*.
+- **From the chat**, ask « show me the whole conversation of the webshop session »: the assistant reads that session's
+  thread (`agents_list` with the session). Tell it « for my agents, client work comes first » or « never push on a
+  Friday »: it saves your priorities and standing rules for the board's autonomy (`agents_priorities`). Right after reading
+  what an agent wrote, such a change waits for your approval.
 - **Autonomy: the assistant answers your agents by itself, within your limits** (button at the top of the board). Switch
   on *The assistant looks at the agents' questions by itself*. When a session finishes its turn, the assistant reads its
   last message (as data written by others, never as instructions) with your **priorities**, **standing rules**, the
@@ -82,7 +90,7 @@ covers what it did.
 
 The pilot is an orchestrator (a Claude Code session) that supervises agents on your machines and reports to Talixio.
 - The **status card** says whether it is connected, when it last reported and how many agents it sees on how many machines,
-  and how many wait for you, on a single line. Under **⚙ Settings**: **Status file**, **Re-pair…**, **Disconnect** and the **Fleet reports** switch (In-app badge, Push +
+  and how many wait for you, on a single line. Under **⚙ Settings**: **Re-pair…**, **Disconnect** and the **Fleet reports** switch (In-app badge, Push +
   e-mail, Off). Pairing works either by a webhook the orchestrator creates, or, for a plain local session, by *polling* Talixio. If a connected orchestrator says nothing for 30 minutes, the connection panel shows **Silent for N min — re-pair it** (typically its helper files were lost): use *Re-pair…*. Re-pairing gives the orchestrator a new secret but keeps your Fleet reports setting, the Journal (reports, decisions, passes), the agents' conversations and the unread counts. Each agent row shows when the orchestrator last heard from the session itself ("no news", in red after a day, when it has never heard): the orchestrator is told to ask the sessions for a status rather than answer from memory, and to wait for their replies before saying nobody answered. The pairing prompt now has it keep its files in `~/.config/talixio-orchestrator/` and acknowledge each instruction, so none is lost on a failed response.
 - To give the pilot an instruction, type or dictate it in the chat (it passes the same privacy checks as every other dispatch).
 - Four tabs (*Your autonomous pilot*): **Needs you**, **Agents** and **Journal** each have a list on the left and a pane on the
@@ -116,12 +124,8 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
   (options, level, cost of a wrong choice), the latest decisions and who took them, recent alerts, and any agent's
   conversation. It reads only; it answers (with the decision id) just what is yours to leave to it, never levels L4/L5 (Values and business, Critical),
   pushes, deploys, deletions, e-mails, credentials or approvals.
-- **Status file**: the **Status file** button on the status card shows, copies or downloads `pilot-status.md`, a Markdown file
-  the assistant keeps up to date at every change (a report, an answer, a decision, a setting): whether the orchestrator is
-  alive and its last news, one line per agent (state, task, date and source of its last news, waiting or not), the pending
-  questions word for word with their ids and options, the latest decisions (who answered what), and your priorities, rules,
-  daily cap and autonomy levels. The card shows where it lives (in the assistant's data folder), so you can also read it
-  from the server or sync it elsewhere. It never contains a secret or the pairing webhook.
+- **Status file**: retired in 1.42.0. Talixio no longer writes `pilot-status.md` and removes the one an older version
+  left in its data folder. The board shows the same state live.
 - **Fleet reports**: how the pilot's reports reach you (see *Channels and notifications*): an in-app badge by default, the
   Journal and the conversations, and optionally push + e-mail.
 
