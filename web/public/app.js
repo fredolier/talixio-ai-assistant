@@ -1234,7 +1234,7 @@ async function toggleDictate(input, btn) {
       try {
         const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
         const info = await uploadFile(blob, `dictation-${Date.now()}.${ext}`, '');
-        const { text } = await post('api/transcribe', { id: info.id });
+        const { text } = await post('api/transcribe', { id: info.id, space: state.space });
         if (text) { input.value = (input.value.trim() ? input.value.replace(/\s*$/, ' ') : '') + text; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); }
         else toast(t('Nothing was recognised.'));
       } catch (e) { toast(e.message); } finally { d.btn.classList.remove('busy'); d.btn.disabled = false; }

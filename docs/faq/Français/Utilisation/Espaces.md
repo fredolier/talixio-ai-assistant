@@ -7,6 +7,7 @@ Un espace est une conversation séparée pour un sujet : un client, la maison, l
   rangées), **ses consignes**, ses notes, un modèle par défaut, une couleur et un **tableau de tâches**.
 - Un espace ne voit pas les conversations des autres, sauf si vous le demandez.
 - Telegram, Signal et l'e-mail écrivent dans *Général* ; `/space Maison` les fait passer dans un autre espace.
+  Pas dans tous : Telegram et l'e-mail n'entrent pas dans un espace Confidentiel, et seule l'app entre dans un espace Secret.
 - Chaque espace a un **niveau de confidentialité** (Interne, Confidentiel, Secret) : le bouclier à côté
   de son nom. Voir *Confidentialité / Niveaux de confidentialité*.
 - Avec un compte IA par espace, un espace Confidentiel ou Secret est cloisonné : les modèles des

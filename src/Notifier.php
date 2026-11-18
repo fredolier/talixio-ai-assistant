@@ -21,14 +21,15 @@ final class Notifier
     }
 
     /** $space: the space the message belongs to (named in the title; the app notification opens it). */
-    public function notify(string $title, string $text, int $space = 0): array
+    /** $level: the level the text was written at, when what it read raised it above its space's (1.41.3). */
+    public function notify(string $title, string $text, int $space = 0, string $level = 'internal'): array
     {
         $c = $this->app->cfg;
         $results = [];
         $sp = $this->app->spaces()->get($space) ?? $this->app->spaces()->general();
         $url = '#chat/' . $sp['slug']; // relative to the app (it may live under a prefix)
         $unread = $this->record($title, $text, $space, $url);
-        if ($c->notifyNeutral || $this->app->privacy()->spaceLevel($space) !== 'internal') { // the content stays in the app
+        if ($c->notifyNeutral || ($this->app->privacy()->spaceLevel($space) !== 'internal' || $level !== 'internal')) { // the content stays in the app
             $title = $c->name;
             $text = I18n::t($this->app, 'New message in {space}', ['space' => $space ? $sp['name'] : I18n::t($this->app, 'General')]);
         }

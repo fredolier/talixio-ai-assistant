@@ -1284,6 +1284,8 @@ final class Web
         $id = (int)($body['id'] ?? 0);
         $f = $this->app->files()->get($id) ?: $this->fail(404, 'no such recording');
         if (!str_starts_with((string)$f['mime'], 'audio/') && !str_starts_with((string)$f['mime'], 'video/')) $this->fail(400, 'not an audio recording');
+        $space = (int)($body['space'] ?? 0); // dictated in this space: transcribed by its rules (1.41.3)
+        if ($space && $this->app->spaces()->get($space)) $this->app->setSpace($space);
         try { $text = $this->app->transcriber()->transcribe($f, false); }
         finally { $this->app->library()->purgeFile($id); } // dictation leaves nothing behind
         return ['text' => trim($text)];
