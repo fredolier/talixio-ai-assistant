@@ -284,6 +284,27 @@ The two genuinely new *concepts*, kept orthogonal (decided with the mockup:
 - **Not done (next slice).** Making the pilot's role clearer (what it did on its own vs. what waits), pushing the file to
   the Library, per-question « snooze », and a one-line « next step for you » banner on the Agents tab.
 
+### Slice 8 — the agent board: sessions report themselves (1.36.0) · *Medium*
+
+- **Why.** The Agents tab showed what a third Claude session (the cloud orchestrator) wrote about the others, every ~10
+  minutes: stacked delays (10–20 min per answer), summaries instead of the agents' words, model-chosen ids and timestamps,
+  no way to answer a permission prompt. These were structural: a model sat in the transport. Decision D6 (the Pilotage
+  target) is settled here: **the assistant is the orchestrator; the transport is code**.
+- **Shape.** `src/AgentHub.php` (tables `agent_sessions`, `agent_events`, `agent_commands`; kv `agents.token`, `agents.rev`).
+  A hook script (`deploy/agent-hook.sh`, served with the address and token filled in by `GET /api/agents/hook.sh`) posts
+  each hook event to `POST /api/agents/hook` and, for `permission` and `reply`, polls `GET /api/agents/wait` every 2–4 s
+  (200 the answer, 204 not yet, 410 stop: the session's sequence number moved on). Short polls, never a held request, so a
+  waiting session never pins one of the `php -S` workers. The answer formats are Claude Code's own: `PermissionRequest`
+  JSON `decision.behavior`, and a `Stop` hook with `asyncRewake` that exits 2 with the reply on stderr, which wakes the
+  session. Any tool that can pipe the same JSON fields reports too (`?agent=<name>`): the design is agent-agnostic, Claude
+  Code is just the first adapter.
+- **UI.** One screen: three columns (Needs you / Working / Quiet), a card per session (project, agent, machine, real age,
+  last words), a thread with a reply box kept across refreshes, Allow/Deny, Mark as seen, Forget. Polled on the 4 s loop
+  while visible, redrawn only when `agents.rev` changes. The cloud orchestrator is folded underneath, unchanged.
+- **Assistant.** `agents_list` (read; untrusted source) and `agent_answer` (asks approval every time).
+- **Next.** Dispatch work to a machine (start a session), stop a session, decisions history per card, then remove the
+  relay (`Conductor` tick/pull/inbox, pairing prompt, Journal/Passes, the fleet_* tools) once nobody depends on it.
+
 ## 5. Open decisions (carry from the mockup)
 
 - ~~`scope` reused vs. a new `specialization` field~~ — **settled (slice 3):**

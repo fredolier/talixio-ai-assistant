@@ -3266,9 +3266,9 @@ check('tasks → Google: a change updates the same event', (end($gs1['updated'])
 $gb->update($gc['id'], ['in_calendar' => false]); $gb->syncGoogle();
 $gs1 = json_decode((string)file_get_contents(sys_get_temp_dir() . "/fake-google-$gport.json"), true);
 check('tasks → Google: unticked, the event is removed', count($gs1['deleted'] ?? []) === 1 && $ga->store->q('SELECT gcal_id FROM cards WHERE id = ?', [$gc['id']])->fetchColumn() === null);
-$gm = $gb->create(['title' => 'Point équipe', 'due_date' => '2026-11-19', 'start_time' => '14:00', 'end_time' => '15:30', 'in_calendar' => true], 0); $gb->syncGoogle();
+$gm = $gb->create(['title' => 'Point équipe', 'due_date' => '2036-11-19', 'start_time' => '14:00', 'end_time' => '15:30', 'in_calendar' => true], 0); $gb->syncGoogle();
 $gs1 = json_decode((string)file_get_contents(sys_get_temp_dir() . "/fake-google-$gport.json"), true); $ev = end($gs1['inserted']);
-check('tasks → Google: a task with hours is a timed, busy event', ($ev['start']['dateTime'] ?? '') === date('c', strtotime('2026-11-19 14:00')) && ($ev['end']['dateTime'] ?? '') === date('c', strtotime('2026-11-19 15:30'))
+check('tasks → Google: a task with hours is a timed, busy event', ($ev['start']['dateTime'] ?? '') === date('c', strtotime('2036-11-19 14:00')) && ($ev['end']['dateTime'] ?? '') === date('c', strtotime('2036-11-19 15:30'))
     && $ev['transparency'] === 'opaque' && $ev['start']['timeZone'] === 'Europe/Paris', json_encode($ev));
 $ga->google()->disconnect();
 check('google: disconnect forgets the tokens', !$ga->google()->connected() && !is_file("$ad/google.json"));
@@ -3311,13 +3311,13 @@ check('outlook: callback works without a session and reports errors back in the 
 $gb = $ga->board();
 check('tasks → Outlook: the timed task shown in the calendar is added', $gb->syncGoogle() === 1);
 $ev = end($mlog()['inserted']);
-check('tasks → Outlook: busy meeting with its hours, marked as a task', ($ev['start']['dateTime'] ?? '') === '2026-11-19T14:00:00' && ($ev['end']['dateTime'] ?? '') === '2026-11-19T15:30:00'
+check('tasks → Outlook: busy meeting with its hours, marked as a task', ($ev['start']['dateTime'] ?? '') === '2036-11-19T14:00:00' && ($ev['end']['dateTime'] ?? '') === '2036-11-19T15:30:00'
     && $ev['showAs'] === 'busy' && $ev['isAllDay'] === false && ($ev['singleValueExtendedProperties'][0]['value'] ?? '') === (string)$gm['id'] && str_contains($ev['subject'], 'Point équipe'), json_encode($ev));
 check('tasks → Outlook: nothing to do when nothing changed', $gb->syncGoogle() === 0);
-$gb->update($gm['id'], ['start_time' => '', 'end_time' => '', 'start_date' => '2026-11-17']); $gb->syncGoogle();
+$gb->update($gm['id'], ['start_time' => '', 'end_time' => '', 'start_date' => '2036-11-17']); $gb->syncGoogle();
 $up = end($mlog()['updated']);
 check('tasks → Outlook: a change updates the same event, all day to the day after the due date', $up['id'] === 'm2' && $up['body']['isAllDay'] === true
-    && $up['body']['start']['dateTime'] === '2026-11-17T00:00:00' && $up['body']['end']['dateTime'] === '2026-11-20T00:00:00' && $up['body']['showAs'] === 'free', json_encode($up));
+    && $up['body']['start']['dateTime'] === '2036-11-17T00:00:00' && $up['body']['end']['dateTime'] === '2036-11-20T00:00:00' && $up['body']['showAs'] === 'free', json_encode($up));
 $ga->store->q("UPDATE cards SET ocal_id = 'gone', ocal_synced = NULL WHERE id = ?", [$gm['id']]); $gb->syncGoogle();
 check('tasks → Outlook: an event removed in Outlook is added again', $ga->store->q('SELECT ocal_id FROM cards WHERE id = ?', [$gm['id']])->fetchColumn() === 'm3');
 $gb->update($gm['id'], ['in_calendar' => false]); $gb->syncGoogle();

@@ -6,7 +6,40 @@ four tabs.
 ## Knowledge base
 A glance at the library of the current space: how much it holds and how it is doing. Search and filing stay in *Files*.
 
-## Your autonomous pilot
+## Agents
+The **Agents** tab is a live board of the coding agents working on your machines (Claude Code today). Each session
+reports to it **by itself**, through a small hook script: what you typed in it, its last message **word for word**,
+the permissions it asks for, when it ends. No model relays or rewrites anything, and the times shown are the real ones.
+The board updates by itself every few seconds while you look at it.
+- **Three columns.** **Needs you**: a session that asks for a permission, or that finished its turn and you have not
+  looked at yet. **Working**: a session busy on your request. **Quiet**: the ones you have looked at, and those that ended.
+  Each card shows the project (its folder), the agent and the machine, how long ago it last spoke, and its last words.
+- **Click a card** to read the session's thread (your prompts, its answers, permission requests, what you sent from here and
+  when it was delivered) and to answer it:
+  - **Reply**: the text goes to the session. A session that finished its turn is woken by it and goes on working; a session
+    still busy gets it at the end of its current turn. The note after sending says which (*Sent* or *Queued*).
+  - **Allow / Deny** a permission request (the command or the file it is about is shown). The session waits **30 seconds**
+    for your answer here; after that, the usual prompt shows in its terminal and you answer there.
+  - **Mark as seen** moves a finished session to Quiet; **Forget** removes it and its thread from the board.
+- **Connect a machine** (button at the top): give the machine a name, **download the script** and save it as
+  `~/.talixio/agent-hook.sh`, then add the hooks shown to `~/.claude/settings.json` (merge them with any hooks already
+  there). The next Claude Code session on that machine appears on the board. It needs `sh` and `curl` (macOS, Linux, or
+  WSL on Windows), and the machine must reach this assistant's address. The script holds the board's address and a token:
+  keep it on your own machines. **New token** cancels the old one (each machine then needs the script again).
+- **Other agents.** Any tool that can run a command when something happens can report the same way: pipe a JSON object
+  `{"session_id": "…", "hook_event_name": "Stop", "last_assistant_message": "…", "cwd": "…"}` to
+  `TALIXIO_AGENT=<its name> sh ~/.talixio/agent-hook.sh reply` (or `event`, or `permission` with `tool_name` and
+  `tool_input`). The events understood are `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `Notification`, `Stop`
+  and `SessionEnd`.
+- **The assistant sees the board too.** Ask it « what are my agents doing? » (`agents_list`): it reads each session's state
+  and last words, which it treats as written by others. It can answer a session for you (`agent_answer`: a reply, allow or
+  deny), and asks your approval first, every time.
+- A permission request also sends a notification (see *Channels and notifications*).
+
+### Cloud orchestrator (previous approach)
+Folded under the board, the earlier pilot is still there for those who paired one; it will be removed once the board
+covers what it did.
+
 The pilot is an orchestrator (a Claude Code session) that supervises agents on your machines and reports to Talixio.
 - The **status card** says whether it is connected, when it last reported and how many agents it sees on how many machines,
   and how many wait for you, on a single line. Under **⚙ Settings**: **Status file**, **Re-pair…**, **Disconnect** and the **Fleet reports** switch (In-app badge, Push +

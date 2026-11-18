@@ -85,6 +85,8 @@ final class I18n
         ' (for {label})' => ' (pour {label})',
         // confidentiality
         'New message in {space}' => 'Nouveau message dans {space}',
+        'An agent asks for permission' => 'Un agent demande une autorisation',
+        'New token: download the hook script again on each machine.' => 'Nouveau jeton : téléchargez à nouveau le script sur chaque machine.',
         '1 file changed: {list}' => '1 fichier modifié : {list}',
         '{n} files changed: {list}' => '{n} fichiers modifiés : {list}',
         'Library' => 'Bibliothèque',

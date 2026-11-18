@@ -46,6 +46,7 @@ final class Web
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         if ($path === '/api/conductor/inbox') { $this->conductorInbox($method); return; } // the delegated cloud orchestrator reports in: its own secret, no session here
         if ($path === '/api/conductor/tick') { $this->conductorTick($method); return; } // one typed call per orchestrator pass: its own secret, no session here
+        if ($path === '/api/agents/hook' || $path === '/api/agents/wait') { $this->agentHook($path, $method); return; } // a coding agent's hook script: the agents token, no session here
         if ($path === '/api/conductor/pull') { $this->conductorPull($method); return; } // a poll-mode orchestrator pulls its queued instructions: its own secret, no session here
         if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye', '/api/federation/ask', '/api/federation/queries'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
@@ -124,6 +125,7 @@ final class Web
             'memory', 'mind', 'skills', 'roles', 'scripts' => $this->routeMind($m, $path, $b),
             'library', 'files', 'shares', 'privacy' => $this->routeLibrary($m, $path, $b),
             'board' => $this->board($m, $path, $b),
+            'agents' => $this->agents($m, $path, $b),
             'apps' => $this->apps($m, $path, $b),
             default => $this->fail(404, 'not found'),
         };
@@ -1842,6 +1844,68 @@ final class Web
         } catch (\Throwable $e) {
             $this->json(['error' => self::internalError($e)], 500);
         }
+    }
+
+    /**
+     * The agent board (AgentHub). POST /api/agents/hook: one event from a hook script; GET /api/agents/wait: the script
+     * asks whether an answer is waiting (200 the answer, 204 not yet, 410 stop waiting). The agents token only.
+     */
+    private function agentHook(string $path, string $method): void
+    {
+        ob_start();
+        try {
+            $hub = $this->app->agentHub();
+            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
+            if (!$hub->authorized($bearer)) $this->fail(401, 'unauthorized');
+            if ($path === '/api/agents/hook') {
+                if ($method !== 'POST') $this->fail(405, 'POST only');
+                $e = json_decode((string)file_get_contents('php://input'), true);
+                if (!is_array($e)) $this->fail(400, 'JSON object expected');
+                if (isset($_GET['agent'])) $e['agent'] = (string)$_GET['agent'];
+                [$code, $resp] = $hub->event($e, (string)($_SERVER['HTTP_X_TALIXIO_MACHINE'] ?? ''));
+                $this->json($resp, $code);
+                return;
+            }
+            if ($method !== 'GET') $this->fail(405, 'GET only');
+            [$code, $body] = $hub->wait((string)($_GET['agent'] ?? 'claude-code'), (string)($_GET['session'] ?? ''), (string)($_GET['for'] ?? 'reply'), (int)($_GET['seq'] ?? -1));
+            while (ob_get_level() > 0) ob_end_clean();
+            http_response_code($code);
+            header('Content-Type: ' . (($_GET['for'] ?? '') === 'permission' ? 'application/json' : 'text/plain; charset=utf-8'));
+            header('Cache-Control: no-store');
+            echo $body;
+        } catch (\Throwable $e) {
+            $this->json(['error' => self::internalError($e)], 500);
+        }
+    }
+
+    /** The board as the signed-in person sees it: list, one session's thread, answers, setup. */
+    private function agents(string $m, string $path, array $b): array
+    {
+        $hub = $this->app->agentHub();
+        $path = preg_replace_callback('#^(/api/agents/s/)([^/]+)#', fn($x) => $x[1] . rawurldecode($x[2]), $path); // the page encodes the ":" of "claude-code:<id>"
+        $id = fn(string $p) => preg_match('#^/api/agents/s/([\w.:-]+)/' . $p . '$#', $path, $mm) ? $mm[1] : null;
+        return match (true) {
+            $path === '/api/agents' && $m === 'GET' => $hub->board(),
+            $path === '/api/agents/setup' && $m === 'GET' => ['settings' => AgentHub::claudeSettings(), 'connected' => $hub->board()['connected']],
+            $path === '/api/agents/hook.sh' && $m === 'GET' => (function () use ($hub) {
+                while (ob_get_level() > 0) ob_end_clean();
+                header('Content-Type: text/x-shellscript; charset=utf-8');
+                header('Content-Disposition: attachment; filename="agent-hook.sh"');
+                header('Cache-Control: no-store');
+                echo $hub->script((string)($_GET['machine'] ?? ''));
+                exit;
+            })(),
+            $path === '/api/agents/token' && $m === 'POST' => (function () use ($hub) { $hub->token(true); return ['ok' => true, 'message' => I18n::t($this->app, 'New token: download the hook script again on each machine.')]; })(),
+            $id('thread') !== null && $m === 'GET' => $hub->thread($id('thread')),
+            $id('seen') !== null && $m === 'POST' => $hub->markSeen($id('seen')),
+            $id('forget') !== null && $m === 'POST' => $hub->forget($id('forget')),
+            $id('(reply|allow|deny)') !== null && $m === 'POST' => (function () use ($hub, $path, $b) {
+                preg_match('#^/api/agents/s/([\w.:-]+)/(reply|allow|deny)$#', $path, $mm);
+                try { return $hub->command($mm[1], $mm[2], (string)($b['text'] ?? '')); }
+                catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+            })(),
+            default => $this->fail(404, 'not found'),
+        };
     }
 
     /** Federation calls from another person's assistant: authenticated by the secret issued at pairing (or the one-time code), never by the web session. */

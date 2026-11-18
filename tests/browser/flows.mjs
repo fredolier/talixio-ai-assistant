@@ -1,5 +1,5 @@
 // The main things a person does in the app, each one checked against the page and the server.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { existsSync, writeFileSync } from 'node:fs';
 const go = async (page, v) => { await page.evaluate(h => { location.hash = h; }, '#' + v); await page.waitForTimeout(500); };
@@ -734,6 +734,49 @@ const flows = {
     check('spaces: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#sp-orch-steps')));
     await page.click('#sp-cancel');
   },
+  async agentBoard({ page, check, data }) {
+    // 1.36.0: a coding agent reports itself through the hook script; the board shows its own words and sends answers back
+    await go(page, 'pilotage');
+    await page.click('#view-pilotage .ptab[data-ptab=agents]');
+    await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
+    check('agent board: three columns, Needs you, Working and Quiet', (await page.$$('#ab-cols .ab-col')).length === 3);
+    if (await page.isHidden('#ab-setup')) await page.click('#ab-connect');
+    await page.waitForFunction(() => /PermissionRequest/.test(document.querySelector('#ab-snippet').textContent), null, { timeout: 6000 });
+    check('agent board: Connect a machine shows the hooks to add', /asyncRewake/.test(await page.textContent('#ab-snippet')));
+    await page.fill('#ab-machine', 'testbox');
+    const script = await page.evaluate(() => fetch(document.querySelector('#ab-dl').getAttribute('href')).then(r => r.text()));
+    check('agent board: the script downloads with the machine name', /M='testbox'/.test(script) && /^U='http/m.test(script), script.slice(0, 400));
+    const sh = join(data, 'agent-hook.sh'); writeFileSync(sh, script);
+    const run = (mode, ev) => new Promise(res => {
+      const p = spawn('sh', [sh, mode], { env: { ...process.env, TALIXIO_WAIT: '20' } }); let out = '', err = '';
+      p.stdout.on('data', d => out += d); p.stderr.on('data', d => err += d); p.on('close', code => res({ code, out, err }));
+      p.stdin.end(JSON.stringify({ session_id: 'bt-1', cwd: '/work/webshop', ...ev }));
+    });
+    const late = (pr, ms) => Promise.race([pr, new Promise(res => setTimeout(() => res({ code: 'timeout' }), ms))]);
+    await run('event', { hook_event_name: 'UserPromptSubmit', prompt: 'Fix the cart' });
+    const turn = run('reply', { hook_event_name: 'Stop', last_assistant_message: 'Fixed the cart. Shall I deploy?' });
+    await page.waitForSelector('#ab-cols [data-col=need] .ab-card', { timeout: 8000 });
+    const need = await page.textContent('#ab-cols [data-col=need]');
+    check('agent board: the finished turn shows in Needs you, word for word, with its folder and machine',
+      /Shall I deploy\?/.test(need) && /webshop/.test(need) && /testbox/.test(need), need);
+    await page.click('#ab-cols [data-col=need] .ab-card');
+    await page.waitForSelector('#ab-detail #ab-reply', { timeout: 6000 });
+    check('agent board: the thread shows what was typed in the session and the answer', /Fix the cart/.test(await page.textContent('#ab-detail .ab-thread')));
+    await page.fill('#ab-reply', 'No, wait for Monday.');
+    await page.click('#ab-detail [data-abact=send]');
+    const r = await late(turn, 15000);
+    check('agent board: the waiting hook gets the reply and wakes the session (exit 2, the text on stderr)', r.code === 2 && /No, wait for Monday\./.test(r.err), JSON.stringify(r));
+    const perm = run('permission', { hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'npm run deploy' } });
+    await page.waitForSelector('#ab-detail .ab-perm [data-abact=deny]', { timeout: 8000 });
+    check('agent board: a permission request shows what it is about', /npm run deploy/.test(await page.textContent('#ab-detail .ab-perm')));
+    await page.waitForTimeout(2500); // the hook asks every 2 s
+    await page.click('#ab-detail .ab-perm [data-abact=deny]');
+    const p2 = await late(perm, 15000);
+    let dec = null; try { dec = JSON.parse(p2.out).hookSpecificOutput.decision.behavior; } catch {}
+    check('agent board: Deny answers the hook in Claude Code\'s own format', p2.code === 0 && dec === 'deny', JSON.stringify(p2));
+    await page.waitForTimeout(4500);
+    check('agent board: the board follows by itself (no reload): the session is working again', /webshop/.test(await page.textContent('#ab-cols [data-col=working]')), await page.textContent('#ab-cols'));
+  },
   async pilotage({ page, check, root, data }) {
     // the director's cockpit: four tabs over machinery already shipped, voice-first
     // seed one non-protected role so the catalogue has a card to group, specialize and run the lifecycle on
@@ -741,6 +784,7 @@ const flows = {
       + "\\Talixio\\App::fromEnv()->skills()->save('browser-role','A role for the browser test','Do the browser thing.',['kind'=>'role']);"],
       { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
     await go(page, 'pilotage');
+    await page.evaluate(() => { document.querySelector('#ab-legacy').open = true; }); // 1.36.0: the cloud orchestrator folds under the agent board
     check('pilotage: the view shows', await page.isVisible('#view-pilotage'));
     check('pilotage: it is reachable from the rail', await page.isVisible('.rail a[data-view=pilotage]'));
     // the Agents tab leads, with the push-to-talk composer and the orchestrator panel moved here
