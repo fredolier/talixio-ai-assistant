@@ -19,6 +19,12 @@
 - Commencer un message par `/deep` pour un raisonnement plus poussé, `/fast` pour une réponse rapide.
 - Sous chaque réponse : le modèle, les jetons, le coût estimé, et où sont allées vos données.
 - **Arrêter** une réponse en cours : le bouton d'envoi devient *Stop*.
+- **Écrire le message suivant sans attendre.** Pendant qu'une réponse arrive, tapez et envoyez comme d'habitude (Entrée,
+  ou le bouton d'envoi, qui n'affiche *Stop* que lorsque la zone est vide) : le message attend son tour au-dessus de la zone
+  et part tout seul quand la réponse est terminée, un à la fois et dans l'ordre. Un enregistrement terminé entre-temps attend
+  de la même façon. ✎ reprend un message en attente dans la zone, ✕ l'annule. La file est gardée dans ce navigateur si vous
+  fermez la page, par espace. Si un message en attente ne peut pas partir, la file s'arrête là et propose *Envoyer
+  maintenant*. Arrêter une réponse n'annule pas la file.
 - **Modifier** votre dernier message ou demander une **autre réponse**.
 
 ## Le menu
