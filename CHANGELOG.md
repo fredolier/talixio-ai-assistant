@@ -3,6 +3,19 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.46.1 (2026-11-18)
+
+Removes the dead code of the cloud orchestrator, retired in 1.45.0 (step 6 of `docs/design/relay-retirement.md`). Nothing changes for you.
+
+- `Conductor.php` keeps only the local code sessions (start, poll, list, the privacy guard). The webhook bridge half (pairing, inbox, tick, pull, the status file, the fleet report) is gone, about 750 lines. Nothing called it any more.
+- About a hundred CSS rules of the old pilot cockpit, whose classes nothing in the page uses, are removed.
+- The bridge's tests go with it: `tests/more/conductor_tick.php`, the pairing checks in `tests/more/jsonfile.php` and the cloud-fleet check (C3) in `tests/more/confidential.php`. The tests of what stays (local sessions, the 410 answers to an old orchestrator, the 1.45.0 cleanup in `tests/more/relay_off.php`) are unchanged.
+- Kept on purpose, for step 7: the three 410 routes for an old orchestrator session still running, and the 1.45.0 cleanup.
+- Left: the French entries of the old cockpit's strings stay in `fr.js`. They are unused and harmless.
+- **Test fix:** the share page's French date check (`tests/more/web2.php`) failed between 23:00 and 00:00 UTC. `run.php` runs in Paris time, but the server it starts runs in UTC, so the expected expiry date was a day off. It now uses the server's UTC date. It failed at 23:40 UTC before the fix and passes after.
+- Tested: the full PHP suite and the full browser suite pass, among them the route census (no page call to a missing route) and the Pilotage and Spaces flows.
+- **Not tried:** an old orchestrator session calling the new build for real (the 410 path is covered by the 1.45.0 tests only).
+
 ## 1.46.0 (2026-11-18)
 
 The director deduces rules from your own answers and decides by a ranked list of sources (levels 3 and §4 of `docs/design/director-knowledge.md`).

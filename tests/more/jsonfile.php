@@ -23,17 +23,9 @@ $ps = []; for ($i = 0; $i < 6; $i++) $ps[] = proc_open([PHP_BINARY, '-r', $code]
 foreach ($ps as $p) proc_close($p);
 check('jsonfile: concurrent updates are all kept', JsonFile::read($c)['n'] === 150, (string)(JsonFile::read($c)['n'] ?? 'none'));
 
-// the pilot's binding: a pairing code pairs once, also when two arrive together
 $keep = getenv('TALIXIO_DATA_DIR');
 putenv("TALIXIO_DATA_DIR=$d/app"); putenv('TALIXIO_PROVIDER=echo'); putenv('TALIXIO_NOTIFY=none');
-$app = App::fromEnv(); $con = $app->conductor();
-$setup = $con->setup(); preg_match('/"code":"([a-f0-9]{32})"/', $setup, $m);
-[$c1] = $con->inbox(['type' => 'pair', 'code' => $m[1], 'mode' => 'poll'], '');
-[$c2] = $con->inbox(['type' => 'pair', 'code' => $m[1], 'mode' => 'poll'], '');
-check('jsonfile: a pairing code is used once', $c1 === 200 && $c2 === 403, "$c1 $c2");
-check('jsonfile: the binding is private', (fileperms("$d/app/conductor.json") & 0777) === 0600);
-$con->disconnect();
-check('jsonfile: disconnecting removes the binding', !is_file("$d/app/conductor.json") && !$con->connected());
+$app = App::fromEnv();
 // settings and the pilot's policy: changes made at the same time are all kept; a failed write keeps the old settings
 $fields = [['TALIXIO_NAME', 'Robin'], ['TALIXIO_HEARTBEAT_MINUTES', '45'], ['TALIXIO_TIMEZONE', 'Europe/Paris']];
 $lost = 0;

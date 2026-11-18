@@ -480,7 +480,7 @@ $open = $sh->create(['folder' => '/Shared'], ['message' => "Hello Alex,\nthe fil
 $r = $visit('/s/' . $tok($open), 'GET', null, ['Accept-Language: fr-FR']);
 check('web2 share page: listing with message, subfolder, kinds, zip and a French date', $r['code'] === 200 && str_contains($r['body'], '<blockquote>Hello Alex,<br />')
     && str_contains($r['body'], 'Sub · ') && str_contains($r['body'], '<span class="th ext">BIN</span>') && str_contains($r['body'], '/zip"')
-    && str_contains($r['body'], date('d/m/Y', time() + 5 * 86400)) && str_contains($r['body'], 'class="th" loading="lazy"'), substr($r['body'], -1500));
+    && str_contains($r['body'], gmdate('d/m/Y', time() + 5 * 86400)) /* the server web_app() starts runs in UTC; run.php runs in Paris */ && str_contains($r['body'], 'class="th" loading="lazy"'), substr($r['body'], -1500));
 $r = $visit('/s/' . $tok($open) . '/zip');
 check('web2 share page: the whole folder as a zip', $r['code'] === 200 && str_starts_with($r['body'], 'PK'));
 $r = $visit('/s/' . $tok($open) . "/view/$docId");
