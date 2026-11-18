@@ -44,10 +44,10 @@ final class Web
         if ($path === '/api/microsoft/callback' && $method === 'GET') { $this->microsoftCallback(); return; }
         if ($path === '/api/spotify/callback' && $method === 'GET') { $this->spotifyCallback(); return; }
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
-        if ($path === '/api/conductor/inbox') { $this->conductorInbox($method); return; } // the delegated cloud orchestrator reports in: its own secret, no session here
-        if ($path === '/api/conductor/tick') { $this->conductorTick($method); return; } // one typed call per orchestrator pass: its own secret, no session here
+        if ($path === '/api/conductor/inbox') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
+        if ($path === '/api/conductor/tick') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
         if (in_array($path, ['/api/agents/hook', '/api/agents/wait', '/api/agents/next', '/api/agents/job'], true)) { $this->agentHook($path, $method); return; } // a coding agent's hook script: the agents token, no session here
-        if ($path === '/api/conductor/pull') { $this->conductorPull($method); return; } // a poll-mode orchestrator pulls its queued instructions: its own secret, no session here
+        if ($path === '/api/conductor/pull') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
         if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye', '/api/federation/ask', '/api/federation/queries'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
         $this->startSession();
@@ -202,7 +202,6 @@ final class Web
             })(),
             $path === '/api/messages/search' => ['results' => $this->searchMessages((string)($_GET['q'] ?? ''), (int)($_GET['space'] ?? 0), ($_GET['mode'] ?? '') !== 'quick'),
                 'more' => ($_GET['mode'] ?? '') === 'quick' && $this->app->recall()->meaningEnabled()],
-            $path === '/api/conductor' && $m === 'GET' => $this->app->conductor()->statusInfo(),
             $path === '/api/pilot' && $m === 'GET' => $this->app->pilot()->overview(),
             $path === '/api/pilot' && $m === 'POST' => (function () use ($b) { $r = $this->app->pilot()->setPolicy($b); if (is_string($r)) throw new \InvalidArgumentException($r); return $r; })(),
             $path === '/api/pilot/verdict' && $m === 'POST' => (function () use ($b) { $r = $this->app->pilot()->verdict((string)($b['decision_id'] ?? ''), !empty($b['ok']), (string)($b['note'] ?? '')); if (is_string($r)) throw new \InvalidArgumentException($r); return $r; })(),
@@ -228,16 +227,6 @@ final class Web
             $path === '/api/federation/ask-sub' && $m === 'POST' => $this->fedDo(fn() => $this->app->federation()->askSub((int)($b['id'] ?? 0), isset($b['value']) ? (string)$b['value'] : null) + $this->federationState()),
             $path === '/api/federation/read' && $m === 'POST' => (function () use ($b) { $this->app->federation()->markRead((int)($b['peer'] ?? 0)); return $this->federationState(); })(),
             $path === '/api/federation/auto' && $m === 'POST' => (function () use ($b) { $this->app->federation()->setAuto(!empty($b['on'])); return $this->federationState(); })(),
-            $path === '/api/conductor/setup' && $m === 'POST' => ['instruction' => $this->app->conductor()->setup()],
-            $path === '/api/conductor/disconnect' && $m === 'POST' => ['message' => $this->app->conductor()->disconnect()] + $this->app->conductor()->statusInfo(),
-            $path === '/api/conductor/notify' && $m === 'POST' => $this->app->conductor()->setNotify((string)($b['mode'] ?? '')),
-            $path === '/api/conductor/read' && $m === 'POST' => $this->app->conductor()->markRead(),
-            (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/thread$#', $path, $mm) && $m === 'GET' => ['thread' => $this->app->conductor()->agentThread($mm[1])],
-            (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/read$#', $path, $mm) && $m === 'POST' => $this->app->conductor()->markAgentRead($mm[1]),
-            (bool)preg_match('#^/api/conductor/agents/([\w.-]+)/say$#', $path, $mm) && $m === 'POST' => (function () use ($mm, $b) {
-                if (isset($_GET['space']) && $_GET['space'] !== '') $this->app->space = (int)$_GET['space']; // ground + guard against the dispatching space
-                return $this->app->conductor()->agentSay($mm[1], (string)($b['text'] ?? ''), (int)$this->app->space, !empty($b['clarify']));
-            })(),
             $path === '/api/spaces' && $m === 'GET' => ['spaces' => $this->app->spaces()->all(true), 'colors' => Spaces::COLORS],
             $path === '/api/spaces' && $m === 'POST' => ['space' => $this->app->spaces()->save($b)],
             (bool)preg_match('#^/api/spaces/(\d+)$#', $path, $mm) && $m === 'POST' => ['space' => $this->app->spaces()->save($b, (int)$mm[1])],
@@ -864,7 +853,7 @@ final class Web
             'tiers' => array_map(fn(Tier $t) => $t->label(), $c->tiers), 'budget' => $this->app->budget()->status(),
             'embeddings' => $c->embeddings, 'max_parallel_jobs' => $c->maxParallelJobs, 'job_max_usd' => $c->jobMaxUsd, 'job_max_usd_limit' => $c->jobMaxUsdLimit, 'job_effort' => $c->jobEffort,
             'version' => Version::get()['number'], 'version_label' => Version::get()['label'],
-            'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()), 'notifications_unread' => $this->app->notifier()->unread(), 'fleet_unread' => $this->app->conductor()->unread(), 'agents_need' => $this->app->agentHub()->needCount(),
+            'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()), 'notifications_unread' => $this->app->notifier()->unread(), 'agents_need' => $this->app->agentHub()->needCount(),
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store),
@@ -1829,55 +1818,22 @@ final class Web
     }
 
     /**
-     * POST /api/conductor/inbox: the delegated cloud orchestrator session (orchestration.md §5.2-B) registers its
-     * webhook at pairing, then reports its fleet's progress. Authenticated by the one-time pairing code (pair) or the
-     * steady Bearer secret issued at pairing (report) — never by the web session. The body is untrusted: the conductor
-     * surfaces reports to the user and never executes them.
+     * The three routes the cloud orchestrator called (inbox, tick, pull), retired in 1.45.0 with the relay
+     * (docs/design/relay-retirement.md). An old orchestrator session may still be running: it gets 410 and words its
+     * model reads, with no authentication needed and nothing stored for it. The user hears of it once a day.
      */
-    private function conductorInbox(string $method): void
+    private function conductorRetired(): void
     {
         ob_start();
         try {
-            if ($method !== 'POST') $this->fail(405, 'POST only');
-            $msg = json_decode((string)file_get_contents('php://input'), true) ?: [];
-            if (!is_array($msg)) $this->fail(400, 'JSON object expected');
-            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
-            [$code, $resp] = $this->app->conductor()->inbox($msg, $bearer);
-            $this->json($resp, $code);
-        } catch (\Throwable $e) {
-            $this->json(['error' => self::internalError($e)], 500);
-        }
-    }
-
-    /** POST /api/conductor/tick: one call per orchestrator pass (roster + reports + acks in, instructions + problems out). Bearer secret only. */
-    private function conductorTick(string $method): void
-    {
-        ob_start();
-        try {
-            if ($method !== 'POST') $this->fail(405, 'POST only');
-            $msg = json_decode((string)file_get_contents('php://input'), true) ?: [];
-            if (!is_array($msg)) $this->fail(400, 'JSON object expected');
-            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
-            [$code, $resp] = $this->app->conductor()->tick($msg, $bearer);
-            $this->json($resp, $code);
-        } catch (\Throwable $e) {
-            $this->json(['error' => self::internalError($e)], 500);
-        }
-    }
-
-    /**
-     * GET /api/conductor/pull: a poll-mode orchestrator (one that could not mint a webhook) pulls the instructions
-     * Talixio has queued for it, authenticated by the steady Bearer secret issued at pairing — never by the web
-     * session. The queue is drained atomically, so each instruction is handed out once.
-     */
-    private function conductorPull(string $method): void
-    {
-        ob_start();
-        try {
-            if ($method !== 'GET') $this->fail(405, 'GET only');
-            $bearer = (string)preg_replace('/^Bearer\s+/i', '', (string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''));
-            [$code, $resp] = $this->app->conductor()->pull($bearer, ($_GET['ack'] ?? '') === '1');
-            $this->json($resp, $code);
+            $day = date('Y-m-d');
+            if ($this->app->store->get('relay.tombstone_day') !== $day) {
+                $this->app->store->set('relay.tombstone_day', $day);
+                $this->app->notifier()->notify(I18n::t($this->app, 'An old cloud orchestrator is still running'),
+                    I18n::t($this->app, 'A cloud orchestrator session still calls Talixio, which no longer uses one. You can close that session; your agents now report on the board (Pilotage → Agents).'));
+            }
+            $this->json(['error' => 'retired', 'message' => 'This Talixio no longer uses a fleet orchestrator. Stop your keep-warm loop and any polling, and tell the user: '
+                . 'connect each machine in Pilotage → Agents → Connect a machine instead; this session can then be closed.'], 410);
         } catch (\Throwable $e) {
             $this->json(['error' => self::internalError($e)], 500);
         }

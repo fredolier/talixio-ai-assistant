@@ -12,6 +12,10 @@ final class I18n
     public const LANGS = ['en', 'fr'];
 
     private const FR = [
+        'An old cloud orchestrator is still running' => 'Un ancien orchestrateur cloud tourne encore',
+        'A cloud orchestrator session still calls Talixio, which no longer uses one. You can close that session; your agents now report on the board (Pilotage → Agents).' => 'Une session d\'orchestrateur cloud appelle encore Talixio, qui n\'en utilise plus. Vous pouvez fermer cette session ; vos agents rendent compte désormais sur le tableau (Pilotage → Agents).',
+        'The cloud orchestrator is switched off' => 'L\'orchestrateur cloud est désactivé',
+        'Its pairing is deleted. What you answered through it is kept in Pilotage → Agents → What I know ({n} decisions, {t} agent threads). Your agents now report on the board.' => 'Son appairage est supprimé. Ce que vous avez répondu par son intermédiaire est conservé dans Pilotage → Agents → Ce que je sais ({n} décisions, {t} fils d\'agents). Vos agents rendent compte désormais sur le tableau.',
         'Past days use what the provider really billed; today\'s estimates are corrected ×{factor} from the last 30 days.' => 'Les jours passés utilisent ce que le fournisseur a réellement facturé ; les estimations du jour sont corrigées ×{factor} d\'après les 30 derniers jours.',
         'Real costs read from the provider: {list}.' => 'Coûts réels lus chez le fournisseur : {list}.',
         '{name} billed ${usd} this month' => '{name} a facturé {usd} $ ce mois-ci',

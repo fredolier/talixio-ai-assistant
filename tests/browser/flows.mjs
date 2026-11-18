@@ -805,14 +805,11 @@ const flows = {
     await page.fill('#sp-instructions', 'Answer briefly.');
     await page.click('#space-form [type=submit]'); await page.waitForTimeout(800);
     check('spaces: the instructions are saved', JSON.stringify(await api(page, 'api/spaces')).includes('Answer briefly.'));
-    // the fleet-orchestrator panel (one per assistant, bootstrapped from the space editor)
+    // 1.45.0: the cloud orchestrator's panel is gone from the space editor
     await page.click('#space-btn');
     await page.click('#space-menu [data-act=edit]');
     await page.waitForSelector('#space-dialog[open]');
-    check('spaces: the orchestrator panel is shown', await page.isVisible('#sp-orch-row'));
-    await page.click('#sp-orch-connect');
-    await page.waitForSelector('#sp-orch-steps:not([hidden])', { timeout: 4000 });
-    check('spaces: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#sp-orch-steps')));
+    check('spaces: the retired orchestrator panel is gone from the editor', !(await page.$('#sp-orch-row')) && !(await page.$('#sp-orch-connect')));
     await page.click('#sp-cancel');
   },
   async siteApis({ page, check, data }) {
@@ -1032,51 +1029,15 @@ sleep 300
       + "\\Talixio\\App::fromEnv()->skills()->save('browser-role','A role for the browser test','Do the browser thing.',['kind'=>'role']);"],
       { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
     await go(page, 'pilotage');
-    await page.evaluate(() => { document.querySelector('#ab-legacy').open = true; }); // 1.36.0: the cloud orchestrator folds under the agent board
     check('pilotage: the view shows', await page.isVisible('#view-pilotage'));
     check('pilotage: it is reachable from the rail', await page.isVisible('.rail a[data-view=pilotage]'));
-    // the Agents tab leads, with the push-to-talk composer and the orchestrator panel moved here
-    check('pilotage: Agents is the opening tab', await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-status'));
+    check('pilotage: Agents is the opening tab, with the board', await page.isVisible('.pilot-panel[data-ppanel=agents] #ab'));
     check('pilotage: there is no permanent talk-to-the-pilot card any more', !(await page.$('#view-pilotage .pilot-talk')));
-    await page.evaluate(() => { document.querySelector('#pilot-cfg').open = true; });
-    await page.click('#pilot-orch-connect');
-    await page.waitForSelector('#pilot-orch-steps:not([hidden])', { timeout: 4000 });
-    check('pilotage: Connect reveals the orchestrator bootstrap steps', /"type":"pair"/.test(await page.textContent('#pilot-orch-steps')));
-    // the agents tab: the status card, the pilot's three tabs (hidden until paired)
-    check('pilotage: the agents tab shows the status card', await page.isVisible('.pilot-panel[data-ppanel=agents] .pilot-status'));
-    check('pilotage: the status card names the autonomous pilot', /pilot/i.test(await page.textContent('#pilot-conn-title')));
-    check('pilotage: with nothing paired, the three tabs are not shown (the status invites pairing)', await page.isHidden('#pl-tabs') && /pair/i.test(await page.textContent('#pilot-orch-status')));
+    // 1.45.0: the cloud orchestrator's cockpit (pairing, Journal, Passes, its agents and status) is gone from under the board
+    check('pilotage: the retired cloud orchestrator cockpit is gone', !(await page.$('#ab-legacy')) && !(await page.$('#pilot-orch-connect')) && !(await page.$('#pl-tabs')) && !(await page.$('#pilot-notify')));
+    check('pilotage: the retired Status file button is gone', !(await page.$('#pilot-status-btn')) && !(await page.$('#pilot-status-dl')));
     check('pilotage: the Knowledge-base tab carries a source badge slot', (await page.$$('.ptab[data-ptab=kb] .ptab-src')).length === 1);
-    // 1.13.0: pair the pilot and file one report, then check the fleet-reports toggle + feed (details live here, badge in the menu)
-    execFileSync('php', ['-r', "require '" + join(root, 'src/autoload.php') + "';"
-      + "$con=\\Talixio\\App::fromEnv()->conductor();"
-      + "preg_match('/\"code\":\"([0-9a-f]+)\"/',$con->setup(),$m);"
-      + "[$c,$r]=$con->inbox(['type'=>'pair','code'=>$m[1],'webhook'=>'https://orch.example/hook','session'=>'sess_browser'],'');"
-      + "$con->setNotify('inapp');"
-      + "$con->inbox(['type'=>'report','title'=>'Build','text'=>'browser fleet report','agents'=>["
-      + "['id'=>'w1','name'=>'dossier-conseil','state'=>'waiting','waiting'=>['kind'=>'decision','type'=>'L3','question'=>'Garder le plan A ou B ?','options'=>['Plan A','Plan B'],'cost'=>'deux jours de reprise']],"
-      + "['id'=>'w2','name'=>'deploy','state'=>'waiting','waiting'=>['kind'=>'approval','question'=>'Token revoked']],"
-      + "['id'=>'w3','name'=>'calme','state'=>'active']]],$r['secret']);"
-      + "$con->inbox(['type'=>'report','agent'=>'w3','text'=>'calm reply'],$r['secret']);"],
-      { env: { ...process.env, TALIXIO_DATA_DIR: data, TALIXIO_STORE: join(data, 'store'), TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw' } });
-    await page.click('#view-pilotage .ptab[data-ptab=roles]'); await page.waitForTimeout(200);
-    await page.click('#view-pilotage .ptab[data-ptab=agents]'); await page.waitForSelector('#pilot-notify-row:not([hidden])', { timeout: 6000 });
-    check('pilotage: once paired, the fleet-reports toggle appears with three modes, one selected',
-      (await page.$$('#pilot-notify [data-notify]')).length === 3 && (await page.$$('#pilot-notify [data-notify].on')).length === 1);
-    // 1.18.0: three tabs, each a list and a pane that scrolls on its own
-    check('pilotage: once paired the pilot has four tabs — Needs you, Agents, Journal, Autonomy', (await page.$$('#pl-tabs .pl-tab')).length === 4 && await page.isVisible('#pl-tabs'));
-    check('pilotage: the Needs you tab counts the two sessions waiting', (await page.textContent('#pl-bd-need')).trim() === '2');
-    check('pilotage: Needs you lists them, the decision first with its question and its options as buttons',
-      (await page.$$('#pl-need-list .pl-rw[data-nsel^="w:"]')).length === 2 && /Garder le plan A ou B/.test(await page.textContent('#pl-need-detail'))
-      && (await page.$$('#pl-need-detail [data-answer]')).length === 2 && /deux jours de reprise/.test(await page.textContent('#pl-need-detail')));
-    check('pilotage: a waiting question shows the question, what a wrong choice costs, then the options and a free-text answer',
-      await (async () => { const h = await page.innerHTML('#pl-need-detail .pl-ask'); const at = r => h.search(r); return at(/pl-q/) >= 0 && at(/pl-q/) < at(/If it goes wrong/) && at(/If it goes wrong/) < at(/data-answer/) && at(/data-answer/) < at(/pl-need-input/); })()
-      && await page.isVisible('#pl-need-input') && await page.isVisible('#pl-need-mic'));
-    await page.click('#pl-need-list .pl-rw[data-nsel="w:w2"]');
-    check('pilotage: an approval offers no answer buttons, and says only the user can give it',
-      (await page.$$('#pl-need-detail [data-answer]')).length === 0 && /Token revoked/.test(await page.textContent('#pl-need-detail')));
-    await page.click('#pl-tabs .pl-tab[data-pl=autonomy]');
-    check('pilotage: the old Autonomy tab points to the board, where the settings moved (1.39.0)', await page.isVisible('[data-plp=autonomy] .pl-moved'));
+    // the autonomy settings live on the board
     if (await page.isHidden('#ab-auto')) await page.click('#ab-auto-btn');
     await page.waitForSelector('#pl-auto .pl-lv', { timeout: 6000 });
     check('pilotage: Autonomy lists the five levels, L4 and L5 are always the user\'s', (await page.$$('#pl-auto .pl-lv tbody tr')).length === 5 && (await page.$$('#pl-auto [data-auto-lv]')).length === 3);
@@ -1084,43 +1045,8 @@ sleep 300
     await page.click('#pl-auto [data-auto-save]'); await page.waitForTimeout(700);
     const pol = await api(page, 'api/pilot');
     check('pilotage: the autonomy settings are saved on the server', pol.enabled === true && pol.levels.L2.mode === 'tell' && pol.levels.L4.mode === 'ask' && pol.priorities.join('|') === 'Client work first|Internal tools later');
-    await page.click('#pl-tabs .pl-tab[data-pl=agents]'); await page.waitForSelector('#pl-ag-list .pl-rw', { timeout: 6000 });
-    const rows = await page.$$eval('#pl-ag-list .pl-rw .pl-n', e => e.map(x => x.textContent.trim()));
-    check('pilotage: Agents lists the three agents, those waiting first', rows.length === 3 && rows.slice(0, 2).sort().join() === 'deploy,dossier-conseil' && rows[2] === 'calme', rows.join('|'));
-    check('pilotage: the unread replies of an agent show on its row and on the tab',
-      (await page.textContent('#pl-bd-agents')).trim() === '1' && (await page.$$eval('#pl-ag-list .pl-rw', r => r.find(x => /calme/.test(x.textContent))?.querySelector('.pl-bd')?.textContent)) === '1');
-    await page.click('#pl-ag-list .pl-rw[data-asel="w3"]'); await page.waitForSelector('#pl-msgs .pl-b', { timeout: 6000 });
-    check('pilotage: opening an agent shows its conversation and a composer, and reading it clears its count',
-      /calm reply/.test(await page.textContent('#pl-msgs')) && await page.isVisible('#pl-ag-input') && await page.isVisible('#pl-ag-send'));
-    await page.waitForTimeout(500);
-    check('pilotage: the unread badge on the Agents tab is gone once the conversation is read', await page.isHidden('#pl-bd-agents'));
-    check('pilotage: the conversation pane scrolls on its own (the page does not grow with the messages)',
-      (await page.$eval('#pl-msgs', e => getComputedStyle(e).overflowY)) === 'auto' && (await page.$eval('#pl-split-agents', e => e.getBoundingClientRect().height)) < 700);
-    await page.click('#pl-ag-list .pl-rw[data-asel="w1"]'); await page.waitForSelector('#pl-ag-detail .pl-pin', { timeout: 6000 });
-    check('pilotage: a waiting agent has its question pinned above the conversation, with the options',
-      /Garder le plan A ou B/.test(await page.textContent('#pl-ag-detail .pl-pin')) && (await page.$$('#pl-ag-detail .pl-pin [data-answer]')).length === 2);
-    await page.fill('#pl-ag-q', 'calme'); await page.waitForTimeout(150);
-    check('pilotage: the agent search narrows the list', (await page.$$('#pl-ag-list .pl-rw')).length === 1);
-    await page.fill('#pl-ag-q', '');
-    await page.click('#pl-ag-f [data-f=waiting]');
-    check('pilotage: the Waiting filter keeps the two blocked agents', (await page.$$('#pl-ag-list .pl-rw')).length === 2);
-    await page.click('#pl-ag-f [data-f=all]');
-    await page.click('#pl-tabs .pl-tab[data-pl=journal]'); await page.waitForSelector('#pl-jr-list .pl-rw', { timeout: 6000 });
-    const jr = await page.textContent('#pl-jr-list');
-    check('pilotage: the Journal holds the fleet-wide report and the alert for the blocked sessions, not the agents’ own replies',
-      /Build/.test(jr) && /needs you/i.test(jr) && !/calm reply/.test(jr) && (await page.$$('#pl-jr-list .pl-pill.alert')).length >= 1);
-    check('pilotage: a journal line opens its full text in the pane', /browser fleet report/.test(await page.textContent('#pl-jr-detail')) || (await page.$$('#pl-jr-list .pl-rw')).length >= 2);
-    await page.click('#pl-jr-f [data-f=alert]');
-    check('pilotage: the Alerts filter keeps only alerts', (await page.$$eval('#pl-jr-list .pl-rw .pl-pill', e => e.every(x => x.classList.contains('alert')))));
-    await page.click('#pl-jr-f [data-f=pass]');
-    check('pilotage: the Journal can show the orchestrator passes instead of reports', await page.isVisible('#pl-jr-list'));
-    await page.click('#pl-jr-f [data-f=all]');
-    check('pilotage: the status line counts what waits for the user', /2 /.test(await page.textContent('#pilot-orch-status')) && /wait|attend/i.test(await page.textContent('#pilot-orch-status')));
-    await page.evaluate(() => { document.querySelector('#pilot-cfg').open = true; });
-    check('pilotage: the retired Status file button is gone', !(await page.$('#pilot-status-btn')) && !(await page.$('#pilot-status-dl')));
-    await page.click('#pilot-notify [data-notify=off]'); await page.waitForTimeout(300);
-    check('pilotage: switching fleet reports to Off is kept', (await page.$$('#pilot-notify [data-notify=off].on')).length === 1);
-    await page.click('#pilot-notify [data-notify=inapp]'); await page.waitForTimeout(200);
+    const st = await api(page, 'api/status');
+    check('pilotage: the status poll no longer carries the relay\'s unread count', !('fleet_unread' in st));
     // tab switching reveals the Worksites/Chantiers board (the Director's directives)
     await page.click('#view-pilotage .ptab[data-ptab=chantiers]'); await page.waitForTimeout(400);
     check('pilotage: Worksites tab opens', await page.isVisible('.pilot-panel[data-ppanel=chantiers]'));

@@ -121,13 +121,6 @@ final class Pilot
 
     // ---- the wake-up ----------------------------------------------------------------------------------------------
 
-    /** A question just appeared: ask the worker to look at it soon (cheap; nothing runs here). */
-    public function wake(): void
-    {
-        if (!$this->state()['enabled']) return;
-        $this->mutate(function (array $s) { $s['pending'] = time(); return [$s, null]; });
-    }
-
     /** A board session finished its turn (1.39.0): the worker looks at it within seconds. */
     public function wakeBoard(): void
     {
@@ -135,22 +128,13 @@ final class Pilot
         $this->mutate(function (array $s) { $s['board_wake'] = time(); return [$s, null]; });
     }
 
-    /** Worker tick: run one triage turn when asked to (and, as a safety net, every 15 min for questions left unattended). */
+    /** Worker tick: the board's autonomy (the relay's triage went with the relay in 1.45.0, whose data moves into the knowledge once). */
     public function tick(int $now): void
     {
         $f = $this->app->cfg->dataDir . '/pilot-status.md'; // the status file is retired (1.42.0): remove what an older version left
         foreach ([$f, "$f.tmp"] as $x) if (is_file($x)) @unlink($x);
+        try { $this->app->knowledge()->retireRelay(); } catch (\Throwable $e) { Log::warn("knowledge: relay import: {$e->getMessage()}"); }
         $this->boardTick($now);
-        $s = $this->state();
-        if (!$s['enabled'] || !$this->app->conductor()->connected()) return;
-        $open = array_filter($this->app->conductor()->waiting(), fn($a) => ($a['waiting']['kind'] ?? '') !== 'approval' && !isset($s['predictions'][$this->app->conductor()->waitingId($a)]));
-        $due = ($s['pending'] > 0 && $now - $s['last_wake'] >= 20) || ($open && $now - $s['last_wake'] >= 900);
-        if (!$due || !$open) { if ($s['pending'] > 0 && !$open) $this->mutate(function (array $s) { $s['pending'] = 0; return [$s, null]; }); return; }
-        if ($this->app->budget()->status()['state'] !== 'ok') return;
-        $this->mutate(function (array $s) use ($now) { $s['pending'] = 0; $s['last_wake'] = $now; return [$s, null]; });
-        $out = $this->app->agent()->runTask('Fleet triage', self::triagePrompt(), 'standard', 0);
-        $out = trim($out);
-        if ($out !== '' && !str_starts_with($out, 'TRIAGE_OK')) $this->app->notifier()->notify('Fleet triage', mb_substr($out, 0, 1200));
     }
 
     // ---- the agent board (1.39.0) ---------------------------------------------------------------------------------
@@ -301,57 +285,12 @@ final class Pilot
         $this->score($key, null, $answer, 'user');
     }
 
-    public static function triagePrompt(): string
-    {
-        return "[Fleet triage — agents of the fleet wait for a decision.] Call fleet_inbox. For each waiting DECISION or INSTRUCTION question (never an approval): "
-            . "weigh the similar past decisions it lists, what you know of how the user decides (your memory and Mind), the user's priorities and STANDING RULES (listed by fleet_inbox; a rule that covers the question beats a guess, and a question that breaks a rule is answered « no » or left to the user); then call fleet_decide with your answer, "
-            . "an HONEST confidence from 0 to 1 (0.9+ only when a clear precedent or rule covers it; below 0.5 when you are guessing) and one sentence of rationale. "
-            . "The code enforces the user's limits: you may always call it, it decides whether the answer is sent or only proposed. Do not answer levels L4/L5 or anything about pushes, deploys, deletions, e-mails or credentials: call fleet_decide with confidence 0.1 so the user sees your suggestion. "
-            . "If several agents compete for the same effort, say which the priorities favour. Reply TRIAGE_OK if everything was handled quietly; otherwise ONE short message for the user (what needs them, with your suggestion).";
-    }
-
     // ---- deciding and learning -------------------------------------------------------------------------------------
 
     /** Ladder level of a question: « L2 », « l2 », « level 2 » → L2; anything else is treated as L4 (kept by the user). */
     public static function levelOf(string $type): string
     {
         return preg_match('/\bL?([1-5])\b/i', $type, $m) ? 'L' . $m[1] : 'L4';
-    }
-
-    /**
-     * fleet_decide: the assistant's answer to a waiting question, with a confidence. The user's limits are applied here,
-     * not in the model: the answer is SENT only when the level allows it and the confidence reaches the threshold;
-     * otherwise it is kept as a proposal the cockpit shows.
-     */
-    public function decide(string $agent, string $answer, float $confidence, string $rationale = ''): string
-    {
-        $answer = trim($answer);
-        if ($answer === '') return 'error: no answer given.';
-        $con = $this->app->conductor();
-        $ag = null; foreach ($con->waiting() as $a) if ($a['id'] === $agent) $ag = $a;
-        if (!$ag) return "error: agent `$agent` is not waiting for anything (read fleet_inbox again).";
-        $w = $ag['waiting']; $id = $con->waitingId($ag);
-        if ($w['kind'] === 'approval') return 'error: an approval is only the user\'s to give, in that session.';
-        $level = self::levelOf((string)$w['type']);
-        $confidence = max(0.0, min(1.0, $confidence));
-        $s = $this->state();
-        $mode = $s['autonomy'][$level];
-        [$sendable, $why] = $this->limits($s, $level, $confidence, $w['question'] . ' ' . $w['cost'] . ' ' . $answer);
-        $action = $sendable ? 'sent' : 'proposed';
-        $this->mutate(function (array $s) use ($id, $agent, $ag, $w, $level, $answer, $confidence, $rationale, $action) {
-            $s['predictions'][$id] = ['id' => $id, 'agent' => $agent, 'name' => $ag['name'], 'level' => $level, 'question' => mb_substr($w['question'], 0, 600), 'answer' => mb_substr($answer, 0, 1000),
-                'confidence' => round($confidence, 2), 'rationale' => mb_substr(trim($rationale), 0, 300), 'action' => $action, 'ts' => time()];
-            if (count($s['predictions']) > self::PRED_CAP) $s['predictions'] = array_slice($s['predictions'], -self::PRED_CAP, null, true);
-            return [$s, null];
-        });
-        if ($sendable) {
-            $r = $con->toFleet($answer, 0, $agent, $id);
-            if (str_starts_with($r, 'error:')) return $r;
-            if ($mode === 'tell') $this->app->notifier()->notify('Fleet: I answered for you', "{$ag['name']} asked: " . mb_substr($w['question'], 0, 300) . "\nI said: " . mb_substr($answer, 0, 300) . ' (' . (int)round($confidence * 100) . "% sure). Tell me if that was wrong — I will learn from it.");
-            return "sent to `$agent` ($level, $mode, " . (int)round($confidence * 100) . '%). The user will confirm or correct it; do not repeat it.';
-        }
-        $this->app->conductor()->suggest($agent, $id, $answer, $confidence);
-        return "not sent ($why): kept as a proposal the user sees in the cockpit with your answer and confidence.";
     }
 
     /**
@@ -449,7 +388,7 @@ final class Pilot
     /**
      * Past decisions that look like this question. Since 1.44.0 first from the director's decision log (yours and the
      * rules', not the assistant's own), those of the same project first, then of the same topic; then the scored
-     * predictions and the relay's answered questions (until it goes).
+     * predictions (the relay's answered questions were moved into the log in 1.45.0).
      */
     public function precedents(string $question, int $n = 3, string $project = ''): array
     {
@@ -462,7 +401,6 @@ final class Pilot
         $since = $this->app->knowledge()->since();
         foreach ($this->state()['predictions'] as $p) // what the user really answered (or accepted) before; a board turn's answer is in the log already
             if ((empty($p['board']) || (int)$p['ts'] < $since) && isset($p['hit']) && ($a = trim((string)($p['actual'] ?? '')) !== '' ? trim((string)$p['actual']) : ($p['hit'] ? (string)$p['answer'] : '')) !== '') $cands[] = ['q' => (string)$p['question'], 'a' => $a, 'by' => 'you', 'ts' => (int)($p['scored'] ?? $p['ts']), 'level' => $p['level']];
-        foreach ($this->app->conductor()->decisions() as $d) $cands[] = ['q' => (string)$d['question'], 'a' => (string)$d['answer'], 'by' => $d['by'], 'ts' => $d['ts'], 'level' => $d['type'] ?? ''];
         $out = [];
         foreach ($cands as $c) {
             $t = $tok($c['q']); if (!$t) continue;
