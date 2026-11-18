@@ -806,6 +806,54 @@ const flows = {
     await page.waitForTimeout(4500);
     check('agent board: the board follows by itself (no reload): the session is working again', /webshop/.test(await page.textContent('#ab-cols [data-col=working]')), await page.textContent('#ab-cols'));
   },
+  async agentAutonomy({ page, check, data }) {
+    // 1.39.0: the autonomy settings live on the board; a suggestion shows in the session, Send this answer scores it, a verdict on what it sent
+    const { readFileSync, existsSync } = await import('node:fs');
+    await go(page, 'pilotage');
+    await page.click('#view-pilotage .ptab[data-ptab=agents]');
+    await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
+    await page.click('#ab-auto-btn');
+    await page.waitForSelector('#ab-auto #pa-on', { timeout: 6000 });
+    check('agent autonomy: the board has the autonomy settings, L4/L5 kept', (await page.$$('#ab-auto [data-auto-lv]')).length === 3);
+    await page.check('#ab-auto #pa-on');
+    await page.selectOption('#ab-auto [data-auto-lv=L1]', 'tell');
+    await page.click('#ab-auto [data-auto-save]');
+    await page.waitForTimeout(800);
+    const pol = await api(page, 'api/pilot');
+    check('agent autonomy: Save turns it on, with the mode per level', pol.enabled === true && pol.levels.L1.mode === 'tell', JSON.stringify(pol.levels));
+    if (await page.isHidden('#ab-setup')) await page.click('#ab-connect');
+    await page.fill('#ab-machine', 'autobox');
+    const sh = join(data, 'auto-hook.sh');
+    writeFileSync(sh, await page.evaluate(() => fetch(document.querySelector('#ab-dl').getAttribute('href')).then(r => r.text())));
+    const ev = e => new Promise(res => { const p = spawn('sh', [sh, 'event']); p.on('close', res); p.stdin.end(JSON.stringify({ session_id: 'auto-1', cwd: '/work/garden', ...e })); });
+    await ev({ hook_event_name: 'UserPromptSubmit', prompt: 'Sort the plants' });
+    await ev({ hook_event_name: 'Stop', last_assistant_message: 'Sorted. Shall I also sort the seeds?' }); // seq 2
+    // what the worker's decision would write (the model is not run in this harness)
+    const f = join(data, 'pilot.json'), st = existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : {};
+    const now = Math.floor(Date.now() / 1000), base = { agent: 'claude-code:auto-1', name: 'garden (autobox)', board: true, question: 'Shall I also sort the seeds?', rationale: 'Same task.', ts: now };
+    st.predictions = { ...(st.predictions || {}),
+      'board:claude-code:auto-1:1': { ...base, id: 'board:claude-code:auto-1:1', level: 'L1', answer: 'Go on.', confidence: 0.9, action: 'sent', why: '' },
+      'board:claude-code:auto-1:2': { ...base, id: 'board:claude-code:auto-1:2', level: 'L2', answer: 'Yes, sort the seeds too.', confidence: 0.6, action: 'proposed', why: 'confidence below the threshold 75%' } };
+    writeFileSync(f, JSON.stringify(st));
+    await page.evaluate(() => { AB.rev = -1; return abRefresh(); });
+    await page.waitForSelector('#ab-cols .ab-card:has-text("garden") .ab-c-sug', { timeout: 6000 });
+    check('agent autonomy: the card says a suggested answer waits', true);
+    await page.click('#ab-cols .ab-card:has-text("garden")');
+    await page.waitForSelector('#ab-detail .ab-sug', { timeout: 6000 });
+    const sug = await page.textContent('#ab-detail .ab-sug');
+    check('agent autonomy: the session shows the suggestion, its level, confidence and why it was not sent', /Yes, sort the seeds too\./.test(sug) && /L2/.test(sug) && /60%/.test(sug) && /75%/.test(sug), sug);
+    check('agent autonomy: and asks about what it sent by itself', /Go on\./.test(await page.textContent('#ab-detail .ab-judge')));
+    await page.click('#ab-detail .ab-judge [data-abact=judge][data-ok="1"]');
+    await page.waitForTimeout(800);
+    await page.click('#ab-detail [data-abact=sendsug]');
+    await page.waitForFunction(() => !document.querySelector('#ab-detail .ab-sug'), null, { timeout: 6000 });
+    const rec = (await api(page, 'api/pilot')).recent;
+    const hit = id => rec.find(p => p.id === id)?.hit;
+    check('agent autonomy: Send this answer sends it and counts as right; the verdict too', hit('board:claude-code:auto-1:2') === true && hit('board:claude-code:auto-1:1') === true, JSON.stringify(rec));
+    check('agent autonomy: the answer is queued for the session, from you', /Yes, sort the seeds too\./.test(await page.textContent('#ab-detail .ab-thread')));
+    await page.click('#ab-auto-btn');
+    await page.click('#ab-detail [data-abact=close]');
+  },
   async agentStart({ page, check, data }) {
     // 1.38.0: start a session from the board on a machine whose listener runs, then stop it; the real scripts, a stand-in for claude
     const { mkdirSync, chmodSync } = await import('node:fs');
@@ -906,7 +954,10 @@ sleep 300
     await page.click('#pl-need-list .pl-rw[data-nsel="w:w2"]');
     check('pilotage: an approval offers no answer buttons, and says only the user can give it',
       (await page.$$('#pl-need-detail [data-answer]')).length === 0 && /Token revoked/.test(await page.textContent('#pl-need-detail')));
-    await page.click('#pl-tabs .pl-tab[data-pl=autonomy]'); await page.waitForSelector('#pl-auto .pl-lv', { timeout: 6000 });
+    await page.click('#pl-tabs .pl-tab[data-pl=autonomy]');
+    check('pilotage: the old Autonomy tab points to the board, where the settings moved (1.39.0)', await page.isVisible('[data-plp=autonomy] .pl-moved'));
+    if (await page.isHidden('#ab-auto')) await page.click('#ab-auto-btn');
+    await page.waitForSelector('#pl-auto .pl-lv', { timeout: 6000 });
     check('pilotage: Autonomy lists the five levels, L4 and L5 are always the user\'s', (await page.$$('#pl-auto .pl-lv tbody tr')).length === 5 && (await page.$$('#pl-auto [data-auto-lv]')).length === 3);
     await page.check('#pa-on'); await page.selectOption('#pl-auto [data-auto-lv=L2]', 'tell'); await page.fill('#pa-pr', 'Client work first\nInternal tools later');
     await page.click('#pl-auto [data-auto-save]'); await page.waitForTimeout(700);

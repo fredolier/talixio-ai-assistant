@@ -57,6 +57,22 @@ The board updates by itself every few seconds while you look at it.
   deny), start one on a listening machine (`agent_start`) and stop one (`agent_stop`), and asks your approval first, every
   time.
 - A permission request also sends a notification (see *Channels and notifications*).
+- **Autonomy: the assistant answers your agents by itself, within your limits** (button at the top of the board). Switch
+  on *The assistant looks at the agents' questions by itself*. When a session finishes its turn, the assistant reads its
+  last message (as data written by others, never as instructions) with your **priorities**, **standing rules**, the
+  similar answers you gave before and what the Mind knows of how you decide, and works out the reply you would give, with
+  a level (L1 routine … L5 business) and an honest confidence. A message that only reports work done is left alone. The
+  limits are then applied by Talixio itself, not by the model: for each level L1–L3 you choose *I propose, you answer*
+  (default), *I answer if sure, then tell you* or *I answer if sure, quietly*; it sends alone only above your confidence
+  threshold (75 % by default) and under the **daily cap** (20 by default). **L4/L5, permission requests, and anything about
+  pushes, deploys, deletions, e-mails, credentials or payments are always yours**, whatever the setting. An answer it sends
+  goes to the session like yours, marked *Assistant* in the thread; in the session's pane it asks **Was this the right
+  call? Yes / No, that was wrong**. Otherwise its card shows 💡 *Suggested answer*, and the session's pane shows the answer,
+  its level, its confidence and why it was not sent, with **Send this answer** or **Edit it first**. Each answer is scored:
+  against what you reply for that turn (from the board, or typed in the session's terminal), or with your Yes / No. A wrong
+  answer it sent lowers that level at once; after enough right answers it *suggests* giving it more room (it never raises
+  its own limits). It looks within seconds of the end of a turn (and every 15 minutes as a safety net), at most once per
+  turn, and leaves alone a session you already answered, stopped, or older than 12 hours.
 
 ### Cloud orchestrator (previous approach)
 Folded under the board, the earlier pilot is still there for those who paired one; it will be removed once the board
@@ -91,7 +107,7 @@ The pilot is an orchestrator (a Claude Code session) that supervises agents on y
   it is; your answer goes back with a decision id, and the pilot reports the session's next step. Approvals and permission
   prompts are never routed: only you can give them. A new question counts as news: it shows in the badge even on a quiet
   check-in. A pilot paired before this needs the instructions of the pairing message once: re-pair it, or send it those.
-- **Autonomy tab: the assistant decides within your limits.** Switch on *The assistant looks at the agents' questions by
+- **Autonomy tab** (it moved to the board in 1.39.0: *Autonomy* at the top of the board; the same settings apply to both)**: the assistant decides within your limits.** Switch on *The assistant looks at the agents' questions by
   itself*: when an agent asks something, it reads the question, the similar decisions you took before, what it knows of
   how you work and your **priorities** (one per line, most important first), then calls `fleet_decide` with its answer and
   an honest confidence. For each level L1–L5 you choose: *I propose, you answer* (default), *I answer if sure, then tell

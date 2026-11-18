@@ -6528,7 +6528,7 @@ async function plVerdict(el) {
   try {
     const ok = el.dataset.verdict === '1';
     PL.auto = await post('api/pilot/verdict', { decision_id: el.dataset.did, ok, note: ok ? '' : (prompt(t('What should it have answered?')) || '') });
-    toast(ok ? t('Noted, thank you.') : t('Noted: I will take that into account.')); if (PL.tab === 'autonomy') plRenderAuto();
+    toast(ok ? t('Noted, thank you.') : t('Noted: I will take that into account.')); plRenderAuto();
   } catch (e) { toast(e.message); el.disabled = false; }
 }
 
@@ -6697,6 +6697,12 @@ function abWire() {
       AB.rev = -1; await abRefresh();
     } catch (e) { toast(e.message); }
   };
+  // 1.39.0: the assistant answers the agents within the limits set here
+  $('#ab-auto-btn').onclick = () => {
+    const box = $('#ab-auto'), open = box.hidden;
+    box.hidden = !open; $('#ab-auto-btn').setAttribute('aria-expanded', String(open));
+    if (open) plLoadAuto();
+  };
   $('#ab-machine').oninput = dl; dl();
   $('#ab-copy').onclick = () => copyText($('#ab-snippet').textContent);
   $('#ab-token').onclick = async () => {
@@ -6717,6 +6723,15 @@ function abWire() {
       } else if (act === 'jforget') { await post(`api/agents/jobs/${AB.sel.slice(4)}/forget`, {}); AB.sel = null; $('#ab-detail').hidden = true; } else
       if (act === 'forget') { if (!confirm(t('Forget this session and its history on the board?'))) return; await post(`api/agents/s/${id}/forget`, {}); AB.sel = null; $('#ab-detail').hidden = true; }
       else if (act === 'seen') await post(`api/agents/s/${id}/seen`, {});
+      else if (act === 'usesug') { const ta = $('#ab-reply'); if (ta) { ta.value = b.dataset.text; ta.focus(); } return; }
+      else if (act === 'judge') {
+        const ok = b.dataset.ok === '1', note = ok ? '' : (prompt(t('What should it have answered?')) || '');
+        PL.auto = await post('api/pilot/verdict', { decision_id: b.dataset.did, ok, note });
+        toast(ok ? t('Noted, thank you.') : t('Noted: I will take that into account.')); plRenderAuto();
+      } else if (act === 'sendsug') {
+        const r = await post(`api/agents/s/${id}/reply`, { text: b.dataset.text });
+        toast(r.listening ? t('Sent: the session is listening and picks it up within seconds.') : t('Queued: the session gets it when it finishes its current turn.'));
+      }
       else if (act === 'send') {
         const ta = $('#ab-reply'), text = ta.value.trim(); if (!text) return;
         const r = await post(`api/agents/s/${id}/reply`, { text }); ta.value = '';
@@ -6770,6 +6785,7 @@ function abCard(s) {
   return `<button type="button" class="ab-card${AB.sel === s.id ? ' on' : ''} ab-${esc(s.state)}" data-ab="${esc(s.id)}">
     <span class="ab-c-top"><b class="no-i18n">${esc(abTitle(s))}</b><span class="muted small">${esc(pilotAgo(s.updated))}</span></span>
     <span class="ab-c-meta muted small"><span class="no-i18n">${esc([s.agent, s.machine].filter(Boolean).join(' · '))}</span> · ${esc(st)}${s.stopping ? ' · ' + esc(t('stopping')) : ''}${s.pending ? ' · ' + esc(pN('1 answer queued', '{n} answers queued', s.pending)) : ''}</span>
+    ${s.suggested ? `<span class="ab-c-sug small">💡 ${esc(t('Suggested answer'))}</span>` : ''}
     ${s.doing && s.state === 'working' ? `<span class="ab-c-doing muted no-i18n">${esc(s.doing)}</span>` : ''}
     ${text ? `<span class="ab-c-text no-i18n">${esc(text.slice(0, 280))}</span>` : ''}</button>`;
 }
@@ -6812,7 +6828,14 @@ async function abOpen(id, quiet) {
     box.innerHTML = `<div class="ab-d-top"></div><div class="ab-thread"></div>${s.state === 'ended' || s.state === 'stopped' ? `<p class="muted small">${esc(s.state === 'stopped' ? t('This session was stopped.') : t('This session has ended.'))}</p>`
       : `<div class="ab-compose"><textarea id="ab-reply" rows="2" placeholder="${esc(t('Reply to this session…'))}"></textarea><button type="button" class="btn small" data-abact="send">${esc(t('Send'))}</button></div>`}`;
   }
-  box.querySelector('.ab-d-top').innerHTML = head + perm; // the reply box is kept: a refresh never drops what is being typed
+  const pct = x => Math.round(x.confidence * 100) + '%';
+  const sug = d.suggestion ? `<div class="ab-sug"><b>💡 ${esc(t('Suggested answer'))}</b> <span class="muted small no-i18n">${esc(d.suggestion.level)} · ${esc(pct(d.suggestion))}</span>
+    <div class="no-i18n">${esc(d.suggestion.answer)}</div>${d.suggestion.rationale ? `<div class="muted small no-i18n">${esc(d.suggestion.rationale)}</div>` : ''}
+    ${d.suggestion.why ? `<div class="muted small">${esc(t('Not sent by itself:'))} <span class="no-i18n">${esc(d.suggestion.why)}</span></div>` : ''}
+    <span><button type="button" class="btn small" data-abact="sendsug" data-text="${esc(d.suggestion.answer)}">${esc(t('Send this answer'))}</button> <button type="button" class="btn ghost small" data-abact="usesug" data-text="${esc(d.suggestion.answer)}">${esc(t('Edit it first'))}</button></span></div>` : '';
+  const judge = (d.judge || []).map(j => `<div class="ab-judge"><span class="small">${esc(t('The assistant answered by itself:'))}</span> <span class="no-i18n">${esc(j.answer)}</span> <span class="muted small no-i18n">${esc(j.level)} · ${esc(pct(j))}</span>
+    <span><span class="muted small">${esc(t('Was this the right call?'))}</span> <button type="button" class="btn small" data-abact="judge" data-ok="1" data-did="${esc(j.id)}">${esc(t('Yes'))}</button> <button type="button" class="btn small danger" data-abact="judge" data-ok="0" data-did="${esc(j.id)}">${esc(t('No, that was wrong'))}</button></span></div>`).join('');
+  box.querySelector('.ab-d-top').innerHTML = head + perm + sug + judge; // the reply box is kept: a refresh never drops what is being typed
   const th = box.querySelector('.ab-thread'), atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 40;
   th.innerHTML = thread || `<p class="muted small">${esc(t('Nothing yet.'))}</p>`;
   if (fresh || atEnd) th.scrollTop = th.scrollHeight;
