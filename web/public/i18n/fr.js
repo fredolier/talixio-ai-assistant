@@ -61,6 +61,7 @@ window.I18N.fr = {
 "{n} need you": "{n} vous attendent",
 "No agent has reported yet.": "Aucun agent ne s'est encore signalé.",
 "asks for permission": "demande une autorisation",
+"sent a file": "a envoyé un fichier",
 "working": "au travail",
 "finished its turn": "a terminé son tour",
 "started": "démarrée",

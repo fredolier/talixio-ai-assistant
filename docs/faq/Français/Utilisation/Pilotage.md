@@ -53,6 +53,15 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   demande ses autorisations sur le tableau, comme les autres ; sans réponse au bout de 30 secondes, l'outil est refusé,
   faute de terminal pour la montrer. Une session qui a terminé son tour reste ouverte, en attente de votre réponse, jusqu'à
   ce que vous l'arrêtiez (ou pendant une journée).
+- **Fichiers de vos agents** (1.47.0). Quand un agent produit quelque chose à regarder (un rapport HTML, un PDF, un
+  graphique, une image), il peut l'envoyer au tableau : au début de chaque session, le hook indique à Claude Code de lancer
+  `sh ~/.talixio/agent-hook.sh send <fichier> <session>` pour cela. Vous pouvez aussi le lui demander dans une réponse :
+  « envoie-moi le rapport ». Le fichier apparaît dans le fil de la session avec **Ouvrir** et **Télécharger**, et il est
+  gardé dans la bibliothèque sous **Agents → <projet>** (un fichier du même nom est gardé à côté du précédent, jamais à
+  sa place). Ouvrir l'affiche dans la visionneuse habituelle : une page HTML s'affiche **sans ses scripts**, donc une page
+  qui dessine ses graphiques en JavaScript ne montre que son texte. 25 Mo au plus par fichier. L'assistant voit aussi les
+  fichiers dans le fil et peut les lire. Scripts de hook installés avant la 1.47.0 : téléchargez le script à nouveau,
+  sinon `send` est inconnu et rien ne le signale à l'agent.
 - **Autres agents.** Tout outil capable de lancer une commande quand quelque chose se passe peut se signaler de la même
   façon : envoyez un objet JSON `{"session_id": "…", "hook_event_name": "Stop", "last_assistant_message": "…", "cwd": "…"}`
   à `TALIXIO_AGENT=<son nom> sh ~/.talixio/agent-hook.sh reply` (ou `event`, ou `permission` avec `tool_name` et

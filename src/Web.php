@@ -46,7 +46,7 @@ final class Web
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         if ($path === '/api/conductor/inbox') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
         if ($path === '/api/conductor/tick') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
-        if (in_array($path, ['/api/agents/hook', '/api/agents/wait', '/api/agents/next', '/api/agents/job'], true)) { $this->agentHook($path, $method); return; } // a coding agent's hook script: the agents token, no session here
+        if (in_array($path, ['/api/agents/hook', '/api/agents/wait', '/api/agents/next', '/api/agents/job', '/api/agents/file'], true)) { $this->agentHook($path, $method); return; } // a coding agent's hook script: the agents token, no session here
         if ($path === '/api/conductor/pull') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
         if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye', '/api/federation/ask', '/api/federation/queries'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
@@ -1861,6 +1861,19 @@ final class Web
                 return;
             }
             $machine = (string)($_SERVER['HTTP_X_TALIXIO_MACHINE'] ?? '');
+            if ($path === '/api/agents/file') { // 1.47.0: a file the agent made (agent-hook.sh send), the bytes as the body, the name in a header
+                if ($method !== 'POST') $this->fail(405, 'POST only');
+                if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > AgentHub::MAX_FILE) $this->fail(413, 'file too large (' . intdiv(AgentHub::MAX_FILE, 1_000_000) . ' MB at most)');
+                $tmp = tempnam(sys_get_temp_dir(), 'tlx-agent');
+                $in = fopen('php://input', 'rb'); $outF = fopen($tmp, 'wb');
+                $n = stream_copy_to_stream($in, $outF, AgentHub::MAX_FILE + 1); fclose($in); fclose($outF);
+                try {
+                    [$code, $resp] = $n > AgentHub::MAX_FILE ? [413, ['error' => 'file too large (' . intdiv(AgentHub::MAX_FILE, 1_000_000) . ' MB at most)']]
+                        : $hub->receiveFile((string)($_GET['agent'] ?? 'claude-code'), (string)($_GET['session'] ?? ''), $machine, (string)($_SERVER['HTTP_X_TALIXIO_NAME'] ?? 'file'), $tmp);
+                } finally { if (is_file($tmp)) @unlink($tmp); }
+                $this->json($resp, $code);
+                return;
+            }
             if ($path === '/api/agents/job') { // the listener reports on a session it started
                 if ($method !== 'POST') $this->fail(405, 'POST only');
                 [$code, $resp] = $hub->jobReport($machine, (int)($_GET['id'] ?? 0), (string)($_GET['state'] ?? ''), (int)($_GET['pid'] ?? 0), (string)file_get_contents('php://input'));

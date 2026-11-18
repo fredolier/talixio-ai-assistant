@@ -94,6 +94,7 @@ final class I18n
         'New message in {space}' => 'Nouveau message dans {space}',
         'An agent asks for permission' => 'Un agent demande une autorisation',
         'An agent finished its turn' => 'Un agent a terminé son tour',
+        'An agent sent a file' => 'Un agent a envoyé un fichier',
         'I answered an agent for you' => 'J’ai répondu à un agent à votre place',
         'This recording is not on the server any more.' => 'Cet enregistrement n’est plus sur le serveur.',
         'Nothing was recorded.' => 'Rien n’a été enregistré.',

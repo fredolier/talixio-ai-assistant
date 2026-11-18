@@ -1973,6 +1973,8 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-thread{max-height:min(480px,60vh);overflow:auto;display:flex;flex-direction:column;gap:8px}
 .ab-ev{border-radius:8px;padding:6px 10px;background:var(--sunk)}
 .ab-ev div{white-space:pre-wrap;word-break:break-word;font-size:.84rem}
+.ab-ev .ab-file{white-space:normal;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px} /* 1.47.0: a file the agent sent */
+.ab-file-name{font-weight:600;word-break:break-all}
 .ab-ev.ab-you,.ab-ev.ab-assistant{background:var(--accent-soft);margin-left:12%}
 .ab-ev.ab-k-queued,.ab-ev.ab-k-delivered{opacity:.75}
 .ab-compose{display:flex;gap:8px;align-items:flex-end}

@@ -894,6 +894,19 @@ const flows = {
     check('agent board: Deny answers the hook in Claude Code\'s own format', p2.code === 0 && dec === 'deny', JSON.stringify(p2));
     await page.waitForTimeout(4500);
     check('agent board: the board follows by itself (no reload): the session is working again', /webshop/.test(await page.textContent('#ab-cols [data-col=working]')), await page.textContent('#ab-cols'));
+    // 1.47.0: the agent sends a file it made; the thread shows it, and Open shows it on its sandboxed viewer
+    const rep = join(data, 'sales report.html'); writeFileSync(rep, '<!doctype html><h1>Q3 sales</h1><script>document.title="ran"</script>');
+    const sent = await new Promise(res => { const p = spawn('sh', [sh, 'send', rep, 'bt-1']); let out = ''; p.stdout.on('data', x => out += x); p.on('close', code => res({ code, out })); });
+    check('agent board: the hook script sends a file the agent made', sent.code === 0 && /Sent to Talixio: sales report\.html/.test(sent.out), JSON.stringify(sent));
+    await page.waitForSelector('#ab-detail .ab-file', { timeout: 8000 });
+    const card = await page.textContent('#ab-detail .ab-file');
+    check('agent board: the thread shows the file, with Open and Download', /sales report\.html/.test(card) && /Agents\/webshop/.test(card) && await page.$('#ab-detail .ab-file a[download]') !== null, card);
+    const href = await page.getAttribute('#ab-detail .ab-file a[target=_blank]', 'href');
+    const [tab] = await Promise.all([page.context().waitForEvent('page'), page.click('#ab-detail .ab-file a[target=_blank]')]);
+    await tab.waitForLoadState();
+    const csp = await page.evaluate(h => fetch(h).then(r => r.headers.get('content-security-policy')), href);
+    check('agent board: Open shows the page, sandboxed: its scripts do not run', /Q3 sales/.test(await tab.textContent('body')) && await tab.title() !== 'ran' && /sandbox/.test(csp || ''), `${await tab.title()} ${csp}`);
+    await tab.close();
   },
   async agentKnowledge({ page, check, root, data }) {
     // 1.44.0: what the director learned from the board (after agentBoard: a reply and a denied permission in webshop on testbox)

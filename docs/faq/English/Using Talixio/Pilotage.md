@@ -47,6 +47,14 @@ The board updates by itself every few seconds while you look at it.
   `TALIXIO_CLAUDE` (the `claude` command) and `TALIXIO_CLAUDE_ARGS` (e.g. `--permission-mode acceptEdits`). The session
   asks its permissions on the board, like the others; after 30 seconds without an answer, the tool is refused, since no
   terminal shows it. A session that finished its turn stays open, waiting for your reply, until you stop it (or for a day).
+- **Files from your agents** (1.47.0). When an agent makes something for you to look at (an HTML report, a PDF, a
+  chart, a picture), it can send it to the board: at the start of each session, the hook tells Claude Code to run
+  `sh ~/.talixio/agent-hook.sh send <file> <session>` for that. You can also just ask it, in a reply: « send me the
+  report ». The file shows in the session's thread with **Open** and **Download**, and is kept in the library under
+  **Agents → <project>** (a file of the same name is kept beside the earlier one, never over it). Open shows it on the
+  usual viewer: an HTML page is shown **without its scripts**, so a page that draws its charts with JavaScript shows
+  only its text. 25 MB at most per file. The assistant sees the files in the thread too and can read them. Hook scripts
+  set up before 1.47.0: download the script again, or `send` is unknown and nothing tells the agent about it.
 - **Other agents.** Any tool that can run a command when something happens can report the same way: pipe a JSON object
   `{"session_id": "…", "hook_event_name": "Stop", "last_assistant_message": "…", "cwd": "…"}` to
   `TALIXIO_AGENT=<its name> sh ~/.talixio/agent-hook.sh reply` (or `event`, or `permission` with `tool_name` and

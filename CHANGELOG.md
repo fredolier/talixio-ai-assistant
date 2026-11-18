@@ -3,6 +3,32 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.47.0 (2026-11-18)
+
+Your coding agents can send you what they make (an HTML report, a PDF, a chart, a picture) and you open it from the assistant.
+
+- **Sending.** The hook script has a new mode: `sh ~/.talixio/agent-hook.sh send <file> <session>`.
+  - At the start of each session, the hook tells the agent this command, with its session id. Claude Code adds what a `SessionStart` hook prints to its context; no other event prints anything.
+  - The agent says where the file went. A missing file, a missing session id, an unreachable Talixio or a refusal ends with a failing exit code and says why.
+- **On the board.** The file shows in the session's thread, as *sent a file*, with **Open** and **Download**. Open uses the library's usual viewer: an HTML page in a sandbox with no scripts; a PDF, a picture or Markdown as usual.
+- **In the library,** it is kept under `/Agents/<project>`. A file of the same name is kept beside the earlier one (`report (2).html`), never over it. A name with a path keeps only the name.
+- **Checks.** The file needs the agents token, an existing session and the session's own machine. It is at most 25 MB (refused with 413 otherwise) and not empty. Sending does not move the session on: a hook waiting for your reply keeps waiting. With *Notify me: all*, you get a notification.
+- **The assistant** sees the file in the thread (`agents_list` with the session), with its id, and can read it with `file_read`. It knows it can ask an agent to send a file.
+- **Help pages, in both languages:** Pilotage (Files from your agents). Hook scripts set up before 1.47.0 must be downloaded again.
+- Tested:
+  - PHP, `tests/more/agent_files.php` (fails before this change):
+    - refused: an unknown session, an empty file, another machine;
+    - the bytes are kept in `/Agents/shop`; the thread event; the session's sequence unchanged and a waiting hook still waiting; the assistant's view with the file id; the same name twice; a name with a path;
+    - the real script against a real server: the session-start hint with the session id; other events print nothing; `send` of `Q3 résumé.pdf` keeps the name and the bytes;
+    - the script's failures: a missing file, no session id, a refusal passed on, and a file over 25 MB, of which nothing is kept;
+    - 401 without the token; the page's thread route returns the file.
+  - Browser (agentBoard): the real script sends `sales report.html`; the thread shows it with Open and Download and its folder; Open shows the page in a new tab with a `sandbox` policy, and its script did not run.
+  - By hand: a 12 MB file goes through the PHP built-in server, so `post_max_size` (8 MB) does not cut a raw body.
+- **Not tried:**
+  - a real Claude Code session acting on the session-start hint, or on « send me the report »;
+  - a real server behind nginx or Apache, whose body size limit (`client_max_body_size`, often 1 MB) may refuse a large file before Talixio sees it;
+  - an HTML page that needs its scripts (charts drawn in JavaScript) shows only its text; a way to open such a page with its scripts, in a sandbox of its own, is not built.
+
 ## 1.46.1 (2026-11-18)
 
 Removes the dead code of the cloud orchestrator, retired in 1.45.0 (step 6 of `docs/design/relay-retirement.md`). Nothing changes for you.
