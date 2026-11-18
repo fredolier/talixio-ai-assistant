@@ -57,6 +57,55 @@ const flows = {
     check('chat queue: once the answer ends, the waiting one goes out by itself, one at a time and in order', sent.join('|') === 'queue one|queue two', sent.join('|'));
     await page.unroute('**/api/chat');
   },
+  async recordSaved({ page, check }) {
+    // 1.41.0: a recording is sent to the server while it is made; an interrupted one is offered back
+    const fakeMic = () => page.evaluate(() => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        const ac = new AudioContext(); const o = ac.createOscillator(); const dst = ac.createMediaStreamDestination();
+        o.connect(dst); o.start(); return dst.stream;
+      };
+    });
+    const pieces = n => page.evaluate(async n => { for (let i = 0; i < n; i++) { await new Promise(r => setTimeout(r, 700)); rec.media.requestData(); } }, n);
+    await go(page, 'chat');
+    await fakeMic();
+    await page.click('#mic');
+    await page.waitForFunction(() => rec.id && !document.querySelector('#recorder').hidden, null, { timeout: 8000 });
+    await pieces(3);
+    await page.waitForFunction(() => rec.sent >= 3 && rec.sent === rec.chunks.length, null, { timeout: 8000 });
+    const saved = (await api(page, 'api/recordings')).recordings;
+    check('recording: each piece is on the server while it records', saved.length === 1 && saved[0].bytes > 0 && saved[0].bytes === await page.evaluate(() => rec.chunks.reduce((n, b) => n + b.size, 0)), JSON.stringify(saved));
+    check('recording: it says so', (await page.textContent('#rec-hint')).includes('saved as you go'));
+    // the page closes in the middle: what was sent is offered back
+    await page.reload(); await page.waitForSelector('#rec-saved:not([hidden]) .rec-saved-it', { timeout: 10000 });
+    check('recording: after an interruption it is offered back', (await page.textContent('#rec-saved')).includes('An interrupted recording was saved'));
+    const sent = []; const onReq = r => { if (r.url().endsWith('/api/chat') && r.method() === 'POST') sent.push(JSON.parse(r.postData())); };
+    page.on('request', onReq);
+    await page.click('#rec-saved [data-rs=meeting]');
+    await page.waitForFunction(() => document.querySelector('#rec-saved').hidden, null, { timeout: 10000 });
+    await page.waitForTimeout(500);
+    const lib = sent.length ? JSON.stringify(await api(page, `api/files/${sent[0].files[0]}/text`)) : '';
+    check('recording: summarised, it becomes a meeting file sent to the chat', sent.length === 1 && sent[0].meeting === true && sent[0].files?.length === 1 && /meeting-[\d-]+\.webm/.test(lib)
+      && (await api(page, 'api/recordings')).recordings.length === 0, JSON.stringify(sent) + lib.slice(0, 300));
+    // finished normally: from the pieces already there, not uploaded again
+    const urls = []; const onUrl = r => { if (r.method() === 'POST') urls.push(new URL(r.url()).pathname); };
+    page.on('request', onUrl);
+    await fakeMic(); await page.click('#mic');
+    await page.waitForFunction(() => rec.id, null, { timeout: 8000 });
+    await pieces(2);
+    await page.click('#rec-voice');
+    await page.waitForFunction(() => !rec.id && !rec.media, null, { timeout: 10000 });
+    await page.waitForTimeout(800);
+    check('recording: sent as a voice note from the pieces on the server, not uploaded again', urls.some(u => /\/api\/recordings\/[a-f0-9]+\/finish$/.test(u)) && !urls.includes('/api/files')
+      && sent.length === 2 && sent[1].meeting === false, urls.join(' '));
+    // cancelled: nothing kept
+    await fakeMic(); await page.click('#mic');
+    await page.waitForFunction(() => rec.id, null, { timeout: 8000 });
+    await pieces(1);
+    await page.click('#rec-cancel');
+    await page.waitForTimeout(800);
+    check('recording: cancelled, nothing is kept on the server', (await api(page, 'api/recordings')).recordings.length === 0 && urls.some(u => /\/discard$/.test(u)));
+    page.off('request', onReq); page.off('request', onUrl);
+  },
   async capture({ page, check }) {
     for (const [kind, text] of [['task', 'Call Sam about the offer'], ['note', 'Idea for the newsletter']]) {
       await go(page, 'chat');

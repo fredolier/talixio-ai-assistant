@@ -54,7 +54,8 @@ final class Web
         try {
             if ($method === 'POST' && ($_SERVER['HTTP_X_TALIXIO'] ?? '') !== '1') $this->fail(403, 'missing request header');
             $package = $path === '/api/spaces/import' && $method === 'POST'; // a .zip, read as a stream below
-            $body = $package ? [] : (json_decode((string)file_get_contents('php://input'), true) ?: []);
+            $piece = $method === 'POST' && preg_match('#^/api/recordings/([a-f0-9]{16})/chunk$#', $path, $rm); // audio, not JSON
+            $body = $package || $piece ? [] : (json_decode((string)file_get_contents('php://input'), true) ?: []);
             if ($path === '/api/login' && $method === 'POST') { $this->login((string)($body['password'] ?? ''), (string)($body['code'] ?? '')); return; }
             if (empty($_SESSION['ok']) || ($_SESSION['gen'] ?? '') !== $this->auth()->generation()) $this->fail(401, 'Please sign in.');
             session_write_close(); // don't hold the session lock during long model calls
@@ -62,6 +63,8 @@ final class Web
             if ($path === '/api/chat' && $method === 'POST' && !empty($body['stream'])) { $this->chatStream($body); return; }
             if ($path === '/api/files' && $method === 'POST') { $this->json($this->upload()); return; }
             if ($path === '/api/transcribe' && $method === 'POST') { $this->json($this->transcribe($body)); return; }
+            if ($piece) { [$code, $r] = $this->recordingPiece($rm[1]); $this->json($r, $code); return; }
+            if (str_starts_with($path, '/api/recordings')) { $this->json($this->recordings($path, $method, $body)); return; }
             if ($package) { $this->json(['space' => $this->importSpace('file')]); return; }
             if (preg_match('#^/api/spaces/(\d+)/export$#', $path, $fm) && $method === 'GET') { $this->exportSpace((int)$fm[1]); return; }
             // the file name at the end of the URL keeps its extension in the address bar, tabs and "save as"
@@ -1298,6 +1301,34 @@ final class Web
         $replaced = $replace && $this->app->library()->taken(Library::normalize($folder), Library::cleanName((string)$f['name'])) !== null;
         $id = $this->app->files()->save($f['tmp_name'], (string)$f['name'], (string)($f['type'] ?? ''), $folder, $replace);
         return ['file' => $this->fileInfo($this->app->files()->get($id)), 'replaced' => $replaced];
+    }
+
+    /** POST /api/recordings/<id>/chunk?seq=n: one piece of a recording being made, the raw audio as the body. */
+    private function recordingPiece(string $id): array
+    {
+        $data = (string)file_get_contents('php://input');
+        if ($data === '' || !isset($_GET['seq'])) $this->fail(400, I18n::t($this->app, 'An empty piece of recording.'));
+        try { return $this->app->recordings()->chunk($id, (int)$_GET['seq'], $data); }
+        catch (\DomainException $e) { $this->fail(404, I18n::t($this->app, $e->getMessage())); }
+        catch (\LengthException $e) { $this->fail(413, I18n::t($this->app, $e->getMessage())); }
+    }
+
+    /** A recording saved as it is made: start, finish (into a file), discard, and the unfinished ones to offer back. */
+    private function recordings(string $path, string $method, array $body): array
+    {
+        $rec = $this->app->recordings();
+        if ($path === '/api/recordings' && $method === 'GET') return ['recordings' => $rec->pending()];
+        if ($path === '/api/recordings' && $method === 'POST') {
+            $folder = (string)($body['folder'] ?? '');
+            if ($folder !== '') Library::guard(Library::normalize($folder));
+            return ['recording' => $rec->start((string)($body['name'] ?? ''), (string)($body['mime'] ?? ''), $folder, !empty($body['meeting']))];
+        }
+        if ($method === 'POST' && preg_match('#^/api/recordings/([a-f0-9]{16})/(finish|discard)$#', $path, $m)) {
+            if ($m[2] === 'discard') { $rec->discard($m[1]); return ['ok' => true]; }
+            try { [$id, $meeting] = $rec->finish($m[1], (string)($body['name'] ?? '')); } catch (\DomainException $e) { $this->fail(404, I18n::t($this->app, $e->getMessage())); }
+            return ['file' => $this->fileInfo($this->app->files()->get($id)), 'meeting' => $meeting];
+        }
+        $this->fail(404, 'not found');
     }
 
     private function fileInfo(array $f): array

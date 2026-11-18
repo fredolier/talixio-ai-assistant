@@ -8,6 +8,19 @@
 - Transcripts and summaries are searchable afterwards. The minutes are also saved as a note, next to the recording.
 - Telegram limits files to 20 MB: upload long recordings in the web app.
 
+## Long meetings, and when the recording is interrupted
+- **Saved as you go**: while you record, the app sends the audio to the server every 5 seconds (the bar says
+  *saved as you go*). If the tab closes, the battery dies or the connection drops, at most the last few seconds are lost.
+- **Interrupted?** The next time you open the app, a bar above the message box shows *An interrupted recording was saved*,
+  with its length: **Summarise meeting**, **Send as voice note**, or **Discard**. It is kept for 7 days.
+- **Connection lost while recording**: the bar says so and the recording is kept on your device; keep the page open,
+  it catches up when the connection is back. If it never comes back, the whole recording is uploaded when you stop.
+- **No length limit in practice**: long recordings are transcribed in pieces (40 minutes with Gemini, 20 minutes with
+  OpenAI and the European providers), then joined, with the times following on. Speaker names are guessed in each piece:
+  in a long meeting with unnamed voices, "Speaker 1" in one piece may be "Speaker 2" in the next.
+- A very long transcript (beyond about 5 hours of speech) is summarised from its first part; the whole transcript is still saved
+  and searchable, and the summary says where it was cut.
+
 ## Why a separate transcription?
 Claude does not take audio as input: transcription is a separate step.
 

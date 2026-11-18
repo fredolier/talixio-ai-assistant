@@ -308,7 +308,8 @@ final class Jobs
                 $transcript = $this->app->files()->text((int)$f['id']);
                 Privacy::$untrusted = true; // what other people said in the meeting is not an instruction
                 $store->updateJob($id, ['result' => 'Summarising…']);
-                $task .= "\n\nRecording: {$f['name']}, " . date('Y-m-d H:i', (int)$f['created']) . ". The full transcript is saved as file #{$f['id']} (searchable later).\n\n# Transcript\n" . mb_substr($transcript, 0, 300000);
+                $task .= "\n\nRecording: {$f['name']}, " . date('Y-m-d H:i', (int)$f['created']) . ". The full transcript is saved as file #{$f['id']} (searchable later).\n\n# Transcript\n" . mb_substr($transcript, 0, 300000)
+                    . (mb_strlen($transcript) > 300000 ? "\n\n[The transcript is cut here, after about 300,000 characters: the rest is in file #{$f['id']}. Say so in the summary.]" : '');
             }
             if ($j['kind'] === 'reflect') { $this->reflect($j, $guard); return; }
             if ($j['kind'] === 'eval') { // the assessor's A/B of a role improvement (agent factory, phase 2)

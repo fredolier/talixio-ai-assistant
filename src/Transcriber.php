@@ -18,17 +18,62 @@ final class Transcriber
         if (!$this->enabled()) throw new \RuntimeException('transcription is off: set GEMINI_API_KEY (or TALIXIO_TRANSCRIBE=openai with an OpenAI key, or local with whisper.cpp)');
         if ($c->transcribe === 'local') { Privacy::local('Transcription (whisper.cpp)'); return $this->local($file['path'], $meeting); }
         $path = $this->compress($file['path']);
+        $pieces = $this->split($path, self::$pieceSeconds[$c->transcribe] ?? 0);
         try {
-            return match ($c->transcribe) {
-                'gemini' => Privacy::as('transcription', fn() => $this->gemini($path, $meeting)),
-                'openai' => Privacy::as('transcription', fn() => $this->openai($path, 'https://api.openai.com/v1', $c->openaiKey, $c->transcribeModel ?: 'gpt-4o-transcribe', 'OpenAI')),
-                'sovereign' => Privacy::as('transcription', fn() => $this->openai($path, $c->sovereignUrl, $c->sovereignKey,
-                    preg_match('/whisper|voxtral/i', $c->transcribeModel) ? $c->transcribeModel : Sovereign::info($c->sovereign)['transcribe'], Sovereign::info($c->sovereign)['name'])),
-                default => throw new \RuntimeException("unknown TALIXIO_TRANSCRIBE {$c->transcribe}"),
-            };
+            if (count($pieces) > 1) { // a long recording: in pieces, each one's times moved by where it starts, then joined
+                $parts = [];
+                foreach ($pieces as [$piece, $start]) $parts[] = $meeting ? self::shift($this->one($c, $piece, true), $start) : $this->one($c, $piece, false);
+                return trim(implode($meeting ? "\n" : ' ', array_filter($parts, fn($p) => trim($p) !== '')));
+            }
+            return $this->one($c, $path, $meeting);
         } finally {
+            foreach ($pieces as [$piece]) if ($piece !== $path) { @unlink($piece); @rmdir(dirname($piece)); }
             if ($path !== $file['path']) @unlink($path);
         }
+    }
+
+    /**
+     * Longest piece sent at once, in seconds, per service. OpenAI's models refuse much more than 25 minutes (and 25 MB); Gemini
+     * stays reliable, and within its output limit, on pieces of 40 minutes. whisper.cpp reads any length. Tests lower these.
+     */
+    public static array $pieceSeconds = ['gemini' => 2400, 'openai' => 1200, 'sovereign' => 1200];
+
+    /** [[path, start in seconds], ...]: the recording itself when it is short enough (or ffmpeg is missing). */
+    public function split(string $path, int $max): array
+    {
+        $dur = $max > 0 ? Files::duration($path) : null;
+        if ($dur === null || $dur <= $max + 30) return [[$path, 0]]; // a few seconds over: not worth a piece of its own
+        $dir = sys_get_temp_dir() . '/talixio-pieces-' . bin2hex(random_bytes(4)); @mkdir($dir);
+        $ext = pathinfo($path, PATHINFO_EXTENSION) ?: 'ogg';
+        $len = (int)ceil($dur / ceil($dur / $max)); // even pieces: no short last one cut from its context
+        exec('ffmpeg -nostdin -loglevel error -y -i ' . escapeshellarg($path) . " -vn -f segment -segment_time $len -reset_timestamps 1 -c copy " . escapeshellarg("$dir/p%03d.$ext") . ' 2>&1', $o, $code);
+        $files = glob("$dir/p*.$ext") ?: [];
+        sort($files);
+        if ($code !== 0 || count($files) < 2) { foreach ($files as $f) @unlink($f); @rmdir($dir); return [[$path, 0]]; }
+        $out = []; $at = 0.0;
+        foreach ($files as $f) { $out[] = [$f, (int)round($at)]; $at += Files::duration($f) ?? $len; } // cut on packets: the real lengths, not the asked ones
+        return $out;
+    }
+
+    /** Moves every [mm:ss] (or [h:mm:ss]) in a piece's transcript by where the piece starts in the recording. */
+    public static function shift(string $text, int $start): string
+    {
+        if ($start <= 0) return $text;
+        return preg_replace_callback('/\[(?:(\d{1,2}):)?(\d{1,3}):(\d{2})\]/', function ($m) use ($start) {
+            $s = (int)$m[1] * 3600 + (int)$m[2] * 60 + (int)$m[3] + $start;
+            return $s >= 3600 ? sprintf('[%d:%02d:%02d]', intdiv($s, 3600), intdiv($s, 60) % 60, $s % 60) : sprintf('[%02d:%02d]', intdiv($s, 60), $s % 60);
+        }, $text);
+    }
+
+    private function one(Config $c, string $path, bool $meeting): string
+    {
+        return match ($c->transcribe) {
+            'gemini' => Privacy::as('transcription', fn() => $this->gemini($path, $meeting)),
+            'openai' => Privacy::as('transcription', fn() => $this->openai($path, 'https://api.openai.com/v1', $c->openaiKey, $c->transcribeModel ?: 'gpt-4o-transcribe', 'OpenAI')),
+            'sovereign' => Privacy::as('transcription', fn() => $this->openai($path, $c->sovereignUrl, $c->sovereignKey,
+                preg_match('/whisper|voxtral/i', $c->transcribeModel) ? $c->transcribeModel : Sovereign::info($c->sovereign)['transcribe'], Sovereign::info($c->sovereign)['name'])),
+            default => throw new \RuntimeException("unknown TALIXIO_TRANSCRIBE {$c->transcribe}"),
+        };
     }
 
     /** Mono Opus at 24 kbit/s: about 11 MB per hour, accepted by both services. */
