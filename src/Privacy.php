@@ -30,6 +30,8 @@ final class Privacy
     public static bool $allowOnce = false;
     /** The strictest level of what the current work has read (index in LEVELS). */
     public static int $taint = 0;
+    /** The settings of the model call under way (1.41.2: routing may send it to another account than the space's): what the model checks grade. */
+    public static ?Config $modelCfg = null;
     /** Set once the current work has read untrusted content (an email, a web page, a connector's result): from then on,
      *  lasting changes and requests to addresses not found in that content wait for the user's approval (Tools::run). */
     public static bool $untrusted = false;
@@ -127,6 +129,7 @@ final class Privacy
     public function mayRead(string $level, ?int $space = null, ?string $folder = null): bool
     {
         if ($this->hidden($level, $space, $folder)) return false;
+        if (self::$confine !== '' && $level !== 'internal') return false; // another person's assistant: never above Internal, even nested in the shared folder (1.41.3)
         if (self::$confine !== '' && $folder !== null && $folder !== self::$confine && !str_starts_with($folder, rtrim(self::$confine, '/') . '/')) return false;
         return $level === 'internal' || self::$person || in_array($this->modelBlocked($level), [null, 'sovereign-only'], true);
     }
@@ -340,9 +343,9 @@ final class Privacy
     }
 
     /** The service the conversation model is reached at. */
-    public function modelService(): string
+    public function modelService(?Config $cfg = null): string
     {
-        $c = $this->app->cfg;
+        $c = $cfg ?? self::$modelCfg ?? $this->app->cfg;
         return match ($c->provider) {
             'anthropic' => $this->service($c->anthropicBaseUrl ?: 'https://api.anthropic.com')['id'],
             'openai', 'gemini', 'sovereign' => $this->service($c->openaiBaseUrl)['id'],
@@ -355,10 +358,10 @@ final class Privacy
      * How the conversation model treats your data: local (this server), business (API under business terms, no training
      * on your data), sovereign (a European provider: business terms, in Europe, under European law), free (may be used to improve the provider's models), consumer (a personal subscription), unknown.
      */
-    public function modelGrade(): string
+    public function modelGrade(?Config $cfg = null): string
     {
-        $c = $this->app->cfg;
-        $svc = $this->modelService();
+        $c = $cfg ?? self::$modelCfg ?? $this->app->cfg;
+        $svc = $this->modelService($c);
         return match (true) {
             $c->provider === 'echo' || $svc === 'local' => 'local',
             $c->provider === 'claude-code' => 'consumer',
@@ -370,12 +373,12 @@ final class Privacy
     }
 
     /** Why the model may not be used at this level (null: it may). */
-    public function modelBlocked(string $level): ?string
+    public function modelBlocked(string $level, ?Config $cfg = null): ?string
     {
-        $g = $this->modelGrade();
+        $g = $this->modelGrade($cfg);
         if ($level === 'secret' && $g !== 'local') return 'secret';
         if ($level === 'confidential' && !in_array($g, ['local', 'business', 'sovereign'], true)) return 'confidential';
-        if ($this->app->cfg->sovereignOnly && in_array($this->modelService(), self::NOT_SOVEREIGN, true)) return 'sovereign-only';
+        if ($this->app->cfg->sovereignOnly && in_array($this->modelService($cfg), self::NOT_SOVEREIGN, true)) return 'sovereign-only';
         return null;
     }
 

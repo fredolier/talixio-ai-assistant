@@ -412,6 +412,6 @@ final class Jobs
         // the report repeats what the job read (web pages, emails, Confidential files): its guard and level go with it (audit S3)
         $reply = $this->app->agent()->chat('job', "[Background job #{$j['id']} \"{$j['title']}\" $head. Its report follows. $how]\n\n{$j['result']}", 'standard', [], null, (int)$j['space'],
             json_decode((string)($j['trust'] ?? ''), true) ?: null);
-        $this->app->notifier()->notify($j['title'], $reply, (int)$j['space']);
+        $this->app->notifier()->notify($j['title'], $reply, (int)$j['space'], Agent::$lastLevel);
     }
 }

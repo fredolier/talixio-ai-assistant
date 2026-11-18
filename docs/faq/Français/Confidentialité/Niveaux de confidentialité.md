@@ -11,15 +11,19 @@ Comportement normal : les services configurés dans les Réglages sont utilisés
 - Seul un modèle sous contrat professionnel lit le contenu : API Claude, API OpenAI, ou Gemini si
   votre clé est sur une offre payante.
 - Web, navigateur et connecteurs demandent votre validation à chaque fois.
-- Transcription et indexation (recherche par le sens) uniquement en local.
-- Notifications sans contenu.
+- Transcription et indexation (recherche par le sens) sur le serveur, ou chez un fournisseur européen (Mistral,
+  Scaleway, OVHcloud, Infomaniak, AKI.IO). Une note vocale suit les règles de l'espace où elle est envoyée, et le
+  modèle qui répond est celui réellement utilisé, même quand la demande est routée vers un autre compte (Réglages → Modèle et budget).
+- Notifications sans contenu, y compris pour une routine ou une tâche de fond d'un autre espace dont le travail a lu quelque chose de ce niveau.
 - Liens de partage : mot de passe obligatoire, 30 jours maximum.
-- L'espace n'est pas accessible depuis Telegram.
+- L'espace n'est pas accessible depuis Telegram ni par e-mail (Signal fonctionne).
+- Un espace Confidentiel ou Secret a toujours son propre dossier (un dossier à son nom est créé si vous n'en donnez
+  pas), pour que ce qui y est envoyé soit rangé à son niveau.
 
 ## Secret
 Rien ne quitte le serveur : pas de modèle extérieur, pas de web, pas de partage. Son contenu n'est
 jamais cherché depuis un autre espace. La bibliothèque et les tâches fonctionnent ; pour discuter,
-il faut un modèle installé sur le serveur.
+il faut un modèle installé sur le serveur. Il ne s'utilise que dans l'app : ni depuis Telegram, ni Signal, ni par e-mail.
 
 ## La « contamination »
 Si une question posée dans Général lit un document confidentiel, la suite de la réponse suit les règles Confidentiel.

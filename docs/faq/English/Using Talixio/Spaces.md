@@ -7,6 +7,7 @@ A space is a separate conversation for one topic: a client, the house, health…
   there), **its own instructions**, its notes, a default model, a color and a **task board**.
 - A space does not see the conversations of the others, unless you ask it to.
 - Telegram, Signal and email write to *General*; `/space Home` moves them to another space.
+  Not to every one: Telegram and email do not go into a Confidential space, and only the app goes into a Secret one.
 - Each space has a **confidentiality level** (Internal, Confidential, Secret): the shield next
   to its name. See *Privacy / Confidentiality levels*.
 - With one AI account per space, a Confidential or Secret space is walled off: other spaces'

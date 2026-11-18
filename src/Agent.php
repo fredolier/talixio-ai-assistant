@@ -6,6 +6,8 @@ namespace Talixio;
 final class Agent
 {
     private int $routine = 0; // the routine whose message is being written (runTask)
+    /** The level the last chat turn reached (its space, raised by what it read): a notice of its answer keeps to it (1.41.3). */
+    public static string $lastLevel = 'internal';
 
     public function __construct(private App $app) {}
 
@@ -148,12 +150,17 @@ final class Agent
             if ($guard) $guard($meta['cost']);
             if ($budget->status()['state'] === 'blocked') throw new Abort('budget exhausted during the run');
         };
+        // the model this usage is routed to is the one that reads: it, not the space's main one, must be allowed at the level reached (1.41.2)
+        $p = $this->app->privacy();
+        if (($why = $p->modelBlocked($p->effective(), $cfg)) !== null) throw new PrivacyBlocked($why);
+        $wasCfg = Privacy::$modelCfg; Privacy::$modelCfg = $cfg; // each request of the call is checked against it too
         try {
             $tools = $this->toolsFor($toolset, $history);
             $text = $this->app->provider($tier, $cfg)->complete($this->systemPrompt($role), in_array($role, ['summary', 'classify', 'mind'], true) ? '' : $this->context($tier, $extra, $toolset === 'chat' && $role === 'main'),
                 $history, $tools, $onUsage, $onEvent);
             if ($toolset === 'chat' && ($groups = $tools->shownGroups())) $this->keepGroups($groups);
         } finally {
+            Privacy::$modelCfg = $wasCfg;
             if (Browser::running()) Browser::shutdown(); // each run starts with a fresh page
         }
         return [trim($text), $meta];
@@ -299,7 +306,7 @@ final class Agent
             if (trim($m[1]) === '') return I18n::t($this->app, 'Spaces: {list}. Switch with "/space name".', ['list' => implode(', ', array_map(fn($x) => $x['name'] . ($x['id'] === $space ? I18n::t($this->app, ' (current)') : ''), $spaces->all()))]);
             $to = $spaces->find($m[1]);
             if (!$to || $to['archived']) return I18n::t($this->app, 'No space called "{name}". Spaces: {list}.', ['name' => $m[1], 'list' => implode(', ', array_column($spaces->all(), 'name'))]);
-            if ($channel === 'telegram' && ($to['privacy'] ?? 'internal') !== 'internal') return I18n::t($this->app, '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).', ['name' => $to['name']]);
+            if (($no = $this->channelRefuses($channel, (string)($to['privacy'] ?? 'internal'), $to['name'])) !== null) return $no;
             $spaces->setForChannel($channel, (int)$to['id']);
             return I18n::t($this->app, 'Now in the space "{name}". "/space general" to come back.', ['name' => $to['name']]);
         }
@@ -323,8 +330,8 @@ final class Agent
             return $reply;
         }
         $privacy = $this->app->privacy();
-        $level = $privacy->spaceLevel($space);
-        if ($channel === 'telegram' && $level !== 'internal') return I18n::t($this->app, '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).', ['name' => $spaces->get($space)['name']]);
+        $level = $privacy->spaceLevel($space); self::$lastLevel = $level;
+        if (($no = $this->channelRefuses($channel, $level, $spaces->get($space)['name'])) !== null) return $no;
         $prompt = $text;
         if ($tier === 'standard') $tier = $spaces->get($space)['tier'] ?: 'standard'; // the space's model, General's included
         // "oui" / "vas-y" to a plan means: act now with the tools; the fast model tends to restate the plan instead
@@ -353,7 +360,7 @@ final class Agent
             if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Finishing another task first (a scheduled task or a job report)… your message is queued.']);
             flock($lock, LOCK_EX);
         }
-        $sf = $space ? (string)($spaces->get($space)['folder'] ?? '') : '';
+        $sf = $space ? $spaces->folderFor($space) : '';
         if ($sf !== '') foreach ($files as $fid) { // attachments sent in a space are filed in its folder
             if (($this->app->files()->get((int)$fid)['folder'] ?? '') === Library::INBOX) $this->app->library()->moveFile((int)$fid, $sf);
         }
@@ -427,7 +434,7 @@ final class Agent
                     ? 'Claude Code is not installed on this server, so your Claude plan cannot be used. Choose another model in Settings → AI model, or install it (sudo ./install.sh --with-claude-code).'
                     : 'No AI model is set up yet, so I cannot answer. In Settings → AI model: sign in with your Claude account (Pro/Max plan), or paste an API key (Claude, Gemini or OpenAI).')
                     : ($e->getMessage() === 'sovereign-only' ? I18n::t($this->app, 'Only European providers may be used (Settings → AI model), and the current model is not one. Choose Mistral, Scaleway, OVHcloud, Infomaniak or AKI.IO, or turn that setting off.')
-                    : (in_array($e->getMessage(), ['secret', 'confidential'], true) && $privacy->modelBlocked($level) !== null
+                    : (in_array($e->getMessage(), ['secret', 'confidential'], true) && $e->getMessage() === $level
                     ? I18n::t($this->app, $level === 'secret'
                         ? 'This is a Secret space: nothing may leave the server, and the assistant runs on a service outside. The library and tasks of this space still work; to chat here, use a model on this server (Settings → AI model).'
                         : 'This is a Confidential space: only a model under business terms (Claude API, OpenAI API, paid Gemini) or a European provider (Mistral, Scaleway, OVHcloud, Infomaniak, AKI.IO) may read its content, and the current one is not. Change the model in Settings → AI model, or the level of the space.')
@@ -446,6 +453,7 @@ final class Agent
             if (isset($meta['model'])) $this->maybeLearn($prompt, $reply, $toolsBefore);
             return $reply;
         } finally {
+            self::$lastLevel = $this->app->privacy()->effective();
             $this->app->setSpace($previousSpace); $this->app->channel = $previousChannel;
             Privacy::$trace = null; Privacy::$onEvent = null; Privacy::$taint = 0; Privacy::trustAgain();
             flock($lock, LOCK_UN);
@@ -471,8 +479,24 @@ final class Agent
             return $msg;
         }
         if ($onEvent) $onEvent(['type' => 'status', 'text' => 'Transcribing your voice note…']);
-        $transcript = $this->app->files()->text($fileId);
+        // transcribed by the rules of the space it is said in, not of the Inbox it waits in (1.41.3)
+        $was = $this->app->space; $this->app->setSpace($space);
+        try { $transcript = $this->app->files()->text($fileId); } finally { $this->app->setSpace($was); }
         return $this->chat($channel, trim(($caption !== '' ? "$caption\n" : '') . "🎤 $transcript"), 'standard', [], $onEvent, $space);
+    }
+
+    /**
+     * Whether a chat app may be used in a space of this level: Telegram reads its messages and e-mail goes through mail servers
+     * (and a sender is easy to forge), so neither above Internal; nothing of a Secret space leaves the server, so only the app (1.41.3).
+     */
+    private function channelRefuses(string $channel, string $level, string $name): ?string
+    {
+        if ($level === 'secret' && in_array($channel, ['telegram', 'signal', 'email'], true))
+            return I18n::t($this->app, '"{name}" is a Secret space: nothing of it leaves the server, so use it in the app.', ['name' => $name]);
+        if ($level === 'internal') return null;
+        if ($channel === 'telegram') return I18n::t($this->app, '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).', ['name' => $name]);
+        if ($channel === 'email') return I18n::t($this->app, '"{name}" is a Confidential space: e-mail goes through mail servers and a sender is easy to forge, so use it in the app (or Signal).', ['name' => $name]);
+        return null;
     }
 
     /** After a multi-step task, a background job (fast tier) checks whether it's a procedure worth keeping as a skill. */

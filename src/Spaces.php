@@ -109,6 +109,27 @@ final class Spaces
     }
 
     /** $by: who made the change, kept in the space's history ('app', 'assistant'). */
+    private static function ownFolder(string $name): string
+    {
+        return Library::normalize('/' . trim(str_replace(['/', '\\'], ' ', Library::cleanName($name))));
+    }
+
+    /**
+     * The space's folder; a Confidential or Secret space without one (made before 1.41.3) is given its own now, so that
+     * attachments sent in it are not left in the Inbox, which is read at the Internal level.
+     */
+    public function folderFor(int $id): string
+    {
+        $sp = $this->get($id);
+        if (!$sp || $id === 0) return '';
+        if ((string)$sp['folder'] !== '' || ($sp['privacy'] ?? 'internal') === 'internal') return (string)$sp['folder'];
+        $folder = self::ownFolder((string)$sp['name']);
+        $this->app->library()->ensureFolder($folder);
+        $this->app->store->q('UPDATE spaces SET folder = ? WHERE id = ?', [$folder, $id]);
+        $this->app->store->set('privacy_rev', (string)((int)$this->app->store->get('privacy_rev', '0') + 1));
+        return $folder;
+    }
+
     public function save(array $d, ?int $id = null, string $by = 'app'): array
     {
         $before = $id ? $this->get($id) : null;
@@ -120,6 +141,8 @@ final class Spaces
         if ($dup) throw new \InvalidArgumentException("A space called \"$name\" already exists.");
         $folder = trim((string)($d['folder'] ?? '')) === '' ? '' : Library::normalize((string)$d['folder']);
         if ($folder === '/') $folder = '';
+        $level = array_key_exists('privacy', $d) ? (string)$d['privacy'] : (string)($before['privacy'] ?? 'internal');
+        if ($folder === '' && $level !== 'internal') $folder = self::ownFolder($name); // what is sent in it is filed at its level, not left in the Inbox (1.41.3)
         if ($folder !== '') $this->app->library()->ensureFolder($folder);
         $tier = in_array($d['tier'] ?? '', Tier::NAMES, true) ? $d['tier'] : 'standard';
         $color = preg_match('/^#[0-9a-f]{6}$/i', (string)($d['color'] ?? '')) ? strtolower($d['color']) : self::COLORS[random_int(0, count(self::COLORS) - 1)];

@@ -100,6 +100,8 @@ final class I18n
         '1 file changed: {list}' => '1 fichier modifié : {list}',
         '{n} files changed: {list}' => '{n} fichiers modifiés : {list}',
         'Library' => 'Bibliothèque',
+        '"{name}" is a Secret space: nothing of it leaves the server, so use it in the app.' => '« {name} » est un espace Secret : rien n\'en quitte le serveur, utilisez-le dans l\'app.',
+        '"{name}" is a Confidential space: e-mail goes through mail servers and a sender is easy to forge, so use it in the app (or Signal).' => '« {name} » est un espace Confidentiel : un e-mail passe par des serveurs de messagerie et un expéditeur est facile à imiter, utilisez-le dans l\'app (ou Signal).',
         '"{name}" is a Confidential space: Telegram can read the messages, so use it in the app (or Signal).' => '« {name} » est un espace Confidentiel : Telegram peut lire les messages, utilisez-le dans l\'app (ou Signal).',
         'This is a Secret space: nothing may leave the server, and the assistant runs on a service outside. The library and tasks of this space still work; to chat here, use a model on this server (Settings → AI model).' =>
             'Cet espace est Secret : rien ne doit quitter le serveur, et l\'assistant fonctionne avec un service extérieur. La bibliothèque et les tâches de cet espace fonctionnent toujours ; pour discuter ici, utilisez un modèle installé sur ce serveur (Réglages → Modèle d\'IA).',

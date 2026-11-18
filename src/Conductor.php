@@ -775,12 +775,16 @@ final class Conductor
         return is_scalar($v) ? mb_substr(preg_replace('/[^A-Za-z0-9._:\-]/', '', (string)$v), 0, 64) : '';
     }
 
-    /** Ground an instruction in the relevant knowledge, respecting privacy levels (search already filters them). */
+    /** Ground an instruction in the relevant knowledge of the Internal level. */
     private function ground(string $instruction, int $space): string
     {
         $hits = [];
-        try { $hits = $this->app->recall()->search($instruction, 4, PHP_INT_MAX, null, null, $space); }
+        // the fleet runs outside the assistant: Internal knowledge only, and what is left out does not raise this turn (1.41.3)
+        $taint = Privacy::$taint;
+        try { $hits = $this->app->recall()->search($instruction, 8, PHP_INT_MAX, null, null, $space); }
         catch (\Throwable $e) { Log::warn("conductor grounding: {$e->getMessage()}"); }
+        finally { Privacy::$taint = $taint; }
+        $hits = array_slice(array_values(array_filter($hits, fn($h) => ($h['level'] ?? 'internal') === 'internal')), 0, 4);
         $ctx = [];
         foreach ($hits as $h) $ctx[] = '- ' . trim((string)$h['label']) . ': ' . mb_substr(trim((string)$h['text']), 0, 400);
         return $ctx === [] ? $instruction

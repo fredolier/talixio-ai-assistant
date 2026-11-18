@@ -11,15 +11,19 @@ Normal behaviour: the services configured in Settings are used.
 - Only a model under business terms reads the content: the Claude API, the OpenAI API, or Gemini if
   your key is on a paid plan.
 - Web, browser and connectors ask for your approval every time.
-- Transcription and indexing (search by meaning) on the server only.
-- Notifications without content.
+- Transcription and indexing (search by meaning) on the server, or at a European provider (Mistral, Scaleway,
+  OVHcloud, Infomaniak, AKI.IO). A voice note follows the rules of the space it is sent in, and the model that
+  answers is the one actually used, even when the request is routed to another account (Settings → Model and budget).
+- Notifications without content, also for a routine or a job of another space whose work read something at this level.
 - Share links: password required, 30 days maximum.
-- The space cannot be used from Telegram.
+- The space cannot be used from Telegram or by e-mail (Signal works).
+- A Confidential or Secret space always has its own folder (one is created with its name if you give none), so
+  what is sent in it is filed at its level.
 
 ## Secret
 Nothing leaves the server: no outside model, no web, no sharing. Its content is never
 searched from another space. The library and tasks work; to chat, you need a model
-installed on the server.
+installed on the server. It is used only in the app: not from Telegram, Signal or e-mail.
 
 ## "Contamination"
 If a question asked in General reads a confidential document, the rest of the answer follows the Confidential rules.

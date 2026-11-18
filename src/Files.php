@@ -287,6 +287,9 @@ final class Files
     {
         if (!$this->app->cfg->visionIndex || $this->app->cfg->provider === 'echo' || $this->app->budget()->status()['state'] !== 'ok') return null;
         [$c, $tier] = $this->app->tierFor('vision');
+        $p = $this->app->privacy();
+        if ($p->modelBlocked($p->effective(), $c) !== null) return null; // the image stays unread rather than go to a model its level forbids (1.41.2)
+        $wasCfg = Privacy::$modelCfg; Privacy::$modelCfg = $c;
         try {
             $text = $this->app->provider($tier, $c)->complete($instruction, '', [['role' => 'user', 'content' => $parts]], $this->app->tools->only('none'),
                 function (array $u) use ($tier, $c) { $this->app->store->addUsage($u, $this->app->pricingFor($c)->cost($u), 'indexing', $tier->name, null, $c->account); });
@@ -295,7 +298,7 @@ final class Files
         } catch (\Throwable $e) {
             Log::warn("image reading: {$e->getMessage()}");
             return null;
-        }
+        } finally { Privacy::$modelCfg = $wasCfg; }
         return trim($text) ?: null;
     }
 
