@@ -91,22 +91,7 @@ $lvl = $pv->folderLevel('/Team/Deals/q4.txt');
 check('confidential: a question from another assistant reads the shared folder', Privacy::confined('/Team', fn() => $pv->mayRead('internal', null, '/Team/notes.txt')));
 check('confidential: ...but not a Confidential folder nested in it', $lvl === 'confidential' && !Privacy::confined('/Team', fn() => $pv->mayRead($lvl, null, '/Team/Deals/q4.txt')));
 check('confidential: outside such a question, the space\'s own work still reads it', $pv->mayRead($lvl, null, '/Team/Deals/q4.txt'));
-
-// ---- C3: an instruction to the code fleet is grounded in Internal knowledge only (it runs outside the assistant)
-putenv('TALIXIO_PUBLIC_URL=https://me.test'); $app->cfg->publicUrl = 'https://me.test';
-$con = $app->conductor();
-$code = preg_match('/"code":"([a-f0-9]{32})"/', $con->setup(), $m) ? $m[1] : '';
-[, $pr] = $con->inbox(['type' => 'pair', 'code' => $code, 'mode' => 'poll', 'session' => 's1'], '');
-$secretFile = $app->files()->save(tap_tmp('Rollout strategy Zephyr: the acquisition of Brightline for 40 M€ closes in March.'), 'zephyr.txt', 'text/plain', '/Clients/Acme');
-$openFile = $app->files()->save(tap_tmp('Rollout strategy Zephyr: release on Tuesdays, never on Fridays.'), 'release.txt', 'text/plain', '/Team');
-$app->files()->text($secretFile); $app->files()->text($openFile);
-Privacy::begin();
-$r = $con->toFleet('Plan the rollout strategy Zephyr');
-[, $pp] = $con->pull((string)($pr['secret'] ?? ''));
-$ins = (string)(end($pp['instructions'])['instruction'] ?? '');
-check('confidential: an instruction to the fleet is not grounded in a Confidential document', str_contains($ins, 'rollout strategy Zephyr') && !str_contains($ins, 'Brightline'), $ins);
-check('confidential: ...it still is in Internal knowledge', str_contains($ins, 'never on Fridays'), $ins);
-check('confidential: ...and the turn is not raised by what it left out', $app->privacy()->effective() === 'internal');
+// C3 (an instruction to the cloud fleet is grounded in Internal knowledge only) went with the fleet relay (1.46.1).
 
 foreach ($saved as $k => $v) putenv($v === false ? $k : "$k=$v");
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();
