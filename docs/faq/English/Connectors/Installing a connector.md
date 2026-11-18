@@ -70,6 +70,8 @@ For a server that is not on GitHub (or in a private repository):
 - A long result (a converted page, a big export) is saved whole as a file in your library, in the space's
   *Notes*; ask the assistant to move or rename it where you want. The chat only shows the start, folded.
 
+A site with no connector and no public API: the assistant can learn the API its pages use and make a connector of it (*Connectors / Learning a site's API*).
+
 Step-by-step examples: *Connectors / anki.talixio.com* (a connector to install) and *Connectors / Home Assistant* (a remote service, by its address).
 
 On a server shared by several people, connectors the admin approved are in Settings → Connectors → *From the store*,

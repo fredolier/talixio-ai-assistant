@@ -613,6 +613,9 @@
               <div class="row wrap"><button id="conn-install" class="btn" type="button">Install a connector…</button><span class="muted small">A local connector: give the address of its GitHub repository, or put its folder as a .zip in the library (e.g. /Connecteurs).</span></div>
               <div id="store-conn" class="store-box" hidden></div>
               <div id="mcp-servers" class="mcp-servers"></div>
+              <div id="sapi" class="sapi" hidden><h5>Learned from sites</h5>
+                <p class="muted small">Connectors the assistant made from a site's own API, when you asked it to learn it. They only call that site. Reads run without asking; changes ask you each time.</p>
+                <div id="sapi-list" class="mcp-servers"></div></div>
               <details class="adv" id="mcp-config"><summary>Configuration (JSON)</summary>
               <textarea id="mcp-raw" class="editor mono" rows="10" spellcheck="false" placeholder='{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "…"}}}}'></textarea>
               <div class="row"><button id="mcp-save" class="btn primary" type="button">Save and connect</button><button id="mcp-refresh" class="btn" type="button">Check again</button><span id="mcp-state" class="muted small"></span></div>

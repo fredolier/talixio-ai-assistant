@@ -243,6 +243,7 @@ final class App
     public function scripts(): Scripts { return new Scripts($this); }
     public function apps(): Apps { return new Apps($this); }
     public function mcp(): Mcp { return new Mcp($this); }
+    public function siteApis(): SiteApis { return new SiteApis($this); }
     public function mcpOAuth(): McpOAuth { return new McpOAuth($this); }
     public function browserAvailable(): bool { return $this->cfg->browser !== 'off' && Browser::findBinary($this->cfg->chromeBin) !== null; }
     public function transcriber(): Transcriber { return new Transcriber($this); }

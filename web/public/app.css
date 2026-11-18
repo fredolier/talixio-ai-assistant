@@ -2041,3 +2041,8 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-legacy{margin-top:8px}
 .ab-legacy>summary{cursor:pointer;color:var(--muted);font-size:.85rem;margin-bottom:8px}
 @media (max-width:760px){.ab-cols{grid-template-columns:1fr}}
+/* connectors learned from a site's API (1.37.0) */
+.sapi{margin-top:6px}
+.sapi h5{margin:4px 0}
+.sapi-eps{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.sapi-eps code{font-size:.85em}

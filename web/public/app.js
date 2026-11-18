@@ -4241,7 +4241,31 @@ function mcpWire(el) {
   });
   filter();
 }
-async function loadConnectors() { try { showConnectors(await api('api/mcp')); } catch {} }
+async function loadConnectors() { try { showConnectors(await api('api/mcp')); } catch {} loadSiteApis(); }
+// Connectors learned from a site's API (1.37.0): what each calls, how it signs in, its key, Remove.
+async function loadSiteApis(d) {
+  try { d = d || await api('api/site-apis'); } catch { return; }
+  $('#sapi').hidden = !d.apis.length;
+  const auth = x => x.auth === 'cookies' ? t('Your login in the assistant\'s browser') : x.auth === 'none' ? t('No sign-in') : x.has_key ? t('Key saved') : t('Needs its key');
+  $('#sapi-list').innerHTML = d.apis.map(x => `<details class="mcp-server sapi-item ${['header', 'query'].includes(x.auth) && !x.has_key ? 'bad' : ''}" data-sapi="${esc(x.name)}"><summary><div class="row">
+      <b class="no-i18n">${esc(x.title)}</b><span class="chip no-i18n">${esc(x.host)}</span><span class="chip">${esc(auth(x))}</span>
+      <span class="muted small">${esc(t('{n} tool(s)', { n: x.endpoints.length }))} · ${esc(t('{n} run without asking', { n: x.endpoints.filter(e => e.reads).length }))}</span></div></summary>
+    <div class="mcp-body"><ul class="sapi-eps">${x.endpoints.map(e => `<li><code class="no-i18n">${esc(e.method)} ${esc(e.path)}</code> <span class="small no-i18n">${esc(e.description)}</span>${e.reads ? '' : ` <span class="chip">${esc(t('asks first'))}</span>`}</li>`).join('')}</ul>
+    ${['header', 'query'].includes(x.auth) ? `<div class="row wrap"><label for="sapi-key-${esc(x.name)}">${esc(t('API key'))}</label><input id="sapi-key-${esc(x.name)}" type="password" autocomplete="new-password" data-sapikey placeholder="${esc(x.has_key ? t('unchanged') : '')}">
+      <button type="button" class="btn small primary" data-sapisave>${esc(t('Save the key'))}</button></div>${x.help ? `<p class="muted small no-i18n">${esc(x.help)}</p>` : ''}` : ''}
+    ${x.auth === 'cookies' ? `<p class="muted small">${esc(t('It uses your login to this site in the assistant\'s browser. When it expires, the assistant tells you and asks you to log in again.'))}</p>` : ''}
+    <div class="row"><span class="spacer"></span><button type="button" class="btn small danger" data-sapidel>${esc(t('Remove'))}</button></div></div></details>`).join('');
+  $('#sapi-list').querySelectorAll('[data-sapi]').forEach(el => {
+    const name = el.dataset.sapi;
+    el.oninput = el.onchange = e => e.stopPropagation(); // saved by its own button: not part of the Settings form
+    const save = el.querySelector('[data-sapisave]');
+    if (save) save.onclick = async () => { try { await loadSiteApis(await post('api/site-apis/key', { name, key: el.querySelector('[data-sapikey]').value })); toast(t('Key saved.')); } catch (e) { toast(e.message); } };
+    el.querySelector('[data-sapidel]').onclick = async () => {
+      if (!confirm(t('Remove this connector? Its tools go with it.'))) return;
+      try { await loadSiteApis(await post('api/site-apis/remove', { name })); } catch (e) { toast(e.message); }
+    };
+  });
+}
 const mcpAction = async (path, body) => {
   $('#mcp-state').textContent = 'Connecting… (local servers can take a minute the first time)';
   try { showConnectors(await post(path, body)); $('#mcp-state').textContent = 'Done. New tools are available from the next message.'; }

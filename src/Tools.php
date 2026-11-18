@@ -31,7 +31,7 @@ final class Tools
         'contacts' => [['contact_'], '/contact|téléphone|phone|numéro|number|adresse|address|qui est|who is/iu', 'find and save contacts'],
         'tasks' => [['board_'], '/tâche|task|todo|to-do|à faire|kanban|tableau|board|carte|card|ticket|projet|project|priorit|backlog|deadline|échéance|estim|temps passé|time spent|\b[A-Z]{2,6}-\d+\b/u', 'the task board: list, create, update, prioritize, log time'],
         'library' => [['kb_', 'share_', 'file_', 'asset_'], '/document|\bdoc|fichier|file|dossier|folder|biblioth|library|note|rapport|report|pdf|partag|share|lien|link|class|range|déplace|move|corbeille|trash|version|inbox|enregistr|save|sauvegard|word|excel|tableur|slides?\b|knowledge base|base de connaissance|hub|entreprise|corporate|company|template|mod[èe]le|charte/iu', 'file, move, save and share documents, and contribute assets to the company knowledge base'],
-        'browser' => [['browser_'], '/site|page|navig|browser|clique|click|formulaire|form\b|connecte|log ?in|réserv|book|https?:\/\/|www\.|\.(com|fr|eu|net|org)\b|command|order|achète|buy|livr|deliver|panier|cart|(regarde|cherche|vérifie|check|look|search)\w* (sur|on)\b|uber|deliveroo|amazon|airbnb|doctolib|leboncoin|sncf|vinted/iu', 'a web browser that clicks and types on pages'],
+        'browser' => [['browser_', 'site_api_'], '/site|page|navig|browser|clique|click|formulaire|form\b|connecte|log ?in|réserv|book|https?:\/\/|www\.|\.(com|fr|eu|net|org)\b|command|order|achète|buy|livr|deliver|panier|cart|(regarde|cherche|vérifie|check|look|search)\w* (sur|on)\b|uber|deliveroo|amazon|airbnb|doctolib|leboncoin|sncf|vinted/iu', 'a web browser that clicks and types on pages, and learns a site\'s API into a connector'],
         'schedule' => [['schedule_task', 'cancel_task', 'routine_'], '/rappel|remind|chaque|tous les|toutes les|every|daily|quotidien|hebdo|weekly|mensuel|monthly|routine|programm|planifi|schedul|automati|plus tard|later|\bdans \d|\bin \d/iu', 'reminders and recurring routines'],
         'jobs' => [['delegate', 'list_jobs', 'continue_job', 'cancel_job', 'archive_job', 'schedule_job'], '/job|recherch|research|cherche|enquête|compar|analys|étude|study|arrière-plan|background|rapport|report|veille|approfondi|trouve|find|liste d|list of/iu', 'background jobs: long research and reports'],
         'director' => [['direct', 'directive_', 'conductor_', 'fleet_'], '/directive|director|directeu?r|équipe|\bteam\b|en parallèle|in parallel|plusieurs (agents|rôles|workers)|several (agents|roles|workers)|worker|mission|chantier|orchestr|fan.?out|à la (fois|chaîne)|chacun|chaque (poster|contrat|concurrent|produit|item)|claude.?code|code session|session de code|agent de code|coding agent|conductor|chef d.orchestre|\bfleet\b|flotte|cloud session|session distante|remote control|priorit(y|ies|és)|\bagents?\b|pilote/iu', 'the director: run a team of worker roles toward one goal, delegate one to a Claude Code session, or drive a cloud orchestrator over the wider fleet'],
@@ -43,7 +43,7 @@ final class Tools
         'law' => [['legifrance_', 'judilibre_', 'eurlex_'], '/\bloi\b|lois|légifrance|legifrance|judilibre|jurisprudence|arrêt|cassation|code civil|code du travail|code pénal|décret|ordonnance|article [LRD]?\s?\d|juridi|droit (français|europ|de l)|eur-?lex|celex|règlement (ue|européen)|directive|jurispruden|cour de justice|conseil d.état|conseil constitutionnel|rgpd|gdpr|ai act|règlement sur l.ia/iu', 'search French and EU law (Légifrance, JudiLibre, EUR-Lex)'],
         'skills' => [['skill_', 'role_'], '/compétence|skill|méthode|procédure|apprend|learn|retiens|à l\'avenir|next time|prochaine fois|toujours|always|jamais|never|r[ôo]le|\brole\b|équipe|\bteam\b|worker|agent spécial|sub-?agent|directeu?r/iu', 'save or delete a skill, or find and save a worker role (a reusable method to reuse)'],
         'spaces' => [['spaces'], '/espace|space/iu', 'the user\'s spaces'],
-        'connectors' => [['connector_'], '/\bmcp\b|connect(eu|o)rs?|github|plugin|intégration|integration/iu', 'install a connector (MCP server) from GitHub'],
+        'connectors' => [['connector_', 'site_api_'], '/\bmcp\b|\bapi\b|connect(eu|o)rs?|github|plugin|intégration|integration/iu', 'install a connector (MCP server) from GitHub'],
         'apps' => [['app_'], '/\bapps?\b|appli|widget|dashboard|tableau de bord|mini.?app|outil visuel|visuali[sz]/iu', 'small apps for the Apps menu (build, list, change)'],
         'usage' => [['usage_'], '/coût|cost|budget|dépens|spent|spend|token|usage|consomm|factur|bill|prix|price|combien|how much/iu', 'what the assistant has spent'],
     ];
@@ -803,6 +803,15 @@ final class Tools
                 ['domains' => ['type' => 'string', 'description' => 'comma-separated, e.g. "ubereats.com, uber.com"'],
                  'path' => ['type' => 'string', 'description' => 'the .json file the connector reads, e.g. ~/.strider/ubereats/cookies.json']], ['domains', 'path'],
                 fn(array $a) => $this->saveLogin((string)$a['domains'], (string)$a['path']));
+            $this->register('browser_api_calls', 'The calls to its own API (JSON) the site made while you browsed it, cleaned of cookies, tokens and keys: method, address, body, '
+                . 'answer (shortened) and how it signed in. To learn a site\'s API: browse the pages that do what the user wants (search, list, open an item; log in first if needed), '
+                . 'read the calls here, then describe them with site_api_save. host: only this site (e.g. "shop.example.com").',
+                ['host' => ['type' => 'string']], [], function (array $a) {
+                    $calls = Browser::get($this->app)->apiCalls((string)($a['host'] ?? ''));
+                    if (!$calls) return 'No API calls seen' . (!empty($a['host']) ? " on {$a['host']}" : '') . ' yet: open the pages that load the data (a search, a list, an item), wait for them, then ask again. A site that renders everything on its server has no API to learn.';
+                    return count($calls) . " API call(s) seen (cookies, tokens and keys removed):\n" . json_encode($calls, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                        . "\n\nTo make a connector of them, call site_api_save with the endpoints worth keeping (what the user will ask for). signed_in_with \"cookies\" means auth type \"cookies\".";
+                });
             $this->register('browser_screenshot', 'Take a screenshot of the visible part of the current page, to see its layout or images.', [], [],
                 fn() => '[[image:' . $b()->screenshot() . ']]');
         }
@@ -862,6 +871,19 @@ final class Tools
                 . "\nIts code is downloaded into /Connecteurs, its dependencies installed (npm, without their install scripts), and it runs inside your assistant"
                 . (Shell::binary() !== null ? ', in a sandbox that sees only its own folder' : ' with the rights of the app (no sandbox on this server)') . ': only approve code whose origin you trust.');
         $this->app->mcp()->register($this);
+        $this->register('site_api_save',
+            'Make a connector from a site\'s own API, learned with browser_api_calls: a description of its endpoints (never code), which Talixio serves itself, calling only that site. '
+            . 'Asks the user to approve it first; its tools are then mcp_<name>_<endpoint>. GET endpoints only read (run without asking) unless "changes": true; the others ask each time. '
+            . 'auth: "cookies" when the calls were signed in with cookies (the user\'s login in this browser, read at each call), "header" or "query" for an API key (the user enters it in Settings, never in the chat: '
+            . 'do not ask for it), "none" for public calls. Keep it to what is useful, with clear descriptions and only the parameters that matter; leave out tracking and analytics calls. Saving the same name replaces it.',
+            ['spec' => ['type' => 'object', 'description' => '{"name": "shop", "title": "Test Shop", "base": "https://www.shop.com/api", "auth": {"type": "cookies"} | {"type": "header", "name": "Authorization", "prefix": "Bearer", "help": "where the user finds the key"}, '
+                . '"endpoints": [{"name": "search_products", "description": "Search products by words; returns id, name, price", "method": "GET", "path": "/products/search", '
+                . '"params": {"q": {"type": "string", "in": "query", "required": true, "description": "the words"}}, "fixed": {"query": {"lang": "fr"}}}, '
+                . '{"name": "get_product", "method": "GET", "path": "/products/{id}", "params": {"id": {"type": "string", "in": "path"}}, "description": "…"}]}',
+                'properties' => new \stdClass()]], ['spec'],
+            fn(array $a) => $this->siteApiSave(self::specArg($a['spec'])),
+            function (array $a) { try { return SiteApis::summary(SiteApis::validate(self::specArg($a['spec']), $this->app->cfg->browserAllowPrivate)); } catch (\InvalidArgumentException) { return self::brief('site_api_save', $a); } });
+        $this->app->siteApis()->register($this);
         $this->registerBoard();
         $this->app->spotify()->register($this);
         $this->app->legifrance()->register($this);
@@ -1291,7 +1313,7 @@ final class Tools
      * (a test checks each tool is in one of the two). fetch_url and browser_open have their own rule (addresses in that
      * content). space_notes and spaces read with their read actions only; connectors' tools that change something already ask.
      */
-    public const READS = ['agents_list', 'app_get', 'app_list', 'ask_director', 'board_changes', 'board_get', 'board_list', 'browser_back', 'browser_open', 'browser_read',
+    public const READS = ['agents_list', 'app_get', 'app_list', 'ask_director', 'board_changes', 'board_get', 'board_list', 'browser_api_calls', 'browser_back', 'browser_open', 'browser_read',
         'browser_screenshot', 'calendar_events', 'check_inbox', 'contact_find', 'decide', 'directive_inbox', 'directive_status', 'directive_tell', 'eurlex_get', 'eurlex_search',
         'fetch_url', 'file_read', 'fleet_inbox', 'fleet_status', 'forecast', 'judilibre_get', 'judilibre_search', 'kb_find', 'kb_inbox', 'kb_list', 'kb_recent',
         'kb_related', 'kb_search', 'kb_versions', 'legifrance_get', 'legifrance_search', 'list_jobs', 'list_tasks', 'mail_draft', 'mail_list', 'mail_read', 'mail_triage',
@@ -1305,7 +1327,7 @@ final class Tools
         'kb_move', 'kb_save_note', 'kb_trash', 'mail_send', 'memory_append', 'memory_replace', 'mind_observe', 'peer_ask', 'peer_publish',
         'peer_send', 'role_case_add', 'role_evaluate', 'role_improve', 'role_install', 'role_publish', 'role_record', 'role_save', 'routine_feedback',
         'schedule_job', 'schedule_task', 'script_delete', 'script_run', 'script_save', 'share_create', 'share_revoke', 'shell_run', 'shell_save',
-        'skill_delete', 'skill_save', 'spotify_control', 'spotify_play', 'spotify_save', 'usage_bill'];
+        'site_api_save', 'skill_delete', 'skill_save', 'spotify_control', 'spotify_play', 'spotify_save', 'usage_bill'];
 
     /** Tools whose results are written by others: emails, web pages, search results, connectors. */
     public static function untrustedSource(string $name): bool
@@ -1451,6 +1473,26 @@ final class Tools
             : 'You did not name this site, and the answer has read content written by others.') . ')';
         return $this->app->approvals()->ask('browser_act', ['label' => $i['label'], 'page' => $page], $summary)
             ? true : 'error: the user did not approve this action on the page (rejected or no answer in time). Nothing was done.';
+    }
+
+    /** The spec as an object, also when the model sent it as JSON text. */
+    private static function specArg(mixed $v): array
+    {
+        return is_array($v) ? $v : (is_string($v) && is_array($d = json_decode($v, true)) ? $d : []);
+    }
+
+    /** Save a connector learned from a site (approved already) and add its tools to this answer. */
+    private function siteApiSave(array $spec): string
+    {
+        try { $s = $this->app->siteApis()->save($spec); }
+        catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage() . '. Nothing was saved: fix it and call site_api_save again.'; }
+        $names = $this->app->siteApis()->registerOne($this, $s['name'], $this->app->siteApis()->get($s['name']));
+        foreach ($names as $n) if ($this->shown !== null) $this->shown[$n] = true;
+        $key = in_array($s['auth']['type'], ['header', 'query'], true) && ((string)($this->app->siteApis()->get($s['name'])['key'] ?? '')) === '';
+        return ($s['replaced'] ? 'replaced' : 'saved') . " the connector {$s['name']} (" . SiteApis::host($s['base']) . '), with ' . count($names) . ' tool(s): ' . implode(', ', $names) . '. '
+            . ($key ? "It needs its key before it works: tell the user to enter it in Settings → Connected accounts → Connectors → {$s['title']}. Never ask for the key in the chat. "
+                : 'Try one of its reads now to check it works. ')
+            . 'It is listed in Settings → Connected accounts → Connectors, where the user can remove it.';
     }
 
     /** Write the browser's cookies for some domains to a connector's cookie file (Playwright format). */
