@@ -6710,8 +6710,15 @@ async function abOpen(id, quiet) {
   const box = $('#ab-detail');
   let d; try { d = await api(`api/agents/s/${encodeURIComponent(id)}/thread`); } catch (e) { if (!quiet) toast(e.message); return; }
   const s = d.session, who = { agent: abTitle(s), you: t('You'), assistant: t('Assistant') };
-  const kind = { started: t('started from the board'), stop: t('asked to stop'), stopped: t('stopped'), prompt: t('typed in the session'), permission: t('asks for permission'), notice: t('notice'), message: '', end: t('session ended'), queued: t('queued'), delivered: t('delivered') };
-  const thread = d.events.map(e => `<div class="ab-ev ab-${esc(e.who)} ab-k-${esc(e.kind)}"><span class="muted small">${esc(who[e.who] || e.who)}${kind[e.kind] ? ' · ' + esc(kind[e.kind]) : ''} · ${esc(new Date(e.ts * 1000).toLocaleString())}</span><div class="no-i18n">${esc(e.text)}</div></div>`).join('');
+  const kind = { started: t('started from the board'), stop: t('asked to stop'), stopped: t('stopped'), prompt: t('typed in the session'), permission: t('asks for permission'), notice: t('notice'), message: '', end: t('session ended'), queued: t('queued'), delivered: t('delivered'), file: t('sent a file') };
+  const body = e => {
+    if (e.kind !== 'file') return `<div class="no-i18n">${esc(e.text)}</div>`;
+    let f = {}; try { f = JSON.parse(e.text) || {}; } catch {}
+    const id = +f.file || 0, name = String(f.name || 'file');
+    return `<div class="ab-file"><span class="ab-file-name no-i18n">📄 ${esc(name)}</span> <span class="muted small no-i18n">${esc(fmtSize(+f.size || 0))} · ${esc(f.folder || '')}</span>
+      <span><a class="btn small" href="api/files/${id}/view/${encodeURIComponent(name)}" target="_blank" rel="noopener">${esc(t('Open'))}</a> <a class="btn ghost small" href="api/files/${id}/file/${encodeURIComponent(name)}?download=1" download="${esc(name)}">${esc(t('Download'))}</a></span></div>`;
+  };
+  const thread = d.events.map(e => `<div class="ab-ev ab-${esc(e.who)} ab-k-${esc(e.kind)}"><span class="muted small">${esc(who[e.who] || e.who)}${kind[e.kind] ? ' · ' + esc(kind[e.kind]) : ''} · ${esc(new Date(e.ts * 1000).toLocaleString())}</span>${body(e)}</div>`).join('');
   const listening = s.listening ? `<span class="ab-live">${esc(t('listening'))}</span>` : '';
   const head = `<div class="ab-d-head"><h4 class="no-i18n">${esc(abTitle(s))}</h4><span class="muted small no-i18n">${esc([s.agent, s.machine, s.cwd].filter(Boolean).join(' · '))}</span>${listening}
     <span class="ab-d-acts">${['ended', 'stopped'].includes(s.state) ? '' : `<button type="button" class="btn ghost small danger" data-abact="stop"${s.stopping ? ' disabled' : ''}>${esc(s.stopping ? t('Stopping…') : t('Stop'))}</button>`}<button type="button" class="btn ghost small" data-abact="seen">${esc(t('Mark as seen'))}</button><button type="button" class="btn ghost small danger" data-abact="forget">${esc(t('Forget'))}</button><button type="button" class="btn ghost small" data-abact="close" aria-label="${esc(t('Close'))}">✕</button></span></div>`;
