@@ -408,6 +408,7 @@ async function switchSpace(id, opts = {}) {
   state.firstId = first.first_id;
   appendMessages(first.messages);
   restoreDraft();
+  drainOutbox(); // messages that waited in line in this space
   const s = state.spaces.find(x => x.id === id); if (s) s.unread = 0;
   showOtherUnread(first.unread);
 }
@@ -876,15 +877,24 @@ function chatSearch() {
 const SPIN = '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
 
 async function send(opts = {}) {
-  const input = $('#input'); const text = input.value.trim();
-  const files = opts.files || state.pending.filter(f => f.id).map(f => f.id);
-  if ((!text && !files.length) || state.sending) return;
-  if (state.pending.some(f => !f.id)) { toast('Wait for the upload to finish.'); return; }
-  if (!navigator.onLine) { queueOffline(); return; }
-  state.sending = true; sendMode(true);
-  input.value = ''; autosize();
-  const shownFiles = opts.shownFiles || state.pending.map(f => f.info);
-  state.pending = []; renderPending();
+  const input = $('#input'), item = opts.item; // item: a message that waited in line (1.40.0)
+  const text = item ? item.text : input.value.trim();
+  const files = item ? item.files : opts.files || state.pending.filter(f => f.id).map(f => f.id);
+  if (!text && !files.length) return;
+  if (!item && state.pending.some(f => !f.id)) { toast('Wait for the upload to finish.'); return; }
+  if (state.sending && !item) { // an answer is on its way: this one waits in line, and goes out after it
+    queueMessage({ text, files, shownFiles: opts.shownFiles || state.pending.map(f => f.info), meeting: !!opts.meeting });
+    input.value = ''; autosize(); state.pending = []; renderPending(); clearDraft();
+    sendMode(true); return;
+  }
+  if (state.sending) return;
+  if (!navigator.onLine) { if (item) { state.outbox.unshift(item); saveOutbox(); renderOutbox(); } else queueOffline(); return; }
+  state.sending = true;
+  const meeting = item ? item.meeting : !!opts.meeting;
+  const shownFiles = item ? item.shownFiles : opts.shownFiles || state.pending.map(f => f.info);
+  if (!item) { input.value = ''; autosize(); state.pending = []; renderPending(); }
+  sendMode(true); // after the box is emptied: an empty box offers Stop
+  let ok = false;
   $('#empty')?.remove();
   const thread = $('#thread');
   const pending = renderMessage({ id: 0, role: 'user', channel: 'web', content: text, files: shownFiles, ts: Date.now() / 1000 });
@@ -905,7 +915,7 @@ async function send(opts = {}) {
   try {
     const res = await fetch('api/chat', { method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-Talixio': '1', Accept: 'text/event-stream' },
-      body: JSON.stringify({ text, files, meeting: !!opts.meeting, stream: true, space: state.space }) });
+      body: JSON.stringify({ text, files, meeting, stream: true, space: state.space }) });
     if (res.status === 401) { showLogin(); throw new Error('Please sign in.'); }
     if (!res.ok || !res.body) throw new Error(`Server error (HTTP ${res.status})`);
     const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = ''; let done = null;
@@ -934,10 +944,13 @@ async function send(opts = {}) {
     pending.remove(); live.remove();
     appendMessages(done.messages);
     loadApprovals();
-    clearDraft();
+    if (!item) clearDraft();
+    ok = true;
   } catch (e) {
     live.remove();
-    if (!textSoFar) {
+    if (!textSoFar && item) { // one that waited in line: it goes back to the head of the line, which waits for you
+      pending.remove(); state.outbox.unshift(item); state.outboxHeld = true; saveOutbox(); renderOutbox();
+    } else if (!textSoFar) {
       pending.remove(); input.value = text; autosize();
       state.pending = shownFiles.map((info, i) => ({ id: files[i], info })).filter(f => f.id); renderPending();
       if (!navigator.onLine || e instanceof TypeError) { state.sending = false; queueOffline(); return; }
@@ -946,14 +959,49 @@ async function send(opts = {}) {
   } finally {
     clearInterval(approvalsTimer);
     state.sending = false; sendMode(false); if (!state.queued) input.focus();
+    if (ok) setTimeout(drainOutbox, 0);
   }
 }
 
-/** While an answer is being written, the send button stops it. */
+// ---- 1.40.0: messages written while an answer is on its way wait in line (kept in this browser), then go out in order ----
+state.outbox = (() => { try { return JSON.parse(localStorage.getItem(LSK + 'talixio.outbox') || '[]'); } catch { return []; } })();
+function saveOutbox() { try { localStorage.setItem(LSK + 'talixio.outbox', JSON.stringify(state.outbox)); } catch {} }
+function queueMessage(m) { state.outbox.push({ ...m, space: state.space, key: String(Date.now()) + Math.random().toString(36).slice(2, 6) }); saveOutbox(); renderOutbox(); }
+function renderOutbox() {
+  const box = $('#outbox'); if (!box) return;
+  const mine = state.outbox.filter(m => m.space === state.space);
+  box.hidden = !mine.length;
+  if (!mine.length) { box.innerHTML = ''; return; }
+  const head = state.outboxHeld && !state.sending
+    ? `<span class="small">${esc(t('Not sent: the message before failed.'))}</span> <button type="button" class="btn small" data-ob-retry>${esc(t('Send now'))}</button>`
+    : `<span class="muted small">${esc(pN('1 message waits: it goes out when the answer ends.', '{n} messages wait: they go out one after the other when the answer ends.', mine.length))}</span>`;
+  box.innerHTML = `<div class="ob-head">${head}</div>` + mine.map(m => `<div class="ob-it" data-key="${esc(m.key)}"><span class="ob-t no-i18n">${esc(m.text || (m.shownFiles || []).map(f => f?.name || '').join(', ') || t('Attachment'))}</span>
+    <button type="button" class="btn ghost icon small" data-ob-edit="${esc(m.key)}" aria-label="${esc(t('Edit'))}" title="${esc(t('Take it back into the box'))}">✎</button><button type="button" class="btn ghost icon small" data-ob-del="${esc(m.key)}" aria-label="${esc(t('Cancel'))}" title="${esc(t('Cancel'))}">✕</button></div>`).join('');
+}
+function drainOutbox() {
+  if (state.sending || state.outboxHeld || !navigator.onLine) { renderOutbox(); return; }
+  const i = state.outbox.findIndex(m => m.space === state.space);
+  if (i < 0) { renderOutbox(); return; }
+  const [item] = state.outbox.splice(i, 1); saveOutbox(); renderOutbox();
+  send({ item });
+}
+$('#outbox')?.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.matches('[data-ob-retry]')) { state.outboxHeld = false; drainOutbox(); return; }
+  const key = b.dataset.obDel || b.dataset.obEdit, i = state.outbox.findIndex(m => m.key === key); if (i < 0) return;
+  const [m] = state.outbox.splice(i, 1); saveOutbox();
+  if (b.dataset.obEdit) { const inp = $('#input'); inp.value = (inp.value.trim() ? inp.value.replace(/\s*$/, '\n') : '') + (m.text || ''); autosize(); inp.focus(); sendMode(state.sending); }
+  if (!state.outbox.some(x => x.space === state.space)) state.outboxHeld = false;
+  renderOutbox();
+});
+
+/** While an answer is being written, the send button stops it; with something typed, it puts that in line instead (1.40.0). */
+const composerHasContent = () => !!$('#input').value.trim() || state.pending.length > 0;
 function sendMode(busy) {
-  const b = $('#send'); b.disabled = false; b.classList.toggle('stop', busy);
-  b.innerHTML = busy ? ICON.stop : ICON.send;
-  b.setAttribute('aria-label', busy ? 'Stop the answer' : 'Send'); b.title = busy ? 'Stop the answer' : '';
+  const b = $('#send'), stop = busy && !composerHasContent(); b.disabled = false; b.classList.toggle('stop', stop);
+  b.innerHTML = stop ? ICON.stop : ICON.send;
+  const label = stop ? 'Stop the answer' : busy ? t('Send after the current answer') : 'Send';
+  b.setAttribute('aria-label', label); b.title = busy ? label : '';
 }
 async function stopAnswer() {
   const b = $('#send'); b.disabled = true;
@@ -966,6 +1014,7 @@ function queueOffline() {
   banner('Offline: your message will be sent as soon as you are back online.', 'Cancel', () => { state.queued = false; banner(''); }, 'offline');
 }
 window.addEventListener('online', () => {
+  setTimeout(drainOutbox, 1500);
   if (!state.queued) return;
   state.queued = false; banner('');
   setTimeout(() => send(), 800); // give the connection a moment
@@ -7373,7 +7422,8 @@ $('#login-form').onsubmit = async e => {
   }
 };
 $('#logout').onclick = async () => { try { await post('api/logout'); } catch {} showLogin(); };
-$('#composer').onsubmit = e => { e.preventDefault(); if (state.sending) stopAnswer(); else send(); };
+$('#composer').onsubmit = e => { e.preventDefault(); if (state.sending && !composerHasContent()) stopAnswer(); else send(); };
+$('#input').addEventListener('input', () => { if (state.sending) sendMode(true); });
 $('#attach').onclick = () => $('#file-input').click();
 $('#file-input').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
 $('#mic').onclick = startRecording;

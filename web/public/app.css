@@ -107,6 +107,11 @@ main{min-width:0;height:100%;overflow:hidden}
 .composer-row{display:flex;gap:6px;align-items:flex-end}
 .composer.drag{outline:2px dashed var(--accent);outline-offset:-6px}
 .pending{display:flex;gap:6px;flex-wrap:wrap}
+/* 1.40.0: messages waiting for the current answer to end */
+.outbox{display:flex;flex-direction:column;gap:4px;padding:6px 10px;margin:0 0 6px;border:1px dashed var(--line,currentColor);border-radius:10px}
+.outbox[hidden]{display:none}
+.ob-it{display:flex;align-items:center;gap:6px}
+.ob-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.86rem;opacity:.8}
 .fchip{display:inline-flex;align-items:center;gap:6px;max-width:100%;font-size:.8rem;padding:4px 8px;border-radius:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
 .fchip button{border:0;background:none;color:var(--muted);cursor:pointer;font:inherit;padding:0 2px}
 .fchip.uploading{opacity:.6}

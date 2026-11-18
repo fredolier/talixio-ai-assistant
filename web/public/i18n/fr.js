@@ -3478,5 +3478,12 @@ window.I18N.fr = {
   "Edit it first": "La modifier d’abord",
   "Not sent by itself:": "Pas envoyée seule :",
   "The assistant answered by itself:": "L’assistant a répondu seul :",
-  "The autonomy settings moved to the agent board above: Autonomy.": "Les réglages d’autonomie sont maintenant sur le tableau des agents, plus haut : Autonomie."
+  "The autonomy settings moved to the agent board above: Autonomy.": "Les réglages d’autonomie sont maintenant sur le tableau des agents, plus haut : Autonomie.",
+  "Not sent: the message before failed.": "Pas envoyé : le message précédent a échoué.",
+  "Send now": "Envoyer maintenant",
+  "1 message waits: it goes out when the answer ends.": "1 message attend : il part quand la réponse est terminée.",
+  "{n} messages wait: they go out one after the other when the answer ends.": "{n} messages attendent : ils partent l’un après l’autre quand la réponse est terminée.",
+  "Attachment": "Pièce jointe",
+  "Take it back into the box": "Le reprendre dans la zone de saisie",
+  "Send after the current answer": "Envoyer après la réponse en cours"
 };

@@ -25,6 +25,38 @@ const flows = {
     await page.waitForSelector('#thread :text("Echo mode")', { timeout: 10000 });
     check('chat: the reply shows', (await page.textContent('#thread')).includes('hello from the browser'));
   },
+  async chatQueue({ page, check }) {
+    // 1.40.0: what is written while an answer is on its way waits in line, then goes out in order
+    await go(page, 'chat');
+    let release; const held = new Promise(r => { release = r; }); let first = true;
+    await page.route('**/api/chat', async route => { if (first && route.request().method() === 'POST') { first = false; await held; } await route.continue(); });
+    const sent = [];
+    page.on('request', r => { if (r.url().endsWith('/api/chat') && r.method() === 'POST') sent.push(JSON.parse(r.postData()).text); });
+    await page.fill('#input', 'queue one');
+    await page.press('#input', 'Enter');
+    await page.waitForSelector('#send.stop', { timeout: 6000 });
+    check('chat queue: while the answer comes, an empty box offers Stop', await page.getAttribute('#send', 'class').then(c => /stop/.test(c)));
+    await page.fill('#input', 'queue two');
+    check('chat queue: with something typed, the button sends it after the answer instead', !/stop/.test(await page.getAttribute('#send', 'class')));
+    await page.click('#send');
+    await page.fill('#input', 'queue three');
+    await page.press('#input', 'Enter');
+    await page.fill('#input', 'queue four');
+    await page.press('#input', 'Enter');
+    const items = await page.$$eval('#outbox .ob-t', e => e.map(x => x.textContent));
+    check('chat queue: they wait in line, in order, and the box is free again', items.join('|') === 'queue two|queue three|queue four' && (await page.inputValue('#input')) === '', items.join('|'));
+    check('chat queue: the line is kept if the page closes', (await page.evaluate(() => JSON.parse(localStorage.getItem(LSK + 'talixio.outbox')).length)) === 3);
+    await page.click('#outbox .ob-it:has-text("queue four") [data-ob-edit]');
+    check('chat queue: ✎ takes one back into the box', (await page.inputValue('#input')) === 'queue four' && (await page.$$('#outbox .ob-it')).length === 2);
+    await page.fill('#input', '');
+    await page.click('#outbox .ob-it:has-text("queue three") [data-ob-del]');
+    check('chat queue: ✕ cancels one', (await page.$$('#outbox .ob-it')).length === 1);
+    release();
+    await page.waitForFunction(() => /queue two/.test(document.querySelector('#thread').textContent) && document.querySelector('#outbox').hidden, null, { timeout: 15000 });
+    await page.waitForFunction(() => (document.querySelector('#thread').textContent.match(/Echo mode/g) || []).length >= 2 && !document.querySelector('#send.stop'), null, { timeout: 15000 });
+    check('chat queue: once the answer ends, the waiting one goes out by itself, one at a time and in order', sent.join('|') === 'queue one|queue two', sent.join('|'));
+    await page.unroute('**/api/chat');
+  },
   async capture({ page, check }) {
     for (const [kind, text] of [['task', 'Call Sam about the offer'], ['note', 'Idea for the newsletter']]) {
       await go(page, 'chat');
@@ -1187,7 +1219,7 @@ sleep 300
 
 export default async ctx => {
   ctx.page.setDefaultTimeout(5000);
-  for (const [name, f] of Object.entries(flows)) {
+  for (const [name, f] of Object.entries(flows)) { if (process.env.ONLY && !process.env.ONLY.split(',').includes(name)) continue;
     await ctx.page.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close()));
     try { await f(ctx); } catch (e) { ctx.check(`${name}: ${e.message.split('\n').slice(0, 9).join(' | ')}`, false); }
   }

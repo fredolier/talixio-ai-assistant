@@ -19,6 +19,11 @@
 - Start a message with `/deep` for deeper reasoning, `/fast` for a quick answer.
 - Under each answer: the model, the tokens, the estimated cost, and where your data went.
 - **Stop** an answer in progress: the send button turns into *Stop*.
+- **Write the next message without waiting.** While an answer is on its way, type and send as usual (Enter, or the send
+  button, which shows *Stop* only while the box is empty): the message waits in line above the box and goes out by itself
+  when the answer ends, one at a time and in order. A recording finished meanwhile waits the same way. ✎ takes a waiting
+  message back into the box, ✕ cancels it. The line is kept in this browser if you close the page, per space. If a waiting
+  message cannot be sent, the line stops there and offers *Send now*. Stopping an answer does not cancel the line.
 - **Edit** your last message or ask for **another answer**.
 
 ## The menu
