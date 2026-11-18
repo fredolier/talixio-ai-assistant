@@ -6793,6 +6793,9 @@ const AB_COLS = [['need', 'Needs you'], ['working', 'Working'], ['quiet', 'Quiet
 const abTitle = s => s.project || s.agent;
 function abWire() {
   if (AB.wired) return; AB.wired = true;
+  $('#ab-notify').onchange = async e => { // what reaches the phone (1.43.0)
+    try { await post('api/agents/notify', { mode: e.target.value }); toast(t('Saved.')); } catch (err) { toast(err.message); }
+  };
   // the board autonomy's Save and its ✓/✗ verdicts (moved here from the relay cockpit's plWire in 1.42.0)
   $('.pilot-panel[data-ppanel=agents]').addEventListener('click', e => {
     let el;
@@ -6868,12 +6871,15 @@ function abWire() {
     } catch (err) { toast(err.message); }
   };
 }
+function abNotifyShow(mode) { const sel = $('#ab-notify'); if (sel && mode && document.activeElement !== sel) sel.value = mode; }
 async function abRefresh() {
   const d = await api('api/agents');
   if (d.rev === AB.rev) return;
   AB.rev = d.rev; AB.sessions = d.sessions || []; AB.jobs = d.jobs || []; AB.machines = d.machines || [];
   if (!$('#ab-new').hidden) abNewForm();
   const need = AB.sessions.filter(s => s.column === 'need').length;
+  if (need !== state.agentsNeed) { state.agentsNeed = need; setFleetBadge(); }
+  abNotifyShow(d.notify);
   if (AB.sel?.startsWith('job:') && !AB.jobs.some(j => 'job:' + j.id === AB.sel)) { // it reports now: open its session
     const s = AB.sessions.find(x => 'job:' + x.job === AB.sel); AB.sel = s ? s.id : null; if (!s) $('#ab-detail').hidden = true;
   }
@@ -6995,9 +7001,9 @@ async function pilotAgents() {
     plRender(info);
   });
 }
-// the Pilotage menu badge + the Agents-subtab badge, both counting unread fleet reports
+// the Pilotage menu badge + the Agents-subtab badge: sessions in « Needs you » (1.43.0), plus the old relay's unread reports
 function setFleetBadge() {
-  const n = state.fleetUnread || 0, txt = n > 99 ? '99+' : String(n);
+  const n = (state.agentsNeed || 0) + (state.fleetUnread || 0), txt = n > 99 ? '99+' : String(n);
   for (const sel of ['#pilot-rail-badge', '#pilot-tab-agents']) {
     const el = $(sel); if (!el) continue; el.hidden = !n; el.textContent = n ? txt : '';
   }
@@ -7437,6 +7443,7 @@ async function refreshStatus() {
     st.title = s.worker_online ? 'Background worker is running: schedules and chat apps work.' : 'Background worker is not running: schedules and Telegram are paused. Check: systemctl status talixio-worker';
     for (const el of [$('#app-version'), $('#more-version')]) { el.textContent = 'Talixio ' + s.version; el.title = s.version_label; }
     if (s.notifications_unread !== state.notifUnread) { state.notifUnread = s.notifications_unread; setBadge(); if (!$('#view-notifications').hidden) loadNotifications(); }
+    if (typeof s.agents_need === 'number' && s.agents_need !== state.agentsNeed) { state.agentsNeed = s.agents_need; setFleetBadge(); }
     if (s.fleet_unread !== state.fleetUnread) { const open = !$('#view-pilotage').hidden && $('.ptab[data-ptab="agents"]')?.getAttribute('aria-selected') === 'true'; state.fleetUnread = s.fleet_unread; if (open) pilotAgents().catch(() => {}); else setFleetBadge(); }
     $('#setup-model').hidden = !s.model_problem;
     $('#setup-claude').hidden = !s.claude_code;

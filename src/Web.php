@@ -864,7 +864,7 @@ final class Web
             'tiers' => array_map(fn(Tier $t) => $t->label(), $c->tiers), 'budget' => $this->app->budget()->status(),
             'embeddings' => $c->embeddings, 'max_parallel_jobs' => $c->maxParallelJobs, 'job_max_usd' => $c->jobMaxUsd, 'job_max_usd_limit' => $c->jobMaxUsdLimit, 'job_effort' => $c->jobEffort,
             'version' => Version::get()['number'], 'version_label' => Version::get()['label'],
-            'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()), 'notifications_unread' => $this->app->notifier()->unread(), 'fleet_unread' => $this->app->conductor()->unread(),
+            'worker_online' => time() - $seen < 90, 'search' => $c->search, 'pending_approvals' => count($this->app->approvals()->pending()), 'notifications_unread' => $this->app->notifier()->unread(), 'fleet_unread' => $this->app->conductor()->unread(), 'agents_need' => $this->app->agentHub()->needCount(),
             'channels' => ['web' => true, 'telegram' => $c->telegramToken !== '', 'email' => $this->app->email()->canReceive(),
                 'signal' => $this->app->signal()->enabled(), 'ntfy' => $c->ntfyUrl !== ''],
             'heartbeat_minutes' => $c->heartbeatMinutes, 'paused' => Transfer::paused($this->app->store),
@@ -1962,6 +1962,7 @@ final class Web
                 try { return $hub->stop($id('stop')); }
                 catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
             })(),
+            $path === '/api/agents/notify' && $m === 'POST' => $hub->setNotify((string)($b['mode'] ?? '')),
             $path === '/api/agents/token' && $m === 'POST' => (function () use ($hub) { $hub->token(true); return ['ok' => true, 'message' => I18n::t($this->app, 'New token: download the hook script again on each machine.')]; })(),
             $id('thread') !== null && $m === 'GET' => $hub->thread($id('thread')),
             $id('seen') !== null && $m === 'POST' => $hub->markSeen($id('seen')),

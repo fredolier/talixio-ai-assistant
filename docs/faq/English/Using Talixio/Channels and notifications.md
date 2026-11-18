@@ -11,6 +11,11 @@ are unread; the app icon counts them too, with the approvals waiting. Tap one to
 mark it read, or *Mark all read*. Opening the page also clears them from the phone's lock screen.
 The last 200 are kept, for 60 days. In a Secret space, the list only says where to look.
 
+## Your coding agents
+The agent board (Pilotage → Agents) counts the sessions in *Needs you* on the **Pilotage** entry and on the **Agents**
+tab. **Notify me**, at the top of the board, chooses what is also sent as a notification: *Permission requests* (the
+default), *Permissions and finished turns*, or *Nothing*.
+
 ## Reports from your autonomous pilot
 Progress reports from the autonomous pilot (see *Pilotage*) are quiet by default: no push, no email. A red count shows on
 the **Pilotage** entry and on the tabs of **Your autonomous pilot** (Pilotage → Agents, in the folded *Cloud orchestrator

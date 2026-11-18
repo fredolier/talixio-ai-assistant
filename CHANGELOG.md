@@ -3,6 +3,17 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.43.0 (2026-11-18)
+
+The agent board takes over what only the cloud relay still did: the badge, notifications and the chat.
+
+- **The badge counts the agents that need you.** The red count on Pilotage in the menu and on the Agents tab came only from the old relay's unread reports. It now counts the board's sessions in *Needs you* (a permission request, or a finished turn you have not opened), and goes down as you open them. The relay's count is added until the relay goes.
+- **Notify me.** A new choice at the top of the board sets what is also sent as a notification: *Permission requests* (as before, the default), *Permissions and finished turns* (each finished turn with the agent's last words), or *Nothing*.
+- **The assistant reads a whole session from the chat.** Ask for one session's conversation: `agents_list` now takes a session id and returns that session's thread, word for word, as text written by others. Before, it showed only each session's last message.
+- **Priorities and rules for the board, from the chat.** A new tool, `agents_priorities`, reads and saves the priorities and standing rules the board's autonomy decides by. Before, only the relay's `fleet_priorities` did this; it stays until the relay goes. Right after reading what an agent wrote, a change waits for your approval, like other changes.
+- **Help pages, in both languages:** Pilotage (badge, Notify me, the chat) and Channels and notifications (a section on coding agents). The Pilotage edit announced in 1.42.0 (the Status file paragraph) had not been saved; it is in this version.
+- Tested (PHP): the count follows the *Needs you* column and drops when a session is opened. By default a permission request is notified and a finished turn is not; *all* notifies the finished turn with its words; *off* notifies nothing; an unknown mode is refused. A session's thread is read from chat, and an unknown session is refused. Priorities and rules are saved by the tool, and a rule change right after reading an agent's thread is held back. Tested (browser): the tab and menu badges equal the number of cards in *Needs you*, `/api/status` says the same, opening a card lowers it, and Notify me is kept. These browser checks failed without the page change. **Not tried**: a real phone receiving the finished-turn notification; only the notification record is checked.
+
 ## 1.42.0 (2026-11-18)
 
 The first step in retiring the cloud relay (the older « Cloud orchestrator » under the agent board), and the plan for what comes next.

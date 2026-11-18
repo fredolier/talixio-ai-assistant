@@ -165,6 +165,12 @@
             <button type="button" id="ab-new-btn" class="btn small" aria-expanded="false">New session</button>
             <button type="button" id="ab-auto-btn" class="btn ghost small" aria-expanded="false">Autonomy</button>
             <button type="button" id="ab-connect" class="btn ghost small" aria-expanded="false">Connect a machine</button>
+            <label class="small ab-notify" title="What the board sends to your phone and your notifications">Notify me
+              <select id="ab-notify">
+                <option value="permission">Permission requests</option>
+                <option value="all">Permissions and finished turns</option>
+                <option value="off">Nothing</option>
+              </select></label>
           </div>
           <div class="card ab-auto" id="ab-auto" hidden><div class="pl-auto" id="pl-auto"></div></div>
           <div class="card ab-new" id="ab-new" hidden>

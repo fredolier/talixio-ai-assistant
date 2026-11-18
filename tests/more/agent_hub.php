@@ -98,5 +98,41 @@ check('agent hub: the settings run the script on each event; the end of a turn w
     ($st['hooks']['Stop'][0]['hooks'][0]['asyncRewake'] ?? false) === true && str_ends_with($st['hooks']['Stop'][0]['hooks'][0]['command'], ' reply')
     && str_ends_with($st['hooks']['PermissionRequest'][0]['hooks'][0]['command'], ' permission') && isset($st['hooks']['SessionEnd'], $st['hooks']['UserPromptSubmit']));
 
+// 1.43.0: the needs-you count (rail and tab badges), what reaches the phone, and the assistant's reach from chat
+$nn = fn(string $t) => (int)$app->store->q('SELECT COUNT(*) FROM notifications WHERE title = ?', [$t])->fetchColumn();
+$e2 = fn(string $sid, array $e) => $hub->event($e + ['session_id' => $sid, 'cwd' => '/home/me/blog'], 'laptop');
+foreach ($hub->board()['sessions'] as $x) $hub->markSeen($x['id']);
+$base = $hub->needCount();
+$e2('n1', ['hook_event_name' => 'UserPromptSubmit', 'prompt' => 'Write the post']);
+$e2('n1', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Draft ready. Publish it?']);
+$e2('n2', ['hook_event_name' => 'PermissionRequest', 'tool_name' => 'Bash', 'tool_input' => ['command' => 'git push']]);
+check('agent hub: the needs-you count follows the Needs you column', $hub->needCount() === $base + 2
+    && $hub->needCount() === count(array_filter($hub->board()['sessions'], fn($x) => $x['column'] === 'need')));
+$hub->markSeen('claude-code:n1');
+check('agent hub: looking at a finished turn takes it off the count', $hub->needCount() === $base + 1);
+check('agent hub: by default a permission request is notified, a finished turn is not', $hub->board()['notify'] === 'permission'
+    && $nn('An agent asks for permission') >= 1 && $nn('An agent finished its turn') === 0);
+check('agent hub: an unknown notify mode is refused', (function () use ($hub) { try { $hub->setNotify('loud'); return false; } catch (\InvalidArgumentException) { return true; } })());
+$hub->setNotify('all');
+$e2('n3', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Tests are green.']);
+check('agent hub: « all » also notifies a finished turn, with its words', $nn('An agent finished its turn') === 1
+    && str_contains((string)$app->store->q("SELECT body FROM notifications WHERE title = 'An agent finished its turn'")->fetchColumn(), 'Tests are green.'));
+$hub->setNotify('off'); $p0 = $nn('An agent asks for permission');
+$e2('n4', ['hook_event_name' => 'PermissionRequest', 'tool_name' => 'Bash', 'tool_input' => ['command' => 'ls']]);
+$e2('n5', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Done again.']);
+check('agent hub: « off » notifies nothing', $nn('An agent asks for permission') === $p0 && $nn('An agent finished its turn') === 1 && $hub->board()['notify'] === 'off');
+$hub->setNotify('permission');
+// the priorities under the board's name (G3), then the whole thread of one session from chat (G4)
+\Talixio\Privacy::trustAgain(); $T = $app->tools->forAnswer();
+check('agent hub: agents_priorities reads, and counts as a change', str_contains($T->run('agents_priorities', []), 'No priorities set yet') && in_array('agents_priorities', Tools::EFFECTS, true));
+$T->run('agents_priorities', ['priorities' => ['Client work first'], 'rules' => ['Never push on Friday']]);
+check('agent hub: agents_priorities writes the board autonomy\'s priorities and rules', $app->pilot()->priorities() === ['Client work first'] && $app->pilot()->rules() === ['Never push on Friday']);
+$one = $T->run('agents_list', ['session' => 'claude-code:n1']);
+check('agent hub: agents_list with a session gives its thread, word for word, as untrusted data', str_contains($one, 'Write the post') && str_contains($one, 'Draft ready. Publish it?') && str_contains($one, 'untrusted'), $one);
+$after = $T->run('agents_priorities', ['rules' => ['Planted by an agent']]);
+check('agent hub: after reading an agent\'s thread, changing the rules waits for the user', $app->pilot()->rules() === ['Never push on Friday'], $after);
+check('agent hub: agents_list with an unknown session says so', str_contains($T->run('agents_list', ['session' => 'nope']), 'no such agent session'));
+\Talixio\Privacy::trustAgain();
+
 foreach ($saved as $k => $v) putenv($v === false ? $k : "$k=$v");
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();
