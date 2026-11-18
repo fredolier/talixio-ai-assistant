@@ -46,7 +46,7 @@ final class Web
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         if ($path === '/api/conductor/inbox') { $this->conductorInbox($method); return; } // the delegated cloud orchestrator reports in: its own secret, no session here
         if ($path === '/api/conductor/tick') { $this->conductorTick($method); return; } // one typed call per orchestrator pass: its own secret, no session here
-        if ($path === '/api/agents/hook' || $path === '/api/agents/wait') { $this->agentHook($path, $method); return; } // a coding agent's hook script: the agents token, no session here
+        if (in_array($path, ['/api/agents/hook', '/api/agents/wait', '/api/agents/next', '/api/agents/job'], true)) { $this->agentHook($path, $method); return; } // a coding agent's hook script: the agents token, no session here
         if ($path === '/api/conductor/pull') { $this->conductorPull($method); return; } // a poll-mode orchestrator pulls its queued instructions: its own secret, no session here
         if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye', '/api/federation/ask', '/api/federation/queries'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
@@ -1871,11 +1871,28 @@ final class Web
                 $e = json_decode((string)file_get_contents('php://input'), true);
                 if (!is_array($e)) $this->fail(400, 'JSON object expected');
                 if (isset($_GET['agent'])) $e['agent'] = (string)$_GET['agent'];
+                $e['talixio_job'] = (int)($_GET['job'] ?? 0); // set by agent-listen.sh for the sessions it started (1.38.0)
                 [$code, $resp] = $hub->event($e, (string)($_SERVER['HTTP_X_TALIXIO_MACHINE'] ?? ''));
                 $this->json($resp, $code);
                 return;
             }
+            $machine = (string)($_SERVER['HTTP_X_TALIXIO_MACHINE'] ?? '');
+            if ($path === '/api/agents/job') { // the listener reports on a session it started
+                if ($method !== 'POST') $this->fail(405, 'POST only');
+                [$code, $resp] = $hub->jobReport($machine, (int)($_GET['id'] ?? 0), (string)($_GET['state'] ?? ''), (int)($_GET['pid'] ?? 0), (string)file_get_contents('php://input'));
+                $this->json($resp, $code);
+                return;
+            }
             if ($method !== 'GET') $this->fail(405, 'GET only');
+            if ($path === '/api/agents/next') { // the listener asks for work
+                [$code, $body] = $hub->next($machine);
+                while (ob_get_level() > 0) ob_end_clean();
+                http_response_code($code);
+                header('Content-Type: text/plain; charset=utf-8');
+                header('Cache-Control: no-store');
+                echo $body;
+                return;
+            }
             [$code, $body] = $hub->wait((string)($_GET['agent'] ?? 'claude-code'), (string)($_GET['session'] ?? ''), (string)($_GET['for'] ?? 'reply'), (int)($_GET['seq'] ?? -1));
             while (ob_get_level() > 0) ob_end_clean();
             http_response_code($code);
@@ -1896,13 +1913,26 @@ final class Web
         return match (true) {
             $path === '/api/agents' && $m === 'GET' => $hub->board(),
             $path === '/api/agents/setup' && $m === 'GET' => ['settings' => AgentHub::claudeSettings(), 'connected' => $hub->board()['connected']],
-            $path === '/api/agents/hook.sh' && $m === 'GET' => (function () use ($hub) {
+            ($path === '/api/agents/hook.sh' || $path === '/api/agents/listen.sh') && $m === 'GET' => (function () use ($hub, $path) {
+                $file = $path === '/api/agents/listen.sh' ? 'agent-listen.sh' : 'agent-hook.sh';
                 while (ob_get_level() > 0) ob_end_clean();
                 header('Content-Type: text/x-shellscript; charset=utf-8');
-                header('Content-Disposition: attachment; filename="agent-hook.sh"');
+                header('Content-Disposition: attachment; filename="' . $file . '"');
                 header('Cache-Control: no-store');
-                echo $hub->script((string)($_GET['machine'] ?? ''));
+                echo $hub->script((string)($_GET['machine'] ?? ''), $file);
                 exit;
+            })(),
+            $path === '/api/agents/start' && $m === 'POST' => (function () use ($hub, $b) {
+                try { return $hub->start((string)($b['machine'] ?? ''), (string)($b['cwd'] ?? ''), (string)($b['prompt'] ?? '')); }
+                catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
+            })(),
+            (bool)preg_match('#^/api/agents/jobs/(\d+)/(stop|forget)$#', $path, $jm) && $m === 'POST' => (function () use ($hub, $jm) {
+                try { return $jm[2] === 'forget' ? $hub->forgetJob((int)$jm[1]) : $hub->stop('job:' . $jm[1]); }
+                catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
+            })(),
+            $id('stop') !== null && $m === 'POST' => (function () use ($hub, $id) {
+                try { return $hub->stop($id('stop')); }
+                catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
             })(),
             $path === '/api/agents/token' && $m === 'POST' => (function () use ($hub) { $hub->token(true); return ['ok' => true, 'message' => I18n::t($this->app, 'New token: download the hook script again on each machine.')]; })(),
             $id('thread') !== null && $m === 'GET' => $hub->thread($id('thread')),

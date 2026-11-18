@@ -4,6 +4,7 @@
 #   sh agent-hook.sh event       report an event (the hook's JSON on stdin)
 #   sh agent-hook.sh permission  report a permission request, wait up to TALIXIO_WAIT seconds for allow/deny
 #   sh agent-hook.sh reply       report the end of a turn, then wait in the background for a reply (exit 2 wakes the session)
+# A session started from the board by agent-listen.sh carries TALIXIO_JOB, which links it to that job.
 # Other agents: pipe {"session_id":"…","hook_event_name":"Stop","last_assistant_message":"…","cwd":"…"} with TALIXIO_AGENT=<name>.
 U=@URL@
 T=@TOKEN@
@@ -15,9 +16,11 @@ in=$(cat)
 sid=$(printf '%s' "$in" | tr '\n' ' ' | sed -n 's/.*"session_id" *: *"\([^"]*\)".*/\1/p')
 [ -n "$sid" ] || exit 0
 r=$(printf '%s' "$in" | curl -sS -m 10 -H "Authorization: Bearer $T" -H "X-Talixio-Machine: $M" -H 'Content-Type: application/json' \
-  --data-binary @- "$U/api/agents/hook?agent=$A" 2>/dev/null) || exit 0
+  --data-binary @- "$U/api/agents/hook?agent=$A&job=${TALIXIO_JOB:-}" 2>/dev/null) || exit 0
 seq=$(printf '%s' "$r" | sed -n 's/.*"seq" *: *\([0-9][0-9]*\).*/\1/p')
 [ -n "$seq" ] || exit 0
+# stopped from the board: the agent stops here
+case "$r" in *'"stop":true'*) printf '%s\n' '{"continue":false,"stopReason":"Stopped from Talixio."}'; exit 0 ;; esac
 [ "$mode" = event ] && exit 0
 out=$(mktemp 2>/dev/null || echo "/tmp/talixio-hook.$$")
 trap 'rm -f "$out"' EXIT

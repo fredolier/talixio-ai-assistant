@@ -24,12 +24,35 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   - **Autoriser / Refuser** une demande d'autorisation (la commande ou le fichier concerné est affiché). La session attend
     votre réponse ici **30 secondes** ; ensuite, la question habituelle s'affiche dans son terminal et vous y répondez là.
   - **Marquer comme vu** range une session terminée dans Au calme ; **Oublier** la retire du tableau avec son fil.
+  - **Arrêter** met fin au travail de la session. Une session démarrée depuis le tableau (ci-dessous) est terminée sur sa
+    machine par l'écouteur, en quelques secondes. Toute autre s'arrête à sa **prochaine étape** : son prochain outil, sa
+    prochaine demande d'autorisation ou la fin de son tour (son hook dit à Claude Code de ne pas continuer). Une session
+    qui a déjà terminé son tour est simplement marquée *arrêtée*. Taper à nouveau dans son terminal reprend la main :
+    l'arrêt ne s'applique plus. Une session arrêtée ne reçoit plus de réponse.
+- **Nouvelle session** (bouton en haut) lance Claude Code sur une de vos machines : choisissez la machine, le dossier, et
+  écrivez ce qu'elle doit faire. Seules les machines dont l'**écouteur** tourne sont proposées, et seulement les dossiers
+  où une session a déjà tourné sur cette machine. La carte indique *en attente de la machine*, puis la session se signale
+  comme les autres, son fil commençant par votre demande. Si elle ne peut pas démarrer (dossier introuvable, Claude Code
+  absent, pas connecté, hooks manquants), sa carte dit pourquoi, avec ce qu'a affiché la machine ; **Oublier** la retire.
 - **Connecter une machine** (bouton en haut) : donnez un nom à la machine, **téléchargez le script** et enregistrez-le sous
   `~/.talixio/agent-hook.sh`, puis ajoutez les hooks affichés à `~/.claude/settings.json` (fusionnez-les avec les hooks
   déjà présents). La prochaine session Claude Code sur cette machine apparaît sur le tableau. Il faut `sh` et `curl`
   (macOS, Linux, ou WSL sous Windows), et la machine doit joindre l'adresse de cet assistant. Le script contient l'adresse
   du tableau et un jeton : gardez-le sur vos propres machines. **Nouveau jeton** annule l'ancien (chaque machine a alors
-  besoin du script à nouveau).
+  besoin du script à nouveau). Les scripts installés avant la version 1.38.0 : téléchargez à nouveau le script (le nouveau
+  relie une session à la Nouvelle session du tableau qui l'a lancée), et ajoutez le hook `PreToolUse` depuis le bloc
+  affiché, sinon un arrêt ne s'applique qu'à la prochaine demande d'autorisation ou fin de tour de la
+  session. Il s'exécute à chaque outil (un court appel à cet assistant).
+- **L'écouteur** (facultatif, étape 4 de *Connecter une machine*) : téléchargez-le, enregistrez-le sous
+  `~/.talixio/agent-listen.sh`, et laissez `sh ~/.talixio/agent-listen.sh` tourner sur cette machine (un terminal, tmux,
+  ou un élément d'ouverture de session). Il demande du travail au tableau toutes les quelques secondes et lance
+  `claude -p` dans le dossier, avec votre demande. Côté machine, il ne démarre que dans un dossier sous votre dossier
+  personnel (à changer avec `TALIXIO_ROOT`), et il garde le processus de chaque session qu'il a lancée : un arrêt venu du
+  tableau désigne la session, jamais un processus, il ne peut donc terminer que celles qu'il a lancées. Autres réglages :
+  `TALIXIO_CLAUDE` (la commande `claude`) et `TALIXIO_CLAUDE_ARGS` (par ex. `--permission-mode acceptEdits`). La session
+  demande ses autorisations sur le tableau, comme les autres ; sans réponse au bout de 30 secondes, l'outil est refusé,
+  faute de terminal pour la montrer. Une session qui a terminé son tour reste ouverte, en attente de votre réponse, jusqu'à
+  ce que vous l'arrêtiez (ou pendant une journée).
 - **Autres agents.** Tout outil capable de lancer une commande quand quelque chose se passe peut se signaler de la même
   façon : envoyez un objet JSON `{"session_id": "…", "hook_event_name": "Stop", "last_assistant_message": "…", "cwd": "…"}`
   à `TALIXIO_AGENT=<son nom> sh ~/.talixio/agent-hook.sh reply` (ou `event`, ou `permission` avec `tool_name` et
@@ -37,7 +60,8 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   `Stop` et `SessionEnd`.
 - **L'assistant voit aussi le tableau.** Demandez-lui « que font mes agents ? » (`agents_list`) : il lit l'état et les
   derniers mots de chaque session, qu'il traite comme écrits par d'autres. Il peut répondre à une session pour vous
-  (`agent_answer` : une réponse, autoriser ou refuser), et vous demande votre accord avant, à chaque fois.
+  (`agent_answer` : une réponse, autoriser ou refuser), en démarrer une sur une machine qui écoute (`agent_start`) et en
+  arrêter une (`agent_stop`), et vous demande votre accord avant, à chaque fois.
 - Une demande d'autorisation envoie aussi une notification (voir *Canaux et notifications*).
 
 ### Orchestrateur cloud (approche précédente)

@@ -806,6 +806,56 @@ const flows = {
     await page.waitForTimeout(4500);
     check('agent board: the board follows by itself (no reload): the session is working again', /webshop/.test(await page.textContent('#ab-cols [data-col=working]')), await page.textContent('#ab-cols'));
   },
+  async agentStart({ page, check, data }) {
+    // 1.38.0: start a session from the board on a machine whose listener runs, then stop it; the real scripts, a stand-in for claude
+    const { mkdirSync, chmodSync } = await import('node:fs');
+    const work = join(data, 'lab', 'shop'), lh = join(data, 'lab', '.talixio');
+    mkdirSync(work, { recursive: true }); mkdirSync(lh, { recursive: true });
+    await go(page, 'pilotage');
+    await page.click('#view-pilotage .ptab[data-ptab=agents]');
+    await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
+    if (await page.isHidden('#ab-setup')) await page.click('#ab-connect');
+    await page.fill('#ab-machine', 'labbox');
+    const get = sel => page.evaluate(s => fetch(document.querySelector(s).getAttribute('href')).then(r => r.text()), sel);
+    const hook = join(lh, 'agent-hook.sh'), listen = join(lh, 'agent-listen.sh');
+    writeFileSync(hook, await get('#ab-dl')); writeFileSync(listen, await get('#ab-dl-listen'));
+    check('agent start: Connect a machine offers the listener, for this machine', /M='labbox'/.test(await get('#ab-dl-listen')) && /api\/agents\/next/.test(await get('#ab-dl-listen')));
+    // a stand-in for Claude Code: reports through the real hook script with TALIXIO_JOB, answers its prompt, then stays alive
+    const fake = join(lh, 'fake-claude.sh');
+    writeFileSync(fake, `#!/bin/sh
+p=$(cat); sid="fake-$$"
+ev() { printf '{"session_id":"%s","hook_event_name":"%s","cwd":"%s"%s}' "$sid" "$1" "$PWD" "$2" | sh '${hook}' event; }
+ev SessionStart ''
+ev UserPromptSubmit ",\\"prompt\\":\\"$p\\""
+ev Stop ",\\"last_assistant_message\\":\\"Done: $p\\""
+sleep 300
+`); chmodSync(fake, 0o755);
+    const seed = spawn('sh', [hook, 'event']); seed.stdin.end(JSON.stringify({ session_id: 'lab-seed', hook_event_name: 'SessionStart', cwd: work }));
+    await new Promise(r => seed.on('close', r));
+    const lis = spawn('sh', [listen], { env: { ...process.env, TALIXIO_HOME: lh, TALIXIO_ROOT: join(data, 'lab'), TALIXIO_CLAUDE: fake }, stdio: 'ignore' });
+    try {
+      await page.click('#ab-new-btn');
+      await page.waitForSelector('#ab-new-form:not([hidden]) #ab-new-machine option[value=labbox]', { state: 'attached', timeout: 12000 });
+      await page.selectOption('#ab-new-machine', 'labbox');
+      check('agent start: New session offers the listening machine and the folder it reported', (await page.$$eval('#ab-new-folder option', o => o.map(x => x.value))).includes(work));
+      await page.selectOption('#ab-new-folder', work);
+      await page.fill('#ab-new-prompt', 'Fix the basket');
+      await page.click('#ab-new-start');
+      await page.waitForFunction(() => /Done: Fix the basket/.test(document.querySelector('#ab-cols [data-col=need]')?.textContent || ''), null, { timeout: 20000 });
+      check('agent start: the session runs on the machine and reports on the board, word for word', /shop/.test(await page.textContent('#ab-cols [data-col=need]')));
+      await page.click('#ab-cols [data-col=need] .ab-card:has-text("Done: Fix the basket")');
+      await page.waitForSelector('#ab-detail [data-abact=stop]', { timeout: 6000 });
+      check('agent start: its thread starts with the prompt sent from the board', /Fix the basket/.test(await page.textContent('#ab-detail .ab-thread')));
+      const pidFile = (await import('node:fs')).readdirSync(join(lh, 'jobs')).find(f => f.endsWith('.pid'));
+      const pid = Number((await import('node:fs')).readFileSync(join(lh, 'jobs', pidFile), 'utf8'));
+      page.once('dialog', dlg => dlg.accept());
+      await page.click('#ab-detail [data-abact=stop]');
+      await page.waitForFunction(() => /stopped|arrêtée/i.test(document.querySelector('#ab-detail')?.textContent || '') && !document.querySelector('#ab-detail [data-abact=stop]'), null, { timeout: 20000 });
+      let alive = true;
+      for (let i = 0; i < 40 && alive; i++) { try { process.kill(pid, 0); await page.waitForTimeout(250); } catch { alive = false; } } // the listener asks every 3 s
+      check('agent start: Stop ends the process the listener started, and the session shows stopped', !alive && /shop/.test(await page.textContent('#ab-cols [data-col=quiet]')));
+    } finally { lis.kill(); }
+  },
   async pilotage({ page, check, root, data }) {
     // the director's cockpit: four tabs over machinery already shipped, voice-first
     // seed one non-protected role so the catalogue has a card to group, specialize and run the lifecycle on

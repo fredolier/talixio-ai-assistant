@@ -6670,7 +6670,7 @@ function plWire() {
 
 // ---- The agent board (1.36.0): each coding agent reports itself through a hook (AgentHub.php); no model in between.
 // Three columns, a card per session with its own last message and real age; click for the thread, a reply, allow/deny. ----
-const AB = { rev: -1, sel: null, sessions: [], wired: false, threadRev: -1 };
+const AB = { rev: -1, sel: null, sessions: [], jobs: [], machines: [], wired: false, threadRev: -1 };
 const AB_COLS = [['need', 'Needs you'], ['working', 'Working'], ['quiet', 'Quiet']];
 const abTitle = s => s.project || s.agent;
 function abWire() {
@@ -6680,7 +6680,23 @@ function abWire() {
     box.hidden = !open; $('#ab-connect').setAttribute('aria-expanded', String(open));
     if (open) try { const r = await api('api/agents/setup'); $('#ab-snippet').textContent = JSON.stringify(r.settings, null, 2); } catch (e) { toast(e.message); }
   };
-  const dl = () => { $('#ab-dl').href = 'api/agents/hook.sh?machine=' + encodeURIComponent($('#ab-machine').value.trim()); };
+  const dl = () => { const q = '?machine=' + encodeURIComponent($('#ab-machine').value.trim()); $('#ab-dl').href = 'api/agents/hook.sh' + q; $('#ab-dl-listen').href = 'api/agents/listen.sh' + q; };
+  // 1.38.0: start a session on a machine whose listener runs, in a folder it already reported
+  $('#ab-new-btn').onclick = () => {
+    const box = $('#ab-new'), open = box.hidden;
+    box.hidden = !open; $('#ab-new-btn').setAttribute('aria-expanded', String(open));
+    if (open) { abNewForm(); $('#ab-new-prompt').focus(); }
+  };
+  $('#ab-new-machine').onchange = () => abNewFolders();
+  $('#ab-new-start').onclick = async () => {
+    const prompt = $('#ab-new-prompt').value.trim(); if (!prompt) { $('#ab-new-prompt').focus(); return; }
+    try {
+      await post('api/agents/start', { machine: $('#ab-new-machine').value, cwd: $('#ab-new-folder').value, prompt });
+      $('#ab-new-prompt').value = ''; $('#ab-new').hidden = true; $('#ab-new-btn').setAttribute('aria-expanded', 'false');
+      toast(t('Sent to the machine: the session starts within seconds.'));
+      AB.rev = -1; await abRefresh();
+    } catch (e) { toast(e.message); }
+  };
   $('#ab-machine').oninput = dl; dl();
   $('#ab-copy').onclick = () => copyText($('#ab-snippet').textContent);
   $('#ab-token').onclick = async () => {
@@ -6693,6 +6709,12 @@ function abWire() {
     const act = b.dataset.abact, id = encodeURIComponent(AB.sel);
     try {
       if (act === 'close') { AB.sel = null; $('#ab-detail').hidden = true; abRender(); return; }
+      if (act === 'stop') {
+        if (!confirm(t('Stop this session?'))) return;
+        const r = await post(AB.sel.startsWith('job:') ? `api/agents/jobs/${AB.sel.slice(4)}/stop` : `api/agents/s/${id}/stop`, {});
+        toast({ kill: t('Stopping: the listener ends it within seconds.'), now: t('Stopped.'), cancelled: t('Cancelled before it started.') }[r.how]
+          || t('Stop asked: it stops at its next step (a tool, a permission, the end of its turn).'));
+      } else if (act === 'jforget') { await post(`api/agents/jobs/${AB.sel.slice(4)}/forget`, {}); AB.sel = null; $('#ab-detail').hidden = true; } else
       if (act === 'forget') { if (!confirm(t('Forget this session and its history on the board?'))) return; await post(`api/agents/s/${id}/forget`, {}); AB.sel = null; $('#ab-detail').hidden = true; }
       else if (act === 'seen') await post(`api/agents/s/${id}/seen`, {});
       else if (act === 'send') {
@@ -6710,44 +6732,84 @@ function abWire() {
 async function abRefresh() {
   const d = await api('api/agents');
   if (d.rev === AB.rev) return;
-  AB.rev = d.rev; AB.sessions = d.sessions || [];
+  AB.rev = d.rev; AB.sessions = d.sessions || []; AB.jobs = d.jobs || []; AB.machines = d.machines || [];
+  if (!$('#ab-new').hidden) abNewForm();
   const need = AB.sessions.filter(s => s.column === 'need').length;
+  if (AB.sel?.startsWith('job:') && !AB.jobs.some(j => 'job:' + j.id === AB.sel)) { // it reports now: open its session
+    const s = AB.sessions.find(x => 'job:' + x.job === AB.sel); AB.sel = s ? s.id : null; if (!s) $('#ab-detail').hidden = true;
+  }
   $('#ab-sub').textContent = AB.sessions.length ? [pN('1 session', '{n} sessions', AB.sessions.length), need ? pN('1 needs you', '{n} need you', need) : ''].filter(Boolean).join(' · ')
     : t('No agent has reported yet.');
   if (!AB.sessions.length && !AB.offered && $('#ab-setup').hidden) { AB.offered = true; $('#ab-connect').click(); }
   abRender();
   if (AB.sel) abOpen(AB.sel, true);
 }
+function abNewForm() {
+  const ms = AB.machines.filter(m => m.listening), sel = $('#ab-new-machine'), cur = sel.value;
+  $('#ab-new-none').hidden = !!ms.length; $('#ab-new-form').hidden = !ms.length;
+  const html = ms.map(m => `<option value="${esc(m.machine)}">${esc(m.machine)}</option>`).join('');
+  if (sel.innerHTML !== html) { sel.innerHTML = html; if (ms.some(m => m.machine === cur)) sel.value = cur; }
+  abNewFolders();
+}
+function abNewFolders() {
+  const m = AB.machines.find(x => x.machine === $('#ab-new-machine').value), sel = $('#ab-new-folder'), cur = sel.value;
+  const html = (m?.folders || []).map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+  if (sel.innerHTML !== html) { sel.innerHTML = html; if ((m?.folders || []).includes(cur)) sel.value = cur; }
+  $('#ab-new-start').disabled = !m?.folders?.length;
+}
+const abJobState = j => ({ queued: t('waiting for the machine'), sent: t('starting'), started: t('started, not reporting yet'), failed: t('could not start') })[j.state] || j.state;
+function abJobCard(j) {
+  return `<button type="button" class="ab-card${AB.sel === 'job:' + j.id ? ' on' : ''} ab-${esc(j.state)}" data-ab="job:${j.id}">
+    <span class="ab-c-top"><b class="no-i18n">${esc(j.project)}</b><span class="muted small">${esc(pilotAgo(j.updated))}</span></span>
+    <span class="ab-c-meta muted small"><span class="no-i18n">${esc(j.machine)}</span> · ${esc(abJobState(j))}${j.stopping ? ' · ' + esc(t('stopping')) : ''}</span>
+    <span class="ab-c-text no-i18n">${esc((j.state === 'failed' && j.log ? j.log : j.prompt).slice(-280))}</span></button>`;
+}
 function abCard(s) {
   const text = s.question || s.last_message || '';
-  const st = { permission: t('asks for permission'), working: t('working'), waiting: t('finished its turn'), ready: t('started'), ended: t('ended') }[s.state] || s.state;
+  const st = { permission: t('asks for permission'), working: t('working'), waiting: t('finished its turn'), ready: t('started'), ended: t('ended'), stopped: t('stopped') }[s.state] || s.state;
   return `<button type="button" class="ab-card${AB.sel === s.id ? ' on' : ''} ab-${esc(s.state)}" data-ab="${esc(s.id)}">
     <span class="ab-c-top"><b class="no-i18n">${esc(abTitle(s))}</b><span class="muted small">${esc(pilotAgo(s.updated))}</span></span>
-    <span class="ab-c-meta muted small"><span class="no-i18n">${esc([s.agent, s.machine].filter(Boolean).join(' · '))}</span> · ${esc(st)}${s.pending ? ' · ' + esc(pN('1 answer queued', '{n} answers queued', s.pending)) : ''}</span>
+    <span class="ab-c-meta muted small"><span class="no-i18n">${esc([s.agent, s.machine].filter(Boolean).join(' · '))}</span> · ${esc(st)}${s.stopping ? ' · ' + esc(t('stopping')) : ''}${s.pending ? ' · ' + esc(pN('1 answer queued', '{n} answers queued', s.pending)) : ''}</span>
+    ${s.doing && s.state === 'working' ? `<span class="ab-c-doing muted no-i18n">${esc(s.doing)}</span>` : ''}
     ${text ? `<span class="ab-c-text no-i18n">${esc(text.slice(0, 280))}</span>` : ''}</button>`;
 }
 function abRender() {
   $('#ab-cols').innerHTML = AB_COLS.map(([k, label]) => {
-    const list = AB.sessions.filter(s => s.column === k);
-    return `<div class="ab-col" data-col="${k}"><h4>${esc(t(label))} <span class="muted">${list.length || ''}</span></h4>${list.map(abCard).join('') || `<p class="muted small">${esc(t('Nothing here.'))}</p>`}</div>`;
+    const list = AB.sessions.filter(s => s.column === k), jobs = AB.jobs.filter(j => (j.state === 'failed' ? 'need' : 'working') === k);
+    const n = list.length + jobs.length;
+    return `<div class="ab-col" data-col="${k}"><h4>${esc(t(label))} <span class="muted">${n || ''}</span></h4>${jobs.map(abJobCard).join('') + list.map(abCard).join('') || `<p class="muted small">${esc(t('Nothing here.'))}</p>`}</div>`;
   }).join('');
+}
+function abOpenJob(id) {
+  const j = AB.jobs.find(x => 'job:' + x.id === id), box = $('#ab-detail'); if (!j) return;
+  box.dataset.id = id;
+  const stop = j.state === 'failed' ? `<button type="button" class="btn ghost small" data-abact="jforget">${esc(t('Forget'))}</button>`
+    : `<button type="button" class="btn ghost small danger" data-abact="stop">${esc(j.state === 'started' ? t('Stop') : t('Cancel'))}</button>`;
+  box.innerHTML = `<div class="ab-d-head"><h4 class="no-i18n">${esc(j.project)}</h4><span class="muted small no-i18n">${esc([j.machine, j.cwd].join(' · '))}</span><span class="muted small">${esc(abJobState(j))}</span>
+    <span class="ab-d-acts">${stop}<button type="button" class="btn ghost small" data-abact="close" aria-label="${esc(t('Close'))}">✕</button></span></div>
+    <div class="ab-ev ab-${esc(j.by)}"><span class="muted small">${esc(j.by === 'assistant' ? t('Assistant') : t('You'))} · ${esc(new Date(j.created * 1000).toLocaleString())}</span><div class="no-i18n">${esc(j.prompt)}</div></div>
+    ${j.log ? `<p class="small">${esc(t('What the machine said:'))}</p><pre class="ab-log no-i18n">${esc(j.log)}</pre>` : ''}
+    ${j.state === 'started' ? `<p class="muted small">${esc(t('Claude Code runs, but its hooks have not reported yet: are they in ~/.claude/settings.json on that machine?'))}</p>` : ''}`;
+  box.hidden = false;
+  abRender();
 }
 async function abOpen(id, quiet) {
   AB.sel = id;
+  if (id.startsWith('job:')) { abOpenJob(id); return; }
   const box = $('#ab-detail');
   let d; try { d = await api(`api/agents/s/${encodeURIComponent(id)}/thread`); } catch (e) { if (!quiet) toast(e.message); return; }
   const s = d.session, who = { agent: abTitle(s), you: t('You'), assistant: t('Assistant') };
-  const kind = { prompt: t('typed in the session'), permission: t('asks for permission'), notice: t('notice'), message: '', end: t('session ended'), queued: t('queued'), delivered: t('delivered') };
+  const kind = { started: t('started from the board'), stop: t('asked to stop'), stopped: t('stopped'), prompt: t('typed in the session'), permission: t('asks for permission'), notice: t('notice'), message: '', end: t('session ended'), queued: t('queued'), delivered: t('delivered') };
   const thread = d.events.map(e => `<div class="ab-ev ab-${esc(e.who)} ab-k-${esc(e.kind)}"><span class="muted small">${esc(who[e.who] || e.who)}${kind[e.kind] ? ' · ' + esc(kind[e.kind]) : ''} · ${esc(new Date(e.ts * 1000).toLocaleString())}</span><div class="no-i18n">${esc(e.text)}</div></div>`).join('');
   const listening = s.listening ? `<span class="ab-live">${esc(t('listening'))}</span>` : '';
   const head = `<div class="ab-d-head"><h4 class="no-i18n">${esc(abTitle(s))}</h4><span class="muted small no-i18n">${esc([s.agent, s.machine, s.cwd].filter(Boolean).join(' · '))}</span>${listening}
-    <span class="ab-d-acts"><button type="button" class="btn ghost small" data-abact="seen">${esc(t('Mark as seen'))}</button><button type="button" class="btn ghost small danger" data-abact="forget">${esc(t('Forget'))}</button><button type="button" class="btn ghost small" data-abact="close" aria-label="${esc(t('Close'))}">✕</button></span></div>`;
+    <span class="ab-d-acts">${['ended', 'stopped'].includes(s.state) ? '' : `<button type="button" class="btn ghost small danger" data-abact="stop"${s.stopping ? ' disabled' : ''}>${esc(s.stopping ? t('Stopping…') : t('Stop'))}</button>`}<button type="button" class="btn ghost small" data-abact="seen">${esc(t('Mark as seen'))}</button><button type="button" class="btn ghost small danger" data-abact="forget">${esc(t('Forget'))}</button><button type="button" class="btn ghost small" data-abact="close" aria-label="${esc(t('Close'))}">✕</button></span></div>`;
   const perm = s.state === 'permission' ? `<div class="ab-perm"><b>${esc(t('Permission asked'))}</b><code class="no-i18n">${esc(s.question)}</code>
     <span><button type="button" class="btn small" data-abact="allow">${esc(t('Allow'))}</button> <button type="button" class="btn ghost small danger" data-abact="deny">${esc(t('Deny'))}</button></span></div>` : '';
-  const fresh = !box.querySelector('#ab-reply') || box.dataset.id !== id;
+  const fresh = !box.querySelector('#ab-reply') || box.dataset.id !== id || ['ended', 'stopped'].includes(s.state);
   if (fresh) {
     box.dataset.id = id;
-    box.innerHTML = `<div class="ab-d-top"></div><div class="ab-thread"></div>${s.state === 'ended' ? `<p class="muted small">${esc(t('This session has ended.'))}</p>`
+    box.innerHTML = `<div class="ab-d-top"></div><div class="ab-thread"></div>${s.state === 'ended' || s.state === 'stopped' ? `<p class="muted small">${esc(s.state === 'stopped' ? t('This session was stopped.') : t('This session has ended.'))}</p>`
       : `<div class="ab-compose"><textarea id="ab-reply" rows="2" placeholder="${esc(t('Reply to this session…'))}"></textarea><button type="button" class="btn small" data-abact="send">${esc(t('Send'))}</button></div>`}`;
   }
   box.querySelector('.ab-d-top').innerHTML = head + perm; // the reply box is kept: a refresh never drops what is being typed
