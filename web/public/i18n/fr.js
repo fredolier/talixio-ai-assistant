@@ -3485,5 +3485,10 @@ window.I18N.fr = {
   "{n} messages wait: they go out one after the other when the answer ends.": "{n} messages attendent : ils partent l’un après l’autre quand la réponse est terminée.",
   "Attachment": "Pièce jointe",
   "Take it back into the box": "Le reprendre dans la zone de saisie",
-  "Send after the current answer": "Envoyer après la réponse en cours"
+  "Send after the current answer": "Envoyer après la réponse en cours",
+  "Recording… saved as you go": "Enregistrement… sauvegardé au fur et à mesure",
+  "Recording… the connection is lost: keep this page open, it is kept here": "Enregistrement… la connexion est perdue : gardez cette page ouverte, il est conservé ici",
+  "An interrupted recording was saved": "Un enregistrement interrompu a été sauvegardé",
+  "Discard": "Supprimer",
+  "Recording discarded": "Enregistrement supprimé"
 };

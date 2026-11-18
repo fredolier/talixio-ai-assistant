@@ -8,6 +8,23 @@
 - Les transcriptions et résumés sont cherchables ensuite. Le compte rendu est aussi enregistré comme note, à côté de l'enregistrement.
 - Telegram limite les fichiers à 20 Mo : téléversez les longs enregistrements dans l'app web.
 
+## Longues réunions, et quand l'enregistrement est interrompu
+- **Sauvegardé au fur et à mesure** : pendant l'enregistrement, l'app envoie l'audio au serveur toutes les 5 secondes (la barre
+  indique *sauvegardé au fur et à mesure*). Si l'onglet se ferme, si la batterie lâche ou si la connexion tombe, vous perdez au
+  plus les dernières secondes.
+- **Interrompu ?** À la prochaine ouverture de l'app, une barre au-dessus de la zone de saisie indique *Un enregistrement
+  interrompu a été sauvegardé*, avec sa durée : **Résumer la réunion**, **Envoyer en message vocal** ou **Supprimer**. Il est
+  gardé 7 jours.
+- **Connexion perdue pendant l'enregistrement** : la barre le signale et l'enregistrement est conservé sur votre appareil ;
+  gardez la page ouverte, il rattrape son retard quand la connexion revient. Si elle ne revient pas, l'enregistrement entier est
+  envoyé quand vous l'arrêtez.
+- **Pas de limite de durée en pratique** : les longs enregistrements sont transcrits par morceaux (40 minutes avec Gemini,
+  20 minutes avec OpenAI et les fournisseurs européens), puis réunis, les horodatages se suivant. Les noms des intervenants sont
+  devinés dans chaque morceau : dans une longue réunion aux voix non nommées, « Intervenant 1 » d'un morceau peut être
+  « Intervenant 2 » dans le suivant.
+- Une transcription très longue (au-delà d'environ 5 heures de parole) est résumée à partir de sa première partie ; la
+  transcription entière reste enregistrée et cherchable, et le résumé indique où elle a été coupée.
+
 ## Pourquoi une transcription séparée ?
 Claude ne prend pas l'audio en entrée : la transcription est une étape à part.
 

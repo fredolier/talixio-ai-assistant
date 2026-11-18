@@ -1102,7 +1102,42 @@ async function addFiles(list) {
 }
 
 // ---- voice notes and meeting recordings ----
-const rec = { media: null, chunks: [], start: 0, timer: null, wake: null };
+// Since 1.41.0 a recording is sent to the server every few seconds while it is made: a closed tab, a dead battery or a lost
+// network loses at most the last seconds, and the recording is offered back the next time the app opens. All the pieces also
+// stay here until the end, so if the server never got them the whole recording is uploaded at once, as before.
+const rec = { media: null, chunks: [], start: 0, timer: null, wake: null, id: null, sent: 0, starting: null, lost: false, retry: 0, pumping: false };
+const REC_SLICE = 5000;
+function recName(kind, type) {
+  const ext = (type || '').includes('mp4') ? 'm4a' : (type || '').includes('ogg') ? 'ogg' : 'webm';
+  return `${kind}-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.${ext}`;
+}
+function recHint() {
+  const h = $('#rec-hint'); if (!h) return;
+  h.textContent = t(rec.lost ? 'Recording… the connection is lost: keep this page open, it is kept here' : rec.id ? 'Recording… saved as you go' : 'Recording… keep this page open');
+  h.classList.toggle('rec-lost', rec.lost);
+}
+/** Sends the pieces not yet on the server, in order; a refused or lost piece is sent again. */
+async function recPump() {
+  if (rec.pumping || !rec.id) return;
+  rec.pumping = true;
+  try {
+    while (rec.id && rec.sent < rec.chunks.length) {
+      const id = rec.id, seq = rec.sent;
+      let r;
+      try { r = await fetch(`api/recordings/${id}/chunk?seq=${seq}`, { method: 'POST', headers: { 'X-Talixio': '1', 'Content-Type': 'application/octet-stream' }, body: rec.chunks[seq] }); }
+      catch { r = null; }
+      if (r && (r.ok || r.status === 409)) {
+        const d = await r.json().catch(() => ({}));
+        rec.sent = Math.max(0, Math.min(rec.chunks.length, Number.isInteger(d.next) ? d.next : seq + 1));
+        rec.retry = 0; if (rec.lost) { rec.lost = false; recHint(); }
+        continue;
+      }
+      if (r && (r.status === 404 || r.status === 413)) { rec.id = null; recHint(); break; } // the server lost it: the whole recording is uploaded at the end
+      rec.lost = true; recHint();
+      await new Promise(res => setTimeout(res, Math.min(30000, 2000 * 2 ** rec.retry++)));
+    }
+  } finally { rec.pumping = false; }
+}
 async function startRecording() {
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { toast('Recording needs a recent browser over HTTPS.'); return; }
   let stream;
@@ -1110,32 +1145,79 @@ async function startRecording() {
   catch { toast('Microphone access was refused.'); return; }
   const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find(t => MediaRecorder.isTypeSupported(t)) || '';
   rec.media = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
-  rec.chunks = []; rec.media.ondataavailable = e => e.data.size && rec.chunks.push(e.data);
-  rec.media.start(10000); rec.start = Date.now();
+  Object.assign(rec, { chunks: [], id: null, sent: 0, lost: false, retry: 0 });
+  rec.media.ondataavailable = e => { if (e.data.size) { rec.chunks.push(e.data); recPump(); } };
+  const mime = rec.media.mimeType || type || 'audio/webm';
+  rec.starting = post('api/recordings', { name: recName('recording', mime), mime, folder: spaceOf(state.space).folder || '' })
+    .then(d => { if (rec.media) { rec.id = d.recording.id; recHint(); recPump(); } else post(`api/recordings/${d.recording.id}/discard`).catch(() => {}); })
+    .catch(() => {}); // an older server, or none: kept here and uploaded at the end
+  rec.media.start(REC_SLICE); rec.start = Date.now();
   try { rec.wake = await navigator.wakeLock?.request('screen'); } catch {}
-  $('#recorder').hidden = false; $('#composer').hidden = true;
+  $('#recorder').hidden = false; $('#composer').hidden = true; recHint();
   const tick = () => { const s = Math.floor((Date.now() - rec.start) / 1000); $('#rec-time').textContent = `${Math.floor(s / 3600) ? Math.floor(s / 3600) + ':' : ''}${String(Math.floor(s / 60) % 60).padStart(Math.floor(s / 3600) ? 2 : 1, '0')}:${String(s % 60).padStart(2, '0')}`; };
   tick(); rec.timer = setInterval(tick, 1000);
 }
-function stopRecording() {
+function stopRecording(cancel = false) {
   return new Promise(resolve => {
     clearInterval(rec.timer); try { rec.wake?.release(); } catch {}
     $('#recorder').hidden = true; $('#composer').hidden = false;
     if (!rec.media) return resolve(null);
-    rec.media.onstop = () => { rec.media.stream.getTracks().forEach(t => t.stop()); const b = new Blob(rec.chunks, { type: rec.media.mimeType || 'audio/webm' }); rec.media = null; resolve(b); };
+    rec.media.onstop = () => {
+      rec.media.stream.getTracks().forEach(t => t.stop());
+      const b = new Blob(rec.chunks, { type: rec.media.mimeType || 'audio/webm' }); rec.media = null;
+      if (cancel && rec.id) { post(`api/recordings/${rec.id}/discard`).catch(() => {}); rec.id = null; }
+      resolve(b);
+    };
     rec.media.stop();
   });
 }
+/** Waits until every piece is on the server (at most a minute); false when it is not. */
+async function recFlush() {
+  await rec.starting;
+  for (let i = 0; i < 120 && rec.id && rec.sent < rec.chunks.length; i++) { recPump(); await new Promise(res => setTimeout(res, 500)); }
+  return !!rec.id && rec.sent >= rec.chunks.length;
+}
 async function finishRecording(meeting) {
   const blob = await stopRecording();
-  if (!blob || blob.size < 1000) { toast('Nothing was recorded.'); return; }
-  const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
-  const name = `${meeting ? 'meeting' : 'voice-note'}-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.${ext}`;
+  if (!blob || blob.size < 1000) { if (rec.id) post(`api/recordings/${rec.id}/discard`).catch(() => {}); rec.id = null; toast('Nothing was recorded.'); return; }
+  const name = recName(meeting ? 'meeting' : 'voice-note', blob.type);
   toast(meeting ? 'Uploading the recording…' : 'Sending your voice note…');
   try {
-    const info = await uploadFile(blob, name, spaceOf(state.space).folder || '');
+    let info;
+    if (await recFlush()) info = (await post(`api/recordings/${rec.id}/finish`, { name })).file;
+    else {
+      if (rec.id) post(`api/recordings/${rec.id}/discard`).catch(() => {}); // what part of it got there is not needed: the whole of it is sent now
+      info = await uploadFile(blob, name, spaceOf(state.space).folder || '');
+    }
+    rec.id = null;
     await send({ files: [info.id], shownFiles: [info], meeting });
   } catch (e) { toast(e.message); }
+}
+/** A recording that was interrupted (the page closed, the phone died) and saved up to then: summarise it, send it, or drop it. */
+async function offerSavedRecordings() {
+  const box = $('#rec-saved'); if (!box) return;
+  let list = [];
+  try { list = (await api('api/recordings')).recordings || []; } catch {}
+  box.hidden = !list.length; box.innerHTML = '';
+  for (const r of list) {
+    const el = document.createElement('div'); el.className = 'rec-saved-it';
+    const len = r.duration ? Math.max(1, Math.round(r.duration / 60)) + ' min' : '';
+    el.innerHTML = `<span class="rec-dot" aria-hidden="true"></span><span>${esc(t('An interrupted recording was saved'))} · <span class="no-i18n">${esc(new Date(r.updated * 1000).toLocaleString())}${len ? ' · ' + esc(len) : ''}</span></span><span class="spacer"></span>
+      <button class="btn small ghost" type="button" data-rs="discard">${esc(t('Discard'))}</button><button class="btn small" type="button" data-rs="voice">${esc(t('Send as voice note'))}</button><button class="btn small primary" type="button" data-rs="meeting">${esc(t('Summarise meeting'))}</button>`;
+    el.querySelectorAll('button').forEach(b => b.onclick = async () => {
+      el.querySelectorAll('button').forEach(x => x.disabled = true);
+      try {
+        if (b.dataset.rs === 'discard') { await post(`api/recordings/${r.id}/discard`); toast('Recording discarded'); }
+        else {
+          const meeting = b.dataset.rs === 'meeting';
+          const info = (await post(`api/recordings/${r.id}/finish`, { name: recName(meeting ? 'meeting' : 'voice-note', r.mime) })).file;
+          await send({ files: [info.id], shownFiles: [info], meeting });
+        }
+      } catch (e) { toast(e.message); }
+      offerSavedRecordings();
+    });
+    box.append(el);
+  }
 }
 
 // ---- dictation: speak into any text field; the recording is transcribed and never kept ----
@@ -7403,6 +7485,7 @@ async function startApp() {
   if (!sp) { let saved = 0; try { saved = +(localStorage.getItem(LSK + 'talixio.space') || 0); } catch {} sp = state.spaces.find(x => x.id === saved && !x.archived); }
   await switchSpace(sp ? sp.id : 0, { keepHash: !fromHash });
   loadApprovals();
+  offerSavedRecordings();
   route();
   clearInterval(state.pollTimer);
   state.pollTimer = setInterval(() => { poll(); }, 4000);
@@ -7427,7 +7510,7 @@ $('#input').addEventListener('input', () => { if (state.sending) sendMode(true);
 $('#attach').onclick = () => $('#file-input').click();
 $('#file-input').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
 $('#mic').onclick = startRecording;
-$('#rec-cancel').onclick = () => stopRecording();
+$('#rec-cancel').onclick = () => stopRecording(true);
 $('#rec-voice').onclick = () => finishRecording(false);
 $('#rec-meeting').onclick = () => finishRecording(true);
 $('#input').addEventListener('paste', e => { const f = [...(e.clipboardData?.files || [])]; if (f.length) { e.preventDefault(); addFiles(f); } });

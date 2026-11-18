@@ -762,6 +762,27 @@ $routes(['POST /gem/v1beta/models/' . \Talixio\GeminiModels::FALLBACK['standard'
 $out = $tr->transcribe(['path' => "$td/beep.webm"], false);
 $restoreEnv();
 check('transcriber: without ffmpeg the recording is sent as it is, a WebM as audio', $fc2 !== 0 || ($out === 'webm ok' && str_contains($calls()[0]['body'] ?? '', '"mime_type":"audio/webm"')), $out);
+// 1.41.0: a long recording is transcribed in pieces, each one's times moved by where it starts, then joined
+exec('ffmpeg -nostdin -loglevel error -y -f lavfi -i sine=frequency=440:duration=85 ' . escapeshellarg("$td/long.wav") . ' 2>&1', $o, $fc3);
+check('transcriber: times move by where a piece starts', Transcriber::shift("[00:05] Alex: hi\n[12:30] Sam: yes [00:07]", 60) === "[01:05] Alex: hi\n[13:30] Sam: yes [01:07]"
+    && Transcriber::shift('[59:30] Alex: late', 45) === '[1:00:15] Alex: late' && Transcriber::shift('[1:02:03] x', 3600) === '[2:02:03] x' && Transcriber::shift('[00:05] same', 0) === '[00:05] same');
+$savedPieces = Transcriber::$pieceSeconds; Transcriber::$pieceSeconds['gemini'] = 30; Transcriber::$pieceSeconds['sovereign'] = 30;
+$tc->transcribeModel = 'gemini-2.5-flash';
+$routes(['POST /gem/v1beta/models/gemini-2.5-flash:generateContent' => [200, ['candidates' => [['content' => ['parts' => [['text' => '[00:05] Alex: hi']]]]]]]]);
+$out = $tr->transcribe(['path' => "$td/long.wav"], true);
+$sp = $tr->split("$td/long.wav", 30); $starts = array_column($sp, 1);
+foreach ($sp as [$pp]) { @unlink($pp); @rmdir(dirname($pp)); }
+check('transcriber: a recording longer than a piece is sent in even pieces, its times shifted, joined in order', $fc3 !== 0 || (count($calls()) === 3 && $starts[0] === 0 && abs($starts[1] - 29) <= 1 && abs($starts[2] - 58) <= 1
+    && $out === implode("\n", array_map(fn($s) => sprintf('[%02d:%02d] Alex: hi', intdiv(5 + $s, 60), (5 + $s) % 60), $starts))), $out . ' ' . json_encode($starts));
+$left = glob(sys_get_temp_dir() . '/talixio-pieces-*') ?: [];
+check('transcriber: the pieces are deleted afterwards', !$left, json_encode($left));
+$tc->transcribe = 'sovereign'; $tc->sovereignUrl = "$F/eu/v1"; $tc->sovereignKey = 'sk-eu'; $tc->transcribeModel = 'whisper-large-v3';
+$routes(['POST /eu/v1/audio/transcriptions' => [200, ['text' => 'Part.']]]);
+$out = $tr->transcribe(['path' => "$td/long.wav"], false);
+check('transcriber: a long voice note too, joined as one text', $fc3 !== 0 || ($out === 'Part. Part. Part.' && count($calls()) === 3), $out);
+$routes(['POST /eu/v1/audio/transcriptions' => [200, ['text' => 'Short.']]]);
+check('transcriber: a recording barely longer than a piece stays whole', $tr->transcribe($beep, false) === 'Short.' && count($calls()) === 1 && count($tr->split("$td/long.wav", 80)) === 1);
+Transcriber::$pieceSeconds = $savedPieces; $tc->transcribe = 'gemini';
 // a large recording goes through the Files API
 $big = "$td/big.bin"; file_put_contents($big, str_repeat('A', 14_000_001));
 $routes(['POST /gem/upload/v1beta/files' => [200, '{}', ['X-Goog-Upload-URL: ' . "$F/up"]], 'POST /up' => [200, ['file' => ['name' => 'files/abc', 'uri' => 'gs://abc', 'state' => 'PROCESSING']]],
