@@ -11,7 +11,8 @@ $now = time(); $day = 86400;
 $s->q('INSERT INTO tool_log(ts, tool, args, result) VALUES (?, ?, ?, ?), (?, ?, ?, ?)', [$now - 100 * $day, 'kb_search', '{}', 'old', $now - $day, 'kb_search', '{}', 'recent']);
 $s->q('INSERT INTO tool_log(ts, tool, args, result, job_id) VALUES (?, ?, ?, ?, ?)', [$now - 400 * $day, 'fetch_url', '{}', 'a job step', 7]);
 $s->q("INSERT INTO relay_messages(ts, sender, recipient, body, delivered) VALUES (?, 'a', 'b', 'old delivered', 1), (?, 'a', 'b', 'old waiting', NULL)", [$now - 40 * $day, $now - 40 * $day]);
-foreach ([[$now - 200 * $day, 3, 0.5], [$now - 200 * $day + 3600, 7, 0.25], [$now - 200 * $day + 7200, 1, null], [$now - $day, 2, 0.1]] as [$ts, $in, $cost])
+$old = strtotime(date('Y-m-d', $now - 200 * $day) . ' 10:00:00'); // three rows of one local day: from 10:00, so the +2 h one cannot cross midnight (it did when the suite ran after 22:00)
+foreach ([[$old, 3, 0.5], [$old + 3600, 7, 0.25], [$old + 7200, 1, null], [$now - $day, 2, 0.1]] as [$ts, $in, $cost])
     $s->q("INSERT INTO usage(ts, model, input_tokens, output_tokens, cost_usd, source, tier) VALUES (?, 'claude-x', ?, 1, ?, 'chat', 'standard')", [$ts, $in, $cost]);
 $total = $s->spentSince(0); $calls = (int)$s->q('SELECT COUNT(*) FROM usage')->fetchColumn();
 $n = $s->prune($now, 90);

@@ -1924,6 +1924,10 @@ final class Web
                 try { return $this->app->knowledge()->setExclude((string)($b['key'] ?? ''), !empty($b['exclude'])); }
                 catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
             })(),
+            $path === '/api/agents/knowledge/rule' && $m === 'POST' => (function () use ($b) { // 1.46.0: confirm, edit or reject a deduced rule
+                try { return $this->app->knowledge()->decideRule((int)($b['id'] ?? 0), (string)($b['action'] ?? ''), (string)($b['text'] ?? '')); }
+                catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
+            })(),
             $path === '/api/agents/knowledge/forget' && $m === 'POST' => $this->app->knowledge()->forgetProject((string)($b['key'] ?? '')),
             $path === '/api/agents/token' && $m === 'POST' => (function () use ($hub) { $hub->token(true); return ['ok' => true, 'message' => I18n::t($this->app, 'New token: download the hook script again on each machine.')]; })(),
             $id('thread') !== null && $m === 'GET' => $hub->thread($id('thread')),

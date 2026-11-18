@@ -2060,6 +2060,10 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-kdigest{margin:6px 0 6px 10px}
 .ab-kfilters{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0}
 .ab-kdec{list-style:none;margin:0;padding:0}
+.ab-krules{list-style:none;margin:0 0 8px;padding:0}
+.ab-krule{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0}
+.ab-krule-proposed{border-style:dashed}
+.ab-krule-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .ab-kdec li{border-top:1px solid var(--line);padding:6px 0}
 .ab-kq{font-size:.9em;color:var(--muted)}
 .ab-ka{font-size:.92em}
