@@ -898,6 +898,32 @@ const flows = {
     await page.waitForTimeout(4500);
     check('agent board: the board follows by itself (no reload): the session is working again', /webshop/.test(await page.textContent('#ab-cols [data-col=working]')), await page.textContent('#ab-cols'));
   },
+  async agentKnowledge({ page, check }) {
+    // 1.44.0: what the director learned from the board (after agentBoard: a reply and a denied permission in webshop on testbox)
+    await go(page, 'pilotage');
+    await page.click('#view-pilotage .ptab[data-ptab=agents]');
+    await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
+    await page.click('#ab-know-btn');
+    await page.waitForSelector('#ab-know .ab-kproj', { timeout: 6000 });
+    const box = await page.textContent('#ab-know');
+    check('agent knowledge: What I know lists the project, with its machine and its decisions', /webshop/.test(box) && /testbox/.test(box) && /No, wait for Monday\./.test(box) && /npm run deploy/.test(box), box.slice(0, 600));
+    check('agent knowledge: a project without a summarised session says it has no dossier yet', (await page.$$('#ab-know .ab-kdossier')).length === 0);
+    await page.selectOption('#ab-know [data-kfilter=topic]', 'deploy');
+    const dep = await page.textContent('#ab-know .ab-kdec');
+    check('agent knowledge: the decision log filters by topic', /npm run deploy/.test(dep) || /Shall I deploy/.test(dep), dep);
+    await page.selectOption('#ab-know [data-kfilter=topic]', 'docs');
+    check('agent knowledge: …and says when nothing matches', !(await page.$('#ab-know .ab-kdec')));
+    page.once('dialog', d => d.accept());
+    await page.click('#ab-know .ab-kproj:has-text("webshop") [data-kact=exclude]');
+    await page.waitForSelector('#ab-know .ab-kproj.off', { timeout: 6000 });
+    const k = await api(page, 'api/agents/knowledge');
+    const wp = k.projects.find(p => p.title === 'webshop');
+    check('agent knowledge: Stop learning turns it off and forgets what was learned', wp && wp.exclude === true && !k.decisions.some(d => d.project === wp.key), JSON.stringify(wp));
+    await page.click('#ab-know .ab-kproj:has-text("webshop") [data-kact=exclude]');
+    await page.waitForSelector('#ab-know .ab-kproj:not(.off)', { timeout: 6000 });
+    check('agent knowledge: Learn again turns it back on', (await api(page, 'api/agents/knowledge')).projects.find(p => p.title === 'webshop')?.exclude === false);
+    await page.click('#ab-know-btn');
+  },
   async agentAutonomy({ page, check, data }) {
     // 1.39.0: the autonomy settings live on the board; a suggestion shows in the session, Send this answer scores it, a verdict on what it sent
     const { readFileSync, existsSync } = await import('node:fs');

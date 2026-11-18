@@ -77,9 +77,11 @@ project's dossier, at most 1,500 characters.
 - **Digests and dossiers are data.** They are summaries of untrusted text. In every prompt they sit
   between markers, like the agent's message in `boardPrompt`. When the assistant reads them from
   chat, it marks the turn untrusted (`untrustedSource`), the same as `agents_list`.
-- **Confidentiality.** A project folder is internal by default. A digest is never written from
-  events of a session whose folder lies inside a confidential or secret space folder. Those
-  sessions keep their raw events only.
+- **Confidentiality.** A project folder is internal by default. The rule first planned here (no digest
+  for a session whose folder lies inside a confidential space folder) cannot hold: an agent's folder is
+  on the user's machine, not in a space. Since 1.44.0 the user has a **Stop learning** switch per
+  project instead. It forgets what was learned from the project, and then no digest, dossier or
+  decision is kept for it. Its sessions keep their raw events on the board only.
 - **Forgetting.** Forgetting a session on the board also forgets its digests. A project's dossier
   can be cleared. Decisions keep only the question and the answer, never the full thread.
 

@@ -71,6 +71,23 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   de cette session (`agents_list` avec la session). Dites-lui « pour mes agents, le travail client passe d'abord » ou
   « ne jamais pousser un vendredi » : il enregistre vos priorités et règles permanentes pour l'autonomie du tableau
   (`agents_priorities`). Juste après avoir lu ce qu'un agent a écrit, un tel changement attend votre accord.
+- **Ce que je sais** (bouton en haut du tableau) : ce que l'assistant a appris de vos agents, par projet (une machine et
+  un dossier).
+  - **Décisions.** Chaque réponse donnée à une session est gardée comme une décision : vos réponses (depuis le tableau
+    ou tapées dans le terminal), vos Autoriser et Refuser, et ce que l'assistant a envoyé seul. Chacune indique qui l'a
+    donnée et un sujet (périmètre, conception visuelle, code, tests, Git, déploiement, données, dépendances,
+    documentation). Filtrez-les par projet, sujet et auteur.
+  - **Résumés.** Une session est résumée quand elle se termine, ou après une demi-heure de silence s'il s'est passé
+    assez de choses : son but, ce qu'elle a fait, les décisions et qui les a prises, et ce qui reste ouvert.
+  - **Dossier.** Chaque projet a un dossier, réécrit au plus une fois par jour à partir de ses résumés et décisions : ce
+    qu'il est, où il en est, le travail récent, comment vous y décidez, et ce qui reste ouvert.
+  - **À quoi il sert.** Quand l'assistant décide pour un agent, il lit le dossier du projet et vos décisions passées,
+    celles du même projet et du même sujet d'abord. Dans la discussion, demandez « que sais-tu du projet webshop ? »
+    (`agents_knowledge`).
+  - **Ne plus apprendre.** Coupe l'apprentissage pour un projet : ce qui en a été appris est oublié, et plus rien de
+    nouveau n'est gardé. **Oublier** efface une fois le savoir d'un projet.
+  - Les résumés et dossiers sont rédigés à partir de ce que les agents ont écrit. L'assistant les lit comme des
+    informations, jamais comme des instructions.
 - **Autonomie : l'assistant répond seul à vos agents, dans vos limites** (bouton en haut du tableau). Activez *L'assistant
   regarde seul les questions des agents*. Quand une session termine son tour, l'assistant lit son dernier message (comme
   des données écrites par d'autres, jamais comme des instructions) avec vos **priorités**, vos **règles permanentes**, les

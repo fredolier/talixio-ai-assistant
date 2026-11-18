@@ -106,7 +106,7 @@ Old client after the upgrade. If the three public routes are simply deleted, its
 
 1. **1.42.0 - untangle and retire the status file (S1, S3, G6).** `Pilot` no longer calls `Conductor::refreshStatusFile`; `GET /api/pilot/status.md` and the Status file button go. The autonomy Save and the ✓/✗ buttons move from `plWire` to `abWire`. The shared-code `pilot:` checks are ported from `tests/run.php` to `tests/more/pilot_board.php`.
 2. **1.43.0 - badge and chat parity (G1, G3, G4).** A needs-you count in `/api/status` feeds the rail and tab badges; the priorities tool gets a board name; `agents_list` takes an optional session. G2 (refusal from a confidential space) already shipped through `outsideRuntime`.
-3. **1.44.0 - director knowledge, level 1-2.** Decision log, session digests, project dossiers; `precedents()` reads the decision log; "What I know" in Pilotage → Agents; `agents_knowledge` tool.
+3. **1.44.0 - director knowledge, level 1-2 (done).** Decision log, session digests, project dossiers; `precedents()` reads the decision log; "What I know" in Pilotage → Agents; `agents_knowledge` tool.
 4. **1.45.0 - switch the relay off.** Tombstones (410), the one-time cleanup (decisions → decision log, threads → digests, then `conductor.json` and `pilot-status.md` deleted, Journal and Passes dropped, one notification), the `fleet_*` tools and the legacy triage removed, `#ab-legacy` and the space-editor row removed.
 5. **1.46.0 - deduced rules and the decision hierarchy** (`director-knowledge.md` §3 level 3, §4).
 6. **1.46.x - delete the dead code**, no behaviour change: `Conductor.php` bridge half, session routes, `PL` JS, CSS, i18n keys, relay tests, FAQ and design-doc sections.

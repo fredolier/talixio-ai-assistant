@@ -164,6 +164,7 @@
             <span class="muted small no-i18n" id="ab-sub"></span>
             <button type="button" id="ab-new-btn" class="btn small" aria-expanded="false">New session</button>
             <button type="button" id="ab-auto-btn" class="btn ghost small" aria-expanded="false">Autonomy</button>
+            <button type="button" id="ab-know-btn" class="btn ghost small" aria-expanded="false" title="What the assistant learned from your agents: a dossier per project, the sessions summarised, and who decided what">What I know</button>
             <button type="button" id="ab-connect" class="btn ghost small" aria-expanded="false">Connect a machine</button>
             <label class="small ab-notify" title="What the board sends to your phone and your notifications">Notify me
               <select id="ab-notify">
@@ -173,6 +174,7 @@
               </select></label>
           </div>
           <div class="card ab-auto" id="ab-auto" hidden><div class="pl-auto" id="pl-auto"></div></div>
+          <div class="card ab-know" id="ab-know" hidden></div>
           <div class="card ab-new" id="ab-new" hidden>
             <p class="small muted" id="ab-new-none">No machine is listening for new work yet. On the machine, start the listener (Connect a machine, step 4); a session can start only in a folder where a session already ran there.</p>
             <div class="ab-new-form" id="ab-new-form" hidden>

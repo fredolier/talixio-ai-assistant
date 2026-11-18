@@ -110,6 +110,7 @@ final class Worker
             $this->lastSummary = $now;
             $this->guard('summary', fn() => (new Summarizer($app))->maybeRun($now));
             $this->guard('mind', fn() => $app->mind()->tick($now));
+            $this->guard('knowledge', fn() => $app->knowledge()->tick($now)); // 1.44.0: digests and dossiers of the coding agents' work
             $this->guard('graph', fn() => $app->graph()->tick($now));
             $this->guard('billing', fn() => $app->billing()->sync(false, $now)); // every 6 hours at most
         }

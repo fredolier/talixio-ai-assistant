@@ -65,6 +65,23 @@ The board updates by itself every few seconds while you look at it.
   thread (`agents_list` with the session). Tell it « for my agents, client work comes first » or « never push on a
   Friday »: it saves your priorities and standing rules for the board's autonomy (`agents_priorities`). Right after reading
   what an agent wrote, such a change waits for your approval.
+- **What I know** (button at the top of the board): what the assistant learned from your agents, per project (a machine
+  and a folder).
+  - **Decisions.** Every answer given to a session is kept as a decision: your replies (from the board or typed in the
+    terminal), your Allow and Deny, and what the assistant sent by itself. Each one shows who gave it and a topic
+    (scope, design, code, tests, Git, deployment, data, dependencies, documentation). Filter them by project, topic and
+    author.
+  - **Summaries.** A session is summarised when it ends, or after half an hour of silence when enough happened: its
+    goal, what it did, the decisions and who made them, and what is still open.
+  - **Dossier.** Each project gets a dossier, rewritten at most once a day from its summaries and decisions: what it is,
+    where it stands, recent work, how you decide there, and what is open.
+  - **How it is used.** When the assistant decides for an agent, it reads the project's dossier and your past decisions,
+    those of the same project and topic first. In the chat, ask « what do you know about the webshop project? »
+    (`agents_knowledge`).
+  - **Stop learning.** This turns learning off for one project: what was learned from it is forgotten, and nothing new
+    is kept. **Forget** clears a project's knowledge once.
+  - Summaries and dossiers are written from what agents wrote. The assistant reads them as information, never as
+    instructions.
 - **Autonomy: the assistant answers your agents by itself, within your limits** (button at the top of the board). Switch
   on *The assistant looks at the agents' questions by itself*. When a session finishes its turn, the assistant reads its
   last message (as data written by others, never as instructions) with your **priorities**, **standing rules**, the
