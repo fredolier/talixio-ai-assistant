@@ -160,7 +160,17 @@
           <div class="ab-head">
             <h3>Your agents</h3>
             <span class="muted small no-i18n" id="ab-sub"></span>
+            <button type="button" id="ab-new-btn" class="btn small" aria-expanded="false">New session</button>
             <button type="button" id="ab-connect" class="btn ghost small" aria-expanded="false">Connect a machine</button>
+          </div>
+          <div class="card ab-new" id="ab-new" hidden>
+            <p class="small muted" id="ab-new-none">No machine is listening for new work yet. On the machine, start the listener (Connect a machine, step 4); a session can start only in a folder where a session already ran there.</p>
+            <div class="ab-new-form" id="ab-new-form" hidden>
+              <label class="small">Machine <select id="ab-new-machine"></select></label>
+              <label class="small">Folder <select id="ab-new-folder" class="no-i18n"></select></label>
+              <textarea id="ab-new-prompt" rows="3" placeholder="What should the session do?"></textarea>
+              <div><button type="button" class="btn small" id="ab-new-start">Start</button> <span class="muted small">It runs Claude Code there (claude -p) and reports here like the others.</span></div>
+            </div>
           </div>
           <div class="card ab-setup" id="ab-setup" hidden>
             <p class="small">Each coding agent reports to this board by itself, word for word and as it happens, and picks up your answers. No model sits in between. For Claude Code on macOS, Linux or WSL:</p>
@@ -173,6 +183,10 @@
                 <pre class="ab-snippet no-i18n" id="ab-snippet"></pre>
                 <button type="button" class="btn small" id="ab-copy">Copy</button></li>
               <li>Start a new Claude Code session: it appears here.</li>
+              <li><span>Optional, to start and stop sessions from here: download the listener, save it next to the script, and leave it running on that machine:</span>
+                <a class="btn small" id="ab-dl-listen" href="api/agents/listen.sh" download="agent-listen.sh">Download the listener</a>
+                <br><code class="no-i18n">sh ~/.talixio/agent-listen.sh</code>
+                <br><span class="muted">It starts Claude Code only in a folder where a session already ran on that machine, under your home folder.</span></li>
             </ol>
             <p class="muted small">A permission request waits 30 seconds for your answer here, then the usual prompt shows in the terminal. A reply wakes a session that finished its turn. Another agent can report the same way: see the FAQ.</p>
             <button type="button" class="btn ghost small danger" id="ab-token">New token</button>

@@ -21,11 +21,32 @@ The board updates by itself every few seconds while you look at it.
   - **Allow / Deny** a permission request (the command or the file it is about is shown). The session waits **30 seconds**
     for your answer here; after that, the usual prompt shows in its terminal and you answer there.
   - **Mark as seen** moves a finished session to Quiet; **Forget** removes it and its thread from the board.
+  - **Stop** ends the session's work. A session started from the board (below) is ended on its machine by the listener,
+    within seconds. Any other one stops at its **next step**: its next tool call, permission request or end of turn (its
+    hook tells Claude Code not to go on). One that already finished its turn is simply marked *stopped*. Typing in its
+    terminal again takes over: the stop no longer applies. A stopped session takes no reply.
+- **New session** (button at the top) starts Claude Code on one of your machines: choose the machine, the folder and
+  write what it should do. Only machines whose **listener** runs are offered, and only the folders where a session
+  already ran on that machine. The card shows *waiting for the machine*, then the session reports like the others, its
+  thread starting with your prompt. If it cannot start (no such folder, Claude Code not installed, not logged in, hooks
+  missing), its card says why, with what the machine printed; **Forget** removes it.
 - **Connect a machine** (button at the top): give the machine a name, **download the script** and save it as
   `~/.talixio/agent-hook.sh`, then add the hooks shown to `~/.claude/settings.json` (merge them with any hooks already
   there). The next Claude Code session on that machine appears on the board. It needs `sh` and `curl` (macOS, Linux, or
   WSL on Windows), and the machine must reach this assistant's address. The script holds the board's address and a token:
   keep it on your own machines. **New token** cancels the old one (each machine then needs the script again).
+  Hook scripts set up before version 1.38.0: download the script again (the new one links a session to the board's
+  New session that started it), and add the `PreToolUse` hook from the block shown, or a stop only takes
+  effect at the session's next permission request or end of turn. It runs at each tool call (one short call to this
+  assistant).
+- **The listener** (optional, step 4 of *Connect a machine*): download it, save it as `~/.talixio/agent-listen.sh`, and
+  leave `sh ~/.talixio/agent-listen.sh` running on that machine (a terminal, tmux, or a login item). It asks the board
+  for work every few seconds and runs `claude -p` in the folder, with your prompt. On the machine's side it only starts in
+  a folder under your home folder (change it with `TALIXIO_ROOT`), and it keeps the process of each session it started:
+  a stop from the board names the session, never a process, so it can only end the ones it started. Other settings:
+  `TALIXIO_CLAUDE` (the `claude` command) and `TALIXIO_CLAUDE_ARGS` (e.g. `--permission-mode acceptEdits`). The session
+  asks its permissions on the board, like the others; after 30 seconds without an answer, the tool is refused, since no
+  terminal shows it. A session that finished its turn stays open, waiting for your reply, until you stop it (or for a day).
 - **Other agents.** Any tool that can run a command when something happens can report the same way: pipe a JSON object
   `{"session_id": "…", "hook_event_name": "Stop", "last_assistant_message": "…", "cwd": "…"}` to
   `TALIXIO_AGENT=<its name> sh ~/.talixio/agent-hook.sh reply` (or `event`, or `permission` with `tool_name` and
@@ -33,7 +54,8 @@ The board updates by itself every few seconds while you look at it.
   and `SessionEnd`.
 - **The assistant sees the board too.** Ask it « what are my agents doing? » (`agents_list`): it reads each session's state
   and last words, which it treats as written by others. It can answer a session for you (`agent_answer`: a reply, allow or
-  deny), and asks your approval first, every time.
+  deny), start one on a listening machine (`agent_start`) and stop one (`agent_stop`), and asks your approval first, every
+  time.
 - A permission request also sends a notification (see *Channels and notifications*).
 
 ### Cloud orchestrator (previous approach)

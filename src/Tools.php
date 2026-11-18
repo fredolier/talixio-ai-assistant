@@ -711,6 +711,26 @@ final class Tools
                 'deny' => "Deny the permission asked by agent session {$a['session']}",
                 default => "Send to agent session {$a['session']}: " . mb_substr((string)($a['text'] ?? ''), 0, 1500),
             });
+        $this->register('agent_start', 'Start a new coding-agent session (Claude Code) on one of the user\'s machines, in a folder it already reported, with what it should do. '
+            . 'Only machines whose listener is running can (agents_list names them, with their folders). The session then reports on the board like the others. The user approves first.',
+            ['machine' => ['type' => 'string'], 'folder' => ['type' => 'string', 'description' => 'one of the folders agents_list gives for that machine, exactly'],
+             'prompt' => ['type' => 'string', 'description' => 'what the session should do, as you would type it in Claude Code']], ['machine', 'folder', 'prompt'],
+            function (array $a) {
+                try { $r = $this->app->agentHub()->start((string)$a['machine'], (string)$a['folder'], (string)$a['prompt'], 'assistant'); }
+                catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
+                return "queued as job:{$r['job']['id']}: the listener on {$a['machine']} starts it within seconds; it then shows on the board (agents_list).";
+            },
+            fn(array $a) => "Start Claude Code on {$a['machine']} in {$a['folder']}: " . mb_substr((string)($a['prompt'] ?? ''), 0, 1500));
+        $this->register('agent_stop', 'Stop one session of the agent board (an id from agents_list, or job:<n> for one started from here that is not reporting yet). '
+            . 'A session the listener started is ended; another stops at its next step. The user approves first.',
+            ['session' => ['type' => 'string']], ['session'],
+            function (array $a) {
+                try { $r = $this->app->agentHub()->stop((string)$a['session'], 'assistant'); }
+                catch (\InvalidArgumentException $e) { return 'error: ' . $e->getMessage(); }
+                return match ($r['how']) { 'kill' => 'stopping: the listener ends its process within seconds.', 'now' => 'stopped (it had finished its turn).',
+                    'cancelled' => 'cancelled before it started.', default => 'stop asked: it stops at its next step (tool call, permission request or end of turn).' };
+            },
+            fn(array $a) => "Stop agent session {$a['session']}");
         $this->register('fleet_status', 'Is a fleet orchestrator connected, which session, and is it still alive (when it last reported vs. when last sent to). Suggests recreating it if it has gone quiet.',
             [], [], fn() => $this->app->conductor()->fleetStatus());
         $this->register('fleet_disconnect', 'Forget the connected fleet orchestrator (its webhook and secret). Use when re-pairing or when the user wants to disconnect the fleet.',
@@ -1320,7 +1340,7 @@ final class Tools
         'memory_read', 'peer_inbox', 'peer_list', 'peer_queries', 'peer_status', 'phone_action', 'role_find', 'script_read', 'search_memory', 'share_list',
         'skill_read', 'space_notes', 'spaces', 'spotify_now', 'tools_more', 'usage_report', 'web_search'];
     /** Tools that change something or send something out: after content written by others, they ask first. */
-    public const EFFECTS = ['agent_answer', 'app_save', 'archive_job', 'asset_install', 'asset_publish', 'asset_publish_file', 'board_add', 'board_delete', 'board_invite',
+    public const EFFECTS = ['agent_answer', 'agent_start', 'agent_stop', 'app_save', 'archive_job', 'asset_install', 'asset_publish', 'asset_publish_file', 'board_add', 'board_delete', 'board_invite',
         'board_log_time', 'board_prioritize', 'board_update', 'browser_click', 'browser_save_login', 'browser_select', 'browser_type', 'calendar_add',
         'cancel_job', 'cancel_task', 'conductor_dispatch', 'connector_install_github', 'contact_save', 'continue_job', 'delegate', 'direct', 'directive_rate',
         'directive_steer', 'fleet_decide', 'fleet_disconnect', 'fleet_dispatch', 'fleet_priorities', 'fleet_setup', 'kb_make_document',
