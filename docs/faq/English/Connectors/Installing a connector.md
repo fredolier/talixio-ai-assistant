@@ -48,7 +48,8 @@ For a server that is not on GitHub (or in a private repository):
   *can change or send things*); this guess comes from the connector's hints and the tool's name, so
   check the description. Tick a tool to let it run without asking, also in background tasks; the
   box on a group row ticks the whole group (only the rows the filter shows). Each tick is saved at
-  once. Or add `"trust": "all"` to its entry to trust all its tools.
+  once. Or add `"trust": "all"` to its entry to trust all its tools. After the assistant has read content written by
+  others (an email, a web page…), the tools of such a connector still ask, except the ones you ticked.
 - The settings (password included) are kept in `data/mcp.json`, in your assistant: they are
   part of backups and transfers. A dedicated account is better.
 - The connector runs in a sandbox when bubblewrap is installed (always under Docker): it sees its own

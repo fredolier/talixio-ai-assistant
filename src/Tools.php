@@ -1413,7 +1413,8 @@ final class Tools
         if (in_array($name, ['memory_append', 'memory_replace', 'skill_save'], true) && $this->app->privacy()->effective() !== 'internal') return null;
         if ($name === 'space_notes' && ($args['action'] ?? 'read') !== 'read') return self::brief($name, $args) . $why;
         if ($name === 'spaces' && ($args['action'] ?? 'list') === 'restore') return self::brief($name, $args) . $why;
-        if (in_array($name, self::READS, true) || str_starts_with($name, 'mcp_')) return null; // reads; a connector's changes already ask
+        // reads, and a connector tool you ticked as only reading; one of a connector you trust for everything may change things, so it asks here (1.41.4)
+        if (in_array($name, self::READS, true) || (str_starts_with($name, 'mcp_') && (in_array($name, $this->readOnly, true) || isset($this->approval[$name])))) return null;
         if (in_array($name, ['browser_click', 'browser_type', 'browser_select'], true)) return null; // asked now, on the live page, by browserGuard
         return self::brief($name, $args) . $why; // anything else, also a tool not classified yet
     }

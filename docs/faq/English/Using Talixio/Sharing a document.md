@@ -6,5 +6,6 @@
 - *Shares* lists all the links: copy, send by email, extend by 30 days, revoke, and who opened what and when.
 - You are notified the first time a link is opened.
 - **Confidential** space: password required, 30 days at most. **Secret** space: no sharing.
+- Wrong passwords: 10 from one address, or 30 from all addresses together, lock the link for 15 minutes.
 - If the links must use a different address from the one you open the app with:
   Settings → Assistant → *Public address*.

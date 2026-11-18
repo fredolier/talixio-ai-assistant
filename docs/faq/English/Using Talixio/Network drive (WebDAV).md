@@ -36,6 +36,8 @@
   - a file renamed or moved keeps its index, under its new name;
   - a deleted file or folder goes to the library's trash (30 days).
 - Folders of **Secret** spaces do not appear. The FAQ is read-only.
+- A folder that holds a Secret space's folder (say `/Clients`, with a Secret `/Clients/Board`) cannot be copied,
+  moved or deleted from the drive: the drive answers « forbidden ». Do it in the app, or move the Secret folder out first.
 - System files (`.DS_Store`, `._…`, `Thumbs.db`, `desktop.ini`…) are kept aside, outside the library.
 - Saving a file under a name already there replaces it; what it held is kept in its *Versions* (see Library).
   Two files with the same name from before 0.28.29, until they are merged: the most recent keeps its name, the others show as "name (#id).ext".

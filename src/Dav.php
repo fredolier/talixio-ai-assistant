@@ -183,6 +183,15 @@ final class Dav
         return $dir . '/' . sha1($path);
     }
 
+    /** Whether a secret space's folder is inside this one: copying, moving or deleting it would take that folder along (1.41.4). */
+    private function secretInside(string $folder): bool
+    {
+        $base = rtrim(Library::normalize($folder), '/') . '/';
+        foreach ($this->app->privacy()->strictSpaces() as $s)
+            if ($s['privacy'] === 'secret' && $s['folder'] !== '' && ($base === '/' || str_starts_with($s['folder'] . '/', $base))) return true;
+        return false;
+    }
+
     /** Folders of secret spaces stay out of the drive. */
     private function hidden(string $folder): bool
     {
@@ -376,6 +385,7 @@ final class Dav
         if (!$r) { $this->status404(); return; }
         if ($r[0] === 'folder') {
             if ($r[1] === '/') throw new \InvalidArgumentException('the root folder cannot be deleted');
+            if ($this->secretInside($r[1])) { $this->send(403, 'this folder holds a secret space'); return; }
             $this->app->library()->deleteFolder($r[1], true); // to the trash, with its files
         } else {
             $this->app->library()->deleteFile((int)$r[1]['id']);
@@ -407,6 +417,7 @@ final class Dav
         $src = $this->resolve($path);
         if (!$src) { $this->status404(); return; }
         if ($src[0] === 'folder' && ($src[1] === '/' || str_starts_with($to . '/', rtrim($src[1], '/') . '/'))) { $this->send(403, 'a folder cannot go inside itself'); return; }
+        if ($src[0] === 'folder' && $this->secretInside($src[1])) { $this->send(403, 'this folder holds a secret space'); return; }
         $existing = $this->resolve($to);
         if ($existing && !$overwrite) { $this->send(412, 'already exists'); return; }
         if (!$this->app->library()->exists($toFolder) && !$this->resolve($toFolder)) { $this->send(409, 'no such folder'); return; }

@@ -1,6 +1,8 @@
 # Notes vocales, réunions et transcription
 
 - **Note vocale** : le micro dans l'app, ou un message vocal sur Telegram/Signal. Elle est transcrite puis traitée.
+  Un message vocal que vous **transférez** (ou un fichier audio) contient les mots de quelqu'un d'autre : l'assistant le lit
+  comme un document écrit par d'autres, et ce qu'il changerait ou enverrait ensuite attend votre validation.
 - **Réunion** : micro → *Résumer la réunion* (gardez la page ouverte et le téléphone allumé), ou
   téléversez un enregistrement (tout audio de plus de 3 minutes compte comme une réunion).
   Vous recevez un résumé, les décisions, les actions (qui/quoi/quand) et les questions ouvertes,
