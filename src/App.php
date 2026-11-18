@@ -22,6 +22,7 @@ final class App
     public ?int $jobId = null;
     private ?Board $board = null;
     private ?AgentHub $agentHub = null;
+    private ?Knowledge $knowledge = null;
     private ?Privacy $privacy = null;
     /** Set in tests to replace the configured model. */
     public ?Provider $providerOverride = null;
@@ -237,6 +238,7 @@ final class App
     public function routines(): Routines { return new Routines($this); }
     public function board(): Board { return $this->board ??= new Board($this); }
     public function agentHub(): AgentHub { return $this->agentHub ??= new AgentHub($this); }
+    public function knowledge(): Knowledge { return $this->knowledge ??= new Knowledge($this); }
     public function google(): Google { return new Google($this); }
     public function microsoft(string $purpose = ''): Microsoft { return new Microsoft($this, $purpose); }
     public function spotify(): Spotify { return new Spotify($this); }

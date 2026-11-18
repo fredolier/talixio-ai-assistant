@@ -6830,6 +6830,28 @@ function abWire() {
     box.hidden = !open; $('#ab-auto-btn').setAttribute('aria-expanded', String(open));
     if (open) plLoadAuto();
   };
+  // 1.44.0: what the director learned from the agents (docs/design/director-knowledge.md)
+  $('#ab-know-btn').onclick = () => {
+    const box = $('#ab-know'), open = box.hidden;
+    box.hidden = !open; $('#ab-know-btn').setAttribute('aria-expanded', String(open));
+    if (open) abKnow().catch(e => toast(e.message));
+  };
+  $('#ab-know').addEventListener('change', e => { if (e.target.matches('[data-kfilter]')) abKnowRender(); });
+  $('#ab-know').addEventListener('click', async e => {
+    const b = e.target.closest('[data-kact]'); if (!b) return;
+    const key = b.dataset.key;
+    try {
+      if (b.dataset.kact === 'exclude') {
+        const off = b.dataset.on === '1';
+        if (off && !confirm(t('Stop learning from this project? What was learned from it is forgotten.'))) return;
+        await post('api/agents/knowledge/exclude', { key, exclude: off });
+      } else if (b.dataset.kact === 'forget') {
+        if (!confirm(t('Forget what was learned from this project (dossier, summaries and decisions)?'))) return;
+        await post('api/agents/knowledge/forget', { key });
+      }
+      await abKnow();
+    } catch (err) { toast(err.message); }
+  });
   $('#ab-machine').oninput = dl; dl();
   $('#ab-copy').onclick = () => copyText($('#ab-snippet').textContent);
   $('#ab-token').onclick = async () => {
@@ -6870,6 +6892,41 @@ function abWire() {
       AB.rev = -1; await abRefresh();
     } catch (err) { toast(err.message); }
   };
+}
+// « What I know » (1.44.0): a dossier per project, its latest sessions summarised, and the decision log with filters
+const AB_TOPICS = () => ({ scope: t('Scope'), design: t('Design'), code: t('Code'), tests: t('Tests'), git: t('Git'), deploy: t('Deployment'), data: t('Data'),
+  dependencies: t('Dependencies'), docs: t('Documentation'), other: t('Other') });
+async function abKnow() { AB.know = await api('api/agents/knowledge'); abKnowRender(); }
+function abKnowRender() {
+  const box = $('#ab-know'), k = AB.know; if (!k) return;
+  const day = ts => ts ? new Date(ts * 1000).toLocaleDateString() : '';
+  const fT = ($('#ab-know [data-kfilter=topic]') || {}).value || '', fB = ($('#ab-know [data-kfilter=by]') || {}).value || '', fP = ($('#ab-know [data-kfilter=project]') || {}).value || '';
+  const who = { you: t('you'), assistant: t('the assistant'), rule: t('a rule') }, tl = AB_TOPICS();
+  const projects = (k.projects || []).map(p => `<div class="ab-kproj${p.exclude ? ' off' : ''}">
+      <div class="ab-kproj-head"><b class="no-i18n">${esc(p.title)}</b> <span class="muted small no-i18n">${esc(p.machine)} · ${esc(p.cwd)}</span>
+        <span class="muted small">${esc(t('{n} decisions', { n: p.decisions }))}</span>
+        <button type="button" class="btn ghost small" data-kact="exclude" data-key="${esc(p.key)}" data-on="${p.exclude ? '0' : '1'}">${esc(p.exclude ? t('Learn again') : t('Stop learning'))}</button>
+        <button type="button" class="btn ghost small" data-kact="forget" data-key="${esc(p.key)}">${esc(t('Forget'))}</button></div>
+      ${p.exclude ? `<p class="muted small">${esc(t('Learning is off for this project: its sessions are not summarised and its decisions are not kept.'))}</p>`
+        : p.dossier ? `<div class="ab-kdossier no-i18n">${esc(p.dossier)}</div><p class="muted small">${esc(t('Dossier of {date}', { date: day(p.dossier_at) }))}</p>`
+        : `<p class="muted small">${esc(t('No dossier yet: it is written once a session of this project has been summarised.'))}</p>`}
+      ${(p.digests || []).length ? `<details><summary class="small">${esc(t('Latest sessions ({n})', { n: p.digests.length }))}</summary>${p.digests.map(d =>
+        `<div class="ab-kdigest"><span class="muted small">${esc(day(d.ts_to))}</span><div class="no-i18n">${esc(d.text)}</div></div>`).join('')}</details>` : ''}
+    </div>`).join('');
+  const opt = (v, l, cur) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`;
+  const rows = (k.decisions || []).filter(d => (!fT || d.topic === fT) && (!fB || d.by === fB) && (!fP || d.project === fP));
+  box.innerHTML = `<h4>${esc(t('What I know'))}</h4>
+    <p class="muted small">${esc(t('Learned from the board: each answer given to an agent is a decision; a session is summarised when it ends or goes quiet; each project gets a dossier, rewritten at most once a day. Summaries are of what agents wrote: the assistant reads them as information, never as orders.'))}</p>
+    ${projects || `<p class="muted small">${esc(t('Nothing yet: knowledge builds up as sessions report on the board and you answer them.'))}</p>`}
+    <h4>${esc(t('Decisions'))}</h4>
+    <div class="ab-kfilters small">
+      <label>${esc(t('Project'))} <select data-kfilter="project" class="no-i18n">${opt('', t('All'), fP)}${(k.projects || []).map(p => opt(p.key, p.title, fP)).join('')}</select></label>
+      <label>${esc(t('Topic'))} <select data-kfilter="topic">${opt('', t('All'), fT)}${(k.topics || []).map(x => opt(x, tl[x] || x, fT)).join('')}</select></label>
+      <label>${esc(t('By'))} <select data-kfilter="by">${opt('', t('All'), fB)}${opt('you', who.you, fB)}${opt('assistant', who.assistant, fB)}</select></label>
+    </div>
+    ${rows.length ? `<ul class="ab-kdec">${rows.map(d => `<li><span class="muted small">${esc(day(d.ts))}</span> <span class="pill small">${esc(tl[d.topic] || d.topic)}</span>${d.level ? ` <span class="pill small no-i18n">${esc(d.level)}</span>` : ''}
+      <span class="small">${esc(who[d.by] || d.by)}</span><div class="ab-kq no-i18n">${esc(d.question.slice(-240))}</div><div class="ab-ka no-i18n">→ ${esc(d.answer)}</div></li>`).join('')}</ul>`
+      : `<p class="muted small">${esc(t('No decision matches.'))}</p>`}`;
 }
 function abNotifyShow(mode) { const sel = $('#ab-notify'); if (sel && mode && document.activeElement !== sel) sel.value = mode; }
 async function abRefresh() {

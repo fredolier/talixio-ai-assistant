@@ -1963,6 +1963,12 @@ final class Web
                 catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
             })(),
             $path === '/api/agents/notify' && $m === 'POST' => $hub->setNotify((string)($b['mode'] ?? '')),
+            $path === '/api/agents/knowledge' && $m === 'GET' => $this->app->knowledge()->overview(), // 1.44.0: what the director learned
+            $path === '/api/agents/knowledge/exclude' && $m === 'POST' => (function () use ($b) {
+                try { return $this->app->knowledge()->setExclude((string)($b['key'] ?? ''), !empty($b['exclude'])); }
+                catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
+            })(),
+            $path === '/api/agents/knowledge/forget' && $m === 'POST' => $this->app->knowledge()->forgetProject((string)($b['key'] ?? '')),
             $path === '/api/agents/token' && $m === 'POST' => (function () use ($hub) { $hub->token(true); return ['ok' => true, 'message' => I18n::t($this->app, 'New token: download the hook script again on each machine.')]; })(),
             $id('thread') !== null && $m === 'GET' => $hub->thread($id('thread')),
             $id('seen') !== null && $m === 'POST' => $hub->markSeen($id('seen')),

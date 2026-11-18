@@ -3,6 +3,19 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.44.0 (2026-11-18)
+
+The director starts to turn what its agents say into knowledge (levels 1 and 2 of `docs/design/director-knowledge.md`).
+
+- **A decision log.** Every answer given to a board session is now kept as a decision. That covers a reply from the board, an answer typed in the session's terminal, Allow and Deny, and what the assistant sent by itself. Each decision records the question, the answer, who gave it, the project (machine and folder), a topic and, when the assistant looked at the turn, its level. A topic is one of: scope, design, code, tests, Git, deployment, data, dependencies, documentation or other. The board model now also gives the topic. Otherwise it is read from the words.
+- **Session summaries.** A session that ended, or went quiet for half an hour after at least six new events, is summarised once by the fast model. The summary covers the goal, what was done, each decision with who made it, and what is open. The log goes to the model between markers that agent text cannot close.
+- **A dossier per project.** In a later tick than the summaries, and at most once a day, each project's dossier is rewritten from its previous version, its latest summaries and its decisions. It covers what the project is, where it stands, recent work, how the user decides there, and what is open.
+- **Used where the assistant decides.** For an agent's turn, the board model now gets the project's dossier (as data, between markers) and past decisions. Those of the same project come first, then those of the same topic. Before, it saw only the scored predictions and the relay's answers, whatever the project. The relay's answers are still read until the relay goes.
+- **What I know.** A new section at the top of the board (Pilotage → Agents) lists each project with its dossier, its latest summaries and its decision count. The decision log can be filtered by project, topic and author. **Stop learning** turns learning off for a project and forgets what was learned from it; **Forget** clears it once. In the chat, the new read-only tool `agents_knowledge` gives the same. Its output counts as written by others, so changes right after it wait for approval.
+- Forgetting a session on the board now also forgets its summaries. Its decisions stay: they are the user's own.
+- **Help pages, in both languages:** Pilotage (What I know).
+- Tested (PHP, `tests/more/knowledge.php`, which fails before this change): topics; your board reply, a terminal answer and a denial are logged, with project and topic; a notice is not a decision; the assistant's own answer carries the model's level and topic, and the board prompt asks for a topic. Precedents come from the log, same project first, then same topic. An ended session gets one summary, and the agent cannot close the markers. A quiet session needs six events and half an hour. The dossier is written in a later tick from the summaries and decisions, and is not rewritten without news. The board prompt carries the dossier and the precedent. `agents_knowledge` gives the dossier, summaries and decisions, and filters by topic. An excluded project gets no summary and no decisions. Forgetting a session or a project removes what it should. Tested (browser, which fails before the page change): What I know lists the project, its machine and its decisions; the topic filter works; Stop learning and Learn again work. **Not tried**: summaries and dossiers written by the real model. The tests use a stand-in, so their quality on real sessions is not yet known.
+
 ## 1.43.0 (2026-11-18)
 
 The agent board takes over what only the cloud relay still did: the badge, notifications and the chat.
