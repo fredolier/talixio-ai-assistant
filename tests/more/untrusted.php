@@ -179,5 +179,28 @@ check('untrusted: ... while a read still runs', !str_contains($T->run('kb_list',
 check('untrusted: ... and space_notes reads without asking', !str_contains($T->run('space_notes', ['action' => 'read']), 'Waiting for'));
 Privacy::trustAgain();
 
+// ---- what is recalled by itself (1.41.2): the chat adds past snippets to each turn, outside any tool, as the user's own
+$mine = (int)$app->library()->saveNote('/Notes', 'garden.md', "# Garden\nPrune the quince tree in March.")['id'];
+$app->files()->processPending(60);
+Privacy::begin();
+$hits = $app->recall()->autoRecall('quince tree', PHP_INT_MAX, 0.99);
+check('untrusted: a note of the user\'s own is recalled by itself, and the turn stays trusted', str_contains($hits, 'quince') && !Privacy::$untrusted, $hits);
+$hits = $app->recall()->autoRecall('Invoice 4471 Acme', PHP_INT_MAX, 0.99);
+check('untrusted: a document written by others is not recalled by itself', !str_contains($hits, 'evil@example.org') && !Privacy::$untrusted, $hits);
+$fake = new FakeModel(); $app->providerOverride = $fake;
+$fake->script = function ($last, $tools, $on) use ($usage) { $usage($on); return $tools->run('memory_append', ['file' => 'MEMORY.md', 'text' => '- invoice paid']); };
+$r = $app->agent()->chat('web', 'Note that Acme invoice 4471 is paid');
+$seen = json_encode(end($fake->calls));
+check('untrusted: so a chat turn about it is not given what it says, and stays the user\'s', !str_contains($seen, 'evil@example.org') && $r === 'appended', $r);
+$app->providerOverride = null;
+Privacy::begin();
+$r = $T->run('search_memory', ['query' => 'Invoice 4471 Acme']);
+check('untrusted: search_memory finding an imported file makes the work untrusted', str_contains($r, 'Invoice 4471') && Privacy::$untrusted, $r);
+$tries($T, 'search_memory found an imported file');
+Privacy::begin();
+$T->run('search_memory', ['query' => 'quince tree']);
+check('untrusted: search_memory finding only the user\'s note keeps it trusted', !Privacy::$untrusted);
+Privacy::trustAgain();
+
 foreach ($envSaved as $k => $v) $v === false ? putenv($k) : putenv("$k=$v");
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

@@ -109,6 +109,18 @@ check('agent start: the assistant asks before starting one, saying where and wha
 $app->cfg->autoApprove[] = 'agent_start'; // as when the person approved it
 $res = $app->tools->run('agent_start', ['machine' => 'laptop', 'folder' => '/home/me/shop', 'prompt' => 'Write the changelog']);
 check('agent start: once approved, it is queued for the machine', str_starts_with($res, 'queued as job:') && count($hub->board()['jobs']) === $before + 1, $res);
+// a coding agent's model runs outside the assistant: nothing goes to one from a confidential space (1.41.2), like a delegated code session
+$sec = $app->spaces()->save(['name' => 'Dossier RH', 'privacy' => 'confidential']);
+$app->cfg->autoApprove[] = 'agent_answer';
+$was = $app->space; $app->space = (int)$sec['id'];
+$jobs = count($hub->board()['jobs']);
+$res = $app->tools->run('agent_start', ['machine' => 'laptop', 'folder' => '/home/me/shop', 'prompt' => 'Summarise the salaries']);
+$res2 = $app->tools->run('agent_answer', ['session' => 'claude-code:x1', 'kind' => 'reply', 'text' => 'The salaries are …']);
+check('agent start: from a confidential space nothing is started or sent to an agent, and it says why', str_starts_with($res, 'error: not sent') && str_contains($res, 'Confidential')
+    && str_starts_with($res2, 'error: not sent') && count($hub->board()['jobs']) === $jobs, "$res | $res2");
+$res3 = $app->tools->run('agent_answer', ['session' => 'claude-code:x1', 'kind' => 'deny']);
+check('agent start: answering a permission carries no content: still possible there', !str_starts_with($res3, 'error: not sent'), $res3);
+$app->space = $was;
 
 // the scripts
 $sh = $hub->script('laptop', 'agent-listen.sh');

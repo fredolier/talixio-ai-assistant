@@ -194,7 +194,8 @@ final class Pilot
     public function boardPrompt(array $row): string
     {
         $s = $this->state();
-        $msg = mb_substr((string)$row['last_message'], -4000);
+        // the agent cannot close the markers itself and write past them as if it were the prompt (1.41.2)
+        $msg = str_ireplace(['<<<AGENT', 'AGENT>>>'], ['<<< AGENT', 'AGENT >>>'], mb_substr((string)$row['last_message'], -4000));
         $prec = $this->precedents($msg);
         $mind = '';
         try { $mind = trim($this->app->mind()->section(0, false)); } catch (\Throwable) {}
@@ -232,6 +233,9 @@ final class Pilot
         $mode = $s['autonomy'][$level];
         $msg = (string)$row['last_message'];
         [$sendable, $why] = $this->limits($s, $level, $confidence, $msg . ' ' . $answer);
+        // a command or a name the model wrote itself is not « a routine choice »: only what the agent offered may be sent alone (1.41.2)
+        preg_match_all('/`([^`]+)`/', $answer, $code);
+        foreach ($code[1] as $c) if ($sendable && !str_contains($msg, $c)) [$sendable, $why] = [false, 'the answer holds a command or a name the agent did not offer'];
         $name = basename((string)$row['cwd']) ?: (string)$row['agent'];
         if ($row['machine'] !== '') $name .= " ({$row['machine']})";
         $hub = $this->app->agentHub();
@@ -362,10 +366,17 @@ final class Pilot
         };
     }
 
-    /** Anything touching what the user keeps for good is never sent by the assistant, whatever the level says. */
+    /**
+     * Anything touching what the user keeps for good is never sent by the assistant, whatever the level says: the last guard
+     * when the model misjudges a turn (tests/eval/board_turns.json, 1.41.2). It errs on the side of a suggestion.
+     */
     public static function sensitive(string $text): bool
     {
-        return (bool)preg_match('/\b(push|force.?push|deploy|déploi|production|prod\b|delete|supprim|drop table|rm -rf|credential|secret|password|mot de passe|token|api key|clé api|e-?mail|mail to|envoyer un mail|payment|paiement|invoice|facture|sign|signer)/iu', $text);
+        return (bool)preg_match('/\b(push|pouss|force.?push|merg|fusionn|rebase|reset --hard|git clean|deploy|déploi|production|prod\b|publi|release|ship|go live|en ligne|live database|migrat'
+            . '|delete|supprim|remov|effac|erase|wipe|purge|truncat|drop\b|rm -|rm\b|chmod|chown|sudo|credential|secret|password|mot de passe|token|api key|clé api|\.env\b'
+            . '|e-?mail|mail to|envoyer un mail|send|envo[iy]|subscriber|abonn|payment|paiement|invoice|factur|pay\b|buy|achet|purchas|subscription|upgrade the plan|pric|tarif|prix'
+            . '|sign|signer|contract|contrat|hire|hiring|recrut|embauch|salar|skip|désactiv|disable|protection|install|dependenc|dépendanc|upload|téléver|curl|wget|https?:)/iu', $text)
+            || (bool)preg_match('/\|\s*(sudo\s+)?(ba|z)?sh\b|[$€£]\s?\d|\d\s?[$€£]|\b(the|our|a|les?|aux|des|du) (clients?|customers?)\b/iu', $text);
     }
 
     /** The user answered a question the assistant had a prediction for: score it. */

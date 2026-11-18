@@ -108,7 +108,7 @@ No account needed, from OpenStreetMap and open data.
 
 ## Banking
 - **Qonto (official)**: accounts, transactions, invoices and transfers of your business account. Online
-  service: once added, click **Sign in** in Settings → Connectors. Sensitive operations are approved in the
+  service: once added, click **Sign in** in Settings → Connected accounts → Connectors (MCP). Sensitive operations are approved in the
   Qonto app. [▶ Install](?connector=https://mcp.qonto.com/mcp&name=qonto)
 
 ## Law and compliance
@@ -129,7 +129,7 @@ No account needed, from OpenStreetMap and open data.
   agreement: it may stop working. [▶ Install](?connector=https://github.com/Racimy/Allocin-MCP)
 
 ## Online services (SaaS)
-The official services below connect with your account: once added, click **Sign in** in Settings → Connectors.
+The official services below connect with your account: once added, click **Sign in** in Settings → Connected accounts → Connectors (MCP).
 The assistant only gets what you allow.
 
 - **Notion (official)**: search, read and write your pages and databases.
@@ -163,16 +163,16 @@ The assistant only gets what you allow.
 - **Wolfram (official)**: calculations, unit conversions, scientific and everyday data.
   [▶ Install](?connector=https://agenttools.wolfram.com/mcp&name=wolfram)
 - **Brevo (official)**: contacts and lists, email and SMS campaigns, transactional emails, statistics. Needs a Brevo
-  MCP key (Brevo → SMTP & API → API keys, tick *MCP server*). Once added, in Settings → Connectors set the
+  MCP key (Brevo → SMTP & API → API keys, tick *MCP server*). Once added, in Settings → Connected accounts → Connectors (MCP) set the
   `Authorization` header to `Bearer ` followed by your key. The key gives full access to your Brevo account.
   [▶ Install](?connector=https://mcp.brevo.com/v1/brevo/mcp&name=brevo&headers=Authorization)
 - **lemlist (official)**: prospecting campaigns, leads, sequences and their statistics. Once added, click
-  **Sign in** in Settings → Connectors and choose your lemlist team. The assistant gets full access to that team:
+  **Sign in** in Settings → Connected accounts → Connectors (MCP) and choose your lemlist team. The assistant gets full access to that team:
   it can add leads and change campaigns.
   [▶ Install](?connector=https://app.lemlist.com/mcp&name=lemlist)
 - **Jira and Confluence (Atlassian, official)**: search, read, create and update issues and pages. For Atlassian
   Cloud. An organisation admin must first allow API tokens for the Rovo MCP server (Atlassian Administration). Then
-  create an API token (id.atlassian.com → Security → API tokens), and in Settings → Connectors set the
+  create an API token (id.atlassian.com → Security → API tokens), and in Settings → Connected accounts → Connectors (MCP) set the
   `Authorization` header to `Basic ` followed by `your-email:your-token` encoded in Base64 (on a computer:
   `echo -n 'you@example.com:TOKEN' | base64`). The assistant gets the same rights as your account.
   [▶ Install](?connector=https://mcp.atlassian.com/v1/mcp&name=atlassian&headers=Authorization)
@@ -183,13 +183,13 @@ The assistant only gets what you allow.
   [▶ Install](?connector=https://github.com/sachitha7/mcp-server-dolibarr&name=dolibarr)
 - **Zapier and Make**: connect thousands of apps (Google Drive, Dropbox, Gmail, Trello…). The address is
   specific to your account: create your server at mcp.zapier.com (or in Make), copy its address, then add it in
-  Settings → Connectors. No direct link here.
+  Settings → Connected accounts → Connectors (MCP). No direct link here.
 
 ## Hosting and cloud
 
 - **OVHcloud (official, beta)**: manage your servers, instances, storage, network, databases and account. You sign
   in with your OVHcloud account; its permissions (IAM) decide what the assistant may do. Address for Europe; for
-  another region, replace `eu` in Settings → Connectors.
+  another region, replace `eu` in Settings → Connected accounts → Connectors (MCP).
   [▶ Install](?connector=https://mcp.eu.ovhcloud.com/mcp&name=ovhcloud)
 - **Hostinger (official)**: websites, VPS, domains and DNS, mailboxes, subscriptions. Needs an API key (hPanel →
   Profile → API), to put in `HOSTINGER_API_TOKEN`.

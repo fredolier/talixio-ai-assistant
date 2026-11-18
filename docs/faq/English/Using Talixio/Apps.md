@@ -31,7 +31,7 @@ Sources an app can declare:
 | Search | a search in the library |
 | Tasks, Calendar, Contacts | those of Talixio |
 | Script | one of your saved scripts |
-| Connector | one tool of a connector, **only if you marked it *only reading*** in Settings → Connectors |
+| Connector | one tool of a connector, **only if you ticked its *Runs without asking* box** in Settings → Connected accounts → Connectors (MCP) |
 
 ## Why it is safe
 
@@ -40,7 +40,7 @@ An app is not free code. The assistant writes it with a small kit (charts, table
 - it runs in a sealed frame: no network, no cookies, no access to the rest of the app or your session;
 - it gets data only from the **sources it declares**: a fixed web address, a library file or folder, a library
   search, the tasks of its space, your calendar, your contacts, one of your saved scripts, or a connector tool you
-  marked *only reading*. Nothing else;
+  ticked *Runs without asking*. Nothing else;
 - **every app the assistant makes or changes waits for your approval.** Open it: you see the sources it reads (and
   the code if you like), then *Approve*. Until then it does not run at all and gets no data;
 - an app belongs to a space and follows its privacy level: apps of a Secret space are not shown elsewhere and never
@@ -48,7 +48,7 @@ An app is not free code. The assistant writes it with a small kit (charts, table
   web or a connector either: what it reads stays in the app. Script arguments may not start with `-`.
 
 A connector tool can do things (send, delete, pay), and what the connector says about itself is not trusted: an app
-may only call a tool *you* marked as only reading, with the arguments fixed when you approved it.
+may only call a tool *you* ticked *Runs without asking*, with the arguments fixed when you approved it.
 
 ## Sharing an app
 

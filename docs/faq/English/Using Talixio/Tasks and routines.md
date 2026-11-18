@@ -10,6 +10,11 @@ which comes back with a report.
 - **Today** view (overdue, today, next up) and one-line quick add: "Call Alex tomorrow 9am #sales 30m p2".
 - **Board** with *All spaces*: one row per space, which you can fold; drag a card into another space's row to
   move it there.
+- **Overall order** view: every open task of all your spaces in one ranked list, what to do first. Drag a task, or use
+  ↑ ↓, to change its place; × takes it out of the order. Below, *Not in the order* lists the other open tasks (by
+  priority and due date), each with **Add to the order**. A line at the top sums up each space: open tasks, hours left,
+  late ones. **Ask the assistant for a proposal** opens the chat in General with a request to propose an order; it sets
+  it only once you agree.
 - **List** view: a sortable table grouped by due date, status, space or priority, with quick views (This week,
   Critical & high, Waiting, No date). Tick several tasks to change their status, date, priority, space or tags at
   once, or to move them to the trash. Keyboard: arrows or j/k, x to select, Enter to open, Esc to clear.

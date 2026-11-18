@@ -24,19 +24,19 @@ Tout se fait depuis l'app, sans administrateur.
    | `TALIXIO_PASSWORD` | son mot de passe |
 
 5. **Installer**. Après une minute au plus (installation des dépendances), la fenêtre affiche
-   « Prêt : n outil(s) de « anki » ». Les outils apparaissent dans Réglages → Connecteurs, sous `anki`.
+   « Prêt : n outil(s) de « anki » ». Les outils apparaissent dans Réglages → Comptes connectés → Connecteurs (MCP), sous `anki`.
 
 ## Utiliser
 - Demandez simplement : « Quelles tâches ai-je ouvertes dans anki ? ».
 - L'assistant a aussi **son propre tableau de tâches** (page Tâches). Dites « dans anki » quand ce n'est pas
   évident : sinon il peut utiliser son tableau à lui.
 - Ses outils **demandent votre validation** dans l'app tant que vous n'avez pas marqué ceux qui lisent
-  (lister, chercher) dans Réglages → Connecteurs. Une fois en confiance, ajoutez `"trust": "all"` à l'entrée `anki` dans
-  Réglages → Connecteurs → *Configuration*.
+  (lister, chercher) dans Réglages → Comptes connectés → Connecteurs (MCP). Une fois en confiance, ajoutez `"trust": "all"` à l'entrée `anki` dans
+  Réglages → Comptes connectés → Connecteurs (MCP) → *Configuration*.
 - Ça marche aussi depuis le téléphone, Telegram ou Signal : c'est l'assistant qui parle à anki.
 
 ## Si ça ne marche pas
-Le message d'erreur s'affiche dans la fenêtre d'installation et dans la carte `anki` de Réglages → Connecteurs.
+Le message d'erreur s'affiche dans la fenêtre d'installation et dans la carte `anki` de Réglages → Comptes connectés → Connecteurs (MCP).
 
 | Message | Que faire |
 |---|---|
@@ -45,7 +45,7 @@ Le message d'erreur s'affiche dans la fenêtre d'installation et dans la carte `
 | `installing dependencies` en erreur | l'assistant n'a pas pu joindre npm : réessayez plus tard, ou prévenez l'administrateur (accès Internet du serveur) |
 | « No server found » | le `.zip` ne contient pas le bon dossier : il faut celui où se trouve `package.json` |
 
-*Vérifier à nouveau* (Réglages → Connecteurs) relance le serveur et relit ses outils.
+*Vérifier à nouveau* (Réglages → Comptes connectés → Connecteurs (MCP)) relance le serveur et relit ses outils.
 
 ## Mettre à jour, retirer
 - **Nouvelle version** du serveur MCP : importez le nouveau `.zip` et réinstallez sous le nom `anki`.

@@ -1,7 +1,7 @@
 # Connectors (MCP)
 
 A connector gives the assistant the tools of another service: GitHub, Notion, your smart home, another
-application (for example a task manager)… Settings → **Connectors (MCP)**.
+application (for example a task manager)… Settings → Connected accounts → **Connectors (MCP)**.
 
 Connectors ready to install in one click: *Connectors / Connector list*.
 
@@ -13,7 +13,7 @@ a `url`, with a token in `headers`, or the **Sign in** button for services that 
 ## A connector published on GitHub
 A "local" MCP server is a small program (Node.js or Python). If it is on GitHub, its address is enough:
 
-1. Settings → Connectors → **Install a connector…**
+1. Settings → Connected accounts → Connectors (MCP) → **Install a connector…**
 2. Paste the repository's address (`https://github.com/owner/repo`, or
    `https://github.com/owner/repo/tree/main/folder` if the server is in a sub-folder) → **Fetch**.
    Talixio downloads the repository and keeps it as a `.zip` in **/Connecteurs**.
@@ -32,7 +32,7 @@ For a server that is not on GitHub (or in a private repository):
 1. Compress **its folder** into a `.zip` (the one that contains `package.json`, or `src/server.js`, `server.js`,
    `index.js`, `server.py`…).
 2. Upload the `.zip` to the library, for example into **/Connectors**.
-3. Open the file → **Install as a connector** (or Settings → Connectors → *Install a
+3. Open the file → **Install as a connector** (or Settings → Connected accounts → Connectors (MCP) → *Install a
    connector…*).
 4. Give it a short name (`anki`) and fill in the settings it reads (address, account, password…):
    Talixio finds them in its code and its README.
@@ -42,7 +42,7 @@ For a server that is not on GitHub (or in a private repository):
 - **Update**: upload the new `.zip` and reinstall under the same name. A password left
   empty keeps the old one.
 - **Remove**: delete its entry in *Configuration*, then *Save and connect*.
-- Every tool **asks for your approval** until you say otherwise. In Settings → Connectors, each
+- Every tool **asks for your approval** until you say otherwise. In Settings → Connected accounts → Connectors (MCP), each
   connector is a card you unfold: it shows what the connector does, then a table of its tools with
   what each one does. The tools are grouped by what they seem to do (*seem to only read*, *not sure*,
   *can change or send things*); this guess comes from the connector's hints and the tool's name, so
@@ -74,5 +74,5 @@ A site with no connector and no public API: the assistant can learn the API its 
 
 Step-by-step examples: *Connectors / anki.talixio.com* (a connector to install) and *Connectors / Home Assistant* (a remote service, by its address).
 
-On a server shared by several people, connectors the admin approved are in Settings → Connectors → *From the store*,
+On a server shared by several people, connectors the admin approved are in Settings → Connected accounts → Connectors (MCP) → *From the store*,
 to install with one button (see *Administration / The store*).

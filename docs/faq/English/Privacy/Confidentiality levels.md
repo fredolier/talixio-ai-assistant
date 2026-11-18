@@ -34,6 +34,9 @@ If a question asked in General reads a confidential document, the rest of the an
   that space.
 - **Other spaces**: routines, jobs and board tasks of a space the model may not read are not listed and
   cannot be changed from elsewhere; a Secret space's folder is not shown outside it.
+- **Coding agents**: from a Confidential or Secret space (or once the work has read something at that level),
+  nothing is sent to a coding agent: no reply to its question and no new session, since it runs outside the
+  assistant. Allowing, refusing and stopping an agent still work.
 - **Web search**: the provider's own web search is turned off as soon as the work is above
   Internal; Talixio's web search asks for your approval (Confidential) or is refused (Secret).
 - **Content written by others**: once an answer has read an email, a web page (the model's own web search

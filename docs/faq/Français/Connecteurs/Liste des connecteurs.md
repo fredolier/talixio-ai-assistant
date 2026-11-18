@@ -8,7 +8,7 @@ Talixio s'ouvre dans un nouvel onglet et prépare l'installation. Vous gardez la
 - Pour un **service en ligne**, Talixio vous demande de confirmer, puis l'ajoute et s'y connecte.
 
 Sur un serveur partagé, ces connecteurs sont aussi dans le catalogue : dans l'assistant, ouvrez **Réglages →
-Comptes connectés → Connecteurs → Depuis le catalogue** et installez-les de là.
+Comptes connectés → Connecteurs (MCP) → Depuis le catalogue** et installez-les de là.
 
 Vous pouvez aussi demander à l'assistant : « installe le connecteur Annuaire des entreprises ».
 
@@ -108,7 +108,7 @@ Des connecteurs sans compte, à partir d'OpenStreetMap et des données ouvertes.
 
 ## Banque
 - **Qonto (officiel)** : comptes, transactions, factures, virements de votre compte pro. Service en ligne :
-  après l'ajout, cliquez sur **Se connecter** dans Réglages → Connecteurs. Les opérations sensibles se
+  après l'ajout, cliquez sur **Se connecter** dans Réglages → Comptes connectés → Connecteurs (MCP). Les opérations sensibles se
   valident dans l'application Qonto. [▶ Installer](?connector=https://mcp.qonto.com/mcp&name=qonto)
 
 ## Droit et conformité
@@ -130,7 +130,7 @@ Des connecteurs sans compte, à partir d'OpenStreetMap et des données ouvertes.
 
 ## Services en ligne (SaaS)
 Les services officiels ci-dessous se connectent avec votre compte : une fois ajouté, cliquez sur **Se connecter**
-dans Réglages → Connecteurs. L'assistant n'a accès qu'à ce que vous autorisez.
+dans Réglages → Comptes connectés → Connecteurs (MCP). L'assistant n'a accès qu'à ce que vous autorisez.
 
 - **Notion (officiel)** : chercher, lire et écrire vos pages et bases de données.
   [▶ Installer](?connector=https://mcp.notion.com/mcp&name=notion)
@@ -163,18 +163,18 @@ dans Réglages → Connecteurs. L'assistant n'a accès qu'à ce que vous autoris
 - **Wolfram (officiel)** : calculs, conversions, données scientifiques et pratiques.
   [▶ Installer](?connector=https://agenttools.wolfram.com/mcp&name=wolfram)
 - **Brevo (officiel)** : contacts et listes, campagnes e-mail et SMS, e-mails transactionnels, statistiques. Il faut
-  une clé MCP Brevo (Brevo → SMTP & API → Clés API, cocher *Serveur MCP*). Une fois ajouté, dans Réglages →
-  Connecteurs, mettez dans l'en-tête `Authorization` : `Bearer ` suivi de votre clé. La clé donne un accès complet à
+  une clé MCP Brevo (Brevo → SMTP & API → Clés API, cocher *Serveur MCP*). Une fois ajouté, dans Réglages → Comptes connectés →
+  Connecteurs (MCP), mettez dans l'en-tête `Authorization` : `Bearer ` suivi de votre clé. La clé donne un accès complet à
   votre compte Brevo.
   [▶ Installer](?connector=https://mcp.brevo.com/v1/brevo/mcp&name=brevo&headers=Authorization)
 - **lemlist (officiel)** : campagnes de prospection, leads, séquences et leurs statistiques. Une fois ajouté,
-  cliquez sur **Se connecter** dans Réglages → Connecteurs et choisissez votre équipe lemlist. L'assistant a un accès
+  cliquez sur **Se connecter** dans Réglages → Comptes connectés → Connecteurs (MCP) et choisissez votre équipe lemlist. L'assistant a un accès
   complet à cette équipe : il peut ajouter des leads et modifier des campagnes.
   [▶ Installer](?connector=https://app.lemlist.com/mcp&name=lemlist)
 - **Jira et Confluence (Atlassian, officiel)** : chercher, lire, créer et modifier tickets et pages. Pour Atlassian
   Cloud. Un administrateur de l'organisation doit d'abord autoriser les jetons d'API pour le serveur Rovo MCP
   (Atlassian Administration). Créez ensuite un jeton d'API (id.atlassian.com → Sécurité → Jetons d'API), puis dans
-  Réglages → Connecteurs mettez dans l'en-tête `Authorization` : `Basic ` suivi de `votre-email:votre-jeton` encodé
+  Réglages → Comptes connectés → Connecteurs (MCP) mettez dans l'en-tête `Authorization` : `Basic ` suivi de `votre-email:votre-jeton` encodé
   en Base64 (sur un ordinateur : `echo -n 'vous@example.com:JETON' | base64`). L'assistant a les mêmes droits que
   votre compte.
   [▶ Installer](?connector=https://mcp.atlassian.com/v1/mcp&name=atlassian&headers=Authorization)
@@ -186,13 +186,13 @@ dans Réglages → Connecteurs. L'assistant n'a accès qu'à ce que vous autoris
   [▶ Installer](?connector=https://github.com/sachitha7/mcp-server-dolibarr&name=dolibarr)
 - **Zapier et Make** : relient des milliers d'applications (Google Drive, Dropbox, Gmail, Trello…). L'adresse est
   propre à votre compte : créez votre serveur sur mcp.zapier.com (ou dans Make), copiez son adresse, puis
-  ajoutez-la dans Réglages → Connecteurs. Pas de lien direct ici.
+  ajoutez-la dans Réglages → Comptes connectés → Connecteurs (MCP). Pas de lien direct ici.
 
 ## Hébergeurs et cloud
 
 - **OVHcloud (officiel, bêta)** : gérer vos serveurs, instances, stockage, réseau, bases de données et votre compte.
   Vous vous connectez avec votre compte OVHcloud ; ses droits (IAM) décident de ce que l'assistant peut faire.
-  Adresse pour l'Europe ; pour une autre région, remplacez `eu` dans Réglages → Connecteurs.
+  Adresse pour l'Europe ; pour une autre région, remplacez `eu` dans Réglages → Comptes connectés → Connecteurs (MCP).
   [▶ Installer](?connector=https://mcp.eu.ovhcloud.com/mcp&name=ovhcloud)
 - **Hostinger (officiel)** : sites, VPS, domaines et DNS, boîtes mail, abonnements. Demande une clé d'API
   (hPanel → Profil → API), à mettre dans `HOSTINGER_API_TOKEN`.

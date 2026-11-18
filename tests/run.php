@@ -1832,7 +1832,8 @@ $sk->delete('summ-x');
 $app->providerOverride = $fake;
 $fake->script = function ($last, $tools) {
     if (str_contains($last, '## Steps taken')) { $tools->run('skill_save', ['name' => 'invoice-check', 'description' => 'When asked to check unpaid invoices', 'content' => '1. mail_list query=invoice']); return 'saved'; }
-    foreach (['list_tasks', 'list_jobs', 'usage_report', 'search_memory'] as $t) $tools->run($t, $t === 'search_memory' ? ['query' => 'invoice'] : []);
+    // the search finds nothing written by others (since 1.41.2, an imported invoice.pdf found here would make the skill wait for approval)
+    foreach (['list_tasks', 'list_jobs', 'usage_report', 'search_memory'] as $t) $tools->run($t, $t === 'search_memory' ? ['query' => 'qzxv-nothing'] : []);
     return 'Two invoices are unpaid.';
 };
 // a clean conversation: since the audit (S3), a job report that read content written by others (an earlier meeting
