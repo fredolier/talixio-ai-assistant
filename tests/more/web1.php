@@ -100,6 +100,12 @@ check('web1: an app error says what went wrong', $r['_code'] >= 400 && ($r['erro
 putenv("TALIXIO_DATA_DIR=$d"); putenv('TALIXIO_PROVIDER=echo'); putenv('TALIXIO_EMBEDDINGS=off');
 $app = App::fromEnv();
 putenv('TALIXIO_DATA_DIR'); putenv('TALIXIO_PROVIDER'); putenv('TALIXIO_EMBEDDINGS');
+// 1.41.1: the mission actions (Pilotage → Missions, Activity) reach the director: « directives » was left out of the router's areas
+$did = $app->store->addDirective('Visibility, wave 1', 'make it known', 2, 0);
+$rr = $web("/api/directives/$did/rate", ['accepted' => true]);
+$rs = $web("/api/directives/$did/steer", ['action' => 'prioritize', 'priority' => 1]);
+check('web1: Accept on a finished mission is recorded, not « not found »', $rr['_code'] === 200 && str_contains($rr['result'] ?? '', "acceptance of directive #$did"), $rr['_raw']);
+check('web1: raising a mission\'s priority works', $rs['_code'] === 200 && (int)$app->store->directive($did)['priority'] === 1, $rs['_raw']);
 $tid = $app->store->addTask('Water the plants', 'remind me', '0 8 * * *', time() + 3600, 'standard', $spaceId);
 $app->routines()->vote($tid, 'item one', 1, 'good', null);
 $tl = $web('/api/tasks');
