@@ -161,8 +161,10 @@
             <h3>Your agents</h3>
             <span class="muted small no-i18n" id="ab-sub"></span>
             <button type="button" id="ab-new-btn" class="btn small" aria-expanded="false">New session</button>
+            <button type="button" id="ab-auto-btn" class="btn ghost small" aria-expanded="false">Autonomy</button>
             <button type="button" id="ab-connect" class="btn ghost small" aria-expanded="false">Connect a machine</button>
           </div>
+          <div class="card ab-auto" id="ab-auto" hidden><div class="pl-auto" id="pl-auto"></div></div>
           <div class="card ab-new" id="ab-new" hidden>
             <p class="small muted" id="ab-new-none">No machine is listening for new work yet. On the machine, start the listener (Connect a machine, step 4); a session can start only in a folder where a session already ran there.</p>
             <div class="ab-new-form" id="ab-new-form" hidden>
@@ -251,7 +253,7 @@
             </div></div>
             <div class="pl-rows" id="pl-jr-list"></div></div>
           <div class="pl-pane" id="pl-jr-detail"></div></div></div>
-        <div class="pl-panel" data-plp="autonomy" hidden><div class="pl-auto" id="pl-auto"></div></div>
+        <div class="pl-panel" data-plp="autonomy" hidden><p class="muted small pl-moved">The autonomy settings moved to the agent board above: Autonomy.</p></div>
         </details>
       </div>
 

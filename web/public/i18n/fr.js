@@ -3474,5 +3474,9 @@ window.I18N.fr = {
   "Make documents": "Créer des documents",
   "After reading the web, it may without asking:": "Après avoir lu le web, elle peut sans demander :",
   "Ask me again": "Me demander à nouveau",
-  "It will ask again.": "Elle demandera à nouveau."
+  "It will ask again.": "Elle demandera à nouveau.",
+  "Edit it first": "La modifier d’abord",
+  "Not sent by itself:": "Pas envoyée seule :",
+  "The assistant answered by itself:": "L’assistant a répondu seul :",
+  "The autonomy settings moved to the agent board above: Autonomy.": "Les réglages d’autonomie sont maintenant sur le tableau des agents, plus haut : Autonomie."
 };

@@ -2040,6 +2040,11 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-live{font-size:.7rem;font-weight:600;color:var(--accent);border:1px solid var(--accent);border-radius:99px;padding:1px 8px}
 .ab-perm{display:flex;flex-direction:column;gap:6px;background:color-mix(in srgb,var(--warn) 12%,var(--surface));border-radius:8px;padding:8px 10px}
 .ab-perm code{white-space:pre-wrap;word-break:break-word;font-size:.78rem}
+/* 1.39.0: the assistant's suggestion and its own answers, on the board */
+.ab-auto{margin-bottom:12px}
+.ab-sug,.ab-judge{display:flex;flex-direction:column;gap:6px;background:color-mix(in srgb,var(--accent) 10%,var(--surface));border-radius:8px;padding:8px 10px;margin-top:6px}
+.ab-sug>div{white-space:pre-wrap;word-break:break-word}
+.ab-c-sug{color:var(--accent)}
 .ab-thread{max-height:min(480px,60vh);overflow:auto;display:flex;flex-direction:column;gap:8px}
 .ab-ev{border-radius:8px;padding:6px 10px;background:var(--sunk)}
 .ab-ev div{white-space:pre-wrap;word-break:break-word;font-size:.84rem}

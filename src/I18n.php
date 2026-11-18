@@ -86,6 +86,7 @@ final class I18n
         // confidentiality
         'New message in {space}' => 'Nouveau message dans {space}',
         'An agent asks for permission' => 'Un agent demande une autorisation',
+        'I answered an agent for you' => 'J’ai répondu à un agent à votre place',
         'New token: download the hook script again on each machine.' => 'Nouveau jeton : téléchargez à nouveau le script sur chaque machine.',
         'Write what the session should do.' => 'Écrivez ce que la session doit faire.',
         'No machine of that name has reported to the board.' => 'Aucune machine de ce nom ne s’est signalée au tableau.',

@@ -92,6 +92,7 @@ final class AgentHub
                 $p = (string)($e['prompt'] ?? '');
                 $lastEv = $this->app->store->q('SELECT kind, text FROM agent_events WHERE session = ? ORDER BY id DESC LIMIT 1', [$id])->fetch();
                 if (!$lastEv || $lastEv['kind'] !== 'started' || trim($lastEv['text']) !== trim($p)) $this->log($id, 'you', 'prompt', $p); // a started job's prompt is already shown
+                if ($s['state'] === 'waiting') $this->learn($id, (int)$s['seq'], $p, 'you'); // answered in the terminal: what the assistant expected is scored
                 break;
             case 'PreToolUse': // 1.38.0: what it is doing now, and the moment a stop asked from the board takes effect
                 if (!$stop) {
@@ -130,6 +131,7 @@ final class AgentHub
         if ($bump) $set += ['seq' => (int)$s['seq'] + 1, 'updated' => $now]; // a notice alone does not bring a looked-at session back to "Needs you"
         $this->update($id, $set);
         $this->bumpRev();
+        if ($kind === 'Stop' && !$stop && $last !== '') { try { $this->app->pilot()->wakeBoard(); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); } } // 1.39.0: the assistant looks at it soon
         return [200, ['seq' => (int)($set['seq'] ?? $s['seq']), 'id' => $id] + ($stop ? ['stop' => true] : [])];
     }
 
@@ -190,6 +192,7 @@ final class AgentHub
         if ($s['state'] === 'ended') throw new \InvalidArgumentException('This session has ended.');
         if ($s['state'] === 'stopped') throw new \InvalidArgumentException('This session was stopped.');
         if ($kind !== 'reply') $this->app->store->q("UPDATE agent_commands SET delivered = -1 WHERE session = ? AND delivered IS NULL AND kind IN ('allow','deny')", [$id]);
+        if ($kind === 'reply' && $s['state'] === 'waiting') $this->learn($id, (int)$s['seq'], $text, $by);
         $this->app->store->q('INSERT INTO agent_commands(session, ts, kind, text, by) VALUES(?,?,?,?,?)', [$id, time(), $kind, $text, $by]);
         $this->log($id, $by, 'queued', $kind === 'reply' ? $text : $kind);
         $this->update($id, ['seen' => time()]);
@@ -203,7 +206,9 @@ final class AgentHub
     {
         $rows = $this->app->store->q("SELECT * FROM agent_sessions ORDER BY updated DESC LIMIT 200")->fetchAll();
         $jobs = $this->app->store->q("SELECT * FROM agent_jobs WHERE session = '' AND state NOT IN ('cancelled','exited') ORDER BY id DESC LIMIT 50")->fetchAll();
-        return ['rev' => (int)$this->app->store->get('agents.rev'), 'sessions' => array_map(fn($s) => $this->shape($s), $rows),
+        $sug = [];
+        try { $sug = $this->app->pilot()->boardProposals(); } catch (\Throwable) {}
+        return ['rev' => (int)$this->app->store->get('agents.rev'), 'sessions' => array_map(fn($s) => $this->shape($s) + ['suggested' => $s['state'] === 'waiting' && isset($sug[Pilot::boardKey($s['id'], (int)$s['seq'])])], $rows),
             'jobs' => array_map(fn($j) => $this->shapeJob($j), $jobs), 'machines' => $this->machines(),
             'connected' => (string)$this->app->store->get('agents.token') !== ''];
     }
@@ -212,8 +217,19 @@ final class AgentHub
     {
         $s = $this->get($id) ?? throw new \InvalidArgumentException('no such agent session');
         $ev = array_reverse($this->app->store->q('SELECT id, ts, who, kind, text FROM agent_events WHERE session = ? ORDER BY id DESC LIMIT ?', [$id, $limit])->fetchAll());
-        return ['session' => $this->shape($s), 'events' => $ev];
+        $pilot = $this->app->pilot();
+        return ['session' => $this->shape($s), 'events' => $ev, 'suggestion' => $s['state'] === 'waiting' ? $pilot->boardSuggestion($id, (int)$s['seq']) : null,
+            'judge' => $pilot->boardSent($id)];
     }
+
+    /** Someone answers this turn: the assistant's expectation for it is scored (1.39.0). */
+    private function learn(string $id, int $seq, string $text, string $by): void
+    {
+        try { $this->app->pilot()->learnBoard($id, $seq, $text, $by); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); }
+    }
+
+    /** Redraw the board (a suggestion appeared). */
+    public function touch(): void { $this->bumpRev(); }
 
     public function markSeen(string $id): array { $this->update($id, ['seen' => time()]); $this->bumpRev(); return ['ok' => true]; }
 

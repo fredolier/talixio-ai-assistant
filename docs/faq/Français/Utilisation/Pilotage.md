@@ -63,6 +63,25 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   (`agent_answer` : une réponse, autoriser ou refuser), en démarrer une sur une machine qui écoute (`agent_start`) et en
   arrêter une (`agent_stop`), et vous demande votre accord avant, à chaque fois.
 - Une demande d'autorisation envoie aussi une notification (voir *Canaux et notifications*).
+- **Autonomie : l'assistant répond seul à vos agents, dans vos limites** (bouton en haut du tableau). Activez *L'assistant
+  regarde seul les questions des agents*. Quand une session termine son tour, l'assistant lit son dernier message (comme
+  des données écrites par d'autres, jamais comme des instructions) avec vos **priorités**, vos **règles permanentes**, les
+  réponses semblables que vous avez données et ce que le Mind sait de votre façon de décider, et en déduit la réponse que
+  vous donneriez, avec un niveau (L1 routine … L5 business) et une confiance honnête. Un message qui ne fait que rendre
+  compte du travail fait est laissé tel quel. Les limites sont ensuite appliquées par Talixio lui-même, pas par le modèle :
+  pour chaque niveau L1–L3 vous choisissez *Je propose, vous répondez* (par défaut), *Je réponds si je suis sûr, puis je vous
+  préviens* ou *Je réponds si je suis sûr, sans bruit* ; il n'envoie seul qu'au-dessus de votre seuil de confiance (75 % par
+  défaut) et sous le **plafond quotidien** (20 par défaut). **L4/L5, les demandes d'autorisation, et tout ce qui touche aux
+  push, déploiements, suppressions, e-mails, identifiants ou paiements restent toujours à vous**, quel que soit le réglage.
+  Une réponse qu'il envoie part vers la session comme la vôtre, marquée *Assistant* dans le fil ; dans le volet de la
+  session il demande **Était-ce la bonne décision ? Oui / Non, c'était faux**. Sinon sa carte affiche 💡 *Réponse suggérée*,
+  et le volet de la session montre la réponse, son niveau, sa confiance et pourquoi elle n'a pas été envoyée, avec
+  **Envoyer cette réponse** ou **La modifier d'abord**. Chaque réponse est évaluée : par rapport à ce que vous répondez pour
+  ce tour (depuis le tableau, ou tapé dans le terminal de la session), ou par votre Oui / Non. Une mauvaise réponse envoyée
+  fait redescendre ce niveau aussitôt ; après assez de bonnes réponses il *suggère* de lui laisser plus de marge (il
+  n'élargit jamais ses propres limites). Il regarde dans les secondes qui suivent la fin d'un tour (et toutes les 15
+  minutes par sécurité), une seule fois par tour, et laisse de côté une session à laquelle vous avez déjà répondu, arrêtée,
+  ou de plus de 12 heures.
 
 ### Orchestrateur cloud (approche précédente)
 Replié sous le tableau, l'ancien pilote reste disponible pour ceux qui en ont appairé un ; il sera retiré quand le tableau
@@ -99,7 +118,7 @@ Le pilote est un orchestrateur (une session Claude Code) qui supervise des agent
   approbations et demandes de permission ne sont jamais routées : vous seul pouvez les donner. Une nouvelle question compte comme
   une nouveauté : elle apparaît dans la pastille même lors d'un point silencieux. Un pilote jumelé avant cette version a besoin
   une fois des consignes du message de jumelage : reconnectez-le, ou envoyez-lui celles-ci.
-- **Onglet Autonomie : l'assistant décide dans vos limites.** Activez *L'assistant regarde seul les questions des agents* :
+- **Onglet Autonomie** (déplacé sur le tableau en 1.39.0 : *Autonomie* en haut du tableau ; les mêmes réglages valent pour les deux)** : l'assistant décide dans vos limites.** Activez *L'assistant regarde seul les questions des agents* :
   quand un agent pose une question, il la lit avec les décisions semblables que vous avez prises, ce qu'il sait de votre façon
   de travailler et vos **priorités** (une par ligne, la plus importante d'abord), puis appelle `fleet_decide` avec sa réponse
   et une confiance honnête. Pour chaque niveau L1–L5 vous choisissez : *Je propose, vous répondez* (par défaut), *Je réponds si
