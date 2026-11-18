@@ -3,6 +3,16 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.42.0 (2026-11-18)
+
+The first step in retiring the cloud relay (the older « Cloud orchestrator » under the agent board), and the plan for what comes next.
+
+- **The status file is retired.** On your decision, Talixio no longer writes `pilot-status.md`. The Status file button and its address (`/api/pilot/status.md`) are gone, and the worker deletes the file an older version left in the data folder. The agent board shows the same state live.
+- **The board's autonomy no longer depends on relay code.** The autonomy **Save** button and the ✓/✗ verdicts were wired by the old cockpit's code. They now have their own wiring. A change to the autonomy settings or a scored answer no longer goes through the relay either. Nothing changes on screen.
+- **Plan and design, in `docs/design/`.** `relay-retirement.md` covers what the relay does, what the board already covers, and the remaining steps. It records your decisions: the Journal and Passes go, and so does the status file. `director-knowledge.md` designs how the assistant learns about the agents and their projects. Each session gets a summary and each project a dossier. Decisions are logged by project and topic. Rules are deduced from your repeated answers, and you confirm them before they apply. Sources are ranked: your rules, then confirmed rules, then patterns, then precedents, then a guess.
+- Help pages updated in both languages: Pilotage (Status file).
+- Tested: the autonomy checks that tested shared code alongside the relay are copied into the board's own tests: kept levels, clean priority and rule lists, the daily-cap bounds, levels, loose comparison, and when to suggest more room. A setting change writes no status file, a leftover one is removed by the worker, and its address now answers « not found ». In the browser, autonomy Save works with the old cockpit's wiring switched off; it failed that way before this change. **Not tried**: a live relay session after the upgrade. Its status file stops being written, and everything else in the relay works as before.
+
 ## 1.41.4 (2026-11-18)
 
 The rest of the security review: six ways in or out, each closed with a check that fails without its change.

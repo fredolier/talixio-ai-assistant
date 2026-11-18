@@ -96,7 +96,6 @@ final class Pilot
             if (isset($in['daily_cap'])) $s['daily_cap'] = max(0, min(200, (int)$in['daily_cap']));
             return [$s, null];
         });
-        $this->app->conductor()->refreshStatusFile();
         return $err ?? $this->overview();
     }
 
@@ -139,6 +138,8 @@ final class Pilot
     /** Worker tick: run one triage turn when asked to (and, as a safety net, every 15 min for questions left unattended). */
     public function tick(int $now): void
     {
+        $f = $this->app->cfg->dataDir . '/pilot-status.md'; // the status file is retired (1.42.0): remove what an older version left
+        foreach ([$f, "$f.tmp"] as $x) if (is_file($x)) @unlink($x);
         $this->boardTick($now);
         $s = $this->state();
         if (!$s['enabled'] || !$this->app->conductor()->connected()) return;
@@ -339,11 +340,9 @@ final class Pilot
             $r = $con->toFleet($answer, 0, $agent, $id);
             if (str_starts_with($r, 'error:')) return $r;
             if ($mode === 'tell') $this->app->notifier()->notify('Fleet: I answered for you', "{$ag['name']} asked: " . mb_substr($w['question'], 0, 300) . "\nI said: " . mb_substr($answer, 0, 300) . ' (' . (int)round($confidence * 100) . "% sure). Tell me if that was wrong — I will learn from it.");
-            $con->refreshStatusFile();
             return "sent to `$agent` ($level, $mode, " . (int)round($confidence * 100) . '%). The user will confirm or correct it; do not repeat it.';
         }
         $this->app->conductor()->suggest($agent, $id, $answer, $confidence);
-        $con->refreshStatusFile();
         return "not sent ($why): kept as a proposal the user sees in the cockpit with your answer and confidence.";
     }
 
@@ -414,7 +413,6 @@ final class Pilot
             return [$s, null];
         });
         if (!$learn) return;
-        $this->app->conductor()->refreshStatusFile();
         [$p, $hit, $demoted, $mode] = $learn;
         try {
             if ($this->app->mind()->enabled()) {

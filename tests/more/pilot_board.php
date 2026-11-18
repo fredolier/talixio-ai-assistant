@@ -97,6 +97,28 @@ $r = $finish('f1', 'Shall I add a test?'); $hub->stop('claude-code:f1'); $n = co
 $pilot->boardTick(time() + 13000);
 check('pilot board: a stopped session is left alone', count($asked) === $n);
 
+// checks of shared code that lived with the cloud relay's tests (ported in 1.42.0, before the relay goes)
+check('pilot: L4/L5 can never be delegated and an unknown mode is refused', is_string($pilot->setPolicy(['autonomy' => ['L4' => 'auto']])) && is_string($pilot->setPolicy(['autonomy' => ['L2' => 'wild']])) && $pilot->state()['autonomy']['L4'] === 'ask');
+$pilot->setPolicy(['priorities' => "1. Client work first\n- the release\n"]);
+check('pilot: a clean ordered priority list is kept', $pilot->priorities() === ['Client work first', 'the release']);
+check('pilot: a level is read from the question type, L4 when unclear', Pilot::levelOf('L2') === 'L2' && Pilot::levelOf('level 3') === 'L3' && Pilot::levelOf('') === 'L4' && Pilot::levelOf('business') === 'L4');
+check('pilot: answers are compared loosely', Pilot::same('Garder A', 'garder a.') && Pilot::same('short', 'Short title please') && !Pilot::same('yes', 'no'));
+check('pilot: the overview suggests more room only after enough right answers', $pilot->overview()['levels']['L3']['suggest'] === null && $pilot->overview()['calibration']['n'] >= 2, json_encode($pilot->overview()['calibration']));
+$pilot->setPolicy(['rules' => ["- Never touch billing without asking", "2) Keep answers short", ""], 'daily_cap' => 0]);
+check('pilot: standing rules are cleaned, shown to the model, and the cap is clamped', $pilot->rules() === ['Never touch billing without asking', 'Keep answers short'] && $pilot->overview()['daily_cap'] === 0
+    && str_contains($pilot->boardPrompt(['id' => 'x', 'seq' => 1, 'cwd' => '/p', 'machine' => '', 'last_message' => 'Go on?']), '1. Never touch billing without asking'));
+$pilot->setPolicy(['daily_cap' => 999]);
+check('pilot: the daily cap is bounded', $pilot->overview()['daily_cap'] === 200);
+
+// the status file is retired (1.42.0): the pilot no longer writes it, and a leftover one is removed
+$stf = $app->cfg->dataDir . '/pilot-status.md';
+$pilot->setPolicy(['rules' => ['Rule after the status file']]);
+check('pilot: a setting change writes no status file', !is_file($stf));
+file_put_contents($stf, "# old\n"); file_put_contents("$stf.tmp", 'x');
+$pilot->tick(time() + 14000);
+check('pilot: a status file left by an older version is removed by the worker', !is_file($stf) && !is_file("$stf.tmp"));
+check('pilot: the board autonomy no longer reaches into the relay for its status file', !str_contains((string)file_get_contents(__DIR__ . '/../../src/Pilot.php'), 'refreshStatusFile'));
+
 Pilot::$model = null;
 foreach ($saved as $k => $v) putenv($v === false ? $k : "$k=$v");
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

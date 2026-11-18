@@ -81,11 +81,6 @@ final class Web
                 header('Content-Disposition: attachment; filename="record-of-processing-' . date('Y-m-d') . '.md"');
                 echo $this->app->privacy()->register(); return;
             }
-            if ($path === '/api/pilot/status.md' && $method === 'GET') { // the permanent status file, read-only (rewritten fresh on each view)
-                header('Content-Type: text/markdown; charset=utf-8'); header('Cache-Control: no-store');
-                if (!empty($_GET['download'])) header('Content-Disposition: attachment; filename="pilot-status.md"');
-                echo $this->app->conductor()->refreshStatusFile(true); return;
-            }
             if ($path === '/api/share/claim' && $method === 'POST') { $this->json($this->shareClaim((string)($body['token'] ?? ''), !empty($body['peek']))); return; }
             $out = $this->route($method, $path, $body);
             $this->json($out, isset($out['errors']) ? 422 : 200); // values that did not validate

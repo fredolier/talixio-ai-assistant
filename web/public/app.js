@@ -6600,17 +6600,6 @@ async function plClarify(id, btn) { // asks for the full question: a message to 
   } catch (err) { toast(err.message); }
   btn.disabled = false;
 }
-async function pilotStatusFile(open) { // the permanent status file: view, copy, download
-  const box = $('#pilot-status-file'), btn = $('#pilot-status-btn'); if (!box) return;
-  box.hidden = !open; btn.setAttribute('aria-expanded', String(!!open));
-  if (!open) return;
-  try {
-    const r = await fetch('api/pilot/status.md', { credentials: 'same-origin', headers: { 'X-Talixio': '1' } });
-    if (!r.ok) throw new Error(t('Not available.'));
-    $('#pilot-status-text').textContent = await r.text();
-    $('#pilot-status-path').textContent = PL.info?.statusFile || 'pilot-status.md';
-  } catch (e) { toast(e.message); }
-}
 
 // -- Autonomy: what the assistant may decide alone, how right it has been, what it arbitrates by --
 async function plLoadAuto() { try { PL.auto = await api('api/pilot'); } catch (e) { PL.auto = null; } plRenderAuto(); }
@@ -6782,8 +6771,6 @@ function plWire() {
     const t0 = e.target;
     let el;
     if ((el = t0.closest('[data-plback]'))) { el.closest('.pl-split').classList.remove('detail'); return; }
-    if ((el = t0.closest('[data-verdict]'))) { plVerdict(el); return; }
-    if ((el = t0.closest('[data-auto-save]'))) { plSaveAuto(); return; }
     if ((el = t0.closest('[data-clarify]'))) { plClarify(el.dataset.clarify, el); return; }
     if ((el = t0.closest('[data-need-send]'))) { const inp = $('#pl-need-input'), text = inp.value.trim(); if (!text) { inp.focus(); return; } PL.draft['n:' + el.dataset.needSend] = ''; plSay(el.dataset.needSend, text, el); return; }
     if ((el = t0.closest('[data-answer]'))) { plSay(el.dataset.agentId, el.dataset.answer, el); return; }
@@ -6806,6 +6793,12 @@ const AB_COLS = [['need', 'Needs you'], ['working', 'Working'], ['quiet', 'Quiet
 const abTitle = s => s.project || s.agent;
 function abWire() {
   if (AB.wired) return; AB.wired = true;
+  // the board autonomy's Save and its ✓/✗ verdicts (moved here from the relay cockpit's plWire in 1.42.0)
+  $('.pilot-panel[data-ppanel=agents]').addEventListener('click', e => {
+    let el;
+    if ((el = e.target.closest('[data-verdict]'))) { plVerdict(el); return; }
+    if ((el = e.target.closest('[data-auto-save]'))) plSaveAuto();
+  });
   $('#ab-connect').onclick = async () => {
     const box = $('#ab-setup'), open = box.hidden;
     box.hidden = !open; $('#ab-connect').setAttribute('aria-expanded', String(open));
@@ -6982,8 +6975,6 @@ async function pilotAgents() {
   plWire();
   if (!pilotAgents.wired) { pilotAgents.wired = true;
     $('#pilot-cfg').addEventListener('toggle', e => { e.currentTarget.dataset.touched = '1'; });
-    $('#pilot-status-btn').onclick = () => pilotStatusFile($('#pilot-status-file').hidden);
-    $('#pilot-status-copy').onclick = () => copyText($('#pilot-status-text').textContent);
   }
   await initOrchestratorPanel('pilot', info => {
     const on = !!info.connected;

@@ -1930,8 +1930,6 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .pl-free textarea { flex: 1; min-width: 0; font: inherit; resize: vertical; }
 .pl-zero { text-align: center; margin-top: 36px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
 .pl-zero b { font-size: 1.05rem; }
-.pilot-statusfile { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
-.pilot-statusfile pre { max-height: 22em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--sunk); border-radius: 8px; padding: 10px 12px; font-size: .78rem; margin: 0; }
 
 /* Other assistants (federation) */
 .fed-peers,.fed-inbox{display:flex;flex-direction:column;gap:10px}
