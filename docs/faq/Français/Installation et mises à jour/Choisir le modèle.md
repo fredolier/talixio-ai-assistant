@@ -87,6 +87,11 @@ non conformes et fait refuser par Confidentialité tout service d'IA ou de reche
 Quand votre clé AKI.IO liste des modèles étiquetés **TL5**, les choix rapide/standard/approfondi sont pris uniquement parmi
 eux : l'assistant est donc traité en Allemagne sans rien faire de plus. Choisir à la main un modèle non TL5 désactive ce choix.
 
+Les modèles qui raisonnent, comme **gpt-oss**, terminent parfois leur travail sans un mot : ce qu'ils voulaient dire reste
+dans leur raisonnement. L'assistant leur demande alors une fois leur réponse. S'ils ne disent toujours rien, la réponse
+liste les actions lancées (« Fait, sans un mot du modèle. Actions lancées : … ») : vérifiez le résultat, par exemple la
+routine modifiée.
+
 ## Niveaux et budget
 - Trois niveaux : **rapide** (résumés, vérifications), **standard** (conversation), **approfondi** (raisonnements difficiles).
 - **Budget** : limites par jour et par mois en dollars. Au-delà de 80 %, il passe au niveau rapide ;

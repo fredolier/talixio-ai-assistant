@@ -275,6 +275,14 @@ final class Agent
     }
 
     /** Two answers that say the same thing (a model repeating itself). */
+    /** The reply when the model ended its turn without a word: the actions it ran, or "(no response)" when there were none (1.47.1). */
+    public static function silentReply(App $app, array $tools): string
+    {
+        $tools = array_values(array_unique(array_map('strval', $tools)));
+        if (!$tools) return I18n::t($app, '(no response)');
+        return I18n::t($app, 'Done, without a word from the model. Actions run: {tools}. Check the result before relying on it.', ['tools' => implode(', ', $tools)]);
+    }
+
     /** The answer says an app was made or saved (the caller checks the tool log for a real app_save). */
     public static function claimsApp(string $reply): bool
     {
@@ -432,7 +440,9 @@ final class Agent
                     foreach ($store->q('SELECT tool, result FROM tool_log WHERE id > ? AND job_id IS NULL ORDER BY id', [$toolsBefore]) as $r) $last[$r['tool']] = str_starts_with((string)$r['result'], 'error');
                     $store->set("trouble_$space", in_array(true, $last, true) ? (string)time() : '0');
                 }
-                $reply = $reply ?: I18n::t($this->app, '(no response)');
+                if (trim((string)$reply) === '') { // 1.47.1: the model said nothing (gpt-oss after its tools): say what was done rather than "(no response)"
+                    $reply = self::silentReply($this->app, $store->q('SELECT tool FROM tool_log WHERE id > ? AND job_id IS NULL ORDER BY id', [$toolsBefore])->fetchAll(\PDO::FETCH_COLUMN));
+                }
             } catch (PrivacyBlocked $e) {
                 $reply = in_array($e->getMessage(), ['no-key', 'no-claude-code'], true) ? I18n::t($this->app, $e->getMessage() === 'no-claude-code'
                     ? 'Claude Code is not installed on this server, so your Claude plan cannot be used. Choose another model in Settings → AI model, or install it (sudo ./install.sh --with-claude-code).'

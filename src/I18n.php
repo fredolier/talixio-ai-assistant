@@ -40,6 +40,7 @@ final class I18n
             "J'ai atteint ma limite de dépenses : je n'appelle pas le modèle pour l'instant. {budget}\nAugmentez le budget dans Réglages → Budget si besoin.",
         "I couldn't answer: {error}" => "Je n'ai pas pu répondre : {error}",
         '(no response)' => '(pas de réponse)',
+        'Done, without a word from the model. Actions run: {tools}. Check the result before relying on it.' => 'Fait, sans un mot du modèle. Actions lancées : {tools}. Vérifiez le résultat avant de vous y fier.',
         '*(stopped)*' => '*(arrêté)*',
         'Got the recording{mins}. I\'m transcribing and summarising it in the background (job #{id}): you\'ll get the summary, decisions and action items here.' =>
             "Enregistrement reçu{mins}. Je le transcris et le résume en arrière-plan (job #{id}) : vous aurez ici le résumé, les décisions et les actions à mener.",

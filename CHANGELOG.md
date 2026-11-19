@@ -3,6 +3,23 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.47.1 (2026-11-19)
+
+Fixes "(no response)" after a request the assistant did carry out, seen with gpt-oss on AKI.IO.
+
+- **What happened:** reasoning models such as gpt-oss sometimes end a turn with an empty answer after using their tools; what they meant to say stays in their reasoning. The action was done (a routine changed, for example), but the chat said *(no response)*.
+- **Now,** with any OpenAI-compatible model (OpenAI, Gemini, the European providers, local servers): when a turn that used tools ends with empty text, the model is asked once more for its answer, tools off, streamed like any answer. What it only thought is never shown.
+- **If it still says nothing,** the reply names the actions run this turn (« Done, without a word from the model. Actions run: routine_update. Check the result before relying on it. »). *(no response)* is left only for a turn with no action and no word.
+- A plain answer costs one request, as before. The extra request happens only after an empty answer, and at most once per turn.
+- **Help pages, in both languages:** Choosing the model (AKI.IO).
+- Tested (PHP, `tests/more/empty_answer.php`, which fails before this change), with a fake gpt-oss server that calls a tool, then answers with reasoning only:
+  - the answer is asked once, without tools, and returned, in both the plain and the streamed modes;
+  - the reasoning is not shown;
+  - a model that stays silent is asked only once;
+  - a normal answer is one request;
+  - the chat's fallback lists the actions run, in English and in French.
+- **Not tried:** the real gpt-oss-120b on AKI.IO. Whether it answers when asked again is likely but not checked.
+
 ## 1.47.0 (2026-11-18)
 
 Your coding agents can send you what they make (an HTML report, a PDF, a chart, a picture) and you open it from the assistant.
