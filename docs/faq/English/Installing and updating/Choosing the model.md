@@ -84,6 +84,10 @@ providers and makes Privacy refuse any non-European AI or search service.
 When your AKI.IO key lists models tagged **TL5**, the fast/standard/deep picks are drawn only from those, so the
 assistant is processed in Germany with no extra step. Choosing a non-TL5 model by hand opts out.
 
+Reasoning models such as **gpt-oss** sometimes finish their work without a word: what they meant to say stays in their
+reasoning. The assistant then asks them once for the answer. If they still say nothing, the reply lists the actions run
+(« Done, without a word from the model. Actions run: … »): check the result, for example the routine it changed.
+
 ## Tiers and budget
 - Three tiers: **fast** (summaries, checks), **standard** (conversation), **deep** (hard reasoning).
 - **Budget**: daily and monthly limits in dollars. Above 80%, it switches to the fast tier;
