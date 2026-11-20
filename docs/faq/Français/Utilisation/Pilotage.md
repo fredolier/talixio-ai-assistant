@@ -53,7 +53,11 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   main*) : laissez `sh ~/.talixio/agent-listen.sh` tourner sur cette machine (un terminal, tmux,
   ou un élément d'ouverture de session). Il demande du travail au tableau toutes les quelques secondes et lance
   `claude -p` dans le dossier, avec votre demande. Côté machine, il ne démarre que dans un dossier sous votre dossier
-  personnel (à changer avec `TALIXIO_ROOT`), et il garde le processus de chaque session qu'il a lancée : un arrêt venu du
+  personnel, sauf si vous en avez choisi d'autres dans **Dossiers où il peut lancer des sessions** à l'installation
+  (plusieurs : séparez-les par `:`, par ex. `~:/app/projects`), ou si vous réglez `TALIXIO_ROOT` de la même façon en le
+  lançant. Un dossier en dehors est refusé, et le refus donne la ligne exacte pour l'autoriser ; vérifiez-en un avant avec
+  `sh ~/.talixio/agent-listen.sh --check <dossier>`. Ajoutez plutôt le seul dossier utile qu'ouvrir `/`, qui laisse le
+  tableau lancer des sessions n'importe où sur la machine. Il garde le processus de chaque session qu'il a lancée : un arrêt venu du
   tableau désigne la session, jamais un processus, il ne peut donc terminer que celles qu'il a lancées. Autres réglages :
   `TALIXIO_CLAUDE` (la commande `claude`) et `TALIXIO_CLAUDE_ARGS` (par ex. `--permission-mode acceptEdits`). La session
   demande ses autorisations sur le tableau, comme les autres ; sans réponse au bout de 30 secondes, l'outil est refusé,

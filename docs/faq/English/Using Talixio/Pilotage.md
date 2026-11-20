@@ -47,7 +47,11 @@ The board updates by itself every few seconds while you look at it.
 - **The listener** (optional, *Also install the listener* in *Connect a machine*, or step 4 of *Install by hand*):
   leave `sh ~/.talixio/agent-listen.sh` running on that machine (a terminal, tmux, or a login item). It asks the board
   for work every few seconds and runs `claude -p` in the folder, with your prompt. On the machine's side it only starts in
-  a folder under your home folder (change it with `TALIXIO_ROOT`), and it keeps the process of each session it started:
+  a folder under the folders it may use: your home folder unless you chose others in **Folders it may start sessions
+  in** when installing it (several: separate them with `:`, e.g. `~:/app/projects`), or set `TALIXIO_ROOT` the same way
+  when starting it. A folder outside them is refused, and the refusal shows the exact line to allow it; check one before
+  with `sh ~/.talixio/agent-listen.sh --check <folder>`. Prefer adding the one folder you need to opening `/`, which lets
+  the board start sessions anywhere on the machine. It keeps the process of each session it started:
   a stop from the board names the session, never a process, so it can only end the ones it started. Other settings:
   `TALIXIO_CLAUDE` (the `claude` command) and `TALIXIO_CLAUDE_ARGS` (e.g. `--permission-mode acceptEdits`). The session
   asks its permissions on the board, like the others; after 30 seconds without an answer, the tool is refused, since no

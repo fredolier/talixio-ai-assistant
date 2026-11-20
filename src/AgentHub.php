@@ -485,13 +485,29 @@ final class AgentHub
     // ---------- setup ----------
 
     /** The hook script a machine saves (it carries the address and the token: the person's own machine only). */
-    public function script(string $machine, string $file = 'agent-hook.sh'): string
+    public function script(string $machine, string $file = 'agent-hook.sh', string $roots = ''): string
     {
+        $roots = self::roots($roots);
         $url = rtrim($this->app->shares()->baseUrl(), '/');
         $q = fn(string $v) => "'" . str_replace("'", "'\\''", $v) . "'";
         $machine = mb_substr(trim(preg_replace('/[^\w .@-]+/u', '', $machine)), 0, 40) ?: (string)gethostname();
-        return (string)preg_replace(['/@URL@/', '/@TOKEN@/', '/@MACHINE@/'], [$q($url), $q($this->token()), $q($machine)],
+        return (string)preg_replace(['/@URL@/', '/@TOKEN@/', '/@MACHINE@/', '/@ROOTS@/'], array_map(fn($v) => str_replace(['\\', '$'], ['\\\\', '\\$'], $v), [$q($url), $q($this->token()), $q($machine), $q($roots)]),
             (string)file_get_contents(dirname(__DIR__) . '/deploy/' . (in_array($file, ['agent-hook.sh', 'agent-listen.sh'], true) ? $file : 'agent-hook.sh')));
+    }
+
+    /**
+     * The folders the listener may start sessions in (1.48.1), as typed on the board: separated by ':' (or new lines,
+     * commas, semicolons), each absolute or starting with ~; anything else is dropped. '' = the listener's default (home).
+     */
+    public static function roots(string $roots): string
+    {
+        $out = [];
+        foreach (preg_split('/[:;,\n]+/', $roots) as $r) {
+            $r = rtrim(trim($r), '/') ?: (trim($r) === '/' ? '/' : '');
+            if ($r === '' || !preg_match('#^(/|~(/|$))#', $r) || preg_match('#[^\w ./~@+-]#u', $r) || preg_match('#(^|/)\.\.(/|$)#', $r)) continue;
+            $out[$r] = true;
+        }
+        return mb_substr(implode(':', array_keys($out)), 0, 500);
     }
 
     public const INSTALL_TTL = 900; // a one-time install code lasts 15 minutes (1.48.0)
@@ -501,13 +517,13 @@ final class AgentHub
      * board. The code, not the agents token, is in the URL (and so in shell history and server logs); it works once,
      * for INSTALL_TTL seconds, and only its hash is kept.
      */
-    public function installCode(string $machine, bool $listener): array
+    public function installCode(string $machine, bool $listener, string $roots = ''): array
     {
         $machine = mb_substr(trim(preg_replace('/[^\w .@-]+/u', '', $machine)), 0, 40);
         $codes = array_filter($this->installCodes(), fn($c) => $c['exp'] > time());
         if (count($codes) >= 20) array_shift($codes); // at most 20 waiting: the oldest goes
         $code = rtrim(strtr(base64_encode(random_bytes(18)), '+/', '-_'), '=');
-        $codes[hash('sha256', $code)] = ['machine' => $machine, 'listener' => $listener, 'exp' => time() + self::INSTALL_TTL];
+        $codes[hash('sha256', $code)] = ['machine' => $machine, 'listener' => $listener, 'roots' => self::roots($roots), 'exp' => time() + self::INSTALL_TTL];
         $this->app->store->set('agents.install', (string)json_encode($codes));
         $url = rtrim($this->app->shares()->baseUrl(), '/') . '/api/agents/install?c=' . $code;
         return ['code' => $code, 'url' => $url, 'command' => "curl -fsSL '$url' | sh", 'expires' => time() + self::INSTALL_TTL];
@@ -524,13 +540,14 @@ final class AgentHub
         if ($code === '' || !$c || $c['exp'] <= time()) return null;
         $machine = $c['machine'] !== '' ? $c['machine'] : (string)gethostname();
         $hook = rtrim($this->script($machine), "\n");
-        $listen = $c['listener'] ? rtrim($this->script($machine, 'agent-listen.sh'), "\n") : '';
+        $listen = $c['listener'] ? rtrim($this->script($machine, 'agent-listen.sh', (string)($c['roots'] ?? '')), "\n") : '';
         foreach (['TALIXIO_HOOK_EOF' => $hook, 'TALIXIO_LISTEN_EOF' => $listen] as $mark => $body) {
             if (preg_match('/^' . $mark . '$/m', $body)) throw new \RuntimeException('installer: a script holds its own end marker');
         }
         $tpl = (string)file_get_contents(dirname(__DIR__) . '/deploy/agent-install.sh');
         return strtr($tpl, ['@HOOK@' => $hook, '@LISTEN@' => $listen, '@LISTENER@' => $c['listener'] ? '1' : '0',
             '@MACHINE_SHOWN@' => preg_replace('/[^\w .@-]/u', '', $machine),
+            '@ROOTS_SHOWN@' => ($c['roots'] ?? '') !== '' ? preg_replace('#[^\w ./~:@+-]#u', '', $c['roots']) : 'your home folder',
             '@HOOKS_JSON@' => (string)json_encode(self::claudeSettings(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)]);
     }
 

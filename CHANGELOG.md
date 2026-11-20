@@ -3,6 +3,18 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.48.1 (2026-11-20)
+
+The agent listener can be allowed more than one folder, and a refusal now says how to allow the folder.
+
+- **What happened:** a session started from the board in `/app/projects/talixio-code` was refused with *"is not under /home/coder (TALIXIO_ROOT)"*. `TALIXIO_ROOT` took a single folder, so the only way to add `/app` alongside the home folder was a wider root. The assistant's advice was `TALIXIO_ROOT=/`, which lets the board start sessions anywhere on the machine.
+- **Several folders:** `TALIXIO_ROOT` now takes several folders separated by `:` (`TALIXIO_ROOT="$HOME:/app/projects"`), and `~` means the home folder. Each is checked on its real path, so `..` or a link cannot lead out of them, as before.
+- **Chosen at install:** with *Also install the listener* ticked, **Folders it may start sessions in** saves them in the listener, so no environment variable is needed. The manual download takes them too. Left empty, it is the home folder, as before.
+- **The refusal** lists the allowed folders and gives the exact line that adds the refused one. `sh ~/.talixio/agent-listen.sh --check <folder>` tells whether a folder is allowed before you start a session there.
+- **Tested:** `tests/more/agent_install.php`: the folders saved by the install command, a folder under either of them allowed, elsewhere refused with the line to fix it, a link out of an allowed folder refused, `TALIXIO_ROOT` taking precedence, no folders chosen meaning the home folder, and odd input (`..`, relative paths, `$(…)`) dropped. A browser check covers the form field.
+- **Test fix:** the agent-start browser check could read the thread of the session the previous flow left open; it now waits for the one it clicked.
+- **Not tried:** a real listener on your machine starting a session in `/app/projects`. Install it again with `~:/app/projects`, or restart it with `TALIXIO_ROOT`.
+
 ## 1.48.0 (2026-11-20)
 
 Connecting a machine to the agent board is now one command, instead of a script to save and hooks to merge into `~/.claude/settings.json` by hand.
