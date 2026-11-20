@@ -34,17 +34,23 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   où une session a déjà tourné sur cette machine. La carte indique *en attente de la machine*, puis la session se signale
   comme les autres, son fil commençant par votre demande. Si elle ne peut pas démarrer (dossier introuvable, Claude Code
   absent, pas connecté, hooks manquants), sa carte dit pourquoi, avec ce qu'a affiché la machine ; **Oublier** la retire.
-- **Connecter une machine** (bouton en haut) : donnez un nom à la machine, **téléchargez le script** et enregistrez-le sous
-  `~/.talixio/agent-hook.sh`, puis ajoutez les hooks affichés à `~/.claude/settings.json` (fusionnez-les avec les hooks
-  déjà présents). La prochaine session Claude Code sur cette machine apparaît sur le tableau. Il faut `sh` et `curl`
-  (macOS, Linux, ou WSL sous Windows), et la machine doit joindre l'adresse de cet assistant. Le script contient l'adresse
-  du tableau et un jeton : gardez-le sur vos propres machines. **Nouveau jeton** annule l'ancien (chaque machine a alors
-  besoin du script à nouveau). Les scripts installés avant la version 1.38.0 : téléchargez à nouveau le script (le nouveau
-  relie une session à la Nouvelle session du tableau qui l'a lancée), et ajoutez le hook `PreToolUse` depuis le bloc
-  affiché, sinon un arrêt ne s'applique qu'à la prochaine demande d'autorisation ou fin de tour de la
-  session. Il s'exécute à chaque outil (un court appel à cet assistant).
-- **L'écouteur** (facultatif, étape 4 de *Connecter une machine*) : téléchargez-le, enregistrez-le sous
-  `~/.talixio/agent-listen.sh`, et laissez `sh ~/.talixio/agent-listen.sh` tourner sur cette machine (un terminal, tmux,
+- **Connecter une machine** (bouton en haut) : donnez un nom à la machine, cochez **Installer aussi l'écouteur** si
+  vous voulez lancer des sessions d'ici, puis **Obtenir la commande d'installation** et lancez la ligne affichée dans un
+  terminal sur cette machine : `curl -fsSL '<cet assistant>/api/agents/install?c=…' | sh`. Elle enregistre le script sous
+  `~/.talixio/agent-hook.sh` (et l'écouteur à côté) et ajoute pour vous les hooks du tableau à `~/.claude/settings.json` :
+  vos autres hooks et réglages restent, une copie du fichier est gardée avant sous `settings.json.talixio-backup`, et une
+  nouvelle commande lancée plus tard remplace les hooks Talixio au lieu de les ajouter deux fois. Si le fichier n'est pas du
+  JSON valide, il est laissé tel quel, et la commande le dit. La commande sert **une fois, pendant 15 minutes** : elle
+  contient un code à usage unique, pas le jeton, on peut donc la coller sans risque ; prenez-en une nouvelle pour chaque
+  machine. Il faut `sh`, `curl`, et `python3`, `node` ou `jq` pour fusionner les réglages (macOS, Linux, ou WSL sous
+  Windows), et la machine doit joindre l'adresse de cet assistant. La prochaine session Claude Code sur cette machine
+  apparaît sur le tableau. **Installer à la main** garde l'ancienne façon : téléchargez le script, enregistrez-le sous
+  `~/.talixio/agent-hook.sh`, et fusionnez vous-même les hooks affichés dans `~/.claude/settings.json`. Le script contient
+  l'adresse du tableau et un jeton : gardez-le sur vos propres machines. **Nouveau jeton** annule l'ancien (chaque machine a
+  alors besoin d'une nouvelle commande d'installation). Les scripts installés avant la version 1.38.0 : réinstallez, sinon
+  un arrêt ne s'applique qu'à la prochaine demande d'autorisation ou fin de tour de la session.
+- **L'écouteur** (facultatif, *Installer aussi l'écouteur* dans *Connecter une machine*, ou étape 4 d'*Installer à la
+  main*) : laissez `sh ~/.talixio/agent-listen.sh` tourner sur cette machine (un terminal, tmux,
   ou un élément d'ouverture de session). Il demande du travail au tableau toutes les quelques secondes et lance
   `claude -p` dans le dossier, avec votre demande. Côté machine, il ne démarre que dans un dossier sous votre dossier
   personnel (à changer avec `TALIXIO_ROOT`), et il garde le processus de chaque session qu'il a lancée : un arrêt venu du

@@ -3,6 +3,18 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.48.0 (2026-11-20)
+
+Connecting a machine to the agent board is now one command, instead of a script to save and hooks to merge into `~/.claude/settings.json` by hand.
+
+- **Pilotage → Agents → Connect a machine:** name the machine, tick *Also install the listener* if you want it, click **Get the install command**, and run the line in a terminal there: `curl -fsSL '<your Talixio>/api/agents/install?c=<code>' | sh`.
+- **What it does:** it saves `~/.talixio/agent-hook.sh` (and `agent-listen.sh` when asked), then merges the board's hooks into `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`) with python3, node or jq, whichever the machine has. Your other settings and hooks stay. A copy is kept first as `settings.json.talixio-backup`. Earlier Talixio hooks are replaced, not doubled, so running it again is safe. A file that is not valid JSON (comments, a stray comma) is left untouched, and the command says why. With none of the three tools, the script is still saved and the hooks to add are printed.
+- **The code:** the command carries a one-time code, not the board's token. It works once, for 15 minutes, and only its hash is stored. A used or expired one prints how to get a new one. Making one needs to be signed in. The script it downloads still holds the token, as before; it never shows in the command you paste.
+- **Install by hand** is still there, folded under the command, for machines where piping into `sh` is not wanted.
+- **Tested:** `tests/more/agent_install.php` runs the real command against a real server, in throwaway home folders. It covers a merge with your own hooks and an old Talixio one, the backup, the second use refused, a reinstall with each of python3, node and jq, the listener, no settings yet, invalid JSON with each tool, no merge tool, and expired, wrong or unauthenticated codes. A browser check clicks the button and runs the command it shows.
+- **Test fix:** the task-reminder check expected exactly one card due tomorrow. A Google-sync fixture is dated 2026-11-21, so the suite failed on 2026-11-20 whatever the code. It now expects every open card due tomorrow, ours included.
+- **Not tried:** macOS's own `sh` and BSD tools (the script sticks to POSIX sh, `mktemp`, `cp` and `mv`), a Claude Code session actually started on the merged settings, and native Windows (WSL only, as before).
+
 ## 1.47.1 (2026-11-19)
 
 Fixes "(no response)" after a request the assistant did carry out, seen with gpt-oss on AKI.IO.

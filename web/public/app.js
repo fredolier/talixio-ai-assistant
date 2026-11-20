@@ -6546,6 +6546,14 @@ function abWire() {
   });
   $('#ab-machine').oninput = dl; dl();
   $('#ab-copy').onclick = () => copyText($('#ab-snippet').textContent);
+  // 1.48.0: one command does it all, with a code that works once
+  $('#ab-cmd-get').onclick = async () => {
+    try {
+      const r = await post('api/agents/install-code', { machine: $('#ab-machine').value.trim(), listener: $('#ab-listen').checked });
+      $('#ab-cmd').textContent = r.command; $('#ab-cmd-box').hidden = false; $('#ab-cmd-listen').hidden = !$('#ab-listen').checked;
+    } catch (e) { toast(e.message); }
+  };
+  $('#ab-cmd-copy').onclick = () => copyText($('#ab-cmd').textContent);
   $('#ab-token').onclick = async () => {
     if (!confirm(t('Machines using the current token stop reporting until they get the new script. Continue?'))) return;
     try { const r = await post('api/agents/token', {}); toast(r.message); } catch (e) { toast(e.message); }

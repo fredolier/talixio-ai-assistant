@@ -186,9 +186,23 @@
           </div>
           <div class="card ab-setup" id="ab-setup" hidden>
             <p class="small">Each coding agent reports to this board by itself, word for word and as it happens, and picks up your answers. No model sits in between. For Claude Code on macOS, Linux or WSL:</p>
-            <ol class="small">
-              <li><label>Name of this machine <input type="text" id="ab-machine" maxlength="40" placeholder="laptop"></label>
-                <a class="btn small" id="ab-dl" href="api/agents/hook.sh" download="agent-hook.sh">Download the script</a>
+            <div class="ab-quick small">
+              <label>Name of this machine <input type="text" id="ab-machine" maxlength="40" placeholder="laptop"></label>
+              <label class="check"><input type="checkbox" id="ab-listen"> Also install the listener (to start and stop sessions from here)</label>
+              <div><button type="button" class="btn small" id="ab-cmd-get">Get the install command</button></div>
+              <div id="ab-cmd-box" hidden>
+                <span>Run this in a terminal on that machine:</span>
+                <pre class="ab-snippet no-i18n" id="ab-cmd"></pre>
+                <button type="button" class="btn small" id="ab-cmd-copy">Copy</button>
+                <span class="muted">It works once, for 15 minutes. It saves the script in ~/.talixio and adds the board’s hooks to ~/.claude/settings.json: your other hooks and settings stay, and a backup is made first. Needs curl, and python3, node or jq.</span>
+                <p class="muted" id="ab-cmd-listen" hidden>Then leave the listener running on that machine: <code class="no-i18n">sh ~/.talixio/agent-listen.sh</code></p>
+              </div>
+              <p>Then start a new Claude Code session there: it appears here.</p>
+            </div>
+            <details class="ab-manual small">
+              <summary>Install by hand</summary>
+            <ol>
+              <li><a class="btn small" id="ab-dl" href="api/agents/hook.sh" download="agent-hook.sh">Download the script</a>
                 <br><span class="muted">Save it as:</span> <code class="no-i18n">~/.talixio/agent-hook.sh</code>
                 <br><span class="muted">It holds this board’s address and token: keep it to your own machines.</span></li>
               <li><span>Add these hooks to ~/.claude/settings.json (merge them with the hooks already there):</span>
@@ -200,6 +214,7 @@
                 <br><code class="no-i18n">sh ~/.talixio/agent-listen.sh</code>
                 <br><span class="muted">It starts Claude Code only in a folder where a session already ran on that machine, under your home folder.</span></li>
             </ol>
+            </details>
             <p class="muted small">A permission request waits 30 seconds for your answer here, then the usual prompt shows in the terminal. A reply wakes a session that finished its turn. Another agent can report the same way: see the FAQ.</p>
             <button type="button" class="btn ghost small danger" id="ab-token">New token</button>
           </div>

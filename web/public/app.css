@@ -1932,6 +1932,10 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-setup{margin-bottom:12px}
 .ab-setup ol{padding-left:1.2em;display:flex;flex-direction:column;gap:10px}
 .ab-setup input{font:inherit;font-size:.82rem;margin:0 6px;width:12em}
+.ab-quick{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.ab-setup .ab-quick label.check{display:flex;align-items:center;gap:6px} .ab-setup .ab-quick label.check input{width:auto;margin:0}
+.ab-quick #ab-cmd{white-space:pre-wrap;word-break:break-all;margin:6px 0}
+.ab-manual{margin-bottom:10px} .ab-manual summary{cursor:pointer;color:var(--muted)} .ab-manual ol{margin-top:8px}
 .ab-snippet{max-height:220px;overflow:auto;background:var(--sunk);border-radius:8px;padding:8px;font-size:.72rem;white-space:pre}
 .ab-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .ab-col{background:var(--sunk);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:90px}

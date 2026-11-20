@@ -1,7 +1,7 @@
 // The main things a person does in the app, each one checked against the page and the server.
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 const go = async (page, v) => { await page.evaluate(h => { location.hash = h; }, '#' + v); await page.waitForTimeout(500); };
 const api = (page, path) => page.evaluate(p => fetch(p).then(r => r.json()), path);
 
@@ -851,6 +851,17 @@ const flows = {
     await page.waitForFunction(() => /PermissionRequest/.test(document.querySelector('#ab-snippet').textContent), null, { timeout: 6000 });
     check('agent board: Connect a machine shows the hooks to add', /asyncRewake/.test(await page.textContent('#ab-snippet')));
     await page.fill('#ab-machine', 'testbox');
+    // 1.48.0: one command installs it all; run here in a home folder of its own
+    await page.click('#ab-cmd-get');
+    await page.waitForSelector('#ab-cmd-box:not([hidden])', { timeout: 6000 });
+    const cmd = await page.textContent('#ab-cmd');
+    check('agent board: Get the install command gives a one-line curl … | sh', /^curl -fsSL 'http[^']+\/api\/agents\/install\?c=[\w-]+' \| sh$/.test(cmd), cmd);
+    const home = join(data, 'install-home'); mkdirSync(home, { recursive: true });
+    let installed = '';
+    try { installed = execFileSync('sh', ['-c', cmd], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] }).toString(); } catch (e) { installed = 'FAILED ' + e.stderr; }
+    const settings = existsSync(join(home, '.claude/settings.json')) ? readFileSync(join(home, '.claude/settings.json'), 'utf8') : '';
+    check('agent board: the command installs the script and the hooks for this machine', /PermissionRequest/.test(settings)
+      && /M='testbox'/.test(readFileSync(join(home, '.talixio/agent-hook.sh'), 'utf8')) && /Done\./.test(installed), installed);
     const script = await page.evaluate(() => fetch(document.querySelector('#ab-dl').getAttribute('href')).then(r => r.text()));
     check('agent board: the script downloads with the machine name', /M='testbox'/.test(script) && /^U='http/m.test(script), script.slice(0, 400));
     const sh = join(data, 'agent-hook.sh'); writeFileSync(sh, script);

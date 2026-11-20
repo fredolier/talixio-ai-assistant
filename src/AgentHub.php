@@ -494,6 +494,53 @@ final class AgentHub
             (string)file_get_contents(dirname(__DIR__) . '/deploy/' . (in_array($file, ['agent-hook.sh', 'agent-listen.sh'], true) ? $file : 'agent-hook.sh')));
     }
 
+    public const INSTALL_TTL = 900; // a one-time install code lasts 15 minutes (1.48.0)
+
+    /**
+     * A one-time code for "curl -fsSL '<address>/api/agents/install?c=<code>' | sh" (1.48.0): the command shown on the
+     * board. The code, not the agents token, is in the URL (and so in shell history and server logs); it works once,
+     * for INSTALL_TTL seconds, and only its hash is kept.
+     */
+    public function installCode(string $machine, bool $listener): array
+    {
+        $machine = mb_substr(trim(preg_replace('/[^\w .@-]+/u', '', $machine)), 0, 40);
+        $codes = array_filter($this->installCodes(), fn($c) => $c['exp'] > time());
+        if (count($codes) >= 20) array_shift($codes); // at most 20 waiting: the oldest goes
+        $code = rtrim(strtr(base64_encode(random_bytes(18)), '+/', '-_'), '=');
+        $codes[hash('sha256', $code)] = ['machine' => $machine, 'listener' => $listener, 'exp' => time() + self::INSTALL_TTL];
+        $this->app->store->set('agents.install', (string)json_encode($codes));
+        $url = rtrim($this->app->shares()->baseUrl(), '/') . '/api/agents/install?c=' . $code;
+        return ['code' => $code, 'url' => $url, 'command' => "curl -fsSL '$url' | sh", 'expires' => time() + self::INSTALL_TTL];
+    }
+
+    /** The installer for a one-time code, which is used up; null when the code is unknown, used or expired. */
+    public function installScript(string $code): ?string
+    {
+        $codes = $this->installCodes();
+        $key = hash('sha256', $code);
+        $c = $codes[$key] ?? null;
+        unset($codes[$key]);
+        $this->app->store->set('agents.install', (string)json_encode(array_filter($codes, fn($x) => $x['exp'] > time())));
+        if ($code === '' || !$c || $c['exp'] <= time()) return null;
+        $machine = $c['machine'] !== '' ? $c['machine'] : (string)gethostname();
+        $hook = rtrim($this->script($machine), "\n");
+        $listen = $c['listener'] ? rtrim($this->script($machine, 'agent-listen.sh'), "\n") : '';
+        foreach (['TALIXIO_HOOK_EOF' => $hook, 'TALIXIO_LISTEN_EOF' => $listen] as $mark => $body) {
+            if (preg_match('/^' . $mark . '$/m', $body)) throw new \RuntimeException('installer: a script holds its own end marker');
+        }
+        $tpl = (string)file_get_contents(dirname(__DIR__) . '/deploy/agent-install.sh');
+        return strtr($tpl, ['@HOOK@' => $hook, '@LISTEN@' => $listen, '@LISTENER@' => $c['listener'] ? '1' : '0',
+            '@MACHINE_SHOWN@' => preg_replace('/[^\w .@-]/u', '', $machine),
+            '@HOOKS_JSON@' => (string)json_encode(self::claudeSettings(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)]);
+    }
+
+    /** The waiting install codes: sha256 of the code => machine, listener, expiry. */
+    private function installCodes(): array
+    {
+        $c = json_decode((string)$this->app->store->get('agents.install'), true);
+        return is_array($c) ? $c : [];
+    }
+
     /** The hooks block for ~/.claude/settings.json, pointing at the saved script. */
     public static function claudeSettings(string $path = '~/.talixio/agent-hook.sh'): array
     {
