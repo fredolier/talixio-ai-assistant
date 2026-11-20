@@ -1934,6 +1934,7 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-setup input{font:inherit;font-size:.82rem;margin:0 6px;width:12em}
 .ab-quick{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .ab-setup .ab-quick label.check{display:flex;align-items:center;gap:6px} .ab-setup .ab-quick label.check input{width:auto;margin:0}
+.ab-setup .ab-quick #ab-roots{width:16em} .ab-roots-row .muted{display:block;margin-top:2px}
 .ab-quick #ab-cmd{white-space:pre-wrap;word-break:break-all;margin:6px 0}
 .ab-manual{margin-bottom:10px} .ab-manual summary{cursor:pointer;color:var(--muted)} .ab-manual ol{margin-top:8px}
 .ab-snippet{max-height:220px;overflow:auto;background:var(--sunk);border-radius:8px;padding:8px;font-size:.72rem;white-space:pre}

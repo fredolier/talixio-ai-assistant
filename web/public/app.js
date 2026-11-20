@@ -6490,7 +6490,7 @@ function abWire() {
     box.hidden = !open; $('#ab-connect').setAttribute('aria-expanded', String(open));
     if (open) try { const r = await api('api/agents/setup'); $('#ab-snippet').textContent = JSON.stringify(r.settings, null, 2); } catch (e) { toast(e.message); }
   };
-  const dl = () => { const q = '?machine=' + encodeURIComponent($('#ab-machine').value.trim()); $('#ab-dl').href = 'api/agents/hook.sh' + q; $('#ab-dl-listen').href = 'api/agents/listen.sh' + q; };
+  const dl = () => { const q = '?machine=' + encodeURIComponent($('#ab-machine').value.trim()); $('#ab-dl').href = 'api/agents/hook.sh' + q; $('#ab-dl-listen').href = 'api/agents/listen.sh' + q + '&roots=' + encodeURIComponent($('#ab-roots').value.trim()); };
   // 1.38.0: start a session on a machine whose listener runs, in a folder it already reported
   $('#ab-new-btn').onclick = () => {
     const box = $('#ab-new'), open = box.hidden;
@@ -6544,12 +6544,13 @@ function abWire() {
       await abKnow();
     } catch (err) { toast(err.message); }
   });
-  $('#ab-machine').oninput = dl; dl();
+  $('#ab-machine').oninput = dl; $('#ab-roots').oninput = dl; dl();
+  const rootsShown = () => { $('.ab-roots-row').hidden = !$('#ab-listen').checked; }; $('#ab-listen').onchange = rootsShown; rootsShown();
   $('#ab-copy').onclick = () => copyText($('#ab-snippet').textContent);
   // 1.48.0: one command does it all, with a code that works once
   $('#ab-cmd-get').onclick = async () => {
     try {
-      const r = await post('api/agents/install-code', { machine: $('#ab-machine').value.trim(), listener: $('#ab-listen').checked });
+      const r = await post('api/agents/install-code', { machine: $('#ab-machine').value.trim(), listener: $('#ab-listen').checked, roots: $('#ab-roots').value.trim() });
       $('#ab-cmd').textContent = r.command; $('#ab-cmd-box').hidden = false; $('#ab-cmd-listen').hidden = !$('#ab-listen').checked;
     } catch (e) { toast(e.message); }
   };

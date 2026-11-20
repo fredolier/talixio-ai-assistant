@@ -852,6 +852,11 @@ const flows = {
     check('agent board: Connect a machine shows the hooks to add', /asyncRewake/.test(await page.textContent('#ab-snippet')));
     await page.fill('#ab-machine', 'testbox');
     // 1.48.0: one command installs it all; run here in a home folder of its own
+    const rootsHidden = await page.isHidden('#ab-roots'); await page.check('#ab-listen');
+    check('agent board: the folders the listener may use are asked only with the listener', rootsHidden && await page.isVisible('#ab-roots'));
+    await page.fill('#ab-roots', '~:/app/projects');
+    check('agent board: the listener download carries those folders', /roots=~%3A%2Fapp%2Fprojects/.test(await page.getAttribute('#ab-dl-listen', 'href')));
+    await page.fill('#ab-roots', ''); await page.uncheck('#ab-listen');
     await page.click('#ab-cmd-get');
     await page.waitForSelector('#ab-cmd-box:not([hidden])', { timeout: 6000 });
     const cmd = await page.textContent('#ab-cmd');
@@ -1053,6 +1058,8 @@ sleep 300
       check('agent start: the session runs on the machine and reports on the board, word for word', /shop/.test(await page.textContent('#ab-cols [data-col=need]')));
       await page.click('#ab-cols [data-col=need] .ab-card:has-text("Done: Fix the basket")');
       await page.waitForSelector('#ab-detail [data-abact=stop]', { timeout: 6000 });
+      // the panel may still hold the session the previous flow left open (it has a Stop too): wait for this one's thread
+      await page.waitForFunction(() => /Fix the basket/.test(document.querySelector('#ab-detail .ab-thread')?.textContent || ''), null, { timeout: 6000 }).catch(() => {});
       check('agent start: its thread starts with the prompt sent from the board', /Fix the basket/.test(await page.textContent('#ab-detail .ab-thread')));
       const pidFile = (await import('node:fs')).readdirSync(join(lh, 'jobs')).find(f => f.endsWith('.pid'));
       const pid = Number((await import('node:fs')).readFileSync(join(lh, 'jobs', pidFile), 'utf8'));

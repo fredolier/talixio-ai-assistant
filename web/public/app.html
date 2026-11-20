@@ -189,6 +189,8 @@
             <div class="ab-quick small">
               <label>Name of this machine <input type="text" id="ab-machine" maxlength="40" placeholder="laptop"></label>
               <label class="check"><input type="checkbox" id="ab-listen"> Also install the listener (to start and stop sessions from here)</label>
+              <label class="ab-roots-row">Folders it may start sessions in <input type="text" id="ab-roots" maxlength="500" placeholder="~ (your home folder)">
+                <span class="muted">Several: separate them with “:”, e.g. ~:/app/projects</span></label>
               <div><button type="button" class="btn small" id="ab-cmd-get">Get the install command</button></div>
               <div id="ab-cmd-box" hidden>
                 <span>Run this in a terminal on that machine:</span>

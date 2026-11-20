@@ -86,4 +86,25 @@ $ch = curl_init("http://127.0.0.1:$port/api/agents/install?c=nope"); curl_setopt
 check('agent install: a wrong code gets a script that only says so (served, so that curl -f shows it)', curl_getinfo($ch, CURLINFO_HTTP_CODE) === 200 && str_contains($body, 'already used') && str_contains($body, 'exit 1') && !str_contains($body, $hub->token()));
 check('agent install: making a code needs to be signed in', $web('/api/agents/install-code', ['machine' => 'x'], 'other')['_code'] === 401);
 
+// 1.48.1: the folders the listener may start sessions in. A project under /app/projects was refused with only
+// "is not under /home/coder (TALIXIO_ROOT)"; the advice given then was TALIXIO_ROOT=/ (the whole machine).
+$h4 = "$d/home4"; foreach (["$h4/code/shop", "$d/app/projects/talixio-code", "$d/elsewhere/x"] as $x) @mkdir($x, 0777, true);
+@symlink("$d/elsewhere", "$d/app/projects/escape");
+check('agent listen: the folders typed on the board are cleaned: absolute or ~, no .., nothing odd', AgentHub::roots(" ~ : /app/projects/ ;/srv/x,../up:rel/dir:/a/../b:/bad\$(id):~/w ") === '~:/app/projects:/srv/x:~/w'
+    && AgentHub::roots('') === '' && AgentHub::roots('/') === '/');
+[$rc, $o, $e] = $sh($web('/api/agents/install-code', ['machine' => 'dev', 'listener' => true, 'roots' => "~:$d/app/projects"])['command'], $h4);
+$lis = "$h4/.talixio/agent-listen.sh";
+check('agent listen: the install command saves the folders in the listener, and says which', $rc === 0 && str_contains((string)@file_get_contents($lis), "R='~:$d/app/projects'")
+    && str_contains($o, "it may start sessions in: ~:$d/app/projects"), "$rc $o $e");
+$chk = fn(string $dir, array $env = []) => $sh('sh ' . escapeshellarg($lis) . ' --check ' . escapeshellarg($dir), $h4, $env);
+[$rc1, $o1] = $chk("$d/app/projects/talixio-code"); [$rc2, $o2] = $chk("$h4/code/shop"); [$rc3, $o3] = $chk("$d/elsewhere/x"); [$rc4, $o4] = $chk("$d/app/projects/escape/x");
+check('agent listen: a folder under any of them is allowed, ~ being the home folder', $rc1 === 0 && $rc2 === 0 && str_contains($o1, 'Allowed'), "$o1 $o2");
+check('agent listen: elsewhere is refused, with the exact way to allow it', $rc3 === 1 && str_contains($o3, "is not under the folders this listener may use (~:$d/app/projects)")
+    && str_contains($o3, "TALIXIO_ROOT='~:$d/app/projects:$d/elsewhere/x' sh ~/.talixio/agent-listen.sh"), $o3);
+check('agent listen: a link out of an allowed folder does not get out', $rc4 === 1, $o4);
+[$rc5] = $chk("$d/elsewhere/x", ['TALIXIO_ROOT' => "/nowhere:$d/elsewhere"]); [$rc6] = $chk("$d/app/projects/talixio-code", ['TALIXIO_ROOT' => "$d/elsewhere"]);
+check('agent listen: TALIXIO_ROOT still wins, several folders too, a missing one skipped', $rc5 === 0 && $rc6 === 1);
+$plain = "$d/plain-listen.sh"; file_put_contents($plain, $hub->script('p', 'agent-listen.sh'));
+check('agent listen: with no folders chosen, it is the home folder as before', $sh("sh $plain --check $h4/code/shop", $h4)[0] === 0 && $sh("sh $plain --check $d/app/projects/talixio-code", $h4)[0] === 1);
+
 foreach ($saved as $k => $v) putenv($v === false ? $k : "$k=$v");

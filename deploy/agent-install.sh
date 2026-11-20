@@ -25,7 +25,7 @@ TALIXIO_HOOK_EOF
 @LISTEN@
 TALIXIO_LISTEN_EOF
     chmod 700 "$D/agent-listen.sh"
-    echo "Talixio: saved $D/agent-listen.sh."
+    echo "Talixio: saved $D/agent-listen.sh (it may start sessions in: @ROOTS_SHOWN@)."
   fi
 
   H=$(mktemp 2>/dev/null || echo "$D/hooks.$$.json")

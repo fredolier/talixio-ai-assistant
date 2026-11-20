@@ -3,15 +3,40 @@
 # Leave it running (a terminal, tmux, or a login item). Needs sh, curl and Claude Code with the agent hooks.
 #   sh agent-listen.sh
 # It asks the board every few seconds for work. A session starts only in a folder where a session already
-# ran on this machine (the board offers no other) and, on this side, only under TALIXIO_ROOT (default: your
-# home folder). It runs `claude -p` there with the prompt, and keeps the process ids in ~/.talixio/jobs: a stop
+# ran on this machine (the board offers no other) and, on this side, only under the folders it may use: TALIXIO_ROOT,
+# else the ones chosen when it was installed, else your home folder. Several folders: separate them with ':'
+# (TALIXIO_ROOT="$HOME:/app/projects"). Check one before starting a session there: sh agent-listen.sh --check <folder> It runs `claude -p` there with the prompt, and keeps the process ids in ~/.talixio/jobs: a stop
 # from the board names a job, never a process, so only the sessions this listener started can be ended here.
 # Settings: TALIXIO_CLAUDE (the claude command), TALIXIO_ROOT, TALIXIO_CLAUDE_ARGS (e.g. --permission-mode acceptEdits).
 U=@URL@
 T=@TOKEN@
 M=@MACHINE@
 CLAUDE="${TALIXIO_CLAUDE:-claude}"
-ROOT="${TALIXIO_ROOT:-$HOME}"
+R=@ROOTS@
+ROOT="${TALIXIO_ROOT:-${R:-$HOME}}"
+# allowed <real folder>: under one of the ROOT folders (their real paths: no way out with .. or a link)
+allowed() {
+  _ok=; _ifs=$IFS; IFS=:; set -f
+  for _r in $ROOT; do
+    case "$_r" in '~') _r=$HOME ;; '~/'*) _r="$HOME/${_r#'~/'}" ;; esac
+    _rr=$(cd "$_r" 2>/dev/null && pwd -P) || continue
+    case "$1" in "$_rr"|"$_rr"/*) _ok=1 ;; esac
+    [ "$_rr" = / ] && _ok=1
+  done
+  IFS=$_ifs; set +f
+  [ -n "$_ok" ]
+}
+refused() { # the folder as asked
+  echo "Refused: $1 is not under the folders this listener may use ($ROOT)."
+  echo "To allow it, restart the listener with that folder added, e.g.: TALIXIO_ROOT='$ROOT:$1' sh ~/.talixio/agent-listen.sh"
+  echo "(or install it again from the board, with the folder in \"Folders it may start sessions in\")."
+}
+if [ "$1" = --check ]; then
+  real=$(cd "$2" 2>/dev/null && pwd -P)
+  if [ -z "$real" ]; then echo "No such folder on this machine: $2"; exit 2; fi
+  if allowed "$real"; then echo "Allowed: the board can start sessions in $2."; exit 0; fi
+  refused "$2"; exit 1
+fi
 D="${TALIXIO_HOME:-$HOME/.talixio}/jobs"
 mkdir -p "$D" || exit 1
 out=$(mktemp 2>/dev/null || echo "/tmp/talixio-listen.$$")
@@ -23,7 +48,7 @@ report() { # job state [file with the output] [pid]
   grep -q '"stop":true' "$out.r" 2>/dev/null && [ -n "$4" ] && kill "$4" 2>/dev/null
   rm -f "$out.r"
 }
-echo "Talixio listener for $M: waiting for work from $U (Ctrl-C to stop)."
+echo "Talixio listener for $M: waiting for work from $U (Ctrl-C to stop). Folders it may use: $ROOT"
 while :; do
   for f in "$D"/*.pid; do # sessions that ended
     [ -f "$f" ] || continue
@@ -40,11 +65,9 @@ while :; do
         [ -f "$D/$id.pid" ] && kill "$(cat "$D/$id.pid")" 2>/dev/null
       elif [ "$kind" = start ]; then
         dir=$(sed -n 3p "$out"); sed '1,3d' "$out" > "$D/$id.prompt"
-        real=$(cd "$dir" 2>/dev/null && pwd -P); root=$(cd "$ROOT" 2>/dev/null && pwd -P) # the real folders: no way out with .. or a link
-        case "$real" in "$root"|"$root"/*) inside=1 ;; *) inside= ;; esac
-        [ "$root" = / ] && inside=1
+        real=$(cd "$dir" 2>/dev/null && pwd -P)
         if [ -z "$real" ]; then echo "No such folder on this machine: $dir" > "$D/$id.log"; report "$id" failed "$D/$id.log"
-        elif [ -z "$inside" ]; then echo "Refused: $dir is not under $ROOT (TALIXIO_ROOT)." > "$D/$id.log"; report "$id" failed "$D/$id.log"
+        elif ! allowed "$real"; then refused "$dir" > "$D/$id.log"; report "$id" failed "$D/$id.log"
         elif ! command -v "$CLAUDE" >/dev/null 2>&1; then echo "Claude Code ($CLAUDE) is not installed or not on the PATH of this listener." > "$D/$id.log"; report "$id" failed "$D/$id.log"
         else
           # shellcheck disable=SC2086
