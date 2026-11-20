@@ -3268,7 +3268,9 @@ $cal = $aj('/api/board/calendar?from=2026-11-01&to=2026-11-30', null, 'd');
 check('board api: tasks of a month for the calendar', in_array('MAI-1', array_column($cal['cards'], 'code'), true) && !in_array('ACM-1', array_column($cal['cards'], 'code'), true), json_encode(array_column($cal['cards'], 'code')));
 $bd->create(['title' => 'Due tomorrow', 'due_date' => date('Y-m-d', strtotime('tomorrow'))], (int)$bsp['id']);
 $ba->cfg->taskReminder = '00:00'; $ba->cfg->notify = [];
-check('board: reminder the day before, once a day', $bd->remind(time()) === 1 && $bd->remind(time()) === 0);
+// every open card due tomorrow is in it: fixtures above use fixed dates (2026-11-21), which on 2026-11-20 is tomorrow too
+$dueTomorrow = (int)$ba->store->q("SELECT COUNT(*) FROM cards WHERE due_date = ? AND status != 'done' AND deleted_at IS NULL", [date('Y-m-d', strtotime('tomorrow'))])->fetchColumn();
+check('board: reminder the day before, once a day', $dueTomorrow >= 1 && $bd->remind(time()) === $dueTomorrow && $bd->remind(time()) === 0, (string)$dueTomorrow);
 $mp = proc_open([PHP_BINARY, dirname(__DIR__) . '/bin/talixio', 'mcp'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $mpipes, null,
     ['TALIXIO_DATA_DIR' => $ad, 'TALIXIO_SPACE' => (string)$bsp['id'], 'PATH' => getenv('PATH')]);
 fwrite($mpipes[0], json_encode(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => ['name' => 'board_add', 'arguments' => ['title' => 'Via Claude Code']]]) . "\n"); fclose($mpipes[0]);

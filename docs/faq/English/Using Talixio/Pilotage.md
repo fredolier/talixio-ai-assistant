@@ -30,16 +30,21 @@ The board updates by itself every few seconds while you look at it.
   already ran on that machine. The card shows *waiting for the machine*, then the session reports like the others, its
   thread starting with your prompt. If it cannot start (no such folder, Claude Code not installed, not logged in, hooks
   missing), its card says why, with what the machine printed; **Forget** removes it.
-- **Connect a machine** (button at the top): give the machine a name, **download the script** and save it as
-  `~/.talixio/agent-hook.sh`, then add the hooks shown to `~/.claude/settings.json` (merge them with any hooks already
-  there). The next Claude Code session on that machine appears on the board. It needs `sh` and `curl` (macOS, Linux, or
-  WSL on Windows), and the machine must reach this assistant's address. The script holds the board's address and a token:
-  keep it on your own machines. **New token** cancels the old one (each machine then needs the script again).
-  Hook scripts set up before version 1.38.0: download the script again (the new one links a session to the board's
-  New session that started it), and add the `PreToolUse` hook from the block shown, or a stop only takes
-  effect at the session's next permission request or end of turn. It runs at each tool call (one short call to this
-  assistant).
-- **The listener** (optional, step 4 of *Connect a machine*): download it, save it as `~/.talixio/agent-listen.sh`, and
+- **Connect a machine** (button at the top): give the machine a name, tick **Also install the listener** if you want
+  to start sessions from here, then **Get the install command** and run the line it shows in a terminal on that machine:
+  `curl -fsSL '<this assistant>/api/agents/install?c=…' | sh`. It saves the script as `~/.talixio/agent-hook.sh` (and
+  the listener next to it) and adds the board's hooks to `~/.claude/settings.json` for you: your other hooks and settings
+  stay, a copy of the file is kept first as `settings.json.talixio-backup`, and running a new command later replaces the
+  Talixio hooks instead of adding them twice. If the file is not valid JSON it is left as it was, and the command says so.
+  The command works **once, for 15 minutes**: it holds a one-time code, not the token, so it is safe to paste; get a new one
+  for each machine. It needs `sh`, `curl`, and `python3`, `node` or `jq` to merge the settings (macOS, Linux, or WSL on
+  Windows), and the machine must reach this assistant's address. The next Claude Code session on that machine appears on
+  the board. **Install by hand** keeps the old way: download the script, save it as `~/.talixio/agent-hook.sh`, and merge
+  the hooks shown into `~/.claude/settings.json` yourself. The script holds the board's address and a token: keep it on
+  your own machines. **New token** cancels the old one (each machine then needs the install command again).
+  Hook scripts set up before version 1.38.0: install again, or a stop only takes effect at the session's next permission
+  request or end of turn.
+- **The listener** (optional, *Also install the listener* in *Connect a machine*, or step 4 of *Install by hand*):
   leave `sh ~/.talixio/agent-listen.sh` running on that machine (a terminal, tmux, or a login item). It asks the board
   for work every few seconds and runs `claude -p` in the folder, with your prompt. On the machine's side it only starts in
   a folder under your home folder (change it with `TALIXIO_ROOT`), and it keeps the process of each session it started:

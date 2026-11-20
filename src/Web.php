@@ -46,6 +46,7 @@ final class Web
         if ($path === '/api/mcp/oauth/callback' && $method === 'GET') { $this->mcpOAuthCallback(); return; }
         if ($path === '/api/conductor/inbox') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
         if ($path === '/api/conductor/tick') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
+        if ($path === '/api/agents/install' && $method === 'GET') { $this->agentInstall(); return; } // 1.48.0: curl … | sh with a one-time code, no session
         if (in_array($path, ['/api/agents/hook', '/api/agents/wait', '/api/agents/next', '/api/agents/job', '/api/agents/file'], true)) { $this->agentHook($path, $method); return; } // a coding agent's hook script: the agents token, no session here
         if ($path === '/api/conductor/pull') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
         if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye', '/api/federation/ask', '/api/federation/queries'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
@@ -1901,6 +1902,22 @@ final class Web
         }
     }
 
+    /**
+     * GET /api/agents/install?c=<one-time code>: the installer, piped to sh on the machine (1.48.0). The code is used up
+     * here. A wrong, used or expired one gets 410 and a script that only says so: piped to sh, it prints that.
+     */
+    private function agentInstall(): void
+    {
+        $script = $this->app->agentHub()->installScript((string)($_GET['c'] ?? ''));
+        while (ob_get_level() > 0) ob_end_clean();
+        // an unknown code still answers 200: curl -f would hide a 410's body, and that body is what tells the person why
+        http_response_code(200);
+        header('Content-Type: text/x-shellscript; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+        echo $script ?? "#!/bin/sh\necho 'Talixio: this install command was already used or has expired (it works once, for 15 minutes). Get a new one on the board: Pilotage, Agents, Connect a machine.' >&2\nexit 1\n";
+    }
+
     /** The board as the signed-in person sees it: list, one session's thread, answers, setup. */
     private function agents(string $m, string $path, array $b): array
     {
@@ -1909,6 +1926,7 @@ final class Web
         $id = fn(string $p) => preg_match('#^/api/agents/s/([\w.:-]+)/' . $p . '$#', $path, $mm) ? $mm[1] : null;
         return match (true) {
             $path === '/api/agents' && $m === 'GET' => $hub->board(),
+            $path === '/api/agents/install-code' && $m === 'POST' => (function () use ($hub, $b) { Shares::remember($this->app); return $hub->installCode((string)($b['machine'] ?? ''), !empty($b['listener'])); })(), // 1.48.0: the address as this signed-in user reaches it
             $path === '/api/agents/setup' && $m === 'GET' => ['settings' => AgentHub::claudeSettings(), 'connected' => $hub->board()['connected']],
             ($path === '/api/agents/hook.sh' || $path === '/api/agents/listen.sh') && $m === 'GET' => (function () use ($hub, $path) {
                 $file = $path === '/api/agents/listen.sh' ? 'agent-listen.sh' : 'agent-hook.sh';
