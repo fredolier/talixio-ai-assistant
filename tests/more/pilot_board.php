@@ -49,7 +49,7 @@ $cases = [
     ['b1', 'Which name for the helper: slugify or toSlug?', '{"kind":"answer","answer":"slugify","level":"L2","confidence":0.6,"rationale":"guess"}', 'confidence below'],
     ['b2', 'Should I rename the API?', '{"kind":"answer","answer":"Yes","level":"L3","confidence":0.95,"rationale":"x"}', '« ask »'],
     ['b3', 'Ready to ship. Go on?', '{"kind":"answer","answer":"Yes, deploy to production.","level":"L1","confidence":0.99,"rationale":"x"}', 'always decides'],
-    ['b4', 'Shall I price it at 40 €?', '{"kind":"answer","answer":"Yes","level":"L5","confidence":0.99,"rationale":"x"}', 'L5 is the user'],
+    ['b4', 'Shall I price it at 40 €?', '{"kind":"answer","answer":"Yes","level":"L6","confidence":0.99,"rationale":"x"}', 'L6 is the user'],
 ];
 foreach ($cases as [$sid, $msg, $out, $why]) {
     $r = $finish($sid, $msg); $reply = $out; $pilot->boardTick(time() + 2000 + 100 * count($asked));
@@ -99,10 +99,10 @@ $pilot->boardTick(time() + 13000);
 check('pilot board: a stopped session is left alone', count($asked) === $n);
 
 // checks of shared code that lived with the cloud relay's tests (ported in 1.42.0, before the relay goes)
-check('pilot: L4/L5 can never be delegated and an unknown mode is refused', is_string($pilot->setPolicy(['autonomy' => ['L4' => 'auto']])) && is_string($pilot->setPolicy(['autonomy' => ['L2' => 'wild']])) && $pilot->state()['autonomy']['L4'] === 'ask');
+check('pilot: L6 (values) can never be delegated and an unknown mode is refused', is_string($pilot->setPolicy(['autonomy' => ['L6' => 'auto']])) && is_string($pilot->setPolicy(['autonomy' => ['L2' => 'wild']])) && $pilot->state()['autonomy']['L6'] === 'ask');
 $pilot->setPolicy(['priorities' => "1. Client work first\n- the release\n"]);
 check('pilot: a clean ordered priority list is kept', $pilot->priorities() === ['Client work first', 'the release']);
-check('pilot: a level is read from the question type, L4 when unclear', Pilot::levelOf('L2') === 'L2' && Pilot::levelOf('level 3') === 'L3' && Pilot::levelOf('') === 'L4' && Pilot::levelOf('business') === 'L4');
+check('pilot: a level is read from the question type, L6 when unclear', Pilot::levelOf('L2') === 'L2' && Pilot::levelOf('level 3') === 'L3' && Pilot::levelOf('') === 'L6' && Pilot::levelOf('business') === 'L6');
 check('pilot: answers are compared loosely', Pilot::same('Garder A', 'garder a.') && Pilot::same('short', 'Short title please') && !Pilot::same('yes', 'no'));
 check('pilot: the overview suggests more room only after enough right answers', $pilot->overview()['levels']['L3']['suggest'] === null && $pilot->overview()['calibration']['n'] >= 2, json_encode($pilot->overview()['calibration']));
 $pilot->setPolicy(['rules' => ["- Never touch billing without asking", "2) Keep answers short", ""], 'daily_cap' => 0]);

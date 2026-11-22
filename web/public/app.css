@@ -2044,6 +2044,11 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-sug>div{white-space:pre-wrap;word-break:break-word}
 .ab-sug-sum{font-weight:500}
 .ab-reopen{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:4px}
+.ab-opts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0}
+.ab-opt{max-width:100%;text-align:left}
+.pl-promote{margin-top:10px;display:grid;gap:6px}
+.pl-promote .pl-chk{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.pl-promote select{width:auto}
 .ab-ev .ab-file{white-space:normal;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px} /* 1.47.0: a file the agent sent */
 .ab-file-name{font-weight:600;word-break:break-all}
 @media (max-width:760px){

@@ -3,6 +3,28 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.52.0 (2026-11-22)
+
+The board's autonomy follows your coding agents' decision ladder, with you as their PO, and gains room by itself where it has earned it. A proposal you did not decide comes back until you do.
+
+- **Why:** you want the assistant to become fully autonomous once it has learned enough (85 to 90 %), escalation never forgotten, and the same ladder as Talixio Code, where the PO (you) decides. The old levels (*Routine*, *Small choices*, *Real choices*, *Values and business*, *Critical*) were the board's own. Only you could raise a level; nothing reminded you of a proposal left waiting.
+- **Six levels.** L1 Technical (bugs, tests, clarity), L2 Design (architecture), L3 Solution (specs, user value), **L4 Product**, the PO's call once the project runs (planning, priorities, a scope trade-off, a small drift), **L5 Business** (direction, revenue, pricing, policy: where it goes when the product's trade-offs no longer hold), **L6 Values** (honesty, harm, anything irreversible). Talixio Code has five levels, with the PO deciding its L4 Business. At your suggestion, product and business are separate levels here. The model's prompt describes the six levels. Pushes, deploys, deletions, e-mails, credentials and payments are "L5 or more" there, and the code's guard on them is unchanged: never sent alone.
+- **Who opens what.** L1 to L5 can each be given *tell* or *auto* by you. L6 is locked (🔒 *Always yours*), and an unclear level counts as L6. Before, L4 and L5 were both locked and an unclear level counted as L4. The old ladder's L4 accuracy ("values or the user's own judgement") moves to L6 once, when the settings are first read.
+- **Self-promotion** (on out of the box, and only once *It may answer by itself* is on). L1 to L3 raise themselves when the assistant's answers matched yours at least 85 % of the time. Over the last 10 answers, *ask* becomes *tell*; over the next 20, *tell* becomes *auto*. The threshold can be 80, 85, 90 or 95 %. A notice *Fleet: autonomy raised* tells you, and a miss lowers the level at once, as before. *L4 Product too* (off by default) lets your PO calls be taken over the same way. L5 is raised only by you (the assistant *suggests* it, as before). L6 is never raised.
+- **The agent's card is read.** A level the agent states (*Niveau : L4*, *Level: L3*, a line starting with *L4*) is kept when the model guesses lower. The agents' L5 (values) is read as L6. Options it lists (*A) …*, *1. …*, one per line or inline) show as one-click buttons in the session's pane.
+- **Reminders.** A proposal nobody decided comes back as *Still waiting for your decision*, an hour later, 4 hours after that, then every day, for as long as its session still waits at that turn. It goes out unless the board's notices are off. A session that moved on drops its reminder.
+- **Tested:** new `tests/more/pilot_ladder.php` (18 checks, which fail without the change):
+  - the six levels in the prompt; L4/L5 settable, L6 not; reading a card's level;
+  - self-promotion at 9 of 10, not before 10, L4 only when allowed, never L5, nothing when switched off;
+  - a card's L4 kept over the model's L1;
+  - reminders at 1 h, not twice, again at +4 h, none once answered.
+
+  New browser flow `agentOptions`: the options as buttons, one click answers. `agentAutonomy` and `pilotage` check the six levels, five settable, and the self-promotion controls saved. Both fail on the old code. Deliberately adapted to the new ladder:
+  - `pilot_board.php`: the "kept" case is now L6 (it was L5); "never delegated" is now checked on L6 (it was L4); an unclear level is now L6 (it was L4);
+  - `agentAutonomy` / `pilotage`: they counted 3 settable levels out of 5;
+  - `tests/eval/board_turns.json`: its "at least L4" turns (pushes, deploys…) are now "at least L5".
+- **Not tried:** a real model with the new level descriptions, so how well it tells L4 Product from L5 Business is not measured. Self-promotion with real answers over days. Reminders reaching a phone (the tests read the notices table). Talixio Code itself still has five levels: telling it that product and business are split here is up to you.
+
 ## 1.51.0 (2026-11-22)
 
 When a board session ends its turn, the assistant now takes it in hand: it reads the turn, says where things stand, proposes what to do next and tells you when it waits for your decision. A session that ended can be resumed from the board.

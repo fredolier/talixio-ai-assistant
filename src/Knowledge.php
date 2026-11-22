@@ -315,7 +315,7 @@ final class Knowledge
             foreach ((array)($b['decisions'] ?? []) as $d) {
                 if (!is_array($d) || trim((string)($d['answer'] ?? '')) === '') continue;
                 $agent = (string)($d['agent'] ?? '');
-                $level = preg_match('/\bL?([1-5])\b/i', (string)($d['type'] ?? ''), $m) ? 'L' . $m[1] : '';
+                $level = preg_match('/\bL?([1-6])\b/i', (string)($d['type'] ?? ''), $m) ? 'L' . $m[1] : '';
                 $nd += $this->recordDecision($proj($agent, (string)($d['name'] ?? $names[$agent] ?? '')), (string)($d['question'] ?? ''), (string)$d['answer'],
                     ($d['by'] ?? '') === 'assistant' ? 'assistant' : 'you', $level, '', 'relay', (int)($d['ts'] ?? time())) > 0 ? 1 : 0;
             }
