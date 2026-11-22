@@ -1402,8 +1402,13 @@ check('conductor: dispatch starts a Tier-D session on its own directive', str_co
 $cjid = (int)$s->q("SELECT MAX(id) FROM jobs WHERE kind='conductor'")->fetchColumn(); $cj = $s->job($cjid);
 check('conductor: the worker is a running conductor job seeded from the role brief, with a live session handle',
     $cj['kind'] === 'conductor' && $cj['status'] === 'running' && $cj['role'] === 'coder-x' && $cj['session'] !== '' && str_contains((string)$cj['instructions'], 'Read the repo, make the change') && str_contains((string)$cj['instructions'], 'Add a --verbose flag'));
+// only the Tier-D session is queued here: other queued jobs (a learning job an earlier chat queued) would start as real
+// processes, still writing to this database while the checks below run (it made "learning: nothing worth keeping" flaky)
+$held = array_column($s->q("SELECT id FROM jobs WHERE status = 'queued'")->fetchAll(), 'id');
+if ($held) $s->q("UPDATE jobs SET status = 'held' WHERE id IN (" . implode(',', array_map('intval', $held)) . ')');
 $s->updateJob($cjid, ['status' => 'queued']); $app->jobs()->dispatch(); // the in-process engine must skip a Tier-D session, not run it
-check('conductor: the in-process jobs engine does not claim a Tier-D session', $s->job($cjid)['status'] === 'queued');
+check('conductor: the in-process jobs engine does not claim a Tier-D session', $s->job($cjid)['status'] === 'queued' && Talixio\Jobs::runningCount() === 0, (string)Talixio\Jobs::runningCount());
+if ($held) $s->q("UPDATE jobs SET status = 'queued' WHERE id IN (" . implode(',', array_map('intval', $held)) . ')');
 $s->updateJob($cjid, ['status' => 'running']);
 $h = array_key_first($cli->sessions); $cli->finish($h, 'Added the --verbose flag and updated the tests.', 0.07);
 $app->conductor()->poll();
@@ -1521,10 +1526,11 @@ $app->jobs()->runJob((int)$learn['id']);
 $last = $s->messagesAfter(0); $last = end($last);
 check('learning: skill saved and the user told', $sk->raw('invoice-check') !== null && $last['channel'] === 'learn' && str_contains($last['content'], 'Learned a skill: **invoice-check**'));
 $fake->script = fn($last) => 'NO_SKILL';
-$n = count($s->messagesAfter(0));
+$top = (int)$s->q('SELECT COALESCE(MAX(id),0) FROM messages')->fetchColumn();
 $id = $s->addJob('Learning from: x', "## Steps taken\n- a", 'fast', 0.05, 'reflect');
 $app->jobs()->runJob($id);
-check('learning: nothing worth keeping stays quiet', count($s->messagesAfter(0)) === $n && $s->job($id)['result'] === 'Nothing worth keeping.');
+$new = $s->q('SELECT channel, role, content FROM messages WHERE id > ?', [$top])->fetchAll();
+check('learning: nothing worth keeping stays quiet', !$new && $s->job($id)['result'] === 'Nothing worth keeping.', json_encode(['new' => $new, 'job' => $s->job($id)['status'] . ': ' . $s->job($id)['result']]));
 $fake->script = fn($last) => 'Short answer.';
 $before = (int)$s->q("SELECT COUNT(*) FROM jobs WHERE kind='reflect'")->fetchColumn();
 $app->agent()->chat('web', 'hi');
