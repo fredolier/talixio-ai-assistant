@@ -12,18 +12,27 @@ L'onglet **Agents** est un tableau en direct des agents de code qui travaillent 
 l'instant). Chaque session s'y signale **elle-même**, par un petit script de hook : ce que vous y avez tapé, son dernier
 message **mot pour mot**, les autorisations qu'elle demande, sa fin. Aucun modèle ne relaie ni ne réécrit rien, et les
 heures affichées sont les vraies. Le tableau se met à jour tout seul toutes les quelques secondes tant que vous le regardez.
-- **Trois colonnes.** **À vous** : une session qui demande une autorisation, ou qui a terminé son tour et que vous n'avez
-  pas encore regardée. **Au travail** : une session occupée par votre demande. **Au calme** : celles que vous avez
-  regardées, et celles qui sont terminées. Chaque carte montre le projet (son dossier), l'agent et la machine, depuis quand
-  elle n'a rien dit, et ses derniers mots.
-- **Cliquez une carte** pour lire le fil de la session (vos demandes, ses réponses, les demandes d'autorisation, ce que
-  vous avez envoyé d'ici et quand c'est arrivé) et lui répondre :
+- **Deux volets** (depuis la 1.49.0). À gauche, la liste des sessions en trois groupes. **À vous** : une session qui
+  demande une autorisation, ou qui a terminé son tour et que vous n'avez pas encore regardée. **Au travail** : une session
+  occupée par votre demande. **Au calme** : celles que vous avez regardées, et celles qui sont terminées. Chaque carte
+  montre le projet (son dossier), la machine, depuis quand elle n'a rien dit, et l'essentiel : la commande ou le fichier
+  d'une demande d'autorisation, la fin de son dernier message (là où se trouve d'habitude sa question), ou ce qu'elle fait
+  en ce moment. À droite, la session ouverte, ou l'outil ouvert par les boutons du haut (Nouvelle session, Connecter une
+  machine, Autonomie, Ce que je sais ; ✕ le ferme). Sur téléphone, la liste prend l'écran, et ce que vous ouvrez la
+  recouvre, avec ‹ pour revenir.
+- **Autoriser / Refuser depuis la liste.** Une carte de demande d'autorisation porte ses propres boutons *Autoriser* et
+  *Refuser* : inutile d'ouvrir la session.
+- **Cliquez une carte** (ou Entrée dessus) pour lire le fil de la session à droite (vos demandes, ses réponses, mises en
+  forme comme écrites, avec listes, titres et code ; les demandes d'autorisation ; ce que vous avez envoyé d'ici et quand
+  c'est arrivé) et lui répondre dans la zone fixée en bas (sur ordinateur, Entrée envoie et Maj+Entrée va à la ligne). Une session ouverte
+  depuis *À vous* y reste pendant que vous la lisez, au lieu de filer dans Au calme sous vos yeux.
   - **Répondre** : le texte part à la session. Une session qui a terminé son tour est réveillée et reprend le travail ; une
     session encore occupée le reçoit à la fin de son tour en cours. Le message après l'envoi dit lequel (*Envoyé* ou
     *En attente*).
   - **Autoriser / Refuser** une demande d'autorisation (la commande ou le fichier concerné est affiché). La session attend
     votre réponse ici **30 secondes** ; ensuite, la question habituelle s'affiche dans son terminal et vous y répondez là.
-  - **Marquer comme vu** range une session terminée dans Au calme ; **Oublier** la retire du tableau avec son fil.
+  - **Marquer comme vu** range une session terminée dans Au calme ; **Oublier** la retire du tableau avec son fil (les
+    deux dans le menu **⋯** en haut de la conversation).
   - **Arrêter** met fin au travail de la session. Une session démarrée depuis le tableau (ci-dessous) est terminée sur sa
     machine par l'écouteur, en quelques secondes. Toute autre s'arrête à sa **prochaine étape** : son prochain outil, sa
     prochaine demande d'autorisation ou la fin de son tour (son hook dit à Claude Code de ne pas continuer). Une session

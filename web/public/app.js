@@ -6485,40 +6485,31 @@ function abWire() {
     if ((el = e.target.closest('[data-verdict]'))) { plVerdict(el); return; }
     if ((el = e.target.closest('[data-auto-save]'))) plSaveAuto();
   });
-  $('#ab-connect').onclick = async () => {
-    const box = $('#ab-setup'), open = box.hidden;
-    box.hidden = !open; $('#ab-connect').setAttribute('aria-expanded', String(open));
-    if (open) try { const r = await api('api/agents/setup'); $('#ab-snippet').textContent = JSON.stringify(r.settings, null, 2); } catch (e) { toast(e.message); }
-  };
+  $('#ab-connect').onclick = () => abTool('ab-setup', abSetupLoad);
+  // the tools' ✕ and the empty pane's buttons
+  $('#ab-pane').addEventListener('click', e => {
+    if (e.target.closest('[data-pane-close]')) { abToolClose(); return; }
+    const o = e.target.closest('[data-pane-open]'); if (o) $('#' + AB_TOOLS[o.dataset.paneOpen]).click();
+    if (e.target.closest('[data-ab-next]')) { const n = abNextNeed(); if (n) abOpen(n.id); }
+  });
+  addEventListener('resize', abFit);
   const dl = () => { const q = '?machine=' + encodeURIComponent($('#ab-machine').value.trim()); $('#ab-dl').href = 'api/agents/hook.sh' + q; $('#ab-dl-listen').href = 'api/agents/listen.sh' + q + '&roots=' + encodeURIComponent($('#ab-roots').value.trim()); };
   // 1.38.0: start a session on a machine whose listener runs, in a folder it already reported
-  $('#ab-new-btn').onclick = () => {
-    const box = $('#ab-new'), open = box.hidden;
-    box.hidden = !open; $('#ab-new-btn').setAttribute('aria-expanded', String(open));
-    if (open) { abNewForm(); $('#ab-new-prompt').focus(); }
-  };
+  $('#ab-new-btn').onclick = () => abTool('ab-new', () => { abNewForm(); $('#ab-new-prompt').focus(); });
   $('#ab-new-machine').onchange = () => abNewFolders();
   $('#ab-new-start').onclick = async () => {
     const prompt = $('#ab-new-prompt').value.trim(); if (!prompt) { $('#ab-new-prompt').focus(); return; }
     try {
       await post('api/agents/start', { machine: $('#ab-new-machine').value, cwd: $('#ab-new-folder').value, prompt });
-      $('#ab-new-prompt').value = ''; $('#ab-new').hidden = true; $('#ab-new-btn').setAttribute('aria-expanded', 'false');
+      $('#ab-new-prompt').value = ''; abToolClose();
       toast(t('Sent to the machine: the session starts within seconds.'));
       AB.rev = -1; await abRefresh();
     } catch (e) { toast(e.message); }
   };
   // 1.39.0: the assistant answers the agents within the limits set here
-  $('#ab-auto-btn').onclick = () => {
-    const box = $('#ab-auto'), open = box.hidden;
-    box.hidden = !open; $('#ab-auto-btn').setAttribute('aria-expanded', String(open));
-    if (open) plLoadAuto();
-  };
+  $('#ab-auto-btn').onclick = () => abTool('ab-auto', plLoadAuto);
   // 1.44.0: what the director learned from the agents (docs/design/director-knowledge.md)
-  $('#ab-know-btn').onclick = () => {
-    const box = $('#ab-know'), open = box.hidden;
-    box.hidden = !open; $('#ab-know-btn').setAttribute('aria-expanded', String(open));
-    if (open) abKnow().catch(e => toast(e.message));
-  };
+  $('#ab-know-btn').onclick = () => abTool('ab-know', () => abKnow().catch(e => toast(e.message)));
   $('#ab-know').addEventListener('change', e => { if (e.target.matches('[data-kfilter]')) abKnowRender(); });
   $('#ab-know').addEventListener('click', async e => {
     const b = e.target.closest('[data-kact]'); if (!b) return;
@@ -6559,19 +6550,40 @@ function abWire() {
     if (!confirm(t('Machines using the current token stop reporting until they get the new script. Continue?'))) return;
     try { const r = await post('api/agents/token', {}); toast(r.message); } catch (e) { toast(e.message); }
   };
-  $('#ab-cols').onclick = e => { const c = e.target.closest('[data-ab]'); if (c) abOpen(c.dataset.ab); };
+  // a card opens its session; Allow / Deny on a card answers a permission without opening it (1.49.0)
+  $('#ab-cols').onclick = async e => {
+    const c = e.target.closest('[data-ab]'); if (!c) return;
+    const a = e.target.closest('[data-cact]');
+    if (!a) { abOpen(c.dataset.ab); return; }
+    a.disabled = true;
+    try {
+      const r = await post(`api/agents/s/${encodeURIComponent(c.dataset.ab)}/${a.dataset.cact}`, {});
+      toast(r.listening ? t('Sent to the session.') : t('Queued: if the terminal already shows its own prompt, answer there.'));
+      AB.rev = -1; await abRefresh();
+    } catch (err) { toast(err.message); a.disabled = false; }
+  };
+  $('#ab-cols').onkeydown = e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.ab-card')) { e.preventDefault(); abOpen(e.target.dataset.ab); }
+  };
+  // Enter sends the reply (Shift+Enter: a new line); on a touch screen, Enter is a new line
+  $('#ab-detail').addEventListener('keydown', e => {
+    if (e.target.id !== 'ab-reply' || e.key !== 'Enter' || e.shiftKey || e.isComposing || !matchMedia('(pointer: fine)').matches) return;
+    e.preventDefault(); $('#ab-detail [data-abact=send]')?.click();
+  });
+  $('#ab-detail').addEventListener('input', e => { if (e.target.id === 'ab-reply') { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } });
   $('#ab-detail').onclick = async e => {
     const b = e.target.closest('[data-abact]'); if (!b || !AB.sel) return;
     const act = b.dataset.abact, id = encodeURIComponent(AB.sel);
     try {
-      if (act === 'close') { AB.sel = null; $('#ab-detail').hidden = true; abRender(); return; }
+      if (act === 'close') { AB.sel = null; AB.stick = null; abPane('ab-empty'); abRender(); return; }
+      if (act === 'next') { const n = abNextNeed(AB.sel); if (n) abOpen(n.id); return; }
       if (act === 'stop') {
         if (!confirm(t('Stop this session?'))) return;
         const r = await post(AB.sel.startsWith('job:') ? `api/agents/jobs/${AB.sel.slice(4)}/stop` : `api/agents/s/${id}/stop`, {});
         toast({ kill: t('Stopping: the listener ends it within seconds.'), now: t('Stopped.'), cancelled: t('Cancelled before it started.') }[r.how]
           || t('Stop asked: it stops at its next step (a tool, a permission, the end of its turn).'));
-      } else if (act === 'jforget') { await post(`api/agents/jobs/${AB.sel.slice(4)}/forget`, {}); AB.sel = null; $('#ab-detail').hidden = true; } else
-      if (act === 'forget') { if (!confirm(t('Forget this session and its history on the board?'))) return; await post(`api/agents/s/${id}/forget`, {}); AB.sel = null; $('#ab-detail').hidden = true; }
+      } else if (act === 'jforget') { await post(`api/agents/jobs/${AB.sel.slice(4)}/forget`, {}); AB.sel = null; abPane('ab-empty'); } else
+      if (act === 'forget') { if (!confirm(t('Forget this session and its history on the board?'))) return; await post(`api/agents/s/${id}/forget`, {}); AB.sel = null; abPane('ab-empty'); }
       else if (act === 'seen') await post(`api/agents/s/${id}/seen`, {});
       else if (act === 'usesug') { const ta = $('#ab-reply'); if (ta) { ta.value = b.dataset.text; ta.focus(); } return; }
       else if (act === 'judge') {
@@ -6584,7 +6596,7 @@ function abWire() {
       }
       else if (act === 'send') {
         const ta = $('#ab-reply'), text = ta.value.trim(); if (!text) return;
-        const r = await post(`api/agents/s/${id}/reply`, { text }); ta.value = '';
+        const r = await post(`api/agents/s/${id}/reply`, { text }); ta.value = ''; ta.style.height = '';
         toast(r.listening ? t('Sent: the session is listening and picks it up within seconds.') : t('Queued: the session gets it when it finishes its current turn.'));
       } else {
         const r = await post(`api/agents/s/${id}/${act}`, {});
@@ -6631,7 +6643,7 @@ function abKnowRender() {
     ${rc.length ? `<h5>${esc(t('Confirmed ({n})', { n: rc.length }))}</h5><ul class="ab-krules">${rc.map(rule).join('')}</ul>` : ''}
     ${!rp.length && !rc.length ? `<p class="muted small">${esc(t('No rule yet: one is proposed once at least three of your answers make the same choice.'))}</p>` : ''}
     ${rr.length ? `<p class="muted small">${esc(t('{n} rejected rules are not proposed again.', { n: rr.length }))}</p>` : ''}`;
-  box.innerHTML = `<h4>${esc(t('What I know'))}</h4>
+  box.innerHTML = `<div class="ab-pane-head"><h4>${esc(t('What I know'))}</h4><button type="button" class="btn ghost small ab-pane-close" data-pane-close aria-label="${esc(t('Close'))}">✕</button></div>
     <p class="muted small">${esc(t('Learned from the board: each answer given to an agent is a decision; a session is summarised when it ends or goes quiet; each project gets a dossier, rewritten at most once a day. Summaries are of what agents wrote: the assistant reads them as information, never as orders.'))}</p>
     ${projects || `<p class="muted small">${esc(t('Nothing yet: knowledge builds up as sessions report on the board and you answer them.'))}</p>`}
     ${rules}
@@ -6646,22 +6658,60 @@ function abKnowRender() {
       : `<p class="muted small">${esc(t('No decision matches.'))}</p>`}`;
 }
 function abNotifyShow(mode) { const sel = $('#ab-notify'); if (sel && mode && document.activeElement !== sel) sel.value = mode; }
+// 1.49.0: one pane on the right shows the open conversation, or one tool (New session, Connect, Autonomy, What I know)
+const AB_TOOLS = { 'ab-new': 'ab-new-btn', 'ab-setup': 'ab-connect', 'ab-auto': 'ab-auto-btn', 'ab-know': 'ab-know-btn' };
+function abPane(which) {
+  AB.pane = which;
+  for (const id of ['ab-empty', 'ab-detail', ...Object.keys(AB_TOOLS)]) $('#' + id).hidden = id !== which;
+  for (const [pane, btn] of Object.entries(AB_TOOLS)) $('#' + btn).setAttribute('aria-expanded', String(pane === which));
+  $('#ab').classList.toggle('ab-open', which !== 'ab-empty');
+  if (which === 'ab-empty') abEmpty();
+}
+// a tool's button opens it, or closes it when it is the one on screen; closed, the pane goes back to the conversation
+function abTool(pane, onOpen) {
+  if (AB.pane === pane) { abToolClose(); return; }
+  abPane(pane); onOpen?.();
+}
+// 1.49.0: the next session that needs you, in list order, other than the open one
+const abNextNeed = except => AB.sessions.find(s => s.column === 'need' && s.id !== except);
+function abToolClose() { if (AB.sel) abOpen(AB.sel, true); else abPane('ab-empty'); }
+function abEmpty() {
+  const need = AB.sessions.filter(s => s.column === 'need').length;
+  $('#ab-empty').innerHTML = !AB.sessions.length && !AB.jobs.length
+    ? `<div class="ab-empty-in"><b>${esc(t('No agent has reported yet.'))}</b><p class="muted small">${esc(t('Connect a machine: its Claude Code sessions then show here, and you answer them from here.'))}</p>
+      <button type="button" class="btn small" data-pane-open="ab-setup">${esc(t('Connect a machine'))}</button></div>`
+    : `<div class="ab-empty-in"><b>${esc(need ? pN('1 session needs you', '{n} sessions need you', need) : t('Nothing waiting for you.'))}</b>
+      <p class="muted small">${esc(t('Pick a session on the left to read it and answer.'))}</p>
+      ${need ? `<button type="button" class="btn small primary" data-ab-next>${esc(t('Open the first one'))}</button>` : ''}</div>`;
+}
+// the board fills the screen's height: the list and the conversation scroll on their own
+function abFit() {
+  const m = $('#ab-main'), view = $('#view-pilotage'); if (!m || !view || view.hidden) return;
+  if (matchMedia('(max-width:760px)').matches) { m.style.removeProperty('--ab-h'); return; }
+  const top = m.getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
+  m.style.setProperty('--ab-h', Math.max(440, view.clientHeight - top - 20) + 'px');
+}
 async function abRefresh() {
   const d = await api('api/agents');
   if (d.rev === AB.rev) return;
   AB.rev = d.rev; AB.sessions = d.sessions || []; AB.jobs = d.jobs || []; AB.machines = d.machines || [];
-  if (!$('#ab-new').hidden) abNewForm();
+  if (AB.pane === 'ab-new') abNewForm();
   const need = AB.sessions.filter(s => s.column === 'need').length;
   if (need !== state.agentsNeed) { state.agentsNeed = need; setFleetBadge(); }
   abNotifyShow(d.notify);
   if (AB.sel?.startsWith('job:') && !AB.jobs.some(j => 'job:' + j.id === AB.sel)) { // it reports now: open its session
-    const s = AB.sessions.find(x => 'job:' + x.job === AB.sel); AB.sel = s ? s.id : null; if (!s) $('#ab-detail').hidden = true;
+    const s = AB.sessions.find(x => 'job:' + x.job === AB.sel); AB.sel = s ? s.id : null; if (!s && AB.pane === 'ab-detail') abPane('ab-empty');
   }
+  if (AB.sel && !AB.sel.startsWith('job:') && !AB.sessions.some(s => s.id === AB.sel)) { AB.sel = null; if (AB.pane === 'ab-detail') abPane('ab-empty'); }
   $('#ab-sub').textContent = AB.sessions.length ? [pN('1 session', '{n} sessions', AB.sessions.length), need ? pN('1 needs you', '{n} need you', need) : ''].filter(Boolean).join(' · ')
     : t('No agent has reported yet.');
-  if (!AB.sessions.length && !AB.offered && $('#ab-setup').hidden) { AB.offered = true; $('#ab-connect').click(); }
+  if (!AB.sessions.length && !AB.offered && AB.pane !== 'ab-setup') { AB.offered = true; abTool('ab-setup', abSetupLoad); }
   abRender();
-  if (AB.sel) abOpen(AB.sel, true);
+  if (AB.sel && AB.pane === 'ab-detail') abOpen(AB.sel, true);
+  else if (AB.pane === 'ab-empty' || !AB.pane) abPane(AB.pane || 'ab-empty');
+}
+async function abSetupLoad() {
+  try { const r = await api('api/agents/setup'); $('#ab-snippet').textContent = JSON.stringify(r.settings, null, 2); } catch (e) { toast(e.message); }
 }
 function abNewForm() {
   const ms = AB.machines.filter(m => m.listening), sel = $('#ab-new-machine'), cur = sel.value;
@@ -6677,27 +6727,37 @@ function abNewFolders() {
   $('#ab-new-start').disabled = !m?.folders?.length;
 }
 const abJobState = j => ({ queued: t('waiting for the machine'), sent: t('starting'), started: t('started, not reporting yet'), failed: t('could not start') })[j.state] || j.state;
+const AB_STATE = () => ({ permission: t('asks for permission'), working: t('working'), waiting: t('finished its turn'), ready: t('started'), ended: t('ended'), stopped: t('stopped') });
+// a preview line: the Markdown marks dropped, the end of the message kept (that is where the question is)
+const abPlain = s => String(s || '').replace(/```[\s\S]*?```/g, ' ').replace(/^ {0,3}#{1,6}\s+/gm, '').replace(/[*_`>|]+/g, '').replace(/^\s*(?:[-+•]|\d+[.)])\s+/gm, '').replace(/\s+/g, ' ').trim();
+const abTail = (s, n) => s.length > n ? '…' + s.slice(-n).replace(/^\S*\s/, '') : s;
+const abMeta = s => [s.agent && s.agent !== 'claude-code' ? s.agent : '', s.machine].filter(Boolean).join(' · ');
 function abJobCard(j) {
-  return `<button type="button" class="ab-card${AB.sel === 'job:' + j.id ? ' on' : ''} ab-${esc(j.state)}" data-ab="job:${j.id}">
-    <span class="ab-c-top"><b class="no-i18n">${esc(j.project)}</b><span class="muted small">${esc(pilotAgo(j.updated))}</span></span>
+  return `<div class="ab-card ab-${esc(j.state)}${AB.sel === 'job:' + j.id ? ' on' : ''}" role="button" tabindex="0" data-ab="job:${j.id}">
+    <span class="ab-c-top"><i class="ab-dot" aria-hidden="true"></i><b class="no-i18n">${esc(j.project)}</b><span class="ab-c-time muted small">${esc(pilotAgo(j.updated))}</span></span>
     <span class="ab-c-meta muted small"><span class="no-i18n">${esc(j.machine)}</span> · ${esc(abJobState(j))}${j.stopping ? ' · ' + esc(t('stopping')) : ''}</span>
-    <span class="ab-c-text no-i18n">${esc((j.state === 'failed' && j.log ? j.log : j.prompt).slice(-280))}</span></button>`;
+    <span class="ab-c-text no-i18n">${esc(abTail(abPlain(j.state === 'failed' && j.log ? j.log : j.prompt), 160))}</span></div>`;
 }
-function abCard(s) {
-  const text = s.question || s.last_message || '';
-  const st = { permission: t('asks for permission'), working: t('working'), waiting: t('finished its turn'), ready: t('started'), ended: t('ended'), stopped: t('stopped') }[s.state] || s.state;
-  return `<button type="button" class="ab-card${AB.sel === s.id ? ' on' : ''} ab-${esc(s.state)}" data-ab="${esc(s.id)}">
-    <span class="ab-c-top"><b class="no-i18n">${esc(abTitle(s))}</b><span class="muted small">${esc(pilotAgo(s.updated))}</span></span>
-    <span class="ab-c-meta muted small"><span class="no-i18n">${esc([s.agent, s.machine].filter(Boolean).join(' · '))}</span> · ${esc(st)}${s.stopping ? ' · ' + esc(t('stopping')) : ''}${s.pending ? ' · ' + esc(pN('1 answer queued', '{n} answers queued', s.pending)) : ''}</span>
-    ${s.suggested ? `<span class="ab-c-sug small">💡 ${esc(t('Suggested answer'))}</span>` : ''}
+function abCard(s, col) {
+  const st = AB_STATE()[s.state] || s.state, perm = s.state === 'permission';
+  const text = col === 'need' ? abTail(abPlain(s.last_message), 170) : '';
+  return `<div class="ab-card ab-${esc(s.state)}${AB.sel === s.id ? ' on' : ''}" role="button" tabindex="0" data-ab="${esc(s.id)}">
+    <span class="ab-c-top"><i class="ab-dot" aria-hidden="true"></i><b class="no-i18n">${esc(abTitle(s))}</b><span class="ab-c-time muted small">${esc(pilotAgo(s.updated))}</span></span>
+    <span class="ab-c-meta muted small"><span class="no-i18n">${esc(abMeta(s))}</span>${abMeta(s) ? ' · ' : ''}${esc(st)}${s.stopping ? ' · ' + esc(t('stopping')) : ''}${s.pending ? ' · ' + esc(pN('1 answer queued', '{n} answers queued', s.pending)) : ''}</span>
+    ${perm ? `<code class="ab-c-cmd no-i18n">${esc(String(s.question || '').slice(0, 2000))}</code>
+      <span class="ab-c-acts"><button type="button" class="btn small primary" data-cact="allow">${esc(t('Allow'))}</button><button type="button" class="btn ghost small danger" data-cact="deny">${esc(t('Deny'))}</button></span>` : ''}
+    ${!perm && text ? `<span class="ab-c-text no-i18n">${esc(text)}</span>` : ''}
     ${s.doing && s.state === 'working' ? `<span class="ab-c-doing muted no-i18n">${esc(s.doing)}</span>` : ''}
-    ${text ? `<span class="ab-c-text no-i18n">${esc(text.slice(0, 280))}</span>` : ''}</button>`;
+    ${s.suggested ? `<span class="ab-c-sug small">💡 ${esc(t('Suggested answer'))}</span>` : ''}</div>`;
 }
 function abRender() {
+  // the session being read stays where it was clicked: marked seen, it would jump to Quiet under the pointer
+  const colOf = s => AB.stick?.id === s.id && s.column === 'quiet' && s.state === 'waiting' ? AB.stick.col : s.column;
   $('#ab-cols').innerHTML = AB_COLS.map(([k, label]) => {
-    const list = AB.sessions.filter(s => s.column === k), jobs = AB.jobs.filter(j => (j.state === 'failed' ? 'need' : 'working') === k);
+    const list = AB.sessions.filter(s => colOf(s) === k), jobs = AB.jobs.filter(j => (j.state === 'failed' ? 'need' : 'working') === k);
     const n = list.length + jobs.length;
-    return `<div class="ab-col" data-col="${k}"><h4>${esc(t(label))} <span class="muted">${n || ''}</span></h4>${jobs.map(abJobCard).join('') + list.map(abCard).join('') || `<p class="muted small">${esc(t('Nothing here.'))}</p>`}</div>`;
+    const none = k === 'need' ? t('Nothing waiting for you.') : t('Nothing here.');
+    return `<section class="ab-col" data-col="${k}"><h4>${esc(t(label))} <span class="ab-n">${n || ''}</span></h4>${jobs.map(abJobCard).join('') + list.map(s => abCard(s, k)).join('') || `<p class="muted small ab-none">${esc(none)}</p>`}</section>`;
   }).join('');
 }
 function abOpenJob(id) {
@@ -6705,39 +6765,60 @@ function abOpenJob(id) {
   box.dataset.id = id;
   const stop = j.state === 'failed' ? `<button type="button" class="btn ghost small" data-abact="jforget">${esc(t('Forget'))}</button>`
     : `<button type="button" class="btn ghost small danger" data-abact="stop">${esc(j.state === 'started' ? t('Stop') : t('Cancel'))}</button>`;
-  box.innerHTML = `<div class="ab-d-head"><h4 class="no-i18n">${esc(j.project)}</h4><span class="muted small no-i18n">${esc([j.machine, j.cwd].join(' · '))}</span><span class="muted small">${esc(abJobState(j))}</span>
-    <span class="ab-d-acts">${stop}<button type="button" class="btn ghost small" data-abact="close" aria-label="${esc(t('Close'))}">✕</button></span></div>
-    <div class="ab-ev ab-${esc(j.by)}"><span class="muted small">${esc(j.by === 'assistant' ? t('Assistant') : t('You'))} · ${esc(new Date(j.created * 1000).toLocaleString())}</span><div class="no-i18n">${esc(j.prompt)}</div></div>
+  box.innerHTML = `<div class="ab-d-top"><div class="ab-d-head"><button type="button" class="btn ghost small ab-close" data-abact="close" aria-label="${esc(t('Close'))}"></button>
+    <div class="ab-d-title"><h4 class="no-i18n">${esc(j.project)}</h4><span class="ab-d-meta muted small no-i18n">${esc([j.machine, j.cwd].join(' · '))}</span></div>
+    <span class="ab-pill">${esc(abJobState(j))}</span><span class="ab-d-acts">${stop}</span></div></div>
+    <div class="ab-thread"><div class="ab-ev ab-${esc(j.by)} ab-mine"><span class="ab-ev-meta muted small">${esc(j.by === 'assistant' ? t('Assistant') : t('You'))} · ${esc(abWhen(j.created))}</span><div class="ab-txt no-i18n">${esc(j.prompt)}</div></div>
     ${j.log ? `<p class="small">${esc(t('What the machine said:'))}</p><pre class="ab-log no-i18n">${esc(j.log)}</pre>` : ''}
-    ${j.state === 'started' ? `<p class="muted small">${esc(t('Claude Code runs, but its hooks have not reported yet: are they in ~/.claude/settings.json on that machine?'))}</p>` : ''}`;
-  box.hidden = false;
+    ${j.state === 'started' ? `<p class="muted small">${esc(t('Claude Code runs, but its hooks have not reported yet: are they in ~/.claude/settings.json on that machine?'))}</p>` : ''}</div>`;
+  abPane('ab-detail');
   abRender();
 }
+// a time in the thread: the hour today, the day and hour before
+const abWhen = ts => { const d = new Date(ts * 1000), today = new Date().toDateString() === d.toDateString();
+  return today ? d.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }) : d.toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 async function abOpen(id, quiet) {
+  if (!quiet || AB.sel !== id) AB.stick = null;
   AB.sel = id;
   if (id.startsWith('job:')) { abOpenJob(id); return; }
   const box = $('#ab-detail');
+  const pane0 = AB.pane;
   let d; try { d = await api(`api/agents/s/${encodeURIComponent(id)}/thread`); } catch (e) { if (!quiet) toast(e.message); return; }
+  if (AB.sel !== id || AB.pane !== pane0) return; // another session or a tool was opened meanwhile
   const s = d.session, who = { agent: abTitle(s), you: t('You'), assistant: t('Assistant') };
+  if (!quiet) AB.stick = { id, col: s.column };
   const kind = { started: t('started from the board'), stop: t('asked to stop'), stopped: t('stopped'), prompt: t('typed in the session'), permission: t('asks for permission'), notice: t('notice'), message: '', end: t('session ended'), queued: t('queued'), delivered: t('delivered'), file: t('sent a file') };
+  const SYS = ['permission', 'notice', 'end', 'stop', 'stopped'];
   const body = e => {
-    if (e.kind !== 'file') return `<div class="no-i18n">${esc(e.text)}</div>`;
-    let f = {}; try { f = JSON.parse(e.text) || {}; } catch {}
-    const id = +f.file || 0, name = String(f.name || 'file');
-    return `<div class="ab-file"><span class="ab-file-name no-i18n">📄 ${esc(name)}</span> <span class="muted small no-i18n">${esc(fmtSize(+f.size || 0))} · ${esc(f.folder || '')}</span>
-      <span><a class="btn small" href="api/files/${id}/view/${encodeURIComponent(name)}" target="_blank" rel="noopener">${esc(t('Open'))}</a> <a class="btn ghost small" href="api/files/${id}/file/${encodeURIComponent(name)}?download=1" download="${esc(name)}">${esc(t('Download'))}</a></span></div>`;
+    if (e.kind === 'file') {
+      let f = {}; try { f = JSON.parse(e.text) || {}; } catch {}
+      const fid = +f.file || 0, name = String(f.name || 'file');
+      return `<div class="ab-file"><span class="ab-file-name no-i18n">📄 ${esc(name)}</span> <span class="muted small no-i18n">${esc(fmtSize(+f.size || 0))} · ${esc(f.folder || '')}</span>
+        <span><a class="btn small" href="api/files/${fid}/view/${encodeURIComponent(name)}" target="_blank" rel="noopener">${esc(t('Open'))}</a> <a class="btn ghost small" href="api/files/${fid}/file/${encodeURIComponent(name)}?download=1" download="${esc(name)}">${esc(t('Download'))}</a></span></div>`;
+    }
+    if (e.kind === 'permission') return `<code class="no-i18n">${esc(e.text)}</code>`;
+    if (e.who === 'agent' && e.kind === 'message') return `<div class="ab-md no-i18n">${md(e.text)}</div>`; // what the agent wrote, formatted (md escapes it first)
+    return e.text ? `<div class="ab-txt no-i18n">${esc(e.text)}</div>` : '';
   };
-  const thread = d.events.map(e => `<div class="ab-ev ab-${esc(e.who)} ab-k-${esc(e.kind)}"><span class="muted small">${esc(who[e.who] || e.who)}${kind[e.kind] ? ' · ' + esc(kind[e.kind]) : ''} · ${esc(new Date(e.ts * 1000).toLocaleString())}</span>${body(e)}</div>`).join('');
-  const listening = s.listening ? `<span class="ab-live">${esc(t('listening'))}</span>` : '';
-  const head = `<div class="ab-d-head"><h4 class="no-i18n">${esc(abTitle(s))}</h4><span class="muted small no-i18n">${esc([s.agent, s.machine, s.cwd].filter(Boolean).join(' · '))}</span>${listening}
-    <span class="ab-d-acts">${['ended', 'stopped'].includes(s.state) ? '' : `<button type="button" class="btn ghost small danger" data-abact="stop"${s.stopping ? ' disabled' : ''}>${esc(s.stopping ? t('Stopping…') : t('Stop'))}</button>`}<button type="button" class="btn ghost small" data-abact="seen">${esc(t('Mark as seen'))}</button><button type="button" class="btn ghost small danger" data-abact="forget">${esc(t('Forget'))}</button><button type="button" class="btn ghost small" data-abact="close" aria-label="${esc(t('Close'))}">✕</button></span></div>`;
+  const thread = d.events.map(e => {
+    const sys = SYS.includes(e.kind), mine = !sys && (e.who === 'you' || e.who === 'assistant');
+    return `<div class="ab-ev ab-${esc(e.who)} ab-k-${esc(e.kind)}${sys ? ' ab-sys' : mine ? ' ab-mine' : ''}"><span class="ab-ev-meta muted small">${esc(who[e.who] || e.who)}${kind[e.kind] ? ' · ' + esc(kind[e.kind]) : ''} · ${esc(abWhen(e.ts))}</span>${body(e)}</div>`;
+  }).join('');
+  const st = AB_STATE()[s.state] || s.state, over = ['ended', 'stopped'].includes(s.state);
+  const others = AB.sessions.filter(x => x.column === 'need' && x.id !== s.id).length;
+  const head = `<div class="ab-d-head"><button type="button" class="btn ghost small ab-close" data-abact="close" aria-label="${esc(t('Close'))}"></button>
+    <div class="ab-d-title"><h4 class="no-i18n">${esc(abTitle(s))}</h4><span class="ab-d-meta muted small no-i18n" title="${esc(s.cwd || '')}">${esc([abMeta(s), s.cwd].filter(Boolean).join(' · '))}</span></div>
+    <span class="ab-pill ab-${esc(s.state)}">${esc(st)}</span>${s.listening ? `<span class="ab-live">${esc(t('listening'))}</span>` : ''}
+    <span class="ab-d-acts">${others ? `<button type="button" class="btn small ab-next" data-abact="next">${esc(pN('Next: 1 waiting', 'Next: {n} waiting', others))}</button>` : ''}${over ? '' : `<button type="button" class="btn ghost small danger" data-abact="stop"${s.stopping ? ' disabled' : ''}>${esc(s.stopping ? t('Stopping…') : t('Stop'))}</button>`}
+      <details class="ab-more"><summary class="btn ghost small" aria-label="${esc(t('More'))}">⋯</summary><div class="ab-more-menu">
+        <button type="button" class="btn ghost small" data-abact="seen">${esc(t('Mark as seen'))}</button><button type="button" class="btn ghost small danger" data-abact="forget">${esc(t('Forget'))}</button></div></details></span></div>`;
   const perm = s.state === 'permission' ? `<div class="ab-perm"><b>${esc(t('Permission asked'))}</b><code class="no-i18n">${esc(s.question)}</code>
-    <span><button type="button" class="btn small" data-abact="allow">${esc(t('Allow'))}</button> <button type="button" class="btn ghost small danger" data-abact="deny">${esc(t('Deny'))}</button></span></div>` : '';
-  const fresh = !box.querySelector('#ab-reply') || box.dataset.id !== id || ['ended', 'stopped'].includes(s.state);
+    <span><button type="button" class="btn small primary" data-abact="allow">${esc(t('Allow'))}</button> <button type="button" class="btn ghost small danger" data-abact="deny">${esc(t('Deny'))}</button></span></div>` : '';
+  const fresh = !box.querySelector('.ab-dock') || box.dataset.id !== id || over !== !box.querySelector('#ab-reply');
   if (fresh) {
     box.dataset.id = id;
-    box.innerHTML = `<div class="ab-d-top"></div><div class="ab-thread"></div>${s.state === 'ended' || s.state === 'stopped' ? `<p class="muted small">${esc(s.state === 'stopped' ? t('This session was stopped.') : t('This session has ended.'))}</p>`
-      : `<div class="ab-compose"><textarea id="ab-reply" rows="2" placeholder="${esc(t('Reply to this session…'))}"></textarea><button type="button" class="btn small" data-abact="send">${esc(t('Send'))}</button></div>`}`;
+    box.innerHTML = `<div class="ab-d-top"></div><div class="ab-thread"></div><div class="ab-dock"><div class="ab-dock-top"></div>${over ? `<p class="muted small">${esc(s.state === 'stopped' ? t('This session was stopped.') : t('This session has ended.'))}</p>`
+      : `<div class="ab-compose"><textarea id="ab-reply" rows="1" placeholder="${esc(t('Reply to this session…'))}"></textarea><button type="button" class="btn small primary" data-abact="send">${esc(t('Send'))}</button></div>`}</div>`;
   }
   const pct = x => Math.round(x.confidence * 100) + '%';
   const sug = d.suggestion ? `<div class="ab-sug"><b>💡 ${esc(t('Suggested answer'))}</b> <span class="muted small no-i18n">${esc(d.suggestion.level)} · ${esc(pct(d.suggestion))}</span>
@@ -6746,11 +6827,14 @@ async function abOpen(id, quiet) {
     <span><button type="button" class="btn small" data-abact="sendsug" data-text="${esc(d.suggestion.answer)}">${esc(t('Send this answer'))}</button> <button type="button" class="btn ghost small" data-abact="usesug" data-text="${esc(d.suggestion.answer)}">${esc(t('Edit it first'))}</button></span></div>` : '';
   const judge = (d.judge || []).map(j => `<div class="ab-judge"><span class="small">${esc(t('The assistant answered by itself:'))}</span> <span class="no-i18n">${esc(j.answer)}</span> <span class="muted small no-i18n">${esc(j.level)} · ${esc(pct(j))}</span>
     <span><span class="muted small">${esc(t('Was this the right call?'))}</span> <button type="button" class="btn small" data-abact="judge" data-ok="1" data-did="${esc(j.id)}">${esc(t('Yes'))}</button> <button type="button" class="btn small danger" data-abact="judge" data-ok="0" data-did="${esc(j.id)}">${esc(t('No, that was wrong'))}</button></span></div>`).join('');
-  box.querySelector('.ab-d-top').innerHTML = head + perm + sug + judge; // the reply box is kept: a refresh never drops what is being typed
-  const th = box.querySelector('.ab-thread'), atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 40;
-  th.innerHTML = thread || `<p class="muted small">${esc(t('Nothing yet.'))}</p>`;
-  if (fresh || atEnd) th.scrollTop = th.scrollHeight;
-  box.hidden = false;
+  const more = box.querySelector('.ab-more')?.open; // a refresh keeps the ⋯ menu as it was
+  box.querySelector('.ab-d-top').innerHTML = head;
+  if (more) box.querySelector('.ab-more').open = true;
+  box.querySelector('.ab-dock-top').innerHTML = perm + sug + judge; // the reply box is kept: a refresh never drops what is being typed
+  const th = box.querySelector('.ab-thread'), atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
+  const html = thread || `<p class="muted small">${esc(t('Nothing yet.'))}</p>`;
+  if (th.dataset.html !== html) { th.innerHTML = html; th.dataset.html = html; if (fresh || atEnd) th.scrollTop = th.scrollHeight; }
+  abPane('ab-detail');
   abRender();
   if (!quiet && s.column === 'need' && s.state === 'waiting') post(`api/agents/s/${encodeURIComponent(id)}/seen`, {}).catch(() => {});
 }
@@ -6758,7 +6842,7 @@ async function abOpen(id, quiet) {
 function abVisible() { return !$('#view-pilotage').hidden && $('.ptab[data-ptab="agents"]')?.getAttribute('aria-selected') === 'true' && !document.hidden; }
 
 async function pilotAgents() {
-  abWire(); abRefresh().catch(e => toast(e.message)); // the relay's cockpit under the board went in 1.45.0
+  abWire(); if (!AB.pane) abPane('ab-empty'); requestAnimationFrame(abFit); abRefresh().catch(e => toast(e.message)); // the relay's cockpit under the board went in 1.45.0
 }
 // the Pilotage menu badge + the Agents-subtab badge: sessions in « Needs you » (1.43.0)
 function setFleetBadge() {

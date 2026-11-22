@@ -923,6 +923,27 @@ const flows = {
     const csp = await page.evaluate(h => fetch(h).then(r => r.headers.get('content-security-policy')), href);
     check('agent board: Open shows the page, sandboxed: its scripts do not run', /Q3 sales/.test(await tab.textContent('body')) && await tab.title() !== 'ran' && /sandbox/.test(csp || ''), `${await tab.title()} ${csp}`);
     await tab.close();
+    // 1.49.0: two panes; a permission is answered from the list, its whole command shown; Next goes from one waiting session to the other
+    await page.click('#ab-detail [data-abact=close]');
+    await run('event', { session_id: 'bt-3', cwd: '/work/blog', hook_event_name: 'Stop', last_assistant_message: 'Draft ready. Publish it?' });
+    const long = 'echo ' + 'x'.repeat(300) + ' && npm run release';
+    const perm2 = run('permission', { session_id: 'bt-2', cwd: '/work/api', hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: long } });
+    await page.waitForSelector('#ab-cols [data-col=need] .ab-card [data-cact=allow]', { timeout: 8000 });
+    check('agent board: a permission card shows the whole command, not a cut', /npm run release/.test(await page.textContent('#ab-cols [data-col=need] .ab-c-cmd')));
+    await page.waitForSelector('#ab-empty [data-ab-next]', { timeout: 6000 });
+    await page.click('#ab-empty [data-ab-next]');
+    await page.waitForSelector('#ab-detail [data-abact=next]', { timeout: 6000 });
+    const first = await page.textContent('#ab-detail .ab-d-title h4');
+    await page.click('#ab-detail [data-abact=next]');
+    await page.waitForFunction(f => document.querySelector('#ab-detail .ab-d-title h4')?.textContent !== f, first, { timeout: 6000 }).catch(() => {});
+    const second = await page.textContent('#ab-detail .ab-d-title h4');
+    check('agent board: Open the first one, then Next, go through the sessions that need you', ['api', 'blog'].includes(first) && ['api', 'blog'].includes(second) && first !== second, `${first} → ${second}`);
+    await page.click('#ab-detail [data-abact=close]');
+    await page.waitForTimeout(2500); // the hook asks every 2 s
+    await page.click('#ab-cols [data-col=need] .ab-card [data-cact=allow]');
+    const p3 = await late(perm2, 15000);
+    let dec3 = null; try { dec3 = JSON.parse(p3.out).hookSpecificOutput.decision.behavior; } catch {}
+    check('agent board: Allow on the card answers the hook, without opening the session', p3.code === 0 && dec3 === 'allow', JSON.stringify(p3));
   },
   async agentKnowledge({ page, check, root, data }) {
     // 1.44.0: what the director learned from the board (after agentBoard: a reply and a denied permission in webshop on testbox)
@@ -1015,7 +1036,7 @@ const flows = {
     const hit = id => rec.find(p => p.id === id)?.hit;
     check('agent autonomy: Send this answer sends it and counts as right; the verdict too', hit('board:claude-code:auto-1:2') === true && hit('board:claude-code:auto-1:1') === true, JSON.stringify(rec));
     check('agent autonomy: the answer is queued for the session, from you', /Yes, sort the seeds too\./.test(await page.textContent('#ab-detail .ab-thread')));
-    await page.click('#ab-auto-btn');
+    // 1.49.0: one pane at a time: opening the card already put the autonomy settings away
     await page.click('#ab-detail [data-abact=close]');
     await page.evaluate(w => { PL.wired = w; }, plWired);
   },
