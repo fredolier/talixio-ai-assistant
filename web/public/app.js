@@ -6420,7 +6420,21 @@ const plainLine = s => String(s || '').replace(/```[\s\S]*?```/g, ' ').replace(/
   .replace(/(\*\*|__|~~|`)/g, '').replace(/(^|\W)[*_]([^*_\n]+)[*_](?=\W|$)/g, '$1$2');
 const plClip = (s, n) => { s = plainLine(s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 async function plLoadAuto() { try { PL.auto = await api('api/pilot'); } catch (e) { PL.auto = null; } plRenderAuto(); }
-const AUTO_LEVELS = { L1: 'Routine', L2: 'Small choices', L3: 'Real choices', L4: 'Values and business', L5: 'Critical' };
+// 1.52.0: the coding agents' ladder, with the PO's level (you) apart from the business
+const AUTO_LEVELS = { L1: ['Technical', 'bugs, tests, clarity'], L2: ['Design', 'architecture, structure'], L3: ['Solution', 'specs, what it does for its users'],
+  L4: ['Product (you, the PO)', 'planning, priorities, a small drift'], L5: ['Business', 'direction, revenue, pricing, policy'], L6: ['Values', 'honesty, harm, anything irreversible'] };
+// the options an agent offers in its message (« A) … », « 1. … », one per line or inline), for one-click answers
+function abOptions(msg) {
+  const text = String(msg || '').slice(-3000), out = [];
+  for (const line of text.split('\n')) { const m = line.match(/^\s*(?:[-*]\s*)?\**\(?([A-F]|[1-6])[).:]\**\s+(.{1,200})$/); if (m) out.push([m[1], m[2].replace(/\*+/g, '').trim()]); }
+  if (out.length < 2) {
+    out.length = 0;
+    const parts = text.split(/(?:^|\s)\(?([A-F])\)\s+/);
+    for (let i = 1; i + 1 < parts.length; i += 2) out.push([parts[i], parts[i + 1].split('\n')[0].trim().slice(0, 200)]);
+  }
+  const keys = out.map(o => o[0]);
+  return out.length >= 2 && out.length <= 6 && new Set(keys).size === keys.length && out.every(o => o[1]) ? out : [];
+}
 function plRenderAuto() {
   const box = $('#pl-auto'), a = PL.auto; if (!box) return;
   if (!a) { box.innerHTML = `<div class="pl-empty">${esc(t('Not available.'))}</div>`; return; }
@@ -6434,13 +6448,20 @@ function plRenderAuto() {
     </section>
     <section class="pl-card"><h5>${esc(t('Autonomy'))}</h5>
       <table class="pl-lv"><thead><tr><th>${esc(t('Level'))}</th><th>${esc(t('Autonomy'))}</th><th>${esc(t('Right so far'))}</th></tr></thead><tbody>${Object.entries(a.levels).map(([l, v]) => `<tr>
-        <td><b class="no-i18n">${l}</b> <span class="muted small">${esc(t(AUTO_LEVELS[l]))}</span></td>
+        <td><b class="no-i18n">${l}</b> ${esc(t(AUTO_LEVELS[l][0]))} <span class="muted small">${esc(t(AUTO_LEVELS[l][1]))}</span></td>
         <td>${v.kept ? `<span class="pl-kept">🔒 ${esc(t('Always yours'))}</span>` : `<select data-auto-lv="${l}" aria-label="${esc(t('Autonomy') + ' · ' + l)}">${modes.map(([m, n]) => `<option value="${m}" ${v.mode === m ? 'selected' : ''}>${esc(t(n))}</option>`).join('')}</select>`}
           ${v.suggest ? `<button type="button" class="btn small" data-auto-up="${l}" data-to="${v.suggest}">${esc(t('Give it more room'))} → ${esc(t(modes.find(m => m[0] === v.suggest)[1]))}</button>` : ''}</td>
         <td class="no-i18n">${v.n ? `${Math.round(v.rate * 100)}% <span class="muted small">(${v.n})</span>` : '—'}</td></tr>`).join('')}</tbody></table>
       <div class="pl-nums">
         <label>${esc(t('It only answers alone above'))} <span class="pl-num"><input type="number" id="pa-th" min="50" max="99" step="5" value="${Math.round(a.threshold * 100)}" class="no-i18n"> %</span> ${esc(t('sure'))}</label>
         <label>${esc(t('At most'))} <span class="pl-num"><input type="number" id="pa-cap" min="0" max="200" value="${+a.daily_cap}" class="no-i18n"></span> ${esc(t('answers sent by itself per day'))} <span class="muted small no-i18n">(${+a.sent_today} ${esc(t('today'))})</span></label>
+      </div>
+      <div class="pl-promote">
+        <label class="pl-chk"><input type="checkbox" id="pa-sp" ${a.self_promote ? 'checked' : ''}> ${esc(t('It gives itself more room on L1–L3 once its answers match yours at least'))}
+          <select id="pa-pa" class="no-i18n" aria-label="${esc(t('Self-promotion threshold'))}">${[80, 85, 90, 95].map(v => `<option value="${v}" ${Math.round(a.promote_at * 100) === v ? 'selected' : ''}>${v} %</option>`).join('')}</select>
+          ${esc(t('of the time (over 10 answers, then 20)'))}</label>
+        <label class="pl-chk"><input type="checkbox" id="pa-po" ${a.promote_po ? 'checked' : ''}> ${esc(t('L4 Product too: it learns your PO calls and takes them over'))}</label>
+        <p class="muted small">${esc(t('Only once it may answer by itself. A miss lowers the level again at once. L5 Business gets more room only from you; L6 Values always stays yours, and pushes, deploys, deletions, e-mails, credentials and payments are never sent alone.'))}</p>
       </div>
       ${a.calibration ? `<p class="muted small no-i18n">${esc(t('Calibration'))}: ${esc(t('says'))} ${Math.round(a.calibration.confidence * 100)}% · ${esc(t('is right'))} ${Math.round(a.calibration.hit_rate * 100)}% (${a.calibration.n})</p>` : ''}
     </section>
@@ -6460,7 +6481,8 @@ function plRenderAuto() {
 }
 async function plSaveAuto() {
   const autonomy = {}; document.querySelectorAll('#pl-auto [data-auto-lv]').forEach(s => { autonomy[s.dataset.autoLv] = s.value; });
-  try { PL.auto = await post('api/pilot', { analyse: $('#pa-read').checked, enabled: $('#pa-on').checked, threshold: Math.max(50, Math.min(99, +$('#pa-th').value || 75)) / 100, autonomy, priorities: $('#pa-pr').value, rules: $('#pa-ru').value, daily_cap: +$('#pa-cap').value || 0 }); toast(t('Saved.')); plRenderAuto(); }
+  try { PL.auto = await post('api/pilot', { analyse: $('#pa-read').checked, enabled: $('#pa-on').checked, threshold: Math.max(50, Math.min(99, +$('#pa-th').value || 75)) / 100, autonomy,
+    self_promote: $('#pa-sp').checked, promote_po: $('#pa-po').checked, promote_at: (+$('#pa-pa').value || 85) / 100, priorities: $('#pa-pr').value, rules: $('#pa-ru').value, daily_cap: +$('#pa-cap').value || 0 }); toast(t('Saved.')); plRenderAuto(); }
   catch (e) { toast(e.message); }
 }
 async function plVerdict(el) {
@@ -6844,12 +6866,15 @@ async function abOpen(id, quiet) {
     ${d.suggestion.summary ? `<div class="ab-sug-sum no-i18n">${esc(d.suggestion.summary)}</div>` : ''}<div class="no-i18n">${esc(d.suggestion.answer)}</div>${d.suggestion.rationale ? `<div class="muted small no-i18n">${esc(d.suggestion.rationale)}</div>` : ''}
     ${d.suggestion.why ? `<div class="muted small">${esc(t('Not sent by itself:'))} <span class="no-i18n">${esc(d.suggestion.why)}</span></div>` : ''}
     <span><button type="button" class="btn small" data-abact="sendsug" data-text="${esc(d.suggestion.answer)}">${esc(t('Send this answer'))}</button> <button type="button" class="btn ghost small" data-abact="usesug" data-text="${esc(d.suggestion.answer)}">${esc(t('Edit it first'))}</button></span></div>` : '';
+  const opts = s.state === 'waiting' ? abOptions(s.last_message) : [];
+  const optBox = opts.length ? `<div class="ab-opts"><span class="muted small">${esc(t('Answer with one of its options:'))}</span> ${opts.map(([k, v]) =>
+    `<button type="button" class="btn small ab-opt" data-abact="sendsug" data-text="${esc(k + ') ' + v)}" title="${esc(v)}"><b class="no-i18n">${esc(k)}</b> <span class="no-i18n">${esc(v.length > 48 ? v.slice(0, 47) + '…' : v)}</span></button>`).join(' ')}</div>` : '';
   const judge = (d.judge || []).map(j => `<div class="ab-judge"><span class="small">${esc(t('The assistant answered by itself:'))}</span> <span class="no-i18n">${esc(j.answer)}</span> <span class="muted small no-i18n">${esc(j.level)} · ${esc(pct(j))}</span>
     <span><span class="muted small">${esc(t('Was this the right call?'))}</span> <button type="button" class="btn small" data-abact="judge" data-ok="1" data-did="${esc(j.id)}">${esc(t('Yes'))}</button> <button type="button" class="btn small danger" data-abact="judge" data-ok="0" data-did="${esc(j.id)}">${esc(t('No, that was wrong'))}</button></span></div>`).join('');
   const more = box.querySelector('.ab-more')?.open; // a refresh keeps the ⋯ menu as it was
   box.querySelector('.ab-d-top').innerHTML = head;
   if (more) box.querySelector('.ab-more').open = true;
-  box.querySelector('.ab-dock-top').innerHTML = perm + sug + judge; // the reply box is kept: a refresh never drops what is being typed
+  box.querySelector('.ab-dock-top').innerHTML = perm + sug + optBox + judge; // the reply box is kept: a refresh never drops what is being typed
   const th = box.querySelector('.ab-thread'), atEnd = th.scrollHeight - th.scrollTop - th.clientHeight < 60;
   const html = thread || `<p class="muted small">${esc(t('Nothing yet.'))}</p>`;
   if (th.dataset.html !== html) { th.innerHTML = html; th.dataset.html = html; if (fresh || atEnd) th.scrollTop = th.scrollHeight; }

@@ -131,8 +131,8 @@ The board updates by itself every few seconds while you look at it.
     applies until you confirm it.
   - **What weighs most.** When the assistant decides for an agent, its sources are ranked, and the higher one wins when
     they disagree: 1. your standing rules (*Autonomy*); 2. the rules you confirmed here, this project's first; 3. what it
-    knows of how you decide; 4. your past decisions on similar questions; 5. its own judgement. Your limits (L4 and L5
-    always yours, the daily cap, the sensitive words) still have the last word.
+    knows of how you decide; 4. your past decisions on similar questions; 5. its own judgement. Your limits (L6 always
+    yours, L5 opened only by you, the daily cap, the sensitive words) still have the last word.
   - **Stop learning.** This turns learning off for one project: what was learned from it (its rules included) is
     forgotten, and nothing new is kept. **Forget** clears a project's knowledge once.
   - Summaries and dossiers are written from what agents wrote. The assistant reads them as information, never as
@@ -151,19 +151,34 @@ The board updates by itself every few seconds while you look at it.
   finishes its turn, the assistant reads its
   last message (as data written by others, never as instructions) with your **priorities**, **standing rules**, the
   similar answers you gave before and what the Mind knows of how you decide, and works out the reply you would give, with
-  a level (L1 Routine, L2 Small choices, L3 Real choices, L4 Values and business, L5 Critical) and an honest confidence. A next step the agent did not ask about is only ever proposed. The
-  limits are then applied by Talixio itself, not by the model: for each level L1–L3 you choose *I propose, you answer*
-  (default), *I answer if sure, then tell you* or *I answer if sure, quietly* (L4 and L5 show 🔒 *Always yours*, with no
+  a level and an honest confidence. The levels (1.52.0) are the decision ladder your coding agents use, with you as
+  their PO (product owner): **L1 Technical** (bugs, tests, clarity), **L2 Design** (architecture, structure), **L3
+  Solution** (specs, what it does for its users), **L4 Product** (your PO calls once the project runs: planning,
+  priorities, a scope trade-off, a small drift), **L5 Business** (direction, revenue, pricing, policy: where it goes when
+  the product's trade-offs no longer hold) and **L6 Values** (honesty, harm to users or data, anything irreversible).
+  When an agent states a level on its question card (*Level: L4*, *Niveau : L4*), that level is kept, never lowered
+  (the agents' own five-level ladder calls values L5: it is read as L6). A next step the agent did not ask about is only ever proposed. The
+  limits are then applied by Talixio itself, not by the model: for each level L1–L5 you choose *I propose, you answer*
+  (default), *I answer if sure, then tell you* or *I answer if sure, quietly* (L6 shows 🔒 *Always yours*, with no
   choice); it sends alone only above your confidence
-  threshold (75 % by default) and under the **daily cap** (20 by default). **L4/L5, permission requests, and anything about
+  threshold (75 % by default) and under the **daily cap** (20 by default). **L6, permission requests, and anything about
   pushes, deploys, deletions, e-mails, credentials or payments are always yours**, whatever the setting — as are merges, releases and publishing, migrations, installing a package, uploading data, sending to customers or subscribers, buying or a plan, hiring, skipping tests, a web address, and a reply holding a command the agent did not offer itself: these stay suggestions even when the model calls them routine. Your **priorities** and **standing rules** (one per line) can be typed or dictated with 🎙️; a
   rule you tell it in the chat is added too. An answer it sends
   goes to the session like yours, marked *Assistant* in the thread; in the session's pane it asks **Was this the right
   call? Yes / No, that was wrong**. Otherwise its card shows 💡 *Suggested answer*, and the session's pane shows the answer,
   its level, its confidence and why it was not sent, with **Send this answer** or **Edit it first**. Each answer is scored:
   against what you reply for that turn (from the board, or typed in the session's terminal), or with your Yes / No. A wrong
-  answer it sent lowers that level at once; after enough right answers it *suggests* giving it more room (it never raises
-  its own limits). It looks within seconds of the end of a turn (and every 15 minutes as a safety net), at most once per
+  answer it sent lowers that level at once.
+- **It earns its own room** (1.52.0): once it may answer by itself, L1–L3 raise themselves when its answers match yours
+  often enough: at least 85 % (you can pick 80, 85, 90 or 95 %) over the last 10 answers lifts *I propose* to *I answer
+  if sure, then tell you*, over the next 20 to *quietly*. You get a notice *Fleet: autonomy raised*, and a miss lowers
+  it again at once. Tick *L4 Product too* to let it take over your PO calls the same way. L5 Business gets more room
+  only when you give it (it *suggests* it after enough right answers); L6 Values never. Untick *It gives itself more
+  room* to keep every change in your hands.
+- **Nothing waits forgotten** (1.52.0): a proposal you have not decided comes back as *Still waiting for your
+  decision*, an hour later, 4 hours after that, then every day, while its session still waits at that turn.
+- **One-click options** (1.52.0): when an agent's message lists options (*A) …*, *B) …*, or *1.*, *2.* …), the
+  session's pane shows them as buttons under *Answer with one of its options:*. A click sends that option. It looks within seconds of the end of a turn (and every 15 minutes as a safety net), at most once per
   turn, and leaves alone a session you already answered, stopped, or older than 12 hours.
 
 ### The cloud orchestrator is gone (1.45.0)

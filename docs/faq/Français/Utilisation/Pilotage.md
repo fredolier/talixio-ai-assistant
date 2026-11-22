@@ -142,7 +142,7 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   - **Ce qui pèse le plus.** Quand l'assistant décide pour un agent, ses sources sont classées, et la plus haute l'emporte
     en cas de désaccord : 1. vos règles permanentes (*Autonomie*) ; 2. les règles confirmées ici, celles du projet
     d'abord ; 3. ce qu'il sait de votre façon de décider ; 4. vos décisions passées sur des questions semblables ; 5. son
-    propre jugement. Vos limites (L4 et L5 toujours à vous, le plafond par jour, les mots sensibles) gardent le dernier mot.
+    propre jugement. Vos limites (L6 toujours à vous, L5 ouvert par vous seul, le plafond par jour, les mots sensibles) gardent le dernier mot.
   - **Ne plus apprendre.** Coupe l'apprentissage pour un projet : ce qui en a été appris (ses règles comprises) est
     oublié, et plus rien de nouveau n'est gardé. **Oublier** efface une fois le savoir d'un projet.
   - Les résumés et dossiers sont rédigés à partir de ce que les agents ont écrit. L'assistant les lit comme des
@@ -162,11 +162,18 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   étape suivante que l'agent n'a pas demandée n'est jamais que proposée. Quand une session termine son tour, l'assistant lit son dernier message (comme
   des données écrites par d'autres, jamais comme des instructions) avec vos **priorités**, vos **règles permanentes**, les
   réponses semblables que vous avez données et ce que le Mind sait de votre façon de décider, et en déduit la réponse que
-  vous donneriez, avec un niveau (L1 Routine, L2 Petits choix, L3 Vrais choix, L4 Valeurs et métier, L5 Critique) et une confiance honnête. Un message qui ne fait que rendre
+  vous donneriez, avec un niveau et une confiance honnête. Les niveaux (1.52.0) sont l'échelle de décision de vos agents
+  de code, vous étant leur PO (product owner) : **L1 Technique** (bugs, tests, clarté), **L2 Conception** (architecture,
+  structure), **L3 Solution** (spécifications, ce que ça apporte aux utilisateurs), **L4 Produit** (vos arbitrages de PO
+  une fois le projet lancé : planning, priorités, périmètre, une légère dérive), **L5 Business** (orientation, revenus,
+  prix, politique : là où l'on remonte quand les arbitrages produit ne tiennent plus) et **L6 Valeurs** (honnêteté, tort
+  causé aux utilisateurs ou aux données, tout ce qui est irréversible). Quand un agent indique un niveau sur sa carte de
+  question (*Niveau : L4*, *Level: L4*), ce niveau est gardé, jamais abaissé (l'échelle à cinq niveaux des agents appelle
+  les valeurs L5 : c'est lu comme L6). Un message qui ne fait que rendre
   compte du travail fait est laissé tel quel. Les limites sont ensuite appliquées par Talixio lui-même, pas par le modèle :
-  pour chaque niveau L1–L3 vous choisissez *Je propose, vous répondez* (par défaut), *Je réponds si je suis sûr, puis je vous
-  préviens* ou *Je réponds si je suis sûr, sans bruit* (L4 et L5 affichent 🔒 *Toujours décidé par vous*, sans choix) ; il n'envoie seul qu'au-dessus de votre seuil de confiance (75 % par
-  défaut) et sous le **plafond quotidien** (20 par défaut). **L4/L5, les demandes d'autorisation, et tout ce qui touche aux
+  pour chaque niveau L1–L5 vous choisissez *Je propose, vous répondez* (par défaut), *Je réponds si je suis sûr, puis je vous
+  préviens* ou *Je réponds si je suis sûr, sans bruit* (L6 affiche 🔒 *Toujours décidé par vous*, sans choix) ; il n'envoie seul qu'au-dessus de votre seuil de confiance (75 % par
+  défaut) et sous le **plafond quotidien** (20 par défaut). **L6, les demandes d'autorisation, et tout ce qui touche aux
   push, déploiements, suppressions, e-mails, identifiants ou paiements restent toujours à vous**, quel que soit le réglage — de même que fusionner, publier ou sortir une version, une migration, installer un paquet, téléverser des données, envoyer à des clients ou abonnés, acheter ou prendre un abonnement, recruter, ignorer des tests, une adresse web, et une réponse contenant une commande que l'agent n'a pas proposée lui-même : elles restent des suggestions même quand le modèle les juge routinières.
   Vos **priorités** et **règles permanentes** (une par ligne) se tapent ou se dictent avec 🎙️ ; une règle que vous lui
   dites dans le chat est ajoutée aussi. Une réponse qu'il envoie part vers la session comme la vôtre, marquée *Assistant* dans le fil ; dans le volet de la
@@ -174,8 +181,18 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   et le volet de la session montre la réponse, son niveau, sa confiance et pourquoi elle n'a pas été envoyée, avec
   **Envoyer cette réponse** ou **La modifier d'abord**. Chaque réponse est évaluée : par rapport à ce que vous répondez pour
   ce tour (depuis le tableau, ou tapé dans le terminal de la session), ou par votre Oui / Non. Une mauvaise réponse envoyée
-  fait redescendre ce niveau aussitôt ; après assez de bonnes réponses il *suggère* de lui laisser plus de marge (il
-  n'élargit jamais ses propres limites). Il regarde dans les secondes qui suivent la fin d'un tour (et toutes les 15
+  fait redescendre ce niveau aussitôt.
+- **Il gagne sa propre latitude** (1.52.0) : une fois qu'il peut répondre seul, L1 à L3 montent d'eux-mêmes quand ses
+  réponses rejoignent assez souvent les vôtres : au moins 85 % (au choix 80, 85, 90 ou 95 %) sur les 10 dernières
+  réponses fait passer *Je propose* à *Je réponds si je suis sûr, puis je vous préviens*, puis sur les 20 suivantes à
+  *sans bruit*. Vous recevez une notification *Flotte : autonomie augmentée*, et une erreur le fait redescendre aussitôt.
+  Cochez *L4 Produit aussi* pour qu'il reprenne de la même façon vos arbitrages de PO. L5 Business ne reçoit plus de
+  latitude que de vous (il le *suggère* après assez de bonnes réponses) ; L6 Valeurs jamais. Décochez *Il se donne plus
+  de latitude* pour garder chaque changement en main.
+- **Rien n'attend oublié** (1.52.0) : une proposition que vous n'avez pas tranchée revient en *Toujours en attente de
+  votre décision*, une heure après, 4 heures plus tard, puis chaque jour, tant que sa session attend à ce tour.
+- **Options en un clic** (1.52.0) : quand le message d'un agent liste des options (*A) …*, *B) …*, ou *1.*, *2.* …), le
+  volet de la session les affiche en boutons sous *Répondre avec une de ses options :*. Un clic envoie cette option. Il regarde dans les secondes qui suivent la fin d'un tour (et toutes les 15
   minutes par sécurité), une seule fois par tour, et laisse de côté une session à laquelle vous avez déjà répondu, arrêtée,
   ou de plus de 12 heures.
 

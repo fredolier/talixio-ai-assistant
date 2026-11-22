@@ -1004,15 +1004,20 @@ const flows = {
     await page.evaluate(() => post('api/pilot', { enabled: true })); // 1.51.0: switched on, every level still on « ask »
     await page.click('#ab-auto-btn');
     await page.waitForSelector('#ab-auto #pa-on', { timeout: 6000 });
-    check('agent autonomy: the board has the autonomy settings, L4/L5 kept', (await page.$$('#ab-auto [data-auto-lv]')).length === 3);
+    check('agent autonomy: the board has the autonomy settings, L6 kept (1.52.0: L4 Product and L5 Business are yours to open)', (await page.$$('#ab-auto [data-auto-lv]')).length === 5);
+    check('agent autonomy: self-promotion is on for L1-L3, off for L4, out of the box', await page.isChecked('#ab-auto #pa-sp') && !(await page.isChecked('#ab-auto #pa-po')) && await page.inputValue('#ab-auto #pa-pa') === '85');
+    check('agent autonomy: the levels carry the agents\' ladder, the PO apart from the business', /Product \(you, the PO\)/.test(await page.textContent('#ab-auto .pl-lv')) && /Business/.test(await page.textContent('#ab-auto .pl-lv')));
     check('agent autonomy: reading each finished turn is on out of the box, apart from answering alone', await page.isChecked('#ab-auto #pa-read'));
     check('agent autonomy: switched on with every level on « I propose », it says it will not answer alone', await page.isVisible('#ab-auto #pa-all-ask'));
     await page.check('#ab-auto #pa-on');
     await page.selectOption('#ab-auto [data-auto-lv=L1]', 'tell');
+    await page.check('#ab-auto #pa-po'); await page.selectOption('#ab-auto #pa-pa', '90');
     await page.click('#ab-auto [data-auto-save]');
     await page.waitForTimeout(800);
     const pol = await api(page, 'api/pilot');
     check('agent autonomy: Save turns it on, with the mode per level', pol.enabled === true && pol.analyse === true && pol.levels.L1.mode === 'tell', JSON.stringify(pol.levels));
+    check('agent autonomy: and the self-promotion settings', pol.self_promote === true && pol.promote_po === true && pol.promote_at === 0.9, JSON.stringify(pol));
+    await page.evaluate(() => post('api/pilot', { promote_po: false, promote_at: 0.85 }));
     check('agent autonomy: once a level has room, the warning goes', !(await page.$('#ab-auto #pa-all-ask')));
     if (await page.isHidden('#ab-setup')) await page.click('#ab-connect');
     await page.fill('#ab-machine', 'autobox');
@@ -1047,6 +1052,29 @@ const flows = {
     // 1.49.0: one pane at a time: opening the card already put the autonomy settings away
     await page.click('#ab-detail [data-abact=close]');
     await page.evaluate(w => { PL.wired = w; }, plWired);
+  },
+  async agentOptions({ page, check, data }) {
+    // 1.52.0: the options an agent offers (its decision card) become one-click answers
+    await go(page, 'pilotage');
+    await page.click('#view-pilotage .ptab[data-ptab=agents]');
+    await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
+    if (await page.isHidden('#ab-setup')) await page.click('#ab-connect');
+    await page.fill('#ab-machine', 'optbox');
+    const sh = join(data, 'opt-hook.sh');
+    writeFileSync(sh, await page.evaluate(() => fetch(document.querySelector('#ab-dl').getAttribute('href')).then(r => r.text())));
+    const ev = e => new Promise(res => { const p = spawn('sh', [sh, 'event']); p.on('close', res); p.stdin.end(JSON.stringify({ session_id: 'opt-1', cwd: '/work/orchard', ...e })); });
+    await ev({ hook_event_name: 'UserPromptSubmit', prompt: 'Plan the harvest' });
+    await ev({ hook_event_name: 'Stop', last_assistant_message: 'Question for the PO\nLevel: L4\nWhich lot first?\nA) The apples, ready this week\nB) The pears\nRecommendation: A' });
+    await page.evaluate(() => { AB.rev = -1; return abRefresh(); });
+    await page.click('#ab-cols .ab-card:has-text("orchard")');
+    await page.waitForSelector('#ab-detail .ab-opts', { timeout: 6000 });
+    const opts = await page.$$eval('#ab-detail .ab-opt', bs => bs.map(b => b.dataset.text));
+    check('agent options: its options are buttons', opts.join('|') === 'A) The apples, ready this week|B) The pears', JSON.stringify(opts));
+    await page.click('#ab-detail .ab-opt:has-text("pears")');
+    await page.waitForFunction(() => /B\) The pears/.test(document.querySelector('#ab-detail .ab-thread')?.textContent || ''), null, { timeout: 6000 });
+    check('agent options: one click answers with that option', true);
+    check('agent options: a message without options gets no buttons', (await page.evaluate(() => [abOptions('Done. Shall I go on?'), abOptions('Version 2. ready'), abOptions('Pick A) red or B) blue')].map(o => o.length).join(','))) === '0,0,2');
+    await page.click('#ab-detail [data-abact=close]');
   },
   async agentStart({ page, check, data }) {
     // 1.38.0: start a session from the board on a machine whose listener runs, then stop it; the real scripts, a stand-in for claude
@@ -1185,7 +1213,7 @@ ev Stop ",\\"last_assistant_message\\":\\"Done: $p\\""
     // the autonomy settings live on the board
     if (await page.isHidden('#ab-auto')) await page.click('#ab-auto-btn');
     await page.waitForSelector('#pl-auto .pl-lv', { timeout: 6000 });
-    check('pilotage: Autonomy lists the five levels, L4 and L5 are always the user\'s', (await page.$$('#pl-auto .pl-lv tbody tr')).length === 5 && (await page.$$('#pl-auto [data-auto-lv]')).length === 3);
+    check('pilotage: Autonomy lists the six levels, L6 is always the user\'s', (await page.$$('#pl-auto .pl-lv tbody tr')).length === 6 && (await page.$$('#pl-auto [data-auto-lv]')).length === 5);
     await page.check('#pa-on'); await page.selectOption('#pl-auto [data-auto-lv=L2]', 'tell'); await page.fill('#pa-pr', 'Client work first\nInternal tools later');
     await page.click('#pl-auto [data-auto-save]'); await page.waitForTimeout(700);
     const pol = await api(page, 'api/pilot');

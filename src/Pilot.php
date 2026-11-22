@@ -6,9 +6,11 @@ namespace Talixio;
  * The autonomous pilot's brain (roadmap: « towards a fleet that decides like you do »).
  *
  * The orchestrator relays; the assistant decides — within limits the USER sets and only the user can raise:
- *  - an autonomy mode per ladder level (L1..L5): `ask` (the assistant proposes, you answer), `tell` (it answers when
- *    confident, then tells you), `auto` (same, silently). L4/L5 (values, business), approvals, pushes, deploys,
- *    deletions, e-mails and credentials are never delegated, whatever the setting;
+ *  - an autonomy mode per ladder level (1.52.0: L1 technical, L2 design, L3 solution, L4 product — the PO's call,
+ *    L5 business, L6 values): `ask` (the assistant proposes, you answer), `tell` (it answers when confident, then tells
+ *    you), `auto` (same, silently). L1-L3 raise themselves once the assistant is right often enough (self-promotion);
+ *    L4 too only when the user allows it; L5 only ever by the user; L6, approvals, pushes, deploys, deletions, e-mails
+ *    and credentials are never delegated, whatever the setting;
  *  - a confidence threshold, below which it only proposes;
  *  - an ordered list of priorities it arbitrates by.
  * Every answer it considers is a PREDICTION written down with a confidence. When you answer yourself (or confirm / correct
@@ -17,10 +19,14 @@ namespace Talixio;
  */
 final class Pilot
 {
-    public const LEVELS = ['L1', 'L2', 'L3', 'L4', 'L5'];
+    public const LEVELS = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'];
     public const MODES = ['ask', 'tell', 'auto'];
-    /** Levels the user keeps for good. */
-    private const KEPT = ['L4', 'L5'];
+    /** Levels the user keeps for good (values, 1.52.0). */
+    private const KEPT = ['L6'];
+    /** Levels that raise their own autonomy when the assistant proves right (L4, the product, only if the user allows it). */
+    private const SELF = ['L1', 'L2', 'L3'];
+    /** Reminders of a proposal nobody decided: an hour after it, 4 hours later, then every day (1.52.0). */
+    private const REMIND = [3600, 4 * 3600, 86400];
     private const PRED_CAP = 200;
     private const WINDOW = 30;
 
@@ -32,10 +38,14 @@ final class Pilot
 
     private static function withDefaults(array $s): array
     {
+        // 1.52.0: six levels; what the old ladder scored as L4 (« values or the user's own judgement ») is now L6
+        if (($s['ladder'] ?? 0) < 6 && isset($s['outcomes']['L4'])) { $s['outcomes']['L6'] = $s['outcomes']['L4']; unset($s['outcomes']['L4']); }
+        $s['ladder'] = 6;
         $s['autonomy'] = array_merge(array_fill_keys(self::LEVELS, 'ask'), array_intersect_key((array)($s['autonomy'] ?? []), array_flip(self::LEVELS)));
         foreach (self::KEPT as $l) $s['autonomy'][$l] = 'ask';
         $s += ['enabled' => false, 'analyse' => true, 'threshold' => 0.75, 'priorities' => [], 'rules' => [], 'daily_cap' => 20, 'predictions' => [], 'outcomes' => [], 'pending' => 0, 'last_wake' => 0,
-            'board_wake' => 0, 'board_last' => 0, 'board_seen' => []];
+            'board_wake' => 0, 'board_last' => 0, 'board_seen' => [],
+            'self_promote' => true, 'promote_at' => 0.85, 'promote_po' => false];
         return $s;
     }
 
@@ -58,7 +68,8 @@ final class Pilot
         }
         $recent = array_slice(array_reverse(array_values($s['predictions'])), 0, 30);
         foreach ($recent as &$r) if (!isset($r['name']) || $r['name'] === '') $r['name'] = (string)($r['agent'] ?? ''); unset($r);
-        return ['enabled' => (bool)$s['enabled'], 'analyse' => (bool)$s['analyse'], 'threshold' => (float)$s['threshold'], 'priorities' => array_values($s['priorities']), 'rules' => array_values($s['rules']), 'daily_cap' => (int)$s['daily_cap'], 'sent_today' => $this->sentToday($s), 'levels' => $acc, 'recent' => $recent,
+        return ['enabled' => (bool)$s['enabled'], 'analyse' => (bool)$s['analyse'], 'threshold' => (float)$s['threshold'], 'priorities' => array_values($s['priorities']), 'rules' => array_values($s['rules']), 'daily_cap' => (int)$s['daily_cap'],
+            'self_promote' => (bool)$s['self_promote'], 'promote_at' => (float)$s['promote_at'], 'promote_po' => (bool)$s['promote_po'], 'sent_today' => $this->sentToday($s), 'levels' => $acc, 'recent' => $recent,
             'calibration' => $this->calibration($s)];
     }
 
@@ -87,6 +98,9 @@ final class Pilot
             if (isset($in['enabled'])) $s['enabled'] = (bool)$in['enabled'];
             if (isset($in['analyse'])) $s['analyse'] = (bool)$in['analyse'];
             if (isset($in['threshold'])) $s['threshold'] = max(0.5, min(0.99, (float)$in['threshold']));
+            if (isset($in['self_promote'])) $s['self_promote'] = (bool)$in['self_promote'];
+            if (isset($in['promote_po'])) $s['promote_po'] = (bool)$in['promote_po'];
+            if (isset($in['promote_at'])) $s['promote_at'] = round(max(0.7, min(0.99, (float)$in['promote_at'])), 2);
             foreach ((array)($in['autonomy'] ?? []) as $l => $m) {
                 if (!in_array($l, self::LEVELS, true) || !in_array($m, self::MODES, true)) { $err = "unknown level or mode: $l"; continue; }
                 if (in_array($l, self::KEPT, true) && $m !== 'ask') { $err = "$l is always yours to decide."; continue; }
@@ -163,6 +177,7 @@ final class Pilot
     public function boardTick(int $now): void
     {
         $s = $this->state();
+        try { $this->remind($s, $now); } catch (\Throwable $e) { Log::warn("pilot reminders: {$e->getMessage()}"); }
         if (!self::reads($s)) return;
         $open = $this->boardOpen($s, $now);
         $due = ($s['board_wake'] > 0 && $now - $s['board_last'] >= 5) || ($open && $now - $s['board_last'] >= 900);
@@ -170,7 +185,7 @@ final class Pilot
         if ($this->app->budget()->status()['state'] !== 'ok') return;
         $this->mutate(function (array $s) use ($now) { $s['board_wake'] = 0; $s['board_last'] = $now; return [$s, null]; });
         foreach (array_slice($open, 0, 5) as $row) {
-            try { $this->decideBoard($row); } catch (\Throwable $e) { Log::warn("pilot board: {$e->getMessage()}"); }
+            try { $this->decideBoard($row, $now); } catch (\Throwable $e) { Log::warn("pilot board: {$e->getMessage()}"); }
         }
     }
 
@@ -186,6 +201,41 @@ final class Pilot
         $row = $this->app->store->q("SELECT * FROM agent_sessions WHERE id = ? AND state = 'waiting'", [$session])->fetch();
         if (!$row || trim((string)$row['last_message']) === '') return 'no_question';
         return $this->decideBoard($row);
+    }
+
+    /**
+     * A proposal nobody decided is never forgotten (1.52.0): while its session still waits at the same turn, it comes
+     * back as a notice an hour later, 4 hours after that, then every day, until someone answers or the session moves on.
+     */
+    private function remind(array $s, int $now): void
+    {
+        $due = [];
+        foreach ($s['predictions'] as $k => $p) {
+            if (empty($p['board']) || ($p['action'] ?? '') !== 'proposed' || isset($p['hit'])) continue;
+            $n = (int)($p['reminded'] ?? 0);
+            if ($now < (int)($p['reminded_at'] ?? $p['ts'] ?? 0) + self::REMIND[min($n, count(self::REMIND) - 1)]) continue;
+            $seq = (int)substr((string)$k, strrpos((string)$k, ':') + 1);
+            $due[$k] = [$p, $seq];
+        }
+        if (!$due) return;
+        $hub = $this->app->agentHub();
+        $sent = [];
+        foreach ($due as $k => [$p, $seq]) {
+            $row = $this->app->store->q("SELECT state, seq FROM agent_sessions WHERE id = ?", [(string)$p['agent']])->fetch();
+            $open = $row && $row['state'] === 'waiting' && (int)$row['seq'] === $seq
+                && !$this->app->store->q('SELECT 1 FROM agent_commands WHERE session = ? AND delivered IS NULL', [(string)$p['agent']])->fetchColumn();
+            $sent[$k] = $open;
+            if ($open && $hub->notifyMode() !== 'off') $this->app->notifier()->notify(I18n::t($this->app, 'Still waiting for your decision'), (string)($p['name'] ?? $p['agent']) . ' · ' . $p['level'] . ': '
+                . (($p['summary'] ?? '') !== '' ? $p['summary'] : mb_substr(trim((string)$p['question']), -300)) . "\n" . I18n::t($this->app, 'Proposed:') . ' ' . mb_substr((string)$p['answer'], 0, 300));
+        }
+        $this->mutate(function (array $s) use ($sent, $now) {
+            foreach ($sent as $k => $open) {
+                if (!isset($s['predictions'][$k])) continue;
+                if ($open) { $s['predictions'][$k]['reminded'] = (int)($s['predictions'][$k]['reminded'] ?? 0) + 1; $s['predictions'][$k]['reminded_at'] = $now; }
+                else $s['predictions'][$k]['action'] = 'lapsed'; // the session moved on without it: nothing left to remind
+            }
+            return [$s, null];
+        });
     }
 
     /** Sessions waiting for a reply, not looked at by the assistant for this turn, with no answer queued. */
@@ -245,19 +295,25 @@ final class Pilot
             . "Rank 3, what is known of how the user decides:\n" . ($mind !== '' ? mb_substr($mind, 0, 3000) : '(none)') . "\n\n"
             . "Rank 4, similar past decisions of the user (this project's first):\n" . ($prec ? implode("\n", array_map(fn($p) => '- ' . (($p['project'] ?? '') === $project ? '[this project] ' : '') . 'Q: ' . Knowledge::fence(mb_substr($p['q'], -200)) . ' → A: ' . Knowledge::fence(mb_substr($p['a'], 0, 200)), $prec)) : '(none)') . "\n\n"
             . "Rank 5, your own judgement: only when nothing above covers the question.\n\n"
-            . "Levels: L1 a routine choice (go on, which of two equivalent ways), L2 a technical choice inside the task, L3 a change of scope or plan, "
-            . "L4 values or the user's own judgement, L5 business, money, people. Pushes, deploys, deletions, e-mails, credentials and payments are always L4 or more.\n"
+            . "Levels, the decision ladder the coding agents use (the user is their PO, product owner): L1 technical (clarity, bugs, tests, naming, go on), "
+            . "L2 design (architecture, structure, a technical choice inside the task), L3 solution (specs, what the feature does for its users, within the agreed scope), "
+            . "L4 product, the PO's call once the project runs (planning, priorities, a scope trade-off, a small drift from the plan), "
+            . "L5 business (the direction, revenue, pricing, policy, the mission: when the product's trade-offs no longer hold), "
+            . "L6 values (honesty towards the user, hiding nothing, harm to users or data, anything irreversible). Pushes, deploys, deletions, e-mails, credentials and payments are always L5 or more.\n"
+            . "When the agent's message states a level (a decision card: « Niveau : L4 », « Level: L4 »), keep it: never lower it. The agents' own ladder has five levels, its L5 being values: read it as L6. "
+            . "When the card gives a recommendation, weigh it, but answer as the user would.\n"
             . "Kinds: answer when the agent asks something (a question, options to choose from, « shall I »): the answer picks or replies. "
             . "next when it asks nothing but the user's task is not finished: the answer is the next instruction towards it. "
             . "done when the task is finished or nothing is worth doing next (the answer may be empty).\n"
             . "summary: two sentences at most for the user, in the language of the user's task: what the agent did or found, and what is to decide.\n"
             . "Confidence is HONEST: 0.9+ only when a rank 1 or 2 rule, or a clear precedent, covers it; below 0.5 when you are guessing.\n"
-            . 'Reply with JSON only: {"kind": "answer", "next" or "done", "summary": "…", "answer": "the reply to send to the agent, short, in the language of its message", "level": "L1".."L5", "topic": one of ' . implode(', ', Knowledge::TOPICS) . ', "confidence": 0.0-1.0, "rationale": "one sentence"}';
+            . 'Reply with JSON only: {"kind": "answer", "next" or "done", "summary": "…", "answer": "the reply to send to the agent, short, in the language of its message", "level": "L1".."L6", "topic": one of ' . implode(', ', Knowledge::TOPICS) . ', "confidence": 0.0-1.0, "rationale": "one sentence"}';
     }
 
     /** One finished turn: the model proposes, the code decides whether it is sent (as « assistant ») or kept as a suggestion. */
-    public function decideBoard(array $row): string
+    public function decideBoard(array $row, ?int $now = null): string
     {
+        $now ??= time();
         $key = self::boardKey($row['id'], (int)$row['seq']);
         $prompt = $this->boardPrompt($row);
         if (self::$model) $text = (string)(self::$model)($prompt);
@@ -270,6 +326,7 @@ final class Pilot
             return 'no_question';
         }
         $level = self::levelOf((string)($j['level'] ?? ''));
+        if (($card = self::cardLevel((string)$row['last_message'])) && (int)$card[1] > (int)$level[1]) $level = $card; // the agent's own card is never lowered (1.52.0)
         $topic = in_array($j['topic'] ?? '', Knowledge::TOPICS, true) ? (string)$j['topic'] : Knowledge::topicOf(mb_substr((string)$row['last_message'], -600) . ' ' . $answer);
         $confidence = max(0.0, min(1.0, (float)($j['confidence'] ?? 0)));
         $summary = mb_substr(trim((string)($j['summary'] ?? '')), 0, 600);
@@ -289,9 +346,9 @@ final class Pilot
             try { $hub->command($row['id'], 'reply', $answer, 'assistant', ['level' => $level, 'topic' => $topic]); }
             catch (\InvalidArgumentException $e) { $sendable = false; $why = $e->getMessage(); } // stopped or ended meanwhile
         }
-        $this->mutate(function (array $s) use ($key, $row, $name, $level, $topic, $msg, $answer, $confidence, $j, $sendable, $why, $kind, $summary) {
+        $this->mutate(function (array $s) use ($key, $row, $name, $level, $topic, $msg, $answer, $confidence, $j, $sendable, $why, $kind, $summary, $now) {
             $s['predictions'][$key] = ['id' => $key, 'agent' => $row['id'], 'name' => $name, 'board' => true, 'kind' => $kind, 'summary' => $summary, 'level' => $level, 'topic' => $topic, 'question' => mb_substr($msg, -600), 'answer' => $answer,
-                'confidence' => round($confidence, 2), 'rationale' => mb_substr(trim((string)($j['rationale'] ?? '')), 0, 300), 'action' => $sendable ? 'sent' : 'proposed', 'why' => $why, 'ts' => time()];
+                'confidence' => round($confidence, 2), 'rationale' => mb_substr(trim((string)($j['rationale'] ?? '')), 0, 300), 'action' => $sendable ? 'sent' : 'proposed', 'why' => $why, 'ts' => $now];
             if (count($s['predictions']) > self::PRED_CAP) $s['predictions'] = array_slice($s['predictions'], -self::PRED_CAP, null, true);
             return [$s, null];
         });
@@ -350,12 +407,22 @@ final class Pilot
     /** Ladder level of a question: « L2 », « l2 », « level 2 » → L2; anything else is treated as L4 (kept by the user). */
     public static function levelOf(string $type): string
     {
-        return preg_match('/\bL?([1-5])\b/i', $type, $m) ? 'L' . $m[1] : 'L4';
+        return preg_match('/\bL?([1-6])\b/i', $type, $m) ? 'L' . $m[1] : 'L6';
+    }
+
+    /**
+     * The level an agent states on its decision card (« Niveau : L4 », « Level: L3 », a line starting with « L4 »), or
+     * null. The agents' ladder has five levels, its L5 being values: their L5 is read as L6 (1.52.0).
+     */
+    public static function cardLevel(string $msg): ?string
+    {
+        if (!preg_match('/(?:niveau|level|échelle|ladder)\s*[:：=-]?\s*\**\s*L([1-6])\b/iu', $msg, $m) && !preg_match('/^[\s>*#_-]*\[?L([1-6])\b/mu', $msg, $m)) return null;
+        return $m[1] === '5' ? 'L6' : 'L' . $m[1];
     }
 
     /**
      * The user's limits, applied in code whatever the model says: [may it send by itself?, why not]. The level's mode
-     * is not « ask » (L4/L5 never), the confidence reaches the threshold, nothing in the question or the answer touches
+     * is not « ask » (L6 never), the confidence reaches the threshold, nothing in the question or the answer touches
      * what the user keeps (pushes, deploys, deletions, e-mails, credentials, payments, signatures), and the daily cap
      * of answers sent by itself is not reached.
      */
@@ -417,11 +484,22 @@ final class Pilot
             if (!$hit && $p['action'] === 'sent' && $s['autonomy'][$l] !== 'ask') { $s['autonomy'][$l] = $s['autonomy'][$l] === 'auto' ? 'tell' : 'ask'; $demoted = true; }
             $r = array_slice($s['outcomes'][$l], -10);
             if (count($r) >= 5 && array_sum($r) / count($r) < 0.7 && $s['autonomy'][$l] !== 'ask') { $s['autonomy'][$l] = 'ask'; $demoted = true; }
-            $learn = [$p, $hit, $demoted, $s['autonomy'][$l]];
+            // 1.52.0: once answering alone is on, L1-L3 (and L4 if the user allows it) earn their own room: right at
+            // promote_at over the last 10 answers lifts « ask » to « tell », over the last 20 « tell » to « auto »
+            $promoted = false;
+            if ($hit && !$demoted && $s['enabled'] && $s['self_promote'] && (in_array($l, self::SELF, true) || ($l === 'L4' && $s['promote_po']))) {
+                $need = ['ask' => 10, 'tell' => 20][$s['autonomy'][$l]] ?? 0;
+                $w = array_slice($s['outcomes'][$l], -$need);
+                if ($need && count($w) >= $need && array_sum($w) / count($w) >= (float)$s['promote_at']) {
+                    $s['autonomy'][$l] = $s['autonomy'][$l] === 'ask' ? 'tell' : 'auto'; $promoted = true;
+                    $s['outcomes'][$l] = []; // the next step is earned on fresh answers
+                }
+            }
+            $learn = [$p, $hit, $demoted, $s['autonomy'][$l], $promoted];
             return [$s, null];
         });
         if (!$learn) return;
-        [$p, $hit, $demoted, $mode] = $learn;
+        [$p, $hit, $demoted, $mode, $promoted] = $learn;
         try {
             if ($this->app->mind()->enabled()) {
                 $q = mb_substr(preg_replace('/\s+/u', ' ', $p['question']), 0, 160);
@@ -431,6 +509,8 @@ final class Pilot
                     $hit ? 1 : 3, 0, 'agents');
             }
         } catch (\Throwable $e) { Log::warn("pilot learning: {$e->getMessage()}"); }
+        if ($promoted) $this->app->notifier()->notify(I18n::t($this->app, 'Fleet: autonomy raised'), "{$p['level']} → « $mode »: "
+            . I18n::t($this->app, 'my answers matched yours often enough. A miss lowers it again at once; you can lower it yourself in Autonomy.'));
         if ($demoted) $this->app->notifier()->notify('Fleet: autonomy lowered', "{$p['level']} goes back to « $mode » after a miss — I will propose and wait for you until my answers prove right again.");
     }
 
