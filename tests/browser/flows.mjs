@@ -1096,6 +1096,60 @@ sleep 300
       check('agent start: Stop ends the process the listener started, and the session shows stopped', !alive && /shop/.test(await page.textContent('#ab-cols [data-col=quiet]')));
     } finally { lis.kill(); }
   },
+  async agentResume({ page, check, data }) {
+    // 1.50.0: a reply to a session started from the board resumes it (claude -p --resume): the reply is its next prompt
+    const { mkdirSync, chmodSync, readFileSync: rf, existsSync: ex } = await import('node:fs');
+    const work = join(data, 'lab2', 'site'), lh = join(data, 'lab2', '.talixio');
+    mkdirSync(work, { recursive: true }); mkdirSync(lh, { recursive: true });
+    await go(page, 'pilotage');
+    await page.click('#view-pilotage .ptab[data-ptab=agents]');
+    await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
+    if (await page.isHidden('#ab-setup')) await page.click('#ab-connect');
+    await page.fill('#ab-machine', 'resumebox');
+    const get = sel => page.evaluate(s => fetch(document.querySelector(s).getAttribute('href')).then(r => r.text()), sel);
+    const hook = join(lh, 'agent-hook.sh'), listen = join(lh, 'agent-listen.sh'), args = join(lh, 'args.txt');
+    writeFileSync(hook, await get('#ab-dl')); writeFileSync(listen, await get('#ab-dl-listen'));
+    // a stand-in for claude -p: one turn, then it exits; with --resume <id> it goes on as that session
+    const fake = join(lh, 'fake-claude.sh');
+    writeFileSync(fake, `#!/bin/sh
+echo "$*" >> '${args}'
+sid="r-$$"; [ "$1" = -p ] && [ "$2" = --resume ] && sid="$3"
+p=$(cat)
+ev() { printf '{"session_id":"%s","hook_event_name":"%s","cwd":"%s"%s}' "$sid" "$1" "$PWD" "$2" | sh '${hook}' event; }
+[ "$2" = --resume ] || ev SessionStart ''
+ev UserPromptSubmit ",\\"prompt\\":\\"$p\\""
+ev Stop ",\\"last_assistant_message\\":\\"Done: $p\\""
+`); chmodSync(fake, 0o755);
+    const seed = spawn('sh', [hook, 'event']); seed.stdin.end(JSON.stringify({ session_id: 'lab2-seed', hook_event_name: 'SessionStart', cwd: work }));
+    await new Promise(r => seed.on('close', r));
+    const lis = spawn('sh', [listen], { env: { ...process.env, TALIXIO_HOME: lh, TALIXIO_ROOT: join(data, 'lab2'), TALIXIO_CLAUDE: fake }, stdio: 'ignore' });
+    try {
+      await page.click('#ab-new-btn');
+      await page.waitForSelector('#ab-new-form:not([hidden]) #ab-new-machine option[value=resumebox]', { state: 'attached', timeout: 12000 });
+      await page.selectOption('#ab-new-machine', 'resumebox');
+      await page.selectOption('#ab-new-folder', work);
+      await page.fill('#ab-new-prompt', 'Plan the release');
+      await page.click('#ab-new-start');
+      await page.waitForFunction(() => /Done: Plan the release/.test(document.querySelector('#ab-cols [data-col=need]')?.textContent || ''), null, { timeout: 20000 });
+      // claude -p has ended with its turn: the listener reports it, and the session stays answerable
+      await page.waitForFunction(() => fetch('api/agents').then(r => r.json()).then(d => d.sessions.some(s => s.project === 'site' && s.state === 'waiting')), null, { timeout: 8000 }).catch(() => {});
+      await page.waitForTimeout(4000);
+      const st = (await api(page, 'api/agents')).sessions.find(s => s.project === 'site' && s.job > 0);
+      check('agent resume: when claude -p ends with its turn, the session waits for you instead of ending', st?.state === 'waiting', JSON.stringify(st));
+      await page.click('#ab-cols [data-col=need] .ab-card:has-text("Done: Plan the release")');
+      await page.waitForSelector('#ab-detail #ab-reply', { timeout: 6000 });
+      check('agent resume: no note about the hook for a session the board started', !(await page.$('#ab-detail .ab-relay-note')));
+      await page.fill('#ab-reply', 'Option B');
+      await page.click('#ab-detail [data-abact=send]');
+      await page.waitForFunction(() => /Done: Option B/.test(document.querySelector('#ab-detail .ab-thread')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
+      const ran = ex(args) ? rf(args, 'utf8') : '';
+      check('agent resume: the listener resumed that very session with the reply as its prompt', new RegExp('^-p --resume ' + st?.id.split(':')[1] + '$', 'm').test(ran), ran);
+      check('agent resume: the resumed session answers in the same thread', /Done: Option B/.test(await page.textContent('#ab-detail .ab-thread')));
+      const mine = await page.$$eval('#ab-detail .ab-thread .ab-mine', els => els.filter(e => e.textContent.includes('Option B')).length);
+      check('agent resume: the reply shows once (not again as typed in the session)', mine === 1, String(mine));
+      await page.click('#ab-detail [data-abact=close]');
+    } finally { lis.kill(); }
+  },
   async pilotage({ page, check, root, data }) {
     // the director's cockpit: four tabs over machinery already shipped, voice-first
     // seed one non-protected role so the catalogue has a card to group, specialize and run the lifecycle on
