@@ -66,6 +66,12 @@ check('agent hub: the hook gets the replies, in order, as plain text', $code ===
 check('agent hub: the session is Working again and its old wait is over', $col('claude-code:s1')['state'] === 'working' && $hub->wait('claude-code', 's1', 'reply', $seq)[0] === 410);
 $kinds = array_map(fn($e) => $e['who'] . ':' . $e['kind'], $hub->thread('claude-code:s1')['events']);
 check('agent hub: the thread records what was queued and when it was delivered', in_array('you:queued', $kinds, true) && in_array('you:delivered', $kinds, true), implode(' ', $kinds));
+// 1.49.1: Claude Code reports the delivered reply back as a prompt (the Stop hook's feedback): an echo, not something typed there
+$n = count($hub->thread('claude-code:s1')['events']);
+$ev(['hook_event_name' => 'UserPromptSubmit', 'prompt' => "<task-notification>\n<summary>Stop hook feedback</summary>\n</task-notification>\n<system-reminder>\nStop hook blocking error from command \"Stop\": Message from the user, sent from Talixio:\n\nYes, add a test.\n\nAnd run the suite.\n</system-reminder>"]);
+check('agent hub: the echo of a reply sent from here is not shown again as typed in the session', count($hub->thread('claude-code:s1')['events']) === $n
+    && $col('claude-code:s1')['state'] === 'working', json_encode(array_slice($hub->thread('claude-code:s1')['events'], $n)));
+check('agent hub: the hook script marks a reply the way the board recognises it', str_contains(file_get_contents(__DIR__ . '/../../deploy/agent-hook.sh'), "printf '" . AgentHub::RELAYED));
 
 [, $r] = $ev(['hook_event_name' => 'Stop', 'last_assistant_message' => 'Done.']);
 $hub->command('claude-code:s1', 'reply', 'thanks');

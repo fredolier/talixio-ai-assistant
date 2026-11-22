@@ -29,6 +29,14 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   - **Répondre** : le texte part à la session. Une session qui a terminé son tour est réveillée et reprend le travail ; une
     session encore occupée le reçoit à la fin de son tour en cours. Le message après l'envoi dit lequel (*Envoyé* ou
     *En attente*).
+    Dans le fil, votre réponse n'apparaît qu'une fois : *en attente*, puis *remis* dès que la session l'a reçue.
+    **Pourquoi une session vous demande parfois de confirmer dans sa propre fenêtre.** Votre réponse arrive à Claude Code
+    par son hook (le tableau ne peut pas taper dans sa fenêtre) : Claude Code la voit comme un message transmis par un
+    hook, pas comme tapé par vous dans sa fenêtre. Pour une réponse ordinaire, cela ne change rien. Pour une étape
+    sensible (pousser, modifier le code d'un autre projet, supprimer), les contrôles de sécurité de Claude Code peuvent ne
+    pas la compter comme votre accord : la session vous demande alors de le taper dans sa fenêtre (ou dans la session
+    concernée). Ce contrôle appartient à Claude Code ; le tableau ne le contourne pas et ne doit pas le contourner. Donnez
+    ces accords dans la session elle-même.
   - **Autoriser / Refuser** une demande d'autorisation (la commande ou le fichier concerné est affiché). La session attend
     votre réponse ici **30 secondes** ; ensuite, la question habituelle s'affiche dans son terminal et vous y répondez là.
   - **Marquer comme vu** range une session terminée dans Au calme ; **Oublier** la retire du tableau avec son fil (les

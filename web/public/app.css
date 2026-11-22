@@ -2007,6 +2007,7 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-perm{display:flex;flex-direction:column;gap:6px;background:color-mix(in srgb,var(--danger) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--danger) 30%,var(--line));border-radius:10px;padding:8px 12px}
 .ab-sug,.ab-judge{display:flex;flex-direction:column;gap:6px;background:color-mix(in srgb,var(--accent) 10%,var(--surface));border-radius:10px;padding:8px 12px}
 .ab-compose{display:flex;gap:8px;align-items:flex-end}
+.ab-relay-note{margin:6px 2px 0;font-size:.72rem;line-height:1.35}
 .ab-compose textarea{flex:1;font:inherit;font-size:.9rem;min-width:0;resize:none;max-height:200px;border-radius:12px;padding:8px 12px}
 .ab-card.ab-failed{box-shadow:inset 3px 0 0 var(--danger)}
 .ab-new-form{display:flex;flex-direction:column;gap:8px}

@@ -19,6 +19,9 @@ final class AgentHub
     public const NOTIFY = ['permission', 'all', 'off'];
     private const AGENTS = '/^[a-z0-9][a-z0-9._-]{0,39}$/';
 
+    /** What agent-hook.sh puts before a reply it hands to the session (keep the two in step) */
+    public const RELAYED = 'Message from the user, sent from Talixio:';
+
     public function __construct(private App $app)
     {
         $app->store->db->exec("CREATE TABLE IF NOT EXISTS agent_sessions(id TEXT PRIMARY KEY, agent TEXT NOT NULL, machine TEXT NOT NULL DEFAULT '',
@@ -94,6 +97,9 @@ final class AgentHub
             case 'UserPromptSubmit': // typed in the session itself: shown, and any wait for an answer from here is over (and a stop asked earlier: the person took over)
                 $set += ['state' => 'working', 'question' => '', 'stop' => 0, 'doing' => '']; $bump = true;
                 $p = (string)($e['prompt'] ?? '');
+                // 1.49.1: a reply sent from here reaches Claude Code as the Stop hook's feedback, and comes back as a prompt:
+                // it is already in the thread (queued, then delivered) and was already counted as your answer
+                if (str_contains($p, self::RELAYED)) break;
                 $lastEv = $this->app->store->q('SELECT kind, text FROM agent_events WHERE session = ? ORDER BY id DESC LIMIT 1', [$id])->fetch();
                 if (!$lastEv || $lastEv['kind'] !== 'started' || trim($lastEv['text']) !== trim($p)) $this->log($id, 'you', 'prompt', $p); // a started job's prompt is already shown
                 if ($s['state'] === 'waiting') { // answered in the terminal: what the assistant expected is scored, and the answer is a decision (1.44.0)

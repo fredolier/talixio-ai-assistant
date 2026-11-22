@@ -26,6 +26,13 @@ The board updates by itself every few seconds while you look at it.
   *Needs you* stays there while you read it, instead of jumping to Quiet under your eyes.
   - **Reply**: the text goes to the session. A session that finished its turn is woken by it and goes on working; a session
     still busy gets it at the end of its current turn. The note after sending says which (*Sent* or *Queued*).
+    In the thread, your reply shows once: *queued*, then *delivered* once the session has it.
+    **Why a session sometimes asks you to confirm in its own window.** Your reply reaches Claude Code through its hook
+    (the board cannot type in its window), so Claude Code sees it as a message passed on by a hook, not as something
+    you typed there. For ordinary answers it makes no difference. For a sensitive step (pushing, changing another
+    project's code, deleting), Claude Code's own safety checks may not count it as your go-ahead, and the session asks
+    you to type it in its window (or in the session concerned). That check belongs to Claude Code: the board does not
+    and should not get round it. Give such go-aheads in the session itself.
   - **Allow / Deny** a permission request (the command or the file it is about is shown). The session waits **30 seconds**
     for your answer here; after that, the usual prompt shows in its terminal and you answer there.
   - **Mark as seen** moves a finished session to Quiet; **Forget** removes it and its thread from the board (both in the

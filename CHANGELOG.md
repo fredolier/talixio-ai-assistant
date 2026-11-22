@@ -3,6 +3,20 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.49.1 (2026-11-22)
+
+Two fixes to how replies sent from the agent board appear, plus an explanation of why a session sometimes refuses to act on them.
+
+- **What happened:** every reply sent from the board showed three times in the thread: *queued*, *delivered*, then *typed in the session*. The third copy was the raw `<task-notification>… Stop hook blocking error…` text. Then a session refused to act on an « A » sent from the board ("the automatic action check blocked it"), and asked for it to be typed in its own window.
+- **Why the session refused:** the board's reply reaches Claude Code through its Stop hook (exit 2, the text on stderr), because the board cannot type into a session's window. Claude Code therefore sees it as hook feedback, not as user input. Its own safety check does not count hook feedback as the person's go-ahead for a sensitive action, such as making another project change its code and push. This is Claude Code's protection, and the board does not try to get round it. A note under the reply box and the FAQ now say so, and say to give such go-aheads in the session itself.
+- **The echo:** Claude Code reports the hook's feedback back as a prompt. The board took it for something typed in the session: it logged it, and if the session was waiting, it scored it a second time as an answer typed in the terminal. A prompt carrying the hook's marker (`AgentHub::RELAYED`) is now recognised as the echo and left out. Echoes already stored by earlier versions are hidden in the thread.
+- **One bubble per reply:** *queued* gives way to *delivered* once the session has the reply.
+- **Tested:**
+  - `tests/more/agent_hub.php`: the echo is not logged again, and the hook script's marker matches the board's;
+  - a browser check: a delivered reply shows once.
+  - Both new checks fail on 1.49.0. Both suites pass.
+- **Not tried:** a live Claude Code session. The echo's exact wording is taken from your example.
+
 ## 1.49.0 (2026-11-22)
 
 The agent board is redrawn as two panes: the list of sessions on the left, the open conversation (or a tool) on the right. The old board was hard to use.

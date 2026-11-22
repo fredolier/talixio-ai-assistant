@@ -100,6 +100,7 @@ window.I18N.fr = {
 "Autonomy": "Autonomie",
 "Sessions": "Sessions",
 "Open the first one": "Ouvrir la première",
+"Claude Code takes this as a message passed on by its hook, not as typed in its window: for a sensitive step (a push, a change in another project) it may ask you to confirm there.": "Claude Code reçoit ceci comme un message transmis par son hook, pas comme tapé dans sa fenêtre : pour une étape sensible (une poussée, une modification dans un autre projet), il peut vous demander de confirmer là-bas.",
 "Next: 1 waiting": "Suivante : 1 en attente",
 "Next: {n} waiting": "Suivante : {n} en attente",
 "laptop": "portable",

@@ -900,6 +900,10 @@ const flows = {
     await page.click('#ab-detail [data-abact=send]');
     const r = await late(turn, 15000);
     check('agent board: the waiting hook gets the reply and wakes the session (exit 2, the text on stderr)', r.code === 2 && /No, wait for Monday\./.test(r.err), JSON.stringify(r));
+    // 1.49.1: one bubble per reply: "queued" gives way to "delivered"
+    const bubbles = () => page.$$eval('#ab-detail .ab-thread .ab-ev', els => els.filter(e => /No, wait for Monday\./.test(e.textContent)).length);
+    await page.waitForSelector('#ab-detail .ab-thread .ab-k-delivered', { timeout: 8000 });
+    check('agent board: a delivered reply shows once in the thread, not queued and delivered', await bubbles() === 1, String(await bubbles()));
     const perm = run('permission', { hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'npm run deploy' } });
     await page.waitForSelector('#ab-detail .ab-perm [data-abact=deny]', { timeout: 8000 });
     check('agent board: a permission request shows what it is about', /npm run deploy/.test(await page.textContent('#ab-detail .ab-perm')));
