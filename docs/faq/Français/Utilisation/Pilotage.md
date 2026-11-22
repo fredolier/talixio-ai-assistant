@@ -37,6 +37,9 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
     pas la compter comme votre accord : la session vous demande alors de le taper dans sa fenêtre (ou dans la session
     concernée). Ce contrôle appartient à Claude Code ; le tableau ne le contourne pas et ne doit pas le contourner. Donnez
     ces accords dans la session elle-même.
+    **Les sessions démarrées depuis le tableau font exception** (depuis la 1.50.0) : votre réponse y est leur prochaine
+    demande, exactement comme la première, et compte donc comme la vôtre, comme si vous l'aviez tapée. Voir *Nouvelle
+    session* ci-dessous.
   - **Autoriser / Refuser** une demande d'autorisation (la commande ou le fichier concerné est affiché). La session attend
     votre réponse ici **30 secondes** ; ensuite, la question habituelle s'affiche dans son terminal et vous y répondez là.
   - **Marquer comme vu** range une session terminée dans Au calme ; **Oublier** la retire du tableau avec son fil (les
@@ -51,6 +54,10 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   où une session a déjà tourné sur cette machine. La carte indique *en attente de la machine*, puis la session se signale
   comme les autres, son fil commençant par votre demande. Si elle ne peut pas démarrer (dossier introuvable, Claude Code
   absent, pas connecté, hooks manquants), sa carte dit pourquoi, avec ce qu'a affiché la machine ; **Oublier** la retire.
+  Une telle session tourne avec `claude -p`, qui s'arrête à la fin de son tour : la session vous attend alors sur le
+  tableau (elle ne se termine pas). Votre réponse la reprend avec `claude -p --resume <session>`, lancé par l'écouteur :
+  la réponse est sa demande suivante. Une réponse envoyée pendant qu'elle travaille part à la fin de son tour. Mettez
+  l'écouteur à jour pour cela (*Connecter une machine*, étape 4, ou la commande d'installation à nouveau).
 - **Connecter une machine** (bouton en haut) : donnez un nom à la machine, cochez **Installer aussi l'écouteur** si
   vous voulez lancer des sessions d'ici, puis **Obtenir la commande d'installation** et lancez la ligne affichée dans un
   terminal sur cette machine : `curl -fsSL '<cet assistant>/api/agents/install?c=…' | sh`. Elle enregistre le script sous

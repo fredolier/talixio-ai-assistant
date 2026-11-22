@@ -3,6 +3,27 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.50.0 (2026-11-22)
+
+A reply to a session started from the board now continues it as its next prompt (`claude -p --resume`), instead of reaching it through a hook.
+
+- **Why:** a reply sent through the Stop hook reaches Claude Code as hook feedback. Claude Code's safety check does not take hook feedback as the person's go-ahead for a sensitive step (1.49.1). A session the board started already gets its first prompt from the board. Continuing it the same way gives the board no new power, and the reply then reaches it as a prompt.
+- **What changes:**
+  - `claude -p` ends with its turn. The session used to end with it. Now it waits for you on the board.
+  - A reply to such a session is queued for the machine's listener. The listener runs `claude -p --resume <session>` in the session's folder, with the reply as the prompt.
+  - A reply sent while the session is still working goes out when its turn ends.
+  - The Stop hook of these sessions no longer takes the reply.
+  - The thread shows the reply once, not also as typed in the session.
+  - The note under the reply box (1.49.1) is no longer shown for these sessions.
+  - The listener accepts only a session id made of letters, digits, `-` and `_`.
+- **Unchanged:** sessions opened in a terminal still get replies through their hook. For those, a sensitive go-ahead is still given in their own window. No documented way was found to hand a running interactive session a typed prompt from outside. The Claude Code docs leave open how Remote Control and channel messages are classified.
+- **Update the listener** on each machine to use this: install it again, or download it again from *Connect a machine*.
+- **Tested:**
+  - `tests/more/agent_resume.php`: the session waits instead of ending, and the listener gets `resume` with the session and the reply, once. It starts again, the resumed prompt is not shown twice, and a reply sent mid-turn waits for the end of the turn. A process that dies mid-turn ends the session, and terminal sessions keep the hook path.
+  - Browser flow `agentResume`: the real listener with a stand-in for `claude -p`. Started from the board, the session ends its turn and stays waiting, and the reply resumes it with `-p --resume <its id>`. Its answer lands in the same thread, and the reply shows once.
+  - The new checks fail on 1.49.1. Both suites pass.
+- **Not tried:** a real `claude -p --resume`, and whether Claude Code's auto-mode check then takes a reply such as « A » as your go-ahead. The docs say it reads user messages, and a `-p` prompt is one, but that has not been checked live. `-p` runs with the permission mode set in `TALIXIO_CLAUDE_ARGS` (e.g. `--permission-mode auto`).
+
 ## 1.49.1 (2026-11-22)
 
 Two fixes to how replies sent from the agent board appear, plus an explanation of why a session sometimes refuses to act on them.

@@ -6827,7 +6827,7 @@ async function abOpen(id, quiet) {
   if (fresh) {
     box.dataset.id = id;
     box.innerHTML = `<div class="ab-d-top"></div><div class="ab-thread"></div><div class="ab-dock"><div class="ab-dock-top"></div>${over ? `<p class="muted small">${esc(s.state === 'stopped' ? t('This session was stopped.') : t('This session has ended.'))}</p>`
-      : `<div class="ab-compose"><textarea id="ab-reply" rows="1" placeholder="${esc(t('Reply to this session…'))}"></textarea><button type="button" class="btn small primary" data-abact="send">${esc(t('Send'))}</button></div>${s.agent === 'claude-code' ? `<p class="ab-relay-note muted small">${esc(t('Claude Code takes this as a message passed on by its hook, not as typed in its window: for a sensitive step (a push, a change in another project) it may ask you to confirm there.'))}</p>` : ''}`}</div>`;
+      : `<div class="ab-compose"><textarea id="ab-reply" rows="1" placeholder="${esc(t('Reply to this session…'))}"></textarea><button type="button" class="btn small primary" data-abact="send">${esc(t('Send'))}</button></div>${s.agent === 'claude-code' && !s.job ? `<p class="ab-relay-note muted small">${esc(t('Claude Code takes this as a message passed on by its hook, not as typed in its window: for a sensitive step (a push, a change in another project) it may ask you to confirm there.'))}</p>` : ''}`}</div>`;
   }
   const pct = x => Math.round(x.confidence * 100) + '%';
   const sug = d.suggestion ? `<div class="ab-sug"><b>💡 ${esc(t('Suggested answer'))}</b> <span class="muted small no-i18n">${esc(d.suggestion.level)} · ${esc(pct(d.suggestion))}</span>

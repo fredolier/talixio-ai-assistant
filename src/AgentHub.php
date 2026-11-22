@@ -100,6 +100,7 @@ final class AgentHub
                 // 1.49.1: a reply sent from here reaches Claude Code as the Stop hook's feedback, and comes back as a prompt:
                 // it is already in the thread (queued, then delivered) and was already counted as your answer
                 if (str_contains($p, self::RELAYED)) break;
+                if ((int)$s['job'] > 0 && $this->justDelivered($id, $p)) break; // 1.50.0: a reply the listener resumed it with, already shown
                 $lastEv = $this->app->store->q('SELECT kind, text FROM agent_events WHERE session = ? ORDER BY id DESC LIMIT 1', [$id])->fetch();
                 if (!$lastEv || $lastEv['kind'] !== 'started' || trim($lastEv['text']) !== trim($p)) $this->log($id, 'you', 'prompt', $p); // a started job's prompt is already shown
                 if ($s['state'] === 'waiting') { // answered in the terminal: what the assistant expected is scored, and the answer is a decision (1.44.0)
@@ -201,13 +202,24 @@ final class AgentHub
                 + ($c['kind'] === 'deny' ? ['message' => $c['text'] !== '' ? $c['text'] : 'Denied from Talixio.'] : [])]];
             return [200, json_encode($out, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)];
         }
-        if ($s['state'] !== 'waiting') return [410, ''];
+        if ($s['state'] !== 'waiting' || (int)$s['job'] > 0) return [410, '']; // 1.50.0: one started from the board is resumed by its listener
         $this->update($id, ['polled' => $now, 'listening' => 'reply']);
         $c = $this->app->store->q("SELECT * FROM agent_commands WHERE session = ? AND delivered IS NULL AND kind = 'reply' ORDER BY id", [$id])->fetchAll();
         if (!$c) return [204, ''];
         foreach (array_slice($c, 1) as $more) $this->deliver($more, []);
         $this->deliver($c[0], ['state' => 'working', 'seq' => (int)$s['seq'] + 1]);
         return [200, implode("\n\n", array_column($c, 'text'))];
+    }
+
+    /** The prompt is the text of the replies delivered last (the listener resumed the session with them, joined) */
+    private function justDelivered(string $id, string $p): bool
+    {
+        $t = [];
+        foreach ($this->app->store->q('SELECT kind, text FROM agent_events WHERE session = ? ORDER BY id DESC LIMIT 20', [$id])->fetchAll() as $e) {
+            if ($e['kind'] !== 'delivered') break;
+            array_unshift($t, $e['text']);
+        }
+        return $t && trim(implode("\n\n", $t)) === trim($p);
     }
 
     private function deliver(array $c, array $set): void
@@ -237,6 +249,8 @@ final class AgentHub
             $this->decided($s, (string)$s['last_message'], $text, $by, $meta); // the first answer to this turn (a second one adds to it)
         $this->app->store->q('INSERT INTO agent_commands(session, ts, kind, text, by) VALUES(?,?,?,?,?)', [$id, time(), $kind, $text, $by]);
         $this->log($id, $by, 'queued', $kind === 'reply' ? $text : $kind);
+        if ($kind === 'reply' && $s['state'] === 'waiting' && (int)$s['job'] > 0) // 1.50.0: its process ended with its turn: the listener resumes it with the reply
+            $this->app->store->q("UPDATE agent_jobs SET state = 'resume', updated = ? WHERE id = ? AND state = 'exited'", [time(), $s['job']]);
         $this->update($id, ['seen' => time()]);
         $this->bumpRev();
         $s = $this->get($id);
@@ -438,6 +452,20 @@ final class AgentHub
             $this->app->store->q("UPDATE agent_jobs SET stop = 2, updated = ? WHERE id = ?", [time(), $j['id']]); // 2: sent to the listener
             return [200, "stop\n{$j['id']}\n"];
         }
+        foreach ($this->app->store->q("SELECT * FROM agent_jobs WHERE machine = ? AND state = 'resume' ORDER BY id", [$machine])->fetchAll() as $j) {
+            // 1.50.0: a reply to a session it started: claude -p --resume <session> with the reply as the prompt
+            $s = $this->get((string)$j['session']);
+            $c = $s ? $this->app->store->q("SELECT * FROM agent_commands WHERE session = ? AND delivered IS NULL AND kind = 'reply' ORDER BY id", [$s['id']])->fetchAll() : [];
+            $sid = $s ? substr($s['id'], strlen($s['agent']) + 1) : '';
+            if (!$c || $s['state'] !== 'waiting' || !preg_match('/^[A-Za-z0-9_-]{1,100}$/', $sid)) {
+                $this->app->store->q("UPDATE agent_jobs SET state = 'exited', updated = ? WHERE id = ?", [time(), $j['id']]);
+                continue;
+            }
+            foreach (array_slice($c, 1) as $more) $this->deliver($more, []);
+            $this->deliver($c[0], ['state' => 'working', 'question' => '', 'seq' => (int)$s['seq'] + 1, 'updated' => time()]);
+            $this->app->store->q("UPDATE agent_jobs SET state = 'sent', stop = 0, updated = ? WHERE id = ?", [time(), $j['id']]);
+            return [200, "resume\n{$j['id']}\n{$j['cwd']}\n$sid\n" . implode("\n\n", array_column($c, 'text'))];
+        }
         $j = $this->app->store->q("SELECT * FROM agent_jobs WHERE machine = ? AND state = 'queued' ORDER BY id LIMIT 1", [$machine])->fetch();
         if (!$j) return [204, ''];
         $this->app->store->q("UPDATE agent_jobs SET state = 'sent', updated = ? WHERE id = ?", [time(), $j['id']]);
@@ -456,11 +484,15 @@ final class AgentHub
         $now = time();
         if ($state === 'started') {
             if ($j['state'] === 'cancelled') return [200, ['stop' => true]]; // cancelled while it was on its way: the listener ends it at once
-            $this->app->store->q("UPDATE agent_jobs SET state = CASE WHEN session = '' THEN 'started' ELSE state END, pid = ?, updated = ? WHERE id = ?", [$pid, $now, $jid]);
+            $this->app->store->q("UPDATE agent_jobs SET state = CASE WHEN session = '' THEN 'started' WHEN state = 'sent' THEN 'running' ELSE state END, pid = ?, updated = ? WHERE id = ?", [$pid, $now, $jid]);
         } else {
             $failed = $state === 'failed' || $j['session'] === ''; // ended without ever reporting: show why (Claude Code missing, not logged in, no hooks…)
             $this->app->store->q('UPDATE agent_jobs SET state = ?, log = ?, updated = ? WHERE id = ?', [$failed ? 'failed' : 'exited', $log, $now, $jid]);
-            if ($j['session'] !== '' && ($s = $this->get($j['session'])) && $s['state'] !== 'ended') {
+            $s = $j['session'] !== '' ? $this->get($j['session']) : null;
+            if (!$failed && $s && $s['state'] === 'waiting' && (int)$j['stop'] === 0) { // 1.50.0: claude -p ends with its turn: a reply resumes it
+                $pending = (int)$this->app->store->q("SELECT COUNT(*) FROM agent_commands WHERE session = ? AND delivered IS NULL AND kind = 'reply'", [$s['id']])->fetchColumn();
+                if ($pending) $this->app->store->q("UPDATE agent_jobs SET state = 'resume' WHERE id = ?", [$jid]);
+            } elseif ($s && $s['state'] !== 'ended') {
                 $this->update($s['id'], ['state' => $s['state'] === 'stopped' || $j['stop'] > 0 ? 'stopped' : 'ended', 'stop' => 0, 'doing' => '', 'seq' => (int)$s['seq'] + 1, 'updated' => $now]);
                 $this->log($s['id'], 'agent', 'end', 'The process ended.');
             }

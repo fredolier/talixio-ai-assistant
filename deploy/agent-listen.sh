@@ -7,6 +7,8 @@
 # else the ones chosen when it was installed, else your home folder. Several folders: separate them with ':'
 # (TALIXIO_ROOT="$HOME:/app/projects"). Check one before starting a session there: sh agent-listen.sh --check <folder> It runs `claude -p` there with the prompt, and keeps the process ids in ~/.talixio/jobs: a stop
 # from the board names a job, never a process, so only the sessions this listener started can be ended here.
+# A reply from the board to a session it started continues it with `claude -p --resume <session>`: the reply is
+# the session's next prompt, as the first one was.
 # Settings: TALIXIO_CLAUDE (the claude command), TALIXIO_ROOT, TALIXIO_CLAUDE_ARGS (e.g. --permission-mode acceptEdits).
 U=@URL@
 T=@TOKEN@
@@ -63,18 +65,27 @@ while :; do
       case "$id" in ''|*[!0-9]*) sleep 5; continue ;; esac
       if [ "$kind" = stop ]; then
         [ -f "$D/$id.pid" ] && kill "$(cat "$D/$id.pid")" 2>/dev/null
-      elif [ "$kind" = start ]; then
-        dir=$(sed -n 3p "$out"); sed '1,3d' "$out" > "$D/$id.prompt"
+      elif [ "$kind" = start ] || [ "$kind" = resume ]; then
+        dir=$(sed -n 3p "$out"); sid=
+        if [ "$kind" = resume ]; then sid=$(sed -n 4p "$out"); sed '1,4d' "$out" > "$D/$id.prompt"; else sed '1,3d' "$out" > "$D/$id.prompt"; fi
         real=$(cd "$dir" 2>/dev/null && pwd -P)
-        if [ -z "$real" ]; then echo "No such folder on this machine: $dir" > "$D/$id.log"; report "$id" failed "$D/$id.log"
+        if [ "$kind" = resume ] && case "$sid" in ''|*[!A-Za-z0-9_-]*) true ;; *) false ;; esac; then
+          echo "Not a session id this listener resumes: $sid" > "$D/$id.log"; report "$id" failed "$D/$id.log"
+        elif [ "$kind" = resume ] && [ -f "$D/$id.pid" ] && kill -0 "$(cat "$D/$id.pid")" 2>/dev/null; then
+          : # still running: it gets the reply at the end of its turn
+        elif [ -z "$real" ]; then echo "No such folder on this machine: $dir" > "$D/$id.log"; report "$id" failed "$D/$id.log"
         elif ! allowed "$real"; then refused "$dir" > "$D/$id.log"; report "$id" failed "$D/$id.log"
         elif ! command -v "$CLAUDE" >/dev/null 2>&1; then echo "Claude Code ($CLAUDE) is not installed or not on the PATH of this listener." > "$D/$id.log"; report "$id" failed "$D/$id.log"
         else
           # shellcheck disable=SC2086
-          (cd "$real" && TALIXIO_JOB=$id && export TALIXIO_JOB && exec "$CLAUDE" -p $TALIXIO_CLAUDE_ARGS < "$D/$id.prompt" > "$D/$id.log" 2>&1) &
+          if [ -n "$sid" ]; then
+            (cd "$real" && TALIXIO_JOB=$id && export TALIXIO_JOB && exec "$CLAUDE" -p --resume "$sid" $TALIXIO_CLAUDE_ARGS < "$D/$id.prompt" > "$D/$id.log" 2>&1) &
+          else
+            (cd "$real" && TALIXIO_JOB=$id && export TALIXIO_JOB && exec "$CLAUDE" -p $TALIXIO_CLAUDE_ARGS < "$D/$id.prompt" > "$D/$id.log" 2>&1) &
+          fi
           pid=$!
           echo "$pid" > "$D/$id.pid"
-          echo "Started job $id in $dir (process $pid)."
+          echo "$( [ -n "$sid" ] && echo Resumed || echo Started ) job $id in $dir (process $pid)."
           report "$id" started "" "$pid"
         fi
       fi

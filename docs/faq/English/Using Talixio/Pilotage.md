@@ -33,6 +33,8 @@ The board updates by itself every few seconds while you look at it.
     project's code, deleting), Claude Code's own safety checks may not count it as your go-ahead, and the session asks
     you to type it in its window (or in the session concerned). That check belongs to Claude Code: the board does not
     and should not get round it. Give such go-aheads in the session itself.
+    **Sessions started from the board are different** (since 1.50.0): a reply to them is their next prompt, exactly as
+    their first one was, so it counts as yours like something typed. See *New session* below.
   - **Allow / Deny** a permission request (the command or the file it is about is shown). The session waits **30 seconds**
     for your answer here; after that, the usual prompt shows in its terminal and you answer there.
   - **Mark as seen** moves a finished session to Quiet; **Forget** removes it and its thread from the board (both in the
@@ -46,6 +48,10 @@ The board updates by itself every few seconds while you look at it.
   already ran on that machine. The card shows *waiting for the machine*, then the session reports like the others, its
   thread starting with your prompt. If it cannot start (no such folder, Claude Code not installed, not logged in, hooks
   missing), its card says why, with what the machine printed; **Forget** removes it.
+  Such a session runs `claude -p`, which ends with its turn: the session then waits for you on the board (it does not
+  end). Your reply continues it with `claude -p --resume <session>`, run by the listener: the reply is its next prompt.
+  A reply sent while it still works goes at the end of its turn. Update the listener for this (*Connect a machine*,
+  step 4, or the install command again).
 - **Connect a machine** (button at the top): give the machine a name, tick **Also install the listener** if you want
   to start sessions from here, then **Get the install command** and run the line it shows in a terminal on that machine:
   `curl -fsSL '<this assistant>/api/agents/install?c=…' | sh`. It saves the script as `~/.talixio/agent-hook.sh` (and
