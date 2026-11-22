@@ -11,16 +11,25 @@ The **Agents** tab is a live board of the coding agents working on your machines
 reports to it **by itself**, through a small hook script: what you typed in it, its last message **word for word**,
 the permissions it asks for, when it ends. No model relays or rewrites anything, and the times shown are the real ones.
 The board updates by itself every few seconds while you look at it.
-- **Three columns.** **Needs you**: a session that asks for a permission, or that finished its turn and you have not
-  looked at yet. **Working**: a session busy on your request. **Quiet**: the ones you have looked at, and those that ended.
-  Each card shows the project (its folder), the agent and the machine, how long ago it last spoke, and its last words.
-- **Click a card** to read the session's thread (your prompts, its answers, permission requests, what you sent from here and
-  when it was delivered) and to answer it:
+- **Two panes** (since 1.49.0). On the left, the list of sessions in three groups. **Needs you**: a session that asks
+  for a permission, or that finished its turn and you have not looked at yet. **Working**: a session busy on your
+  request. **Quiet**: the ones you have looked at, and those that ended. Each card shows the project (its folder), the
+  machine, how long ago it last spoke, and what matters: the command or file a permission is about, the end of its last
+  message (where its question usually is), or what it is doing now. On the right, the session you opened, or the tool you
+  opened from the buttons at the top (New session, Connect a machine, Autonomy, What I know; ✕ closes it). On a phone,
+  the list takes the screen, and what you open covers it with a ‹ to come back.
+- **Allow / Deny straight from the list.** A permission card carries its own *Allow* and *Deny* buttons: no need to open
+  the session.
+- **Click a card** (or Enter on it) to read the session's thread on the right (your prompts, its answers, formatted as
+  written, with lists, headings and code; permission requests; what you sent from here and when it was delivered) and
+  to answer it in the box pinned at the bottom (on a computer, Enter sends and Shift+Enter makes a new line). A session you opened from
+  *Needs you* stays there while you read it, instead of jumping to Quiet under your eyes.
   - **Reply**: the text goes to the session. A session that finished its turn is woken by it and goes on working; a session
     still busy gets it at the end of its current turn. The note after sending says which (*Sent* or *Queued*).
   - **Allow / Deny** a permission request (the command or the file it is about is shown). The session waits **30 seconds**
     for your answer here; after that, the usual prompt shows in its terminal and you answer there.
-  - **Mark as seen** moves a finished session to Quiet; **Forget** removes it and its thread from the board.
+  - **Mark as seen** moves a finished session to Quiet; **Forget** removes it and its thread from the board (both in the
+    **⋯** menu at the top of the conversation).
   - **Stop** ends the session's work. A session started from the board (below) is ended on its machine by the listener,
     within seconds. Any other one stops at its **next step**: its next tool call, permission request or end of turn (its
     hook tells Claude Code not to go on). One that already finished its turn is simply marked *stopped*. Typing in its

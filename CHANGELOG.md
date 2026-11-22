@@ -3,6 +3,39 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.49.0 (2026-11-22)
+
+The agent board is redrawn as two panes: the list of sessions on the left, the open conversation (or a tool) on the right. The old board was hard to use.
+
+- **What was wrong:**
+  - the conversation opened under the three columns, often off-screen;
+  - a card jumped from *Needs you* to *Quiet* as soon as it was clicked;
+  - the agents' Markdown showed raw (`##`, `**`, backticks);
+  - a permission took several clicks;
+  - the Connect / Autonomy / What I know panels pushed everything down;
+  - the cards' meta line was noisy.
+- **Two panes that fill the screen:**
+  - the list scrolls on its own, grouped into *Needs you*, *Working* and *Quiet*, and the group titles stay in view;
+  - each card shows what matters: the full command or file of a permission, the end of the last message (where the question usually is), or what the session is doing;
+  - the right pane shows one thing at a time: the session, *New session*, *Connect a machine*, *Autonomy* or *What I know*, each closed with ✕.
+- **Allow / Deny on the card itself.** Allow is the main button. The whole command shows (up to 2,000 characters, scrolling), instead of being cut at 240.
+- **The conversation:**
+  - messages are formatted (headings, lists, code), in bubbles;
+  - the reply box is pinned at the bottom: Enter sends on a computer, Shift+Enter makes a new line, and the box grows as you type;
+  - *Mark as seen* and *Forget* moved to a ⋯ menu;
+  - a session opened from *Needs you* stays there while you read it.
+- **Going through what waits:**
+  - *Open the first one* in the empty pane;
+  - *Next: n waiting* in the conversation's header goes to the next session that needs you.
+- **Phone:** the list takes the screen; a session or a tool covers it, with ‹ to come back. The permission buttons are larger.
+- **Reviewed:** an independent UX/UI review of before/after screenshots. Taken from it: the full command, a clear main button, Next, and sticky group titles. Not taken: making a session you have looked at count as *Needs you* again. That is the existing rule, and it would change the badge counts.
+- **Tested:**
+  - the browser suite (294 checks, 3 new): a permission card shows the whole command, *Open the first one* then *Next* go through the waiting sessions, and Allow on the card answers the hook without opening the session. The new checks fail on 1.48.1;
+  - one cleanup step of the autonomy flow changed: it no longer folds the Autonomy panel, since opening a session already replaces it;
+  - the PHP suite;
+  - screenshots on desktop (1440×900) and phone (390×844).
+- **Not tried:** a real board with many machines, keyboard-only use beyond Enter/Space on cards, and very long thread histories.
+
 ## 1.48.1 (2026-11-20)
 
 The agent listener can be allowed more than one folder, and a refusal now says how to allow the folder.

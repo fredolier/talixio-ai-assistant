@@ -160,68 +160,78 @@
       <div class="pilot-panel" data-ppanel="agents" id="ppanel-agents" role="tabpanel" aria-labelledby="ptab-agents" hidden>
         <section class="ab" id="ab" aria-label="Your agents">
           <div class="ab-head">
-            <h3>Your agents</h3>
-            <span class="muted small no-i18n" id="ab-sub"></span>
-            <button type="button" id="ab-new-btn" class="btn small" aria-expanded="false">New session</button>
-            <button type="button" id="ab-auto-btn" class="btn ghost small" aria-expanded="false">Autonomy</button>
-            <button type="button" id="ab-know-btn" class="btn ghost small" aria-expanded="false" title="What the assistant learned from your agents: a dossier per project, the sessions summarised, and who decided what">What I know</button>
-            <button type="button" id="ab-connect" class="btn ghost small" aria-expanded="false">Connect a machine</button>
-            <label class="small ab-notify" title="What the board sends to your phone and your notifications">Notify me
-              <select id="ab-notify">
-                <option value="permission">Permission requests</option>
-                <option value="all">Permissions and finished turns</option>
-                <option value="off">Nothing</option>
-              </select></label>
-          </div>
-          <div class="card ab-auto" id="ab-auto" hidden><div class="pl-auto" id="pl-auto"></div></div>
-          <div class="card ab-know" id="ab-know" hidden></div>
-          <div class="card ab-new" id="ab-new" hidden>
-            <p class="small muted" id="ab-new-none">No machine is listening for new work yet. On the machine, start the listener (Connect a machine, step 4); a session can start only in a folder where a session already ran there.</p>
-            <div class="ab-new-form" id="ab-new-form" hidden>
-              <label class="small">Machine <select id="ab-new-machine"></select></label>
-              <label class="small">Folder <select id="ab-new-folder" class="no-i18n"></select></label>
-              <textarea id="ab-new-prompt" rows="3" placeholder="What should the session do?"></textarea>
-              <div><button type="button" class="btn small" id="ab-new-start">Start</button> <span class="muted small">It runs Claude Code there (claude -p) and reports here like the others.</span></div>
+            <div class="ab-title"><h3>Your agents</h3><span class="muted small no-i18n" id="ab-sub"></span></div>
+            <div class="ab-tools">
+              <button type="button" id="ab-new-btn" class="btn small" aria-expanded="false">New session</button>
+              <button type="button" id="ab-connect" class="btn ghost small" aria-expanded="false">Connect a machine</button>
+              <button type="button" id="ab-auto-btn" class="btn ghost small" aria-expanded="false">Autonomy</button>
+              <button type="button" id="ab-know-btn" class="btn ghost small" aria-expanded="false" title="What the assistant learned from your agents: a dossier per project, the sessions summarised, and who decided what">What I know</button>
+              <label class="small ab-notify" title="What the board sends to your phone and your notifications"><span class="ab-notify-l">Notify me</span>
+                <select id="ab-notify">
+                  <option value="permission">Permission requests</option>
+                  <option value="all">Permissions and finished turns</option>
+                  <option value="off">Nothing</option>
+                </select></label>
             </div>
           </div>
-          <div class="card ab-setup" id="ab-setup" hidden>
-            <p class="small">Each coding agent reports to this board by itself, word for word and as it happens, and picks up your answers. No model sits in between. For Claude Code on macOS, Linux or WSL:</p>
-            <div class="ab-quick small">
-              <label>Name of this machine <input type="text" id="ab-machine" maxlength="40" placeholder="laptop"></label>
-              <label class="check"><input type="checkbox" id="ab-listen"> Also install the listener (to start and stop sessions from here)</label>
-              <label class="ab-roots-row">Folders it may start sessions in <input type="text" id="ab-roots" maxlength="500" placeholder="~ (your home folder)">
-                <span class="muted">Several: separate them with “:”, e.g. ~:/app/projects</span></label>
-              <div><button type="button" class="btn small" id="ab-cmd-get">Get the install command</button></div>
-              <div id="ab-cmd-box" hidden>
-                <span>Run this in a terminal on that machine:</span>
-                <pre class="ab-snippet no-i18n" id="ab-cmd"></pre>
-                <button type="button" class="btn small" id="ab-cmd-copy">Copy</button>
-                <span class="muted">It works once, for 15 minutes. It saves the script in ~/.talixio and adds the board’s hooks to ~/.claude/settings.json: your other hooks and settings stay, and a backup is made first. Needs curl, and python3, node or jq.</span>
-                <p class="muted" id="ab-cmd-listen" hidden>Then leave the listener running on that machine: <code class="no-i18n">sh ~/.talixio/agent-listen.sh</code></p>
+          <div class="ab-main" id="ab-main">
+            <nav class="ab-cols" id="ab-cols" aria-label="Sessions"></nav>
+            <div class="ab-pane" id="ab-pane">
+              <div class="ab-empty" id="ab-empty"></div>
+              <div class="ab-detail" id="ab-detail" hidden></div>
+            <div class="ab-tool ab-new" id="ab-new" hidden>
+              <div class="ab-pane-head"><h4>New session</h4><button type="button" class="btn ghost small ab-pane-close" data-pane-close aria-label="Close">✕</button></div>
+              <p class="small muted" id="ab-new-none">No machine is listening for new work yet. On the machine, start the listener (Connect a machine, step 4); a session can start only in a folder where a session already ran there.</p>
+              <div class="ab-new-form" id="ab-new-form" hidden>
+                <label class="small">Machine <select id="ab-new-machine"></select></label>
+                <label class="small">Folder <select id="ab-new-folder" class="no-i18n"></select></label>
+                <textarea id="ab-new-prompt" rows="3" placeholder="What should the session do?"></textarea>
+                <div><button type="button" class="btn small" id="ab-new-start">Start</button> <span class="muted small">It runs Claude Code there (claude -p) and reports here like the others.</span></div>
               </div>
-              <p>Then start a new Claude Code session there: it appears here.</p>
             </div>
-            <details class="ab-manual small">
-              <summary>Install by hand</summary>
-            <ol>
-              <li><a class="btn small" id="ab-dl" href="api/agents/hook.sh" download="agent-hook.sh">Download the script</a>
-                <br><span class="muted">Save it as:</span> <code class="no-i18n">~/.talixio/agent-hook.sh</code>
-                <br><span class="muted">It holds this board’s address and token: keep it to your own machines.</span></li>
-              <li><span>Add these hooks to ~/.claude/settings.json (merge them with the hooks already there):</span>
-                <pre class="ab-snippet no-i18n" id="ab-snippet"></pre>
-                <button type="button" class="btn small" id="ab-copy">Copy</button></li>
-              <li>Start a new Claude Code session: it appears here.</li>
-              <li><span>Optional, to start and stop sessions from here: download the listener, save it next to the script, and leave it running on that machine:</span>
-                <a class="btn small" id="ab-dl-listen" href="api/agents/listen.sh" download="agent-listen.sh">Download the listener</a>
-                <br><code class="no-i18n">sh ~/.talixio/agent-listen.sh</code>
-                <br><span class="muted">It starts Claude Code only in a folder where a session already ran on that machine, under your home folder.</span></li>
-            </ol>
-            </details>
-            <p class="muted small">A permission request waits 30 seconds for your answer here, then the usual prompt shows in the terminal. A reply wakes a session that finished its turn. Another agent can report the same way: see the FAQ.</p>
-            <button type="button" class="btn ghost small danger" id="ab-token">New token</button>
+            <div class="ab-tool ab-setup" id="ab-setup" hidden>
+              <div class="ab-pane-head"><h4>Connect a machine</h4><button type="button" class="btn ghost small ab-pane-close" data-pane-close aria-label="Close">✕</button></div>
+              <p class="small">Each coding agent reports to this board by itself, word for word and as it happens, and picks up your answers. No model sits in between. For Claude Code on macOS, Linux or WSL:</p>
+              <div class="ab-quick small">
+                <label>Name of this machine <input type="text" id="ab-machine" maxlength="40" placeholder="laptop"></label>
+                <label class="check"><input type="checkbox" id="ab-listen"> Also install the listener (to start and stop sessions from here)</label>
+                <label class="ab-roots-row">Folders it may start sessions in <input type="text" id="ab-roots" maxlength="500" placeholder="~ (your home folder)">
+                  <span class="muted">Several: separate them with “:”, e.g. ~:/app/projects</span></label>
+                <div><button type="button" class="btn small" id="ab-cmd-get">Get the install command</button></div>
+                <div id="ab-cmd-box" hidden>
+                  <span>Run this in a terminal on that machine:</span>
+                  <pre class="ab-snippet no-i18n" id="ab-cmd"></pre>
+                  <button type="button" class="btn small" id="ab-cmd-copy">Copy</button>
+                  <span class="muted">It works once, for 15 minutes. It saves the script in ~/.talixio and adds the board’s hooks to ~/.claude/settings.json: your other hooks and settings stay, and a backup is made first. Needs curl, and python3, node or jq.</span>
+                  <p class="muted" id="ab-cmd-listen" hidden>Then leave the listener running on that machine: <code class="no-i18n">sh ~/.talixio/agent-listen.sh</code></p>
+                </div>
+                <p>Then start a new Claude Code session there: it appears here.</p>
+              </div>
+              <details class="ab-manual small">
+                <summary>Install by hand</summary>
+              <ol>
+                <li><a class="btn small" id="ab-dl" href="api/agents/hook.sh" download="agent-hook.sh">Download the script</a>
+                  <br><span class="muted">Save it as:</span> <code class="no-i18n">~/.talixio/agent-hook.sh</code>
+                  <br><span class="muted">It holds this board’s address and token: keep it to your own machines.</span></li>
+                <li><span>Add these hooks to ~/.claude/settings.json (merge them with the hooks already there):</span>
+                  <pre class="ab-snippet no-i18n" id="ab-snippet"></pre>
+                  <button type="button" class="btn small" id="ab-copy">Copy</button></li>
+                <li>Start a new Claude Code session: it appears here.</li>
+                <li><span>Optional, to start and stop sessions from here: download the listener, save it next to the script, and leave it running on that machine:</span>
+                  <a class="btn small" id="ab-dl-listen" href="api/agents/listen.sh" download="agent-listen.sh">Download the listener</a>
+                  <br><code class="no-i18n">sh ~/.talixio/agent-listen.sh</code>
+                  <br><span class="muted">It starts Claude Code only in a folder where a session already ran on that machine, under your home folder.</span></li>
+              </ol>
+              </details>
+              <p class="muted small">A permission request waits 30 seconds for your answer here, then the usual prompt shows in the terminal. A reply wakes a session that finished its turn. Another agent can report the same way: see the FAQ.</p>
+              <button type="button" class="btn ghost small danger" id="ab-token">New token</button>
+            </div>
+            <div class="ab-tool ab-auto" id="ab-auto" hidden>
+              <div class="ab-pane-head"><h4>Autonomy</h4><button type="button" class="btn ghost small ab-pane-close" data-pane-close aria-label="Close">✕</button></div>
+              <div class="pl-auto" id="pl-auto"></div></div>
+            <div class="ab-tool ab-know" id="ab-know" hidden></div>
+            </div>
           </div>
-          <div class="ab-cols" id="ab-cols"></div>
-          <div class="card ab-detail" id="ab-detail" hidden></div>
         </section>
       </div>
 
