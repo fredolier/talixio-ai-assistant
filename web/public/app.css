@@ -1847,6 +1847,7 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .pl-sw-t { display: flex; flex-direction: column; gap: 4px; }
 .pl-auto select { font: inherit; font-size: .85rem; color: var(--ink); background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; max-width: 100%; }
 .pl-kept { color: var(--muted); font-size: .85rem; }
+.pl-warn { margin: 8px 0 0; padding: 6px 10px; border-radius: 8px; background: color-mix(in srgb, var(--warn, #d97706) 14%, var(--surface)); }
 .pl-nums { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; }
 .pl-nums label { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--ink); }
 .pl-num { display: inline-flex; align-items: center; gap: 4px; }
@@ -2041,6 +2042,8 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-kq{font-size:.9em;color:var(--muted)}
 .ab-ka{font-size:.92em}
 .ab-sug>div{white-space:pre-wrap;word-break:break-word}
+.ab-sug-sum{font-weight:500}
+.ab-reopen{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:4px}
 .ab-ev .ab-file{white-space:normal;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px} /* 1.47.0: a file the agent sent */
 .ab-file-name{font-weight:600;word-break:break-all}
 @media (max-width:760px){

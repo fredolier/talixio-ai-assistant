@@ -257,6 +257,37 @@ final class AgentHub
         return ['session' => $this->shape($s), 'listening' => $this->listening($s, $kind === 'reply' ? 'reply' : 'permission')];
     }
 
+    /**
+     * Resume and re-read (1.51.0): a Claude Code session that ended (or a board-started one that was stopped) waits again
+     * for your answer, and the assistant reads where it stopped. The answer then continues it through the machine's
+     * listener with claude -p --resume, in its folder: the same session, its whole history, not a new one. A session
+     * typed in a terminal and stopped from here may still be open there, so it is not taken over.
+     */
+    public function reopen(string $id, string $by = 'you'): array
+    {
+        $s = $this->get($id) ?? throw new \InvalidArgumentException('no such agent session');
+        $sid = substr($s['id'], strlen($s['agent']) + 1);
+        if ($s['agent'] !== 'claude-code' || !preg_match('/^[A-Za-z0-9_-]{1,100}$/', $sid)) throw new \InvalidArgumentException('Only a Claude Code session can be resumed from here.');
+        $job = (int)$s['job'] > 0 ? $this->job((int)$s['job']) : null;
+        if (!($s['state'] === 'ended' || $s['state'] === 'stopped' && $job)) throw new \InvalidArgumentException('Only a session that has ended can be resumed: answer it instead.');
+        if ($job && in_array($job['state'], ['started', 'running', 'sent', 'resume'], true)) throw new \InvalidArgumentException('Its process is still running.');
+        $m = array_values(array_filter($this->machines(), fn($x) => $x['machine'] === $s['machine']))[0] ?? null;
+        if (!$m || !$m['listening']) throw new \InvalidArgumentException('This machine is not listening for new work: start the listener on it (Connect a machine).');
+        $now = time();
+        if ($job) $this->app->store->q("UPDATE agent_jobs SET state = 'exited', stop = 0, updated = ? WHERE id = ?", [$now, $job['id']]);
+        else { // typed in a terminal: from now on its listener carries it, as for a session it started
+            $this->app->store->q("INSERT INTO agent_jobs(machine, cwd, prompt, by, state, session, created, updated) VALUES(?,?,'',?,'exited',?,?,?)", [$s['machine'], $s['cwd'], $by, $id, $now, $now]);
+            $this->update($id, ['job' => (int)$this->app->store->db->lastInsertId()]);
+        }
+        $this->app->store->q('UPDATE agent_commands SET delivered = -1 WHERE session = ? AND delivered IS NULL', [$id]); // nothing left over from before it ended
+        $this->update($id, ['state' => 'waiting', 'question' => '', 'stop' => 0, 'doing' => '', 'seen' => 0, 'seq' => (int)$s['seq'] + 1, 'updated' => $now]);
+        $this->log($id, $by, 'reopened', '');
+        $this->bumpRev();
+        $read = 'off';
+        try { $read = $this->app->pilot()->analyseNow($id); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); $read = 'failed'; }
+        return ['session' => $this->shape($this->get($id)), 'analysis' => $read];
+    }
+
     /** The board: every session not forgotten, newest first, with the revision the page polls to know whether to redraw. */
     public function board(): array
     {

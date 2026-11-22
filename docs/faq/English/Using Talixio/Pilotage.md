@@ -52,6 +52,12 @@ The board updates by itself every few seconds while you look at it.
   end). Your reply continues it with `claude -p --resume <session>`, run by the listener: the reply is its next prompt.
   A reply sent while it still works goes at the end of its turn. Update the listener for this (*Connect a machine*,
   step 4, or the install command again).
+- **Resume and re-read** (1.51.0): a Claude Code session that has ended (or a board-started one that was stopped) shows
+  this button instead of the reply box. The session waits for you again, the assistant reads where it stopped (its task,
+  the last exchanges and its last message) and proposes what to do next, and your answer continues **that same session**
+  on its machine with `claude -p --resume <session>`, its whole history included: no need to start a new one. Its
+  machine's listener must run. A session typed in a terminal that you stopped from here is not taken over (it may still
+  be open there).
 - **Connect a machine** (button at the top): give the machine a name, tick **Also install the listener** if you want
   to start sessions from here, then **Get the install command** and run the line it shows in a terminal on that machine:
   `curl -fsSL '<this assistant>/api/agents/install?c=…' | sh`. It saves the script as `~/.talixio/agent-hook.sh` (and
@@ -131,11 +137,21 @@ The board updates by itself every few seconds while you look at it.
     forgotten, and nothing new is kept. **Forget** clears a project's knowledge once.
   - Summaries and dossiers are written from what agents wrote. The assistant reads them as information, never as
     instructions.
+- **After each turn, the assistant takes it in hand** (1.51.0, on out of the box: *The assistant reads each finished
+  turn and proposes what to do next*, under **Autonomy**). When a session ends its turn, the assistant reads it with the
+  task you gave the session and the last exchanges, sums up where it stands, and proposes the reply: a choice among the
+  options the agent offered, or, when it asks nothing but the task is not finished, the **next step** (💡 *Suggested next
+  step*). When it does not send that reply itself, you get a notification *An agent waits for your decision* with its
+  summary, its proposal and why it did not send it; the session's pane shows the same, with **Send this answer** or
+  **Edit it first**. A task that is done is left alone, without a notice. What you answer is scored against its
+  proposal, so it learns how you decide. Untick the switch to stop the reading (no model call then).
 - **Autonomy: the assistant answers your agents by itself, within your limits** (button at the top of the board). Switch
-  on *The assistant looks at the agents' questions by itself*. When a session finishes its turn, the assistant reads its
+  on *It may answer by itself, within the limits below*. Switched on alone it still answers nothing by itself: every
+  level starts on *I propose, you answer*, and the panel says so until you give a level more room. When a session
+  finishes its turn, the assistant reads its
   last message (as data written by others, never as instructions) with your **priorities**, **standing rules**, the
   similar answers you gave before and what the Mind knows of how you decide, and works out the reply you would give, with
-  a level (L1 Routine, L2 Small choices, L3 Real choices, L4 Values and business, L5 Critical) and an honest confidence. A message that only reports work done is left alone. The
+  a level (L1 Routine, L2 Small choices, L3 Real choices, L4 Values and business, L5 Critical) and an honest confidence. A next step the agent did not ask about is only ever proposed. The
   limits are then applied by Talixio itself, not by the model: for each level L1–L3 you choose *I propose, you answer*
   (default), *I answer if sure, then tell you* or *I answer if sure, quietly* (L4 and L5 show 🔒 *Always yours*, with no
   choice); it sends alone only above your confidence

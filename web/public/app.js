@@ -6426,8 +6426,11 @@ function plRenderAuto() {
   if (!a) { box.innerHTML = `<div class="pl-empty">${esc(t('Not available.'))}</div>`; return; }
   const modes = [['ask', 'I propose, you answer'], ['tell', 'I answer if sure, then tell you'], ['auto', 'I answer if sure, quietly']];
   box.innerHTML = `<section class="pl-card pl-hero">
-      <label class="pl-switch"><input type="checkbox" id="pa-on" ${a.enabled ? 'checked' : ''}><span class="pl-sw-t"><b>${esc(t('The assistant looks at the agents’ questions by itself'))}</b>
+      <label class="pl-switch"><input type="checkbox" id="pa-read" ${a.analyse ? 'checked' : ''}><span class="pl-sw-t"><b>${esc(t('The assistant reads each finished turn and proposes what to do next'))}</b>
+        <span class="muted small">${esc(t('When an agent ends its turn, the assistant sums up where it stands, proposes a reply (a choice among its options, or the next step) and tells you it waits for your decision.'))}</span></span></label>
+      <label class="pl-switch"><input type="checkbox" id="pa-on" ${a.enabled ? 'checked' : ''}><span class="pl-sw-t"><b>${esc(t('It may answer by itself, within the limits below'))}</b>
         <span class="muted small">${esc(t('When an agent asks something, the assistant reads it, weighs your past decisions and priorities, then answers within the limits below — or proposes an answer and waits for you. Each of its answers is written down with a confidence and scored against yours.'))}</span></span></label>
+      ${a.enabled && Object.values(a.levels).every(v => v.kept || v.mode === 'ask') ? `<p class="pl-warn small" id="pa-all-ask">${esc(t('Every level is on « I propose, you answer »: it will not answer by itself until you give a level more room below.'))}</p>` : ''}
     </section>
     <section class="pl-card"><h5>${esc(t('Autonomy'))}</h5>
       <table class="pl-lv"><thead><tr><th>${esc(t('Level'))}</th><th>${esc(t('Autonomy'))}</th><th>${esc(t('Right so far'))}</th></tr></thead><tbody>${Object.entries(a.levels).map(([l, v]) => `<tr>
@@ -6457,7 +6460,7 @@ function plRenderAuto() {
 }
 async function plSaveAuto() {
   const autonomy = {}; document.querySelectorAll('#pl-auto [data-auto-lv]').forEach(s => { autonomy[s.dataset.autoLv] = s.value; });
-  try { PL.auto = await post('api/pilot', { enabled: $('#pa-on').checked, threshold: Math.max(50, Math.min(99, +$('#pa-th').value || 75)) / 100, autonomy, priorities: $('#pa-pr').value, rules: $('#pa-ru').value, daily_cap: +$('#pa-cap').value || 0 }); toast(t('Saved.')); plRenderAuto(); }
+  try { PL.auto = await post('api/pilot', { analyse: $('#pa-read').checked, enabled: $('#pa-on').checked, threshold: Math.max(50, Math.min(99, +$('#pa-th').value || 75)) / 100, autonomy, priorities: $('#pa-pr').value, rules: $('#pa-ru').value, daily_cap: +$('#pa-cap').value || 0 }); toast(t('Saved.')); plRenderAuto(); }
   catch (e) { toast(e.message); }
 }
 async function plVerdict(el) {
@@ -6585,6 +6588,12 @@ function abWire() {
       } else if (act === 'jforget') { await post(`api/agents/jobs/${AB.sel.slice(4)}/forget`, {}); AB.sel = null; abPane('ab-empty'); } else
       if (act === 'forget') { if (!confirm(t('Forget this session and its history on the board?'))) return; await post(`api/agents/s/${id}/forget`, {}); AB.sel = null; abPane('ab-empty'); }
       else if (act === 'seen') await post(`api/agents/s/${id}/seen`, {});
+      else if (act === 'reopen') {
+        b.disabled = true; b.textContent = t('Reading…');
+        const r = await post(`api/agents/s/${id}/reopen`, {});
+        toast({ off: t('Resumed. The assistant’s reading is off: answer it yourself.'), budget: t('Resumed. The budget is reached: the assistant did not read it.'), failed: t('Resumed, but the assistant could not read it: answer it yourself.'),
+          no_question: t('Resumed: the assistant sees nothing to do next. Write what it should do.') }[r.analysis] || t('Resumed: the assistant’s proposal is below.'));
+      }
       else if (act === 'usesug') { const ta = $('#ab-reply'); if (ta) { ta.value = b.dataset.text; ta.focus(); } return; }
       else if (act === 'judge') {
         const ok = b.dataset.ok === '1', note = ok ? '' : (prompt(t('What should it have answered?')) || '');
@@ -6787,7 +6796,7 @@ async function abOpen(id, quiet) {
   if (AB.sel !== id || AB.pane !== pane0) return; // another session or a tool was opened meanwhile
   const s = d.session, who = { agent: abTitle(s), you: t('You'), assistant: t('Assistant') };
   if (!quiet) AB.stick = { id, col: s.column };
-  const kind = { started: t('started from the board'), stop: t('asked to stop'), stopped: t('stopped'), prompt: t('typed in the session'), permission: t('asks for permission'), notice: t('notice'), message: '', end: t('session ended'), queued: t('queued'), delivered: t('delivered'), file: t('sent a file') };
+  const kind = { started: t('started from the board'), stop: t('asked to stop'), stopped: t('stopped'), prompt: t('typed in the session'), permission: t('asks for permission'), notice: t('notice'), message: '', end: t('session ended'), reopened: t('resumed from the board'), queued: t('queued'), delivered: t('delivered'), file: t('sent a file') };
   const SYS = ['permission', 'notice', 'end', 'stop', 'stopped'];
   const body = e => {
     if (e.kind === 'file') {
@@ -6826,12 +6835,13 @@ async function abOpen(id, quiet) {
   const fresh = !box.querySelector('.ab-dock') || box.dataset.id !== id || over !== !box.querySelector('#ab-reply');
   if (fresh) {
     box.dataset.id = id;
-    box.innerHTML = `<div class="ab-d-top"></div><div class="ab-thread"></div><div class="ab-dock"><div class="ab-dock-top"></div>${over ? `<p class="muted small">${esc(s.state === 'stopped' ? t('This session was stopped.') : t('This session has ended.'))}</p>`
+    box.innerHTML = `<div class="ab-d-top"></div><div class="ab-thread"></div><div class="ab-dock"><div class="ab-dock-top"></div>${over ? `<p class="muted small">${esc(s.state === 'stopped' ? t('This session was stopped.') : t('This session has ended.'))}</p>${s.agent === 'claude-code' && (s.state === 'ended' || s.job) ? `<div class="ab-reopen"><button type="button" class="btn small primary" data-abact="reopen">${esc(t('Resume and re-read'))}</button>
+        <span class="muted small">${esc(t('The assistant reads where it stopped and proposes what to do next. Your answer continues this same session on its machine (the listener must run there).'))}</span></div>` : ''}`
       : `<div class="ab-compose"><textarea id="ab-reply" rows="1" placeholder="${esc(t('Reply to this session…'))}"></textarea><button type="button" class="btn small primary" data-abact="send">${esc(t('Send'))}</button></div>${s.agent === 'claude-code' && !s.job ? `<p class="ab-relay-note muted small">${esc(t('Claude Code takes this as a message passed on by its hook, not as typed in its window: for a sensitive step (a push, a change in another project) it may ask you to confirm there.'))}</p>` : ''}`}</div>`;
   }
   const pct = x => Math.round(x.confidence * 100) + '%';
-  const sug = d.suggestion ? `<div class="ab-sug"><b>💡 ${esc(t('Suggested answer'))}</b> <span class="muted small no-i18n">${esc(d.suggestion.level)} · ${esc(pct(d.suggestion))}</span>
-    <div class="no-i18n">${esc(d.suggestion.answer)}</div>${d.suggestion.rationale ? `<div class="muted small no-i18n">${esc(d.suggestion.rationale)}</div>` : ''}
+  const sug = d.suggestion ? `<div class="ab-sug"><b>💡 ${esc(d.suggestion.kind === 'next' ? t('Suggested next step') : t('Suggested answer'))}</b> <span class="muted small no-i18n">${esc(d.suggestion.level)} · ${esc(pct(d.suggestion))}</span>
+    ${d.suggestion.summary ? `<div class="ab-sug-sum no-i18n">${esc(d.suggestion.summary)}</div>` : ''}<div class="no-i18n">${esc(d.suggestion.answer)}</div>${d.suggestion.rationale ? `<div class="muted small no-i18n">${esc(d.suggestion.rationale)}</div>` : ''}
     ${d.suggestion.why ? `<div class="muted small">${esc(t('Not sent by itself:'))} <span class="no-i18n">${esc(d.suggestion.why)}</span></div>` : ''}
     <span><button type="button" class="btn small" data-abact="sendsug" data-text="${esc(d.suggestion.answer)}">${esc(t('Send this answer'))}</button> <button type="button" class="btn ghost small" data-abact="usesug" data-text="${esc(d.suggestion.answer)}">${esc(t('Edit it first'))}</button></span></div>` : '';
   const judge = (d.judge || []).map(j => `<div class="ab-judge"><span class="small">${esc(t('The assistant answered by itself:'))}</span> <span class="no-i18n">${esc(j.answer)}</span> <span class="muted small no-i18n">${esc(j.level)} · ${esc(pct(j))}</span>

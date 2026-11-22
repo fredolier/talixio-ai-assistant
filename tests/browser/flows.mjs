@@ -1001,15 +1001,19 @@ const flows = {
     await go(page, 'pilotage');
     await page.click('#view-pilotage .ptab[data-ptab=agents]');
     await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
+    await page.evaluate(() => post('api/pilot', { enabled: true })); // 1.51.0: switched on, every level still on « ask »
     await page.click('#ab-auto-btn');
     await page.waitForSelector('#ab-auto #pa-on', { timeout: 6000 });
     check('agent autonomy: the board has the autonomy settings, L4/L5 kept', (await page.$$('#ab-auto [data-auto-lv]')).length === 3);
+    check('agent autonomy: reading each finished turn is on out of the box, apart from answering alone', await page.isChecked('#ab-auto #pa-read'));
+    check('agent autonomy: switched on with every level on « I propose », it says it will not answer alone', await page.isVisible('#ab-auto #pa-all-ask'));
     await page.check('#ab-auto #pa-on');
     await page.selectOption('#ab-auto [data-auto-lv=L1]', 'tell');
     await page.click('#ab-auto [data-auto-save]');
     await page.waitForTimeout(800);
     const pol = await api(page, 'api/pilot');
-    check('agent autonomy: Save turns it on, with the mode per level', pol.enabled === true && pol.levels.L1.mode === 'tell', JSON.stringify(pol.levels));
+    check('agent autonomy: Save turns it on, with the mode per level', pol.enabled === true && pol.analyse === true && pol.levels.L1.mode === 'tell', JSON.stringify(pol.levels));
+    check('agent autonomy: once a level has room, the warning goes', !(await page.$('#ab-auto #pa-all-ask')));
     if (await page.isHidden('#ab-setup')) await page.click('#ab-connect');
     await page.fill('#ab-machine', 'autobox');
     const sh = join(data, 'auto-hook.sh');
@@ -1147,6 +1151,19 @@ ev Stop ",\\"last_assistant_message\\":\\"Done: $p\\""
       check('agent resume: the resumed session answers in the same thread', /Done: Option B/.test(await page.textContent('#ab-detail .ab-thread')));
       const mine = await page.$$eval('#ab-detail .ab-thread .ab-mine', els => els.filter(e => e.textContent.includes('Option B')).length);
       check('agent resume: the reply shows once (not again as typed in the session)', mine === 1, String(mine));
+      // 1.51.0: a session that ended can be resumed from the board, and its next answer continues the same session
+      await new Promise(r => { const p = spawn('sh', [hook, 'event']); p.on('close', r); p.stdin.end(JSON.stringify({ session_id: st.id.split(':')[1], hook_event_name: 'SessionEnd', reason: 'exit', cwd: work })); });
+      await page.waitForSelector('#ab-detail [data-abact=reopen]', { timeout: 8000 });
+      check('agent resume: an ended session offers « Resume and re-read », not a reply box', !(await page.$('#ab-detail #ab-reply')));
+      await page.click('#ab-detail [data-abact=reopen]');
+      await page.waitForSelector('#ab-detail #ab-reply', { timeout: 8000 });
+      check('agent resume: resumed, it waits for you again', (await api(page, 'api/agents')).sessions.find(s => s.id === st.id)?.state === 'waiting');
+      await page.fill('#ab-reply', 'Carry on');
+      await page.click('#ab-detail [data-abact=send]');
+      await page.waitForFunction(() => /Done: Carry on/.test(document.querySelector('#ab-detail .ab-thread')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
+      const ran2 = ex(args) ? rf(args, 'utf8') : '';
+      check('agent resume: the answer after resuming continues that same session', /Done: Carry on/.test(await page.textContent('#ab-detail .ab-thread'))
+        && (ran2.match(new RegExp('^-p --resume ' + st.id.split(':')[1] + '$', 'gm')) || []).length === 2, ran2);
       await page.click('#ab-detail [data-abact=close]');
     } finally { lis.kill(); }
   },
