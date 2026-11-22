@@ -3,6 +3,17 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.50.1 (2026-11-22)
+
+Test fix: the PHP suite's check "learning: nothing worth keeping stays quiet" failed now and then.
+
+- **Cause:** the conductor test calls the jobs engine (`dispatch()`) to check that it skips a code session. That call also started every other queued job as a real background process, here a learning job queued by an earlier chat in the test. That process ran alongside the next tests and wrote to the same database. A probe saw it still running when the learning check ran.
+- **Fix:** the conductor test holds the other queued jobs during that call and restores them afterwards. It now also checks that no job process was started.
+- **The learning check** now looks for messages added after the job, not at a count of `messagesAfter(0)`, which is capped at 200. When it fails, it says which messages appeared and what the job ended with.
+- **Tested:** the PHP suite passed three times after the fix, once while the browser suite ran alongside, as when it first failed. The new "no process started" check fails without the fix: the probe counted one process.
+- **Not tried:** many more runs. The failure was seen once, and the four runs made to reproduce it before the fix all passed, so the fix is backed by the probe, not by a reproduced failure.
+- **Seen while investigating:** running four PHP suites at once makes "transcriber: the pieces are deleted afterwards" fail, because the runs share `/tmp`. The suite is not meant to run in parallel, so that is left as is.
+
 ## 1.50.0 (2026-11-22)
 
 A reply to a session started from the board now continues it as its next prompt (`claude -p --resume`), instead of reaching it through a hook.
