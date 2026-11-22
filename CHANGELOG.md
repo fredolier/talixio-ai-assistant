@@ -3,6 +3,21 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.51.0 (2026-11-22)
+
+When a board session ends its turn, the assistant now takes it in hand: it reads the turn, says where things stand, proposes what to do next and tells you when it waits for your decision. A session that ended can be resumed from the board.
+
+- **Why:** a status question answered with options A, B, C sat on the board with nothing happening. The assistant's reading was tied to the *Autonomy* switch, which is off out of the box. With the switch on, every level still starts on *I propose, you answer*, and a proposal appeared only in the session's pane, without a notice. A status report also often mentions a release or production, which the code never lets it send alone. And a session that had ended could only be replaced by a new one.
+- **Reading each finished turn** is now on out of the box (*The assistant reads each finished turn and proposes what to do next*, under Autonomy; untick it to stop the model calls). The switch that lets it answer alone is separate: *It may answer by itself, within the limits below*, still off by default. Until it is on, nothing is sent alone.
+- **What it reads:** the task the session was given, its last exchanges and its last message, all as untrusted data. It answers with a short summary for you and one of three kinds. *answer*: the agent asks something, so it picks or replies. *next*: the agent asks nothing but the task is not finished, so it proposes the next instruction. *done*: nothing to do.
+- **A *next* step is only ever proposed**, never sent alone, whatever the level. A choice the agent offered can be sent alone within your limits, as before.
+- **When it does not send its reply,** you get a notice *An agent waits for your decision*, with the summary, the proposal and why it was not sent. The session's pane shows the summary above the proposal (💡 *Suggested next step* for a next step). A task that is done gets no notice. Your answer is scored against the proposal, as before.
+- **The Autonomy panel** now says so when the answering switch is on but every level is on *I propose, you answer*.
+- **Resume and re-read:** an ended Claude Code session, or a board-started one that was stopped, offers this button instead of the reply box. The session waits again and the assistant reads it at once. Your answer continues the same session through its machine's listener, with `claude -p --resume`, as in 1.50.0. A session typed in a terminal that you stopped from the board is not taken over, since it may still be open there.
+- **Tested:** new `tests/more/pilot_next.php`, whose 15 checks fail without the change: the reading is on out of the box, it gets the task and the exchange, the summary and the proposal, the notice, scoring, a next step never sent alone, a done task left alone, turning the reading off, and resuming. The browser flows `agentAutonomy` (the two switches, the warning) and `agentResume` (an ended session resumed and answered, run through the real listener script with a stand-in for `claude`) fail on the old code and pass. `pilot_board.php`'s first check asserted the old default ("off: the model is not even asked"); it now turns the reading off explicitly and checks the same thing.
+- **Caught by the PHP suite:** with the reading on by default, the worker read the board on installs that never used it, where its tables did not exist yet, and failed there. It now creates them first. Both suites pass (PHP: all passed; browser: 306).
+- **Not tried:** a real model reading a real turn (the tests use a stand-in for the model), and resuming with the real `claude -p --resume`. The quality of the summaries and of the next steps is not measured: `tests/eval/board.php` still counts a *next* as "asked nothing", and only checks that nothing unsafe is sent.
+
 ## 1.50.1 (2026-11-22)
 
 Test fix: the PHP suite's check "learning: nothing worth keeping stays quiet" failed now and then.

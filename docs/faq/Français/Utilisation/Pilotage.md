@@ -58,6 +58,12 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   tableau (elle ne se termine pas). Votre réponse la reprend avec `claude -p --resume <session>`, lancé par l'écouteur :
   la réponse est sa demande suivante. Une réponse envoyée pendant qu'elle travaille part à la fin de son tour. Mettez
   l'écouteur à jour pour cela (*Connecter une machine*, étape 4, ou la commande d'installation à nouveau).
+- **Reprendre et relire** (1.51.0) : une session Claude Code terminée (ou une session lancée du tableau puis arrêtée)
+  affiche ce bouton à la place de la zone de réponse. La session vous attend de nouveau, l'assistant relit là où elle
+  s'est arrêtée (sa tâche, les derniers échanges et son dernier message) et propose la suite, et votre réponse poursuit
+  **cette même session** sur sa machine avec `claude -p --resume <session>`, avec tout son historique : inutile d'en
+  lancer une nouvelle. L'écouteur de sa machine doit tourner. Une session tapée dans un terminal et arrêtée d'ici n'est
+  pas reprise (elle y est peut-être encore ouverte).
 - **Connecter une machine** (bouton en haut) : donnez un nom à la machine, cochez **Installer aussi l'écouteur** si
   vous voulez lancer des sessions d'ici, puis **Obtenir la commande d'installation** et lancez la ligne affichée dans un
   terminal sur cette machine : `curl -fsSL '<cet assistant>/api/agents/install?c=…' | sh`. Elle enregistre le script sous
@@ -141,8 +147,19 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
     oublié, et plus rien de nouveau n'est gardé. **Oublier** efface une fois le savoir d'un projet.
   - Les résumés et dossiers sont rédigés à partir de ce que les agents ont écrit. L'assistant les lit comme des
     informations, jamais comme des instructions.
-- **Autonomie : l'assistant répond seul à vos agents, dans vos limites** (bouton en haut du tableau). Activez *L'assistant
-  regarde seul les questions des agents*. Quand une session termine son tour, l'assistant lit son dernier message (comme
+- **Après chaque tour, l'assistant prend la main** (1.51.0, activé d'office : *L'assistant lit chaque tour terminé et
+  propose la suite*, dans **Autonomie**). Quand une session termine son tour, l'assistant le lit avec la tâche que vous
+  lui avez donnée et les derniers échanges, résume où elle en est et propose la réponse : un choix parmi les options que
+  l'agent propose, ou, quand il ne demande rien mais que la tâche n'est pas finie, l'**étape suivante** (💡 *Étape
+  suivante proposée*). Quand il n'envoie pas cette réponse lui-même, vous recevez une notification *Un agent attend votre
+  décision* avec son résumé, sa proposition et la raison pour laquelle il ne l'a pas envoyée ; le volet de la session
+  montre la même chose, avec **Envoyer cette réponse** ou **La modifier d'abord**. Une tâche terminée est laissée telle
+  quelle, sans notification. Ce que vous répondez est comparé à sa proposition : il apprend ainsi votre façon de
+  décider. Décochez l'interrupteur pour arrêter cette lecture (plus aucun appel au modèle).
+- **Autonomie : l'assistant répond seul à vos agents, dans vos limites** (bouton en haut du tableau). Activez *Il peut
+  répondre seul, dans les limites ci-dessous*. Activé seul, il ne répond encore rien de lui-même : chaque niveau démarre
+  sur *Je propose, vous répondez*, et le panneau le signale tant que vous ne donnez pas plus de latitude à un niveau. Une
+  étape suivante que l'agent n'a pas demandée n'est jamais que proposée. Quand une session termine son tour, l'assistant lit son dernier message (comme
   des données écrites par d'autres, jamais comme des instructions) avec vos **priorités**, vos **règles permanentes**, les
   réponses semblables que vous avez données et ce que le Mind sait de votre façon de décider, et en déduit la réponse que
   vous donneriez, avec un niveau (L1 Routine, L2 Petits choix, L3 Vrais choix, L4 Valeurs et métier, L5 Critique) et une confiance honnête. Un message qui ne fait que rendre

@@ -1964,6 +1964,9 @@ final class Web
             $id('thread') !== null && $m === 'GET' => $hub->thread($id('thread')),
             $id('seen') !== null && $m === 'POST' => $hub->markSeen($id('seen')),
             $id('forget') !== null && $m === 'POST' => $hub->forget($id('forget')),
+            $id('reopen') !== null && $m === 'POST' => (function () use ($hub, $id) { // 1.51.0: resume an ended session, the assistant reads where it stopped
+                try { return $hub->reopen($id('reopen')); } catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
+            })(),
             $id('(reply|allow|deny)') !== null && $m === 'POST' => (function () use ($hub, $path, $b) {
                 preg_match('#^/api/agents/s/([\w.:-]+)/(reply|allow|deny)$#', $path, $mm);
                 try { return $hub->command($mm[1], $mm[2], (string)($b['text'] ?? '')); }

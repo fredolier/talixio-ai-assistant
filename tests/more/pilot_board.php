@@ -23,10 +23,11 @@ $finish = function (string $sid, string $msg) use ($ev) { $ev($sid, ['hook_event
 $queued = fn(string $id) => $app->store->q("SELECT by, text FROM agent_commands WHERE session = ? AND delivered IS NULL", [$id])->fetchAll();
 $pred = fn(string $k) => $pilot->state()['predictions'][$k] ?? null;
 
-// off by default: nothing is asked
+// reading and answering both off (1.51.0: the reading is on out of the box, tests/more/pilot_next.php): nothing is asked
+$pilot->setPolicy(['analyse' => false]);
 $r = $finish('a1', 'Tests pass. Shall I also update the README?');
 $pilot->boardTick(time());
-check('pilot board: autonomy off: the model is not even asked', !$asked && !$pilot->state()['board_wake']);
+check('pilot board: reading and autonomy off: the model is not even asked', !$asked && !$pilot->state()['board_wake']);
 
 $pilot->setPolicy(['enabled' => true, 'autonomy' => ['L1' => 'tell', 'L2' => 'auto'], 'rules' => ['Always keep the README up to date'], 'priorities' => ['Client deliveries first']]);
 $r = $finish('a1', 'Tests pass. Shall I also update the README?');
