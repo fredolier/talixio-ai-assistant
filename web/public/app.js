@@ -6800,7 +6800,16 @@ async function abOpen(id, quiet) {
     if (e.who === 'agent' && e.kind === 'message') return `<div class="ab-md no-i18n">${md(e.text)}</div>`; // what the agent wrote, formatted (md escapes it first)
     return e.text ? `<div class="ab-txt no-i18n">${esc(e.text)}</div>` : '';
   };
-  const thread = d.events.map(e => {
+  // 1.49.1: one bubble per reply sent from here: "queued" gives way to "delivered" once the session has it, and the
+  // echo Claude Code sends back (the hook's feedback, seen as a prompt; kept by boards before 1.49.1) is not shown again
+  const done = d.events.filter(e => e.kind === 'delivered').map(e => e.who + '\n' + e.text);
+  const evs = d.events.filter(e => {
+    if (e.kind === 'prompt' && e.text.includes('Message from the user, sent from Talixio:')) return false;
+    if (e.kind !== 'queued') return true;
+    const i = done.indexOf(e.who + '\n' + e.text); if (i < 0) return true;
+    done.splice(i, 1); return false;
+  });
+  const thread = evs.map(e => {
     const sys = SYS.includes(e.kind), mine = !sys && (e.who === 'you' || e.who === 'assistant');
     return `<div class="ab-ev ab-${esc(e.who)} ab-k-${esc(e.kind)}${sys ? ' ab-sys' : mine ? ' ab-mine' : ''}"><span class="ab-ev-meta muted small">${esc(who[e.who] || e.who)}${kind[e.kind] ? ' · ' + esc(kind[e.kind]) : ''} · ${esc(abWhen(e.ts))}</span>${body(e)}</div>`;
   }).join('');
@@ -6818,7 +6827,7 @@ async function abOpen(id, quiet) {
   if (fresh) {
     box.dataset.id = id;
     box.innerHTML = `<div class="ab-d-top"></div><div class="ab-thread"></div><div class="ab-dock"><div class="ab-dock-top"></div>${over ? `<p class="muted small">${esc(s.state === 'stopped' ? t('This session was stopped.') : t('This session has ended.'))}</p>`
-      : `<div class="ab-compose"><textarea id="ab-reply" rows="1" placeholder="${esc(t('Reply to this session…'))}"></textarea><button type="button" class="btn small primary" data-abact="send">${esc(t('Send'))}</button></div>`}</div>`;
+      : `<div class="ab-compose"><textarea id="ab-reply" rows="1" placeholder="${esc(t('Reply to this session…'))}"></textarea><button type="button" class="btn small primary" data-abact="send">${esc(t('Send'))}</button></div>${s.agent === 'claude-code' ? `<p class="ab-relay-note muted small">${esc(t('Claude Code takes this as a message passed on by its hook, not as typed in its window: for a sensitive step (a push, a change in another project) it may ask you to confirm there.'))}</p>` : ''}`}</div>`;
   }
   const pct = x => Math.round(x.confidence * 100) + '%';
   const sug = d.suggestion ? `<div class="ab-sug"><b>💡 ${esc(t('Suggested answer'))}</b> <span class="muted small no-i18n">${esc(d.suggestion.level)} · ${esc(pct(d.suggestion))}</span>
