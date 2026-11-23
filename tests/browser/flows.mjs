@@ -1073,7 +1073,7 @@ const flows = {
     await page.click('#ab-detail .ab-opt:has-text("pears")');
     await page.waitForFunction(() => /B\) The pears/.test(document.querySelector('#ab-detail .ab-thread')?.textContent || ''), null, { timeout: 6000 });
     check('agent options: one click answers with that option', true);
-    check('agent options: a message without options gets no buttons', (await page.evaluate(() => [abOptions('Done. Shall I go on?'), abOptions('Version 2. ready'), abOptions('Pick A) red or B) blue')].map(o => o.length).join(','))) === '0,0,2');
+    check('agent options: a message without options gets no buttons', (await page.evaluate(() => [abOptions('Done. Shall I go on?'), abOptions('Version 2. ready'), abOptions('Pick A) red or B) blue'), abOptions('- **A. Allow narrow sub-agent permissions** (my recommendation). ' + 'Allow Write and Edit under the scenario folder, and the one command that records decisions, in the settings file. '.repeat(2) + '\n  - It is narrow.\n- **B. Approve the prompts in this session.**\n  - The settings stay.\n- **C. I write the remaining files myself.**')].map(o => o.length).join(','))) === '0,0,2,3');
     await page.click('#ab-detail [data-abact=close]');
   },
   async agentStart({ page, check, data }) {
@@ -1151,6 +1151,7 @@ ev() { printf '{"session_id":"%s","hook_event_name":"%s","cwd":"%s"%s}' "$sid" "
 [ "$2" = --resume ] || ev SessionStart ''
 ev UserPromptSubmit ",\\"prompt\\":\\"$p\\""
 ev Stop ",\\"last_assistant_message\\":\\"Done: $p\\""
+ev SessionEnd ",\\"reason\\":\\"other\\""
 `); chmodSync(fake, 0o755);
     const seed = spawn('sh', [hook, 'event']); seed.stdin.end(JSON.stringify({ session_id: 'lab2-seed', hook_event_name: 'SessionStart', cwd: work }));
     await new Promise(r => seed.on('close', r));
@@ -1179,8 +1180,10 @@ ev Stop ",\\"last_assistant_message\\":\\"Done: $p\\""
       check('agent resume: the resumed session answers in the same thread', /Done: Option B/.test(await page.textContent('#ab-detail .ab-thread')));
       const mine = await page.$$eval('#ab-detail .ab-thread .ab-mine', els => els.filter(e => e.textContent.includes('Option B')).length);
       check('agent resume: the reply shows once (not again as typed in the session)', mine === 1, String(mine));
-      // 1.51.0: a session that ended can be resumed from the board, and its next answer continues the same session
-      await new Promise(r => { const p = spawn('sh', [hook, 'event']); p.on('close', r); p.stdin.end(JSON.stringify({ session_id: st.id.split(':')[1], hook_event_name: 'SessionEnd', reason: 'exit', cwd: work })); });
+      // 1.51.0: a session that was stopped (1.52.2: claude -p's own SessionEnd after a turn no longer ends it) can be
+      // resumed from the board, and its next answer continues the same session
+      await page.waitForFunction(id => fetch('api/agents').then(r => r.json()).then(d => d.sessions.some(s => s.id === id && s.state === 'waiting')), st.id, { timeout: 8000 });
+      await page.evaluate(id => post(`api/agents/s/${encodeURIComponent(id)}/stop`, {}), st.id);
       await page.waitForSelector('#ab-detail [data-abact=reopen]', { timeout: 8000 });
       check('agent resume: an ended session offers « Resume and re-read », not a reply box', !(await page.$('#ab-detail #ab-reply')));
       await page.click('#ab-detail [data-abact=reopen]');

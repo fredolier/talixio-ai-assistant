@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.52.2 (2026-11-23)
+
+A session started from the board no longer ends after each turn, so the assistant takes it in hand and its options show as buttons.
+
+- **Why:** an agent's question card for the PO (options A, B, C, a recommendation) landed in *Quiet* as *ended*, with only *Resume and re-read*. No proposal, no option buttons. A session the board starts runs `claude -p`, which ends with every turn, and Claude Code then sends `SessionEnd` (reason « other »). The board took that as the session's end. So the 1.50.0 resume, the 1.51.0 reading and the 1.52.0 buttons never applied to these sessions in real use. The tests had only simulated the listener's exit report, never Claude Code's `SessionEnd`.
+- **Now:** a `SessionEnd` for a board-started session whose turn ended waiting for you leaves it waiting, in *Needs you*. A `SessionEnd` in the middle of its work, or for a session typed in a terminal, still ends it. Option lines longer than 200 characters (`- **A. …** (my recommendation). …`) are now read as options: before, they were skipped, so an agent's recommended option A was missing from the buttons.
+- **Tested:** `tests/more/agent_resume.php`: `SessionEnd` with reason « other » after a waiting turn keeps the session waiting; one mid-turn, or of a terminal session, ends it. These fail without the change. In the browser flow `agentResume`, the stand-in for `claude` now sends `SessionEnd` after its turn, as the real one does, and the flow fails on the old code. The flow's 1.51.0 part ended the session with that same `SessionEnd`, which no longer ends it. It now stops the session from the board, a deliberate change. `agentOptions` adds a card with a long option A, which also fails on the old code.
+- **Not tried:** the real `claude -p` (its `SessionEnd` reason « other » is taken from the user's board). A session already shown as ended stays ended: *Resume and re-read* brings it back, with a listener from 1.50.0 or later.
+
 ## 1.52.1 (2026-11-23)
 
 A reply to a session started from the board no longer goes missing when its listener does not resume it.

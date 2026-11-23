@@ -56,6 +56,8 @@ The board updates by itself every few seconds while you look at it.
   running after its turn (Claude Code can wait for its background tasks), the thread says so, and the reply goes as
   soon as it ends; **Stop** ends it if you would rather not wait. If the listener never takes the reply (one older than
   1.50.0), the thread says to update it after a few minutes; the reply waits, it is not lost.
+  Such a session no longer shows as *ended* after each turn (1.52.2): it waits in **Needs you**, the assistant reads it
+  and its options show as buttons. It ends when you stop it, or when its process ends in the middle of its work.
 - **Resume and re-read** (1.51.0): a Claude Code session that has ended (or a board-started one that was stopped) shows
   this button instead of the reply box. The session waits for you again, the assistant reads where it stopped (its task,
   the last exchanges and its last message) and proposes what to do next, and your answer continues **that same session**

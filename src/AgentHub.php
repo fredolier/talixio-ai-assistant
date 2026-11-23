@@ -136,6 +136,9 @@ final class AgentHub
                 if ($this->notifyMode() === 'all' && !$stop) $this->app->notifier()->notify(I18n::t($this->app, 'An agent finished its turn'), self::label($s) . ': ' . mb_substr(trim($last), -300));
                 break;
             case 'SessionEnd':
+                // 1.52.2: a session the board started runs claude -p, which ends with every turn: a turn that ended
+                // waiting for you does not end the session (its listener resumes it with your reply)
+                if ((int)$s['job'] > 0 && $s['state'] === 'waiting' && !(int)$s['stop']) break;
                 $set += ['state' => $s['state'] === 'stopped' ? 'stopped' : 'ended', 'question' => '', 'stop' => 0, 'doing' => '']; $bump = true; // stopped from here: it stays "stopped"
                 $this->log($id, 'agent', 'end', (string)($e['reason'] ?? ''));
                 break;
