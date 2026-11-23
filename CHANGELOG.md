@@ -3,6 +3,33 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.55.0 (2026-11-23)
+
+The assistant answers your coding agents' permission requests the way you do, and leaves you only the ones that need you.
+
+- **Why:** you said the board was unusable: a permission to approve every 30 seconds, when the point is for the assistant to learn from what you tell it and answer on your behalf. Until now every permission request waited for you ("permission requests are always yours"); you chose to change that.
+- **Permissions**, a new choice at the top of the board:
+  - *The assistant learns from you* (the default). It allows a request that only reads (the 1.53.0 label), and a command you allowed 3 times in that project without ever denying it. A command is learned by its first two words (`npx vitest`, `git commit`, `php tests/x.php`), a file edit by its folder, a page by its host. Every part of a chained command must be learned.
+  - *The assistant allows read-only*: only what reads.
+  - *Always ask me*: the behaviour before 1.55.0.
+- **What it never does:**
+  - it never allows a request labelled *Check first* (push, deletions, network, installs, scripts, its own settings);
+  - once you deny a command in a project, the assistant never allows it there again;
+  - its own answers never count as yours.
+- **What you see:** what it allows sends no notification, and the thread says *Allowed by the assistant* and why.
+- **Tested:** new `tests/more/agent_learn.php` (16 checks, which fail without the change):
+  - the keys commands are learned by;
+  - read-only allowed at once, and a new command waiting;
+  - not before the third time; allowed after it;
+  - the assistant's answers not counted, and the learning per project;
+  - a chain with an unlearned part waits;
+  - a denial ends it;
+  - *Check first* never learned;
+  - the three choices, and an unknown choice refused.
+
+  The `agentPerm` browser flow was adapted on purpose: its read-only request used to wait for a click, and is now answered by the assistant. The flow now checks that answer, the thread's note, *Always ask me* still waiting with the label, and the choice being kept.
+- **Not tried:** a real day of coding sessions, so how many requests are left for you is not measured. Learning by the first two words is coarse: after `npx vitest` three times, any `npx vitest …` in that project goes through.
+
 ## 1.54.0 (2026-11-23)
 
 *Connect a machine* can set Claude Code's auto mode on that machine, so its sessions stop asking at every step, as the assistant's own cloud sessions do.

@@ -1108,12 +1108,23 @@ const flows = {
     let dec = {}; try { dec = JSON.parse(r2.out).hookSpecificOutput.decision; } catch {}
     check('agent perm: the hook allows it and hands Claude Code the rule to save', dec.behavior === 'allow' && dec.updatedPermissions?.[0]?.rules?.[0]?.ruleContent === 'npx playwright test:*'
       && dec.updatedPermissions[0].destination === 'localSettings', r2.out);
-    const p3 = ask({ tool_input: { command: 'head -c 3000 /tmp/x/ask-base.jsonl; ls /tmp/x' } });
+    // 1.55.0: with « The assistant allows read-only », a read-only request is answered without you
+    await page.selectOption('#ab-perms', 'read'); await page.waitForTimeout(400);
+    const r3 = await ask({ tool_input: { command: 'head -c 3000 /tmp/x/ask-base.jsonl; ls /tmp/x' } });
+    let dec3 = {}; try { dec3 = JSON.parse(r3.out).hookSpecificOutput.decision; } catch {}
+    check('agent perm: a read-only request is allowed by the assistant, no click', dec3.behavior === 'allow', r3.out);
+    await page.waitForFunction(() => /Allowed by the assistant: it only reads/.test(document.querySelector('#ab-detail .ab-thread')?.textContent || ''), null, { timeout: 8000 }).catch(() => {});
+    check('agent perm: the thread says the assistant allowed it, and why', /Allowed by the assistant: it only reads/.test(await page.textContent('#ab-detail .ab-thread')));
+    // « Always ask me »: it waits for you, labelled
+    await page.selectOption('#ab-perms', 'off'); await page.waitForTimeout(400);
+    const p4 = ask({ tool_input: { command: 'ls /tmp/x' } });
     await page.waitForSelector('#ab-detail .ab-perm .ab-safe', { timeout: 8000 });
-    check('agent perm: a read-only request says it is safe', /Read-only: safe to allow/.test(await page.textContent('#ab-detail .ab-perm .ab-safe')));
+    check('agent perm: with « Always ask me », a read-only request waits, labelled safe', /Read-only: safe to allow/.test(await page.textContent('#ab-detail .ab-perm .ab-safe')));
     await page.waitForTimeout(2500);
     await page.click('#ab-detail .ab-perm [data-abact=allow]');
-    await p3;
+    await p4;
+    await page.selectOption('#ab-perms', 'learn'); await page.waitForTimeout(400);
+    check('agent perm: the choice is kept', (await api(page, 'api/agents')).perms === 'learn');
     await page.click('#ab-detail [data-abact=close]');
   },
   async agentStart({ page, check, data }) {

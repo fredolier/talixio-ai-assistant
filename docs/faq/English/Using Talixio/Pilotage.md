@@ -48,6 +48,15 @@ The board updates by itself every few seconds while you look at it.
     the project's `.claude/settings.local.json` (yours, not committed), so it stops asking for that command. Only narrow
     rules are offered: never a whole tool, a lone interpreter (`php`, `npx`, `sh`…), a bare runner (`npm run`), anything
     labelled *Check first*, or the agent's own settings. To take a rule back, remove its line from that file.
+  - **The assistant answers permissions for you** (1.55.0). *Permissions* at the top of the board chooses who answers:
+    - *The assistant learns from you* (the default): it allows a request that only reads, and a command you allowed
+      **3 times** in that project without ever denying it (learned by its first two words, `npx vitest`, `git commit`…,
+      or by folder for file edits). Once you deny one, it is yours again for good. No notification is sent for what it
+      allows, and the thread says *Allowed by the assistant* and why;
+    - *The assistant allows read-only*: only what reads;
+    - *Always ask me*: as before 1.55.0.
+
+    A request labelled *Check first* (push, deletions, network, installs, scripts, its own settings) always waits for you.
   - **Mark as seen** moves a finished session to Quiet; **Forget** removes it and its thread from the board (both in the
     **⋯** menu at the top of the conversation).
   - **Stop** ends the session's work. A session started from the board (below) is ended on its machine by the listener,
@@ -186,7 +195,7 @@ The board updates by itself every few seconds while you look at it.
   limits are then applied by Talixio itself, not by the model: for each level L1–L5 you choose *I propose, you answer*
   (default), *I answer if sure, then tell you* or *I answer if sure, quietly* (L6 shows 🔒 *Always yours*, with no
   choice); it sends alone only above your confidence
-  threshold (75 % by default) and under the **daily cap** (20 by default). **L6, permission requests, and anything about
+  threshold (75 % by default) and under the **daily cap** (20 by default). **L6, permission requests (except as *Permissions* allows, see above), and anything about
   pushes, deploys, deletions, e-mails, credentials or payments are always yours**, whatever the setting — as are merges, releases and publishing, migrations, installing a package, uploading data, sending to customers or subscribers, buying or a plan, hiring, skipping tests, a web address, and a reply holding a command the agent did not offer itself: these stay suggestions even when the model calls them routine. Your **priorities** and **standing rules** (one per line) can be typed or dictated with 🎙️; a
   rule you tell it in the chat is added too. An answer it sends
   goes to the session like yours, marked *Assistant* in the thread; in the session's pane it asks **Was this the right

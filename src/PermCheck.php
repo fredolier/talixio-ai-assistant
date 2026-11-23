@@ -167,6 +167,33 @@ final class PermCheck
     }
 
     /**
+     * What the board learns your answers by (1.55.0): one key per part of the command that does not only read (its
+     * first two words: "npx vitest", "git commit", "php tests/x.php"), "Edit <folder>" for a file, "WebFetch <host>"
+     * for a page. [] for a request that only reads; null when it cannot be learned (risky, or code it cannot read).
+     */
+    public static function keys(string $tool, array $in): ?array
+    {
+        $a = self::assess($tool, $in);
+        if ($a['level'] === 'risk') return null;
+        if ($a['level'] === 'read') return [];
+        if ($tool === 'Bash') {
+            $keys = [];
+            foreach (self::split((string)($in['command'] ?? '')) ?? [] as [$seg, $writes]) {
+                $w = self::words($seg);
+                if (!$w || (!$writes && self::readOnly($w))) continue;
+                $keys[] = mb_substr(implode(' ', array_slice($w, 0, 2)) . ($writes ? ' >' : ''), 0, 200);
+            }
+            return array_values(array_unique($keys)) ?: null;
+        }
+        if (in_array($tool, ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'], true)) {
+            $p = (string)($in['file_path'] ?? $in['notebook_path'] ?? '');
+            return $p === '' ? null : ['Edit ' . mb_substr(dirname($p), 0, 200)];
+        }
+        if ($tool === 'WebFetch') { $h = parse_url((string)($in['url'] ?? ''), PHP_URL_HOST); return $h ? ['WebFetch ' . strtolower($h)] : null; }
+        return str_starts_with($tool, 'mcp__') || $tool === '' ? null : [$tool];
+    }
+
+    /**
      * Claude Code's "always allow" suggestions narrow enough to save: addRules / allow entries only, on the tools above,
      * never a rule on a whole tool, a lone interpreter or a risky command. Saved in the project's .claude/settings.local.json
      * (yours, not committed). Returns the entries to send back, with their rules as Claude Code writes them.

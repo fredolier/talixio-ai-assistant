@@ -6501,6 +6501,9 @@ const AB_COLS = [['need', 'Needs you'], ['working', 'Working'], ['quiet', 'Quiet
 const abTitle = s => s.project || s.agent;
 function abWire() {
   if (AB.wired) return; AB.wired = true;
+  $('#ab-perms').onchange = async e => { // who answers permission requests (1.55.0)
+    try { await post('api/agents/perms', { mode: e.target.value }); toast(t('Saved.')); } catch (err) { toast(err.message); }
+  };
   $('#ab-notify').onchange = async e => { // what reaches the phone (1.43.0)
     try { await post('api/agents/notify', { mode: e.target.value }); toast(t('Saved.')); } catch (err) { toast(err.message); }
   };
@@ -6730,6 +6733,7 @@ async function abRefresh() {
   const need = AB.sessions.filter(s => s.column === 'need').length;
   if (need !== state.agentsNeed) { state.agentsNeed = need; setFleetBadge(); }
   abNotifyShow(d.notify);
+  { const sel = $('#ab-perms'); if (sel && d.perms && document.activeElement !== sel) sel.value = d.perms; }
   if (AB.sel?.startsWith('job:') && !AB.jobs.some(j => 'job:' + j.id === AB.sel)) { // it reports now: open its session
     const s = AB.sessions.find(x => 'job:' + x.job === AB.sel); AB.sel = s ? s.id : null; if (!s && AB.pane === 'ab-detail') abPane('ab-empty');
   }

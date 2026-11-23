@@ -1950,6 +1950,7 @@ final class Web
                 catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
             })(),
             $path === '/api/agents/notify' && $m === 'POST' => $hub->setNotify((string)($b['mode'] ?? '')),
+            $path === '/api/agents/perms' && $m === 'POST' => (function () use ($hub, $b) { try { return $hub->setPerms((string)($b['mode'] ?? '')); } catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); } })(), // 1.55.0
             $path === '/api/agents/knowledge' && $m === 'GET' => $this->app->knowledge()->overview(), // 1.44.0: what the director learned
             $path === '/api/agents/knowledge/exclude' && $m === 'POST' => (function () use ($b) {
                 try { return $this->app->knowledge()->setExclude((string)($b['key'] ?? ''), !empty($b['exclude'])); }
