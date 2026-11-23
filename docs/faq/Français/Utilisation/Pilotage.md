@@ -58,6 +58,11 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   tableau (elle ne se termine pas). Votre réponse la reprend avec `claude -p --resume <session>`, lancé par l'écouteur :
   la réponse est sa demande suivante. Une réponse envoyée pendant qu'elle travaille part à la fin de son tour. Mettez
   l'écouteur à jour pour cela (*Connecter une machine*, étape 4, ou la commande d'installation à nouveau).
+  Une réponse reste *en attente* tant que l'écouteur ne l'a pas vraiment relancée (1.52.1). Si le processus `claude -p`
+  tourne encore après son tour (Claude Code peut attendre ses tâches d'arrière-plan), le fil le dit, et la réponse part
+  dès qu'il se termine ; **Arrêter** le termine si vous préférez ne pas attendre. Si l'écouteur ne prend jamais la
+  réponse (un écouteur antérieur à 1.50.0), le fil dit de le mettre à jour au bout de quelques minutes : la réponse
+  attend, elle n'est pas perdue.
 - **Reprendre et relire** (1.51.0) : une session Claude Code terminée (ou une session lancée du tableau puis arrêtée)
   affiche ce bouton à la place de la zone de réponse. La session vous attend de nouveau, l'assistant relit là où elle
   s'est arrêtée (sa tâche, les derniers échanges et son dernier message) et propose la suite, et votre réponse poursuit

@@ -72,7 +72,9 @@ while :; do
         if [ "$kind" = resume ] && case "$sid" in ''|*[!A-Za-z0-9_-]*) true ;; *) false ;; esac; then
           echo "Not a session id this listener resumes: $sid" > "$D/$id.log"; report "$id" failed "$D/$id.log"
         elif [ "$kind" = resume ] && [ -f "$D/$id.pid" ] && kill -0 "$(cat "$D/$id.pid")" 2>/dev/null; then
-          : # still running: it gets the reply at the end of its turn
+          # still running (Claude Code may wait for its background tasks): the board keeps the reply until it ends
+          echo "Job $id is still running (process $(cat "$D/$id.pid")): the reply goes when it ends."
+          report "$id" busy "" "$(cat "$D/$id.pid")"
         elif [ -z "$real" ]; then echo "No such folder on this machine: $dir" > "$D/$id.log"; report "$id" failed "$D/$id.log"
         elif ! allowed "$real"; then refused "$dir" > "$D/$id.log"; report "$id" failed "$D/$id.log"
         elif ! command -v "$CLAUDE" >/dev/null 2>&1; then echo "Claude Code ($CLAUDE) is not installed or not on the PATH of this listener." > "$D/$id.log"; report "$id" failed "$D/$id.log"

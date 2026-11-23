@@ -41,6 +41,9 @@ final class AgentHub
         $app->store->addColumn('agent_sessions', 'stop', 'INTEGER NOT NULL DEFAULT 0');
         $app->store->addColumn('agent_sessions', 'job', 'INTEGER NOT NULL DEFAULT 0');
         $app->store->addColumn('agent_sessions', 'doing', "TEXT NOT NULL DEFAULT ''");
+        // 1.52.1: the last reply a resume carried (delivered once the listener says it started), and how often it was offered
+        $app->store->addColumn('agent_jobs', 'upto', 'INTEGER NOT NULL DEFAULT 0');
+        $app->store->addColumn('agent_jobs', 'tries', 'INTEGER NOT NULL DEFAULT 0');
     }
 
     // ---------- the machine side (Bearer token) ----------
@@ -483,18 +486,22 @@ final class AgentHub
             $this->app->store->q("UPDATE agent_jobs SET stop = 2, updated = ? WHERE id = ?", [time(), $j['id']]); // 2: sent to the listener
             return [200, "stop\n{$j['id']}\n"];
         }
-        foreach ($this->app->store->q("SELECT * FROM agent_jobs WHERE machine = ? AND state = 'resume' ORDER BY id", [$machine])->fetchAll() as $j) {
-            // 1.50.0: a reply to a session it started: claude -p --resume <session> with the reply as the prompt
+        // 1.50.0: a reply to a session it started: claude -p --resume <session> with the reply as the prompt. 1.52.1: a resume
+        // the listener did not confirm within RESUME_WAIT (an older listener, or one that lost it) is offered again; the
+        // replies count as delivered only once it says it started
+        foreach ($this->app->store->q("SELECT * FROM agent_jobs WHERE machine = ? AND (state = 'resume' OR (state = 'sent' AND session != '' AND updated < ?)) ORDER BY id",
+            [$machine, time() - self::RESUME_WAIT])->fetchAll() as $j) {
             $s = $this->get((string)$j['session']);
             $c = $s ? $this->app->store->q("SELECT * FROM agent_commands WHERE session = ? AND delivered IS NULL AND kind = 'reply' ORDER BY id", [$s['id']])->fetchAll() : [];
             $sid = $s ? substr($s['id'], strlen($s['agent']) + 1) : '';
             if (!$c || $s['state'] !== 'waiting' || !preg_match('/^[A-Za-z0-9_-]{1,100}$/', $sid)) {
-                $this->app->store->q("UPDATE agent_jobs SET state = 'exited', updated = ? WHERE id = ?", [time(), $j['id']]);
+                $this->app->store->q("UPDATE agent_jobs SET state = 'exited', upto = 0, tries = 0, updated = ? WHERE id = ?", [time(), $j['id']]);
                 continue;
             }
-            foreach (array_slice($c, 1) as $more) $this->deliver($more, []);
-            $this->deliver($c[0], ['state' => 'working', 'question' => '', 'seq' => (int)$s['seq'] + 1, 'updated' => time()]);
-            $this->app->store->q("UPDATE agent_jobs SET state = 'sent', stop = 0, updated = ? WHERE id = ?", [time(), $j['id']]);
+            $tries = $j['state'] === 'sent' ? (int)$j['tries'] + 1 : 1;
+            if ($tries === 3) $this->log($s['id'], 'agent', 'notice', I18n::t($this->app, 'Its listener on {machine} does not resume this session: update the listener (Connect a machine, then install it again) and restart it. Your reply waits until then.', ['machine' => $j['machine']]));
+            $this->app->store->q("UPDATE agent_jobs SET state = 'sent', stop = 0, upto = ?, tries = ?, updated = ? WHERE id = ?", [(int)end($c)['id'], $tries, time(), $j['id']]);
+            $this->bumpRev();
             return [200, "resume\n{$j['id']}\n{$j['cwd']}\n$sid\n" . implode("\n\n", array_column($c, 'text'))];
         }
         $j = $this->app->store->q("SELECT * FROM agent_jobs WHERE machine = ? AND state = 'queued' ORDER BY id LIMIT 1", [$machine])->fetch();
@@ -504,17 +511,37 @@ final class AgentHub
         return [200, "start\n{$j['id']}\n{$j['cwd']}\n{$j['prompt']}"];
     }
 
-    /** The listener reports on a job: started (with its pid), failed (why), exited (the end of its output). */
+    /** How long a resume handed to the listener may go unconfirmed before it is offered again (1.52.1). */
+    private const RESUME_WAIT = 90;
+
+    /**
+     * The listener reports on a job: started (with its pid), failed (why), exited (the end of its output), busy (1.52.1:
+     * asked to resume, its process still runs, e.g. Claude Code waiting for its background tasks: the reply waits for its end).
+     */
     public function jobReport(string $machine, int $jid, string $state, int $pid, string $log): array
     {
         $j = $this->job($jid);
         $machine = mb_substr(trim(preg_replace('/[^\w .@-]+/u', '', $machine)), 0, 40);
         if (!$j || $j['machine'] !== $machine) return [404, ['error' => 'no such job']];
-        if (!in_array($state, ['started', 'failed', 'exited'], true)) return [400, ['error' => 'started, failed or exited']];
+        if (!in_array($state, ['started', 'failed', 'exited', 'busy'], true)) return [400, ['error' => 'started, failed, exited or busy']];
         $log = mb_substr(trim($log), -4000);
         $now = time();
+        if ($state === 'busy') {
+            if ($j['state'] === 'sent' && $j['session'] !== '') {
+                $this->app->store->q("UPDATE agent_jobs SET state = 'running', upto = 0, tries = 0, updated = ? WHERE id = ?", [$now, $jid]);
+                $this->log($j['session'], 'agent', 'notice', I18n::t($this->app, 'Its process is still running on {machine} (Claude Code may be waiting for its background tasks): your reply goes as soon as it ends. Stop it to send it now.', ['machine' => $j['machine']]));
+                $this->bumpRev();
+            }
+            return [200, ['ok' => true]];
+        }
         if ($state === 'started') {
             if ($j['state'] === 'cancelled') return [200, ['stop' => true]]; // cancelled while it was on its way: the listener ends it at once
+            if ($j['state'] === 'sent' && $j['session'] !== '' && (int)$j['upto'] > 0 && ($s = $this->get($j['session']))) { // 1.52.1: the resume started: its replies are delivered now
+                $c = $this->app->store->q("SELECT * FROM agent_commands WHERE session = ? AND delivered IS NULL AND kind = 'reply' AND id <= ? ORDER BY id", [$s['id'], (int)$j['upto']])->fetchAll();
+                foreach (array_slice($c, 1) as $more) $this->deliver($more, []);
+                if ($c) $this->deliver($c[0], ['state' => 'working', 'question' => '', 'seq' => (int)$s['seq'] + 1, 'updated' => $now]);
+                $this->app->store->q('UPDATE agent_jobs SET upto = 0, tries = 0 WHERE id = ?', [$jid]);
+            }
             $this->app->store->q("UPDATE agent_jobs SET state = CASE WHEN session = '' THEN 'started' WHEN state = 'sent' THEN 'running' ELSE state END, pid = ?, updated = ? WHERE id = ?", [$pid, $now, $jid]);
         } else {
             $failed = $state === 'failed' || $j['session'] === ''; // ended without ever reporting: show why (Claude Code missing, not logged in, no hooks…)

@@ -101,6 +101,8 @@ final class I18n
         'Proposed:' => 'Proposition :',
         'Not sent by itself:' => 'Pas envoyé tout seul :',
         'Still waiting for your decision' => 'Toujours en attente de votre décision',
+        'Its listener on {machine} does not resume this session: update the listener (Connect a machine, then install it again) and restart it. Your reply waits until then.' => 'Son écouteur sur {machine} ne reprend pas cette session : mettez l’écouteur à jour (Connecter une machine, puis réinstallez-le) et relancez-le. Votre réponse attend jusque-là.',
+        'Its process is still running on {machine} (Claude Code may be waiting for its background tasks): your reply goes as soon as it ends. Stop it to send it now.' => 'Son processus tourne encore sur {machine} (Claude Code attend peut-être ses tâches d’arrière-plan) : votre réponse part dès qu’il se termine. Arrêtez-le pour l’envoyer maintenant.',
         'Fleet: autonomy raised' => 'Flotte : autonomie augmentée',
         'my answers matched yours often enough. A miss lowers it again at once; you can lower it yourself in Autonomy.' => 'mes réponses ont assez souvent été les vôtres. Une erreur la rabaisse aussitôt ; vous pouvez aussi la baisser vous-même dans Autonomie.',
         'This recording is not on the server any more.' => 'Cet enregistrement n’est plus sur le serveur.',
