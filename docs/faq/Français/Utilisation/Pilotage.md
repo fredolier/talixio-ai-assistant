@@ -42,6 +42,18 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
     session* ci-dessous.
   - **Autoriser / Refuser** une demande d'autorisation (la commande ou le fichier concerné est affiché). La session attend
     votre réponse ici **30 secondes** ; ensuite, la question habituelle s'affiche dans son terminal et vous y répondez là.
+  - **Ce que fait la demande** (1.53.0) : le tableau lit la commande lui-même, sans modèle, et l'étiquette.
+    *✓ Lecture seule : sans risque* quand chaque partie ne fait que lire (`ls`, `cat`, `head`, `grep`, `git status`,
+    `git diff`…, même hors du projet). *⚠ À vérifier* avec la raison quand une partie supprime des fichiers, accède au
+    réseau, pousse ou réécrit l'historique git, installe des paquets, déploie, modifie les autorisations de l'agent
+    lui-même, ou lance un script ou du code que la carte ne montre pas (un script dans /tmp, `$(…)`, `sh -c`). Sans
+    étiquette : elle modifie des choses dans son projet, à vous de juger. L'étiquette ne répond jamais à votre place.
+  - **Toujours autoriser** (1.53.0) : quand Claude Code propose une règle pour la demande (par ex.
+    `Bash(npx playwright test:*)`), le volet de la session l'affiche avec un bouton *Toujours autoriser*. Il autorise
+    cette demande et fait enregistrer la règle par Claude Code dans le `.claude/settings.local.json` du projet (le vôtre,
+    non versionné) : il ne demande plus pour cette commande. Seules les règles étroites sont proposées : jamais un outil
+    entier, un interpréteur seul (`php`, `npx`, `sh`…), un lanceur nu (`npm run`), ce qui est étiqueté *À vérifier*, ni
+    les réglages de l'agent lui-même. Pour retirer une règle, supprimez sa ligne de ce fichier.
   - **Marquer comme vu** range une session terminée dans Au calme ; **Oublier** la retire du tableau avec son fil (les
     deux dans le menu **⋯** en haut de la conversation).
   - **Arrêter** met fin au travail de la session. Une session démarrée depuis le tableau (ci-dessous) est terminée sur sa

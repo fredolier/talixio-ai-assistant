@@ -1967,8 +1967,8 @@ final class Web
             $id('reopen') !== null && $m === 'POST' => (function () use ($hub, $id) { // 1.51.0: resume an ended session, the assistant reads where it stopped
                 try { return $hub->reopen($id('reopen')); } catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
             })(),
-            $id('(reply|allow|deny)') !== null && $m === 'POST' => (function () use ($hub, $path, $b) {
-                preg_match('#^/api/agents/s/([\w.:-]+)/(reply|allow|deny)$#', $path, $mm);
+            $id('(reply|allow|deny|always)') !== null && $m === 'POST' => (function () use ($hub, $path, $b) {
+                preg_match('#^/api/agents/s/([\w.:-]+)/(reply|allow|deny|always)$#', $path, $mm);
                 try { return $hub->command($mm[1], $mm[2], (string)($b['text'] ?? '')); }
                 catch (\InvalidArgumentException $e) { $this->fail(400, $e->getMessage()); }
             })(),

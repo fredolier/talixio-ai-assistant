@@ -1076,6 +1076,44 @@ const flows = {
     check('agent options: a message without options gets no buttons', (await page.evaluate(() => [abOptions('Done. Shall I go on?'), abOptions('Version 2. ready'), abOptions('Pick A) red or B) blue'), abOptions('- **A. Allow narrow sub-agent permissions** (my recommendation). ' + 'Allow Write and Edit under the scenario folder, and the one command that records decisions, in the settings file. '.repeat(2) + '\n  - It is narrow.\n- **B. Approve the prompts in this session.**\n  - The settings stay.\n- **C. I write the remaining files myself.**')].map(o => o.length).join(','))) === '0,0,2,3');
     await page.click('#ab-detail [data-abact=close]');
   },
+  async agentPerm({ page, check, data }) {
+    // 1.53.0: a permission says what it does, and « Always allow » hands Claude Code the rule it suggested, through the real hook script
+    await go(page, 'pilotage');
+    await page.click('#view-pilotage .ptab[data-ptab=agents]');
+    await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
+    if (await page.isHidden('#ab-setup')) await page.click('#ab-connect');
+    await page.fill('#ab-machine', 'permbox');
+    const sh = join(data, 'perm-hook.sh');
+    writeFileSync(sh, await page.evaluate(() => fetch(document.querySelector('#ab-dl').getAttribute('href')).then(r => r.text())));
+    const ask = e => new Promise(res => { const p = spawn('sh', [sh, 'permission']); let out = ''; p.stdout.on('data', x => out += x); p.on('close', code => res({ code, out }));
+      p.stdin.end(JSON.stringify({ session_id: 'perm-1', cwd: '/work/vineyard', hook_event_name: 'PermissionRequest', tool_name: 'Bash', ...e })); });
+    const sug = c => ({ type: 'addRules', behavior: 'allow', destination: 'localSettings', rules: [{ toolName: 'Bash', ruleContent: c }] });
+    const p1 = ask({ tool_input: { command: 'git status && git push origin main' }, permission_suggestions: [sug('git push:*')] });
+    await page.waitForSelector('#ab-cols .ab-card:has-text("vineyard") .ab-risk', { timeout: 8000 });
+    check('agent perm: a card says what to check first', /Check first: it pushes or rewrites git history/.test(await page.textContent('#ab-cols .ab-card:has-text("vineyard") .ab-risk')));
+    await page.click('#ab-cols .ab-card:has-text("vineyard")');
+    await page.waitForSelector('#ab-detail .ab-perm [data-abact=deny]', { timeout: 6000 });
+    check('agent perm: a push offers no « Always allow »', await page.$('#ab-detail .ab-perm [data-abact=always]') === null);
+    await page.waitForTimeout(2500); // the hook asks every 2 s
+    await page.click('#ab-detail .ab-perm [data-abact=deny]');
+    await p1;
+    const p2 = ask({ tool_input: { command: 'npx playwright test --list 2>&1 | tail -4' }, permission_suggestions: [sug('npx playwright test:*')] });
+    await page.waitForSelector('#ab-detail .ab-perm [data-abact=always]', { timeout: 8000 });
+    check('agent perm: « Always allow » shows the rule it saves', /npx playwright test:\*/.test(await page.textContent('#ab-detail .ab-perm .ab-rules')) && await page.$('#ab-detail .ab-perm .ab-risk') === null);
+    await page.waitForTimeout(2500);
+    await page.click('#ab-detail .ab-perm [data-abact=always]');
+    const r2 = await p2;
+    let dec = {}; try { dec = JSON.parse(r2.out).hookSpecificOutput.decision; } catch {}
+    check('agent perm: the hook allows it and hands Claude Code the rule to save', dec.behavior === 'allow' && dec.updatedPermissions?.[0]?.rules?.[0]?.ruleContent === 'npx playwright test:*'
+      && dec.updatedPermissions[0].destination === 'localSettings', r2.out);
+    const p3 = ask({ tool_input: { command: 'head -c 3000 /tmp/x/ask-base.jsonl; ls /tmp/x' } });
+    await page.waitForSelector('#ab-detail .ab-perm .ab-safe', { timeout: 8000 });
+    check('agent perm: a read-only request says it is safe', /Read-only: safe to allow/.test(await page.textContent('#ab-detail .ab-perm .ab-safe')));
+    await page.waitForTimeout(2500);
+    await page.click('#ab-detail .ab-perm [data-abact=allow]');
+    await p3;
+    await page.click('#ab-detail [data-abact=close]');
+  },
   async agentStart({ page, check, data }) {
     // 1.38.0: start a session from the board on a machine whose listener runs, then stop it; the real scripts, a stand-in for claude
     const { mkdirSync, chmodSync } = await import('node:fs');

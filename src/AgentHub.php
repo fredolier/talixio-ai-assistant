@@ -41,6 +41,9 @@ final class AgentHub
         $app->store->addColumn('agent_sessions', 'stop', 'INTEGER NOT NULL DEFAULT 0');
         $app->store->addColumn('agent_sessions', 'job', 'INTEGER NOT NULL DEFAULT 0');
         $app->store->addColumn('agent_sessions', 'doing', "TEXT NOT NULL DEFAULT ''");
+        // 1.53.0: what the permission asked does (read, risk:<why> or empty), and the "always allow" rules it may save
+        $app->store->addColumn('agent_sessions', 'safety', "TEXT NOT NULL DEFAULT ''");
+        $app->store->addColumn('agent_sessions', 'rules', "TEXT NOT NULL DEFAULT ''");
         // 1.52.1: the last reply a resume carried (delivered once the listener says it started), and how often it was offered
         $app->store->addColumn('agent_jobs', 'upto', 'INTEGER NOT NULL DEFAULT 0');
         $app->store->addColumn('agent_jobs', 'tries', 'INTEGER NOT NULL DEFAULT 0');
@@ -120,7 +123,10 @@ final class AgentHub
             case 'PermissionRequest':
                 if ($stop) break; // stopped: the hook says so at once, nothing to ask
                 $q = self::describeTool((string)($e['tool_name'] ?? ''), (array)($e['tool_input'] ?? []));
-                $set += ['state' => 'permission', 'question' => $q, 'seen' => 0]; $bump = true;
+                $safe = PermCheck::assess((string)($e['tool_name'] ?? ''), (array)($e['tool_input'] ?? []));
+                $rules = $safe['level'] === 'risk' ? [] : PermCheck::rules((array)($e['permission_suggestions'] ?? []));
+                $set += ['state' => 'permission', 'question' => $q, 'seen' => 0, 'safety' => $safe['level'] . ($safe['why'] !== '' ? ':' . $safe['why'] : ''),
+                    'rules' => $rules ? (string)json_encode($rules, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : '']; $bump = true;
                 $this->log($id, 'agent', 'permission', $q);
                 if ($this->notifyMode() !== 'off') $this->app->notifier()->notify(I18n::t($this->app, 'An agent asks for permission'), self::label($s) . ': ' . mb_substr($q, 0, 200));
                 break;
@@ -203,9 +209,14 @@ final class AgentHub
             }
             $c = $this->app->store->q("SELECT * FROM agent_commands WHERE session = ? AND delivered IS NULL AND kind IN ('allow','deny') ORDER BY id LIMIT 1", [$id])->fetch();
             if (!$c) return [204, ''];
-            $this->deliver($c, ['state' => 'working', 'question' => '']);
+            $this->deliver($c, ['state' => 'working', 'question' => '', 'rules' => '']);
             $out = ['hookSpecificOutput' => ['hookEventName' => 'PermissionRequest', 'decision' => ['behavior' => $c['kind']]
                 + ($c['kind'] === 'deny' ? ['message' => $c['text'] !== '' ? $c['text'] : 'Denied from Talixio.'] : [])]];
+            $rules = json_decode((string)$s['rules'], true);
+            if ($c['kind'] === 'allow' && $c['text'] === 'always' && is_array($rules) && $rules) { // 1.53.0: allowed, and saved for the next times
+                $out['hookSpecificOutput']['decision']['updatedPermissions'] = [['type' => 'addRules', 'rules' => $rules, 'behavior' => 'allow', 'destination' => 'localSettings']];
+                $this->log($id, 'you', 'notice', 'Always allowed in this project (.claude/settings.local.json): ' . implode(', ', array_map([PermCheck::class, 'show'], $rules)));
+            }
             return [200, json_encode($out, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)];
         }
         if ($s['state'] !== 'waiting' || (int)$s['job'] > 0) return [410, '']; // 1.50.0: one started from the board is resumed by its listener
@@ -242,7 +253,11 @@ final class AgentHub
     public function command(string $id, string $kind, string $text = '', string $by = 'you', array $meta = []): array
     {
         $s = $this->get($id) ?? throw new \InvalidArgumentException('no such agent session');
-        if (!in_array($kind, ['reply', 'allow', 'deny'], true)) throw new \InvalidArgumentException('reply, allow or deny');
+        if (!in_array($kind, ['reply', 'allow', 'deny', 'always'], true)) throw new \InvalidArgumentException('reply, allow or deny');
+        if ($kind === 'always') { // 1.53.0: allow, and save the rule Claude Code suggested (checked narrow) in the project
+            if ($s['state'] === 'permission' && !json_decode((string)$s['rules'], true)) throw new \InvalidArgumentException('No rule narrow enough to save for this request: allow it once.');
+            $kind = 'allow'; $text = 'always';
+        }
         $text = mb_substr(trim($text), 0, self::MAX_TEXT);
         if ($kind === 'reply' && $text === '') throw new \InvalidArgumentException('Write something to send.');
         if ($kind !== 'reply' && $s['state'] !== 'permission') throw new \InvalidArgumentException('This session is not asking for a permission any more.');
@@ -709,6 +724,8 @@ final class AgentHub
             'state' => $s['state'], 'column' => $col, 'last_message' => $s['last_message'], 'question' => $s['question'],
             'started' => (int)$s['started'], 'updated' => (int)$s['updated'], 'pending' => $pending,
             'doing' => (string)$s['doing'], 'stopping' => (int)$s['stop'] === 1, 'job' => (int)$s['job'],
+            'safety' => $s['state'] === 'permission' ? (string)$s['safety'] : '',
+            'rules' => $s['state'] === 'permission' ? array_map([PermCheck::class, 'show'], (array)(json_decode((string)$s['rules'], true) ?: [])) : [],
             'listening' => $this->listening($s, $s['state'] === 'permission' ? 'permission' : 'reply')];
     }
 

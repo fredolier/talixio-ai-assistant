@@ -3,6 +3,23 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.53.0 (2026-11-23)
+
+A permission request on the agent board says what it does, and one you trust can be allowed for good in one click.
+
+- **Why:** coding sessions ask for permission every minute, mostly for commands that only read or run tests. Each card showed the bare command, so every one needed a careful read, and nothing allowed a safe one for the next times.
+- **What it does, at a glance.** The board reads the command itself, with no model: it cuts it at its shell operators (outside quotes) and looks past `timeout`, `nice` and `VAR=value`, as Claude Code does.
+  - *✓ Read-only: safe to allow* when every part only reads (`ls`, `cat`, `head`, `grep`, `sed` without `-i`, read-only git…), even outside the project.
+  - *⚠ Check first* with the reason when any part deletes, reaches the network, pushes or rewrites git history, installs, deploys, changes the agent's own `.claude/settings*.json`, or runs a script or code the card cannot show (a script in /tmp, `$(…)`, backticks, `sh -c`).
+  - No label otherwise (tests, edits in its project: your call).
+  - The label is on the card and in the session's pane, and it only informs: nothing is allowed without your click, as before.
+- **Always allow.** Claude Code sends the rules it would offer with "don't ask again". When they are narrow, the pane shows them with an *Always allow* button. It allows the request and hands the rules back in the hook's answer (`updatedPermissions`, saved in the project's `.claude/settings.local.json`). Never offered:
+  - a whole tool, a lone interpreter or runner (`php`, `npx`, `sh`, `npm run`…);
+  - a request labelled *Check first*, or the agent's settings files;
+  - any other kind of update (permission mode, directories).
+- **Tested:** new `tests/more/agent_perm.php` (19 checks: the labels on the commands seen in real sessions, the rules kept and refused, the hook's answer with and without *Always allow*, refused when there is no rule); new browser flow `agentPerm` through the real hook script (labels, no button on a push, the rule shown, the hook's answer). Both fail on the old code. `tests/more/agent_hub.php` reused a variable holding a session for `exec`'s output; the session's new `rules` list made that a warning, so the variable is now emptied first (no check changed).
+- **Not tried:** a real Claude Code saving the rule from the hook's answer. The hook format is taken from Claude Code's hooks documentation, and whether `claude -p` sessions apply it too is not checked. The label is a reading of the command line: a script it runs is not read (hence *Check first* on scripts in /tmp, but a script inside the project gets no label).
+
 ## 1.52.2 (2026-11-23)
 
 A session started from the board no longer ends after each turn, so the assistant takes it in hand and its options show as buttons.

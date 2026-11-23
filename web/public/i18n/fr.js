@@ -3591,5 +3591,18 @@ window.I18N.fr = {
   "of the time (over 10 answers, then 20)": "du temps (sur 10 réponses, puis 20)",
   "L4 Product too: it learns your PO calls and takes them over": "L4 Produit aussi : il apprend vos arbitrages de PO et les reprend",
   "Only once it may answer by itself. A miss lowers the level again at once. L5 Business gets more room only from you; L6 Values always stays yours, and pushes, deploys, deletions, e-mails, credentials and payments are never sent alone.": "Seulement quand il peut répondre seul. Une erreur rabaisse aussitôt le niveau. L5 Business ne reçoit plus de latitude que de vous ; L6 Valeurs reste toujours à vous, et les push, déploiements, suppressions, e-mails, identifiants et paiements ne partent jamais seuls.",
-  "Answer with one of its options:": "Répondre avec une de ses options :"
+  "Answer with one of its options:": "Répondre avec une de ses options :",
+  "it deletes files": "elle supprime des fichiers",
+  "it reaches the network": "elle accède au réseau",
+  "it pushes or rewrites git history": "elle pousse ou réécrit l'historique git",
+  "it installs or removes packages": "elle installe ou retire des paquets",
+  "it runs a script you cannot see here": "elle lance un script que vous ne voyez pas ici",
+  "it runs code you cannot see here": "elle exécute du code que vous ne voyez pas ici",
+  "it changes the system or other processes": "elle modifie le système ou d'autres processus",
+  "it changes the agent’s own permissions": "elle modifie les autorisations de l'agent lui-même",
+  "it deploys or releases": "elle déploie ou publie une version",
+  "Read-only: safe to allow": "Lecture seule : sans risque",
+  "Check first: {why}": "À vérifier : {why}",
+  "Always allow": "Toujours autoriser",
+  "Always allow saves this rule in the project’s .claude/settings.local.json, and Claude Code stops asking:": "Toujours autoriser enregistre cette règle dans le .claude/settings.local.json du projet, et Claude Code ne demande plus :"
 };
