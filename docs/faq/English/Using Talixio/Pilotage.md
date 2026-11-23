@@ -52,6 +52,10 @@ The board updates by itself every few seconds while you look at it.
   end). Your reply continues it with `claude -p --resume <session>`, run by the listener: the reply is its next prompt.
   A reply sent while it still works goes at the end of its turn. Update the listener for this (*Connect a machine*,
   step 4, or the install command again).
+  A reply stays *queued* until the listener has really started it again (1.52.1). If the `claude -p` process is still
+  running after its turn (Claude Code can wait for its background tasks), the thread says so, and the reply goes as
+  soon as it ends; **Stop** ends it if you would rather not wait. If the listener never takes the reply (one older than
+  1.50.0), the thread says to update it after a few minutes; the reply waits, it is not lost.
 - **Resume and re-read** (1.51.0): a Claude Code session that has ended (or a board-started one that was stopped) shows
   this button instead of the reply box. The session waits for you again, the assistant reads where it stopped (its task,
   the last exchanges and its last message) and proposes what to do next, and your answer continues **that same session**

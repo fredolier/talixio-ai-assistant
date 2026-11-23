@@ -3,6 +3,15 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.52.1 (2026-11-23)
+
+A reply to a session started from the board no longer goes missing when its listener does not resume it.
+
+- **Why:** on a board-started session, a reply showed *delivered*, yet nothing happened, and every later reply stayed *queued* for good. The board marked a reply delivered as soon as it handed it to the machine's listener, and the job then waited for a report that never came. The listener does not resume a session whose `claude -p` process is still alive after its turn (Claude Code can wait for its background tasks), and a listener older than 1.50.0 does not know « resume » at all. Which of the two happened on the user's machine is not known.
+- **Now:** a reply counts as delivered only once the listener says it started the session again. When the process still runs, the listener (updated) says so: the reply stays queued, the thread says why and that **Stop** sends it now, and it goes as soon as the process ends. A resume that the listener did not confirm within 90 seconds is offered again, with every reply waiting. After three such offers the thread says to update the listener. A job left stuck by the old behaviour is picked up again the same way.
+- **Tested:** `tests/more/agent_resume.php`: its check « handed out once, delivered, and the session is working again » asserted the old hand-out behaviour. It now asserts the reply is delivered at the listener's start, a deliberate change. New checks: a process still running (busy, then the reply resumes it when it ends); a listener that never confirms (offered again with every reply, not before 90 s, the notice after three offers, delivered once it starts); the listener script reports « busy ». Without the change they fail. The browser flow `agentResume` (the real listener script, a stand-in for `claude`) still passes.
+- **Not tried:** the real `claude -p` keeping its process after its turn. The 90-second wait is a guess. A reply already marked delivered by 1.52.0 and earlier, but never given to the session, is not recovered: send it again.
+
 ## 1.52.0 (2026-11-22)
 
 The board's autonomy follows your coding agents' decision ladder, with you as their PO, and gains room by itself where it has earned it. A proposal you did not decide comes back until you do.
