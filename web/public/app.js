@@ -6426,7 +6426,7 @@ const AUTO_LEVELS = { L1: ['Technical', 'bugs, tests, clarity'], L2: ['Design', 
 // the options an agent offers in its message (« A) … », « 1. … », one per line or inline), for one-click answers
 function abOptions(msg) {
   const text = String(msg || '').slice(-3000), out = [];
-  for (const line of text.split('\n')) { const m = line.match(/^\s*(?:[-*]\s*)?\**\(?([A-F]|[1-6])[).:]\**\s+(.{1,200})$/); if (m) out.push([m[1], m[2].replace(/\*+/g, '').trim()]); }
+  for (const line of text.split('\n')) { const m = line.match(/^\s*(?:[-*]\s*)?\**\(?([A-F]|[1-6])[).:]\**\s+(.+)$/); if (m) out.push([m[1], m[2].replace(/\*+/g, '').trim().slice(0, 200)]); }
   if (out.length < 2) {
     out.length = 0;
     const parts = text.split(/(?:^|\s)\(?([A-F])\)\s+/);

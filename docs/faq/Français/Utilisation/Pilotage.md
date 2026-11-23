@@ -63,6 +63,9 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   dès qu'il se termine ; **Arrêter** le termine si vous préférez ne pas attendre. Si l'écouteur ne prend jamais la
   réponse (un écouteur antérieur à 1.50.0), le fil dit de le mettre à jour au bout de quelques minutes : la réponse
   attend, elle n'est pas perdue.
+  Une telle session ne s'affiche plus *terminée* après chaque tour (1.52.2) : elle attend dans **À vous**, l'assistant
+  la relit et ses options s'affichent en boutons. Elle se termine quand vous l'arrêtez, ou si son processus s'arrête en
+  plein travail.
 - **Reprendre et relire** (1.51.0) : une session Claude Code terminée (ou une session lancée du tableau puis arrêtée)
   affiche ce bouton à la place de la zone de réponse. La session vous attend de nouveau, l'assistant relit là où elle
   s'est arrêtée (sa tâche, les derniers échanges et son dernier message) et propose la suite, et votre réponse poursuit

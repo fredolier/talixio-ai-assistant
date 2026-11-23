@@ -25,7 +25,10 @@ $ev('r1', ['hook_event_name' => 'SessionStart', 'talixio_job' => $j['id']]);
 $ev('r1', ['hook_event_name' => 'UserPromptSubmit', 'prompt' => 'Prepare the release', 'talixio_job' => $j['id']]);
 [, $r] = $ev('r1', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Ready. Shall I push? A) push B) wait', 'talixio_job' => $j['id']]);
 $seq = $r['seq'];
-// claude -p ends with its turn
+// claude -p ends with its turn: Claude Code says so with SessionEnd (reason « other ») before the listener sees the process end
+$ev('r1', ['hook_event_name' => 'SessionEnd', 'reason' => 'other', 'talixio_job' => $j['id']]);
+check('agent resume: the SessionEnd of claude -p after a turn that waits for you does not end the session (1.52.2)', $sess('claude-code:r1')['state'] === 'waiting'
+    && $sess('claude-code:r1')['column'] === 'need' && (int)$hub->get('claude-code:r1')['seq'] === (int)$seq);
 $hub->jobReport('laptop', $j['id'], 'exited', 0, 'Ready.');
 $s = $sess('claude-code:r1');
 check('agent resume: a board-started session that finished its turn stays answerable when its process ends', $s['state'] === 'waiting' && $s['column'] === 'need'
@@ -89,6 +92,16 @@ check('agent resume: after three unanswered offers the thread says the listener 
 $hub->jobReport('laptop', $j2['id'], 'started', 51, '');
 check('agent resume: once it starts, both replies are delivered', $sess('claude-code:r2')['pending'] === 0 && $sess('claude-code:r2')['state'] === 'working');
 check('agent resume: the listener script says when a session is still running', str_contains($hub->script('laptop', 'agent-listen.sh'), 'report "$id" busy'));
+
+// a SessionEnd in the middle of its work, or of a session typed in a terminal, still ends it
+$j3 = $hub->start('laptop', '/home/me/shop', 'Tidy')['job'];
+$hub->next('laptop'); $hub->jobReport('laptop', $j3['id'], 'started', 60, '');
+$ev('r3', ['hook_event_name' => 'SessionStart', 'talixio_job' => $j3['id']]);
+$ev('r3', ['hook_event_name' => 'UserPromptSubmit', 'prompt' => 'Tidy', 'talixio_job' => $j3['id']]);
+$ev('r3', ['hook_event_name' => 'SessionEnd', 'reason' => 'other', 'talixio_job' => $j3['id']]);
+$ev('t0', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Done?']);
+$ev('t0', ['hook_event_name' => 'SessionEnd', 'reason' => 'prompt_input_exit']);
+check('agent resume: a SessionEnd mid-turn, or of a terminal session, still ends it', $sess('claude-code:r3')['state'] === 'ended' && $sess('claude-code:t0')['state'] === 'ended');
 
 // a session typed in a terminal keeps the hook's way
 [, $r] = $ev('t1', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Done?']);
