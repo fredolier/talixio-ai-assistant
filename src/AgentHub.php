@@ -631,13 +631,21 @@ final class AgentHub
      * board. The code, not the agents token, is in the URL (and so in shell history and server logs); it works once,
      * for INSTALL_TTL seconds, and only its hash is kept.
      */
-    public function installCode(string $machine, bool $listener, string $roots = ''): array
+    /**
+     * 1.54.0: what « Work without asking » adds to ~/.claude/settings.json: Claude Code's auto mode (a model checks each
+     * action and refuses the risky ones, instead of asking you each time), and the steps that still ask you whatever the mode.
+     */
+    public const AUTO_PERMISSIONS = ['defaultMode' => 'auto', 'ask' => ['Bash(git push:*)', 'Bash(git reset --hard:*)', 'Bash(git clean:*)', 'Bash(rm -rf:*)',
+        'Bash(sudo:*)', 'Bash(npm publish:*)', 'Edit(.claude/settings.json)', 'Edit(.claude/settings.local.json)', 'Write(.claude/settings.json)',
+        'Write(.claude/settings.local.json)', 'Edit(~/.claude/settings.json)', 'Write(~/.claude/settings.json)']];
+
+    public function installCode(string $machine, bool $listener, string $roots = '', bool $auto = false): array
     {
         $machine = mb_substr(trim(preg_replace('/[^\w .@-]+/u', '', $machine)), 0, 40);
         $codes = array_filter($this->installCodes(), fn($c) => $c['exp'] > time());
         if (count($codes) >= 20) array_shift($codes); // at most 20 waiting: the oldest goes
         $code = rtrim(strtr(base64_encode(random_bytes(18)), '+/', '-_'), '=');
-        $codes[hash('sha256', $code)] = ['machine' => $machine, 'listener' => $listener, 'roots' => self::roots($roots), 'exp' => time() + self::INSTALL_TTL];
+        $codes[hash('sha256', $code)] = ['machine' => $machine, 'listener' => $listener, 'roots' => self::roots($roots), 'auto' => $auto, 'exp' => time() + self::INSTALL_TTL];
         $this->app->store->set('agents.install', (string)json_encode($codes));
         $url = rtrim($this->app->shares()->baseUrl(), '/') . '/api/agents/install?c=' . $code;
         return ['code' => $code, 'url' => $url, 'command' => "curl -fsSL '$url' | sh", 'expires' => time() + self::INSTALL_TTL];
@@ -659,10 +667,11 @@ final class AgentHub
             if (preg_match('/^' . $mark . '$/m', $body)) throw new \RuntimeException('installer: a script holds its own end marker');
         }
         $tpl = (string)file_get_contents(dirname(__DIR__) . '/deploy/agent-install.sh');
-        return strtr($tpl, ['@HOOK@' => $hook, '@LISTEN@' => $listen, '@LISTENER@' => $c['listener'] ? '1' : '0',
+        $auto = !empty($c['auto']);
+        return strtr($tpl, ['@HOOK@' => $hook, '@LISTEN@' => $listen, '@LISTENER@' => $c['listener'] ? '1' : '0', '@AUTO@' => $auto ? '1' : '0',
             '@MACHINE_SHOWN@' => preg_replace('/[^\w .@-]/u', '', $machine),
             '@ROOTS_SHOWN@' => ($c['roots'] ?? '') !== '' ? preg_replace('#[^\w ./~:@+-]#u', '', $c['roots']) : 'your home folder',
-            '@HOOKS_JSON@' => (string)json_encode(self::claudeSettings(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)]);
+            '@HOOKS_JSON@' => (string)json_encode(self::claudeSettings() + ($auto ? ['permissions' => self::AUTO_PERMISSIONS] : []), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)]);
     }
 
     /** The waiting install codes: sha256 of the code => machine, listener, expiry. */

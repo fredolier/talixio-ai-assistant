@@ -1926,7 +1926,7 @@ final class Web
         $id = fn(string $p) => preg_match('#^/api/agents/s/([\w.:-]+)/' . $p . '$#', $path, $mm) ? $mm[1] : null;
         return match (true) {
             $path === '/api/agents' && $m === 'GET' => $hub->board(),
-            $path === '/api/agents/install-code' && $m === 'POST' => (function () use ($hub, $b) { Shares::remember($this->app); return $hub->installCode((string)($b['machine'] ?? ''), !empty($b['listener']), (string)($b['roots'] ?? '')); })(), // 1.48.0: the address as this signed-in user reaches it
+            $path === '/api/agents/install-code' && $m === 'POST' => (function () use ($hub, $b) { Shares::remember($this->app); return $hub->installCode((string)($b['machine'] ?? ''), !empty($b['listener']), (string)($b['roots'] ?? ''), !empty($b['auto'])); })(), // 1.48.0: the address as this signed-in user reaches it
             $path === '/api/agents/setup' && $m === 'GET' => ['settings' => AgentHub::claudeSettings(), 'connected' => $hub->board()['connected']],
             ($path === '/api/agents/hook.sh' || $path === '/api/agents/listen.sh') && $m === 'GET' => (function () use ($hub, $path) {
                 $file = $path === '/api/agents/listen.sh' ? 'agent-listen.sh' : 'agent-hook.sh';

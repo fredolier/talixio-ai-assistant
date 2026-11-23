@@ -4,6 +4,8 @@
 # It saves ~/.talixio/agent-hook.sh (and the listener, if asked), then adds the board's hooks to
 # ~/.claude/settings.json: your other hooks and settings are kept, a backup is made first, and running it again
 # replaces the Talixio hooks instead of adding them twice. Needs sh, curl, and python3, node or jq for the merge.
+# With « Work without asking » (1.54.0) it also sets Claude Code's auto mode there (permissions.defaultMode), and adds
+# "ask" rules so pushes, rm -rf, sudo and the agent's own settings still ask you, on the board.
 # The code works once, for 15 minutes. This script holds the board's address and token: keep it to your machines.
 # Everything runs in main(), called on the last line: a download cut short runs nothing.
 
@@ -34,6 +36,15 @@ TALIXIO_LISTEN_EOF
 @HOOKS_JSON@
 TALIXIO_JSON_EOF
 
+  if [ @AUTO@ = 1 ]; then # 1.54.0: auto mode, if this Claude Code offers it; else it edits files without asking
+    if command -v "${TALIXIO_CLAUDE:-claude}" >/dev/null 2>&1 && ! "${TALIXIO_CLAUDE:-claude}" --help 2>/dev/null | grep -Eq '(^|[^A-Za-z-])auto([^A-Za-z-]|$)'; then
+      sed 's/"defaultMode": "auto"/"defaultMode": "acceptEdits"/' "$H" > "$H.m" && mv "$H.m" "$H"
+      echo "Talixio: this Claude Code does not offer auto mode: its sessions will edit files without asking (acceptEdits), the rest still asks. Update Claude Code and run a new install command for auto mode."
+    else
+      echo "Talixio: Claude Code sessions on this machine will work in auto mode: a model checks each step and refuses the risky ones, instead of asking you each time. Pushes, rm -rf, sudo and changes to its own settings still ask you."
+    fi
+  fi
+
   if [ -s "$S" ]; then
     cp "$S" "$S.talixio-backup"
     echo "Talixio: your settings were saved first as $S.talixio-backup."
@@ -61,6 +72,13 @@ for ev, groups in ours.items():
         if hs or not g.get("hooks"): kept.append(dict(g, hooks=hs))
     hooks[ev] = kept + groups
 cur["hooks"] = hooks
+p = json.load(open(h)).get("permissions")
+if p:  # 1.54.0: work without asking: the mode, and the rules that still ask (yours stay)
+    cp = cur.get("permissions") if isinstance(cur.get("permissions"), dict) else {}
+    cp["defaultMode"] = p["defaultMode"]
+    ask = cp.get("ask") if isinstance(cp.get("ask"), list) else []
+    cp["ask"] = ask + [r for r in p["ask"] if r not in ask]
+    cur["permissions"] = cp
 with open(out, "w") as f: json.dump(cur, f, indent=2); f.write("\n")
 ' "$S" "$H" "$S.talixio-new" ;;
     node) node -e '
@@ -80,13 +98,23 @@ for (const [ev, groups] of Object.entries(ours)) {
   hooks[ev] = kept.concat(groups);
 }
 cur.hooks = hooks;
+const p = JSON.parse(fs.readFileSync(h, "utf8")).permissions;
+if (p) { // 1.54.0: work without asking: the mode, and the rules that still ask (yours stay)
+  const cp = cur.permissions && typeof cur.permissions === "object" && !Array.isArray(cur.permissions) ? cur.permissions : {};
+  cp.defaultMode = p.defaultMode;
+  const ask = Array.isArray(cp.ask) ? cp.ask : [];
+  cp.ask = ask.concat(p.ask.filter(r => !ask.includes(r)));
+  cur.permissions = cp;
+}
 fs.writeFileSync(out, JSON.stringify(cur, null, 2) + "\n");
 ' "$S" "$H" "$S.talixio-new" ;;
     jq) { if [ -s "$S" ]; then cat "$S"; else echo '{}'; fi; } | jq --slurpfile o "$H" '
       .hooks = (((.hooks | objects) // {}) as $h | reduce ($o[0].hooks | to_entries[]) as $e ($h;
         .[$e.key] = ([(.[$e.key] // [])[] | if type == "object" then
             (.hooks // []) as $all | .hooks = [$all[] | select(((.command? // "") | tostring | contains(".talixio/agent-hook.sh")) | not)]
-            | select((.hooks | length) > 0 or ($all | length) == 0) else . end] + $e.value)))' > "$S.talixio-new" ;;
+            | select((.hooks | length) > 0 or ($all | length) == 0) else . end] + $e.value)))
+      | if $o[0].permissions then .permissions = (((.permissions | objects) // {}) | .defaultMode = $o[0].permissions.defaultMode
+          | .ask = (((.ask | arrays) // []) as $a | $a + [$o[0].permissions.ask[] | select(. as $r | ($a | any(. == $r)) | not)])) else . end' > "$S.talixio-new" ;;
     *)
       echo "Talixio: the script is saved, but this machine has neither python3, node nor jq to add the hooks to $S." >&2
       echo "Add these hooks to it by hand (merge them with the hooks already there):" >&2

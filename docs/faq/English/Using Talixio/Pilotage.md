@@ -87,6 +87,14 @@ The board updates by itself every few seconds while you look at it.
   the board. **Install by hand** keeps the old way: download the script, save it as `~/.talixio/agent-hook.sh`, and merge
   the hooks shown into `~/.claude/settings.json` yourself. The script holds the board's address and a token: keep it on
   your own machines. **New token** cancels the old one (each machine then needs the install command again).
+- **Work without asking** (1.54.0, ticked by default in *Connect a machine*): the install command also turns on Claude
+  Code's **auto mode** for every session on that machine (`permissions.defaultMode` in `~/.claude/settings.json`). It is
+  the way the assistant's own cloud sessions work: instead of asking you at each step, a model checks each one and
+  refuses the risky ones. Some steps still ask you, whatever the mode, on the board: `git push`, `git reset --hard`,
+  `git clean`, `rm -rf`, `sudo`, `npm publish`, and changes to Claude Code's own settings files (the command adds them as
+  *ask* rules, next to yours, which stay). A Claude Code too old for auto mode gets *acceptEdits* instead (it edits files
+  without asking; the rest still asks), and the command says so: update it and run a new command. To go back, untick it
+  and run a new command, then set `defaultMode` back to `default` in that file (a new command does not remove it).
   Hook scripts set up before version 1.38.0: install again, or a stop only takes effect at the session's next permission
   request or end of turn.
 - **The listener** (optional, *Also install the listener* in *Connect a machine*, or step 4 of *Install by hand*):
