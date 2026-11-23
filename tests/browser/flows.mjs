@@ -867,6 +867,8 @@ const flows = {
     const settings = existsSync(join(home, '.claude/settings.json')) ? readFileSync(join(home, '.claude/settings.json'), 'utf8') : '';
     check('agent board: the command installs the script and the hooks for this machine', /PermissionRequest/.test(settings)
       && /M='testbox'/.test(readFileSync(join(home, '.talixio/agent-hook.sh'), 'utf8')) && /Done\./.test(installed), installed);
+    check('agent board: « Work without asking » is ticked by default, and the command sets the mode (1.54.0)', await page.isChecked('#ab-noask')
+      && /"defaultMode": "(auto|acceptEdits)"/.test(settings) && /"Bash\(git push:\*\)"/.test(settings), settings);
     const script = await page.evaluate(() => fetch(document.querySelector('#ab-dl').getAttribute('href')).then(r => r.text()));
     check('agent board: the script downloads with the machine name', /M='testbox'/.test(script) && /^U='http/m.test(script), script.slice(0, 400));
     const sh = join(data, 'agent-hook.sh'); writeFileSync(sh, script);

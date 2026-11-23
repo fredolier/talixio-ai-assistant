@@ -63,6 +63,33 @@ foreach (['python3', 'node', 'jq'] as $tool) {
 check('agent install: the listener is installed when asked, and the machine name is the one given', is_file("$home/.talixio/agent-listen.sh")
     && str_contains(file_get_contents("$home/.talixio/agent-listen.sh"), "M='box'") && str_contains(file_get_contents("$home/.talixio/agent-hook.sh"), "M='box'"));
 
+// 1.54.0: « Work without asking »: Claude Code's auto mode, and the steps that still ask; your own rules stay, ours once
+$fake = "$d/fakebin"; @mkdir($fake);
+file_put_contents("$fake/claude-auto", "#!/bin/sh\necho '  --permission-mode <mode>  (choices: \"acceptEdits\", \"auto\", \"default\", \"plan\")'\n"); chmod("$fake/claude-auto", 0755);
+file_put_contents("$fake/claude-old", "#!/bin/sh\necho '  --permission-mode <mode>  (choices: \"acceptEdits\", \"default\", \"plan\") auto-update'\n"); chmod("$fake/claude-old", 0755);
+foreach (['python3', 'node', 'jq'] as $tool) {
+    $h = "$d/home-auto-$tool"; @mkdir("$h/.claude", 0777, true);
+    file_put_contents("$h/.claude/settings.json", json_encode(['permissions' => ['defaultMode' => 'default', 'allow' => ['Bash(npm test)'], 'ask' => ['Bash(git push:*)', 'Bash(make deploy)']]]));
+    [$rc, $o, $e] = $sh($hub->installCode('box', false, '', true)['command'], $h, ['TALIXIO_MERGE' => $tool, 'TALIXIO_CLAUDE' => "$fake/claude-auto"]);
+    $p = (json_decode((string)file_get_contents("$h/.claude/settings.json"), true) ?: [])['permissions'] ?? [];
+    check("agent install: with $tool, « Work without asking » sets auto mode, keeps your rules and adds the asks once", $rc === 0 && $p['defaultMode'] === 'auto'
+        && $p['allow'] === ['Bash(npm test)'] && array_slice($p['ask'], 0, 2) === ['Bash(git push:*)', 'Bash(make deploy)']
+        && count($p['ask']) === count(array_unique([...['Bash(make deploy)'], ...AgentHub::AUTO_PERMISSIONS['ask']])) && in_array('Edit(.claude/settings.json)', $p['ask'], true)
+        && str_contains($o, 'auto mode'), "$rc $o $e " . json_encode($p));
+}
+$h = "$d/home-auto-old"; @mkdir($h);
+[$rc, $o, $e] = $sh($hub->installCode('box', false, '', true)['command'], $h, ['TALIXIO_CLAUDE' => "$fake/claude-old"]);
+$p = (json_decode((string)@file_get_contents("$h/.claude/settings.json"), true) ?: [])['permissions'] ?? [];
+check('agent install: a Claude Code without auto mode gets acceptEdits, and is told why', $rc === 0 && ($p['defaultMode'] ?? '') === 'acceptEdits'
+    && in_array('Bash(git push:*)', $p['ask'] ?? [], true) && str_contains($o, 'does not offer auto mode'), "$rc $o $e " . json_encode($p));
+$h = "$d/home-noauto"; @mkdir($h);
+$sh($hub->installCode('box', false)['command'], $h, ['TALIXIO_CLAUDE' => "$fake/claude-auto"]);
+check('agent install: without it, no permission is set', !isset((json_decode((string)@file_get_contents("$h/.claude/settings.json"), true) ?: [])['permissions']));
+$r = $web('/api/agents/install-code', ['machine' => 'webbox', 'listener' => false, 'auto' => true]);
+$h = "$d/home-auto-web"; @mkdir($h);
+$sh($r['command'], $h, ['TALIXIO_CLAUDE' => "$fake/claude-auto"]);
+check('agent install: the board\'s checkbox reaches the installer', ((json_decode((string)@file_get_contents("$h/.claude/settings.json"), true) ?: [])['permissions']['defaultMode'] ?? '') === 'auto');
+
 // a machine with no settings yet, and one whose settings are not JSON
 $home2 = "$d/home2"; @mkdir($home2);
 [$rc, , $e] = $sh($hub->installCode('fresh', false)['command'], $home2);

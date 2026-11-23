@@ -6566,7 +6566,7 @@ function abWire() {
   // 1.48.0: one command does it all, with a code that works once
   $('#ab-cmd-get').onclick = async () => {
     try {
-      const r = await post('api/agents/install-code', { machine: $('#ab-machine').value.trim(), listener: $('#ab-listen').checked, roots: $('#ab-roots').value.trim() });
+      const r = await post('api/agents/install-code', { machine: $('#ab-machine').value.trim(), listener: $('#ab-listen').checked, roots: $('#ab-roots').value.trim(), auto: $('#ab-noask').checked });
       $('#ab-cmd').textContent = r.command; $('#ab-cmd-box').hidden = false; $('#ab-cmd-listen').hidden = !$('#ab-listen').checked;
     } catch (e) { toast(e.message); }
   };

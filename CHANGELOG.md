@@ -3,6 +3,24 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.54.0 (2026-11-23)
+
+*Connect a machine* can set Claude Code's auto mode on that machine, so its sessions stop asking at every step, as the assistant's own cloud sessions do.
+
+- **Why:** you asked why the assistant's cloud sessions never ask for permission while your Claude Code sessions on your Docker VM ask every minute. Those cloud sessions run in Claude Code's auto mode (a model checks each step and refuses the risky ones); yours ran in the default mode, where anything not allowed by a rule asks you.
+- **Work without asking**, a new box in *Connect a machine*, ticked by default. The install command then also writes `permissions.defaultMode: "auto"` in the machine's `~/.claude/settings.json`, for every session there, the ones the listener starts included.
+- **Some steps still ask you,** on the board, as *ask* rules added next to yours (yours stay, ours are added once): `git push`, `git reset --hard`, `git clean`, `rm -rf`, `sudo`, `npm publish`, and edits to Claude Code's own settings files.
+- **A Claude Code without auto mode** (its `--help` does not list it) gets `acceptEdits` instead: it edits files without asking, the rest still asks. The command says so.
+- Without the box, nothing changes in your permissions. A new command without the box does not undo an earlier one: set `defaultMode` back by hand (the FAQ says how).
+- **Tested:** `tests/more/agent_install.php` (5 new checks, which fail without the change):
+  - with python3, node and jq: auto mode set, your own allow and ask rules kept, ours added once;
+  - a Claude Code whose help does not list auto: acceptEdits, and the command says why;
+  - without the box, no permission written;
+  - the board's checkbox reaching the installer.
+
+  The `agentBoard` browser flow checks the box is ticked by default and the installed settings carry the mode and the ask rules.
+- **Not tried:** a real Claude Code in auto mode with these settings. That includes whether its auto mode is available on your plan and version, and whether *ask* rules still ask in auto mode in `claude -p` sessions; both are taken from Claude Code's documentation. The auto-mode check reads `claude --help` (stand-ins in the tests).
+
 ## 1.53.0 (2026-11-23)
 
 A permission request on the agent board says what it does, and one you trust can be allowed for good in one click.

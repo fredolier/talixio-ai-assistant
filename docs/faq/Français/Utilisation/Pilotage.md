@@ -97,7 +97,17 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   apparaît sur le tableau. **Installer à la main** garde l'ancienne façon : téléchargez le script, enregistrez-le sous
   `~/.talixio/agent-hook.sh`, et fusionnez vous-même les hooks affichés dans `~/.claude/settings.json`. Le script contient
   l'adresse du tableau et un jeton : gardez-le sur vos propres machines. **Nouveau jeton** annule l'ancien (chaque machine a
-  alors besoin d'une nouvelle commande d'installation). Les scripts installés avant la version 1.38.0 : réinstallez, sinon
+  alors besoin d'une nouvelle commande d'installation).
+- **Travailler sans demander** (1.54.0, coché par défaut dans *Connecter une machine*) : la commande d'installation active
+  aussi le **mode auto** de Claude Code pour toutes les sessions de cette machine (`permissions.defaultMode` dans
+  `~/.claude/settings.json`). C'est ainsi que fonctionnent les sessions cloud de l'assistant : au lieu de vous demander à
+  chaque étape, un modèle vérifie chacune et refuse les risquées. Certaines étapes vous demandent toujours, quel que soit le
+  mode, sur le tableau : `git push`, `git reset --hard`, `git clean`, `rm -rf`, `sudo`, `npm publish`, et les modifications
+  des fichiers de réglages de Claude Code lui-même (la commande les ajoute comme règles *ask*, à côté des vôtres, qui
+  restent). Un Claude Code trop ancien pour le mode auto reçoit *acceptEdits* à la place (il modifie les fichiers sans
+  demander ; le reste demande toujours), et la commande le dit : mettez-le à jour et lancez une nouvelle commande. Pour
+  revenir en arrière, décochez la case et lancez une nouvelle commande, puis remettez `defaultMode` à `default` dans ce
+  fichier (une nouvelle commande ne le retire pas). Les scripts installés avant la version 1.38.0 : réinstallez, sinon
   un arrêt ne s'applique qu'à la prochaine demande d'autorisation ou fin de tour de la session.
 - **L'écouteur** (facultatif, *Installer aussi l'écouteur* dans *Connecter une machine*, ou étape 4 d'*Installer à la
   main*) : laissez `sh ~/.talixio/agent-listen.sh` tourner sur cette machine (un terminal, tmux,
