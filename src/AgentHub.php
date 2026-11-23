@@ -17,6 +17,13 @@ final class AgentHub
     public const MAX_FILE = 25_000_000;
     /** What reaches your phone and inbox (1.43.0): permission requests (default), also finished turns, or nothing. */
     public const NOTIFY = ['permission', 'all', 'off'];
+    /**
+     * Who answers a permission request (1.55.0): learn (the assistant allows what only reads, and what you allowed
+     * LEARN_AT times in that project without ever denying it), read (only what reads), off (always you). Never
+     * a request labelled « Check first ».
+     */
+    public const PERMS = ['learn', 'read', 'off'];
+    public const LEARN_AT = 3;
     private const AGENTS = '/^[a-z0-9][a-z0-9._-]{0,39}$/';
 
     /** What agent-hook.sh puts before a reply it hands to the session (keep the two in step) */
@@ -36,7 +43,9 @@ final class AgentHub
             CREATE TABLE IF NOT EXISTS agent_jobs(id INTEGER PRIMARY KEY, machine TEXT NOT NULL, cwd TEXT NOT NULL, prompt TEXT NOT NULL, by TEXT NOT NULL DEFAULT 'you',
                 state TEXT NOT NULL, session TEXT NOT NULL DEFAULT '', pid INTEGER NOT NULL DEFAULT 0, stop INTEGER NOT NULL DEFAULT 0, log TEXT NOT NULL DEFAULT '',
                 created INTEGER NOT NULL, updated INTEGER NOT NULL);
-            CREATE TABLE IF NOT EXISTS agent_machines(machine TEXT PRIMARY KEY, polled INTEGER NOT NULL);");
+            CREATE TABLE IF NOT EXISTS agent_machines(machine TEXT PRIMARY KEY, polled INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS agent_perms(cwd TEXT NOT NULL, key TEXT NOT NULL, allowed INTEGER NOT NULL DEFAULT 0, denied INTEGER NOT NULL DEFAULT 0,
+                updated INTEGER NOT NULL, PRIMARY KEY(cwd, key));");
         // 1.38.0: a stop asked from the board (applied at the session's next hook), the job that started it, what it is doing now
         $app->store->addColumn('agent_sessions', 'stop', 'INTEGER NOT NULL DEFAULT 0');
         $app->store->addColumn('agent_sessions', 'job', 'INTEGER NOT NULL DEFAULT 0');
@@ -44,6 +53,7 @@ final class AgentHub
         // 1.53.0: what the permission asked does (read, risk:<why> or empty), and the "always allow" rules it may save
         $app->store->addColumn('agent_sessions', 'safety', "TEXT NOT NULL DEFAULT ''");
         $app->store->addColumn('agent_sessions', 'rules', "TEXT NOT NULL DEFAULT ''");
+        $app->store->addColumn('agent_sessions', 'pkeys', "TEXT NOT NULL DEFAULT ''"); // 1.55.0: what your answer to it teaches
         // 1.52.1: the last reply a resume carried (delivered once the listener says it started), and how often it was offered
         $app->store->addColumn('agent_jobs', 'upto', 'INTEGER NOT NULL DEFAULT 0');
         $app->store->addColumn('agent_jobs', 'tries', 'INTEGER NOT NULL DEFAULT 0');
@@ -125,10 +135,13 @@ final class AgentHub
                 $q = self::describeTool((string)($e['tool_name'] ?? ''), (array)($e['tool_input'] ?? []));
                 $safe = PermCheck::assess((string)($e['tool_name'] ?? ''), (array)($e['tool_input'] ?? []));
                 $rules = $safe['level'] === 'risk' ? [] : PermCheck::rules((array)($e['permission_suggestions'] ?? []));
+                $keys = PermCheck::keys((string)($e['tool_name'] ?? ''), (array)($e['tool_input'] ?? []));
                 $set += ['state' => 'permission', 'question' => $q, 'seen' => 0, 'safety' => $safe['level'] . ($safe['why'] !== '' ? ':' . $safe['why'] : ''),
-                    'rules' => $rules ? (string)json_encode($rules, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : '']; $bump = true;
+                    'rules' => $rules ? (string)json_encode($rules, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : '',
+                    'pkeys' => $keys === null ? '' : (string)json_encode($keys, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)]; $bump = true;
                 $this->log($id, 'agent', 'permission', $q);
-                if ($this->notifyMode() !== 'off') $this->app->notifier()->notify(I18n::t($this->app, 'An agent asks for permission'), self::label($s) . ': ' . mb_substr($q, 0, 200));
+                $auto = $this->permAuto($keys, (string)($set['cwd'] ?? $s['cwd']));
+                if ($auto === '' && $this->notifyMode() !== 'off') $this->app->notifier()->notify(I18n::t($this->app, 'An agent asks for permission'), self::label($s) . ': ' . mb_substr($q, 0, 200));
                 break;
             case 'Notification':
                 $msg = (string)($e['message'] ?? '');
@@ -158,6 +171,11 @@ final class AgentHub
         if ($bump) $set += ['seq' => (int)$s['seq'] + 1, 'updated' => $now]; // a notice alone does not bring a looked-at session back to "Needs you"
         $this->update($id, $set);
         $this->bumpRev();
+        if ($kind === 'PermissionRequest' && !$stop && ($auto ?? '') !== '') { // 1.55.0: answered by the assistant, as you would have
+            $this->command($id, 'allow', '', 'assistant');
+            $this->log($id, 'assistant', 'notice', $auto === 'read' ? I18n::t($this->app, 'Allowed by the assistant: it only reads.')
+                : I18n::t($this->app, 'Allowed by the assistant: you allowed this {n} times or more in this project, and never denied it.', ['n' => self::LEARN_AT]));
+        }
         if ($kind === 'Stop' && !$stop && $last !== '') { try { $this->app->pilot()->wakeBoard(); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); } } // 1.39.0: the assistant looks at it soon
         return [200, ['seq' => (int)($set['seq'] ?? $s['seq']), 'id' => $id] + ($stop ? ['stop' => true] : [])];
     }
@@ -215,7 +233,7 @@ final class AgentHub
             $rules = json_decode((string)$s['rules'], true);
             if ($c['kind'] === 'allow' && $c['text'] === 'always' && is_array($rules) && $rules) { // 1.53.0: allowed, and saved for the next times
                 $out['hookSpecificOutput']['decision']['updatedPermissions'] = [['type' => 'addRules', 'rules' => $rules, 'behavior' => 'allow', 'destination' => 'localSettings']];
-                $this->log($id, 'you', 'notice', 'Always allowed in this project (.claude/settings.local.json): ' . implode(', ', array_map([PermCheck::class, 'show'], $rules)));
+                $this->log($id, 'you', 'notice', I18n::t($this->app, 'Always allowed in this project (.claude/settings.local.json): {rules}', ['rules' => implode(', ', array_map([PermCheck::class, 'show'], $rules))]));
             }
             return [200, json_encode($out, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)];
         }
@@ -266,6 +284,7 @@ final class AgentHub
         if ($kind !== 'reply') $this->app->store->q("UPDATE agent_commands SET delivered = -1 WHERE session = ? AND delivered IS NULL AND kind IN ('allow','deny')", [$id]);
         if ($kind === 'reply' && $s['state'] === 'waiting') $this->learn($id, (int)$s['seq'], $text, $by);
         if ($kind !== 'reply') $this->decided($s, (string)$s['question'], $kind === 'allow' ? 'allowed' : 'denied', $by, $meta);
+        if ($kind !== 'reply' && $by === 'you') $this->permLearn($s, $kind === 'allow');
         elseif ($s['state'] === 'waiting' && !$this->answeredTurn($id))
             $this->decided($s, (string)$s['last_message'], $text, $by, $meta); // the first answer to this turn (a second one adds to it)
         $this->app->store->q('INSERT INTO agent_commands(session, ts, kind, text, by) VALUES(?,?,?,?,?)', [$id, time(), $kind, $text, $by]);
@@ -318,13 +337,46 @@ final class AgentHub
         try { $sug = $this->app->pilot()->boardProposals(); } catch (\Throwable) {}
         return ['rev' => (int)$this->app->store->get('agents.rev'), 'sessions' => array_map(fn($s) => $this->shape($s) + ['suggested' => $s['state'] === 'waiting' && isset($sug[Pilot::boardKey($s['id'], (int)$s['seq'])])], $rows),
             'jobs' => array_map(fn($j) => $this->shapeJob($j), $jobs), 'machines' => $this->machines(),
-            'connected' => (string)$this->app->store->get('agents.token') !== '', 'notify' => $this->notifyMode()];
+            'connected' => (string)$this->app->store->get('agents.token') !== '', 'notify' => $this->notifyMode(), 'perms' => $this->permMode()];
     }
 
     /** Sessions in « Needs you » (the same rule as shape()): the badges on the rail and on the Agents tab. */
     public function needCount(): int
     {
         return (int)$this->app->store->q("SELECT COUNT(*) FROM agent_sessions WHERE state = 'permission' OR (state = 'waiting' AND seen < updated)")->fetchColumn();
+    }
+
+    public function permMode(): string { $m = (string)$this->app->store->get('agents.perms'); return in_array($m, self::PERMS, true) ? $m : 'learn'; }
+
+    public function setPerms(string $mode): array
+    {
+        if (!in_array($mode, self::PERMS, true)) throw new \InvalidArgumentException('unknown mode: ' . $mode);
+        $this->app->store->set('agents.perms', $mode);
+        return ['perms' => $mode];
+    }
+
+    /** 'read', 'learned' or '' (you answer): may the assistant allow a request with these keys (null: never)? */
+    private function permAuto(?array $keys, string $cwd): string
+    {
+        $mode = $this->permMode();
+        if ($keys === null || $mode === 'off') return '';
+        if ($keys === []) return 'read';
+        if ($mode !== 'learn') return '';
+        foreach ($keys as $k) {
+            $r = $this->app->store->q('SELECT allowed, denied FROM agent_perms WHERE cwd = ? AND key = ?', [$cwd, $k])->fetch();
+            if (!$r || (int)$r['denied'] > 0 || (int)$r['allowed'] < self::LEARN_AT) return '';
+        }
+        return 'learned';
+    }
+
+    /** Your answer to a permission request, counted for each of its keys in its project. */
+    private function permLearn(array $s, bool $allowed): void
+    {
+        $keys = json_decode((string)($s['pkeys'] ?? ''), true);
+        if (!is_array($keys)) return;
+        foreach ($keys as $k) $this->app->store->q('INSERT INTO agent_perms(cwd, key, allowed, denied, updated) VALUES(?,?,?,?,?)
+            ON CONFLICT(cwd, key) DO UPDATE SET allowed = allowed + excluded.allowed, denied = denied + excluded.denied, updated = excluded.updated',
+            [(string)$s['cwd'], (string)$k, $allowed ? 1 : 0, $allowed ? 0 : 1, time()]);
     }
 
     public function notifyMode(): string { $m = (string)$this->app->store->get('agents.notify'); return in_array($m, self::NOTIFY, true) ? $m : 'permission'; }

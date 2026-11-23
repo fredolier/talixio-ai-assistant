@@ -54,6 +54,17 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
     non versionné) : il ne demande plus pour cette commande. Seules les règles étroites sont proposées : jamais un outil
     entier, un interpréteur seul (`php`, `npx`, `sh`…), un lanceur nu (`npm run`), ce qui est étiqueté *À vérifier*, ni
     les réglages de l'agent lui-même. Pour retirer une règle, supprimez sa ligne de ce fichier.
+  - **L'assistant répond aux autorisations pour vous** (1.55.0). *Autorisations*, en haut du tableau, choisit qui répond :
+    - *L'assistant apprend de vous* (par défaut) : il autorise une demande qui ne fait que lire, et une commande que vous
+      avez autorisée **3 fois** dans ce projet sans jamais la refuser (apprise par ses deux premiers mots, `npx vitest`,
+      `git commit`…, ou par dossier pour les modifications de fichiers). Dès que vous en refusez une, elle redevient la
+      vôtre pour de bon. Aucune notification n'est envoyée pour ce qu'il autorise, et le fil indique *Autorisé par
+      l'assistant* et pourquoi ;
+    - *L'assistant autorise la lecture seule* : seulement ce qui lit ;
+    - *Toujours me demander* : comme avant la 1.55.0.
+
+    Une demande étiquetée *À vérifier* (push, suppressions, réseau, installations, scripts, ses propres réglages) vous
+    attend toujours.
   - **Marquer comme vu** range une session terminée dans Au calme ; **Oublier** la retire du tableau avec son fil (les
     deux dans le menu **⋯** en haut de la conversation).
   - **Arrêter** met fin au travail de la session. Une session démarrée depuis le tableau (ci-dessous) est terminée sur sa
@@ -203,7 +214,7 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   compte du travail fait est laissé tel quel. Les limites sont ensuite appliquées par Talixio lui-même, pas par le modèle :
   pour chaque niveau L1–L5 vous choisissez *Je propose, vous répondez* (par défaut), *Je réponds si je suis sûr, puis je vous
   préviens* ou *Je réponds si je suis sûr, sans bruit* (L6 affiche 🔒 *Toujours décidé par vous*, sans choix) ; il n'envoie seul qu'au-dessus de votre seuil de confiance (75 % par
-  défaut) et sous le **plafond quotidien** (20 par défaut). **L6, les demandes d'autorisation, et tout ce qui touche aux
+  défaut) et sous le **plafond quotidien** (20 par défaut). **L6, les demandes d'autorisation (sauf ce que permet *Autorisations*, voir plus haut), et tout ce qui touche aux
   push, déploiements, suppressions, e-mails, identifiants ou paiements restent toujours à vous**, quel que soit le réglage — de même que fusionner, publier ou sortir une version, une migration, installer un paquet, téléverser des données, envoyer à des clients ou abonnés, acheter ou prendre un abonnement, recruter, ignorer des tests, une adresse web, et une réponse contenant une commande que l'agent n'a pas proposée lui-même : elles restent des suggestions même quand le modèle les juge routinières.
   Vos **priorités** et **règles permanentes** (une par ligne) se tapent ou se dictent avec 🎙️ ; une règle que vous lui
   dites dans le chat est ajoutée aussi. Une réponse qu'il envoie part vers la session comme la vôtre, marquée *Assistant* dans le fil ; dans le volet de la

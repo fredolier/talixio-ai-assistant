@@ -3605,5 +3605,10 @@ window.I18N.fr = {
   "Check first: {why}": "À vérifier : {why}",
   "Always allow": "Toujours autoriser",
   "Always allow saves this rule in the project’s .claude/settings.local.json, and Claude Code stops asking:": "Toujours autoriser enregistre cette règle dans le .claude/settings.local.json du projet, et Claude Code ne demande plus :",
-  "Work without asking (Claude Code's auto mode: a model checks each step and refuses the risky ones; pushes, rm -rf, sudo and its own settings still ask you)": "Travailler sans demander (le mode auto de Claude Code : un modèle vérifie chaque étape et refuse les risquées ; les push, rm -rf, sudo et ses propres réglages vous demandent toujours)"
+  "Work without asking (Claude Code's auto mode: a model checks each step and refuses the risky ones; pushes, rm -rf, sudo and its own settings still ask you)": "Travailler sans demander (le mode auto de Claude Code : un modèle vérifie chaque étape et refuse les risquées ; les push, rm -rf, sudo et ses propres réglages vous demandent toujours)",
+  "Permissions": "Autorisations",
+  "Who answers the agents' permission requests. Never one labelled Check first (push, deletions, network, installs, scripts).": "Qui répond aux demandes d'autorisation des agents. Jamais une demande étiquetée À vérifier (push, suppressions, réseau, installations, scripts).",
+  "The assistant learns from you": "L'assistant apprend de vous",
+  "The assistant allows read-only": "L'assistant autorise la lecture seule",
+  "Always ask me": "Toujours me demander"
 };
