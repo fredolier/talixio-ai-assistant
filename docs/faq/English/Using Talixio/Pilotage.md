@@ -37,6 +37,17 @@ The board updates by itself every few seconds while you look at it.
     their first one was, so it counts as yours like something typed. See *New session* below.
   - **Allow / Deny** a permission request (the command or the file it is about is shown). The session waits **30 seconds**
     for your answer here; after that, the usual prompt shows in its terminal and you answer there.
+  - **What the request does** (1.53.0): the board reads the command itself, without a model, and labels it.
+    *✓ Read-only: safe to allow* when every part only reads (`ls`, `cat`, `head`, `grep`, `git status`, `git diff`…, even
+    outside the project). *⚠ Check first* with the reason when a part deletes files, reaches the network, pushes or
+    rewrites git history, installs packages, deploys, changes the agent's own permissions, or runs a script or code you
+    cannot see on the card (a script in /tmp, `$(…)`, `sh -c`). No label: it changes things in its project, your call.
+    The label never answers for you.
+  - **Always allow** (1.53.0): when Claude Code suggests a rule for the request (e.g. `Bash(npx playwright test:*)`), the
+    session's pane shows it with an *Always allow* button. It allows this request and has Claude Code save the rule in
+    the project's `.claude/settings.local.json` (yours, not committed), so it stops asking for that command. Only narrow
+    rules are offered: never a whole tool, a lone interpreter (`php`, `npx`, `sh`…), a bare runner (`npm run`), anything
+    labelled *Check first*, or the agent's own settings. To take a rule back, remove its line from that file.
   - **Mark as seen** moves a finished session to Quiet; **Forget** removes it and its thread from the board (both in the
     **⋯** menu at the top of the conversation).
   - **Stop** ends the session's work. A session started from the board (below) is ended on its machine by the listener,

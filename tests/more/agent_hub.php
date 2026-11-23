@@ -97,7 +97,7 @@ check('agent hub: the summary names the session, its state and its last words', 
 $sh = $hub->script("lap'top");
 check('agent hub: the script carries the address, the token and the machine (no quote can break out)', str_contains($sh, "T='" . $hub->token() . "'")
     && str_contains($sh, "M='laptop'") && !str_contains($sh, '@TOKEN@') && !str_contains($sh, '@URL@'));
-$f = "$d/hook.sh"; file_put_contents($f, $sh); exec('sh -n ' . escapeshellarg($f) . ' 2>&1', $o, $rc);
+$f = "$d/hook.sh"; file_put_contents($f, $sh); $o = []; exec('sh -n ' . escapeshellarg($f) . ' 2>&1', $o, $rc);
 check('agent hub: the script is valid sh', $rc === 0, implode("\n", $o));
 $st = AgentHub::claudeSettings();
 check('agent hub: the settings run the script on each event; the end of a turn waits in the background (it wakes the session)',

@@ -6763,6 +6763,16 @@ const AB_STATE = () => ({ permission: t('asks for permission'), working: t('work
 const abPlain = s => String(s || '').replace(/```[\s\S]*?```/g, ' ').replace(/^ {0,3}#{1,6}\s+/gm, '').replace(/[*_`>|]+/g, '').replace(/^\s*(?:[-+•]|\d+[.)])\s+/gm, '').replace(/\s+/g, ' ').trim();
 const abTail = (s, n) => s.length > n ? '…' + s.slice(-n).replace(/^\S*\s/, '') : s;
 const abMeta = s => [s.agent && s.agent !== 'claude-code' ? s.agent : '', s.machine].filter(Boolean).join(' · ');
+// 1.53.0: what a permission request does, read by the board without a model: only a label, you still decide
+const AB_WHY = () => ({ delete: t('it deletes files'), network: t('it reaches the network'), git: t('it pushes or rewrites git history'),
+  install: t('it installs or removes packages'), script: t('it runs a script you cannot see here'), hidden: t('it runs code you cannot see here'),
+  admin: t('it changes the system or other processes'), settings: t('it changes the agent’s own permissions'), deploy: t('it deploys or releases') });
+function abSafety(s) {
+  const [lvl, why] = String(s.safety || '').split(':');
+  if (lvl === 'read') return `<span class="ab-safe">✓ ${esc(t('Read-only: safe to allow'))}</span>`;
+  if (lvl === 'risk') return `<span class="ab-risk">⚠ ${esc(t('Check first: {why}', { why: AB_WHY()[why] || why }))}</span>`;
+  return '';
+}
 function abJobCard(j) {
   return `<div class="ab-card ab-${esc(j.state)}${AB.sel === 'job:' + j.id ? ' on' : ''}" role="button" tabindex="0" data-ab="job:${j.id}">
     <span class="ab-c-top"><i class="ab-dot" aria-hidden="true"></i><b class="no-i18n">${esc(j.project)}</b><span class="ab-c-time muted small">${esc(pilotAgo(j.updated))}</span></span>
@@ -6775,7 +6785,7 @@ function abCard(s, col) {
   return `<div class="ab-card ab-${esc(s.state)}${AB.sel === s.id ? ' on' : ''}" role="button" tabindex="0" data-ab="${esc(s.id)}">
     <span class="ab-c-top"><i class="ab-dot" aria-hidden="true"></i><b class="no-i18n">${esc(abTitle(s))}</b><span class="ab-c-time muted small">${esc(pilotAgo(s.updated))}</span></span>
     <span class="ab-c-meta muted small"><span class="no-i18n">${esc(abMeta(s))}</span>${abMeta(s) ? ' · ' : ''}${esc(st)}${s.stopping ? ' · ' + esc(t('stopping')) : ''}${s.pending ? ' · ' + esc(pN('1 answer queued', '{n} answers queued', s.pending)) : ''}</span>
-    ${perm ? `<code class="ab-c-cmd no-i18n">${esc(String(s.question || '').slice(0, 2000))}</code>
+    ${perm ? `<code class="ab-c-cmd no-i18n">${esc(String(s.question || '').slice(0, 2000))}</code>${abSafety(s)}
       <span class="ab-c-acts"><button type="button" class="btn small primary" data-cact="allow">${esc(t('Allow'))}</button><button type="button" class="btn ghost small danger" data-cact="deny">${esc(t('Deny'))}</button></span>` : ''}
     ${!perm && text ? `<span class="ab-c-text no-i18n">${esc(text)}</span>` : ''}
     ${s.doing && s.state === 'working' ? `<span class="ab-c-doing muted no-i18n">${esc(s.doing)}</span>` : ''}
@@ -6852,8 +6862,10 @@ async function abOpen(id, quiet) {
     <span class="ab-d-acts">${others ? `<button type="button" class="btn small ab-next" data-abact="next">${esc(pN('Next: 1 waiting', 'Next: {n} waiting', others))}</button>` : ''}${over ? '' : `<button type="button" class="btn ghost small danger" data-abact="stop"${s.stopping ? ' disabled' : ''}>${esc(s.stopping ? t('Stopping…') : t('Stop'))}</button>`}
       <details class="ab-more"><summary class="btn ghost small" aria-label="${esc(t('More'))}">⋯</summary><div class="ab-more-menu">
         <button type="button" class="btn ghost small" data-abact="seen">${esc(t('Mark as seen'))}</button><button type="button" class="btn ghost small danger" data-abact="forget">${esc(t('Forget'))}</button></div></details></span></div>`;
-  const perm = s.state === 'permission' ? `<div class="ab-perm"><b>${esc(t('Permission asked'))}</b><code class="no-i18n">${esc(s.question)}</code>
-    <span><button type="button" class="btn small primary" data-abact="allow">${esc(t('Allow'))}</button> <button type="button" class="btn ghost small danger" data-abact="deny">${esc(t('Deny'))}</button></span></div>` : '';
+  const rules = s.rules || [];
+  const perm = s.state === 'permission' ? `<div class="ab-perm"><b>${esc(t('Permission asked'))}</b><code class="no-i18n">${esc(s.question)}</code>${abSafety(s)}
+    <span><button type="button" class="btn small primary" data-abact="allow">${esc(t('Allow'))}</button> ${rules.length ? `<button type="button" class="btn small" data-abact="always">${esc(t('Always allow'))}</button> ` : ''}<button type="button" class="btn ghost small danger" data-abact="deny">${esc(t('Deny'))}</button></span>
+    ${rules.length ? `<span class="ab-rules muted small">${esc(t('Always allow saves this rule in the project’s .claude/settings.local.json, and Claude Code stops asking:'))} ${rules.map(r => `<code class="no-i18n">${esc(r)}</code>`).join(' ')}</span>` : ''}</div>` : '';
   const fresh = !box.querySelector('.ab-dock') || box.dataset.id !== id || over !== !box.querySelector('#ab-reply');
   if (fresh) {
     box.dataset.id = id;
