@@ -166,31 +166,113 @@ final class PermCheck
         return true;
     }
 
+    /** Interpreters: a script is learned by itself, then by its folder (1.56.0). */
+    private const INTERP = ['php', 'python', 'python3', 'node', 'ruby', 'perl', 'deno', 'bun', 'tsx', 'ts-node'];
+    /** Package managers: "npm run <script>" is learned by itself, then as "npm run". */
+    private const PKG = ['npm', 'pnpm', 'yarn', 'bun'];
+    /** Commands that change files: one family, while every path they name stays in the project. */
+    private const FILE_OPS = ['mv', 'cp', 'mkdir', 'touch', 'ln', 'sed', 'tee', 'patch'];
+    /** Never learned beyond their first two words, besides BROAD: they reach outside the paths they name. */
+    private const NARROW = ['tar', 'unzip', 'zip', 'gzip', 'gunzip', 'install'];
+
     /**
-     * What the board learns your answers by (1.55.0): one key per part of the command that does not only read (its
-     * first two words: "npx vitest", "git commit", "php tests/x.php"), "Edit <folder>" for a file, "WebFetch <host>"
-     * for a page. [] for a request that only reads; null when it cannot be learned (risky, or code it cannot read).
+     * What the board learns your answers by: one ladder per part of the command that does not only read, from the
+     * narrowest key to the widest (1.56.0): ["./tools-workflow check-gate", "./tools-workflow"], ["php tests/lib/a.php",
+     * "php tests/lib/*"], ["npm run build", "npm run"], ["mv (in project)", "file changes (in project)"], ["Edit src/a",
+     * "Edit src/**", "Edit **"]. Without the project's folder, or outside it, a part is learned by its first two words
+     * ("npx vitest", "git commit") and a file edit by its folder, as in 1.55.0. git, npx and the other BROAD programs never
+     * widen. [] for a request that only reads; null when it cannot be learned (risky, or code it cannot read).
      */
-    public static function keys(string $tool, array $in): ?array
+    public static function keys(string $tool, array $in, string $cwd = ''): ?array
     {
         $a = self::assess($tool, $in);
         if ($a['level'] === 'risk') return null;
         if ($a['level'] === 'read') return [];
+        $cwd = rtrim($cwd, '/');
+        if ($cwd !== '' && ($cwd[0] !== '/' || self::resolve('/', $cwd) !== $cwd)) $cwd = '';
         if ($tool === 'Bash') {
-            $keys = [];
+            $out = []; $base = $cwd;
             foreach (self::split((string)($in['command'] ?? '')) ?? [] as [$seg, $writes]) {
                 $w = self::words($seg);
-                if (!$w || (!$writes && self::readOnly($w))) continue;
-                $keys[] = mb_substr(implode(' ', array_slice($w, 0, 2)) . ($writes ? ' >' : ''), 0, 200);
+                if (!$w) continue;
+                if ($w[0] === 'cd') { $base = $base !== '' && isset($w[1]) && $w[1][0] !== '-' ? (self::resolve($base, $w[1]) ?? '') : ''; continue; }
+                if (!$writes && self::readOnly($w)) continue;
+                $l = array_map(fn($k) => mb_substr($k, 0, 200) . ($writes ? ' >' : ''), self::ladder($w, $base === '' ? '' : $cwd, $base));
+                $out[implode("\n", $l)] = $l;
             }
-            return array_values(array_unique($keys)) ?: null;
+            return array_values($out) ?: null;
         }
         if (in_array($tool, ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'], true)) {
             $p = (string)($in['file_path'] ?? $in['notebook_path'] ?? '');
-            return $p === '' ? null : ['Edit ' . mb_substr(dirname($p), 0, 200)];
+            if ($p === '') return null;
+            $rel = $cwd === '' ? null : self::inside($cwd, $cwd, dirname($p));
+            if ($rel === null) return [['Edit ' . mb_substr(dirname($p), 0, 200)]];
+            if ($rel === '.') return [['Edit .', 'Edit **']];
+            $top = explode('/', $rel)[0];
+            if (in_array($top, ['.claude', '.git'], true)) return [['Edit ' . mb_substr($rel, 0, 200)]];
+            return [array_values(array_unique(['Edit ' . mb_substr($rel, 0, 200), 'Edit ' . mb_substr($top, 0, 200) . '/**', 'Edit **']))];
         }
-        if ($tool === 'WebFetch') { $h = parse_url((string)($in['url'] ?? ''), PHP_URL_HOST); return $h ? ['WebFetch ' . strtolower($h)] : null; }
-        return str_starts_with($tool, 'mcp__') || $tool === '' ? null : [$tool];
+        if ($tool === 'WebFetch') { $h = parse_url((string)($in['url'] ?? ''), PHP_URL_HOST); return $h ? [['WebFetch ' . strtolower($h)]] : null; }
+        return str_starts_with($tool, 'mcp__') || $tool === '' ? null : [[$tool]];
+    }
+
+    /** The ladder of one part (see keys); $cwd '' when the folder it runs in is not known. */
+    private static function ladder(array $w, string $cwd, string $base): array
+    {
+        $two = function () use (&$w) { return implode(' ', array_slice($w, 0, 2)); };
+        if ($cwd === '') return [$two()];
+        if (str_contains($w[0], '/')) {
+            $p = self::inside($cwd, $base, $w[0]);
+            if ($p === null || $p === '.') return [$two()];
+            $w[0] = './' . $p;
+        }
+        $c = $w[0]; $a1 = $w[1] ?? '';
+        if (in_array($c, self::PKG, true) && $a1 === 'run' && isset($w[2])) return ["$c run {$w[2]}", "$c run"];
+        if (in_array($c, self::INTERP, true)) {
+            if ($a1 === '' || $a1[0] === '-') return [$two()];
+            $p = self::inside($cwd, $base, $a1);
+            if ($p === null || $p === '.') return [$two()];
+            $d = dirname($p);
+            return ["$c $p", "$c " . ($d === '.' ? '' : "$d/") . '*'];
+        }
+        if (in_array($c, self::FILE_OPS, true)) {
+            $paths = []; $script = $c !== 'sed'; $skip = false; $name = $c;
+            foreach (array_slice($w, 1) as $x) {
+                if ($skip) { $skip = false; continue; }
+                if ($x !== '' && $x[0] === '-') {
+                    if ($c === 'sed' && preg_match('/^(-i|--in-place)/', $x)) $name = 'sed -i';
+                    if ($c === 'sed' && in_array($x, ['-e', '-f', '--expression', '--file'], true)) { $script = true; $skip = true; }
+                    continue;
+                }
+                if (!$script) { $script = true; continue; }
+                $paths[] = $x;
+            }
+            foreach ($paths as $x) if (self::inside($cwd, $base, $x) === null) return [$two()];
+            return $paths ? ["$name (in project)", 'file changes (in project)'] : [$two()];
+        }
+        if (in_array($c, self::BROAD, true) || in_array($c, self::NARROW, true) || in_array($c, self::PKG, true)) return [$two()];
+        return array_values(array_unique([$two(), $c]));
+    }
+
+    /** $p (absolute, or relative to $base) as a path relative to the project $cwd: '.' for the project itself; null outside it. */
+    private static function inside(string $cwd, string $base, string $p): ?string
+    {
+        $abs = self::resolve($base, $p);
+        if ($abs === null) return null;
+        if ($abs === $cwd) return '.';
+        return str_starts_with($abs, $cwd . '/') ? substr($abs, strlen($cwd) + 1) : null;
+    }
+
+    /** $p made absolute against $base, with . and .. resolved; null when the shell would expand it ($VAR, ~). */
+    private static function resolve(string $base, string $p): ?string
+    {
+        if ($p === '' || $p[0] === '~' || str_contains($p, '$') || str_contains($p, '`')) return null;
+        $parts = [];
+        foreach (explode('/', $p[0] === '/' ? $p : "$base/$p") as $x) {
+            if ($x === '' || $x === '.') continue;
+            if ($x === '..') array_pop($parts); else $parts[] = $x;
+        }
+        return '/' . implode('/', $parts);
     }
 
     /**

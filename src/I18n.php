@@ -105,6 +105,7 @@ final class I18n
         'Always allowed in this project (.claude/settings.local.json): {rules}' => 'Toujours autorisé dans ce projet (.claude/settings.local.json) : {rules}',
         'Allowed by the assistant: it only reads.' => 'Autorisé par l’assistant : elle ne fait que lire.',
         'Allowed by the assistant: you allowed this {n} times or more in this project, and never denied it.' => 'Autorisé par l’assistant : vous l’avez autorisé au moins {n} fois dans ce projet, et jamais refusé.',
+        'Allowed by the assistant: you allowed requests like this one ({keys}) {n} times or more in this project, in at least 2 forms, and never denied them.' => 'Autorisé par l’assistant : vous avez autorisé des demandes comme celle-ci ({keys}) au moins {n} fois dans ce projet, sous au moins 2 formes, et jamais refusé.',
         'Its process is still running on {machine} (Claude Code may be waiting for its background tasks): your reply goes as soon as it ends. Stop it to send it now.' => 'Son processus tourne encore sur {machine} (Claude Code attend peut-être ses tâches d’arrière-plan) : votre réponse part dès qu’il se termine. Arrêtez-le pour l’envoyer maintenant.',
         'Fleet: autonomy raised' => 'Flotte : autonomie augmentée',
         'my answers matched yours often enough. A miss lowers it again at once; you can lower it yourself in Autonomy.' => 'mes réponses ont assez souvent été les vôtres. Une erreur la rabaisse aussitôt ; vous pouvez aussi la baisser vous-même dans Autonomie.',

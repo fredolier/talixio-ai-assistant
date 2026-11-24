@@ -56,10 +56,22 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
     les réglages de l'agent lui-même. Pour retirer une règle, supprimez sa ligne de ce fichier.
   - **L'assistant répond aux autorisations pour vous** (1.55.0). *Autorisations*, en haut du tableau, choisit qui répond :
     - *L'assistant apprend de vous* (par défaut) : il autorise une demande qui ne fait que lire, et une commande que vous
-      avez autorisée **3 fois** dans ce projet sans jamais la refuser (apprise par ses deux premiers mots, `npx vitest`,
-      `git commit`…, ou par dossier pour les modifications de fichiers). Dès que vous en refusez une, elle redevient la
-      vôtre pour de bon. Aucune notification n'est envoyée pour ce qu'il autorise, et le fil indique *Autorisé par
-      l'assistant* et pourquoi ;
+      avez autorisée **3 fois** dans ce projet sans jamais la refuser. Aucune notification n'est envoyée pour ce qu'il
+      autorise, et le fil indique *Autorisé par l'assistant* et pourquoi. Depuis la 1.56.0, il apprend aussi des demandes
+      semblables, une fois que vous les avez autorisées 3 fois sous **au moins 2 formes différentes** :
+      - un outil du projet : `./tools-workflow scenario:query` et `./tools-workflow check-gate` apprennent
+        `./tools-workflow` (par chemin relatif ou absolu) ;
+      - un script : `php tests/lib/a.php` et `php tests/lib/b.php` apprennent tous les scripts de `tests/lib` ;
+      - `npm run build` et `npm run lint` apprennent `npm run` ;
+      - les modifications de fichiers (`mv`, `cp`, `mkdir`, `touch`, `sed -i`…) forment une famille tant que tous les
+        chemins restent dans le projet ;
+      - les modifications de fichiers par l'éditeur : deux dossiers sous `packages/` apprennent `packages/`, deux dossiers
+        de premier niveau apprennent tout le projet (jamais `.claude/` ni `.git/`).
+
+      `git` (chaque sous-commande à part), `npx`, `make`, `docker` et les interpréteurs sans script ne s'élargissent
+      jamais ; hors du projet, une commande est apprise par ses deux premiers mots. Dès que vous refusez une demande, ni
+      elle ni rien de plus large n'est plus autorisé par l'assistant dans ce projet (ce qu'il avait appris plus étroit
+      reste) ;
     - *L'assistant autorise la lecture seule* : seulement ce qui lit ;
     - *Toujours me demander* : comme avant la 1.55.0.
 

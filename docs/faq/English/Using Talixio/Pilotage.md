@@ -50,9 +50,20 @@ The board updates by itself every few seconds while you look at it.
     labelled *Check first*, or the agent's own settings. To take a rule back, remove its line from that file.
   - **The assistant answers permissions for you** (1.55.0). *Permissions* at the top of the board chooses who answers:
     - *The assistant learns from you* (the default): it allows a request that only reads, and a command you allowed
-      **3 times** in that project without ever denying it (learned by its first two words, `npx vitest`, `git commit`…,
-      or by folder for file edits). Once you deny one, it is yours again for good. No notification is sent for what it
-      allows, and the thread says *Allowed by the assistant* and why;
+      **3 times** in that project without ever denying it. No notification is sent for what it allows, and the thread
+      says *Allowed by the assistant* and why. Since 1.56.0 it also learns from similar requests, once you allowed them
+      3 times in **at least 2 different forms**:
+      - a project tool: `./tools-workflow scenario:query` and `./tools-workflow check-gate` teach `./tools-workflow`
+        (by relative or absolute path);
+      - a script: `php tests/lib/a.php` and `php tests/lib/b.php` teach every script in `tests/lib`;
+      - `npm run build` and `npm run lint` teach `npm run`;
+      - file changes (`mv`, `cp`, `mkdir`, `touch`, `sed -i`…) are one family while every path stays in the project;
+      - file edits: two folders under `packages/` teach `packages/`, two top folders teach the whole project (never
+        `.claude/` or `.git/`).
+
+      `git` (each subcommand on its own), `npx`, `make`, `docker` and interpreters without a script never widen; outside
+      the project, a command is learned by its first two words. Once you deny a request, neither it nor anything wider
+      is allowed by the assistant again in that project (what it had learned narrower stays);
     - *The assistant allows read-only*: only what reads;
     - *Always ask me*: as before 1.55.0.
 
