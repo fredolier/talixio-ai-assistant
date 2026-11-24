@@ -45,7 +45,9 @@ final class AgentHub
                 created INTEGER NOT NULL, updated INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS agent_machines(machine TEXT PRIMARY KEY, polled INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS agent_perms(cwd TEXT NOT NULL, key TEXT NOT NULL, allowed INTEGER NOT NULL DEFAULT 0, denied INTEGER NOT NULL DEFAULT 0,
-                updated INTEGER NOT NULL, PRIMARY KEY(cwd, key));");
+                updated INTEGER NOT NULL, PRIMARY KEY(cwd, key));
+            -- 1.56.0: the narrower keys you allowed under a wider one (a wider key is learned from 2 different ones)
+            CREATE TABLE IF NOT EXISTS agent_perm_links(cwd TEXT NOT NULL, gkey TEXT NOT NULL, skey TEXT NOT NULL, PRIMARY KEY(cwd, gkey, skey));");
         // 1.38.0: a stop asked from the board (applied at the session's next hook), the job that started it, what it is doing now
         $app->store->addColumn('agent_sessions', 'stop', 'INTEGER NOT NULL DEFAULT 0');
         $app->store->addColumn('agent_sessions', 'job', 'INTEGER NOT NULL DEFAULT 0');
@@ -135,7 +137,7 @@ final class AgentHub
                 $q = self::describeTool((string)($e['tool_name'] ?? ''), (array)($e['tool_input'] ?? []));
                 $safe = PermCheck::assess((string)($e['tool_name'] ?? ''), (array)($e['tool_input'] ?? []));
                 $rules = $safe['level'] === 'risk' ? [] : PermCheck::rules((array)($e['permission_suggestions'] ?? []));
-                $keys = PermCheck::keys((string)($e['tool_name'] ?? ''), (array)($e['tool_input'] ?? []));
+                $keys = PermCheck::keys((string)($e['tool_name'] ?? ''), (array)($e['tool_input'] ?? []), (string)($set['cwd'] ?? $s['cwd']));
                 $set += ['state' => 'permission', 'question' => $q, 'seen' => 0, 'safety' => $safe['level'] . ($safe['why'] !== '' ? ':' . $safe['why'] : ''),
                     'rules' => $rules ? (string)json_encode($rules, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : '',
                     'pkeys' => $keys === null ? '' : (string)json_encode($keys, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)]; $bump = true;
@@ -173,8 +175,12 @@ final class AgentHub
         $this->bumpRev();
         if ($kind === 'PermissionRequest' && !$stop && ($auto ?? '') !== '') { // 1.55.0: answered by the assistant, as you would have
             $this->command($id, 'allow', '', 'assistant');
-            $this->log($id, 'assistant', 'notice', $auto === 'read' ? I18n::t($this->app, 'Allowed by the assistant: it only reads.')
-                : I18n::t($this->app, 'Allowed by the assistant: you allowed this {n} times or more in this project, and never denied it.', ['n' => self::LEARN_AT]));
+            $this->log($id, 'assistant', 'notice', match (true) {
+                $auto === 'read' => I18n::t($this->app, 'Allowed by the assistant: it only reads.'),
+                $auto === 'learned' => I18n::t($this->app, 'Allowed by the assistant: you allowed this {n} times or more in this project, and never denied it.', ['n' => self::LEARN_AT]),
+                default => I18n::t($this->app, 'Allowed by the assistant: you allowed requests like this one ({keys}) {n} times or more in this project, in at least 2 forms, and never denied them.',
+                    ['keys' => substr($auto, 5), 'n' => self::LEARN_AT]),
+            });
         }
         if ($kind === 'Stop' && !$stop && $last !== '') { try { $this->app->pilot()->wakeBoard(); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); } } // 1.39.0: the assistant looks at it soon
         return [200, ['seq' => (int)($set['seq'] ?? $s['seq']), 'id' => $id] + ($stop ? ['stop' => true] : [])];
@@ -355,28 +361,49 @@ final class AgentHub
         return ['perms' => $mode];
     }
 
-    /** 'read', 'learned' or '' (you answer): may the assistant allow a request with these keys (null: never)? */
+    /**
+     * 'read', 'learned', 'like:<the wider keys it matched>' or '' (you answer): may the assistant allow a request with these
+     * ladders (null: never)? Each part must be learned at some step of its ladder: its narrowest key allowed LEARN_AT times,
+     * or a wider one allowed LEARN_AT times in at least 2 narrower forms; never past a key you denied (a denial counts on
+     * every step of its ladder, so it stops the widening without forgetting what was learned narrower).
+     */
     private function permAuto(?array $keys, string $cwd): string
     {
         $mode = $this->permMode();
         if ($keys === null || $mode === 'off') return '';
         if ($keys === []) return 'read';
         if ($mode !== 'learn') return '';
-        foreach ($keys as $k) {
-            $r = $this->app->store->q('SELECT allowed, denied FROM agent_perms WHERE cwd = ? AND key = ?', [$cwd, $k])->fetch();
-            if (!$r || (int)$r['denied'] > 0 || (int)$r['allowed'] < self::LEARN_AT) return '';
+        $like = [];
+        foreach ($keys as $l) {
+            $l = array_values(array_map('strval', is_array($l) ? $l : [$l]));
+            $hit = null;
+            foreach ($l as $i => $k) {
+                $r = $this->app->store->q('SELECT allowed, denied FROM agent_perms WHERE cwd = ? AND key = ?', [$cwd, $k])->fetch();
+                if ($r && (int)$r['denied'] > 0) return ''; // denied: neither this step nor a wider one
+                if (!$r || (int)$r['allowed'] < self::LEARN_AT) continue;
+                if ($i > 0 && (int)$this->app->store->q('SELECT COUNT(*) FROM agent_perm_links WHERE cwd = ? AND gkey = ?', [$cwd, $k])->fetchColumn() < 2) continue;
+                $hit = $i; break;
+            }
+            if ($hit === null) return '';
+            if ($hit > 0) $like[] = $l[$hit];
         }
-        return 'learned';
+        return $like ? 'like:' . implode(', ', array_unique($like)) : 'learned';
     }
 
-    /** Your answer to a permission request, counted for each of its keys in its project. */
+    /** Your answer to a permission request, counted for every key of its ladders in its project. */
     private function permLearn(array $s, bool $allowed): void
     {
         $keys = json_decode((string)($s['pkeys'] ?? ''), true);
         if (!is_array($keys)) return;
-        foreach ($keys as $k) $this->app->store->q('INSERT INTO agent_perms(cwd, key, allowed, denied, updated) VALUES(?,?,?,?,?)
-            ON CONFLICT(cwd, key) DO UPDATE SET allowed = allowed + excluded.allowed, denied = denied + excluded.denied, updated = excluded.updated',
-            [(string)$s['cwd'], (string)$k, $allowed ? 1 : 0, $allowed ? 0 : 1, time()]);
+        foreach ($keys as $l) {
+            $l = array_values(array_map('strval', is_array($l) ? $l : [$l])); // 1.55.0 stored plain keys
+            foreach ($l as $i => $k) {
+                $this->app->store->q('INSERT INTO agent_perms(cwd, key, allowed, denied, updated) VALUES(?,?,?,?,?)
+                    ON CONFLICT(cwd, key) DO UPDATE SET allowed = allowed + excluded.allowed, denied = denied + excluded.denied, updated = excluded.updated',
+                    [(string)$s['cwd'], $k, $allowed ? 1 : 0, $allowed ? 0 : 1, time()]);
+                if ($allowed && $i > 0) $this->app->store->q('INSERT OR IGNORE INTO agent_perm_links(cwd, gkey, skey) VALUES(?,?,?)', [(string)$s['cwd'], $k, $l[$i - 1]]);
+            }
+        }
     }
 
     public function notifyMode(): string { $m = (string)$this->app->store->get('agents.notify'); return in_array($m, self::NOTIFY, true) ? $m : 'permission'; }

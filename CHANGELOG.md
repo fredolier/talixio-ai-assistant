@@ -3,6 +3,31 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.56.0 (2026-11-24)
+
+The assistant learns from similar requests, not only from the same command.
+
+- **Why:** you said learning by the first two words would miss many valid cases: every variant of a command had to be approved 3 times on its own.
+- **How it learns now:** each part of a request gets a ladder of keys, from the narrowest to the widest. The narrowest key is learned after 3 allows, as before. A wider key is learned after 3 allows in at least 2 different narrower forms:
+  - a project tool by its subcommand, then the tool (`./tools-workflow check-gate`, then `./tools-workflow`); an absolute path inside the project counts as the same tool;
+  - a script by itself, then its folder (`php tests/lib/a.php`, then `php tests/lib/*`); a `cd` earlier in the command is followed;
+  - `npm run <script>`, then `npm run` (same for pnpm, yarn, bun);
+  - file changes (`mv`, `cp`, `mkdir`, `touch`, `ln`, `sed -i`, `tee`, `patch`) by command, then as one family, only while every path they name stays inside the project (no `~`, `$VAR`, `..` out of it, or `cd` outside first);
+  - file edits by folder, then top folder, then the whole project; never widened into `.claude/` or `.git/`;
+  - another program by its first two words, then the program alone (`pytest tests/a.py`, then `pytest`).
+- **What never widens:** `git` (each subcommand on its own), `npx`, `make`, `docker`, `env`, `find`, `sed` without `-i`, interpreters without a script or with a script outside the project, archive tools. Anything labelled *Check first* is still never learned, at any level. Outside a known project folder a part is learned by its first two words, as in 1.55.0.
+- **Denials:** a denial counts on every key of the request's ladder, so the widening stops there for good in that project; what was learned at a narrower key stays learned.
+- **What you see:** when a wider key allowed it, the thread says so and names it: *you allowed requests like this one (./tools-workflow) 3 times or more…*.
+- **Tested:** `tests/more/agent_learn.php` grows from 16 to 27 checks; the new ones fail without the change:
+  - the ladders for each kind of request, including the cases that must not widen (paths outside the project, `cd /etc`, `$HOME`, `..`, `git`, `npx`, `make`, `.claude/`);
+  - one form allowed 3 times does not widen; 2 forms do, and the thread names the key;
+  - a risky subcommand of a learned tool still waits;
+  - edits widen to the project, not to `.claude/` or outside it;
+  - after a denial the widening stops, and the narrower learned folder still goes through.
+
+  Two existing key checks were adapted on purpose: `PermCheck::keys` now returns ladders (`[['git add'], ['git commit']]` instead of `['git add', 'git commit']`). Keys saved by 1.55.0 are still read as one-step ladders.
+- **Not tried:** a real Claude Code session on your VM with the new learning; only the hook events, as the tests send them.
+
 ## 1.55.0 (2026-11-23)
 
 The assistant answers your coding agents' permission requests the way you do, and leaves you only the ones that need you.
