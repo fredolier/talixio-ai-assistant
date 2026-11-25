@@ -7,6 +7,7 @@
 # With « Work without asking » (1.54.0) it also sets Claude Code's auto mode there (permissions.defaultMode), and adds
 # "ask" rules so pushes, rm -rf, sudo and the agent's own settings still ask you, on the board.
 # The code works once, for 15 minutes. This script holds the board's address and token: keep it to your machines.
+# The token is saved in ~/.talixio/agent.env (mode 600), not in the scripts (1.56.1).
 # Everything runs in main(), called on the last line: a download cut short runs nothing.
 
 main() {
@@ -17,6 +18,12 @@ main() {
   umask 077
   mkdir -p "$D" "$C"
 
+  # 1.56.1: the token in a file of its own, readable by you only; the scripts read it from there
+  rm -f "$D/agent.env"
+  cat > "$D/agent.env" <<'TALIXIO_ENV_EOF'
+@TOKEN_LINE@
+TALIXIO_ENV_EOF
+  chmod 600 "$D/agent.env"
   cat > "$D/agent-hook.sh" <<'TALIXIO_HOOK_EOF'
 @HOOK@
 TALIXIO_HOOK_EOF

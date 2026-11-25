@@ -113,7 +113,10 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   `~/.talixio/agent-hook.sh` (et l'écouteur à côté) et ajoute pour vous les hooks du tableau à `~/.claude/settings.json` :
   vos autres hooks et réglages restent, une copie du fichier est gardée avant sous `settings.json.talixio-backup`, et une
   nouvelle commande lancée plus tard remplace les hooks Talixio au lieu de les ajouter deux fois. Si le fichier n'est pas du
-  JSON valide, il est laissé tel quel, et la commande le dit. La commande sert **une fois, pendant 15 minutes** : elle
+  JSON valide, il est laissé tel quel, et la commande le dit. Le jeton du tableau est enregistré à part, dans
+  `~/.talixio/agent.env`, lisible par vous seul (depuis la 1.56.1) ; les scripts le lisent là (ou dans `TALIXIO_TOKEN`
+  s'il est défini) et ne contiennent donc aucun secret. Une machine installée avant la 1.56.1 en profite en relançant
+  une nouvelle commande d'installation. La commande sert **une fois, pendant 15 minutes** : elle
   contient un code à usage unique, pas le jeton, on peut donc la coller sans risque ; prenez-en une nouvelle pour chaque
   machine. Il faut `sh`, `curl`, et `python3`, `node` ou `jq` pour fusionner les réglages (macOS, Linux, ou WSL sous
   Windows), et la machine doit joindre l'adresse de cet assistant. La prochaine session Claude Code sur cette machine

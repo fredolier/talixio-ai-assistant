@@ -677,14 +677,17 @@ final class AgentHub
 
     // ---------- setup ----------
 
-    /** The hook script a machine saves (it carries the address and the token: the person's own machine only). */
-    public function script(string $machine, string $file = 'agent-hook.sh', string $roots = ''): string
+    /**
+     * The hook script a machine saves (it carries the address and the token: the person's own machine only). With
+     * $inline false (the installer, 1.56.1) the token is left out: the script reads it from ~/.talixio/agent.env.
+     */
+    public function script(string $machine, string $file = 'agent-hook.sh', string $roots = '', bool $inline = true): string
     {
         $roots = self::roots($roots);
         $url = rtrim($this->app->shares()->baseUrl(), '/');
         $q = fn(string $v) => "'" . str_replace("'", "'\\''", $v) . "'";
         $machine = mb_substr(trim(preg_replace('/[^\w .@-]+/u', '', $machine)), 0, 40) ?: (string)gethostname();
-        return (string)preg_replace(['/@URL@/', '/@TOKEN@/', '/@MACHINE@/', '/@ROOTS@/'], array_map(fn($v) => str_replace(['\\', '$'], ['\\\\', '\\$'], $v), [$q($url), $q($this->token()), $q($machine), $q($roots)]),
+        return (string)preg_replace(['/@URL@/', '/@TOKEN@/', '/@MACHINE@/', '/@ROOTS@/'], array_map(fn($v) => str_replace(['\\', '$'], ['\\\\', '\\$'], $v), [$q($url), $q($inline ? $this->token() : ''), $q($machine), $q($roots)]),
             (string)file_get_contents(dirname(__DIR__) . '/deploy/' . (in_array($file, ['agent-hook.sh', 'agent-listen.sh'], true) ? $file : 'agent-hook.sh')));
     }
 
@@ -740,14 +743,14 @@ final class AgentHub
         $this->app->store->set('agents.install', (string)json_encode(array_filter($codes, fn($x) => $x['exp'] > time())));
         if ($code === '' || !$c || $c['exp'] <= time()) return null;
         $machine = $c['machine'] !== '' ? $c['machine'] : (string)gethostname();
-        $hook = rtrim($this->script($machine), "\n");
-        $listen = $c['listener'] ? rtrim($this->script($machine, 'agent-listen.sh', (string)($c['roots'] ?? '')), "\n") : '';
+        $hook = rtrim($this->script($machine, 'agent-hook.sh', '', false), "\n");
+        $listen = $c['listener'] ? rtrim($this->script($machine, 'agent-listen.sh', (string)($c['roots'] ?? ''), false), "\n") : '';
         foreach (['TALIXIO_HOOK_EOF' => $hook, 'TALIXIO_LISTEN_EOF' => $listen] as $mark => $body) {
             if (preg_match('/^' . $mark . '$/m', $body)) throw new \RuntimeException('installer: a script holds its own end marker');
         }
         $tpl = (string)file_get_contents(dirname(__DIR__) . '/deploy/agent-install.sh');
         $auto = !empty($c['auto']);
-        return strtr($tpl, ['@HOOK@' => $hook, '@LISTEN@' => $listen, '@LISTENER@' => $c['listener'] ? '1' : '0', '@AUTO@' => $auto ? '1' : '0',
+        return strtr($tpl, ['@TOKEN_LINE@' => "TALIXIO_TOKEN='" . $this->token() . "'", '@HOOK@' => $hook, '@LISTEN@' => $listen, '@LISTENER@' => $c['listener'] ? '1' : '0', '@AUTO@' => $auto ? '1' : '0',
             '@MACHINE_SHOWN@' => preg_replace('/[^\w .@-]/u', '', $machine),
             '@ROOTS_SHOWN@' => ($c['roots'] ?? '') !== '' ? preg_replace('#[^\w ./~:@+-]#u', '', $c['roots']) : 'your home folder',
             '@HOOKS_JSON@' => (string)json_encode(self::claudeSettings() + ($auto ? ['permissions' => self::AUTO_PERMISSIONS] : []), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)]);

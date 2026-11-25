@@ -40,7 +40,12 @@ file_put_contents("$home/.claude/settings.json", json_encode($mine, JSON_PRETTY_
 [$rc, $o, $e] = $sh($r['command'], $home);
 $s = json_decode((string)@file_get_contents("$home/.claude/settings.json"), true) ?: [];
 check('agent install: the command installs the hook script, as the board would give it', $rc === 0 && is_file("$home/.talixio/agent-hook.sh")
-    && file_get_contents("$home/.talixio/agent-hook.sh") === rtrim($hub->script("lap'top"), "\n") . "\n" && (fileperms("$home/.talixio/agent-hook.sh") & 0777) === 0700, "$rc $o $e");
+    && file_get_contents("$home/.talixio/agent-hook.sh") === rtrim($hub->script("lap'top", 'agent-hook.sh', '', false), "\n") . "\n" && (fileperms("$home/.talixio/agent-hook.sh") & 0777) === 0700, "$rc $o $e");
+// 1.56.1: the token is kept apart, in a file only you can read, and the installed hook still reaches the board with it
+check('agent install: the token is not in the script, but in ~/.talixio/agent.env, yours only', !str_contains(file_get_contents("$home/.talixio/agent-hook.sh"), $hub->token())
+    && trim((string)@file_get_contents("$home/.talixio/agent.env")) === "TALIXIO_TOKEN='" . $hub->token() . "'" && (fileperms("$home/.talixio/agent.env") & 0777) === 0600);
+$sh("printf '%s' '{\"session_id\":\"inst1\",\"hook_event_name\":\"SessionStart\",\"cwd\":\"/w\"}' | sh \"\$HOME/.talixio/agent-hook.sh\" event", $home);
+check('agent install: the installed hook reaches the board with the token from that file', $hub->get('claude-code:inst1') !== null);
 check('agent install: the hooks are merged: yours stay, the old Talixio one is replaced, each event has ours once',
     $s['model'] === 'opus' && $s['permissions'] === $mine['permissions'] && $s['hooks']['PostToolUse'] === $mine['hooks']['PostToolUse']
     && $s['hooks']['Stop'][0]['hooks'][0]['command'] === 'say done' && count($s['hooks']['Stop']) === 2
@@ -61,7 +66,8 @@ foreach (['python3', 'node', 'jq'] as $tool) {
         && str_contains($o, "merged with $tool"), "$rc $o $e " . json_encode($s2));
 }
 check('agent install: the listener is installed when asked, and the machine name is the one given', is_file("$home/.talixio/agent-listen.sh")
-    && str_contains(file_get_contents("$home/.talixio/agent-listen.sh"), "M='box'") && str_contains(file_get_contents("$home/.talixio/agent-hook.sh"), "M='box'"));
+    && str_contains(file_get_contents("$home/.talixio/agent-listen.sh"), "M='box'") && str_contains(file_get_contents("$home/.talixio/agent-hook.sh"), "M='box'")
+    && !str_contains(file_get_contents("$home/.talixio/agent-listen.sh"), $hub->token()));
 
 // 1.54.0: « Work without asking »: Claude Code's auto mode, and the steps that still ask; your own rules stay, ours once
 $fake = "$d/fakebin"; @mkdir($fake);
