@@ -9,6 +9,9 @@
 # Other agents: pipe {"session_id":"…","hook_event_name":"Stop","last_assistant_message":"…","cwd":"…"} with TALIXIO_AGENT=<name>.
 U=@URL@
 T=@TOKEN@
+# 1.56.1: installed by the one-line command, the token is not in this file but in ~/.talixio/agent.env (yours only, 600)
+[ -n "$T" ] || T="${TALIXIO_TOKEN:-}"
+[ -n "$T" ] || T=$(sed -n "s/^TALIXIO_TOKEN='\([0-9a-f]*\)'\$/\1/p" "$HOME/.talixio/agent.env" 2>/dev/null)
 M=@MACHINE@
 A="${TALIXIO_AGENT:-claude-code}"
 WAIT="${TALIXIO_WAIT:-30}"

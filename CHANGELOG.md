@@ -3,6 +3,23 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.56.1 (2026-11-25)
+
+The one-line install no longer writes the board's token into the agent scripts.
+
+- **Why:** a coding agent on your VM found the token inline in `~/.talixio/agent-hook.sh` and `~/.talixio/agent-listen.sh`. A fix made by hand on the machine would be undone by the next install, so the fix is at the source.
+- **What changed:**
+  - the installer writes the token to `~/.talixio/agent.env` (mode 600), and the scripts it saves carry no token;
+  - the scripts read the token, in this order: from themselves (a script downloaded with *Install by hand* still carries it, as before), from `TALIXIO_TOKEN`, then from `~/.talixio/agent.env`;
+  - they read that file with `sed`, accepting only a hex token, and never run it as shell code.
+- **For a machine installed earlier:** run a new install command from *Connect a machine*. It rewrites both scripts without the token and creates `agent.env`.
+- **Tested:** `tests/more/agent_install.php` runs the real install command in a home folder of its own. New checks:
+  - neither installed script holds the token, and `agent.env` holds it with mode 600 (both fail without the change);
+  - the installed hook still reaches the board with the token read from that file.
+
+  One existing check was adapted on purpose: the installed hook is compared with the script without the token.
+- **Not tried:** an install on your VM. The token is still passed to `curl` on its command line (`-H "Authorization: Bearer …"`), so another user on the same machine could see it in the process list while a request runs; that is unchanged.
+
 ## 1.56.0 (2026-11-24)
 
 The assistant learns from similar requests, not only from the same command.

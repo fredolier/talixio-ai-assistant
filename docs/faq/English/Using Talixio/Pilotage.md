@@ -101,6 +101,9 @@ The board updates by itself every few seconds while you look at it.
   the listener next to it) and adds the board's hooks to `~/.claude/settings.json` for you: your other hooks and settings
   stay, a copy of the file is kept first as `settings.json.talixio-backup`, and running a new command later replaces the
   Talixio hooks instead of adding them twice. If the file is not valid JSON it is left as it was, and the command says so.
+  The board's token is saved apart, in `~/.talixio/agent.env`, readable by you only (since 1.56.1); the scripts read it
+  from there (or from `TALIXIO_TOKEN`, if set), so they hold no secret. A machine installed before 1.56.1 gets this by
+  running a new install command.
   The command works **once, for 15 minutes**: it holds a one-time code, not the token, so it is safe to paste; get a new one
   for each machine. It needs `sh`, `curl`, and `python3`, `node` or `jq` to merge the settings (macOS, Linux, or WSL on
   Windows), and the machine must reach this assistant's address. The next Claude Code session on that machine appears on

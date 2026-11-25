@@ -12,6 +12,9 @@
 # Settings: TALIXIO_CLAUDE (the claude command), TALIXIO_ROOT, TALIXIO_CLAUDE_ARGS (e.g. --permission-mode acceptEdits).
 U=@URL@
 T=@TOKEN@
+# 1.56.1: installed by the one-line command, the token is not in this file but in ~/.talixio/agent.env (yours only, 600)
+[ -n "$T" ] || T="${TALIXIO_TOKEN:-}"
+[ -n "$T" ] || T=$(sed -n "s/^TALIXIO_TOKEN='\([0-9a-f]*\)'\$/\1/p" "$HOME/.talixio/agent.env" 2>/dev/null)
 M=@MACHINE@
 CLAUDE="${TALIXIO_CLAUDE:-claude}"
 R=@ROOTS@
