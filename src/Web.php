@@ -47,7 +47,7 @@ final class Web
         if ($path === '/api/conductor/inbox') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
         if ($path === '/api/conductor/tick') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
         if ($path === '/api/agents/install' && $method === 'GET') { $this->agentInstall(); return; } // 1.48.0: curl … | sh with a one-time code, no session
-        if (in_array($path, ['/api/agents/hook', '/api/agents/wait', '/api/agents/next', '/api/agents/job', '/api/agents/file'], true)) { $this->agentHook($path, $method); return; } // a coding agent's hook script: the agents token, no session here
+        if (in_array($path, ['/api/agents/hook', '/api/agents/wait', '/api/agents/next', '/api/agents/job', '/api/agents/file', '/api/agents/check'], true)) { $this->agentHook($path, $method); return; } // a coding agent's hook script: the agents token, no session here
         if ($path === '/api/conductor/pull') { $this->conductorRetired(); return; } // the cloud orchestrator's route, retired in 1.45.0: 410 for an old session still running
         if (str_starts_with($path, '/api/federation/') && in_array($path, ['/api/federation/pair', '/api/federation/push', '/api/federation/pull', '/api/federation/bye', '/api/federation/ask', '/api/federation/queries'], true)) { $this->federationPublic($path, $method); return; } // another person's assistant: its own secret, no session here
         ob_start(); // anything printed by accident is dropped, not mixed into the JSON
@@ -1875,6 +1875,12 @@ final class Web
                 $this->json($resp, $code);
                 return;
             }
+            if ($path === '/api/agents/check') { // 1.57.0: the listener sends an objective's check results
+                if ($method !== 'POST') $this->fail(405, 'POST only');
+                [$code, $resp] = $hub->goalReport($machine, (int)($_GET['id'] ?? 0), mb_substr((string)file_get_contents('php://input'), 0, 40000));
+                $this->json($resp, $code);
+                return;
+            }
             if ($path === '/api/agents/job') { // the listener reports on a session it started
                 if ($method !== 'POST') $this->fail(405, 'POST only');
                 [$code, $resp] = $hub->jobReport($machine, (int)($_GET['id'] ?? 0), (string)($_GET['state'] ?? ''), (int)($_GET['pid'] ?? 0), (string)file_get_contents('php://input'));
@@ -1947,6 +1953,15 @@ final class Web
             })(),
             $id('stop') !== null && $m === 'POST' => (function () use ($hub, $id) {
                 try { return $hub->stop($id('stop')); }
+                catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
+            })(),
+            $path === '/api/agents/goals' && $m === 'POST' => (function () use ($hub, $b) { // 1.57.0: an objective
+                try { return $hub->goalStart((string)($b['machine'] ?? ''), (string)($b['cwd'] ?? ''), (string)($b['title'] ?? ''), (string)($b['prompt'] ?? ''),
+                    (string)($b['checks'] ?? ''), array_map('strval', (array)($b['allow'] ?? [])), (string)($b['report'] ?? ''), (int)($b['max_runs'] ?? 20), (int)($b['hours'] ?? 12)); }
+                catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
+            })(),
+            (bool)preg_match('#^/api/agents/goals/(\d+)/(stop|resume|forget)$#', $path, $gm) && $m === 'POST' => (function () use ($hub, $gm) {
+                try { return $hub->goalAct((int)$gm[1], $gm[2]); }
                 catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
             })(),
             $path === '/api/agents/notify' && $m === 'POST' => $hub->setNotify((string)($b['mode'] ?? '')),

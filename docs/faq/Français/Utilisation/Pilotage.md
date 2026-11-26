@@ -101,6 +101,45 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   Une telle session ne s'affiche plus *terminée* après chaque tour (1.52.2) : elle attend dans **À vous**, l'assistant
   la relit et ses options s'affichent en boutons. Elle se termine quand vous l'arrêtez, ou si son processus s'arrête en
   plein travail.
+- **Objectifs** (1.57.0, bouton en haut) : donnez un but à une session et laissez-la travailler jusqu'au bout sans
+  vous, par exemple clore une épopée une fois que vous l'avez spécifiée et validée. Choisissez la machine et le dossier
+  (comme pour *Nouvelle session*), donnez-lui un nom, dites ce qu'elle doit faire et écrivez les **vérifications** : une
+  commande par ligne qui dit si l'objectif est atteint, lancée dans le dossier du projet. Une vérification passe quand son
+  code de sortie est 0, ou, avec `=> texte` après elle, quand sa sortie montre ce texte. Pour le workflow, par exemple :
+
+  ```
+  ./tools-workflow scenario:check-gate --verdict --gate GATE_3 --epic E06c --scenario fw => "closure_held": false
+  ./tools-workflow ci:status --sha HEAD
+  ```
+
+  Lancez d'abord chaque commande vous-même et copiez le texte qui montre que l'épopée est vraiment close : un verdict de
+  gate propre ne suffit pas quand la clôture est retenue. Une vérification est une seule commande en mots simples (sans
+  guillemets, `$`, `;`, `|`, `&`, `>`, `<` ni `*`), jamais une commande risquée (un push, une suppression…) ; de 1 à 5.
+  - **Comment elle continue seule.** La session démarre avec l'objectif et ses vérifications. Après chacun de ses tours,
+    l'écouteur de la machine lance les vérifications dans le dossier et le tableau lit les résultats. Pas toutes vertes :
+    la session reçoit ce que montre chaque vérification et continue (*tour 2 sur 20*). Toutes vertes : on lui demande son
+    rapport final (ce qui a été fait, ce que montre chaque vérification, ce qui reste et pour qui, l'état de la CI), et
+    l'objectif est *atteint* quand elle l'a écrit. Vous pouvez écrire vos propres consignes sous *Rapport et limites*.
+  - **Ses demandes d'autorisation** suivent les règles de l'objectif, aussitôt, pour qu'elle ne vous attende pas : dans
+    son dossier, tout ce qui n'est pas étiqueté *À vérifier* est autorisé. Parmi les demandes *À vérifier*, seules celles
+    que vous avez cochées le sont : pousser sur sa branche, supprimer, installer, le réseau, les scripts téléchargés ou en
+    ligne. Ce que vous n'avez pas coché est refusé, et l'agent doit s'y prendre autrement ou vous le laisser dans son
+    rapport (cochez *Me demander* pour qu'on vous le demande plutôt). Jamais autorisé, coché ou non : un push sur
+    `main`/`master` ou en force, un fichier hors du projet, ses propres réglages (`.claude/`), un déploiement, `sudo`. Le
+    fil dit *Autorisé par les règles de l'objectif* ou *Refusé…* et pourquoi. Ce qu'il autorise n'apprend rien à
+    l'assistant.
+  - **Quand elle s'arrête.** Elle se met en pause seule quand les vérifications donnent les mêmes résultats 3 fois de
+    suite (aucun progrès), quand elle a utilisé tous ses tours (20 par défaut) ou son temps (12 heures par défaut) ; vous
+    recevez une notification. Quand l'assistant lit les tours et que l'agent a posé une question à laquelle vous seul
+    pouvez répondre, l'objectif *vous attend* : répondez dans la session, puis cliquez **Reprendre** (Reprendre donne aussi
+    10 tours de plus et au moins 4 heures à un objectif en pause). **Arrêter** termine l'objectif et sa session ;
+    **Oublier** retire de la liste un objectif fini.
+  - **Sur la machine :** les vérifications sont lancées par l'écouteur ; réinstallez-le depuis *Connecter une machine*
+    (un écouteur d'avant 1.57.0 ne les lance pas). Il refuse une vérification qui n'est pas en mots simples, ou un
+    dossier qu'il ne peut pas utiliser.
+  - **Limites :** une commande au niveau le plus simple (non étiquetée *À vérifier*) est autorisée même quand elle écrit
+    hors du dossier du projet ; les contrôles de Claude Code s'appliquent toujours (lancez-le en mode auto pour un second
+    regard sur chaque étape).
 - **Reprendre et relire** (1.51.0) : une session Claude Code terminée (ou une session lancée du tableau puis arrêtée)
   affiche ce bouton à la place de la zone de réponse. La session vous attend de nouveau, l'assistant relit là où elle
   s'est arrêtée (sa tâche, les derniers échanges et son dernier message) et propose la suite, et votre réponse poursuit

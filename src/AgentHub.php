@@ -47,7 +47,13 @@ final class AgentHub
             CREATE TABLE IF NOT EXISTS agent_perms(cwd TEXT NOT NULL, key TEXT NOT NULL, allowed INTEGER NOT NULL DEFAULT 0, denied INTEGER NOT NULL DEFAULT 0,
                 updated INTEGER NOT NULL, PRIMARY KEY(cwd, key));
             -- 1.56.0: the narrower keys you allowed under a wider one (a wider key is learned from 2 different ones)
-            CREATE TABLE IF NOT EXISTS agent_perm_links(cwd TEXT NOT NULL, gkey TEXT NOT NULL, skey TEXT NOT NULL, PRIMARY KEY(cwd, gkey, skey));");
+            CREATE TABLE IF NOT EXISTS agent_perm_links(cwd TEXT NOT NULL, gkey TEXT NOT NULL, skey TEXT NOT NULL, PRIMARY KEY(cwd, gkey, skey));
+            -- 1.57.0: an objective: a session the board keeps going until its checks pass
+            CREATE TABLE IF NOT EXISTS agent_goals(id INTEGER PRIMARY KEY, machine TEXT NOT NULL, cwd TEXT NOT NULL, title TEXT NOT NULL, prompt TEXT NOT NULL,
+                checks TEXT NOT NULL, report TEXT NOT NULL DEFAULT '', allow TEXT NOT NULL DEFAULT '', job INTEGER NOT NULL DEFAULT 0, session TEXT NOT NULL DEFAULT '',
+                state TEXT NOT NULL, runs INTEGER NOT NULL DEFAULT 0, max_runs INTEGER NOT NULL DEFAULT 20, deadline INTEGER NOT NULL DEFAULT 0,
+                sent INTEGER NOT NULL DEFAULT 0, checked INTEGER NOT NULL DEFAULT 0, result TEXT NOT NULL DEFAULT '', fp TEXT NOT NULL DEFAULT '',
+                same INTEGER NOT NULL DEFAULT 0, why TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, updated INTEGER NOT NULL);");
         // 1.38.0: a stop asked from the board (applied at the session's next hook), the job that started it, what it is doing now
         $app->store->addColumn('agent_sessions', 'stop', 'INTEGER NOT NULL DEFAULT 0');
         $app->store->addColumn('agent_sessions', 'job', 'INTEGER NOT NULL DEFAULT 0');
@@ -103,6 +109,7 @@ final class AgentHub
             $this->app->store->q("UPDATE agent_jobs SET session = ?, state = 'running', updated = ? WHERE id = ?", [$id, $now, $job]);
             $set['job'] = $job; $s['job'] = $job;
             $this->log($id, $j['by'], 'started', $j['prompt']);
+            $this->app->store->q("UPDATE agent_goals SET session = ?, state = CASE WHEN state = 'starting' THEN 'working' ELSE state END, updated = ? WHERE job = ? AND session = ''", [$id, $now, $job]);
         }
         $stop = (int)$s['stop'] === 1 && in_array($kind, ['PreToolUse', 'PermissionRequest', 'Notification', 'Stop'], true);
         if (($e['cwd'] ?? '') !== '') $set['cwd'] = mb_substr((string)$e['cwd'], 0, 300);
@@ -142,7 +149,8 @@ final class AgentHub
                     'rules' => $rules ? (string)json_encode($rules, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : '',
                     'pkeys' => $keys === null ? '' : (string)json_encode($keys, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)]; $bump = true;
                 $this->log($id, 'agent', 'permission', $q);
-                $auto = $this->permAuto($keys, (string)($set['cwd'] ?? $s['cwd']));
+                $goalSays = $this->goalPerm($id, (string)($e['tool_name'] ?? ''), (array)($e['tool_input'] ?? []), $safe, (string)($set['cwd'] ?? $s['cwd']));
+                $auto = $goalSays ?? $this->permAuto($keys, (string)($set['cwd'] ?? $s['cwd']));
                 if ($auto === '' && $this->notifyMode() !== 'off') $this->app->notifier()->notify(I18n::t($this->app, 'An agent asks for permission'), self::label($s) . ': ' . mb_substr($q, 0, 200));
                 break;
             case 'Notification':
@@ -173,7 +181,13 @@ final class AgentHub
         if ($bump) $set += ['seq' => (int)$s['seq'] + 1, 'updated' => $now]; // a notice alone does not bring a looked-at session back to "Needs you"
         $this->update($id, $set);
         $this->bumpRev();
-        if ($kind === 'PermissionRequest' && !$stop && ($auto ?? '') !== '') { // 1.55.0: answered by the assistant, as you would have
+        if ($kind === 'PermissionRequest' && !$stop && str_starts_with($auto ?? '', 'goal')) { // 1.57.0: the objective's rules, set when you started it
+            $no = str_starts_with($auto, 'goal-deny');
+            $why = $no ? substr($auto, 10) : '';
+            $this->command($id, $no ? 'deny' : 'allow', $no ? 'Not allowed while working on this objective (' . $why . '). Do it another way, or leave it for the person and say so in your report.' : '', 'assistant');
+            $this->log($id, 'assistant', 'notice', $no ? I18n::t($this->app, 'Refused by the objective\'s rules: {why}. The agent was told to do it another way.', ['why' => $why])
+                : I18n::t($this->app, 'Allowed by the objective\'s rules.'));
+        } elseif ($kind === 'PermissionRequest' && !$stop && ($auto ?? '') !== '') { // 1.55.0: answered by the assistant, as you would have
             $this->command($id, 'allow', '', 'assistant');
             $this->log($id, 'assistant', 'notice', match (true) {
                 $auto === 'read' => I18n::t($this->app, 'Allowed by the assistant: it only reads.'),
@@ -182,6 +196,7 @@ final class AgentHub
                     ['keys' => substr($auto, 5), 'n' => self::LEARN_AT]),
             });
         }
+        if ($kind === 'Stop' && !$stop) $this->goalTurnEnded($id);
         if ($kind === 'Stop' && !$stop && $last !== '') { try { $this->app->pilot()->wakeBoard(); } catch (\Throwable $e) { Log::warn("pilot: {$e->getMessage()}"); } } // 1.39.0: the assistant looks at it soon
         return [200, ['seq' => (int)($set['seq'] ?? $s['seq']), 'id' => $id] + ($stop ? ['stop' => true] : [])];
     }
@@ -337,13 +352,14 @@ final class AgentHub
     /** The board: every session not forgotten, newest first, with the revision the page polls to know whether to redraw. */
     public function board(): array
     {
+        $this->goalSync();
         $rows = $this->app->store->q("SELECT * FROM agent_sessions ORDER BY updated DESC LIMIT 200")->fetchAll();
         $jobs = $this->app->store->q("SELECT * FROM agent_jobs WHERE session = '' AND state NOT IN ('cancelled','exited') ORDER BY id DESC LIMIT 50")->fetchAll();
         $sug = [];
         try { $sug = $this->app->pilot()->boardProposals(); } catch (\Throwable) {}
         return ['rev' => (int)$this->app->store->get('agents.rev'), 'sessions' => array_map(fn($s) => $this->shape($s) + ['suggested' => $s['state'] === 'waiting' && isset($sug[Pilot::boardKey($s['id'], (int)$s['seq'])])], $rows),
             'jobs' => array_map(fn($j) => $this->shapeJob($j), $jobs), 'machines' => $this->machines(),
-            'connected' => (string)$this->app->store->get('agents.token') !== '', 'notify' => $this->notifyMode(), 'perms' => $this->permMode()];
+            'connected' => (string)$this->app->store->get('agents.token') !== '', 'notify' => $this->notifyMode(), 'perms' => $this->permMode(), 'goals' => $this->goals()];
     }
 
     /** Sessions in « Needs you » (the same rule as shape()): the badges on the rail and on the Agents tab. */
@@ -578,10 +594,17 @@ final class AgentHub
         $was = (int)$this->app->store->q('SELECT polled FROM agent_machines WHERE machine = ?', [$machine])->fetchColumn();
         $this->app->store->q('INSERT INTO agent_machines(machine, polled) VALUES(?,?) ON CONFLICT(machine) DO UPDATE SET polled = excluded.polled', [$machine, time()]);
         if (time() - $was >= 30) $this->bumpRev(); // it starts listening: the board offers it
+        try { $this->goalsTick(); } catch (\Throwable $e) { Log::warn("objectives: {$e->getMessage()}"); } // 1.57.0: on its poll too, worker or not
         $j = $this->app->store->q("SELECT * FROM agent_jobs WHERE machine = ? AND stop = 1 AND state IN ('started','running') ORDER BY id LIMIT 1", [$machine])->fetch();
         if ($j) {
             $this->app->store->q("UPDATE agent_jobs SET stop = 2, updated = ? WHERE id = ?", [time(), $j['id']]); // 2: sent to the listener
             return [200, "stop\n{$j['id']}\n"];
+        }
+        // 1.57.0: an objective's checks, after its session's turn: run by the listener in the objective's folder
+        $g = $this->app->store->q("SELECT * FROM agent_goals WHERE machine = ? AND state = 'checking' AND sent < ? ORDER BY id LIMIT 1", [$machine, time() - self::CHECK_WAIT])->fetch();
+        if ($g) {
+            $this->app->store->q('UPDATE agent_goals SET sent = ?, updated = ? WHERE id = ?', [time(), time(), $g['id']]);
+            return [200, "check\n{$g['id']}\n{$g['cwd']}\n" . implode("\n", array_column(json_decode($g['checks'], true) ?: [], 'cmd'))];
         }
         // 1.50.0: a reply to a session it started: claude -p --resume <session> with the reply as the prompt. 1.52.1: a resume
         // the listener did not confirm within RESUME_WAIT (an older listener, or one that lost it) is offered again; the
@@ -673,6 +696,248 @@ final class AgentHub
     {
         return ['id' => (int)$j['id'], 'machine' => $j['machine'], 'cwd' => $j['cwd'], 'project' => basename((string)$j['cwd']), 'prompt' => $j['prompt'],
             'state' => $j['state'], 'log' => $j['log'], 'stopping' => (int)$j['stop'] > 0, 'by' => $j['by'], 'created' => (int)$j['created'], 'updated' => (int)$j['updated']];
+    }
+
+    // ---------- objectives (1.57.0) ----------
+
+    /** How long a check handed to the listener may run before it is offered again. */
+    private const CHECK_WAIT = 1800;
+    /** The states in which the board keeps an objective going. */
+    private const GOAL_ACTIVE = ['starting', 'working', 'checking', 'checked', 'needs_you', 'reporting'];
+    /** What « Check first » an objective may allow when you tick it; the rest is never allowed by an objective. */
+    public const GOAL_ALLOW = ['git', 'delete', 'install', 'network', 'script'];
+    /** A check: one command, plain words only (no quotes, $, ;, |, &, >, <, *, ~): the listener runs exactly that. */
+    private const CHECK_RE = '#^[A-Za-z0-9_./:=,@+-]+( [A-Za-z0-9_./:=,@+-]+)*$#';
+
+    /**
+     * Start an objective: a session in a folder of a listening machine, kept going until every check passes, then asked
+     * for its report. $checks: one per line, "command" (passes on exit code 0) or "command => text" (passes when its
+     * output holds the text). $allow: the « Check first » kinds it may do (GOAL_ALLOW), and 'ask' to send you the rest
+     * instead of refusing it.
+     */
+    public function goalStart(string $machine, string $cwd, string $title, string $prompt, string $checks, array $allow = [], string $report = '', int $maxRuns = 20, int $hours = 12, string $by = 'you'): array
+    {
+        $title = mb_substr(trim(preg_replace('/\s+/', ' ', $title)), 0, 200);
+        if ($title === '') throw new \InvalidArgumentException('Give the objective a name.');
+        $list = [];
+        foreach (preg_split('/\r?\n/', $checks) as $line) {
+            if (trim($line) === '') continue;
+            [$cmd, $expect] = array_map('trim', explode('=>', $line, 2) + [1 => '']);
+            $cmd = preg_replace('/\s+/', ' ', $cmd);
+            if (strlen($cmd) > 300 || !preg_match(self::CHECK_RE, $cmd)) throw new \InvalidArgumentException(I18n::t($this->app, 'A check is one command in plain words (no quotes, $, ;, |, &, >, < or *): {cmd}', ['cmd' => mb_substr($cmd, 0, 80)]));
+            if (PermCheck::bash($cmd)['level'] === 'risk') throw new \InvalidArgumentException(I18n::t($this->app, 'A check must not change anything risky: {cmd}', ['cmd' => $cmd]));
+            $list[] = ['cmd' => $cmd, 'expect' => mb_substr($expect, 0, 200)];
+        }
+        if (!$list) throw new \InvalidArgumentException('Give at least one check: the command that says the objective is met.');
+        if (count($list) > 5) throw new \InvalidArgumentException('At most 5 checks.');
+        $allow = array_values(array_intersect([...self::GOAL_ALLOW, 'ask'], $allow));
+        $maxRuns = max(1, min(100, $maxRuns)); $hours = max(1, min(72, $hours));
+        $report = mb_substr(trim($report), 0, 2000) ?: 'Write the final status report: what was done, what each check shows now, what is left for people and who owns it, and the CI status. Say "not read" for anything a command did not answer.';
+        $lines = implode("\n", array_map(fn($c) => '- `' . $c['cmd'] . '`' . ($c['expect'] !== '' ? ' (its output shows "' . $c['expect'] . '")' : ' (exit code 0)'), $list));
+        $full = trim($prompt) . "\n\n" . "Objective, set on the Talixio board: $title.\nIt is met when every one of these checks passes, run from the project folder:\n$lines\n\n"
+            . "Work through it on your own, step after step, without waiting for a confirmation: you have it. Ask only for a decision that is not yours to take "
+            . "(product direction, values, anything irreversible). End each turn with a short status: what you did, and what comes next. "
+            . "After each of your turns the board runs the checks and tells you what is still missing.";
+        $job = $this->start($machine, $cwd, $full, $by)['job'];
+        $now = time();
+        $this->app->store->q("INSERT INTO agent_goals(machine, cwd, title, prompt, checks, report, allow, job, state, max_runs, deadline, created, updated) VALUES(?,?,?,?,?,?,?,?,'starting',?,?,?,?)",
+            [$machine, $cwd, $title, trim($prompt), (string)json_encode($list, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $report, implode(',', $allow), $job['id'], $maxRuns, $now + $hours * 3600, $now, $now]);
+        $gid = (int)$this->app->store->db->lastInsertId();
+        $this->bumpRev();
+        return ['goal' => $this->shapeGoal($this->goal($gid))];
+    }
+
+    /** Does an objective keep this session going? */
+    public function inGoal(string $session): bool { return $this->goalOf($session) !== null; }
+
+    public function goal(int $id): ?array { $g = $this->app->store->q('SELECT * FROM agent_goals WHERE id = ?', [$id])->fetch(); return $g ?: null; }
+
+    /** The objectives on the board, the active ones first. */
+    public function goals(): array
+    {
+        return array_map(fn($g) => $this->shapeGoal($g), $this->app->store->q("SELECT * FROM agent_goals ORDER BY CASE WHEN state IN ('" . implode("','", self::GOAL_ACTIVE) . "') THEN 0 ELSE 1 END, updated DESC LIMIT 30")->fetchAll());
+    }
+
+    private function shapeGoal(array $g): array
+    {
+        return ['id' => (int)$g['id'], 'machine' => $g['machine'], 'cwd' => $g['cwd'], 'project' => basename((string)$g['cwd']), 'title' => $g['title'],
+            'checks' => json_decode($g['checks'], true) ?: [], 'allow' => array_values(array_filter(explode(',', (string)$g['allow']))), 'session' => $g['session'],
+            'job' => (int)$g['job'], 'state' => $g['state'], 'active' => in_array($g['state'], self::GOAL_ACTIVE, true), 'runs' => (int)$g['runs'],
+            'max_runs' => (int)$g['max_runs'], 'deadline' => (int)$g['deadline'], 'result' => json_decode((string)$g['result'], true) ?: [], 'checked' => (int)$g['checked'],
+            'why' => $g['why'], 'created' => (int)$g['created'], 'updated' => (int)$g['updated']];
+    }
+
+    private function goalSet(int $id, array $set): void
+    {
+        $set['updated'] = time();
+        $this->app->store->q('UPDATE agent_goals SET ' . implode(', ', array_map(fn($k) => "$k = ?", array_keys($set))) . ' WHERE id = ?', [...array_values($set), $id]);
+        $this->bumpRev();
+    }
+
+    private function goalOf(string $session): ?array
+    {
+        $g = $this->app->store->q("SELECT * FROM agent_goals WHERE session = ? AND state IN ('" . implode("','", self::GOAL_ACTIVE) . "') ORDER BY id DESC LIMIT 1", [$session])->fetch();
+        return $g ?: null;
+    }
+
+    /**
+     * A permission request from an objective's session, in its folder: null (not for the objective: the usual rules), else
+     * 'goal' (allowed) or 'goal-deny:<why>'. Allowed: what reads or changes things in the project, and the « Check first »
+     * kinds you ticked; never pushing to main or master or forcing a push, its own settings, the system, a deploy or
+     * code it cannot show. The rest is refused (the agent is told to do it another way), or sent to you when you said so.
+     */
+    private function goalPerm(string $session, string $tool, array $in, array $safe, string $cwd): ?string
+    {
+        $g = $this->goalOf($session);
+        if (!$g || ($cwd !== $g['cwd'] && !str_starts_with($cwd, rtrim($g['cwd'], '/') . '/'))) return null;
+        $allow = array_filter(explode(',', (string)$g['allow']));
+        $no = fn(string $why) => in_array('ask', $allow, true) ? null : "goal-deny:$why";
+        if (str_starts_with($tool, 'mcp__')) return $no('a tool outside the project');
+        if (in_array($tool, ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'], true)) {
+            $p = (string)($in['file_path'] ?? $in['notebook_path'] ?? '');
+            if ($safe['level'] === 'risk') return 'goal-deny:settings';
+            return str_starts_with($p, rtrim($g['cwd'], '/') . '/') ? 'goal' : $no('a file outside the project');
+        }
+        if (in_array($tool, ['WebFetch', 'WebSearch'], true)) return in_array('network', $allow, true) ? 'goal' : $no('network');
+        if ($safe['level'] !== 'risk') return 'goal';
+        $why = (string)$safe['why'];
+        if ($why === 'git' && preg_match('/\bgit\b.*\bpush\b.*(\s(-f|--force\S*|--mirror|--delete|-d)\b|[\s:+](main|master)\b)/', (string)($in['command'] ?? ''))) return 'goal-deny:git';
+        if (in_array($why, self::GOAL_ALLOW, true) && in_array($why, $allow, true)) return 'goal';
+        return in_array($why, self::GOAL_ALLOW, true) ? $no($why) : "goal-deny:$why";
+    }
+
+    /** A turn of an objective's session ended: the checks run next (on its listener). */
+    private function goalTurnEnded(string $session): void
+    {
+        $g = $this->goalOf($session);
+        if (!$g) return;
+        if ($g['state'] === 'reporting') { // its report: the objective is done
+            $s = $this->get($session);
+            $this->goalSet((int)$g['id'], ['state' => 'done', 'why' => '']);
+            $this->log($session, 'assistant', 'notice', I18n::t($this->app, 'Objective met: {title}.', ['title' => $g['title']]));
+            if ($this->notifyMode() !== 'off') $this->app->notifier()->notify(I18n::t($this->app, 'Objective met: {title}', ['title' => $g['title']]), mb_substr(trim((string)($s['last_message'] ?? '')), 0, 1500));
+            return;
+        }
+        $this->goalSet((int)$g['id'], ['state' => 'checking', 'sent' => 0]);
+    }
+
+    /**
+     * The listener's check results: "=== <n> <exit code>" then that check's output, for each check. Met: every check
+     * passes; the session is then asked for its report. Not met: it is told what is missing and goes on, unless the
+     * assistant answers it or proposes you an answer first, it made no progress (the same results 3 times), or it ran
+     * out of runs or time.
+     */
+    public function goalReport(string $machine, int $gid, string $body): array
+    {
+        $g = $this->goal($gid);
+        $machine = mb_substr(trim(preg_replace('/[^\w .@-]+/u', '', $machine)), 0, 40);
+        if (!$g || $g['machine'] !== $machine) return [404, ['error' => 'no such objective']];
+        if ($g['state'] !== 'checking') return [200, ['ok' => true]]; // stopped meanwhile, or a late copy
+        $checks = json_decode($g['checks'], true) ?: [];
+        $parts = preg_split('/^=== (\d+) (\d+)\n?/m', $body, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $out = [];
+        for ($i = 1; $i + 1 < count($parts); $i += 3) $out[(int)$parts[$i]] = ['code' => (int)$parts[$i + 1], 'out' => mb_substr(rtrim((string)($parts[$i + 2] ?? '')), -2500)];
+        $res = []; $met = true;
+        foreach ($checks as $n => $c) {
+            $r = $out[$n] ?? ['code' => -1, 'out' => '(no result)'];
+            $ok = $r['code'] >= 0 && ($c['expect'] !== '' ? str_contains($r['out'], $c['expect']) : $r['code'] === 0);
+            $met = $met && $ok;
+            $res[] = ['cmd' => $c['cmd'], 'code' => $r['code'], 'ok' => $ok, 'out' => $r['out']];
+        }
+        $fp = sha1(json_encode(array_map(fn($r) => [$r['code'], $r['out']], $res)));
+        $same = $fp === $g['fp'] ? (int)$g['same'] + 1 : 0;
+        $this->goalSet($gid, ['state' => $met ? 'reporting' : 'checked', 'checked' => time(), 'result' => (string)json_encode($res, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 'fp' => $fp, 'same' => $same]);
+        if ($met) {
+            $this->log($g['session'], 'assistant', 'notice', I18n::t($this->app, 'Every check of the objective passes: the agent is asked for its report.'));
+            $this->goalNudge($this->goal($gid), "The objective is met: every check passes.\n\n" . $g['report'] . "\nDo not start new work.");
+            return [200, ['ok' => true]];
+        }
+        $this->goalDecide($this->goal($gid));
+        return [200, ['ok' => true]];
+    }
+
+    /** Worker tick: the objectives whose checks came back while the assistant was still reading the turn. */
+    public function goalsTick(): void
+    {
+        $this->goalSync();
+        foreach ($this->app->store->q("SELECT * FROM agent_goals WHERE state = 'checked'")->fetchAll() as $g) $this->goalDecide($g);
+    }
+
+    /** What follows a check that did not pass (see goalReport). */
+    private function goalDecide(array $g): void
+    {
+        $s = $this->get((string)$g['session']);
+        if (!$s) return;
+        $gid = (int)$g['id'];
+        $pending = (int)$this->app->store->q("SELECT COUNT(*) FROM agent_commands WHERE session = ? AND delivered IS NULL AND kind = 'reply'", [$s['id']])->fetchColumn();
+        if ($pending) { $this->goalSet($gid, ['state' => 'working']); return; } // an answer already goes to it (yours, or the assistant's)
+        $pilot = $this->app->pilot();
+        $seen = $pilot->boardDecided($s['id'], (int)$s['seq']);
+        if ($seen === null && $pilot->boardReads() && time() - (int)$g['checked'] < 120) return; // the assistant has not read this turn yet
+        if ($seen === 'sent' || $s['state'] === 'working') { $this->goalSet($gid, ['state' => 'working']); return; } // the assistant answered it: it goes on
+        if ($seen === 'proposed') { $this->goalSet($gid, ['state' => 'needs_you', 'why' => 'the agent asked something only you can answer']); return; }
+        $why = match (true) {
+            (int)$g['same'] >= 2 => 'no progress: the checks gave the same results 3 times in a row',
+            (int)$g['runs'] >= (int)$g['max_runs'] => 'it used all its runs',
+            time() > (int)$g['deadline'] => 'it ran out of time',
+            default => '',
+        };
+        if ($why !== '') {
+            $this->goalSet($gid, ['state' => 'paused', 'why' => $why]);
+            $this->log($s['id'], 'assistant', 'notice', I18n::t($this->app, 'Objective paused: {why}.', ['why' => I18n::t($this->app, $why)]));
+            if ($this->notifyMode() !== 'off') $this->app->notifier()->notify(I18n::t($this->app, 'Objective paused: {title}', ['title' => $g['title']]), I18n::t($this->app, $why));
+            return;
+        }
+        $miss = [];
+        foreach (json_decode((string)$g['result'], true) ?: [] as $r) if (!$r['ok']) $miss[] = '$ ' . $r['cmd'] . ' → exit ' . $r['code'] . "\n" . mb_substr($r['out'], -1500);
+        $this->goalNudge($g, 'The objective is not met yet (run ' . ((int)$g['runs'] + 1) . ' of ' . $g['max_runs'] . "). What the checks show:\n\n" . implode("\n\n", $miss)
+            . "\n\nCarry on with the next step towards the objective.", true);
+    }
+
+    /** Send the session the board's word (not an answer of yours: it teaches nothing), and resume it. */
+    private function goalNudge(array $g, string $text, bool $run = false): void
+    {
+        $s = $this->get((string)$g['session']);
+        if (!$s || !in_array($s['state'], ['waiting', 'working', 'ready'], true)) { $this->goalSet((int)$g['id'], ['state' => 'stopped', 'why' => 'its session is not running']); return; }
+        $this->app->store->q('INSERT INTO agent_commands(session, ts, kind, text, by) VALUES(?,?,?,?,?)', [$s['id'], time(), 'reply', mb_substr($text, 0, self::MAX_TEXT), 'assistant']);
+        $this->log($s['id'], 'assistant', 'queued', mb_substr($text, 0, self::MAX_TEXT));
+        if ((int)$s['job'] > 0) $this->app->store->q("UPDATE agent_jobs SET state = 'resume', updated = ? WHERE id = ? AND state = 'exited'", [time(), $s['job']]);
+        $this->goalSet((int)$g['id'], ($g['state'] === 'reporting' ? [] : ['state' => 'working']) + ($run ? ['runs' => (int)$g['runs'] + 1] : []) + ['why' => '']);
+    }
+
+    /** An objective whose session ended or was stopped is stopped too; one whose session never started has failed. */
+    private function goalSync(): void
+    {
+        foreach ($this->app->store->q("SELECT * FROM agent_goals WHERE state IN ('" . implode("','", self::GOAL_ACTIVE) . "')")->fetchAll() as $g) {
+            if ($g['session'] === '') {
+                $j = $this->job((int)$g['job']);
+                if (!$j || in_array($j['state'], ['failed', 'cancelled'], true)) $this->goalSet((int)$g['id'], ['state' => 'failed', 'why' => $j ? mb_substr((string)$j['log'], -300) : 'its session is gone']);
+                continue;
+            }
+            $s = $this->get($g['session']);
+            if (!$s || in_array($s['state'], ['ended', 'stopped'], true)) $this->goalSet((int)$g['id'], ['state' => 'stopped', 'why' => 'its session ended or was stopped']);
+        }
+    }
+
+    /** Stop an objective (and its session), or let a paused one go on: more runs and time, its checks again. */
+    public function goalAct(int $gid, string $act): array
+    {
+        $g = $this->goal($gid) ?? throw new \InvalidArgumentException('no such objective');
+        if ($act === 'stop') {
+            if (!in_array($g['state'], self::GOAL_ACTIVE, true) && $g['state'] !== 'paused') throw new \InvalidArgumentException('This objective is not running.');
+            $this->goalSet($gid, ['state' => 'stopped', 'why' => 'stopped by you']);
+            if ($g['session'] !== '') { try { $this->stop($g['session']); } catch (\InvalidArgumentException) {} }
+            elseif ($g['job']) { try { $this->stop('job:' . $g['job']); } catch (\InvalidArgumentException) {} }
+        } elseif ($act === 'resume') {
+            if (!in_array($g['state'], ['paused', 'needs_you'], true)) throw new \InvalidArgumentException('Only a paused objective can go on.');
+            $this->goalSet($gid, ['state' => 'checking', 'sent' => 0, 'same' => 0, 'fp' => '', 'max_runs' => max((int)$g['max_runs'], (int)$g['runs'] + 10),
+                'deadline' => max((int)$g['deadline'], time() + 4 * 3600), 'why' => '']);
+        } elseif ($act === 'forget') {
+            if (in_array($g['state'], self::GOAL_ACTIVE, true) || $g['state'] === 'paused') throw new \InvalidArgumentException('Stop it first.');
+            $this->app->store->q('DELETE FROM agent_goals WHERE id = ?', [$gid]); $this->bumpRev();
+            return ['ok' => true];
+        } else throw new \InvalidArgumentException('stop, resume or forget');
+        return ['goal' => $this->shapeGoal($this->goal($gid))];
     }
 
     // ---------- setup ----------
