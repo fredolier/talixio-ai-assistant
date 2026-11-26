@@ -140,4 +140,25 @@ check('agent listen: TALIXIO_ROOT still wins, several folders too, a missing one
 $plain = "$d/plain-listen.sh"; file_put_contents($plain, $hub->script('p', 'agent-listen.sh'));
 check('agent listen: with no folders chosen, it is the home folder as before', $sh("sh $plain --check $h4/code/shop", $h4)[0] === 0 && $sh("sh $plain --check $d/app/projects/talixio-code", $h4)[0] === 1);
 
+// 1.57.0: an objective's checks, run by the real listener in the objective's folder; what is not a plain command is not run
+$proj = "$d/app/projects/talixio-code";
+$hub->event(['hook_event_name' => 'SessionStart', 'session_id' => 'gl', 'cwd' => $proj], 'dev');
+$ins = function (string $cwd, array $checks) use ($app) {
+    $app->store->q("INSERT INTO agent_goals(machine, cwd, title, prompt, checks, report, allow, job, session, state, runs, max_runs, deadline, sent, checked, result, fp, same, why, created, updated)
+        VALUES('dev', ?, 'G', '', ?, '', '', 0, 'claude-code:gl', 'checking', 0, 20, ?, 0, 0, '', '', 0, '', ?, ?)", [$cwd, json_encode($checks), time() + 3600, time(), time()]);
+    return (int)$app->store->db->lastInsertId();
+};
+$gid = $ins($proj, [['cmd' => 'echo E06c closed', 'expect' => 'E06c'], ['cmd' => 'false', 'expect' => ''], ['cmd' => 'pwd', 'expect' => 'talixio-code'], ['cmd' => 'echo $(id) > pwned', 'expect' => '']]);
+$sh('timeout 8 sh ' . escapeshellarg($lis), $h4, ['TALIXIO_CLAUDE' => 'true']);
+$res = fn(int $id) => json_decode((string)$app->store->q('SELECT result FROM agent_goals WHERE id = ?', [$id])->fetchColumn(), true) ?: [];
+for ($i = 0; $i < 50 && !$res($gid); $i++) usleep(100000);
+$r = $res($gid);
+check('agent listen: it runs an objective\'s checks in its folder and sends back each exit code and output', count($r) === 4 && $r[0]['ok'] && $r[0]['code'] === 0 && str_contains($r[0]['out'], 'E06c closed')
+    && !$r[1]['ok'] && $r[1]['code'] === 1 && $r[2]['ok'] && str_ends_with($r[2]['out'], 'talixio-code'), json_encode($r));
+check('agent listen: a check that is not plain words is not run', $r[3]['code'] === 126 && str_contains($r[3]['out'], 'not a plain command') && !is_file("$proj/pwned"), json_encode($r[3] ?? null));
+$gid2 = $ins("$d/elsewhere/x", [['cmd' => 'touch made', 'expect' => '']]);
+$sh('timeout 8 sh ' . escapeshellarg($lis), $h4, ['TALIXIO_CLAUDE' => 'true']);
+for ($i = 0; $i < 50 && !$res($gid2); $i++) usleep(100000);
+check('agent listen: nor in a folder it may not use', ($res($gid2)[0]['code'] ?? 0) === 126 && !is_file("$d/elsewhere/x/made"), json_encode($res($gid2)));
+
 foreach ($saved as $k => $v) putenv($v === false ? $k : "$k=$v");

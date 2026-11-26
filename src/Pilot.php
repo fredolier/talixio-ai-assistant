@@ -156,6 +156,7 @@ final class Pilot
         foreach ([$f, "$f.tmp"] as $x) if (is_file($x)) @unlink($x);
         try { $this->app->knowledge()->retireRelay(); } catch (\Throwable $e) { Log::warn("knowledge: relay import: {$e->getMessage()}"); }
         $this->boardTick($now);
+        try { $this->app->agentHub()->goalsTick(); } catch (\Throwable $e) { Log::warn("objectives: {$e->getMessage()}"); } // 1.57.0
     }
 
     // ---- the agent board (1.39.0) ---------------------------------------------------------------------------------
@@ -321,6 +322,8 @@ final class Pilot
         $j = preg_match('/\{.*\}/s', (string)$text, $m) ? json_decode($m[0], true) : null;
         $answer = is_array($j) ? mb_substr(trim((string)($j['answer'] ?? '')), 0, 2000) : '';
         $kind = is_array($j) ? (string)($j['kind'] ?? '') : '';
+        // 1.57.0: in an objective, the next step is the objective's: the board tells the agent what is missing, not you
+        if ($kind === 'next' && $this->app->agentHub()->inGoal((string)$row['id'])) $kind = '';
         if (!in_array($kind, ['answer', 'next'], true) || $answer === '') { // done, nothing asked, or no usable answer: remember the turn, do nothing
             $this->mutate(function (array $s) use ($key) { $s['board_seen'][$key] = time(); $s['board_seen'] = array_slice($s['board_seen'], -200, null, true); return [$s, null]; });
             return 'no_question';
@@ -364,6 +367,17 @@ final class Pilot
             . ($why !== '' ? "\n" . I18n::t($this->app, 'Not sent by itself:') . " $why" : ''));
         return 'proposed';
     }
+
+    /** 1.57.0: what the assistant did with this turn: sent, proposed, 'none' (nothing asked), or null (not read yet). */
+    public function boardDecided(string $session, int $seq): ?string
+    {
+        $s = $this->state(); $k = self::boardKey($session, $seq);
+        if (isset($s['predictions'][$k])) return (string)$s['predictions'][$k]['action'];
+        return isset($s['board_seen'][$k]) ? 'none' : null;
+    }
+
+    /** 1.57.0: does the assistant read the agents' turns at all? */
+    public function boardReads(): bool { return self::reads($this->state()); }
 
     /** What the assistant expected for this turn, if it looked (its level and topic go with the decision, 1.44.0). */
     public function boardPrediction(string $session, int $seq): ?array { return $this->state()['predictions'][self::boardKey($session, $seq)] ?? null; }

@@ -3,6 +3,47 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.57.0 (2026-11-26)
+
+Objectives: a session works to the end of a goal by itself, and the board checks when it is reached.
+
+- **Why:** you want to give an agent an epic to close from A to Z once it is specified and OK'd, with the assistant
+  relaunching it until the epic is closed, the CI validated and a status report written, and with as few permission
+  requests and questions as possible.
+- **What it does:** *Objectives* on the Agents tab. You give a machine, a folder, a name, what to do, and 1 to 5
+  **checks**: the workflow's own commands (`./tools-workflow scenario:check-gate …`, `./tools-workflow ci:status --sha HEAD`).
+  - After each turn of the session, the listener runs the checks in the project folder. A check passes on exit code 0,
+    or when its output shows the text given after `=>`. The board decides, not a model.
+  - Not all passing: the session is resumed with what each check showed. All passing: it is asked for its final status
+    report, and the objective is met once it has written it.
+  - It pauses by itself after 3 identical results in a row (no progress), at its run limit (20) or its time limit (12 h),
+    and notifies you. **Go on**, **Stop** and **Forget** are in its card.
+  - When the assistant reads the turns: what it would propose to you makes the objective wait for you; a "next step"
+    it would have proposed is the objective's to take, so it goes on.
+- **Permissions, per objective:** in its folder, what is not labelled *Check first* is allowed at once. Of the *Check
+  first* kinds, only what you ticked: a push to its branch, deletions, installs, network, scripts. The rest is refused
+  and the agent is told to do it another way (or you are asked, if you tick *Ask me*). Never allowed: a push to
+  `main`/`master` or a forced push, a file outside the project, its own settings, a deploy, `sudo`. What the objective
+  allows teaches the assistant nothing.
+- **On the machine:** the listener has to be installed again from *Connect a machine*, because one from before 1.57.0
+  does not run checks. It runs only lines in plain words (also checked by the board when the objective is created) and
+  only in a folder it may use.
+- **Tested:**
+  - `tests/more/agent_goal.php` (23 checks; without the change it fails at the first one): check validation, the start prompt, each
+    permission rule, the check-run hand-off to the listener, resume with the results, the no-progress pause, Go on,
+    the report and the end, the assistant's read (a next step goes on, a question for you waits), Stop, Forget, and a
+    session that never started.
+  - `tests/more/agent_install.php`: the real listener runs the checks in the folder (exit codes, output, the expected
+    text), refuses a line with `$( )` without running it, and refuses a folder outside its roots.
+  - Browser flow `agentGoal`: an objective created from the pane, with the real hook and listener scripts and a stand-in
+    for `claude -p`. It goes on by itself when told the check fails, writes its report, shows as met, and is forgotten.
+- **Not tried:**
+  - a real Claude Code session and the real `./tools-workflow` on your VM. Run each check command by hand first, and
+    copy the text that shows the epic is closed (a clean gate verdict is not enough while the closure is held);
+  - the assistant's real reading of the turns of an objective; only its decisions were stubbed;
+  - a command at the plainest level is allowed even if it writes outside the project folder. Claude Code's own checks
+    (auto mode) remain the second layer for that.
+
 ## 1.56.1 (2026-11-25)
 
 The one-line install no longer writes the board's token into the agent scripts.

@@ -66,7 +66,24 @@ while :; do
     200)
       kind=$(sed -n 1p "$out"); id=$(sed -n 2p "$out")
       case "$id" in ''|*[!0-9]*) sleep 5; continue ;; esac
-      if [ "$kind" = stop ]; then
+      if [ "$kind" = check ]; then # 1.57.0: an objective's checks, in its folder; one command per line, plain words only
+        dir=$(sed -n 3p "$out"); real=$(cd "$dir" 2>/dev/null && pwd -P)
+        sed '1,3d' "$out" > "$D/check-$id.cmds"
+        (
+          n=0
+          while IFS= read -r c || [ -n "$c" ]; do
+            case "$c" in ''|*[!A-Za-z0-9_./:=,@+\ -]*) rc=126; o="Refused by the listener: not a plain command." ;;
+              *) if [ -z "$real" ] || ! allowed "$real"; then rc=126; o=$(refused "$dir")
+                 else o=$(cd "$real" && sh -c "$c" 2>&1 < /dev/null); rc=$?; fi ;;
+            esac
+            printf '=== %s %s\n%s\n' "$n" "$rc" "$(printf '%s' "$o" | tail -c 2500)"
+            n=$((n + 1))
+          done < "$D/check-$id.cmds" > "$D/check-$id.out"
+          curl -sS -m 20 -o /dev/null -H "Authorization: Bearer $T" -H "X-Talixio-Machine: $M" --data-binary @"$D/check-$id.out" "$U/api/agents/check?id=$id" 2>/dev/null
+          rm -f "$D/check-$id.cmds" "$D/check-$id.out"
+        ) &
+        echo "Checking objective $id in $dir."
+      elif [ "$kind" = stop ]; then
         [ -f "$D/$id.pid" ] && kill "$(cat "$D/$id.pid")" 2>/dev/null
       elif [ "$kind" = start ] || [ "$kind" = resume ]; then
         dir=$(sed -n 3p "$out"); sid=

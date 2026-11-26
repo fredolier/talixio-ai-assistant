@@ -89,6 +89,41 @@ The board updates by itself every few seconds while you look at it.
   1.50.0), the thread says to update it after a few minutes; the reply waits, it is not lost.
   Such a session no longer shows as *ended* after each turn (1.52.2): it waits in **Needs you**, the assistant reads it
   and its options show as buttons. It ends when you stop it, or when its process ends in the middle of its work.
+- **Objectives** (1.57.0, button at the top): give a session a goal and let it work to the end without you, for
+  example closing an epic once you have specified it and said OK. Choose the machine and folder (as for *New session*),
+  give it a name, say what it should do, and write the **checks**: one command per line that says whether the objective
+  is met, run in the project folder. A check passes when its exit code is 0, or, with `=> text` after it, when its output
+  shows that text. For the workflow, for example:
+
+  ```
+  ./tools-workflow scenario:check-gate --verdict --gate GATE_3 --epic E06c --scenario fw => "closure_held": false
+  ./tools-workflow ci:status --sha HEAD
+  ```
+
+  Run each command once yourself first and copy the text that shows the epic is really closed: a clean gate verdict
+  alone is not enough when the closure is held. A check is one command in plain words (no quotes, `$`, `;`, `|`, `&`,
+  `>`, `<` or `*`), never a risky one (a push, a deletion…); 1 to 5 checks.
+  - **How it goes on by itself.** The session starts with the objective and its checks. After each of its turns, the
+    machine's listener runs the checks in the folder and the board reads the results. Not all passing: the session is
+    told what each check shows and goes on (*run 2 of 20*). All passing: it is asked for its final status report (what
+    was done, what each check shows, what is left and for whom, the CI status), and the objective is *met* when it
+    has written it. You can write your own report instructions under *Report and limits*.
+  - **Its permission requests** follow the objective's rules, at once, so it does not wait for you: in its folder,
+    everything that is not labelled *Check first* is allowed. Of the *Check first* kinds, only those you ticked are
+    allowed: a push to its branch, deletions, installs, the network, downloaded or inline scripts. What you did not tick
+    is refused, and the agent is told to do it another way or leave it for you in its report (tick *Ask me* to be asked
+    instead). Never allowed, ticked or not: a push to `main`/`master` or a forced push, a file outside the project, its
+    own settings (`.claude/`), a deploy, `sudo`. The thread says *Allowed by the objective's rules* or *Refused…* and why.
+    What it allows teaches the assistant nothing.
+  - **When it stops.** It pauses by itself when the checks give the same results 3 times in a row (no progress), when it
+    has used all its runs (20 by default) or its time (12 hours by default); you get a notification. When the assistant
+    reads the turns and the agent asked something only you can answer, the objective *waits for you*: answer in the
+    session, then click **Go on** (Go on also gives a paused one 10 more runs and at least 4 hours). **Stop** ends the
+    objective and its session; **Forget** removes a finished one from the list.
+  - **On the machine:** the checks are run by the listener, so install it again from *Connect a machine* (a listener
+    from before 1.57.0 does not run them). It refuses a check that is not plain words, or a folder it may not use.
+  - **Limits:** a command at the plainest level (one that is not labelled *Check first*) is allowed even when it writes
+    outside the project folder; Claude Code's own checks still apply (run it in auto mode for a second look at each step).
 - **Resume and re-read** (1.51.0): a Claude Code session that has ended (or a board-started one that was stopped) shows
   this button instead of the reply box. The session waits for you again, the assistant reads where it stopped (its task,
   the last exchanges and its last message) and proposes what to do next, and your answer continues **that same session**

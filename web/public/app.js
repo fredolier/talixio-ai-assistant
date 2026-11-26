@@ -6534,6 +6534,27 @@ function abWire() {
       AB.rev = -1; await abRefresh();
     } catch (e) { toast(e.message); }
   };
+  // 1.57.0: an objective: the session goes on until its checks pass, then writes its report
+  $('#ab-goal-btn').onclick = () => abTool('ab-goal', () => { abGoalRender(); $('#ab-goal-title').focus(); });
+  $('#ab-goal-machine').onchange = () => abGoalFolders();
+  $('#ab-goal-start').onclick = async () => {
+    const title = $('#ab-goal-title').value.trim(), checks = $('#ab-goal-checks').value.trim();
+    if (!title) { $('#ab-goal-title').focus(); return; }
+    if (!checks) { $('#ab-goal-checks').focus(); return; }
+    try {
+      await post('api/agents/goals', { machine: $('#ab-goal-machine').value, cwd: $('#ab-goal-folder').value, title, prompt: $('#ab-goal-prompt').value.trim(), checks,
+        allow: [...document.querySelectorAll('#ab-goal-form .ab-goal-allow input:checked')].map(i => i.value), report: $('#ab-goal-report').value.trim(),
+        max_runs: +$('#ab-goal-runs').value || 20, hours: +$('#ab-goal-hours').value || 12 });
+      for (const id of ['ab-goal-title', 'ab-goal-prompt', 'ab-goal-checks', 'ab-goal-report']) $('#' + id).value = '';
+      toast(t('Sent to the machine: the session starts within seconds.'));
+      AB.rev = -1; await abRefresh();
+    } catch (e) { toast(e.message); }
+  };
+  $('#ab-goal-list').addEventListener('click', async e => {
+    const b = e.target.closest('[data-gact]'); if (!b) return;
+    if (b.dataset.gact === 'open') { abOpen(b.dataset.sid); return; }
+    try { await post(`api/agents/goals/${b.dataset.gid}/${b.dataset.gact}`, {}); AB.rev = -1; await abRefresh(); } catch (err) { toast(err.message); }
+  });
   // 1.39.0: the assistant answers the agents within the limits set here
   $('#ab-auto-btn').onclick = () => abTool('ab-auto', plLoadAuto);
   // 1.44.0: what the director learned from the agents (docs/design/director-knowledge.md)
@@ -6693,7 +6714,7 @@ function abKnowRender() {
 }
 function abNotifyShow(mode) { const sel = $('#ab-notify'); if (sel && mode && document.activeElement !== sel) sel.value = mode; }
 // 1.49.0: one pane on the right shows the open conversation, or one tool (New session, Connect, Autonomy, What I know)
-const AB_TOOLS = { 'ab-new': 'ab-new-btn', 'ab-setup': 'ab-connect', 'ab-auto': 'ab-auto-btn', 'ab-know': 'ab-know-btn' };
+const AB_TOOLS = { 'ab-new': 'ab-new-btn', 'ab-goal': 'ab-goal-btn', 'ab-setup': 'ab-connect', 'ab-auto': 'ab-auto-btn', 'ab-know': 'ab-know-btn' };
 function abPane(which) {
   AB.pane = which;
   for (const id of ['ab-empty', 'ab-detail', ...Object.keys(AB_TOOLS)]) $('#' + id).hidden = id !== which;
@@ -6728,8 +6749,10 @@ function abFit() {
 async function abRefresh() {
   const d = await api('api/agents');
   if (d.rev === AB.rev) return;
-  AB.rev = d.rev; AB.sessions = d.sessions || []; AB.jobs = d.jobs || []; AB.machines = d.machines || [];
+  AB.rev = d.rev; AB.sessions = d.sessions || []; AB.jobs = d.jobs || []; AB.machines = d.machines || []; AB.goals = d.goals || [];
   if (AB.pane === 'ab-new') abNewForm();
+  if (AB.pane === 'ab-goal') abGoalRender();
+  { const n = AB.goals.filter(g => g.active).length; $('#ab-goal-btn').textContent = n ? t('Objectives') + ' · ' + n : t('Objectives'); }
   const need = AB.sessions.filter(s => s.column === 'need').length;
   if (need !== state.agentsNeed) { state.agentsNeed = need; setFleetBadge(); }
   abNotifyShow(d.notify);
@@ -6760,6 +6783,35 @@ function abNewFolders() {
   const html = (m?.folders || []).map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
   if (sel.innerHTML !== html) { sel.innerHTML = html; if ((m?.folders || []).includes(cur)) sel.value = cur; }
   $('#ab-new-start').disabled = !m?.folders?.length;
+}
+// 1.57.0: the objectives, and the form for a new one (the same machines and folders as a new session)
+const AB_GOAL_STATE = () => ({ starting: t('starting'), working: t('working'), checking: t('running the checks'), checked: t('waiting for the assistant\'s read'),
+  needs_you: t('waits for you'), reporting: t('writing its report'), done: t('objective met'), paused: t('paused'), stopped: t('stopped'), failed: t('could not start') });
+function abGoalRender() {
+  const ms = AB.machines.filter(m => m.listening), sel = $('#ab-goal-machine'), cur = sel.value;
+  $('#ab-goal-none').hidden = !!ms.length; $('#ab-goal-form').hidden = !ms.length;
+  const html = ms.map(m => `<option value="${esc(m.machine)}">${esc(m.machine)}</option>`).join('');
+  if (sel.innerHTML !== html) { sel.innerHTML = html; if (ms.some(m => m.machine === cur)) sel.value = cur; }
+  abGoalFolders();
+  const st = AB_GOAL_STATE();
+  $('#ab-goal-list').innerHTML = (AB.goals || []).map(g => {
+    const cls = g.state === 'done' ? 'ok' : ['paused', 'needs_you', 'failed'].includes(g.state) ? 'warn' : g.active ? 'run' : '';
+    const res = (g.result || []).map(r => `<li class="${r.ok ? 'ok' : 'bad'}"><span aria-hidden="true">${r.ok ? '✓' : '✗'}</span> <code class="no-i18n">${esc(r.cmd)}</code>
+      <span class="muted">${esc(t('exit {code}', { code: r.code }))}</span>${r.out ? `<pre class="no-i18n">${esc(abTail(r.out, 300))}</pre>` : ''}</li>`).join('');
+    const acts = [g.session && g.session !== '' ? `<button type="button" class="btn ghost small" data-gact="open" data-sid="${esc(g.session)}">${esc(t('Open the session'))}</button>` : '',
+      ['paused', 'needs_you'].includes(g.state) ? `<button type="button" class="btn small" data-gact="resume" data-gid="${g.id}">${esc(t('Go on'))}</button>` : '',
+      g.active || g.state === 'paused' ? `<button type="button" class="btn ghost small" data-gact="stop" data-gid="${g.id}">${esc(t('Stop'))}</button>`
+        : `<button type="button" class="btn ghost small" data-gact="forget" data-gid="${g.id}">${esc(t('Forget'))}</button>`].join(' ');
+    return `<div class="ab-goal-card ${cls}"><div class="ab-goal-top"><b class="no-i18n">${esc(g.title)}</b> <span class="ab-goal-st">${esc(st[g.state] || g.state)}</span></div>
+      <div class="muted small"><span class="no-i18n">${esc(g.project)} · ${esc(g.machine)}</span> · ${esc(t('run {n} of {max}', { n: g.runs, max: g.max_runs }))}${g.checked ? ' · ' + esc(t('checked {ago}', { ago: pilotAgo(g.checked) })) : ''}</div>
+      ${g.why ? `<div class="small ab-goal-why">${esc(t(g.why))}</div>` : ''}${res ? `<ul class="ab-goal-res small">${res}</ul>` : ''}<div class="ab-goal-acts">${acts}</div></div>`;
+  }).join('');
+}
+function abGoalFolders() {
+  const m = AB.machines.find(x => x.machine === $('#ab-goal-machine').value), sel = $('#ab-goal-folder'), cur = sel.value;
+  const html = (m?.folders || []).map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+  if (sel.innerHTML !== html) { sel.innerHTML = html; if ((m?.folders || []).includes(cur)) sel.value = cur; }
+  $('#ab-goal-start').disabled = !m?.folders?.length;
 }
 const abJobState = j => ({ queued: t('waiting for the machine'), sent: t('starting'), started: t('started, not reporting yet'), failed: t('could not start') })[j.state] || j.state;
 const AB_STATE = () => ({ permission: t('asks for permission'), working: t('working'), waiting: t('finished its turn'), ready: t('started'), ended: t('ended'), stopped: t('stopped') });

@@ -1249,6 +1249,65 @@ ev SessionEnd ",\\"reason\\":\\"other\\""
       await page.click('#ab-detail [data-abact=close]');
     } finally { lis.kill(); }
   },
+  async agentGoal({ page, check, data }) {
+    // 1.57.0: an objective: the session goes on by itself until the checks pass in its folder (the real listener runs
+    // them), then writes its report; a stand-in for claude -p makes progress when told what the checks show
+    const { mkdirSync, chmodSync } = await import('node:fs');
+    const work = join(data, 'lab3', 'shop3'), lh = join(data, 'lab3', '.talixio');
+    mkdirSync(work, { recursive: true }); mkdirSync(lh, { recursive: true });
+    const postj = (path, body) => page.evaluate(([p, b]) => fetch(p, { method: 'POST', headers: { 'X-Talixio': '1', 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json()), [path, body]);
+    const was = (d => ({ analyse: (d.policy ?? d).analyse, enabled: (d.policy ?? d).enabled }))(await api(page, 'api/pilot'));
+    await postj('api/pilot', { analyse: false, enabled: false }); // the assistant does not read the turns here: no model in this harness
+    await go(page, 'pilotage');
+    await page.click('#view-pilotage .ptab[data-ptab=agents]');
+    await page.waitForSelector('#ab-cols .ab-col', { timeout: 6000 });
+    if (await page.isHidden('#ab-setup')) await page.click('#ab-connect');
+    await page.fill('#ab-machine', 'goalbox');
+    const get = sel => page.evaluate(s => fetch(document.querySelector(s).getAttribute('href')).then(r => r.text()), sel);
+    const hook = join(lh, 'agent-hook.sh'), listen = join(lh, 'agent-listen.sh');
+    writeFileSync(hook, await get('#ab-dl')); writeFileSync(listen, await get('#ab-dl-listen'));
+    const fake = join(lh, 'fake-claude.sh');
+    writeFileSync(fake, `#!/bin/sh
+sid="g-$$"; [ "$2" = --resume ] && sid="$3"
+p=$(cat)
+ev() { printf '{"session_id":"%s","hook_event_name":"%s","cwd":"%s"%s}' "$sid" "$1" "$PWD" "$2" | sh '${hook}' event; }
+[ "$2" = --resume ] || ev SessionStart ''
+msg="Stage 1 done."
+case "$p" in *"not met yet"*) echo "E06c closed" > state.txt; msg="Closed E06c." ;; *"objective is met"*) msg="Report: E06c closed, CI not read." ;; esac
+ev Stop ",\\"last_assistant_message\\":\\"$msg\\""
+`); chmodSync(fake, 0o755);
+    const seed = spawn('sh', [hook, 'event']); seed.stdin.end(JSON.stringify({ session_id: 'lab3-seed', hook_event_name: 'SessionStart', cwd: work }));
+    await new Promise(r => seed.on('close', r));
+    const lis = spawn('sh', [listen], { env: { ...process.env, TALIXIO_HOME: lh, TALIXIO_ROOT: join(data, 'lab3'), TALIXIO_CLAUDE: fake }, stdio: 'ignore' });
+    try {
+      await page.click('#ab-goal-btn');
+      await page.waitForSelector('#ab-goal-form:not([hidden]) #ab-goal-machine option[value=goalbox]', { state: 'attached', timeout: 12000 });
+      await page.selectOption('#ab-goal-machine', 'goalbox');
+      await page.selectOption('#ab-goal-folder', work);
+      await page.fill('#ab-goal-title', 'Close E06c');
+      await page.fill('#ab-goal-prompt', 'Take E06c to its close.');
+      await page.fill('#ab-goal-checks', 'cat state.txt => E06c closed');
+      await page.check('#ab-goal-form .ab-goal-allow input[value=git]');
+      await page.click('#ab-goal-start');
+      await page.waitForSelector('#ab-goal-list .ab-goal-card', { timeout: 6000 });
+      check('agent goal: the objective shows in its pane, running', /Close E06c/.test(await page.textContent('#ab-goal-list')) && /·\s*1/.test(await page.textContent('#ab-goal-btn')));
+      const g = () => api(page, 'api/agents').then(d => d.goals.find(x => x.title === 'Close E06c'));
+      let x;
+      for (let i = 0; i < 120 && (x = await g())?.state !== 'done'; i++) await page.waitForTimeout(500);
+      check('agent goal: it went on by itself until the check passed, then wrote its report and is done', x?.state === 'done' && x.runs === 1 && x.result[0]?.ok === true, JSON.stringify(x));
+      await page.waitForFunction(() => /objective met|objectif atteint/i.test(document.querySelector('#ab-goal-list')?.textContent || ''), null, { timeout: 8000 }).catch(() => {});
+      check('agent goal: the pane shows it met, its check passing, with a way to forget it', /objective met|objectif atteint/i.test(await page.textContent('#ab-goal-list'))
+        && !!(await page.$('#ab-goal-list li.ok')) && !!(await page.$('#ab-goal-list [data-gact=forget]')));
+      await page.click('#ab-goal-list [data-gact=open]');
+      await page.waitForFunction(() => /Report: E06c closed/.test(document.querySelector('#ab-detail .ab-thread')?.textContent || ''), null, { timeout: 6000 }).catch(() => {});
+      const th = await page.textContent('#ab-detail .ab-thread');
+      check('agent goal: its thread holds the board\'s word after the checks, and the report', /not met yet|pas encore atteint/.test(th) && /Report: E06c closed/.test(th), th.slice(-600));
+      await page.click('#ab-goal-btn');
+      await page.click('#ab-goal-list [data-gact=forget]');
+      await page.waitForFunction(() => !/Close E06c/.test(document.querySelector('#ab-goal-list')?.textContent || ''), null, { timeout: 6000 }).catch(() => {});
+      check('agent goal: Forget removes it', !/Close E06c/.test(await page.textContent('#ab-goal-list')));
+    } finally { lis.kill(); await postj('api/pilot', { analyse: was.analyse !== false, enabled: !!was.enabled }); }
+  },
   async pilotage({ page, check, root, data }) {
     // the director's cockpit: four tabs over machinery already shipped, voice-first
     // seed one non-protected role so the catalogue has a card to group, specialize and run the lifecycle on

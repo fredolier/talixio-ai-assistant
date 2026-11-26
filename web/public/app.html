@@ -163,6 +163,7 @@
             <div class="ab-title"><h3>Your agents</h3><span class="muted small no-i18n" id="ab-sub"></span></div>
             <div class="ab-tools">
               <button type="button" id="ab-new-btn" class="btn small" aria-expanded="false">New session</button>
+              <button type="button" id="ab-goal-btn" class="btn ghost small" aria-expanded="false" title="Give a session an objective: it keeps going until the checks you set pass, then writes its report">Objectives</button>
               <button type="button" id="ab-connect" class="btn ghost small" aria-expanded="false">Connect a machine</button>
               <button type="button" id="ab-auto-btn" class="btn ghost small" aria-expanded="false">Autonomy</button>
               <button type="button" id="ab-know-btn" class="btn ghost small" aria-expanded="false" title="What the assistant learned from your agents: a dossier per project, the sessions summarised, and who decided what">What I know</button>
@@ -193,6 +194,36 @@
                 <label class="small">Folder <select id="ab-new-folder" class="no-i18n"></select></label>
                 <textarea id="ab-new-prompt" rows="3" placeholder="What should the session do?"></textarea>
                 <div><button type="button" class="btn small" id="ab-new-start">Start</button> <span class="muted small">It runs Claude Code there (claude -p) and reports here like the others.</span></div>
+              </div>
+            </div>
+            <div class="ab-tool ab-goal" id="ab-goal" hidden>
+              <div class="ab-pane-head"><h4>Objectives</h4><button type="button" class="btn ghost small ab-pane-close" data-pane-close aria-label="Close">✕</button></div>
+              <p class="small muted">A session works towards an objective on its own. After each of its turns the listener runs your checks in the project; until they all pass, the session is told what they show and goes on. Then it writes its report. Its permission requests follow the rules below, so it does not wait for you.</p>
+              <div class="ab-goal-list" id="ab-goal-list"></div>
+              <p class="small muted" id="ab-goal-none">No machine is listening for new work yet. On the machine, start the listener (Connect a machine, step 4); a session can start only in a folder where a session already ran there.</p>
+              <div class="ab-new-form ab-goal-form" id="ab-goal-form" hidden>
+                <h5>New objective</h5>
+                <label class="small">Machine <select id="ab-goal-machine"></select></label>
+                <label class="small">Folder <select id="ab-goal-folder" class="no-i18n"></select></label>
+                <label class="small">Name <input id="ab-goal-title" maxlength="200" placeholder="Close epic E06c"></label>
+                <textarea id="ab-goal-prompt" rows="3" placeholder="What should it do? E.g. take epic E06c of scenario fw to its close, following the workflow."></textarea>
+                <label class="small ab-goal-col">Checks: one command per line; add => text when its output must show that text (else its exit code must be 0)
+                  <textarea id="ab-goal-checks" rows="3" class="no-i18n" spellcheck="false" placeholder="./tools-workflow scenario:check-gate --verdict --gate GATE_3 --epic E06c --scenario fw => &quot;closure_held&quot;: false
+./tools-workflow ci:status --sha HEAD"></textarea></label>
+                <fieldset class="ab-goal-allow small"><legend>Also allowed without asking (Check first)</legend>
+                  <label><input type="checkbox" value="git"> Push to its branch (never main, never forced)</label>
+                  <label><input type="checkbox" value="delete"> Delete files in the project</label>
+                  <label><input type="checkbox" value="install"> Install packages</label>
+                  <label><input type="checkbox" value="network"> Reach the network</label>
+                  <label><input type="checkbox" value="script"> Run downloaded or inline scripts</label>
+                  <label><input type="checkbox" value="ask"> Ask me for what is not ticked (else it is refused and the agent does it another way)</label>
+                </fieldset>
+                <details class="small"><summary>Report and limits</summary>
+                  <textarea id="ab-goal-report" rows="2" placeholder="The report it writes at the end (empty: what was done, what each check shows, what is left and for whom, the CI status)"></textarea>
+                  <label class="small">Runs at most <input id="ab-goal-runs" type="number" min="1" max="100" value="20"></label>
+                  <label class="small">Hours at most <input id="ab-goal-hours" type="number" min="1" max="168" value="12"></label>
+                </details>
+                <div><button type="button" class="btn small" id="ab-goal-start">Start</button> <span class="muted small">It pauses on its own when the checks show no progress 3 times in a row.</span></div>
               </div>
             </div>
             <div class="ab-tool ab-setup" id="ab-setup" hidden>
