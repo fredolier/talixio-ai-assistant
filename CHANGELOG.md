@@ -3,6 +3,35 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.59.1 (2026-11-26)
+
+Objectives: fixes from simulating realistic runs of 1.59.0.
+
+- **Why:** you asked for use cases played against what was built. Six simulated runs (the real code, the model's
+  answer scripted) showed four problems; you asked to fix these four.
+- **What changed:**
+  - **A step taken counts as progress.** The listener now adds a fingerprint of the project's git state (HEAD, status,
+    diff) after the checks. An objective pauses for *no progress* only when the checks give the same results 3 times
+    in a row and the project did not change either. Before, a long epic whose final check shows the same until the
+    end paused at its third run. The listener must be updated on your machine (Connect a machine, then install it
+    again); until then it behaves as in 1.59.0.
+  - **A usage limit waits for its reset.** When a run ends on Claude Code's usage limit (in its output, or as its whole
+    last message), the objective waits until the reset time it gives (else an hour; 5 minutes for a rate limit), then
+    goes on. Before, it retried at once, failed the same way, and paused after 3 runs as *no progress*.
+  - **Why a check fails, in words.** A check that needs a text in its output is described as *its output does not show
+    "E07 closed"*, no longer as *exit 0*, in the resume, the plain word and what the assistant reads.
+  - **Your answer in the session goes on with what waited for you.** The objective returns to *working* and the card
+    disappears; before, it kept showing *Send and go on* until the turn ended, and clicking it sent a second reply.
+  - Also: the assistant is told that when a check only waits for something running (a CI still pending), the agent
+    should wait for it inside its turn rather than end it.
+- **Tested:** 8 new checks in `tests/more/agent_goal.php` (the first 5 fail without the change; the others need code
+  that does not exist before it): progress through git state, the pause when nothing changes, the check wording, the
+  wait for a usage limit and the resume after it, which messages count as a limit, and your answer in the session.
+  One 1.57.0 check was adapted on purpose: each check result now also carries the text it needs (`expect`).
+- **Not tried:** the updated listener on a real machine (its `git` lines were checked with `sh -n` only), real
+  Claude Code usage-limit messages (the formats matched are `Claude AI usage limit reached|<time>`, *limit reached*,
+  *You've hit your limit*, and API 429 errors), and the CI wait advice with a real model.
+
 ## 1.59.0 (2026-11-26)
 
 When a run of an objective stops, the assistant reads why and writes the resume, with your guidelines.

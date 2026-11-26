@@ -71,6 +71,7 @@ final class AgentHub
         $app->store->addColumn('agent_goals', 'guide', "TEXT NOT NULL DEFAULT ''");
         $app->store->addColumn('agent_goals', 'ask', "TEXT NOT NULL DEFAULT ''");
         $app->store->addColumn('agent_goals', 'crash', "TEXT NOT NULL DEFAULT ''");
+        $app->store->addColumn('agent_goals', 'wait_until', 'INTEGER NOT NULL DEFAULT 0'); // 1.59.1: Claude Code's usage limit resets then
     }
 
     // ---------- the machine side (Bearer token) ----------
@@ -316,6 +317,8 @@ final class AgentHub
             $this->decided($s, (string)$s['last_message'], $text, $by, $meta); // the first answer to this turn (a second one adds to it)
         $this->app->store->q('INSERT INTO agent_commands(session, ts, kind, text, by) VALUES(?,?,?,?,?)', [$id, time(), $kind, $text, $by]);
         $this->log($id, $by, 'queued', $kind === 'reply' ? $text : $kind);
+        if ($kind === 'reply' && $by === 'you' && ($g = $this->goalOf($id)) && $g['state'] === 'needs_you') // 1.59.1: answered in the session: the objective goes on
+            $this->goalSet((int)$g['id'], ['state' => 'working', 'ask' => '', 'why' => '']);
         if ($kind === 'reply' && $s['state'] === 'waiting' && (int)$s['job'] > 0) // 1.50.0: its process ended with its turn: the listener resumes it with the reply
             $this->app->store->q("UPDATE agent_jobs SET state = 'resume', updated = ? WHERE id = ? AND state = 'exited'", [time(), $s['job']]);
         $this->update($id, ['seen' => time()]);
@@ -838,7 +841,7 @@ final class AgentHub
             if ($this->notifyMode() !== 'off') $this->app->notifier()->notify(I18n::t($this->app, 'Objective met: {title}', ['title' => $g['title']]), mb_substr(trim((string)($s['last_message'] ?? '')), 0, 1500));
             return;
         }
-        $this->goalSet((int)$g['id'], ['state' => 'checking', 'sent' => 0, 'ask' => '', 'crash' => mb_substr($crash, -3000)]);
+        $this->goalSet((int)$g['id'], ['state' => 'checking', 'sent' => 0, 'ask' => '', 'crash' => mb_substr($crash, -3000), 'wait_until' => 0]);
     }
 
     /**
@@ -854,6 +857,10 @@ final class AgentHub
         if (!$g || $g['machine'] !== $machine) return [404, ['error' => 'no such objective']];
         if ($g['state'] !== 'checking') return [200, ['ok' => true]]; // stopped meanwhile, or a late copy
         $checks = json_decode($g['checks'], true) ?: [];
+        // 1.59.1: after the checks, the listener adds a fingerprint of the project's git state (HEAD, status, diff): a
+        // workflow that takes its steps changes the project even while the final check still shows the same
+        $git = '';
+        if (preg_match('/^=== git\n(.*)\z/ms', $body, $gm, PREG_OFFSET_CAPTURE)) { $git = trim($gm[1][0]); $body = substr($body, 0, $gm[0][1]); }
         $parts = preg_split('/^=== (\d+) (\d+)\n?/m', $body, -1, PREG_SPLIT_DELIM_CAPTURE);
         $out = [];
         for ($i = 1; $i + 1 < count($parts); $i += 3) $out[(int)$parts[$i]] = ['code' => (int)$parts[$i + 1], 'out' => mb_substr(rtrim((string)($parts[$i + 2] ?? '')), -2500)];
@@ -862,9 +869,9 @@ final class AgentHub
             $r = $out[$n] ?? ['code' => -1, 'out' => '(no result)'];
             $ok = $r['code'] >= 0 && ($c['expect'] !== '' ? str_contains($r['out'], $c['expect']) : $r['code'] === 0);
             $met = $met && $ok;
-            $res[] = ['cmd' => $c['cmd'], 'code' => $r['code'], 'ok' => $ok, 'out' => $r['out']];
+            $res[] = ['cmd' => $c['cmd'], 'expect' => $c['expect'], 'code' => $r['code'], 'ok' => $ok, 'out' => $r['out']];
         }
-        $fp = sha1(json_encode(array_map(fn($r) => [$r['code'], $r['out']], $res)));
+        $fp = sha1(json_encode([array_map(fn($r) => [$r['code'], $r['out']], $res), $git]));
         $same = $fp === $g['fp'] ? (int)$g['same'] + 1 : 0;
         $this->goalSet($gid, ['state' => $met ? 'reporting' : 'checked', 'checked' => time(), 'result' => (string)json_encode($res, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 'fp' => $fp, 'same' => $same]);
         if ($met) {
@@ -897,8 +904,17 @@ final class AgentHub
         $pending = (int)$this->app->store->q("SELECT COUNT(*) FROM agent_commands WHERE session = ? AND delivered IS NULL AND kind = 'reply'", [$s['id']])->fetchColumn();
         if ($pending) { $this->goalSet($gid, ['state' => 'working']); return; } // an answer already goes to it (yours, or the assistant's)
         if ($s['state'] === 'working') { $this->goalSet($gid, ['state' => 'working']); return; } // it goes on already (you typed in its terminal)
+        // 1.59.1: Claude Code hit its usage limit: retrying now fails the same way and spends the runs; it goes on once it resets
+        $until = (int)($g['wait_until'] ?? 0);
+        if ($until > time()) return;
+        if ($until > 0 && (int)$g['checked'] < $until) { $this->goalSet($gid, ['checked' => time(), 'why' => '']); $g['checked'] = time(); } // it reset: the reading starts now
+        if ($until === 0 && ($reset = self::limitReset((string)$g['crash'], (string)$s['last_message'])) !== null) {
+            $this->goalSet($gid, ['wait_until' => $reset, 'why' => 'it waits for its usage limit to reset']);
+            $this->log($s['id'], 'assistant', 'notice', I18n::t($this->app, 'Claude Code hit its usage limit: the objective goes on at {time}.', ['time' => date('H:i', $reset)]));
+            return;
+        }
         $why = match (true) {
-            (int)$g['same'] >= 2 => 'no progress: the checks gave the same results 3 times in a row',
+            (int)$g['same'] >= 2 => 'no progress: the checks gave the same results 3 times in a row, and the project did not change',
             (int)$g['runs'] >= (int)$g['max_runs'] => 'it used all its runs',
             time() > (int)$g['deadline'] => 'it ran out of time',
             default => '',
@@ -929,18 +945,39 @@ final class AgentHub
             }
         }
         $miss = [];
-        foreach (json_decode((string)$g['result'], true) ?: [] as $r) if (!$r['ok']) $miss[] = '$ ' . $r['cmd'] . ' → exit ' . $r['code'] . "\n" . mb_substr($r['out'], -1500);
+        foreach (json_decode((string)$g['result'], true) ?: [] as $r) if (!$r['ok']) $miss[] = '$ ' . $r['cmd'] . ' → ' . self::checkMiss($r) . "\n" . mb_substr($r['out'], -1500);
         $each = (string)($g['every_run'] ?? '');
         $text = 'The objective is not met yet (run ' . ((int)$g['runs'] + 1) . ' of ' . $g['max_runs'] . "). What the checks show:\n\n" . implode("\n\n", $miss)
             . "\n\nCarry on with the next step towards the objective.";
         $this->goalNudge($g, str_starts_with($each, '/') ? $each : ($each !== '' ? "$each\n\n$text" : $text), true);
     }
 
+    /**
+     * 1.59.1: when Claude Code's usage limit resets (a time), if this run ended on it: its output after a crash, or a last
+     * message that is only that error. The reset time it gives, else in an hour (5 minutes for a rate limit). null: not a limit.
+     */
+    public static function limitReset(string $crash, string $last = ''): ?int
+    {
+        $last = trim($last);
+        $t = trim($crash) !== '' ? mb_substr($crash, -2000) : (mb_strlen($last) <= 400 && preg_match('/^(API Error|Claude AI usage limit|[^\n]{0,40}limit reached|You.ve hit your limit)/i', $last) ? $last : '');
+        if ($t === '') return null;
+        if (preg_match('/usage limit reached\|(\d{10})/i', $t, $m)) return max(time() + 60, (int)$m[1] + 60);
+        if (preg_match('/usage limit|limit reached|hit your limit|limit will reset|resets? (at )?\d/i', $t)) return time() + 3600;
+        if (preg_match('/\b429\b|rate.?limit/i', $t)) return time() + 300;
+        return null;
+    }
+
+    /** 1.59.1: why a check does not pass, in words: its output lacks the text it needs, or its exit code. */
+    public static function checkMiss(array $r): string
+    {
+        return ($r['expect'] ?? '') !== '' && (int)$r['code'] === 0 ? 'its output does not show "' . $r['expect'] . '"' : 'exit ' . $r['code'];
+    }
+
     /** 1.59.0: the next run, as the assistant wrote it, then where the objective stands and the workflow's command. */
     private function goalRun(array $g, string $text): string
     {
         $fail = [];
-        foreach (json_decode((string)$g['result'], true) ?: [] as $r) if (!$r['ok']) $fail[] = '`' . $r['cmd'] . '` (exit ' . $r['code'] . ')';
+        foreach (json_decode((string)$g['result'], true) ?: [] as $r) if (!$r['ok']) $fail[] = '`' . $r['cmd'] . '` (' . self::checkMiss($r) . ')';
         $each = (string)($g['every_run'] ?? '');
         return trim($text) . "\n\nObjective: {$g['title']} (run " . ((int)$g['runs'] + 1) . ' of ' . $g['max_runs'] . '). '
             . ($fail ? 'Checks not passing yet: ' . implode(', ', $fail) . '.' : '')
