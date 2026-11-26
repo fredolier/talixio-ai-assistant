@@ -103,13 +103,10 @@ The board updates by itself every few seconds while you look at it.
   Run each command once yourself first and copy the text that shows the epic is really closed: a clean gate verdict
   alone is not enough when the closure is held. A check is one command in plain words (no quotes, `$`, `;`, `|`, `&`,
   `>`, `<` or `*`), never a risky one (a push, a deletion…); 1 to 5 checks.
-  - **Each run** (1.58.0, optional): the workflow's command, for a workflow that keeps its own plan, for example
-    `/scenario-orchestrator fw`. A slash command is the whole first prompt, exactly as typed (anything after it would be
-    its arguments). Each later run ends with *Then go on with the workflow: run /scenario-orchestrator fw*, after the
-    assistant's message (below); when the assistant does not read the turns, a later run is the command alone. Other
-    text is sent first, followed by the objective (first run) or what the checks show (later runs).
   - **Guidelines** (1.59.0): how the assistant answers it and resumes it for you: what it may decide, what stays yours
-    (*The spec is OK'd: decide the implementation yourself. Never change the scope without asking me.*). They rank above
+    (*The spec is OK'd: decide the implementation yourself. Never change the scope without asking me.*). If your workflow
+    has its own command for the next step, name it here (*Go on with /scenario-orchestrator fw.*): since 1.60.0 there is
+    no separate *Each run* field. They rank above
     your other rules for this objective, and the session gets them in its first prompt.
   - **How it goes on by itself.** The session starts with the objective and its checks. After each of its turns, the
     machine's listener runs the checks in the folder and the board reads the results. Not all passing: the session is
@@ -117,8 +114,7 @@ The board updates by itself every few seconds while you look at it.
     and proposes what to do next*, in *Autonomy*, on by default), it first works out why the run stopped: a question, a
     blocker (a failure, a refused permission), a step done, an error, or it says it is done while a check fails. It
     writes the resume message as you would, from the objective, your guidelines, what the checks show and the last
-    exchange: the answer, or what to do about what stopped it, then where the objective stands and the workflow's
-    command. It decides what is technical, design, solution or product within the scope (L1 to L4; L4 only when it is
+    exchange: the answer, or what to do about what stopped it, then where the objective stands. It decides what is technical, design, solution or product within the scope (L1 to L4; L4 only when it is
     fairly sure). A run whose process ended before its turn did (an API error, a limit) is read the same way, with the
     end of its output, instead of ending the objective. The thread says *The assistant read the turn* and what it found.
     The reading is done by the server's worker; if none reads the turn within 5 minutes, or the assistant gives no usable

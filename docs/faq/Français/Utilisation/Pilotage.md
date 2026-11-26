@@ -115,15 +115,11 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   Lancez d'abord chaque commande vous-même et copiez le texte qui montre que l'épopée est vraiment close : un verdict de
   gate propre ne suffit pas quand la clôture est retenue. Une vérification est une seule commande en mots simples (sans
   guillemets, `$`, `;`, `|`, `&`, `>`, `<` ni `*`), jamais une commande risquée (un push, une suppression…) ; de 1 à 5.
-  - **À chaque tour** (1.58.0, facultatif) : la commande du workflow, pour un workflow qui tient son propre plan, par
-    exemple `/scenario-orchestrator fw`. Une commande slash est tout le premier prompt, telle quelle (ce qui la suivrait
-    serait ses arguments). Chaque tour suivant se termine par *Then go on with the workflow: run /scenario-orchestrator
-    fw*, après le message de l'assistant (ci-dessous) ; quand l'assistant ne lit pas les tours, un tour suivant est la
-    commande seule. Un autre texte est envoyé en premier, suivi de l'objectif (premier tour) ou de ce que montrent les
-    vérifications (tours suivants).
   - **Consignes** (1.59.0) : comment l'assistant lui répond et la relance à votre place : ce qu'il peut décider, ce qui
     reste à vous (*La spec est validée : décide toi-même de l'implémentation. Ne change jamais le périmètre sans me
-    demander.*). Elles passent avant vos autres règles pour cet objectif, et la session les reçoit dans son premier prompt.
+    demander.*). Si votre
+    workflow a sa propre commande pour l'étape suivante, nommez-la ici (*Continue avec /scenario-orchestrator fw.*) :
+    depuis 1.60.0, il n'y a plus de champ *À chaque tour* séparé. Elles passent avant vos autres règles pour cet objectif, et la session les reçoit dans son premier prompt.
   - **Comment elle continue seule.** La session démarre avec l'objectif et ses vérifications. Après chacun de ses tours,
     l'écouteur de la machine lance les vérifications dans le dossier et le tableau lit les résultats. Pas toutes vertes :
     la session est relancée (*tour 2 sur 20*). Depuis 1.59.0, quand l'assistant lit les tours (*L'assistant lit chaque
@@ -131,7 +127,7 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
     s'est arrêté : une question, un blocage (un échec, une autorisation refusée), une étape finie, une erreur, ou elle se
     dit finie alors qu'une vérification échoue. Il écrit le message de relance comme vous le feriez, à partir de
     l'objectif, de vos consignes, de ce que montrent les vérifications et des derniers échanges : la réponse, ou quoi faire
-    de ce qui l'a arrêtée, puis où en est l'objectif et la commande du workflow. Il décide ce qui est technique,
+    de ce qui l'a arrêtée, puis où en est l'objectif. Il décide ce qui est technique,
     conception, solution ou produit dans le périmètre (L1 à L4 ; L4 seulement quand il est assez sûr). Un tour dont le
     processus s'est arrêté avant la fin (une erreur d'API, une limite) est lu de la même façon, avec la fin de sa sortie,
     au lieu de terminer l'objectif. Le fil dit *L'assistant a lu le tour* et ce qu'il a trouvé. La lecture est faite par

@@ -1309,7 +1309,7 @@ ev Stop ",\\"last_assistant_message\\":\\"$msg\\""
       // 1.59.0: what waits for you shows the agent's question and the assistant's proposal, which you can change and send
       let sent = null;
       await page.route('**/api/agents', async r => { const res = await r.fetch(); const d = await res.json();
-        d.rev = 'mock-' + Date.now(); d.goals = [{ id: 77, machine: 'goalbox', cwd: work, project: 'shop3', title: 'Price page', every_run: '', guide: '', checks: [], allow: [], session: '', job: 0,
+        d.rev = 'mock-' + Date.now(); d.goals = [{ id: 77, machine: 'goalbox', cwd: work, project: 'shop3', title: 'Price page', guide: '', checks: [], allow: [], session: '', job: 0,
           state: 'needs_you', active: true, runs: 2, max_runs: 20, deadline: 0, result: [], checked: 0, why: 'the agent asked something only you can answer',
           ask: { text: 'Keep it.', question: 'Drop the pricing page?', summary: 'It asks about pricing.', level: 'L6', situation: 'question' }, created: 0, updated: 0 }];
         await r.fulfill({ response: res, json: d }); });
