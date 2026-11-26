@@ -101,7 +101,7 @@ check('goal: once done, its session has the usual rules again', !$hub->inGoal('c
 // 1.59.0: the assistant reads why the run stopped and writes the next one, with the objective, your guidelines, the checks
 // and the workflow's command; only what is not the objective's to decide waits for you, with its proposal
 $app->pilot()->setPolicy(['analyse' => true]);
-$g2 = $hub->goalStart('vm', '/w/shop', 'E07', 'Close E07.', 'ls', ['git'], '', 20, 12, 'you', '/scenario-orchestrator fw', 'The spec is OK\'d: decide the implementation yourself.')['goal'];
+$g2 = $hub->goalStart('vm', '/w/shop', 'E07', 'Close E07.', 'ls', ['git'], '', 20, 12, 'you', 'The spec is OK\'d: decide the implementation yourself.')['goal'];
 $hub->next('vm'); $hub->jobReport('vm', $g2['job'], 'started', 300, '');
 $ev('g2', ['hook_event_name' => 'SessionStart', 'talixio_job' => $g2['job']]);
 $before = Pilot::$model;
@@ -121,9 +121,9 @@ check('goal: the checks are back: the reading is the worker\'s, the listener\'s 
 $hub->goalsTick(true);
 [, $resume] = $hub->next('vm');
 check('goal: the assistant read the turn with the objective, your guidelines, the checks and the command', str_contains($seen, 'Close E07.') && str_contains($seen, 'decide the implementation yourself')
-    && str_contains($seen, 'Should I split the migration') && str_contains($seen, '[fails] $ ls') && str_contains($seen, '/scenario-orchestrator fw'), $seen);
-check('goal: it answers the question itself (L2), then says where the objective stands and to go on with the workflow', $goal($g2['id'])['state'] === 'working' && (int)$goal($g2['id'])['runs'] === 1
-    && str_contains($resume, "g2\nYes, split it in two.\n\nObjective: E07 (run 1 of 20). Checks not passing yet: `ls` (exit 1).\nThen go on with the workflow: run /scenario-orchestrator fw.")
+    && str_contains($seen, 'Should I split the migration') && str_contains($seen, '[fails] $ ls'), $seen);
+check('goal: it answers the question itself (L2), then says where the objective stands', $goal($g2['id'])['state'] === 'working' && (int)$goal($g2['id'])['runs'] === 1
+    && str_contains($resume, "g2\nYes, split it in two.\n\nObjective: E07 (run 1 of 20). Checks not passing yet: `ls` (exit 1).")
     && str_contains($text('g2'), 'The assistant read the turn (a question): It asks whether to split the migration.'), $resume);
 check('goal: the board\'s own reading leaves an objective\'s turns alone', $app->pilot()->boardSent('claude-code:g2') === [] && !$app->pilot()->boardPrediction('claude-code:g2', (int)$hub->get('claude-code:g2')['seq']));
 $hub->jobReport('vm', $g2['job'], 'started', 301, '');
@@ -152,7 +152,7 @@ Pilot::$model = fn() => 'not JSON';
 $round('nope 4', 'Stage s4 done.');
 $hub->goalsTick(true);
 [, $resume] = $hub->next('vm');
-check('goal: no usable reading: the board\'s plain word goes (here, the workflow\'s command alone)', $resume === "resume\n{$g2['job']}\n/w/shop\ng2\n/scenario-orchestrator fw", $resume);
+check('goal: no usable reading: the board\'s plain word goes', str_starts_with($resume, "resume\n{$g2['job']}\n/w/shop\ng2\nThe objective is not met yet (run 4 of 20). What the checks show:"), $resume);
 $hub->jobReport('vm', $g2['job'], 'started', 304, '');
 $round('nope 5', 'Stage s5 done.');
 $app->store->q('UPDATE agent_goals SET checked = ? WHERE id = ?', [time() - AgentHub::READ_WAIT - 1, $g2['id']]);
@@ -169,24 +169,14 @@ $hub->next('vm'); $hub->jobReport('vm', $g3['job'], 'failed', 0, 'claude: comman
 $hub->board();
 check('goal: a session that never started fails the objective, with why', $goal($g3['id'])['state'] === 'failed' && str_contains($goal($g3['id'])['why'], 'not found'));
 
-// 1.58.0: each run starts with the same command, e.g. the workflow's skill, which follows its own plan
+// 1.60.0: no command for each run any more (1.58.0 is removed): the form has no such field, and what follows `by` is your guidelines
 $app->pilot()->setPolicy(['analyse' => false, 'enabled' => false]);
-check('goal: a command for each run is one line', str_contains($err(fn() => $hub->goalStart('vm', '/w/shop', 'E09', '', 'ls', [], '', 20, 12, 'you', "/scenario-orchestrator fw\nand more")), 'one line'));
-$g4 = $hub->goalStart('vm', '/w/shop', 'E09', 'Close E09.', 'ls', [], '', 20, 12, 'you', ' /scenario-orchestrator fw ')['goal'];
+$g4 = $hub->goalStart('vm', '/w/shop', 'E09', 'Close E09.', 'ls', [], '', 20, 12, 'you', 'Decide the details yourself.')['goal'];
 [, $body] = $hub->next('vm');
-check('goal: a slash command for each run is the whole first prompt, as typed', $g4['every_run'] === '/scenario-orchestrator fw' && $body === "start\n{$g4['job']}\n/w/shop\n/scenario-orchestrator fw", $body);
-$hub->jobReport('vm', $g4['job'], 'started', 400, '');
-$ev('g4', ['hook_event_name' => 'SessionStart', 'talixio_job' => $g4['job']]);
-$ev('g4', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Stage s1 done.']);
-$hub->jobReport('vm', $g4['job'], 'exited', 0, '');
-$hub->next('vm');
-$hub->goalReport('vm', $g4['id'], "=== 0 1\nnope\n");
-[, $resume] = $hub->next('vm');
-check('goal: and every run after it the same command again, nothing else', $resume === "resume\n{$g4['job']}\n/w/shop\ng4\n/scenario-orchestrator fw" && (int)$goal($g4['id'])['runs'] === 1, $resume);
+check('goal: no command for each run: the first prompt is the objective, with your guidelines', $g4['guide'] === 'Decide the details yourself.' && !array_key_exists('every_run', $g4)
+    && str_starts_with($body, "start\n{$g4['job']}\n/w/shop\nClose E09.") && str_ends_with($body, "The user's guidelines for this objective:\nDecide the details yourself.")
+    && !str_contains((string)file_get_contents(__DIR__ . '/../../web/public/app.html'), 'ab-goal-each'), $body);
 $hub->goalAct($g4['id'], 'stop');
-$g5 = $hub->goalStart('vm', '/w/shop', 'E10', 'Close E10.', 'ls', [], '', 20, 12, 'you', 'Run the next stage of the plan.')['goal'];
-[, $body] = $hub->next('vm');
-check('goal: other text for each run comes first, the objective after it', str_starts_with($body, "start\n{$g5['job']}\n/w/shop\nRun the next stage of the plan.\n\nClose E10.") && str_contains($body, 'Objective, set on the Talixio board'), $body);
 
 
 // 1.59.1: a step taken counts as progress even when the checks still show the same; a usage limit waits for its reset;

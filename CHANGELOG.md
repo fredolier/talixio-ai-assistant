@@ -3,6 +3,28 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.60.0 (2026-11-26)
+
+Objectives: the *Each run* field (1.58.0) is removed. 1.57.0, 1.59.0 and 1.59.1 stay.
+
+- **Why:** you judged 1.58.0 not worth keeping. Since 1.59.0 the assistant writes each resume itself, from the
+  objective, your guidelines and what stopped the run, so a fixed command sent at each run adds little. (This is not
+  the "context commands and decision log" idea discussed for 1.60.0; that one is not built.)
+- **What changed:**
+  - The objective form has no *Each run* field; the card no longer shows it; the server ignores `every_run`.
+  - The first prompt is always the objective, its checks and your guidelines. A later run no longer ends with *Then go
+    on with the workflow: run …*, and the plain word (when the assistant does not read the turn) is what the checks
+    show, no longer the command alone.
+  - If your workflow has its own command for its next step, name it in **Guidelines** (*Go on with /scenario-orchestrator
+    fw.*); the FAQ (Pilotage, both languages) says so.
+  - Existing databases keep the `every_run` column, unused; objectives started with it go on without it.
+- **Tested:** a new check in `tests/more/agent_goal.php` (fails without the change): the argument after `by` is now
+  the guidelines, the first prompt is the objective with them, and the form has no such field. Three checks were
+  adapted on purpose, since they expected the workflow's command: the 1.59.0 resume (L2 answer) and the plain word
+  without a usable reading; the two 1.58.0 checks were removed with the feature. The browser mock objective lost its
+  `every_run` field.
+- **Not tried:** a real objective on a machine after the change.
+
 ## 1.59.1 (2026-11-26)
 
 Objectives: fixes from simulating realistic runs of 1.59.0.

@@ -125,7 +125,6 @@ final class I18n
         'no such objective' => 'objectif introuvable',
         'This objective is not running.' => 'Cet objectif n’est pas en cours.',
         'Only a paused objective can go on.' => 'Seul un objectif en pause peut reprendre.',
-        'A command for each run is one line.' => 'Une commande pour chaque tour tient sur une ligne.',
         'Its process ended before its turn did: the objective goes on, the assistant reads why.' => 'Son processus s’est arrêté avant la fin de son tour : l’objectif continue, l’assistant lit pourquoi.',
         'The assistant read the turn ({situation}): {summary}' => 'L’assistant a lu le tour ({situation}) : {summary}',
         'a question' => 'une question',
