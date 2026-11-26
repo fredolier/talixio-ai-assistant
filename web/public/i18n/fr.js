@@ -3646,5 +3646,10 @@ window.I18N.fr = {
   "no progress: the checks gave the same results 3 times in a row": "aucun progrès : les vérifications ont donné les mêmes résultats 3 fois de suite",
   "it used all its runs": "il a utilisé tous ses tours",
   "it ran out of time": "il a dépassé son temps",
+  "Guidelines: how the assistant answers it and resumes it for you (what it may decide, what stays yours)": "Consignes : comment l’assistant lui répond et la relance à votre place (ce qu’il peut décider, ce qui reste à vous)",
+  "The spec is OK'd: decide the implementation yourself. Never change the scope without asking me.": "La spec est validée : décide toi-même de l’implémentation. Ne change jamais le périmètre sans me demander.",
+  "It asks ({level}):": "Elle demande ({level}) :",
+  "Your reply (the assistant's proposal):": "Votre réponse (la proposition de l’assistant) :",
+  "Send and go on": "Envoyer et continuer",
   "Each run (optional): what is sent to start each run, e.g. a skill that follows its own plan. A slash command is sent exactly as typed; other text comes before what the checks show": "À chaque tour (facultatif) : ce qui est envoyé au début de chaque tour, par ex. une skill qui suit son propre plan. Une commande slash est envoyée telle quelle ; un autre texte vient avant ce que montrent les vérifications"
 };

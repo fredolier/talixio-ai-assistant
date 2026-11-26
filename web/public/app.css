@@ -2036,6 +2036,9 @@ table.mb-table{border-collapse:collapse;width:100%;font-size:.82rem;min-width:72
 .ab-goal-res li.ok > span{color:var(--accent)}
 .ab-goal-res li.bad > span{color:var(--danger)}
 .ab-goal-res pre{margin:2px 0 0;padding:4px 6px;background:var(--sunk);border-radius:4px;font-size:.75rem;white-space:pre-wrap;max-height:6em;overflow:auto}
+.ab-goal-ask{margin-top:6px;padding:6px 8px;border-radius:6px;background:var(--sunk);display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.ab-goal-ask label.ab-goal-col{display:flex;flex-direction:column;gap:4px;align-self:stretch}
+.ab-goal-ask textarea{font:inherit;font-size:.85rem}
 .ab-goal-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .ab-goal-acts:empty{display:none}
 .ab-log{max-height:220px;overflow:auto;background:var(--sunk);border-radius:8px;padding:8px;font-size:.74rem;white-space:pre-wrap;word-break:break-word;margin:0}

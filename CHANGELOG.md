@@ -3,6 +3,44 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.59.0 (2026-11-26)
+
+When a run of an objective stops, the assistant reads why and writes the resume, with your guidelines.
+
+- **Why:** you said 1.58.0 was too simple: a session that stops or pauses is in a state that has to be read before it
+  is resumed. It needs the goal and the command it knows, but also an answer to its question or to what stopped it,
+  with guidelines to finish the epic or the scenario.
+- **What changed:**
+  - **Guidelines** in the objective's form: what the assistant may decide for you and what stays yours. The session
+    gets them in its first prompt, and the assistant ranks them above your other rules when it reads the turns.
+  - After each run whose checks do not all pass, the assistant (when it reads the turns, *Autonomy*) works out why the
+    run stopped (a question, a blocker, a step done, an error, or "done" while a check fails) and writes the next
+    message from the objective, the guidelines, what the checks show and the last exchange. Each resume then says
+    where the objective stands (*Objective: E07 (run 2 of 20). Checks not passing yet: …*) and ends with *Then go on
+    with the workflow: run …* when the objective has a command for each run. The thread says *The assistant read the
+    turn* and what it found.
+  - It decides L1 to L3, and L4 when it is fairly sure (confidence 0.5 or more). What is not the objective's to
+    decide (business, values, irreversible, access or credentials, a level the agent marked L5 on its own card) waits
+    for you: the card shows the question and the proposed reply, which you can change and send with **Send and go on**
+    (`POST /api/agents/goals/{id}/send`).
+  - A run whose process ended before its turn did (an API error, a limit) no longer leaves the objective without a
+    session: it is read the same way, with the end of its output.
+  - The reading runs in the server's worker, so the listener's poll never waits for a model. If no worker reads the
+    turn within 5 minutes, or the model gives no usable answer, the plain 1.58.0 resume goes (the command alone, or
+    what the checks show).
+  - The board's own reading of turns (*next step* / *proposed*) now leaves objective sessions alone: the objective's
+    reading replaces it.
+- **Tested:** 11 new checks in `tests/more/agent_goal.php` (they fail without the change): the poll does not wait for
+  the reading; the prompt holds the objective, guidelines, checks and command; an L2 answer is sent in the format
+  above; the board's own reading skips the session; an L5 card waits for you with the proposal; Send is refused when
+  nothing waits and works when something does; a crashed run is read with its output and goes on; a non-JSON answer
+  and a reading that never comes fall back to the plain word. The 3 checks from 1.57.0 on how the board's *next step*
+  and *proposed* handled objective turns were replaced on purpose, since that reading no longer handles them. 2 new
+  browser checks: the waiting card shows the question and the proposal, and **Send and go on** sends the edited text
+  (with the server answer mocked).
+- **Not tried:** a real model reading a real turn, a real `claude -p --resume` with a skill on your machine, and the
+  waiting card with live data.
+
 ## 1.58.0 (2026-11-26)
 
 An objective can start every run with the same command, such as the workflow's skill.

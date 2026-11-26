@@ -4,7 +4,7 @@ declare(strict_types=1);
 // workflow's own commands, run by the listener), then asks it for its report. Its permission requests follow the rules
 // set when it started, so it does not wait for you; it stops when it makes no progress, or runs out of runs or time.
 require_once __DIR__ . '/../helpers.php';
-use Talixio\{App, Pilot};
+use Talixio\{AgentHub, App, Pilot};
 
 $d = test_dir('agent-goal');
 $keys = ['TALIXIO_DATA_DIR', 'TALIXIO_PROVIDER', 'TALIXIO_NOTIFY', 'TALIXIO_EMBEDDINGS'];
@@ -98,29 +98,66 @@ check('goal: its report ends it: done, and the thread says so', $G['state'] === 
     && $G['result'][1] === ['cmd' => './tools-workflow ci:status --sha HEAD', 'code' => 0, 'ok' => true, 'out' => 'green']);
 check('goal: once done, its session has the usual rules again', !$hub->inGoal('claude-code:g1') && $hub->board()['goals'][0]['id'] === $g['id']);
 
-// the assistant reads the turns: what it proposes you waits for you; a next step it would have proposed is the objective's
+// 1.59.0: the assistant reads why the run stopped and writes the next one, with the objective, your guidelines, the checks
+// and the workflow's command; only what is not the objective's to decide waits for you, with its proposal
 $app->pilot()->setPolicy(['analyse' => true]);
-$g2 = $hub->goalStart('vm', '/w/shop', 'E07', 'Close E07.', 'ls')['goal'];
+$g2 = $hub->goalStart('vm', '/w/shop', 'E07', 'Close E07.', 'ls', ['git'], '', 20, 12, 'you', '/scenario-orchestrator fw', 'The spec is OK\'d: decide the implementation yourself.')['goal'];
 $hub->next('vm'); $hub->jobReport('vm', $g2['job'], 'started', 300, '');
 $ev('g2', ['hook_event_name' => 'SessionStart', 'talixio_job' => $g2['job']]);
 $before = Pilot::$model;
-Pilot::$model = fn() => '{"kind":"next","answer":"Go on with s3.","level":"L1","confidence":0.99}';
-$ev('g2', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Stage s2 done. Next: s3.']);
-$hub->jobReport('vm', $g2['job'], 'exited', 0, '');
+$seen = '';
+$says = function (array $j) use (&$seen) { return function (string $p) use (&$seen, $j) { $seen = $p; return json_encode($j); }; };
+$round = function (string $out, string $msg = '', string $crash = '') use ($hub, $ev, $g2) { // a run ends (its turn, or its process), its checks come back
+    if ($msg !== '') { $ev('g2', ['hook_event_name' => 'Stop', 'last_assistant_message' => $msg]); $hub->jobReport('vm', $g2['job'], 'exited', 0, ''); }
+    else $hub->jobReport('vm', $g2['job'], 'exited', 0, $crash);
+    $hub->next('vm');
+    $hub->goalReport('vm', $g2['id'], "=== 0 1\n$out\n");
+};
+Pilot::$model = $says(['situation' => 'question', 'summary' => 'It asks whether to split the migration.', 'question' => 'Split the migration?', 'resume' => 'Yes, split it in two.',
+    'needs_person' => false, 'level' => 'L2', 'confidence' => 0.8]);
+$round('nope 1', 'Should I split the migration in two? (Level: L2)');
+check('goal: the checks are back: the reading is the worker\'s, the listener\'s poll does not wait for a model', $goal($g2['id'])['state'] === 'checked' && $hub->next('vm') === [204, '']
+    && $app->pilot()->analyseNow('claude-code:g2') === 'goal' && $seen === '');
+$hub->goalsTick(true);
+[, $resume] = $hub->next('vm');
+check('goal: the assistant read the turn with the objective, your guidelines, the checks and the command', str_contains($seen, 'Close E07.') && str_contains($seen, 'decide the implementation yourself')
+    && str_contains($seen, 'Should I split the migration') && str_contains($seen, '[fails] $ ls') && str_contains($seen, '/scenario-orchestrator fw'), $seen);
+check('goal: it answers the question itself (L2), then says where the objective stands and to go on with the workflow', $goal($g2['id'])['state'] === 'working' && (int)$goal($g2['id'])['runs'] === 1
+    && str_contains($resume, "g2\nYes, split it in two.\n\nObjective: E07 (run 1 of 20). Checks not passing yet: `ls` (exit 1).\nThen go on with the workflow: run /scenario-orchestrator fw.")
+    && str_contains($text('g2'), 'The assistant read the turn (a question): It asks whether to split the migration.'), $resume);
+check('goal: the board\'s own reading leaves an objective\'s turns alone', $app->pilot()->boardSent('claude-code:g2') === [] && !$app->pilot()->boardPrediction('claude-code:g2', (int)$hub->get('claude-code:g2')['seq']));
+$hub->jobReport('vm', $g2['job'], 'started', 301, '');
+Pilot::$model = $says(['situation' => 'question', 'summary' => 'It asks whether to drop the pricing page.', 'question' => 'Drop the pricing page?', 'resume' => 'Keep it.',
+    'needs_person' => false, 'level' => 'L3', 'confidence' => 0.9]);
+$round('nope 2', 'Should we drop the pricing page from this epic? (Level: L5)');
+$hub->goalsTick(true);
+$G = array_values(array_filter($hub->board()['goals'], fn($x) => $x['id'] === $g2['id']))[0];
+check('goal: a question at L5 (its own card, never lowered) waits for you, with the proposal, and sends nothing', $G['state'] === 'needs_you' && $G['ask']['text'] === 'Keep it.' && $G['ask']['level'] === 'L6'
+    && $G['ask']['question'] === 'Drop the pricing page?' && $hub->next('vm') === [204, ''] && str_contains($text('g2'), 'This waits for you (L6)'));
+check('goal: only what waits for you can be sent', str_contains($err(fn() => $hub->goalAct($g['id'], 'send')), 'Nothing'));
+$hub->goalAct($g2['id'], 'send');
+[, $resume] = $hub->next('vm');
+check('goal: Send gives it the proposal, and it goes on', $goal($g2['id'])['state'] === 'working' && $goal($g2['id'])['ask'] === '' && str_contains($resume, "g2\nKeep it.\n\nObjective: E07 (run 2 of 20)"), $resume);
+$hub->jobReport('vm', $g2['job'], 'started', 302, '');
+Pilot::$model = $says(['situation' => 'error', 'summary' => 'The API was overloaded.', 'question' => '', 'resume' => 'The run was cut by an API error: redo its last step.',
+    'needs_person' => false, 'level' => 'L1', 'confidence' => 0.9]);
+$round('nope 3', '', 'API Error: 529 overloaded');
+check('goal: a process that ended before its turn did is read too, with its output, not ended', $hub->get('claude-code:g2')['state'] === 'waiting' && $goal($g2['id'])['state'] === 'checked'
+    && str_contains($text('g2'), 'Its process ended before its turn did'));
+$hub->goalsTick(true);
+[, $resume] = $hub->next('vm');
+check('goal: and it goes on with what to do about it', str_contains($seen, 'API Error: 529 overloaded') && str_contains($resume, 'redo its last step') && $goal($g2['id'])['state'] === 'working', $resume);
+$hub->jobReport('vm', $g2['job'], 'started', 303, '');
+Pilot::$model = fn() => 'not JSON';
+$round('nope 4', 'Stage s4 done.');
+$hub->goalsTick(true);
+[, $resume] = $hub->next('vm');
+check('goal: no usable reading: the board\'s plain word goes (here, the workflow\'s command alone)', $resume === "resume\n{$g2['job']}\n/w/shop\ng2\n/scenario-orchestrator fw", $resume);
+$hub->jobReport('vm', $g2['job'], 'started', 304, '');
+$round('nope 5', 'Stage s5 done.');
+$app->store->q('UPDATE agent_goals SET checked = ? WHERE id = ?', [time() - AgentHub::READ_WAIT - 1, $g2['id']]);
 $hub->next('vm');
-$hub->goalReport('vm', $g2['id'], "=== 0 1\nnope\n");
-check('goal: the checks came back before the assistant read the turn: it waits for it', $goal($g2['id'])['state'] === 'checked');
-$app->pilot()->analyseNow('claude-code:g2');
-$hub->goalsTick();
-check('goal: a next step is not yours to choose in an objective: it goes on', $goal($g2['id'])['state'] === 'working' && (int)$goal($g2['id'])['runs'] === 1);
-$hub->next('vm'); $hub->jobReport('vm', $g2['job'], 'started', 301, '');
-Pilot::$model = fn() => '{"kind":"answer","answer":"Drop the pricing page.","level":"L5","confidence":0.6}';
-$ev('g2', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Should we drop the pricing page from this epic? (Level: L5)']);
-$hub->jobReport('vm', $g2['job'], 'exited', 0, '');
-$app->pilot()->analyseNow('claude-code:g2');
-$hub->next('vm');
-$hub->goalReport('vm', $g2['id'], "=== 0 1\nnope\n");
-check('goal: a question only you answer: it waits for you, and sends nothing', $goal($g2['id'])['state'] === 'needs_you' && $hub->next('vm') === [204, '']);
+check('goal: no worker read it in time: the board\'s plain word goes on the listener\'s poll', $goal($g2['id'])['state'] === 'working' && (int)$goal($g2['id'])['runs'] === 5);
 Pilot::$model = $before;
 $hub->goalAct($g2['id'], 'stop');
 check('goal: Stop ends the objective and its session', $goal($g2['id'])['state'] === 'stopped' && $hub->get('claude-code:g2')['state'] === 'stopped'

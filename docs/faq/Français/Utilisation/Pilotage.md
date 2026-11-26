@@ -115,16 +115,28 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   Lancez d'abord chaque commande vous-même et copiez le texte qui montre que l'épopée est vraiment close : un verdict de
   gate propre ne suffit pas quand la clôture est retenue. Une vérification est une seule commande en mots simples (sans
   guillemets, `$`, `;`, `|`, `&`, `>`, `<` ni `*`), jamais une commande risquée (un push, une suppression…) ; de 1 à 5.
-  - **À chaque tour** (1.58.0, facultatif) : ce qui est envoyé au début de chaque tour. Pour un workflow qui tient son
-    propre plan, donnez sa skill, par exemple `/scenario-orchestrator fw` : le premier tour et chacun des suivants sont
-    exactement cette commande, et le workflow avance d'une étape de son plan à chaque fois. Une commande slash est
-    envoyée telle quelle (ce qui la suivrait serait ses arguments) : la session ne reçoit donc pas ce que montrent les
-    vérifications, mais ce sont toujours elles qui disent quand l'objectif est atteint. Un autre texte est envoyé en
-    premier, suivi de l'objectif (premier tour) ou de ce que montrent les vérifications (tours suivants). Laissé vide,
-    chaque tour dit ce que montrent les vérifications et demande de continuer.
+  - **À chaque tour** (1.58.0, facultatif) : la commande du workflow, pour un workflow qui tient son propre plan, par
+    exemple `/scenario-orchestrator fw`. Une commande slash est tout le premier prompt, telle quelle (ce qui la suivrait
+    serait ses arguments). Chaque tour suivant se termine par *Then go on with the workflow: run /scenario-orchestrator
+    fw*, après le message de l'assistant (ci-dessous) ; quand l'assistant ne lit pas les tours, un tour suivant est la
+    commande seule. Un autre texte est envoyé en premier, suivi de l'objectif (premier tour) ou de ce que montrent les
+    vérifications (tours suivants).
+  - **Consignes** (1.59.0) : comment l'assistant lui répond et la relance à votre place : ce qu'il peut décider, ce qui
+    reste à vous (*La spec est validée : décide toi-même de l'implémentation. Ne change jamais le périmètre sans me
+    demander.*). Elles passent avant vos autres règles pour cet objectif, et la session les reçoit dans son premier prompt.
   - **Comment elle continue seule.** La session démarre avec l'objectif et ses vérifications. Après chacun de ses tours,
     l'écouteur de la machine lance les vérifications dans le dossier et le tableau lit les résultats. Pas toutes vertes :
-    la session reçoit ce que montre chaque vérification et continue (*tour 2 sur 20*). Toutes vertes : on lui demande son
+    la session est relancée (*tour 2 sur 20*). Depuis 1.59.0, quand l'assistant lit les tours (*L'assistant lit chaque
+    tour terminé et propose la suite*, dans *Autonomie*, activé par défaut), il commence par comprendre pourquoi le tour
+    s'est arrêté : une question, un blocage (un échec, une autorisation refusée), une étape finie, une erreur, ou elle se
+    dit finie alors qu'une vérification échoue. Il écrit le message de relance comme vous le feriez, à partir de
+    l'objectif, de vos consignes, de ce que montrent les vérifications et des derniers échanges : la réponse, ou quoi faire
+    de ce qui l'a arrêtée, puis où en est l'objectif et la commande du workflow. Il décide ce qui est technique,
+    conception, solution ou produit dans le périmètre (L1 à L4 ; L4 seulement quand il est assez sûr). Un tour dont le
+    processus s'est arrêté avant la fin (une erreur d'API, une limite) est lu de la même façon, avec la fin de sa sortie,
+    au lieu de terminer l'objectif. Le fil dit *L'assistant a lu le tour* et ce qu'il a trouvé. La lecture est faite par
+    le worker du serveur ; si aucun ne lit le tour dans les 5 minutes, ou si l'assistant ne donne pas de réponse
+    utilisable, la session reçoit ce que montre chaque vérification et continue. Toutes vertes : on lui demande son
     rapport final (ce qui a été fait, ce que montre chaque vérification, ce qui reste et pour qui, l'état de la CI), et
     l'objectif est *atteint* quand elle l'a écrit. Vous pouvez écrire vos propres consignes sous *Rapport et limites*.
   - **Ses demandes d'autorisation** suivent les règles de l'objectif, aussitôt, pour qu'elle ne vous attende pas : dans
@@ -137,9 +149,11 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
     l'assistant.
   - **Quand elle s'arrête.** Elle se met en pause seule quand les vérifications donnent les mêmes résultats 3 fois de
     suite (aucun progrès), quand elle a utilisé tous ses tours (20 par défaut) ou son temps (12 heures par défaut) ; vous
-    recevez une notification. Quand l'assistant lit les tours et que l'agent a posé une question à laquelle vous seul
-    pouvez répondre, l'objectif *vous attend* : répondez dans la session, puis cliquez **Reprendre** (Reprendre donne aussi
-    10 tours de plus et au moins 4 heures à un objectif en pause). **Arrêter** termine l'objectif et sa session ;
+    recevez une notification (**Reprendre** donne 10 tours de plus et au moins 4 heures à un objectif en pause). Ce qui
+    n'est pas à l'objectif de décider (business, valeurs, tout ce qui est irréversible, un accès ou un identifiant que vous
+    seul pouvez donner, un niveau que l'agent a lui-même marqué L5) *vous attend* : sa carte montre la question et la
+    réponse proposée par l'assistant ; modifiez-la si vous voulez et cliquez **Envoyer et continuer**. Vous pouvez aussi
+    répondre dans la session elle-même. **Arrêter** termine l'objectif et sa session ;
     **Oublier** retire de la liste un objectif fini.
   - **Sur la machine :** les vérifications sont lancées par l'écouteur ; réinstallez-le depuis *Connecter une machine*
     (un écouteur d'avant 1.57.0 ne les lance pas). Il refuse une vérification qui n'est pas en mots simples, ou un

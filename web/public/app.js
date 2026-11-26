@@ -6544,8 +6544,8 @@ function abWire() {
     try {
       await post('api/agents/goals', { machine: $('#ab-goal-machine').value, cwd: $('#ab-goal-folder').value, title, prompt: $('#ab-goal-prompt').value.trim(), checks,
         allow: [...document.querySelectorAll('#ab-goal-form .ab-goal-allow input:checked')].map(i => i.value), report: $('#ab-goal-report').value.trim(),
-        max_runs: +$('#ab-goal-runs').value || 20, hours: +$('#ab-goal-hours').value || 12, every_run: $('#ab-goal-each').value.trim() });
-      for (const id of ['ab-goal-title', 'ab-goal-prompt', 'ab-goal-each', 'ab-goal-checks', 'ab-goal-report']) $('#' + id).value = '';
+        max_runs: +$('#ab-goal-runs').value || 20, hours: +$('#ab-goal-hours').value || 12, every_run: $('#ab-goal-each').value.trim(), guide: $('#ab-goal-guide').value.trim() });
+      for (const id of ['ab-goal-title', 'ab-goal-prompt', 'ab-goal-each', 'ab-goal-guide', 'ab-goal-checks', 'ab-goal-report']) $('#' + id).value = '';
       toast(t('Sent to the machine: the session starts within seconds.'));
       AB.rev = -1; await abRefresh();
     } catch (e) { toast(e.message); }
@@ -6553,7 +6553,8 @@ function abWire() {
   $('#ab-goal-list').addEventListener('click', async e => {
     const b = e.target.closest('[data-gact]'); if (!b) return;
     if (b.dataset.gact === 'open') { abOpen(b.dataset.sid); return; }
-    try { await post(`api/agents/goals/${b.dataset.gid}/${b.dataset.gact}`, {}); AB.rev = -1; await abRefresh(); } catch (err) { toast(err.message); }
+    const text = b.dataset.gact === 'send' ? (b.closest('.ab-goal-card')?.querySelector('.ab-goal-reply')?.value || '').trim() : '';
+    try { await post(`api/agents/goals/${b.dataset.gid}/${b.dataset.gact}`, text ? { text } : {}); AB.rev = -1; await abRefresh(); } catch (err) { toast(err.message); }
   });
   // 1.39.0: the assistant answers the agents within the limits set here
   $('#ab-auto-btn').onclick = () => abTool('ab-auto', plLoadAuto);
@@ -6794,18 +6795,25 @@ function abGoalRender() {
   if (sel.innerHTML !== html) { sel.innerHTML = html; if (ms.some(m => m.machine === cur)) sel.value = cur; }
   abGoalFolders();
   const st = AB_GOAL_STATE();
+  // the reply being written to what waits for you is kept across refreshes
+  const typing = {}; document.querySelectorAll('#ab-goal-list .ab-goal-reply').forEach(x => { typing[x.dataset.gid] = x.value; });
+  const focus = document.activeElement?.classList.contains('ab-goal-reply') ? document.activeElement.dataset.gid : null;
   $('#ab-goal-list').innerHTML = (AB.goals || []).map(g => {
     const cls = g.state === 'done' ? 'ok' : ['paused', 'needs_you', 'failed'].includes(g.state) ? 'warn' : g.active ? 'run' : '';
     const res = (g.result || []).map(r => `<li class="${r.ok ? 'ok' : 'bad'}"><span aria-hidden="true">${r.ok ? '✓' : '✗'}</span> <code class="no-i18n">${esc(r.cmd)}</code>
       <span class="muted">${esc(t('exit {code}', { code: r.code }))}</span>${r.out ? `<pre class="no-i18n">${esc(abTail(r.out, 300))}</pre>` : ''}</li>`).join('');
     const acts = [g.session && g.session !== '' ? `<button type="button" class="btn ghost small" data-gact="open" data-sid="${esc(g.session)}">${esc(t('Open the session'))}</button>` : '',
-      ['paused', 'needs_you'].includes(g.state) ? `<button type="button" class="btn small" data-gact="resume" data-gid="${g.id}">${esc(t('Go on'))}</button>` : '',
+      g.state === 'paused' || (g.state === 'needs_you' && !g.ask) ? `<button type="button" class="btn small" data-gact="resume" data-gid="${g.id}">${esc(t('Go on'))}</button>` : '',
       g.active || g.state === 'paused' ? `<button type="button" class="btn ghost small" data-gact="stop" data-gid="${g.id}">${esc(t('Stop'))}</button>`
         : `<button type="button" class="btn ghost small" data-gact="forget" data-gid="${g.id}">${esc(t('Forget'))}</button>`].join(' ');
     return `<div class="ab-goal-card ${cls}"><div class="ab-goal-top"><b class="no-i18n">${esc(g.title)}</b> <span class="ab-goal-st">${esc(st[g.state] || g.state)}</span></div>
       <div class="muted small"><span class="no-i18n">${esc(g.project)} · ${esc(g.machine)}${g.every_run ? ' · ' + esc(abTail(g.every_run, 60)) : ''}</span> · ${esc(t('run {n} of {max}', { n: g.runs, max: g.max_runs }))}${g.checked ? ' · ' + esc(t('checked {ago}', { ago: pilotAgo(g.checked) })) : ''}</div>
-      ${g.why ? `<div class="small ab-goal-why">${esc(t(g.why))}</div>` : ''}${res ? `<ul class="ab-goal-res small">${res}</ul>` : ''}<div class="ab-goal-acts">${acts}</div></div>`;
+      ${g.why ? `<div class="small ab-goal-why">${esc(t(g.why))}</div>` : ''}
+      ${g.state === 'needs_you' && g.ask ? `<div class="ab-goal-ask small"><div><b>${esc(t('It asks ({level}):', { level: g.ask.level }))}</b> <span class="no-i18n">${esc(g.ask.question || g.ask.summary)}</span></div>
+        <label class="ab-goal-col">${esc(t('Your reply (the assistant\'s proposal):'))}<textarea class="ab-goal-reply no-i18n" rows="2" data-gid="${g.id}">${esc(typing[g.id] ?? g.ask.text)}</textarea></label>
+        <button type="button" class="btn small primary" data-gact="send" data-gid="${g.id}">${esc(t('Send and go on'))}</button></div>` : ''}${res ? `<ul class="ab-goal-res small">${res}</ul>` : ''}<div class="ab-goal-acts">${acts}</div></div>`;
   }).join('');
+  if (focus) document.querySelector(`#ab-goal-list .ab-goal-reply[data-gid="${focus}"]`)?.focus();
 }
 function abGoalFolders() {
   const m = AB.machines.find(x => x.machine === $('#ab-goal-machine').value), sel = $('#ab-goal-folder'), cur = sel.value;

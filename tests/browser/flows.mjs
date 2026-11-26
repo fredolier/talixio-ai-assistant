@@ -1306,6 +1306,24 @@ ev Stop ",\\"last_assistant_message\\":\\"$msg\\""
       await page.click('#ab-goal-list [data-gact=forget]');
       await page.waitForFunction(() => !/Close E06c/.test(document.querySelector('#ab-goal-list')?.textContent || ''), null, { timeout: 6000 }).catch(() => {});
       check('agent goal: Forget removes it', !/Close E06c/.test(await page.textContent('#ab-goal-list')));
+      // 1.59.0: what waits for you shows the agent's question and the assistant's proposal, which you can change and send
+      let sent = null;
+      await page.route('**/api/agents', async r => { const res = await r.fetch(); const d = await res.json();
+        d.rev = 'mock-' + Date.now(); d.goals = [{ id: 77, machine: 'goalbox', cwd: work, project: 'shop3', title: 'Price page', every_run: '', guide: '', checks: [], allow: [], session: '', job: 0,
+          state: 'needs_you', active: true, runs: 2, max_runs: 20, deadline: 0, result: [], checked: 0, why: 'the agent asked something only you can answer',
+          ask: { text: 'Keep it.', question: 'Drop the pricing page?', summary: 'It asks about pricing.', level: 'L6', situation: 'question' }, created: 0, updated: 0 }];
+        await r.fulfill({ response: res, json: d }); });
+      await page.route('**/api/agents/goals/77/send', r => { sent = r.request().postDataJSON(); r.fulfill({ json: { goal: {} } }); });
+      await page.evaluate(() => { AB.rev = -1; return abRefresh(); });
+      await page.waitForSelector('#ab-goal-list .ab-goal-reply', { timeout: 6000 });
+      check('agent goal: what waits for you shows its question and the proposal', /Drop the pricing page\?/.test(await page.textContent('#ab-goal-list .ab-goal-ask'))
+        && await page.inputValue('#ab-goal-list .ab-goal-reply') === 'Keep it.' && !(await page.$('#ab-goal-list [data-gact=resume]')));
+      await page.fill('#ab-goal-list .ab-goal-reply', 'Keep it, and simplify it.');
+      await page.click('#ab-goal-list [data-gact=send]');
+      for (let i = 0; i < 20 && !sent; i++) await page.waitForTimeout(100);
+      check('agent goal: Send and go on sends your words', sent?.text === 'Keep it, and simplify it.', JSON.stringify(sent));
+      await page.unroute('**/api/agents'); await page.unroute('**/api/agents/goals/77/send');
+      await page.evaluate(() => { AB.rev = -1; return abRefresh(); });
     } finally { lis.kill(); await postj('api/pilot', { analyse: was.analyse !== false, enabled: !!was.enabled }); }
   },
   async pilotage({ page, check, root, data }) {

@@ -103,15 +103,26 @@ The board updates by itself every few seconds while you look at it.
   Run each command once yourself first and copy the text that shows the epic is really closed: a clean gate verdict
   alone is not enough when the closure is held. A check is one command in plain words (no quotes, `$`, `;`, `|`, `&`,
   `>`, `<` or `*`), never a risky one (a push, a deletion…); 1 to 5 checks.
-  - **Each run** (1.58.0, optional): what is sent to start every run. For a workflow that keeps its own plan, give
-    its skill, for example `/scenario-orchestrator fw`: the first run and each run after it are exactly that command,
-    and the workflow takes the next step of its plan each time. A slash command is sent exactly as typed (anything
-    after it would be its arguments), so the session is not told what the checks show; the checks still decide when
-    it is met. Other text is sent first, followed by the objective (first run) or what the checks show (later runs).
-    Left empty, each run says what the checks show and asks it to carry on.
+  - **Each run** (1.58.0, optional): the workflow's command, for a workflow that keeps its own plan, for example
+    `/scenario-orchestrator fw`. A slash command is the whole first prompt, exactly as typed (anything after it would be
+    its arguments). Each later run ends with *Then go on with the workflow: run /scenario-orchestrator fw*, after the
+    assistant's message (below); when the assistant does not read the turns, a later run is the command alone. Other
+    text is sent first, followed by the objective (first run) or what the checks show (later runs).
+  - **Guidelines** (1.59.0): how the assistant answers it and resumes it for you: what it may decide, what stays yours
+    (*The spec is OK'd: decide the implementation yourself. Never change the scope without asking me.*). They rank above
+    your other rules for this objective, and the session gets them in its first prompt.
   - **How it goes on by itself.** The session starts with the objective and its checks. After each of its turns, the
     machine's listener runs the checks in the folder and the board reads the results. Not all passing: the session is
-    told what each check shows and goes on (*run 2 of 20*). All passing: it is asked for its final status report (what
+    resumed (*run 2 of 20*). Since 1.59.0, when the assistant reads the turns (*The assistant reads each finished turn
+    and proposes what to do next*, in *Autonomy*, on by default), it first works out why the run stopped: a question, a
+    blocker (a failure, a refused permission), a step done, an error, or it says it is done while a check fails. It
+    writes the resume message as you would, from the objective, your guidelines, what the checks show and the last
+    exchange: the answer, or what to do about what stopped it, then where the objective stands and the workflow's
+    command. It decides what is technical, design, solution or product within the scope (L1 to L4; L4 only when it is
+    fairly sure). A run whose process ended before its turn did (an API error, a limit) is read the same way, with the
+    end of its output, instead of ending the objective. The thread says *The assistant read the turn* and what it found.
+    The reading is done by the server's worker; if none reads the turn within 5 minutes, or the assistant gives no usable
+    answer, the session is told what each check shows and goes on. All passing: it is asked for its final status report (what
     was done, what each check shows, what is left and for whom, the CI status), and the objective is *met* when it
     has written it. You can write your own report instructions under *Report and limits*.
   - **Its permission requests** follow the objective's rules, at once, so it does not wait for you: in its folder,
@@ -122,9 +133,11 @@ The board updates by itself every few seconds while you look at it.
     own settings (`.claude/`), a deploy, `sudo`. The thread says *Allowed by the objective's rules* or *Refused…* and why.
     What it allows teaches the assistant nothing.
   - **When it stops.** It pauses by itself when the checks give the same results 3 times in a row (no progress), when it
-    has used all its runs (20 by default) or its time (12 hours by default); you get a notification. When the assistant
-    reads the turns and the agent asked something only you can answer, the objective *waits for you*: answer in the
-    session, then click **Go on** (Go on also gives a paused one 10 more runs and at least 4 hours). **Stop** ends the
+    has used all its runs (20 by default) or its time (12 hours by default); you get a notification (**Go on** gives a
+    paused one 10 more runs and at least 4 hours). What is not the objective's to decide (business, values, anything
+    irreversible, an access or a credential only you can give, a level the agent itself marked L5) *waits for you*:
+    its card shows the question and the assistant's proposed reply; change it if you like and click **Send and go on**.
+    You can also answer in the session itself. **Stop** ends the
     objective and its session; **Forget** removes a finished one from the list.
   - **On the machine:** the checks are run by the listener, so install it again from *Connect a machine* (a listener
     from before 1.57.0 does not run them). It refuses a check that is not plain words, or a folder it may not use.

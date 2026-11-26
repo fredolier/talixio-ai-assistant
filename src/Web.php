@@ -1957,11 +1957,11 @@ final class Web
             })(),
             $path === '/api/agents/goals' && $m === 'POST' => (function () use ($hub, $b) { // 1.57.0: an objective
                 try { return $hub->goalStart((string)($b['machine'] ?? ''), (string)($b['cwd'] ?? ''), (string)($b['title'] ?? ''), (string)($b['prompt'] ?? ''),
-                    (string)($b['checks'] ?? ''), array_map('strval', (array)($b['allow'] ?? [])), (string)($b['report'] ?? ''), (int)($b['max_runs'] ?? 20), (int)($b['hours'] ?? 12), 'you', (string)($b['every_run'] ?? '')); }
+                    (string)($b['checks'] ?? ''), array_map('strval', (array)($b['allow'] ?? [])), (string)($b['report'] ?? ''), (int)($b['max_runs'] ?? 20), (int)($b['hours'] ?? 12), 'you', (string)($b['every_run'] ?? ''), (string)($b['guide'] ?? '')); }
                 catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
             })(),
-            (bool)preg_match('#^/api/agents/goals/(\d+)/(stop|resume|forget)$#', $path, $gm) && $m === 'POST' => (function () use ($hub, $gm) {
-                try { return $hub->goalAct((int)$gm[1], $gm[2]); }
+            (bool)preg_match('#^/api/agents/goals/(\d+)/(stop|resume|send|forget)$#', $path, $gm) && $m === 'POST' => (function () use ($hub, $gm, $b) {
+                try { return $hub->goalAct((int)$gm[1], $gm[2], (string)($b['text'] ?? '')); }
                 catch (\InvalidArgumentException $e) { $this->fail(400, I18n::t($this->app, $e->getMessage())); }
             })(),
             $path === '/api/agents/notify' && $m === 'POST' => $hub->setNotify((string)($b['mode'] ?? '')),
