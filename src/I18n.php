@@ -125,6 +125,7 @@ final class I18n
         'no such objective' => 'objectif introuvable',
         'This objective is not running.' => 'Cet objectif n’est pas en cours.',
         'Only a paused objective can go on.' => 'Seul un objectif en pause peut reprendre.',
+        'A command for each run is one line.' => 'Une commande pour chaque tour tient sur une ligne.',
         'Stop it first.' => 'Arrêtez-le d’abord.',
         'Fleet: autonomy raised' => 'Flotte : autonomie augmentée',
         'my answers matched yours often enough. A miss lowers it again at once; you can lower it yourself in Autonomy.' => 'mes réponses ont assez souvent été les vôtres. Une erreur la rabaisse aussitôt ; vous pouvez aussi la baisser vous-même dans Autonomie.',

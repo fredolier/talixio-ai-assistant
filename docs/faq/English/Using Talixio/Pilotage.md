@@ -103,6 +103,12 @@ The board updates by itself every few seconds while you look at it.
   Run each command once yourself first and copy the text that shows the epic is really closed: a clean gate verdict
   alone is not enough when the closure is held. A check is one command in plain words (no quotes, `$`, `;`, `|`, `&`,
   `>`, `<` or `*`), never a risky one (a push, a deletion…); 1 to 5 checks.
+  - **Each run** (1.58.0, optional): what is sent to start every run. For a workflow that keeps its own plan, give
+    its skill, for example `/scenario-orchestrator fw`: the first run and each run after it are exactly that command,
+    and the workflow takes the next step of its plan each time. A slash command is sent exactly as typed (anything
+    after it would be its arguments), so the session is not told what the checks show; the checks still decide when
+    it is met. Other text is sent first, followed by the objective (first run) or what the checks show (later runs).
+    Left empty, each run says what the checks show and asks it to carry on.
   - **How it goes on by itself.** The session starts with the objective and its checks. After each of its turns, the
     machine's listener runs the checks in the folder and the board reads the results. Not all passing: the session is
     told what each check shows and goes on (*run 2 of 20*). All passing: it is asked for its final status report (what

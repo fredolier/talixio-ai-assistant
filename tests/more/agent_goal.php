@@ -132,5 +132,24 @@ $hub->next('vm'); $hub->jobReport('vm', $g3['job'], 'failed', 0, 'claude: comman
 $hub->board();
 check('goal: a session that never started fails the objective, with why', $goal($g3['id'])['state'] === 'failed' && str_contains($goal($g3['id'])['why'], 'not found'));
 
+// 1.58.0: each run starts with the same command, e.g. the workflow's skill, which follows its own plan
+$app->pilot()->setPolicy(['analyse' => false, 'enabled' => false]);
+check('goal: a command for each run is one line', str_contains($err(fn() => $hub->goalStart('vm', '/w/shop', 'E09', '', 'ls', [], '', 20, 12, 'you', "/scenario-orchestrator fw\nand more")), 'one line'));
+$g4 = $hub->goalStart('vm', '/w/shop', 'E09', 'Close E09.', 'ls', [], '', 20, 12, 'you', ' /scenario-orchestrator fw ')['goal'];
+[, $body] = $hub->next('vm');
+check('goal: a slash command for each run is the whole first prompt, as typed', $g4['every_run'] === '/scenario-orchestrator fw' && $body === "start\n{$g4['job']}\n/w/shop\n/scenario-orchestrator fw", $body);
+$hub->jobReport('vm', $g4['job'], 'started', 400, '');
+$ev('g4', ['hook_event_name' => 'SessionStart', 'talixio_job' => $g4['job']]);
+$ev('g4', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Stage s1 done.']);
+$hub->jobReport('vm', $g4['job'], 'exited', 0, '');
+$hub->next('vm');
+$hub->goalReport('vm', $g4['id'], "=== 0 1\nnope\n");
+[, $resume] = $hub->next('vm');
+check('goal: and every run after it the same command again, nothing else', $resume === "resume\n{$g4['job']}\n/w/shop\ng4\n/scenario-orchestrator fw" && (int)$goal($g4['id'])['runs'] === 1, $resume);
+$hub->goalAct($g4['id'], 'stop');
+$g5 = $hub->goalStart('vm', '/w/shop', 'E10', 'Close E10.', 'ls', [], '', 20, 12, 'you', 'Run the next stage of the plan.')['goal'];
+[, $body] = $hub->next('vm');
+check('goal: other text for each run comes first, the objective after it', str_starts_with($body, "start\n{$g5['job']}\n/w/shop\nRun the next stage of the plan.\n\nClose E10.") && str_contains($body, 'Objective, set on the Talixio board'), $body);
+
 foreach ($saved as $k => $v) putenv($v === false ? $k : "$k=$v");
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

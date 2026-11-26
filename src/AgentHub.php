@@ -65,6 +65,7 @@ final class AgentHub
         // 1.52.1: the last reply a resume carried (delivered once the listener says it started), and how often it was offered
         $app->store->addColumn('agent_jobs', 'upto', 'INTEGER NOT NULL DEFAULT 0');
         $app->store->addColumn('agent_jobs', 'tries', 'INTEGER NOT NULL DEFAULT 0');
+        $app->store->addColumn('agent_goals', 'every_run', "TEXT NOT NULL DEFAULT ''"); // 1.58.0: the prompt sent at each run (e.g. a skill)
     }
 
     // ---------- the machine side (Bearer token) ----------
@@ -715,8 +716,12 @@ final class AgentHub
      * output holds the text). $allow: the « Check first » kinds it may do (GOAL_ALLOW), and 'ask' to send you the rest
      * instead of refusing it.
      */
-    public function goalStart(string $machine, string $cwd, string $title, string $prompt, string $checks, array $allow = [], string $report = '', int $maxRuns = 20, int $hours = 12, string $by = 'you'): array
+    public function goalStart(string $machine, string $cwd, string $title, string $prompt, string $checks, array $allow = [], string $report = '', int $maxRuns = 20, int $hours = 12, string $by = 'you', string $everyRun = ''): array
     {
+        // 1.58.0: the prompt every run starts with, e.g. /scenario-orchestrator fw: a workflow that keeps its own plan goes on
+        // by itself when it is run again. A slash command is sent exactly as typed (what follows it would be its arguments).
+        $everyRun = mb_substr(trim($everyRun), 0, 1000);
+        if (str_starts_with($everyRun, '/') && preg_match('/[\r\n]/', $everyRun)) throw new \InvalidArgumentException('A command for each run is one line.');
         $title = mb_substr(trim(preg_replace('/\s+/', ' ', $title)), 0, 200);
         if ($title === '') throw new \InvalidArgumentException('Give the objective a name.');
         $list = [];
@@ -738,10 +743,12 @@ final class AgentHub
             . "Work through it on your own, step after step, without waiting for a confirmation: you have it. Ask only for a decision that is not yours to take "
             . "(product direction, values, anything irreversible). End each turn with a short status: what you did, and what comes next. "
             . "After each of your turns the board runs the checks and tells you what is still missing.";
+        if (str_starts_with($everyRun, '/')) $full = $everyRun;
+        elseif ($everyRun !== '') $full = $everyRun . "\n\n" . $full;
         $job = $this->start($machine, $cwd, $full, $by)['job'];
         $now = time();
-        $this->app->store->q("INSERT INTO agent_goals(machine, cwd, title, prompt, checks, report, allow, job, state, max_runs, deadline, created, updated) VALUES(?,?,?,?,?,?,?,?,'starting',?,?,?,?)",
-            [$machine, $cwd, $title, trim($prompt), (string)json_encode($list, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $report, implode(',', $allow), $job['id'], $maxRuns, $now + $hours * 3600, $now, $now]);
+        $this->app->store->q("INSERT INTO agent_goals(machine, cwd, title, prompt, every_run, checks, report, allow, job, state, max_runs, deadline, created, updated) VALUES(?,?,?,?,?,?,?,?,?,'starting',?,?,?,?)",
+            [$machine, $cwd, $title, trim($prompt), $everyRun, (string)json_encode($list, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $report, implode(',', $allow), $job['id'], $maxRuns, $now + $hours * 3600, $now, $now]);
         $gid = (int)$this->app->store->db->lastInsertId();
         $this->bumpRev();
         return ['goal' => $this->shapeGoal($this->goal($gid))];
@@ -760,7 +767,7 @@ final class AgentHub
 
     private function shapeGoal(array $g): array
     {
-        return ['id' => (int)$g['id'], 'machine' => $g['machine'], 'cwd' => $g['cwd'], 'project' => basename((string)$g['cwd']), 'title' => $g['title'],
+        return ['id' => (int)$g['id'], 'machine' => $g['machine'], 'cwd' => $g['cwd'], 'project' => basename((string)$g['cwd']), 'title' => $g['title'], 'every_run' => (string)($g['every_run'] ?? ''),
             'checks' => json_decode($g['checks'], true) ?: [], 'allow' => array_values(array_filter(explode(',', (string)$g['allow']))), 'session' => $g['session'],
             'job' => (int)$g['job'], 'state' => $g['state'], 'active' => in_array($g['state'], self::GOAL_ACTIVE, true), 'runs' => (int)$g['runs'],
             'max_runs' => (int)$g['max_runs'], 'deadline' => (int)$g['deadline'], 'result' => json_decode((string)$g['result'], true) ?: [], 'checked' => (int)$g['checked'],
@@ -890,8 +897,10 @@ final class AgentHub
         }
         $miss = [];
         foreach (json_decode((string)$g['result'], true) ?: [] as $r) if (!$r['ok']) $miss[] = '$ ' . $r['cmd'] . ' → exit ' . $r['code'] . "\n" . mb_substr($r['out'], -1500);
-        $this->goalNudge($g, 'The objective is not met yet (run ' . ((int)$g['runs'] + 1) . ' of ' . $g['max_runs'] . "). What the checks show:\n\n" . implode("\n\n", $miss)
-            . "\n\nCarry on with the next step towards the objective.", true);
+        $each = (string)($g['every_run'] ?? '');
+        $text = 'The objective is not met yet (run ' . ((int)$g['runs'] + 1) . ' of ' . $g['max_runs'] . "). What the checks show:\n\n" . implode("\n\n", $miss)
+            . "\n\nCarry on with the next step towards the objective.";
+        $this->goalNudge($g, str_starts_with($each, '/') ? $each : ($each !== '' ? "$each\n\n$text" : $text), true);
     }
 
     /** Send the session the board's word (not an answer of yours: it teaches nothing), and resume it. */

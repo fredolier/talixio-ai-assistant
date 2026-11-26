@@ -6544,8 +6544,8 @@ function abWire() {
     try {
       await post('api/agents/goals', { machine: $('#ab-goal-machine').value, cwd: $('#ab-goal-folder').value, title, prompt: $('#ab-goal-prompt').value.trim(), checks,
         allow: [...document.querySelectorAll('#ab-goal-form .ab-goal-allow input:checked')].map(i => i.value), report: $('#ab-goal-report').value.trim(),
-        max_runs: +$('#ab-goal-runs').value || 20, hours: +$('#ab-goal-hours').value || 12 });
-      for (const id of ['ab-goal-title', 'ab-goal-prompt', 'ab-goal-checks', 'ab-goal-report']) $('#' + id).value = '';
+        max_runs: +$('#ab-goal-runs').value || 20, hours: +$('#ab-goal-hours').value || 12, every_run: $('#ab-goal-each').value.trim() });
+      for (const id of ['ab-goal-title', 'ab-goal-prompt', 'ab-goal-each', 'ab-goal-checks', 'ab-goal-report']) $('#' + id).value = '';
       toast(t('Sent to the machine: the session starts within seconds.'));
       AB.rev = -1; await abRefresh();
     } catch (e) { toast(e.message); }
@@ -6803,7 +6803,7 @@ function abGoalRender() {
       g.active || g.state === 'paused' ? `<button type="button" class="btn ghost small" data-gact="stop" data-gid="${g.id}">${esc(t('Stop'))}</button>`
         : `<button type="button" class="btn ghost small" data-gact="forget" data-gid="${g.id}">${esc(t('Forget'))}</button>`].join(' ');
     return `<div class="ab-goal-card ${cls}"><div class="ab-goal-top"><b class="no-i18n">${esc(g.title)}</b> <span class="ab-goal-st">${esc(st[g.state] || g.state)}</span></div>
-      <div class="muted small"><span class="no-i18n">${esc(g.project)} · ${esc(g.machine)}</span> · ${esc(t('run {n} of {max}', { n: g.runs, max: g.max_runs }))}${g.checked ? ' · ' + esc(t('checked {ago}', { ago: pilotAgo(g.checked) })) : ''}</div>
+      <div class="muted small"><span class="no-i18n">${esc(g.project)} · ${esc(g.machine)}${g.every_run ? ' · ' + esc(abTail(g.every_run, 60)) : ''}</span> · ${esc(t('run {n} of {max}', { n: g.runs, max: g.max_runs }))}${g.checked ? ' · ' + esc(t('checked {ago}', { ago: pilotAgo(g.checked) })) : ''}</div>
       ${g.why ? `<div class="small ab-goal-why">${esc(t(g.why))}</div>` : ''}${res ? `<ul class="ab-goal-res small">${res}</ul>` : ''}<div class="ab-goal-acts">${acts}</div></div>`;
   }).join('');
 }
