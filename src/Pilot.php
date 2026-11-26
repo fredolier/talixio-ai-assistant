@@ -408,7 +408,7 @@ final class Pilot
         $mind = '';
         try { $mind = trim($this->app->mind()->section(0, false)); } catch (\Throwable) {}
         $list = fn(array $a) => $a ? implode("\n", array_map(fn($i, $x) => ($i + 1) . ". $x", array_keys($a), $a)) : '(none)';
-        $checks = implode("\n", array_map(fn($r) => ($r['ok'] ? '[passes] ' : '[fails] ') . '$ ' . $r['cmd'] . ' → exit ' . $r['code'] . "\n" . mb_substr((string)$r['out'], -1200),
+        $checks = implode("\n", array_map(fn($r) => ($r['ok'] ? '[passes] ' : '[fails] ') . '$ ' . $r['cmd'] . ' → ' . ($r['ok'] ? 'exit ' . $r['code'] : AgentHub::checkMiss($r)) . "\n" . mb_substr((string)$r['out'], -1200),
             json_decode((string)$g['result'], true) ?: []));
         $recent = $fence($this->recent((string)$row['id']), 'TASK');
         $crash = trim((string)($g['crash'] ?? ''));
@@ -428,7 +428,7 @@ final class Pilot
             . "stage_done (a step is finished and it waits to go on), error (its process or a tool failed), claims_done (it says it is finished but checks do not pass), other.\n"
             . "resume: what the user would write to it, short, in the language of its messages. Answer its question or deal with what stopped it, deciding yourself anything at "
             . "L1 (technical) to L4 (product, within the agreed scope) that the objective and its guidelines cover, then tell it to go on towards the objective. When it claims to be done, "
-            . "say what the checks still show. Never tell it to get around a refused permission, to skip, weaken or disable a test, to push to main or to force a push.\n"
+            . "say what the checks still show. When a check only waits for something running (a CI run still pending), tell it to wait for it inside its turn (watch it until it ends, then fix what fails) rather than end its turn. Never tell it to get around a refused permission, to skip, weaken or disable a test, to push to main or to force a push.\n"
             . "needs_person: true only when going on needs a decision at L5 (business: direction, pricing, policy) or L6 (values, anything irreversible), or something only a "
             . "person can give (an access, a credential, a payment, an answer the spec and guidelines do not hold and that changes what users get). Then resume is your proposed reply.\n"
             . "Keep a level the agent's message states (« Level: L4 »), never lower it. Confidence is honest: below 0.5 when you are guessing.\n"

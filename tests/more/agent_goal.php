@@ -95,7 +95,7 @@ $hub->jobReport('vm', $g['job'], 'started', 200, '');
 $ev('g1', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'E06c: closed. GATE_5 pass. CI green.']);
 $G = array_values(array_filter($hub->board()['goals'], fn($x) => $x['id'] === $g['id']))[0];
 check('goal: its report ends it: done, and the thread says so', $G['state'] === 'done' && !$G['active'] && str_contains($text('g1'), 'Objective met: Close epic E06c')
-    && $G['result'][1] === ['cmd' => './tools-workflow ci:status --sha HEAD', 'code' => 0, 'ok' => true, 'out' => 'green']);
+    && $G['result'][1] === ['cmd' => './tools-workflow ci:status --sha HEAD', 'expect' => '', 'code' => 0, 'ok' => true, 'out' => 'green']);
 check('goal: once done, its session has the usual rules again', !$hub->inGoal('claude-code:g1') && $hub->board()['goals'][0]['id'] === $g['id']);
 
 // 1.59.0: the assistant reads why the run stopped and writes the next one, with the objective, your guidelines, the checks
@@ -187,6 +187,61 @@ $hub->goalAct($g4['id'], 'stop');
 $g5 = $hub->goalStart('vm', '/w/shop', 'E10', 'Close E10.', 'ls', [], '', 20, 12, 'you', 'Run the next stage of the plan.')['goal'];
 [, $body] = $hub->next('vm');
 check('goal: other text for each run comes first, the objective after it', str_starts_with($body, "start\n{$g5['job']}\n/w/shop\nRun the next stage of the plan.\n\nClose E10.") && str_contains($body, 'Objective, set on the Talixio board'), $body);
+
+
+// 1.59.1: a step taken counts as progress even when the checks still show the same; a usage limit waits for its reset;
+// a check that needs a text says so; your answer in the session goes on with what waited for you
+$app->pilot()->setPolicy(['analyse' => false, 'enabled' => false]);
+$g6 = $hub->goalStart('vm', '/w/shop', 'E11', 'Close E11.', 'ls => E11 closed', [], '', 20, 12, 'you', '')['goal'];
+$hub->next('vm'); $hub->jobReport('vm', $g6['job'], 'started', 500, '');
+$ev('g6', ['hook_event_name' => 'SessionStart', 'talixio_job' => $g6['job']]);
+$turn = function (string $git, string $msg = 'Stage done.', string $crash = '') use ($hub, $ev, $g6) {
+    if ($crash === '') { $ev('g6', ['hook_event_name' => 'Stop', 'last_assistant_message' => $msg]); $hub->jobReport('vm', $g6['job'], 'exited', 0, ''); }
+    else $hub->jobReport('vm', $g6['job'], 'exited', 0, $crash);
+    $hub->next('vm');
+    $hub->goalReport('vm', $g6['id'], "=== 0 0\nE11 open\n" . ($git !== '' ? "=== git\n$git\n" : ''));
+    [, $r] = $hub->next('vm');
+    if (str_starts_with($r, 'resume')) $hub->jobReport('vm', $g6['job'], 'started', 501, '');
+    return $r;
+};
+$r1 = $turn('111 1'); $turn('222 2'); $turn('333 3'); $turn('444 4');
+check('goal: the project changes at each step (its git state), the checks show the same: it is progress, it goes on', $goal($g6['id'])['state'] === 'working' && (int)$goal($g6['id'])['runs'] === 4
+    && (int)$goal($g6['id'])['same'] === 0 && $goal($g6['id'])['result'] !== '' && !str_contains($goal($g6['id'])['result'], '=== git'));
+check('goal: a check that needs a text says so, not its exit code', str_contains($r1, '$ ls → its output does not show "E11 closed"'), $r1);
+$turn('444 4'); $turn('444 4');
+check('goal: neither the checks nor the project change: no progress, it pauses', $goal($g6['id'])['state'] === 'paused' && str_contains($goal($g6['id'])['why'], 'the project did not change'));
+$hub->goalAct($g6['id'], 'resume');
+$hub->next('vm');
+$hub->goalReport('vm', $g6['id'], "=== 0 0\nE11 open\n=== git\n555 5\n");
+$hub->next('vm'); $hub->jobReport('vm', $g6['job'], 'started', 502, '');
+$reset = time() + 7200;
+$r = $turn('555 5', '', "Claude AI usage limit reached|$reset");
+$G = $goal($g6['id']);
+check('goal: Claude Code hit its usage limit: it waits for the reset, sends nothing, spends no run', $r === '' && $G['state'] === 'checked' && (int)$G['wait_until'] === $reset + 60
+    && str_contains($G['why'], 'usage limit') && str_contains($text('g6'), 'hit its usage limit'));
+$hub->goalsTick(true);
+check('goal: still waiting on the next tick', $hub->next('vm') === [204, ''] && $goal($g6['id'])['state'] === 'checked');
+$app->store->q('UPDATE agent_goals SET wait_until = ? WHERE id = ?', [time() - 1, $g6['id']]);
+$hub->goalsTick(true);
+[, $r] = $hub->next('vm');
+check('goal: once it resets, it goes on', str_starts_with($r, 'resume') && $goal($g6['id'])['state'] === 'working' && $goal($g6['id'])['why'] === '', $r);
+check('goal: a usage limit is read from its output, or a last message that is only that error; not from ordinary work',
+    AgentHub::limitReset('', "You've hit your limit · resets 3pm") > time() + 3000 && AgentHub::limitReset('API Error: 429 rate_limit_error') <= time() + 300
+    && AgentHub::limitReset('', 'Added a rate limiter; the usage limit page is done.') === null && AgentHub::limitReset('Error: ENOENT') === null);
+$hub->goalAct($g6['id'], 'stop');
+$app->pilot()->setPolicy(['analyse' => true, 'enabled' => true]);
+$g7 = $hub->goalStart('vm', '/w/shop', 'E12', 'Close E12.', 'ls')['goal'];
+$hub->next('vm'); $hub->jobReport('vm', $g7['job'], 'started', 600, '');
+$ev('g7', ['hook_event_name' => 'SessionStart', 'talixio_job' => $g7['job']]);
+Pilot::$model = fn() => json_encode(['situation' => 'question', 'summary' => 'Pricing.', 'question' => 'Free plan export?', 'resume' => 'Keep it.', 'needs_person' => true, 'level' => 'L5', 'confidence' => 0.6]);
+$ev('g7', ['hook_event_name' => 'Stop', 'last_assistant_message' => 'Keep export on the free plan?']); $hub->jobReport('vm', $g7['job'], 'exited', 0, '');
+$hub->next('vm'); $hub->goalReport('vm', $g7['id'], "=== 0 1\nno\n"); $hub->goalsTick(true);
+$was = $goal($g7['id'])['state'];
+$hub->command('claude-code:g7', 'reply', 'Remove it.');
+check('goal: you answer in the session what waited for you: it goes on, the card goes', $was === 'needs_you' && $goal($g7['id'])['state'] === 'working' && $goal($g7['id'])['ask'] === ''
+    && str_ends_with($hub->next('vm')[1], "g7\nRemove it."));
+$hub->goalAct($g7['id'], 'stop');
+Pilot::$model = null;
 
 foreach ($saved as $k => $v) putenv($v === false ? $k : "$k=$v");
 if (realpath($_SERVER['SCRIPT_FILENAME']) === __FILE__) tests_done();

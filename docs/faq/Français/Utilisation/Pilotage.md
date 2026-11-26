@@ -148,12 +148,15 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
     fil dit *Autorisé par les règles de l'objectif* ou *Refusé…* et pourquoi. Ce qu'il autorise n'apprend rien à
     l'assistant.
   - **Quand elle s'arrête.** Elle se met en pause seule quand les vérifications donnent les mêmes résultats 3 fois de
-    suite (aucun progrès), quand elle a utilisé tous ses tours (20 par défaut) ou son temps (12 heures par défaut) ; vous
+    suite et que le projet n'a pas changé non plus (aucun progrès : depuis 1.59.1 l'écouteur relève aussi l'état git du
+    projet, donc un workflow qui avance ses étapes pendant que la vérification finale montre la même chose continue), quand elle a utilisé tous ses tours (20 par défaut) ou son temps (12 heures par défaut) ; vous
     recevez une notification (**Reprendre** donne 10 tours de plus et au moins 4 heures à un objectif en pause). Ce qui
     n'est pas à l'objectif de décider (business, valeurs, tout ce qui est irréversible, un accès ou un identifiant que vous
     seul pouvez donner, un niveau que l'agent a lui-même marqué L5) *vous attend* : sa carte montre la question et la
     réponse proposée par l'assistant ; modifiez-la si vous voulez et cliquez **Envoyer et continuer**. Vous pouvez aussi
-    répondre dans la session elle-même. **Arrêter** termine l'objectif et sa session ;
+    répondre dans la session elle-même : l'objectif continue alors et la carte disparaît. Quand Claude Code atteint sa
+    limite d'utilisation, l'objectif attend qu'elle se réinitialise (le fil donne l'heure) au lieu de relancer et
+    d'user ses tours. **Arrêter** termine l'objectif et sa session ;
     **Oublier** retire de la liste un objectif fini.
   - **Sur la machine :** les vérifications sont lancées par l'écouteur ; réinstallez-le depuis *Connecter une machine*
     (un écouteur d'avant 1.57.0 ne les lance pas). Il refuse une vérification qui n'est pas en mots simples, ou un

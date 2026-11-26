@@ -79,6 +79,10 @@ while :; do
             printf '=== %s %s\n%s\n' "$n" "$rc" "$(printf '%s' "$o" | tail -c 2500)"
             n=$((n + 1))
           done < "$D/check-$id.cmds" > "$D/check-$id.out"
+          # 1.59.1: the project's git state, so the board sees a step taken even when the checks still show the same
+          if [ -n "$real" ] && allowed "$real"; then
+            printf '=== git\n%s\n' "$(cd "$real" && { git rev-parse HEAD; git status --porcelain; git diff; } 2>/dev/null | cksum)" >> "$D/check-$id.out"
+          fi
           curl -sS -m 20 -o /dev/null -H "Authorization: Bearer $T" -H "X-Talixio-Machine: $M" --data-binary @"$D/check-$id.out" "$U/api/agents/check?id=$id" 2>/dev/null
           rm -f "$D/check-$id.cmds" "$D/check-$id.out"
         ) &

@@ -132,12 +132,16 @@ The board updates by itself every few seconds while you look at it.
     instead). Never allowed, ticked or not: a push to `main`/`master` or a forced push, a file outside the project, its
     own settings (`.claude/`), a deploy, `sudo`. The thread says *Allowed by the objective's rules* or *Refused…* and why.
     What it allows teaches the assistant nothing.
-  - **When it stops.** It pauses by itself when the checks give the same results 3 times in a row (no progress), when it
+  - **When it stops.** It pauses by itself when the checks give the same results 3 times in a row and the project did not
+    change either (no progress: since 1.59.1 the listener also notes the project's git state, so a workflow that takes
+    its steps while the final check still shows the same goes on), when it
     has used all its runs (20 by default) or its time (12 hours by default); you get a notification (**Go on** gives a
     paused one 10 more runs and at least 4 hours). What is not the objective's to decide (business, values, anything
     irreversible, an access or a credential only you can give, a level the agent itself marked L5) *waits for you*:
     its card shows the question and the assistant's proposed reply; change it if you like and click **Send and go on**.
-    You can also answer in the session itself. **Stop** ends the
+    You can also answer in the session itself: the objective then goes on and the card goes. When Claude Code hits its
+    usage limit, the objective waits for the limit to reset (the thread gives the time) instead of retrying and using its
+    runs. **Stop** ends the
     objective and its session; **Forget** removes a finished one from the list.
   - **On the machine:** the checks are run by the listener, so install it again from *Connect a machine* (a listener
     from before 1.57.0 does not run them). It refuses a check that is not plain words, or a folder it may not use.
