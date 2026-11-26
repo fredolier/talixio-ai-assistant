@@ -3,6 +3,25 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.58.0 (2026-11-26)
+
+An objective can start every run with the same command, such as the workflow's skill.
+
+- **Why:** you asked what is sent on each resume. Until now it was a message with what the checks show and "carry on
+  with the next step", and the agent chose the step. Your workflow goes on by itself when its skill is run again
+  (`/scenario-orchestrator <scenario>`), since it keeps its own plan.
+- **What changed:** *Each run* in the objective's form.
+  - A slash command is the whole prompt of the first run and of every run after it, exactly as typed (one line).
+    Anything after it would become its arguments, so the check results are not added; the checks still decide when
+    the objective is met, and the final report request is unchanged.
+  - Other text comes first, followed by the objective on the first run and by what the checks show on later runs.
+  - Left empty, nothing changes.
+- **Tested:** 4 new checks in `tests/more/agent_goal.php` (they fail without the change): a multi-line command is
+  refused; a slash command is the first prompt and every resume, alone; other text comes before the objective.
+- **Not tried:** a skill run through `claude -p` on your machine. Try it once by hand in the project:
+  `echo '/scenario-orchestrator fw' | claude -p`. The scenario name is typed in the form; the board does not read it
+  from the project.
+
 ## 1.57.0 (2026-11-26)
 
 Objectives: a session works to the end of a goal by itself, and the board checks when it is reached.

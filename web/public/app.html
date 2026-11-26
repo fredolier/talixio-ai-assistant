@@ -207,6 +207,8 @@
                 <label class="small">Folder <select id="ab-goal-folder" class="no-i18n"></select></label>
                 <label class="small">Name <input id="ab-goal-title" maxlength="200" placeholder="Close epic E06c"></label>
                 <textarea id="ab-goal-prompt" rows="3" placeholder="What should it do? E.g. take epic E06c of scenario fw to its close, following the workflow."></textarea>
+                <label class="small ab-goal-col">Each run (optional): what is sent to start each run, e.g. a skill that follows its own plan. A slash command is sent exactly as typed; other text comes before what the checks show
+                  <input id="ab-goal-each" maxlength="1000" class="no-i18n" spellcheck="false" placeholder="/scenario-orchestrator fw"></label>
                 <label class="small ab-goal-col">Checks: one command per line; add => text when its output must show that text (else its exit code must be 0)
                   <textarea id="ab-goal-checks" rows="3" class="no-i18n" spellcheck="false" placeholder="./tools-workflow scenario:check-gate --verdict --gate GATE_3 --epic E06c --scenario fw => &quot;closure_held&quot;: false
 ./tools-workflow ci:status --sha HEAD"></textarea></label>

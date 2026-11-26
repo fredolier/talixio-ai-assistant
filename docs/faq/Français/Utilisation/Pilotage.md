@@ -115,6 +115,13 @@ heures affichées sont les vraies. Le tableau se met à jour tout seul toutes le
   Lancez d'abord chaque commande vous-même et copiez le texte qui montre que l'épopée est vraiment close : un verdict de
   gate propre ne suffit pas quand la clôture est retenue. Une vérification est une seule commande en mots simples (sans
   guillemets, `$`, `;`, `|`, `&`, `>`, `<` ni `*`), jamais une commande risquée (un push, une suppression…) ; de 1 à 5.
+  - **À chaque tour** (1.58.0, facultatif) : ce qui est envoyé au début de chaque tour. Pour un workflow qui tient son
+    propre plan, donnez sa skill, par exemple `/scenario-orchestrator fw` : le premier tour et chacun des suivants sont
+    exactement cette commande, et le workflow avance d'une étape de son plan à chaque fois. Une commande slash est
+    envoyée telle quelle (ce qui la suivrait serait ses arguments) : la session ne reçoit donc pas ce que montrent les
+    vérifications, mais ce sont toujours elles qui disent quand l'objectif est atteint. Un autre texte est envoyé en
+    premier, suivi de l'objectif (premier tour) ou de ce que montrent les vérifications (tours suivants). Laissé vide,
+    chaque tour dit ce que montrent les vérifications et demande de continuer.
   - **Comment elle continue seule.** La session démarre avec l'objectif et ses vérifications. Après chacun de ses tours,
     l'écouteur de la machine lance les vérifications dans le dossier et le tableau lit les résultats. Pas toutes vertes :
     la session reçoit ce que montre chaque vérification et continue (*tour 2 sur 20*). Toutes vertes : on lui demande son
