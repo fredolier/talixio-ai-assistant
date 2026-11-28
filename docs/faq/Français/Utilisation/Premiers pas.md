@@ -32,6 +32,10 @@ Le bouton 🔍 en haut du chat (*Rechercher dans la conversation*) cherche dans 
 moins deux lettres : les messages qui contiennent vos mots viennent d'abord, puis, après quelques secondes, ceux qui ont un
 sens proche. Cliquez un résultat pour aller à ce message ; *Fermer* (ou Échap) masque la recherche.
 
+## La zone de message
+Entrée envoie ; Maj+Entrée passe à la ligne. La zone s'agrandit avec ce que vous écrivez, jusqu'à 40 % de la fenêtre (au
+moins une dizaine de lignes), pour que vous voyiez l'essentiel d'un long message ; au-delà, elle défile.
+
 ## Dicter
 Le bouton 🎙️ à côté de la zone de message (*Dicter*) écrit ce que vous dites : appuyez, parlez, appuyez à nouveau. Ce que
 vous avez dit est transcrit et ajouté dans la zone, après ce qui s'y trouve déjà, pour que vous le relisiez avant

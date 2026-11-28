@@ -1530,6 +1530,25 @@ ev Stop ",\\"last_assistant_message\\":\\"$msg\\""
     }));
     await page.setViewportSize({ width: 1280, height: 860 });
   },
+  async composerSize({ page, check }) {
+    // 1.61.0: the message box fits its text: no scroll arrows with one line (the 2px border of a Confidential space
+    // counted), sized again when the chat shows after text was put in it from another view, and taller for long text
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await page.evaluate(() => { location.hash = '#chat'; }); await page.waitForTimeout(300);
+    const m = () => page.evaluate(() => { const i = document.querySelector('#input'); return { h: i.offsetHeight, sh: i.scrollHeight, ch: i.clientHeight, vh: innerHeight }; });
+    await page.evaluate(() => { document.querySelector('#composer').dataset.level = 'confidential'; const i = document.querySelector('#input'); i.value = 'One line'; autosize(); });
+    let r = await m();
+    check('composer: one line in a Confidential space has no scrollbar', r.sh <= r.ch && r.h < 60, JSON.stringify(r));
+    await page.evaluate(() => { location.hash = '#library'; }); await page.waitForTimeout(400);
+    await page.evaluate(() => { const i = document.querySelector('#input'); i.value = 'a\nb\nc\nd'; autosize(); });
+    await page.evaluate(() => { location.hash = '#chat'; }); await page.waitForTimeout(400);
+    r = await m();
+    check('composer: text put in from another view is sized when the chat shows', r.sh <= r.ch && r.h > 80, JSON.stringify(r));
+    await page.fill('#input', Array.from({ length: 40 }, (_, k) => 'line ' + k).join('\n'));
+    r = await m();
+    check('composer: long text grows the box past 200px, up to 40% of the window, then scrolls', r.h > 300 && r.h <= Math.round(r.vh * 0.4) + 1 && r.sh > r.ch, JSON.stringify(r));
+    await page.fill('#input', ''); await page.evaluate(() => { delete document.querySelector('#composer').dataset.level; renderSpaceHead(); });
+  },
   async activityChart({ page, check }) {
     // 1.60.1: today's bar is as wide as the others (its class clashed with the Today view's grid), and the axis stays on one line
     await page.evaluate(() => { location.hash = '#activity'; });
