@@ -3,6 +3,25 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.62.1 (2026-11-28)
+
+The installed app no longer loses its assistant's address (`/fred-work/`), so you can sign in again.
+
+- **Why:** you said that on Android, after a refresh or a lost session, the installed app showed a sign-in you could not
+  get past: it went back to the bare domain, without `/fred-work`.
+- **What changed:** the installed app opens with `?source=app` in its address, and the app then removed it by writing
+  the address as the site's root plus the page (`/#chat`) instead of the assistant's folder (`/fred-work/#chat`). It
+  went unseen while the app was at the root of its domain; under a path (the Docker stack), the next reload or sign-in
+  opened the bare domain. The address now keeps its folder. The same applied to a share from another app and to the
+  icon's shortcuts. The bug was there since the first installable version.
+- **For you:** nothing to reinstall. After the update, close the app fully and open it from its icon (it starts at
+  `/fred-work/`).
+- **Tested:** 2 new browser checks run an assistant under `/fred-work/` behind a proxy that strips the prefix, as Caddy
+  does (both fail without the change: the address became `/` and the sign-in was gone): opened as the installed app, the
+  address stays in the folder; a lost session shows this assistant's sign-in. A run in Chrome emulating an Android phone
+  (Pixel 7), with the service worker: sign in, reload, lose the session, sign in again, all at `/fred-work/`.
+- **Not tried:** your phone with the real stack.
+
 ## 1.62.0 (2026-11-28)
 
 Chat: tables in replies keep their words whole, and replies with a table or code get more width.

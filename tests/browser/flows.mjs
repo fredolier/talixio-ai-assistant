@@ -1530,6 +1530,34 @@ ev Stop ",\\"last_assistant_message\\":\\"$msg\\""
     }));
     await page.setViewportSize({ width: 1280, height: 860 });
   },
+  async basePath({ browser, root, check }) {
+    // 1.62.1: an assistant under a path (/fred-work/, as on the Docker stack): opened as the installed app
+    // (?source=app), the address stays in its folder, so a reload or a new sign-in does not land on the bare domain
+    const { mkdtempSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const http = await import('node:http'); const net = await import('node:net');
+    const free = () => new Promise(r => { const s = net.createServer().listen(0, () => { const p = s.address().port; s.close(() => r(p)); }); });
+    const data = mkdtempSync(join(tmpdir(), 'talixio-base-')); mkdirSync(join(data, 'store'));
+    const port = await free(), front = await free();
+    const php = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', join(root, 'web/public'), join(root, 'web/router.php')],
+      { env: { ...process.env, TALIXIO_BASE_PATH: 'fred-work', TALIXIO_DATA_DIR: data, TALIXIO_PROVIDER: 'echo', TALIXIO_WEB_PASSWORD: 'pw', TALIXIO_NOTIFY: 'none', TALIXIO_STORE: join(data, 'store') }, stdio: 'ignore' });
+    // like Caddy: /fred-work/... goes to the assistant without its prefix, anything else is the bare domain
+    const proxy = http.createServer((req, res) => {
+      if (!req.url.startsWith('/fred-work/')) { res.writeHead(404, { 'Content-Type': 'text/html' }); return res.end('<p id="bare">Open the address you were given.</p>'); }
+      const up = http.request({ host: '127.0.0.1', port, path: req.url.slice('/fred-work'.length), method: req.method, headers: req.headers }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+      up.on('error', () => { res.writeHead(502); res.end(); }); req.pipe(up);
+    }).listen(front, '127.0.0.1');
+    const ctx = await browser.newContext({ viewport: { width: 400, height: 800 } }); const p = await ctx.newPage();
+    try {
+      for (let i = 0; i < 50; i++) { try { const r = await fetch(`http://127.0.0.1:${front}/fred-work/manifest.json`); if (r.ok) break; } catch {} await new Promise(r => setTimeout(r, 100)); }
+      await p.goto(`http://127.0.0.1:${front}/fred-work/?source=app#chat`); await p.waitForSelector('#password', { timeout: 6000 });
+      await p.fill('#password', 'pw'); await p.click('#login-form button[type=submit]');
+      await p.waitForSelector('#shell:not([hidden])', { timeout: 6000 }); await p.waitForTimeout(300);
+      const after = new URL(p.url()).pathname;
+      await ctx.clearCookies(); await p.reload(); await p.waitForTimeout(800);
+      const lost = { path: new URL(p.url()).pathname, login: await p.$('#login:not([hidden])') !== null };
+      check('base path: opened as the installed app, the address stays in the assistant\'s folder', after === '/fred-work/', after);
+      check('base path: a lost session shows this assistant\'s sign-in, not the bare domain', lost.path === '/fred-work/' && lost.login, JSON.stringify(lost));
+    } finally { await ctx.close(); proxy.close(); php.kill(); }
+  },
   async chatTable({ page, check }) {
     // 1.62.0: a table in a reply keeps its words whole (it scrolls when too wide), and the reply gets more width
     await page.setViewportSize({ width: 1600, height: 860 });
