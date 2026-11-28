@@ -7957,7 +7957,9 @@ async function handleLaunch() {
     history.replaceState(null, '', location.pathname + location.hash);
     installFromLink(params.get('connector'), params.get('name'), (params.get('headers') || '').split(',').filter(Boolean)).catch(e => toast(e.message));
   }
-  if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', '/' + location.hash);
+  // the address without its query, in this assistant's folder (/fred-work/), never the site's root: the next reload
+  // or sign-in would open the bare domain
+  if (params.has('share') || params.has('action') || params.has('source')) history.replaceState(null, '', location.pathname + location.hash);
   if (token) {
     // a share is only looked at first: nothing is stored nor written in the message box before the user says yes
     // (a link to /?share=… can come from somewhere else than this browser's share sheet)
