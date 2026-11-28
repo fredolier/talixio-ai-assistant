@@ -1530,6 +1530,20 @@ ev Stop ",\\"last_assistant_message\\":\\"$msg\\""
     }));
     await page.setViewportSize({ width: 1280, height: 860 });
   },
+  async activityChart({ page, check }) {
+    // 1.60.1: today's bar is as wide as the others (its class clashed with the Today view's grid), and the axis stays on one line
+    await page.evaluate(() => { location.hash = '#activity'; });
+    await page.waitForSelector('#usage .chart .col', { timeout: 4000 });
+    const bars = await page.evaluate(() => {
+      const c = [...document.querySelectorAll('#usage .chart .col')].map(e => e.getBoundingClientRect().width);
+      const y = [...document.querySelectorAll('#usage .y-axis span')].map(e => e.getBoundingClientRect().height);
+      const plot = document.querySelector('#usage .plot').getBoundingClientRect(), end = document.querySelector('#usage .x-axis span:last-child');
+      const r = end.firstChild ? (() => { const g = document.createRange(); g.selectNodeContents(end); return g.getBoundingClientRect().right; })() : 0;
+      return { n: c.length, first: c[0], last: c[c.length - 1], y: Math.max(...y), lh: parseFloat(getComputedStyle(document.querySelector('#usage .y-axis span')).fontSize) * 2, r, pr: plot.right };
+    });
+    check('activity: today\'s bar is as wide as the other days, and its label stays inside the chart',
+      bars.n === 30 && Math.abs(bars.last - bars.first) < 1 && bars.y < bars.lh && bars.r <= bars.pr + 1, JSON.stringify(bars));
+  },
 };
 
 export default async ctx => {

@@ -3,6 +3,24 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.60.1 (2026-11-28)
+
+Activity: the *Tokens per day* chart is fixed and easier to read.
+
+- **Why:** you showed the chart with today's bar stretched across the last two weeks, and asked for it to look nicer.
+- **What changed:**
+  - **Today's bar is as wide as the other days.** It carried the class `today`, which the *Today* page also uses for
+    its layout (a grid with a 300px column), so the bar took that width. It now has its own class.
+  - **The value axis reads in millions** from 1 M up (*10 M*, *2.5 M*, no longer *10 000 k* wrapped on two lines),
+    and its labels stay on one line.
+  - **A day with no tokens shows a faint line**, so the days without use stay visible in the timeline.
+  - **The *Today* label under the last bar ends at the chart's edge** instead of being cut off.
+- **Tested:** a new browser check (fails without the change: today's bar was 324px wide, the others 14px, and its label
+  went past the chart): today's bar is as wide as the first day's, the axis labels are one line high, and the last label
+  stays inside the chart. A screenshot with figures like yours (up to 8.4 M a day, six days without use) looks as
+  intended.
+- **Not tried:** a phone-sized screen with millions of tokens a day.
+
 ## 1.60.0 (2026-11-26)
 
 Objectives: the *Each run* field (1.58.0) is removed. 1.57.0, 1.59.0 and 1.59.1 stay.
