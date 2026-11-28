@@ -6100,13 +6100,15 @@ function tokenChart(days, byDay, costDay) {
   const step = niceStep(max / 4); const top = Math.max(step, Math.ceil(max / step) * step);
   const ticks = []; for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v);
   const short = d => new Date(d + 'T12:00').toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
+  // the axis in millions from 1 M up: "10 M", not "10 000 k"
+  const axis = v => top >= 1e6 && v > 0 ? new Intl.NumberFormat(LOCALE.length ? LOCALE : 'en-US', { maximumFractionDigits: 1 }).format(v / 1e6) + (LANG === 'en' ? 'M' : ' M') : ktok(v);
   return `<div class="chart" role="img" aria-label="Tokens per day over the last 30 days, up to ${nf.format(max)} a day">
-    <div class="y-axis">${ticks.map(v => `<span style="bottom:${(v / top * 100).toFixed(2)}%">${ktok(v)}</span>`).join('')}</div>
+    <div class="y-axis">${ticks.map(v => `<span style="bottom:${(v / top * 100).toFixed(2)}%">${axis(v)}</span>`).join('')}</div>
     <div class="plot">${ticks.map(v => `<i class="grid" style="bottom:${(v / top * 100).toFixed(2)}%"></i>`).join('')}
       <div class="cols">${days.map((d, i) => `<div class="col" data-tip="<b>${short(d)}</b><br>${nf.format(byDay[d] || 0)} tokens${costDay[d] != null ? '<br>' + (money(costDay[d]) || '$0') : ''}">
-        <div class="bar${i === days.length - 1 ? ' today' : ''}" style="height:${((byDay[d] || 0) / top * 100).toFixed(2)}%"></div></div>`).join('')}</div>
+        <div class="bar${i === days.length - 1 ? ' now' : ''}${byDay[d] ? '' : ' zero'}" style="height:${((byDay[d] || 0) / top * 100).toFixed(2)}%"></div></div>`).join('')}</div>
       <div class="tip" hidden></div></div>
-    <div class="x-axis">${days.map((d, i) => `<span>${(days.length - 1 - i) % 7 === 0 ? (i === days.length - 1 ? 'Today' : short(d)) : ''}</span>`).join('')}</div>
+    <div class="x-axis">${days.map((d, i) => `<span${i === days.length - 1 ? ' class="end"' : ''}>${(days.length - 1 - i) % 7 === 0 ? (i === days.length - 1 ? 'Today' : short(d)) : ''}</span>`).join('')}</div>
   </div>`;
 }
 function niceStep(raw) {
