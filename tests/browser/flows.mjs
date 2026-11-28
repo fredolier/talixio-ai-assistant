@@ -1530,6 +1530,26 @@ ev Stop ",\\"last_assistant_message\\":\\"$msg\\""
     }));
     await page.setViewportSize({ width: 1280, height: 860 });
   },
+  async chatTable({ page, check }) {
+    // 1.62.0: a table in a reply keeps its words whole (it scrolls when too wide), and the reply gets more width
+    await page.setViewportSize({ width: 1600, height: 860 });
+    await page.evaluate(() => { location.hash = '#chat'; }); await page.waitForTimeout(300);
+    const r = await page.evaluate(() => {
+      const md = '| CVE | Component | Debian versions concerned | CVSS | Fix (DSA/DLA) | Recommended action | Status |\n|---|---|---|---|---|---|---|\n'
+        + '| CVE-2026-98432 | kernel (linux) | trixie >= 6.12.118-1 | 9.8 | DSA-6652-1 (6.12.118-1) | Restart the trixie VMs outside the window | Ready |\n';
+      const el = renderMessage({ id: 999999, role: 'assistant', content: md, ts: Date.now() / 1000 }); el.id = 'wide-test';
+      document.querySelector('#thread').append(el);
+      const lh = parseFloat(getComputedStyle(el.querySelector('th')).lineHeight) || 20;
+      const heads = [...el.querySelectorAll('th')].map(h => h.getBoundingClientRect().height);
+      const plain = document.querySelector('#thread .msg.assistant:not(#wide-test)');
+      const out = { w: el.getBoundingClientRect().width, th: Math.max(...heads), lh, col: (() => { const t = document.querySelector('#thread'); const cs = getComputedStyle(t); return t.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); })(),
+        cve: el.querySelector('td').getBoundingClientRect().height };
+      el.remove(); return out;
+    });
+    check('chat: a table header keeps its words on one line, and a CVE id is not cut', r.th < r.lh * 1.6 + 12 && r.cve < r.lh * 1.6 + 12, JSON.stringify(r));
+    check('chat: a reply with a table is wider than the reading column', r.w > r.col + 100, JSON.stringify(r));
+    await page.setViewportSize({ width: 1280, height: 860 });
+  },
   async composerSize({ page, check }) {
     // 1.61.0: the message box fits its text: no scroll arrows with one line (the 2px border of a Confidential space
     // counted), sized again when the chat shows after text was put in it from another view, and taller for long text

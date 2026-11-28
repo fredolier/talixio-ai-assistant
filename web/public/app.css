@@ -74,12 +74,15 @@ main{min-width:0;height:100%;overflow:hidden}
 .view{height:100%}
 
 /* chat */
-.chat-view{display:flex;flex-direction:column}
+.chat-view{display:flex;flex-direction:column;container-type:inline-size} /* 1.62.0: the room beside the column, for wide replies */
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px max(16px,calc((100% - 760px)/2));border-bottom:1px solid var(--line)}
 .topbar p{margin:2px 0 0}
 .thread{flex:1;overflow-y:auto;padding:20px max(16px,calc((100% - 760px)/2));display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth}
 .msg{display:flex;flex-direction:column;gap:4px;max-width:88%;min-width:0}
 .msg.user{align-self:flex-end;align-items:flex-end}
+/* 1.62.0: a reply with a table or code takes the whole column, and up to 170px more on each side when the window has room */
+.thread{--wide:clamp(0px,(100cqw - 812px)/2,170px)}
+.msg.assistant:has(.bubble .table,.bubble pre){max-width:none;width:calc(100% + 2 * var(--wide));margin-left:calc(-1 * var(--wide))}
 .bubble{padding:10px 14px;border-radius:16px;overflow-wrap:anywhere;min-width:0;max-width:100%}
 .user .bubble{background:var(--accent);color:var(--accent-ink);border-bottom-right-radius:5px;white-space:pre-wrap}
 .assistant .bubble{background:var(--surface);border:1px solid var(--line);border-bottom-left-radius:5px}
@@ -174,8 +177,9 @@ main{min-width:0;height:100%;overflow:hidden}
 .bubble li,.doc li{margin:.15em 0} .bubble li>ul,.bubble li>ol,.doc li>ul,.doc li>ol{margin:.15em 0}
 .bubble blockquote,.doc blockquote{margin:.5em 0;padding:.1em 0 .1em 12px;border-left:3px solid var(--line);color:var(--muted)}
 .bubble hr,.doc hr{border:0;border-top:1px solid var(--line);margin:.9em 0}
-.bubble .table,.doc .table{overflow-x:auto;margin:.5em 0;max-width:100%}
-.bubble table,.doc table{border-collapse:collapse;font-size:.9em;min-width:50%}
+.bubble .table,.doc .table{overflow-x:auto;margin:.5em 0;max-width:100%;padding-bottom:1px} /* the padding keeps the last row's border visible */
+.bubble table,.doc table{border-collapse:collapse;font-size:.9em;min-width:50%;overflow-wrap:normal;word-break:normal} /* whole words; too wide: the table scrolls (1.62.0) */
+.bubble th,.doc th{white-space:nowrap} .bubble td,.doc td{max-width:32em}
 .bubble th,.bubble td,.doc th,.doc td{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
 .bubble th,.doc th{background:var(--sunk);font-weight:600}
 .check{color:var(--muted)} .check.done{color:var(--accent)}

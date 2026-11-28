@@ -36,6 +36,9 @@ sens proche. Cliquez un résultat pour aller à ce message ; *Fermer* (ou Échap
 Entrée envoie ; Maj+Entrée passe à la ligne. La zone s'agrandit avec ce que vous écrivez, jusqu'à 40 % de la fenêtre (au
 moins une dizaine de lignes), pour que vous voyiez l'essentiel d'un long message ; au-delà, elle défile.
 
+Les réponses avec un tableau ou du code sont plus larges que les autres (sur un grand écran, jusqu'à environ 1100px). Un
+tableau garde ses mots entiers : s'il reste trop large, faites-le défiler sur le côté.
+
 ## Dicter
 Le bouton 🎙️ à côté de la zone de message (*Dicter*) écrit ce que vous dites : appuyez, parlez, appuyez à nouveau. Ce que
 vous avez dit est transcrit et ajouté dans la zone, après ce qui s'y trouve déjà, pour que vous le relisiez avant
