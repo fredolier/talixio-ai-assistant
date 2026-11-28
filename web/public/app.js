@@ -376,7 +376,7 @@ function renderSpaceHead() {
   const pb = $('#privacy-badge'); pb.className = 'privacy-badge ' + lvl;
   pb.querySelector('span').textContent = lvl === 'internal' ? '' : LEVELS[lvl].label;
   pb.title = t('Confidentiality: {level}', { level: t(LEVELS[lvl].label) }); pb.setAttribute('aria-label', pb.title);
-  $('#composer').dataset.level = lvl;
+  $('#composer').dataset.level = lvl; autosize(); // its border is thicker in a Confidential or Secret space
   document.title = general ? (state.status?.name || 'Talixio') : `${sp.name} · ${state.status?.name || 'Talixio'}`;
   applyTint();
   $('#archived-note').hidden = !sp?.archived;
@@ -1220,7 +1220,19 @@ async function toggleDictate(input, btn) {
 }
 document.querySelectorAll('.dictate-btn').forEach(b => b.onclick = () => toggleDictate(document.getElementById(b.dataset.dictateFor), b));
 
-function autosize() { const i = $('#input'); i.style.height = 'auto'; i.style.height = Math.min(i.scrollHeight, 200) + 'px'; }
+/** The composer grows with its text, up to 40% of the window (at least 200px), then scrolls. Its height counts its
+ *  border (box-sizing: border-box; 2px in a Confidential or Secret space). Hidden (another view), it has no size to
+ *  measure: the observer below sizes it when it shows again, and when its width changes the line count. */
+function autosize() {
+  const i = $('#input'); if (!i.offsetWidth) return;
+  const max = Math.max(200, Math.round(innerHeight * 0.4));
+  i.style.height = 'auto';
+  const h = i.scrollHeight + i.offsetHeight - i.clientHeight;
+  i.style.height = Math.min(h, max) + 'px';
+  i.style.overflowY = h > max ? 'auto' : 'hidden';
+}
+{ let w = 0; new ResizeObserver(() => { const n = $('#input').offsetWidth; if (n !== w) { w = n; if (n) autosize(); } }).observe($('#input')); }
+addEventListener('resize', () => autosize());
 
 // ---- tasks ----
 async function runTaskNow(t, b) {

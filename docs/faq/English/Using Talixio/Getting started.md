@@ -31,6 +31,10 @@ The 🔍 button at the top of the chat (*Find in the conversation*) searches the
 least two letters: the messages with your words come first, then, after a few seconds, those close in meaning. Click a
 result to jump to that message; *Close* (or Esc) hides the search.
 
+## The message box
+Enter sends; Shift+Enter starts a new line. The box grows with what you write, up to 40% of the window (at least about
+ten lines), so you can see most of a long message; past that, it scrolls.
+
 ## Dictate
 The 🎙️ button next to the message box (*Dictate*) types what you say: press it, speak, press it again. What you said is
 transcribed and added to the box, after what is already there, so you can read it over before sending; the recording is

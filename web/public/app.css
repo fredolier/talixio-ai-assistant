@@ -141,7 +141,7 @@ main{min-width:0;height:100%;overflow:hidden}
 .activity svg{width:14px;height:14px;color:var(--accent);animation:spin 1.6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .cursor::after{content:'▍';color:var(--accent);animation:blink 1s infinite;margin-left:1px}
-.composer textarea{resize:none;max-height:200px;border-radius:14px;padding:11px 14px;background:var(--surface);flex:1;min-width:0}
+.composer textarea{resize:none;max-height:max(200px,40vh);overflow-y:hidden;border-radius:14px;padding:11px 14px;background:var(--surface);flex:1;min-width:0}
 
 .meta .tier{font-variant-numeric:tabular-nums}
 .jobcard{align-self:stretch;border:1px dashed var(--line);border-radius:12px;padding:8px 12px;font-size:.84rem;color:var(--muted);background:var(--bg)}

@@ -3,6 +3,24 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.61.0 (2026-11-28)
+
+Chat: the message box no longer shows badly, and it grows taller for long messages.
+
+- **Why:** you showed the box squashed to less than a line, with scroll arrows, in a Confidential space ("it happens
+  from time to time"), and asked for multi-line text to show as much as possible.
+- **What changed:**
+  - **Its height counts its border.** It was set to the text's height without the border, so in a Confidential or
+    Secret space (2px border) it was 4px short and showed scroll arrows even for one line.
+  - **It is sized when it shows.** Text put in from another page (*Ask* in Files, People, Mail, Tasks…, a restored
+    draft) was measured while the chat was hidden, where it has no height, and the box collapsed. It is now sized when
+    the chat shows, when its width changes, and when the space's confidentiality changes.
+  - **It grows up to 40% of the window** (at least 200px, the old limit), then scrolls.
+- **Tested:** 3 new browser checks (all 3 fail without the change; the collapsed box measured 26px): one line in a
+  Confidential space has no scrollbar, text put in from another view is sized when the chat shows, and long text grows
+  past 200px up to 40% of the window. FAQ *Getting started* gets a *Message box* section (both languages).
+- **Not tried:** phones (the keyboard shrinks the window, so 40% is smaller there; the 200px minimum still applies).
+
 ## 1.60.1 (2026-11-28)
 
 Activity: the *Tokens per day* chart is fixed and easier to read.
