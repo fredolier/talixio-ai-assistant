@@ -35,6 +35,9 @@ result to jump to that message; *Close* (or Esc) hides the search.
 Enter sends; Shift+Enter starts a new line. The box grows with what you write, up to 40% of the window (at least about
 ten lines), so you can see most of a long message; past that, it scrolls.
 
+Replies with a table or code are wider than the others (on a large screen, up to about 1100px). A table keeps its
+words whole: if it is still too wide, scroll it sideways.
+
 ## Dictate
 The 🎙️ button next to the message box (*Dictate*) types what you say: press it, speak, press it again. What you said is
 transcribed and added to the box, after what is already there, so you can read it over before sending; the recording is

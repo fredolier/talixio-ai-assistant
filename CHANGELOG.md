@@ -3,6 +3,26 @@
 The version number is in `VERSION`; the app shows it at the bottom of the menu, in Settings → Updates
 and with `talixio version`. Each delivery raises it and adds a line here.
 
+## 1.62.0 (2026-11-28)
+
+Chat: tables in replies keep their words whole, and replies with a table or code get more width.
+
+- **Why:** you showed a security report whose table was crushed into a narrow bubble ("Com / posa / nt", "CV / SS"),
+  and chose two of the proposed changes (whole words, more width; not the "wide view" switch).
+- **What changed:**
+  - **Whole words in tables.** The bubble lets long text (links) break anywhere, and tables inherited that, so the
+    browser cut every word to fit the columns. Tables now break only between words, headers stay on one line, and a
+    table still too wide scrolls sideways inside the reply.
+  - **More width for wide replies.** A reply with a table or code takes the whole column instead of 88% of it, and on a
+    large window up to 170px more on each side (about 1100px in all). Plain-text replies keep the reading width.
+  - The last row of a table had no bottom border; it has one again.
+- **Tested:** 2 new browser checks (both fail without the change: the headers were 3 lines high, the reply 669px wide in
+  a 760px column): a table's headers and CVE ids stay on one line, and a reply with a table is wider than the column.
+  Screenshots of a report like yours at 1000px and 1500px wide look as intended. FAQ *Getting started* says so in both
+  languages.
+- **Not tried:** Safari and Firefox (the layout relies on `:has()` and container units, supported by their current
+  versions); a phone (there is no extra room, so only the whole words apply).
+
 ## 1.61.0 (2026-11-28)
 
 Chat: the message box no longer shows badly, and it grows taller for long messages.
